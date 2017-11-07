@@ -4,23 +4,21 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/pkg/errors"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/cloudflare/cloudflare-warp/origin"
-	tunnelpogs "github.com/cloudflare/cloudflare-warp/tunnelrpc/pogs"
 	cli "gopkg.in/urfave/cli.v2"
 )
 
 type templateData struct {
 	ServerName string
 	Request    *http.Request
-	Tags       []tunnelpogs.Tag
+	Body       string
 }
 
 const defaultServerName = "the Cloudflare Warp test server"
@@ -42,7 +40,7 @@ const indexTemplate = `
     </style>
   </head>
   <body class="sans-serif black">
-    <div class="bt bw2 b--orange bg-white pb6"> 
+    <div class="bt bw2 b--orange bg-white pb6">
       <div class="mw7 center ph4 pt3">
         <svg id="Layer_2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 109 40.5" class="mw4">
           <path class="st0" d="M98.6 14.2L93 12.9l-1-.4-25.7.2v12.4l32.3.1z"/>
@@ -56,21 +54,30 @@ const indexTemplate = `
           running an encrypted, virtual tunnel from your laptop or server to
           Cloudflare's edge network.
         </p>
-        <p class="b f5 mt5 fw6">Ready for the next step?</p> 
-        <a 
-          class="fw6 link white bg-blue ph4 pv2 br1 dib f5 link-hover" 
+        <p class="b f5 mt5 fw6">Ready for the next step?</p>
+        <a
+          class="fw6 link white bg-blue ph4 pv2 br1 dib f5 link-hover"
           style="border-bottom: 1px solid #1f679e"
           href="https://warp.cloudflare.com">
           Get started here
         </a>
-{{if .Tags}}        <section>
-          <h4 class="f6 fw4 pt5 mb2">Connection</h4>
+       <section>
+          <h4 class="f6 fw4 pt5 mb2">Request</h4>
           <dl class="bl bw2 b--orange ph3 pt3 pb2 bg-light-gray f7 code overflow-x-auto mw-100">
-{{range .Tags}}            <dt class="ttu mb1">{{.Name}}</dt>
-            <dd class="ml0 mb3 f5">{{.Value}}</dd>
-{{end}}          </dl>
+						<dd class="ml0 mb3 f5">Method: {{.Request.Method}}</dd>
+						<dd class="ml0 mb3 f5">Protocol: {{.Request.Proto}}</dd>
+						<dd class="ml0 mb3 f5">Request URL: {{.Request.URL}}</dd>
+						<dd class="ml0 mb3 f5">Transfer encoding: {{.Request.TransferEncoding}}</dd>
+						<dd class="ml0 mb3 f5">Host: {{.Request.Host}}</dd>
+						<dd class="ml0 mb3 f5">Remote address: {{.Request.RemoteAddr}}</dd>
+						<dd class="ml0 mb3 f5">Request URI: {{.Request.RequestURI}}</dd>
+{{range $key, $value := .Request.Header}}
+						<dd class="ml0 mb3 f5">Header: {{$key}}, Value: {{$value}}</dd>
+{{end}}
+						<dd class="ml0 mb3 f5">Body: {{.Body}}</dd>
+					</dl>
         </section>
-{{end}}      </div>
+     </div>
     </div>
   </body>
 </html>
@@ -127,10 +134,17 @@ func (s *HelloWorldServer) ListenAndServe(address string) error {
 func (s *HelloWorldServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.WithField("client", r.RemoteAddr).Infof("%s %s %s", r.Method, r.URL, r.Proto)
 	var buffer bytes.Buffer
-	err := s.responseTemplate.Execute(&buffer, &templateData{
+	var body string
+	rawBody, err := ioutil.ReadAll(r.Body)
+	if err == nil {
+		body = string(rawBody)
+	} else {
+		body = ""
+	}
+	err = s.responseTemplate.Execute(&buffer, &templateData{
 		ServerName: s.serverName,
 		Request:    r,
-		Tags:       tagsFromHeaders(r.Header),
+		Body:       body,
 	})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -138,18 +152,4 @@ func (s *HelloWorldServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		buffer.WriteTo(w)
 	}
-}
-
-func tagsFromHeaders(header http.Header) []tunnelpogs.Tag {
-	var tags []tunnelpogs.Tag
-	for headerName, headerValues := range header {
-		trimmed := strings.TrimPrefix(headerName, origin.TagHeaderNamePrefix)
-		if trimmed == headerName {
-			continue
-		}
-		for _, value := range headerValues {
-			tags = append(tags, tunnelpogs.Tag{Name: trimmed, Value: value})
-		}
-	}
-	return tags
 }

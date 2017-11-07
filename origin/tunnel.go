@@ -34,9 +34,7 @@ type TunnelConfig struct {
 	EdgeAddr          string
 	OriginUrl         string
 	Hostname          string
-	APIKey            string
-	APIEmail          string
-	APICAKey          string
+	OriginCert        []byte
 	TlsConfig         *tls.Config
 	Retries           uint
 	HeartbeatInterval time.Duration
@@ -45,7 +43,6 @@ type TunnelConfig struct {
 	ReportedVersion   string
 	LBPool            string
 	Tags              []tunnelpogs.Tag
-	AccessInternalIP  bool
 	ConnectedSignal   h2mux.Signal
 }
 
@@ -78,7 +75,6 @@ func (c *TunnelConfig) RegistrationOptions() *tunnelpogs.RegistrationOptions {
 		ExistingTunnelPolicy: policy,
 		PoolID:               c.LBPool,
 		Tags:                 c.Tags,
-		ExposeInternalHostname: c.AccessInternalIP,
 	}
 }
 
@@ -146,15 +142,16 @@ func ServeTunnel(
 		return err, true
 	}
 	if registerErr != nil {
-		raven.CaptureError(registerErr, nil)
 		// Don't retry on errors like entitlement failure or version too old
 		if e, ok := registerErr.(printableRegisterTunnelError); ok {
-			log.WithError(e).Error("Cannot register")
+			log.Error(e)
 			if e.permanent {
 				return nil, false
 			}
 			return e.cause, true
 		}
+		// Only log errors to Sentry that may have been caused by the client side, to reduce dupes
+		raven.CaptureError(registerErr, nil)
 		log.Error("Cannot register")
 		return err, true
 	}
@@ -202,7 +199,7 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	})
 	registration, err := ts.RegisterTunnel(
 		ctx,
-		&tunnelpogs.Authentication{Key: config.APIKey, Email: config.APIEmail, OriginCAKey: config.APICAKey},
+		config.OriginCert,
 		config.Hostname,
 		config.RegistrationOptions(),
 	)
@@ -220,9 +217,9 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 			permanent: registration.PermanentFailure,
 		}
 	}
-	for _, url := range registration.Urls {
-		log.Infof("Registered at %s", url)
-	}
+
+	log.Infof("Registered at %s", registration.Url)
+
 	for _, logLine := range registration.LogLines {
 		log.Infof(logLine)
 	}

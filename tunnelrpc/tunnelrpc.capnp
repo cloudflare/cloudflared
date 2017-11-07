@@ -11,8 +11,8 @@ struct Authentication {
 
 struct TunnelRegistration {
     err @0 :Text;
-    # A list of URLs that the tunnel is accessible from.
-    urls @1 :List(Text);
+    # the url to access the tunnel
+    url @1 :Text;
     # Used to inform the client of actions taken.
     logLines @2 :List(Text);
     # In case of error, whether the client should attempt to reconnect.
@@ -29,10 +29,8 @@ struct RegistrationOptions {
     existingTunnelPolicy @3 :ExistingTunnelPolicy;
     # If using the balancing policy, identifies the LB pool to use.
     poolId @4 :Text;
-    # Prevents the tunnel from being accessed at <subdomain>.cftunnel.com
-    exposeInternalHostname @5 :Bool;
     # Client-defined tags to associate with the tunnel
-    tags @6 :List(Tag);
+    tags @5 :List(Tag);
 }
 
 struct Tag {
@@ -51,6 +49,6 @@ struct ServerInfo {
 }
 
 interface TunnelServer {
-    registerTunnel @0 (auth :Authentication, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
+    registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
 }

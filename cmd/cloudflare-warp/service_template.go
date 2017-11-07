@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"text/template"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -78,11 +81,108 @@ func runCommand(command string, args ...string) error {
 	}
 	commandErr, _ := ioutil.ReadAll(stderr)
 	if len(commandErr) > 0 {
-		return fmt.Errorf("%s error: %s", command, commandErr)
+		fmt.Fprintf(os.Stderr, "%s: %s", command, commandErr)
 	}
 	err = cmd.Wait()
 	if err != nil {
 		return fmt.Errorf("%s returned with error: %v", command, err)
 	}
+	return nil
+}
+
+func ensureConfigDirExists(configDir string) error {
+	ok, err := fileExists(configDir)
+	if !ok && err == nil {
+		err = os.Mkdir(configDir, 0700)
+	}
+	return err
+}
+
+// openFile opens the file at path. If create is set and the file exists, returns nil, true, nil
+func openFile(path string, create bool) (file *os.File, exists bool, err error) {
+	expandedPath, err := homedir.Expand(path)
+	if err != nil {
+		return nil, false, err
+	}
+	if create {
+		fileInfo, err := os.Stat(expandedPath)
+		if err == nil && fileInfo.Size() > 0 {
+			return nil, true, nil
+		}
+		file, err = os.OpenFile(expandedPath, os.O_RDWR|os.O_CREATE, 0600)
+	} else {
+		file, err = os.Open(expandedPath)
+	}
+	return file, false, err
+}
+
+func copyCertificate(configDir string) error {
+	// Copy certificate
+	destCredentialPath := filepath.Join(configDir, credentialFile)
+	destFile, exists, err := openFile(destCredentialPath, true)
+	if err != nil {
+		return err
+	} else if exists {
+		// credentials already exist, do nothing
+		return nil
+	}
+	defer destFile.Close()
+
+	srcCredentialPath := filepath.Join(defaultConfigDir, credentialFile)
+	srcFile, _, err := openFile(srcCredentialPath, false)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	_, err = io.Copy(destFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("unable to copy %s to %s: %v", srcCredentialPath, destCredentialPath, err)
+	}
+
+	return nil
+}
+
+func copyCredentials(configDir string) error {
+	if err := ensureConfigDirExists(configDir); err != nil {
+		return err
+	}
+
+	if err := copyCertificate(configDir); err != nil {
+		return err
+	}
+
+	// Copy or create config
+	destConfigPath := filepath.Join(configDir, configFile)
+	destFile, exists, err := openFile(destConfigPath, true)
+	if err != nil {
+		return err
+	} else if exists {
+		// config already exists, do nothing
+		return nil
+	}
+	defer destFile.Close()
+
+	srcConfigPath := filepath.Join(defaultConfigDir, configFile)
+	srcFile, _, err := openFile(srcConfigPath, false)
+	if err != nil {
+		fmt.Println("Your service needs a config file that at least specifies the hostname option.")
+		fmt.Println("Type in a hostname now, or leave it blank and create the config file later.")
+		fmt.Print("Hostname: ")
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		if input == "" {
+			return err
+		}
+		fmt.Fprintf(destFile, "hostname: %s\n", input)
+	} else {
+		defer srcFile.Close()
+		_, err = io.Copy(destFile, srcFile)
+		if err != nil {
+			return fmt.Errorf("unable to copy %s to %s: %v", srcConfigPath, destConfigPath, err)
+		}
+		fmt.Printf("Copied %s to %s", srcConfigPath, destConfigPath)
+	}
+
 	return nil
 }

@@ -29,6 +29,8 @@ func runApp(app *cli.App) {
 	app.Run(os.Args)
 }
 
+const serviceConfigDir = "/etc/cloudflare-warp"
+
 var systemdTemplates = []ServiceTemplate{
 	{
 		Path: "/etc/systemd/system/cloudflare-warp.service",
@@ -39,8 +41,7 @@ After=network.target
 [Service]
 TimeoutStartSec=0
 Type=notify
-ExecStart={{ .Path }} --config /etc/cloudflare-warp.yml --autoupdate 0s
-User=nobody
+ExecStart={{ .Path }} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --autoupdate 0s
 
 [Install]
 WantedBy=multi-user.target
@@ -86,7 +87,7 @@ var sysvTemplate = ServiceTemplate{
 # Short-Description: Cloudflare Warp
 # Description:       Cloudflare Warp agent
 ### END INIT INFO
-cmd="{{.Path}} --config /etc/cloudflare-warp.yml --pidfile /var/run/$name.pid"
+cmd="{{.Path}} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --pidfile /var/run/$name.pid"
 name=$(basename $(readlink -f $0))
 pid_file="/var/run/$name.pid"
 stdout_log="/var/log/$name.log"
@@ -176,6 +177,12 @@ func installLinuxService(c *cli.Context) error {
 		return fmt.Errorf("error determining executable path: %v", err)
 	}
 	templateArgs := ServiceTemplateArgs{Path: etPath}
+
+	if err = copyCredentials(serviceConfigDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to copy user configuration: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Before running the service, ensure that %s contains two files, %s and %s",
+			serviceConfigDir, credentialFile, configFile)
+	}
 
 	switch {
 	case isSystemd():

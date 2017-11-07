@@ -27,7 +27,7 @@ func UnmarshalAuthentication(s tunnelrpc.Authentication) (*Authentication, error
 
 type TunnelRegistration struct {
 	Err              string
-	Urls             []string
+	Url              string
 	LogLines         []string
 	PermanentFailure bool
 }
@@ -48,7 +48,6 @@ type RegistrationOptions struct {
 	OS                     string `capnp:"os"`
 	ExistingTunnelPolicy   tunnelrpc.ExistingTunnelPolicy
 	PoolID                 string `capnp:"poolId"`
-	ExposeInternalHostname bool
 	Tags                   []Tag
 }
 
@@ -82,7 +81,7 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 }
 
 type TunnelServer interface {
-	RegisterTunnel(ctx context.Context, auth *Authentication, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
+	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
 }
 
@@ -95,11 +94,7 @@ type TunnelServer_PogsImpl struct {
 }
 
 func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerTunnel) error {
-	authentication, err := p.Params.Auth()
-	if err != nil {
-		return err
-	}
-	pogsAuthentication, err := UnmarshalAuthentication(authentication)
+	originCert, err := p.Params.OriginCert()
 	if err != nil {
 		return err
 	}
@@ -116,7 +111,7 @@ func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerT
 		return err
 	}
 	server.Ack(p.Options)
-	registration, err := i.impl.RegisterTunnel(p.Ctx, pogsAuthentication, hostname, pogsOptions)
+	registration, err := i.impl.RegisterTunnel(p.Ctx, originCert, hostname, pogsOptions)
 	if err != nil {
 		return err
 	}
@@ -149,14 +144,10 @@ func (c TunnelServer_PogsClient) Close() error {
 	return c.Conn.Close()
 }
 
-func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, auth *Authentication, hostname string, options *RegistrationOptions) (*TunnelRegistration, error) {
+func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error) {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.RegisterTunnel(ctx, func(p tunnelrpc.TunnelServer_registerTunnel_Params) error {
-		authentication, err := p.NewAuth()
-		if err != nil {
-			return err
-		}
-		err = MarshalAuthentication(authentication, auth)
+		err := p.SetOriginCert(originCert)
 		if err != nil {
 			return err
 		}
