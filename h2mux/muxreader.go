@@ -310,7 +310,6 @@ func (r *MuxReader) connectionError(err error) error {
 	case MuxerProtocolError:
 		http2Code = e.h2code
 	}
-	log.Warnf("Connection error %v", http2Code)
 	r.sendGoAway(http2Code)
 	return err
 }

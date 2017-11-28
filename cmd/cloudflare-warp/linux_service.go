@@ -41,7 +41,7 @@ After=network.target
 [Service]
 TimeoutStartSec=0
 Type=notify
-ExecStart={{ .Path }} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --autoupdate 0s
+ExecStart={{ .Path }} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --no-autoupdate
 
 [Install]
 WantedBy=multi-user.target
@@ -63,7 +63,7 @@ ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 64 ]; then s
 Description=Update Cloudflare Warp
 
 [Timer]
-OnUnitActiveSec=1d 
+OnUnitActiveSec=1d
 
 [Install]
 WantedBy=timers.target
@@ -87,7 +87,7 @@ var sysvTemplate = ServiceTemplate{
 # Short-Description: Cloudflare Warp
 # Description:       Cloudflare Warp agent
 ### END INIT INFO
-cmd="{{.Path}} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --pidfile /var/run/$name.pid"
+cmd="{{.Path}} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s"
 name=$(basename $(readlink -f $0))
 pid_file="/var/run/$name.pid"
 stdout_log="/var/log/$name.log"

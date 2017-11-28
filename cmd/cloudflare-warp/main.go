@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudflare/cloudflare-warp/h2mux"
 	"github.com/cloudflare/cloudflare-warp/metrics"
 	"github.com/cloudflare/cloudflare-warp/origin"
 	"github.com/cloudflare/cloudflare-warp/tlsconfig"
@@ -84,9 +83,8 @@ WARNING:
 			Usage: "Disable periodic check for updates, restarting the server with the new version.",
 			Value: false,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "edge",
-			Value:   "cftunnel.com:7844",
 			Usage:   "Address of the Cloudflare tunnel server.",
 			EnvVars: []string{"TUNNEL_EDGE"},
 			Hidden:  true,
@@ -149,6 +147,12 @@ WARNING:
 			Usage:   "Listen address for metrics reporting.",
 			EnvVars: []string{"TUNNEL_METRICS"},
 		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    "metrics-update-freq",
+			Usage:   "Frequency to update tunnel metrics",
+			Value:   time.Second * 5,
+			EnvVars: []string{"TUNNEL_METRICS_UPDATE_FREQ"},
+		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "tag",
 			Usage:   "Custom tags used to identify this tunnel, in format `KEY=VALUE`. Multiple tags may be specified",
@@ -169,8 +173,14 @@ WARNING:
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "loglevel",
 			Value:   "info",
-			Usage:   "Logging level {panic, fatal, error, warn, info, debug}",
+			Usage:   "Application logging level {panic, fatal, error, warn, info, debug}",
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "proto-loglevel",
+			Value:   "warn",
+			Usage:   "Protocol logging level {panic, fatal, error, warn, info, debug}",
+			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL"},
 		}),
 		altsrc.NewUintFlag(&cli.UintFlag{
 			Name:    "retries",
@@ -187,6 +197,11 @@ WARNING:
 			Name:    "pidfile",
 			Usage:   "Write the application's PID to this file after first successful connection.",
 			EnvVars: []string{"TUNNEL_PIDFILE"},
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:   "ha-connections",
+			Value:  4,
+			Hidden: true,
 		}),
 	}
 	app.Action = func(c *cli.Context) error {
@@ -259,6 +274,13 @@ func startServer(c *cli.Context) {
 	}
 
 	log.SetLevel(logLevel)
+	protoLogLevel, err := log.ParseLevel(c.String("proto-loglevel"))
+	if err != nil {
+		log.WithError(err).Fatal("Unknown protocol logging level specified")
+	}
+	protoLogger := log.New()
+	protoLogger.Level = protoLogLevel
+
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
 		log.WithError(err).Fatal("Invalid hostname")
@@ -325,8 +347,9 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	if err != nil {
 		log.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
 	}
+	tunnelMetrics := origin.NewTunnelMetrics()
 	tunnelConfig := &origin.TunnelConfig{
-		EdgeAddr:          c.String("edge"),
+		EdgeAddrs:         c.StringSlice("edge"),
 		OriginUrl:         url,
 		Hostname:          hostname,
 		OriginCert:        originCert,
@@ -338,20 +361,25 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		ReportedVersion:   Version,
 		LBPool:            c.String("lb-pool"),
 		Tags:              tags,
-		ConnectedSignal:   h2mux.NewSignal(),
+		HAConnections:     c.Int("ha-connections"),
+		Metrics:           tunnelMetrics,
+		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
+		ProtocolLogger:    protoLogger,
 	}
+	connectedSignal := make(chan struct{})
 
 	tunnelConfig.TlsConfig = tlsconfig.CLIFlags{RootCA: "cacert"}.GetConfig(c)
 	if tunnelConfig.TlsConfig.RootCAs == nil {
 		tunnelConfig.TlsConfig.RootCAs = GetCloudflareRootCA()
 		tunnelConfig.TlsConfig.ServerName = "cftunnel.com"
-	} else {
-		tunnelConfig.TlsConfig.ServerName, _, _ = net.SplitHostPort(tunnelConfig.EdgeAddr)
+	} else if len(tunnelConfig.EdgeAddrs) > 0 {
+		// Set for development environments and for testing specific origintunneld instances
+		tunnelConfig.TlsConfig.ServerName, _, _ = net.SplitHostPort(tunnelConfig.EdgeAddrs[0])
 	}
 
-	go writePidFile(tunnelConfig.ConnectedSignal, c.String("pidfile"))
+	go writePidFile(connectedSignal, c.String("pidfile"))
 	go func() {
-		errC <- origin.StartTunnelDaemon(tunnelConfig, shutdownC)
+		errC <- origin.StartTunnelDaemon(tunnelConfig, shutdownC, connectedSignal)
 		wg.Done()
 	}()
 
@@ -476,8 +504,8 @@ func generateRandomClientID() string {
 	return hex.EncodeToString(id)
 }
 
-func writePidFile(waitForSignal h2mux.Signal, pidFile string) {
-	waitForSignal.Wait()
+func writePidFile(waitForSignal chan struct{}, pidFile string) {
+	<-waitForSignal
 	daemon.SdNotify(false, "READY=1")
 	if pidFile == "" {
 		return

@@ -31,6 +31,10 @@ struct RegistrationOptions {
     poolId @4 :Text;
     # Client-defined tags to associate with the tunnel
     tags @5 :List(Tag);
+    # A unique identifier for a high-availability connection made by a single client.
+    connectionId @6 :UInt8;
+    # origin LAN IP
+    originLocalIp @7 :Text;
 }
 
 struct Tag {

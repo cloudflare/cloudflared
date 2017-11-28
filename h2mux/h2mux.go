@@ -43,6 +43,8 @@ type MuxerConfig struct {
 	HeartbeatInterval time.Duration
 	// The minimum number of heartbeats to send before terminating the connection.
 	MaxHeartbeats uint64
+	// Logger to use
+	Logger *log.Logger
 }
 
 type Muxer struct {
@@ -70,7 +72,7 @@ type Muxer struct {
 	streams *activeStreamMap
 	// explicitShutdown records whether the Muxer is closing because Shutdown was called, or due to another
 	// error.
-	explicitShutdown BooleanFuse
+	explicitShutdown *BooleanFuse
 }
 
 type Header struct {
@@ -84,6 +86,13 @@ func Handshake(
 	r io.ReadCloser,
 	config MuxerConfig,
 ) (*Muxer, error) {
+	// Set default config values
+	if config.Timeout == 0 {
+		config.Timeout = defaultTimeout
+	}
+	if config.Logger == nil {
+		config.Logger = log.New()
+	}
 	// Initialise connection state fields
 	m := &Muxer{
 		f:             http2.NewFramer(w, r), // A framer that writes to w and reads from r
@@ -96,10 +105,6 @@ func Handshake(
 		streams:       newActiveStreamMap(config.IsClient),
 	}
 	m.f.ReadMetaHeaders = hpack.NewDecoder(4096, func(hpack.HeaderField) {})
-
-	if config.Timeout == 0 {
-		config.Timeout = defaultTimeout
-	}
 
 	// Initialise the settings to identify this connection and confirm the other end is sane.
 	handshakeSetting := http2.Setting{ID: SettingMuxerMagic, Val: MuxerMagicEdge}
@@ -134,14 +139,15 @@ func Handshake(
 	// Sanity check to enusre idelDuration is sane
 	if idleDuration == 0 || idleDuration < defaultTimeout {
 		idleDuration = defaultTimeout
-		log.Warn("Minimum idle time has been adjusted to ", defaultTimeout)
+		config.Logger.Warn("Minimum idle time has been adjusted to ", defaultTimeout)
 	}
 	maxRetries := config.MaxHeartbeats
 	if maxRetries == 0 {
 		maxRetries = defaultRetries
-		log.Warn("Minimum number of unacked heartbeats to send before closing the connection has been adjusted to ", maxRetries)
+		config.Logger.Warn("Minimum number of unacked heartbeats to send before closing the connection has been adjusted to ", maxRetries)
 	}
 
+	m.explicitShutdown = NewBooleanFuse()
 	m.muxReader = &MuxReader{
 		f:                   m.f,
 		handler:             m.config.Handler,
@@ -226,7 +232,7 @@ func joinErrorsWithTimeout(errChan <-chan error, receiveCount int, timeout time.
 }
 
 func (m *Muxer) Serve() error {
-	logger := log.WithField("name", m.config.Name)
+	logger := m.config.Logger.WithField("name", m.config.Name)
 	errChan := make(chan error)
 	go func() {
 		errChan <- m.muxReader.run(logger)

@@ -43,12 +43,14 @@ func UnmarshalTunnelRegistration(s tunnelrpc.TunnelRegistration) (*TunnelRegistr
 }
 
 type RegistrationOptions struct {
-	ClientID               string `capnp:"clientId"`
-	Version                string
-	OS                     string `capnp:"os"`
-	ExistingTunnelPolicy   tunnelrpc.ExistingTunnelPolicy
-	PoolID                 string `capnp:"poolId"`
-	Tags                   []Tag
+	ClientID             string `capnp:"clientId"`
+	Version              string
+	OS                   string `capnp:"os"`
+	ExistingTunnelPolicy tunnelrpc.ExistingTunnelPolicy
+	PoolID               string `capnp:"poolId"`
+	Tags                 []Tag
+	ConnectionID         uint8 `capnp:"connectionId"`
+	OriginLocalIP        string `capnp:"originLocalIp"`
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {
