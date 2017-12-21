@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -47,6 +48,7 @@ type TunnelConfig struct {
 	LBPool            string
 	Tags              []tunnelpogs.Tag
 	HAConnections     int
+	HTTPTransport     http.RoundTripper
 	Metrics           *TunnelMetrics
 	MetricsUpdateFreq time.Duration
 	ProtocolLogger    *log.Logger
@@ -98,6 +100,7 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 		<-shutdownC
 		cancel()
 	}()
+	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
 	if config.HAConnections > 1 {
 		return NewSupervisor(config).Run(ctx, connectedSignal)
 	} else {
@@ -110,6 +113,8 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 }
 
 func ServeTunnelLoop(ctx context.Context, config *TunnelConfig, addr *net.TCPAddr, connectionID uint8, connectedSignal chan struct{}) error {
+	config.Metrics.incrementHaConnections()
+	defer config.Metrics.decrementHaConnections()
 	backoff := BackoffHandler{MaxRetries: config.Retries}
 	// Used to close connectedSignal no more than once
 	connectedFuse := h2mux.NewBooleanFuse()
@@ -141,6 +146,8 @@ func ServeTunnel(
 	connectedFuse *h2mux.BooleanFuse,
 	backoff *BackoffHandler,
 ) (err error, recoverable bool) {
+	var wg sync.WaitGroup
+	wg.Add(2)
 	// Treat panics as recoverable errors
 	defer func() {
 		if r := recover(); r != nil {
@@ -159,6 +166,7 @@ func ServeTunnel(
 		switch err.(type) {
 		case dialError:
 			errLog.Error("Unable to dial edge")
+			return err, false
 		case h2mux.MuxerHandshakeError:
 			errLog.Error("Handshake failed with edge server")
 		default:
@@ -178,14 +186,16 @@ func ServeTunnel(
 			serveCancel()
 		}
 		registerErrC <- err
+		wg.Done()
 	}()
 	updateMetricsTickC := time.Tick(config.MetricsUpdateFreq)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-serveCtx.Done():
 				handler.muxer.Shutdown()
-				break
+				return
 			case <-updateMetricsTickC:
 				handler.UpdateMetrics()
 			}
@@ -195,6 +205,7 @@ func ServeTunnel(
 	err = handler.muxer.Serve()
 	serveCancel()
 	registerErr := <-registerErrC
+	wg.Wait()
 	if err != nil {
 		log.WithError(err).Error("Tunnel error")
 		return err, true
@@ -204,7 +215,7 @@ func ServeTunnel(
 		if e, ok := registerErr.(printableRegisterTunnelError); ok {
 			log.Error(e)
 			if e.permanent {
-				return nil, false
+				return e, false
 			}
 			return e.cause, true
 		} else if e, ok := registerErr.(dupConnRegisterTunnelError); ok {
@@ -282,10 +293,6 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	}
 
 	log.Infof("Registered at %s", registration.Url)
-
-	for _, logLine := range registration.LogLines {
-		log.Infof(logLine)
-	}
 	return nil
 }
 
@@ -348,7 +355,7 @@ func H1ResponseToH2Response(h1 *http.Response) (h2 []h2mux.Header) {
 type TunnelHandler struct {
 	originUrl  string
 	muxer      *h2mux.Muxer
-	httpClient *http.Client
+	httpClient http.RoundTripper
 	tags       []tunnelpogs.Tag
 	metrics    *TunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
@@ -365,10 +372,13 @@ func NewTunnelHandler(ctx context.Context, config *TunnelConfig, addr string, co
 	}
 	h := &TunnelHandler{
 		originUrl:    url,
-		httpClient:   &http.Client{Timeout: time.Minute},
+		httpClient:   config.HTTPTransport,
 		tags:         config.Tags,
 		metrics:      config.Metrics,
 		connectionID: uint8ToString(connectionID),
+	}
+	if h.httpClient == nil {
+		h.httpClient = http.DefaultTransport
 	}
 	// Inherit from parent context so we can cancel (Ctrl-C) while dialing
 	dialCtx, dialCancel := context.WithTimeout(ctx, dialTimeout)
@@ -376,13 +386,13 @@ func NewTunnelHandler(ctx context.Context, config *TunnelConfig, addr string, co
 	plaintextEdgeConn, err := dialer.DialContext(dialCtx, "tcp", addr)
 	dialCancel()
 	if err != nil {
-		return nil, "", dialError{cause: err}
+		return nil, "", dialError{cause: errors.Wrap(err, "DialContext error")}
 	}
 	edgeConn := tls.Client(plaintextEdgeConn, config.TlsConfig)
 	edgeConn.SetDeadline(time.Now().Add(dialTimeout))
 	err = edgeConn.Handshake()
 	if err != nil {
-		return nil, "", dialError{cause: err}
+		return nil, "", dialError{cause: errors.Wrap(err, "Handshake with edge error")}
 	}
 	// clear the deadline on the conn; h2mux has its own timeouts
 	edgeConn.SetDeadline(time.Time{})
@@ -419,7 +429,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		log.WithError(err).Error("invalid request received")
 	}
 	h.AppendTagHeaders(req)
-	response, err := h.httpClient.Do(req)
+	response, err := h.httpClient.RoundTrip(req)
 	if err != nil {
 		log.WithError(err).Error("HTTP request error")
 		stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: "502"}})

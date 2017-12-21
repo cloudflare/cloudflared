@@ -11,7 +11,7 @@ import (
 
 const (
 	// Waiting time before retrying a failed tunnel connection
-	tunnelRetryDuration = time.Minute
+	tunnelRetryDuration = time.Second * 10
 	// Limit on the exponential backoff time period. (2^5 = 32 minutes)
 	tunnelRetryLimit = 5
 	// SRV record resolution TTL
@@ -19,12 +19,16 @@ const (
 )
 
 type Supervisor struct {
-	config              *TunnelConfig
-	edgeIPs             []*net.TCPAddr
-	lastResolve         time.Time
-	resolverC           chan resolveResult
-	tunnelErrors        chan tunnelError
-	tunnelsConnecting   map[int]chan struct{}
+	config  *TunnelConfig
+	edgeIPs []*net.TCPAddr
+	// nextUnusedEdgeIP is the index of the next addr k edgeIPs to try
+	nextUnusedEdgeIP  int
+	lastResolve       time.Time
+	resolverC         chan resolveResult
+	tunnelErrors      chan tunnelError
+	tunnelsConnecting map[int]chan struct{}
+	// nextConnectedIndex and nextConnectedSignal are used to wait for all
+	// currently-connecting tunnels to finish connecting so we can reset backoff timer
 	nextConnectedIndex  int
 	nextConnectedSignal chan struct{}
 }
@@ -53,7 +57,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 	}
 	tunnelsActive := s.config.HAConnections
 	tunnelsWaiting := []int{}
-	backoff := BackoffHandler{MaxRetries: tunnelRetryLimit, BaseTime: tunnelRetryDuration, RetryForever: true}
+	backoff := BackoffHandler{MaxRetries: s.config.Retries, BaseTime: tunnelRetryDuration, RetryForever: true}
 	var backoffTimer <-chan time.Time
 	for tunnelsActive > 0 {
 		select {
@@ -72,10 +76,17 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 				log.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
-				if backoffTimer != nil {
+				if backoffTimer == nil {
 					backoffTimer = backoff.BackoffTimer()
 				}
-				s.refreshEdgeIPs()
+				// If the error is a dial error, the problem is likely to be network related
+				// try another addr before refreshing since we are likely to get back the
+				// same IPs in the same order. Same problem with duplicate connection error.
+				if s.unusedIPs() {
+					s.replaceEdgeIP(tunnelError.index)
+				} else {
+					s.refreshEdgeIPs()
+				}
 			}
 		// Backoff was set and its timer expired
 		case <-backoffTimer:
@@ -109,15 +120,23 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}) error {
 	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 	if err != nil {
+		log.Infof("ResolveEdgeIPs err")
 		return err
 	}
 	s.edgeIPs = edgeIPs
+	if s.config.HAConnections > len(edgeIPs) {
+		log.Warnf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, len(edgeIPs))
+		s.config.HAConnections = len(edgeIPs)
+	}
 	s.lastResolve = time.Now()
-	go s.startTunnel(ctx, 0, connectedSignal)
+	// check entitlement and version too old error before attempting to register more tunnels
+	s.nextUnusedEdgeIP = s.config.HAConnections
+	go s.startFirstTunnel(ctx, connectedSignal)
 	select {
 	case <-ctx.Done():
 		<-s.tunnelErrors
-		return nil
+		// Error can't be nil. A nil error signals that initialization succeed
+		return fmt.Errorf("Context was canceled")
 	case tunnelError := <-s.tunnelErrors:
 		return tunnelError.err
 	case <-connectedSignal:
@@ -125,8 +144,39 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
 		go s.startTunnel(ctx, i, make(chan struct{}))
+		// TODO: Add artificial delay between HA connections to make sure all origins
+		// are registered in LB pool. Temporary fix until we fix LB
+		time.Sleep(time.Millisecond * 500)
 	}
 	return nil
+}
+
+// startTunnel starts the first tunnel connection. The resulting error will be sent on
+// s.tunnelErrors. It will send a signal via connectedSignal if registration succeed
+func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan struct{}) {
+	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal)
+	defer func() {
+		s.tunnelErrors <- tunnelError{index: 0, err: err}
+	}()
+
+	for s.unusedIPs() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		switch err.(type) {
+		case nil:
+			return
+		// try the next address if it was a dialError(network problem) or
+		// dupConnRegisterTunnelError
+		case dialError, dupConnRegisterTunnelError:
+			s.replaceEdgeIP(0)
+		default:
+			return
+		}
+		err = ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal)
+	}
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
@@ -171,4 +221,13 @@ func (s *Supervisor) refreshEdgeIPs() {
 		edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 		s.resolverC <- resolveResult{edgeIPs: edgeIPs, err: err}
 	}()
+}
+
+func (s *Supervisor) unusedIPs() bool {
+	return s.nextUnusedEdgeIP < len(s.edgeIPs)
+}
+
+func (s *Supervisor) replaceEdgeIP(badIPIndex int) {
+	s.edgeIPs[badIPIndex] = s.edgeIPs[s.nextUnusedEdgeIP]
+	s.nextUnusedEdgeIP++
 }

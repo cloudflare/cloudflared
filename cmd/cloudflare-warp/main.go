@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -203,6 +204,35 @@ WARNING:
 			Value:  4,
 			Hidden: true,
 		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:  "proxy-connect-timeout",
+			Usage: "HTTP proxy timeout for establishing a new connection",
+			Value: time.Second * 30,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:  "proxy-tls-timeout",
+			Usage: "HTTP proxy timeout for completing a TLS handshake",
+			Value: time.Second * 10,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:  "proxy-tcp-keepalive",
+			Usage: "HTTP proxy TCP keepalive duration",
+			Value: time.Second * 30,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:  "proxy-no-happy-eyeballs",
+			Usage: "HTTP proxy should disable \"happy eyeballs\" for IPv4/v6 fallback",
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:  "proxy-keepalive-connections",
+			Usage: "HTTP proxy maximum keepalive connection pool size",
+			Value: 100,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:  "proxy-keepalive-timeout",
+			Usage: "HTTP proxy timeout for closing an idle connection",
+			Value: time.Second * 90,
+		}),
 	}
 	app.Action = func(c *cli.Context) error {
 		raven.CapturePanic(func() { startServer(c) }, nil)
@@ -348,6 +378,18 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		log.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
 	}
 	tunnelMetrics := origin.NewTunnelMetrics()
+	httpTransport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   c.Duration("proxy-connect-timeout"),
+			KeepAlive: c.Duration("proxy-tcp-keepalive"),
+			DualStack: !c.Bool("proxy-no-happy-eyeballs"),
+		}).DialContext,
+		MaxIdleConns:          c.Int("proxy-keepalive-connections"),
+		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
+		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 	tunnelConfig := &origin.TunnelConfig{
 		EdgeAddrs:         c.StringSlice("edge"),
 		OriginUrl:         url,
@@ -362,6 +404,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		LBPool:            c.String("lb-pool"),
 		Tags:              tags,
 		HAConnections:     c.Int("ha-connections"),
+		HTTPTransport:     httpTransport,
 		Metrics:           tunnelMetrics,
 		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
 		ProtocolLogger:    protoLogger,

@@ -10,6 +10,7 @@ import (
 )
 
 type TunnelMetrics struct {
+	haConnections     prometheus.Gauge
 	totalRequests     prometheus.Counter
 	requestsPerTunnel *prometheus.CounterVec
 	// concurrentRequestsLock is a mutex for concurrentRequests and maxConcurrentRequests
@@ -41,6 +42,13 @@ type TunnelMetrics struct {
 
 // Metrics that can be collected without asking the edge
 func NewTunnelMetrics() *TunnelMetrics {
+	haConnections := prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "ha_connections",
+			Help: "Number of active ha connections",
+		})
+	prometheus.MustRegister(haConnections)
+
 	totalRequests := prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "total_requests",
@@ -173,6 +181,7 @@ func NewTunnelMetrics() *TunnelMetrics {
 	prometheus.MustRegister(serverLocations)
 
 	return &TunnelMetrics{
+		haConnections:                  haConnections,
 		totalRequests:                  totalRequests,
 		requestsPerTunnel:              requestsPerTunnel,
 		concurrentRequestsPerTunnel:    concurrentRequestsPerTunnel,
@@ -194,6 +203,14 @@ func NewTunnelMetrics() *TunnelMetrics {
 		serverLocations:       serverLocations,
 		oldServerLocations:    make(map[string]string),
 	}
+}
+
+func (t *TunnelMetrics) incrementHaConnections() {
+	t.haConnections.Inc()
+}
+
+func (t *TunnelMetrics) decrementHaConnections() {
+	t.haConnections.Dec()
 }
 
 func (t *TunnelMetrics) updateTunnelFlowControlMetrics(metrics *h2mux.FlowControlMetrics) {
