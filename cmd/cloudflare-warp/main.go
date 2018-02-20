@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -21,11 +23,12 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflare-warp/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflare-warp/validation"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/facebookgo/grace/gracenet"
-	raven "github.com/getsentry/raven-go"
-	homedir "github.com/mitchellh/go-homedir"
-	cli "gopkg.in/urfave/cli.v2"
+	"github.com/getsentry/raven-go"
+	"github.com/mitchellh/go-homedir"
+	"github.com/rifflock/lfshook"
+	"github.com/sirupsen/logrus"
+	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
 
 	"github.com/coreos/go-systemd/daemon"
@@ -40,10 +43,20 @@ const configFile = "config.yml"
 var listeners = gracenet.Net{}
 var Version = "DEV"
 var BuildTime = "unknown"
+var Log *logrus.Logger
 
 // Shutdown channel used by the app. When closed, app must terminate.
 // May be closed by the Windows service runner.
 var shutdownC chan struct{}
+
+type BuildAndRuntimeInfo struct {
+	GoOS        string                 `json:"go_os"`
+	GoVersion   string                 `json:"go_version"`
+	GoArch      string                 `json:"go_arch"`
+	WarpVersion string                 `json:"warp_version"`
+	WarpFlags   map[string]interface{} `json:"warp_flags"`
+	WarpEnvs    map[string]string      `json:"warp_envs"`
+}
 
 func main() {
 	metrics.RegisterBuildInfo(BuildTime, Version)
@@ -84,6 +97,12 @@ WARNING:
 			Usage: "Disable periodic check for updates, restarting the server with the new version.",
 			Value: false,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name: "is-autoupdated",
+			Usage: "Signal the new process that Warp client has been autoupdated",
+			Value: false,
+			Hidden: true,
+		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "edge",
 			Usage:   "Address of the Cloudflare tunnel server.",
@@ -99,12 +118,12 @@ WARNING:
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "origincert",
 			Usage:   "Path to the certificate generated for your origin when you run cloudflare-warp login.",
-			EnvVars: []string{"ORIGIN_CERT"},
+			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
 			Value:   filepath.Join(defaultConfigDir, credentialFile),
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "url",
-			Value:   "http://localhost:8080",
+			Value:   "https://localhost:8080",
 			Usage:   "Connect to the local webserver at `URL`.",
 			EnvVars: []string{"TUNNEL_URL"},
 		}),
@@ -190,14 +209,20 @@ WARNING:
 			EnvVars: []string{"TUNNEL_RETRIES"},
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:  "hello-world",
-			Usage: "Run Hello World Server",
-			Value: false,
+			Name:    "hello-world",
+			Value:   false,
+			Usage:   "Run Hello World Server",
+			EnvVars: []string{"TUNNEL_HELLO_WORLD"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "pidfile",
 			Usage:   "Write the application's PID to this file after first successful connection.",
 			EnvVars: []string{"TUNNEL_PIDFILE"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "logfile",
+			Usage:   "Save application log to this file for reporting issues.",
+			EnvVars: []string{"TUNNEL_LOGFILE"},
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:   "ha-connections",
@@ -239,6 +264,7 @@ WARNING:
 		return nil
 	}
 	app.Before = func(context *cli.Context) error {
+		Log = logrus.New()
 		inputSource, err := findInputSourceContext(context)
 		if err != nil {
 			return err
@@ -248,7 +274,7 @@ WARNING:
 		return nil
 	}
 	app.Commands = []*cli.Command{
-		&cli.Command{
+		{
 			Name:      "update",
 			Action:    update,
 			Usage:     "Update the agent if a new version exists",
@@ -259,7 +285,7 @@ WARNING:
 
    To determine if an update happened in a script, check for error code 64.`,
 		},
-		&cli.Command{
+		{
 			Name:      "login",
 			Action:    login,
 			Usage:     "Generate a configuration file with your login details",
@@ -271,7 +297,7 @@ WARNING:
 				},
 			},
 		},
-		&cli.Command{
+		{
 			Name:   "hello",
 			Action: hello,
 			Usage:  "Run a simple \"Hello World\" server for testing Cloudflare Warp.",
@@ -293,27 +319,43 @@ func startServer(c *cli.Context) {
 	errC := make(chan error)
 	wg.Add(2)
 
-	if c.NumFlags() == 0 && c.NArg() == 0 {
+	// If the user choose to supply all options through env variables,
+	// c.NumFlags() == 0 && c.NArg() == 0. For warp to work, the user needs to at
+	// least provide a hostname.
+	if c.NumFlags() == 0 && c.NArg() == 0 && os.Getenv("TUNNEL_HOSTNAME") == "" {
 		cli.ShowAppHelp(c)
 		return
 	}
-
-	logLevel, err := log.ParseLevel(c.String("loglevel"))
+	logLevel, err := logrus.ParseLevel(c.String("loglevel"))
 	if err != nil {
-		log.WithError(err).Fatal("Unknown logging level specified")
+		Log.WithError(err).Fatal("Unknown logging level specified")
 	}
+	logrus.SetLevel(logLevel)
 
-	log.SetLevel(logLevel)
-	protoLogLevel, err := log.ParseLevel(c.String("proto-loglevel"))
+	protoLogLevel, err := logrus.ParseLevel(c.String("proto-loglevel"))
 	if err != nil {
-		log.WithError(err).Fatal("Unknown protocol logging level specified")
+		Log.WithError(err).Fatal("Unknown protocol logging level specified")
 	}
-	protoLogger := log.New()
+	protoLogger := logrus.New()
 	protoLogger.Level = protoLogLevel
+
+	if c.String("logfile") != "" {
+		if err := initLogFile(c, protoLogger); err != nil {
+			Log.Error(err)
+		}
+	}
+
+	if !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0 {
+		if initUpdate() {
+			return
+		}
+		Log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
+	}
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
-		log.WithError(err).Fatal("Invalid hostname")
+		Log.WithError(err).Fatal("Invalid hostname")
 
 	}
 	clientID := c.String("id")
@@ -323,46 +365,44 @@ func startServer(c *cli.Context) {
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		log.WithError(err).Fatal("Tag parse failure")
+		Log.WithError(err).Fatal("Tag parse failure")
 	}
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
-
 	if c.IsSet("hello-world") {
 		wg.Add(1)
-		listener, err := findAvailablePort()
+		listener, err := createListener("127.0.0.1:")
 		if err != nil {
 			listener.Close()
-			log.WithError(err).Fatal("Cannot start Hello World Server")
+			Log.WithError(err).Fatal("Cannot start Hello World Server")
 		}
 		go func() {
 			startHelloWorldServer(listener, shutdownC)
 			wg.Done()
 			listener.Close()
 		}()
-		c.Set("url", "http://"+listener.Addr().String())
-		log.Infof("Starting Hello World Server at %s", c.String("url"))
+		c.Set("url", "https://"+listener.Addr().String())
 	}
 
 	url, err := validateUrl(c)
 	if err != nil {
-		log.WithError(err).Fatal("Error validating url")
+		Log.WithError(err).Fatal("Error validating url")
 	}
-	log.Infof("Proxying tunnel requests to %s", url)
+	Log.Infof("Proxying tunnel requests to %s", url)
 
 	// Fail if the user provided an old authentication method
 	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {
-		log.Fatal("You don't need to give us your api-key anymore. Please use the new log in method. Just run cloudflare-warp login")
+		Log.Fatal("You don't need to give us your api-key anymore. Please use the new log in method. Just run cloudflare-warp login")
 	}
 
 	// Check that the user has acquired a certificate using the log in command
 	originCertPath, err := homedir.Expand(c.String("origincert"))
 	if err != nil {
-		log.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
+		Log.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
 	}
 	ok, err := fileExists(originCertPath)
 	if !ok {
-		log.Fatalf(`Cannot find a valid certificate for your origin at the path:
+		Log.Fatalf(`Cannot find a valid certificate for your origin at the path:
 
     %s
 
@@ -375,8 +415,9 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
-		log.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
+		Log.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
 	}
+
 	tunnelMetrics := origin.NewTunnelMetrics()
 	httpTransport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -389,13 +430,15 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
 		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
 		ExpectContinueTimeout: 1 * time.Second,
+		TLSClientConfig:       &tls.Config{RootCAs: tlsconfig.LoadOriginCertsPool()},
 	}
 	tunnelConfig := &origin.TunnelConfig{
 		EdgeAddrs:         c.StringSlice("edge"),
 		OriginUrl:         url,
 		Hostname:          hostname,
 		OriginCert:        originCert,
-		TlsConfig:         &tls.Config{},
+		TlsConfig:         tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
+		ClientTlsConfig:   httpTransport.TLSClientConfig,
 		Retries:           c.Uint("retries"),
 		HeartbeatInterval: c.Duration("heartbeat-interval"),
 		MaxHeartbeats:     c.Uint64("heartbeat-count"),
@@ -408,17 +451,10 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		Metrics:           tunnelMetrics,
 		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
 		ProtocolLogger:    protoLogger,
+		Logger:            Log,
+		IsAutoupdated:     c.Bool("is-autoupdated"),
 	}
 	connectedSignal := make(chan struct{})
-
-	tunnelConfig.TlsConfig = tlsconfig.CLIFlags{RootCA: "cacert"}.GetConfig(c)
-	if tunnelConfig.TlsConfig.RootCAs == nil {
-		tunnelConfig.TlsConfig.RootCAs = GetCloudflareRootCA()
-		tunnelConfig.TlsConfig.ServerName = "cftunnel.com"
-	} else if len(tunnelConfig.EdgeAddrs) > 0 {
-		// Set for development environments and for testing specific origintunneld instances
-		tunnelConfig.TlsConfig.ServerName, _, _ = net.SplitHostPort(tunnelConfig.EdgeAddrs[0])
-	}
 
 	go writePidFile(connectedSignal, c.String("pidfile"))
 	go func() {
@@ -428,24 +464,21 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		log.WithError(err).Fatal("Error opening metrics server listener")
+		Log.WithError(err).Fatal("Error opening metrics server listener")
 	}
 	go func() {
 		errC <- metrics.ServeMetrics(metricsListener, shutdownC)
 		wg.Done()
 	}()
 
-	if !c.Bool("no-autoupdate") {
-		log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
-		go autoupdate(c.Duration("autoupdate-period"), shutdownC)
-	}
-
+	var errCode int
 	err = WaitForSignal(errC, shutdownC)
 	if err != nil {
-		log.WithError(err).Error("Quitting due to error")
+		Log.WithError(err).Error("Quitting due to error")
 		raven.CaptureErrorAndWait(err, nil)
+		errCode = 1
 	} else {
-		log.Info("Quitting...")
+		Log.Info("Quitting...")
 	}
 	// Wait for clean exit, discarding all errors
 	go func() {
@@ -453,6 +486,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		}
 	}()
 	wg.Wait()
+	os.Exit(errCode)
 }
 
 func WaitForSignal(errC chan error, shutdownC chan struct{}) error {
@@ -477,30 +511,40 @@ func update(c *cli.Context) error {
 	return nil
 }
 
-func autoupdate(frequency time.Duration, shutdownC chan struct{}) {
-	if int64(frequency) == 0 {
-		return
+func initUpdate() bool {
+	if updateApplied() {
+		os.Args = append(os.Args, "--is-autoupdated=true")
+		if _, err := listeners.StartProcess(); err != nil {
+			Log.WithError(err).Error("Unable to restart server automatically")
+			return false
+		}
+		return true
 	}
+	return false
+}
+
+func autoupdate(freq time.Duration, shutdownC chan struct{}) {
 	for {
 		if updateApplied() {
+			os.Args = append(os.Args, "--is-autoupdated=true")
 			if _, err := listeners.StartProcess(); err != nil {
-				log.WithError(err).Error("Unable to restart server automatically")
+				Log.WithError(err).Error("Unable to restart server automatically")
 			}
 			close(shutdownC)
 			return
 		}
-		time.Sleep(frequency)
+		time.Sleep(freq)
 	}
 }
 
 func updateApplied() bool {
 	releaseInfo := checkForUpdates()
 	if releaseInfo.Updated {
-		log.Infof("Updated to version %s", releaseInfo.Version)
+		Log.Infof("Updated to version %s", releaseInfo.Version)
 		return true
 	}
 	if releaseInfo.Error != nil {
-		log.WithError(releaseInfo.Error).Error("Update check failed")
+		Log.WithError(releaseInfo.Error).Error("Update check failed")
 	}
 	return false
 }
@@ -555,7 +599,7 @@ func writePidFile(waitForSignal chan struct{}, pidFile string) {
 	}
 	file, err := os.Create(pidFile)
 	if err != nil {
-		log.WithError(err).Errorf("Unable to write pid to %s", pidFile)
+		Log.WithError(err).Errorf("Unable to write pid to %s", pidFile)
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "%d", os.Getpid())
@@ -572,4 +616,56 @@ func validateUrl(c *cli.Context) (string, error) {
 	}
 	validUrl, err := validation.ValidateUrl(url)
 	return validUrl, err
+}
+
+func initLogFile(c *cli.Context, protoLogger *logrus.Logger) error {
+	fileMode := os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC
+	// do not truncate log file if the client has been autoupdated
+	if c.Bool("is-autoupdated") {
+		fileMode = os.O_WRONLY|os.O_APPEND|os.O_CREATE
+	}
+	f, err := os.OpenFile(c.String("logfile"), fileMode, 0664)
+	if err != nil {
+		errors.Wrap(err, fmt.Sprintf("Cannot open file %s", c.String("logfile")))
+	}
+	defer f.Close()
+
+	pathMap := lfshook.PathMap{
+		logrus.InfoLevel:  c.String("logfile"),
+		logrus.ErrorLevel: c.String("logfile"),
+		logrus.FatalLevel: c.String("logfile"),
+		logrus.PanicLevel: c.String("logfile"),
+	}
+
+	Log.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
+	protoLogger.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
+
+	flags := make(map[string]interface{})
+	envs := make(map[string]string)
+
+	for _, flag := range c.LocalFlagNames() {
+		flags[flag] = c.Generic(flag)
+	}
+
+	// Find env variables for Warp
+	for _, env := range os.Environ() {
+		// All Warp env variables start with TUNNEL_
+		if strings.Contains(env, "TUNNEL_") {
+			vars := strings.Split(env, "=")
+			if len(vars) == 2 {
+				envs[vars[0]] = vars[1]
+			}
+		}
+	}
+
+	Log.Infof("Warp build and runtime configuration: %+v", BuildAndRuntimeInfo{
+		GoOS:        runtime.GOOS,
+		GoVersion:   runtime.Version(),
+		GoArch:      runtime.GOARCH,
+		WarpVersion: Version,
+		WarpFlags:   flags,
+		WarpEnvs:    envs,
+	})
+
+	return nil
 }

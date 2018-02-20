@@ -28,13 +28,15 @@ struct RegistrationOptions {
     # What to do with existing tunnels for the given hostname.
     existingTunnelPolicy @3 :ExistingTunnelPolicy;
     # If using the balancing policy, identifies the LB pool to use.
-    poolId @4 :Text;
+    poolName @4 :Text;
     # Client-defined tags to associate with the tunnel
     tags @5 :List(Tag);
     # A unique identifier for a high-availability connection made by a single client.
     connectionId @6 :UInt8;
     # origin LAN IP
     originLocalIp @7 :Text;
+    # whether Warp client has been autoupdated
+    isAutoupdated @8 :Bool;
 }
 
 struct Tag {

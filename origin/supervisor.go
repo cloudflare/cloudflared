@@ -5,7 +5,6 @@ import (
 	"net"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
@@ -73,7 +72,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil {
-				log.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
+				Log.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 				if backoffTimer == nil {
@@ -107,10 +106,10 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 			s.lastResolve = time.Now()
 			s.resolverC = nil
 			if result.err == nil {
-				log.Debug("Service discovery refresh complete")
+				Log.Debug("Service discovery refresh complete")
 				s.edgeIPs = result.edgeIPs
 			} else {
-				log.WithError(result.err).Error("Service discovery error")
+				Log.WithError(result.err).Error("Service discovery error")
 			}
 		}
 	}
@@ -120,12 +119,12 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}) error {
 	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 	if err != nil {
-		log.Infof("ResolveEdgeIPs err")
+		Log.Infof("ResolveEdgeIPs err")
 		return err
 	}
 	s.edgeIPs = edgeIPs
 	if s.config.HAConnections > len(edgeIPs) {
-		log.Warnf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, len(edgeIPs))
+		Log.Warnf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, len(edgeIPs))
 		s.config.HAConnections = len(edgeIPs)
 	}
 	s.lastResolve = time.Now()

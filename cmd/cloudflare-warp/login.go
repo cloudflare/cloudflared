@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	homedir "github.com/mitchellh/go-homedir"
 	cli "gopkg.in/urfave/cli.v2"
 )
@@ -137,7 +136,7 @@ func download(certURL, filePath string) bool {
 			return true
 		}
 		if err != nil {
-			log.WithError(err).Error("Error fetching certificate")
+			Log.WithError(err).Error("Error fetching certificate")
 			return false
 		}
 	}
@@ -180,16 +179,16 @@ func putSuccess(client *http.Client, certURL string) {
 	// indicate success to the relay server
 	req, err := http.NewRequest("PUT", certURL+"/ok", nil)
 	if err != nil {
-		log.WithError(err).Error("HTTP request error")
+		Log.WithError(err).Error("HTTP request error")
 		return
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.WithError(err).Error("HTTP error")
+		Log.WithError(err).Error("HTTP error")
 		return
 	}
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
-		log.Errorf("Unexpected HTTP error code %d", resp.StatusCode)
+		Log.Errorf("Unexpected HTTP error code %d", resp.StatusCode)
 	}
 }

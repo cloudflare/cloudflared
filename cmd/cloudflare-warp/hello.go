@@ -2,23 +2,31 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
+	"time"
 
-	"github.com/pkg/errors"
+	"github.com/gorilla/websocket"
+	"gopkg.in/urfave/cli.v2"
 
-	log "github.com/Sirupsen/logrus"
-	cli "gopkg.in/urfave/cli.v2"
+	"github.com/cloudflare/cloudflare-warp/tlsconfig"
 )
 
 type templateData struct {
 	ServerName string
 	Request    *http.Request
 	Body       string
+}
+
+type OriginUpTime struct {
+	StartTime time.Time `json:"startTime"`
+	UpTime    string    `json:"uptime"`
 }
 
 const defaultServerName = "the Cloudflare Warp test server"
@@ -85,71 +93,113 @@ const indexTemplate = `
 
 func hello(c *cli.Context) error {
 	address := fmt.Sprintf(":%d", c.Int("port"))
-	server := NewHelloWorldServer()
-	if hostname, err := os.Hostname(); err != nil {
-		server.serverName = hostname
+	listener, err := createListener(address)
+	if err != nil {
+		return err
 	}
-	err := server.ListenAndServe(address)
-	return errors.Wrap(err, "Fail to start Hello World Server")
+	defer listener.Close()
+	err = startHelloWorldServer(listener, nil)
+	return err
 }
 
 func startHelloWorldServer(listener net.Listener, shutdownC <-chan struct{}) error {
-	server := NewHelloWorldServer()
-	if hostname, err := os.Hostname(); err != nil {
-		server.serverName = hostname
+	Log.Infof("Starting Hello World server at %s", listener.Addr())
+	serverName := defaultServerName
+	if hostname, err := os.Hostname(); err == nil {
+		serverName = hostname
 	}
-	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: server}
+
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+
+	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: nil}
 	go func() {
 		<-shutdownC
 		httpServer.Close()
 	}()
+
+	http.HandleFunc("/uptime", uptimeHandler(time.Now()))
+	http.HandleFunc("/ws", websocketHandler(upgrader))
+	http.HandleFunc("/", rootHandler(serverName))
 	err := httpServer.Serve(listener)
 	return err
 }
 
-type HelloWorldServer struct {
-	responseTemplate *template.Template
-	serverName       string
-}
-
-func NewHelloWorldServer() *HelloWorldServer {
-	return &HelloWorldServer{
-		responseTemplate: template.Must(template.New("index").Parse(indexTemplate)),
-		serverName:       defaultServerName,
+func createListener(address string) (net.Listener, error) {
+	certificate, err := tlsconfig.GetHelloCertificate()
+	if err != nil {
+		return nil, err
 	}
-}
 
-func findAvailablePort() (net.Listener, error) {
-	// If the port in address is empty, a port number is automatically chosen.
-	listener, err := net.Listen("tcp", "127.0.0.1:")
+	// If the port in address is empty, a port number is automatically chosen
+	listener, err := tls.Listen(
+		"tcp",
+		address,
+		&tls.Config{Certificates: []tls.Certificate{certificate}})
+
 	return listener, err
 }
 
-func (s *HelloWorldServer) ListenAndServe(address string) error {
-	log.Infof("Starting Hello World server on %s", address)
-	err := http.ListenAndServe(address, s)
-	return err
+func uptimeHandler(startTime time.Time) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Note that if autoupdate is enabled, the uptime is reset when a new client
+		// release is available
+		resp := &OriginUpTime{StartTime: startTime, UpTime: time.Now().Sub(startTime).String()}
+		respJson, err := json.Marshal(resp)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(respJson)
+		}
+	}
 }
 
-func (s *HelloWorldServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.WithField("client", r.RemoteAddr).Infof("%s %s %s", r.Method, r.URL, r.Proto)
-	var buffer bytes.Buffer
-	var body string
-	rawBody, err := ioutil.ReadAll(r.Body)
-	if err == nil {
-		body = string(rawBody)
-	} else {
-		body = ""
+func websocketHandler(upgrader websocket.Upgrader) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		for {
+			mt, message, err := conn.ReadMessage()
+			if err != nil {
+				break
+			}
+
+			if err := conn.WriteMessage(mt, message); err != nil {
+				break
+			}
+		}
 	}
-	err = s.responseTemplate.Execute(&buffer, &templateData{
-		ServerName: s.serverName,
-		Request:    r,
-		Body:       body,
-	})
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "error: %v", err)
-	} else {
-		buffer.WriteTo(w)
+}
+
+func rootHandler(serverName string) http.HandlerFunc {
+	responseTemplate := template.Must(template.New("index").Parse(indexTemplate))
+	return func(w http.ResponseWriter, r *http.Request) {
+		Log.WithField("client", r.RemoteAddr).Infof("%s %s %s", r.Method, r.URL, r.Proto)
+		var buffer bytes.Buffer
+		var body string
+		rawBody, err := ioutil.ReadAll(r.Body)
+		if err == nil {
+			body = string(rawBody)
+		} else {
+			body = ""
+		}
+		err = responseTemplate.Execute(&buffer, &templateData{
+			ServerName: serverName,
+			Request:    r,
+			Body:       body,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "error: %v", err)
+		} else {
+			buffer.WriteTo(w)
+		}
 	}
 }

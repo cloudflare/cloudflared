@@ -6,13 +6,14 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 func TestMain(m *testing.M) {
@@ -25,25 +26,20 @@ func TestMain(m *testing.M) {
 type DefaultMuxerPair struct {
 	OriginMuxConfig MuxerConfig
 	OriginMux       *Muxer
-	OriginWriter    *io.PipeWriter
-	OriginReader    *io.PipeReader
+	OriginConn      net.Conn
 	EdgeMuxConfig   MuxerConfig
 	EdgeMux         *Muxer
-	EdgeWriter      *io.PipeWriter
-	EdgeReader      *io.PipeReader
+	EdgeConn        net.Conn
 	doneC           chan struct{}
 }
 
 func NewDefaultMuxerPair() *DefaultMuxerPair {
-	originReader, edgeWriter := io.Pipe()
-	edgeReader, originWriter := io.Pipe()
+	origin, edge := net.Pipe()
 	return &DefaultMuxerPair{
 		OriginMuxConfig: MuxerConfig{Timeout: time.Second, IsClient: true, Name: "origin"},
-		OriginWriter:    originWriter,
-		OriginReader:    originReader,
+		OriginConn:      origin,
 		EdgeMuxConfig:   MuxerConfig{Timeout: time.Second, IsClient: false, Name: "edge"},
-		EdgeWriter:      edgeWriter,
-		EdgeReader:      edgeReader,
+		EdgeConn:        edge,
 		doneC:           make(chan struct{}),
 	}
 }
@@ -53,12 +49,12 @@ func (p *DefaultMuxerPair) Handshake(t *testing.T) {
 	originErrC := make(chan error)
 	go func() {
 		var err error
-		p.EdgeMux, err = Handshake(p.EdgeWriter, p.EdgeReader, p.EdgeMuxConfig)
+		p.EdgeMux, err = Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig)
 		edgeErrC <- err
 	}()
 	go func() {
 		var err error
-		p.OriginMux, err = Handshake(p.OriginWriter, p.OriginReader, p.OriginMuxConfig)
+		p.OriginMux, err = Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig)
 		originErrC <- err
 	}()
 
@@ -120,8 +116,8 @@ func (p *DefaultMuxerPair) Wait(t *testing.T) {
 func TestHandshake(t *testing.T) {
 	muxPair := NewDefaultMuxerPair()
 	muxPair.Handshake(t)
-	AssertIfPipeReadable(t, muxPair.OriginReader)
-	AssertIfPipeReadable(t, muxPair.EdgeReader)
+	AssertIfPipeReadable(t, muxPair.OriginConn)
+	AssertIfPipeReadable(t, muxPair.EdgeConn)
 }
 
 func TestSingleStream(t *testing.T) {
@@ -145,7 +141,7 @@ func TestSingleStream(t *testing.T) {
 		stream.Write(buf)
 		// after this receive, the edge closed the stream
 		<-closeC
-		n, err := stream.Read(buf)
+		n, err := io.ReadFull(stream, buf)
 		if n > 0 {
 			t.Fatalf("read %d bytes after EOF", n)
 		}
@@ -173,7 +169,7 @@ func TestSingleStream(t *testing.T) {
 		t.Fatalf("expected header value %s, got %s", "responseValue", stream.Headers[0].Value)
 	}
 	responseBody := make([]byte, 11)
-	n, err := stream.Read(responseBody)
+	n, err := io.ReadFull(stream, responseBody)
 	if err != nil {
 		t.Fatalf("error from (*MuxedStream).Read: %s", err)
 	}
@@ -243,7 +239,7 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 		t.Fatalf("expected header value %s, got %s", "responseValue", stream.Headers[0].Value)
 	}
 	responseBody := make([]byte, bodySize)
-	n, err := stream.Read(responseBody)
+	n, err := io.ReadFull(stream, responseBody)
 	if err != nil {
 		t.Fatalf("error from (*MuxedStream).Read: %s", err)
 	}
@@ -302,7 +298,7 @@ func TestMultipleStreams(t *testing.T) {
 				return
 			}
 			responseBody := make([]byte, 2)
-			n, err := stream.Read(responseBody)
+			n, err := io.ReadFull(stream, responseBody)
 			if err != nil {
 				errorsC <- fmt.Errorf("stream %d has error: error from (*MuxedStream).Read: %s", stream.streamID, err)
 				return
@@ -392,7 +388,7 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 			}
 
 			responseBody := make([]byte, responseSizes[(stream.streamID-2)/2])
-			n, err := stream.Read(responseBody)
+			n, err := io.ReadFull(stream, responseBody)
 			if err != nil {
 				errorsC <- fmt.Errorf("stream %d error from (*MuxedStream).Read: %s", stream.streamID, err)
 				return
@@ -451,7 +447,7 @@ func TestGracefulShutdown(t *testing.T) {
 	}
 	responseBody := make([]byte, len(responseBuf))
 	log.Debugf("Waiting for %d bytes", len(responseBuf))
-	n, err := stream.Read(responseBody)
+	n, err := io.ReadFull(stream, responseBody)
 	if err != nil {
 		t.Fatalf("error from (*MuxedStream).Read with %d bytes read: %s", n, err)
 	}
@@ -498,13 +494,13 @@ func TestUnexpectedShutdown(t *testing.T) {
 		nil,
 	)
 	// Close the underlying connection before telling the origin to write.
-	muxPair.EdgeReader.Close()
+	muxPair.EdgeConn.Close()
 	close(sendC)
 	if err != nil {
 		t.Fatalf("error in OpenStream: %s", err)
 	}
 	responseBody := make([]byte, len(responseBuf))
-	n, err := stream.Read(responseBody)
+	n, err := io.ReadFull(stream, responseBody)
 	if err != io.EOF {
 		t.Fatalf("unexpected error from (*MuxedStream).Read: %s", err)
 	}
@@ -545,14 +541,14 @@ func TestOpenAfterDisconnect(t *testing.T) {
 		switch i {
 		case 0:
 			// Close both directions of the connection to cause EOF on both peers.
-			muxPair.OriginReader.Close()
-			muxPair.OriginWriter.Close()
+			muxPair.OriginConn.Close()
+			muxPair.EdgeConn.Close()
 		case 1:
-			// Close origin reader (edge writer) to cause EOF on origin only.
-			muxPair.OriginReader.Close()
+			// Close origin conn to cause EOF on origin first.
+			muxPair.OriginConn.Close()
 		case 2:
-			// Close origin writer (edge reader) to cause EOF on edge only.
-			muxPair.OriginWriter.Close()
+			// Close edge conn to cause EOF on edge first.
+			muxPair.EdgeConn.Close()
 		}
 
 		_, err := muxPair.EdgeMux.OpenStream(
@@ -623,7 +619,7 @@ func TestHPACK(t *testing.T) {
 	}
 }
 
-func AssertIfPipeReadable(t *testing.T, pipe *io.PipeReader) {
+func AssertIfPipeReadable(t *testing.T, pipe io.ReadCloser) {
 	errC := make(chan error)
 	go func() {
 		b := []byte{0}
@@ -640,7 +636,5 @@ func AssertIfPipeReadable(t *testing.T, pipe *io.PipeReader) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		// nothing to read
-		pipe.Close()
-		<-errC
 	}
 }

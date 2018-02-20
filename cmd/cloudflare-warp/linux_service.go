@@ -42,6 +42,8 @@ After=network.target
 TimeoutStartSec=0
 Type=notify
 ExecStart={{ .Path }} --config /etc/cloudflare-warp/config.yml --origincert /etc/cloudflare-warp/cert.pem --no-autoupdate
+Restart=on-failure
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target

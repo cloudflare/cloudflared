@@ -5,7 +5,6 @@ import (
 
 	"github.com/cloudflare/cloudflare-warp/h2mux"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -249,7 +248,7 @@ func (t *TunnelMetrics) decrementConcurrentRequests(connectionID string) {
 	if _, ok := t.concurrentRequests[connectionID]; ok {
 		t.concurrentRequests[connectionID] -= 1
 	} else {
-		log.Error("Concurrent requests per tunnel metrics went wrong; you can't decrement concurrent requests count without increment it first.")
+		Log.Error("Concurrent requests per tunnel metrics went wrong; you can't decrement concurrent requests count without increment it first.")
 	}
 	t.concurrentRequestsLock.Unlock()
 

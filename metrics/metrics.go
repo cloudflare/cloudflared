@@ -11,9 +11,9 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	log "github.com/sirupsen/logrus"
 )
 
 const (

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	cli "gopkg.in/urfave/cli.v2"
 
 	"golang.org/x/sys/windows/svc"

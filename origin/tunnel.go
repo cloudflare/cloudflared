@@ -19,13 +19,16 @@ import (
 	"github.com/cloudflare/cloudflare-warp/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflare-warp/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflare-warp/validation"
+	"github.com/cloudflare/cloudflare-warp/websocket"
 
-	log "github.com/Sirupsen/logrus"
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	_ "github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 	rpc "zombiezen.com/go/capnproto2/rpc"
 )
+
+var Log *logrus.Logger
 
 const (
 	dialTimeout = 15 * time.Second
@@ -40,6 +43,7 @@ type TunnelConfig struct {
 	Hostname          string
 	OriginCert        []byte
 	TlsConfig         *tls.Config
+	ClientTlsConfig   *tls.Config
 	Retries           uint
 	HeartbeatInterval time.Duration
 	MaxHeartbeats     uint64
@@ -51,7 +55,9 @@ type TunnelConfig struct {
 	HTTPTransport     http.RoundTripper
 	Metrics           *TunnelMetrics
 	MetricsUpdateFreq time.Duration
-	ProtocolLogger    *log.Logger
+	ProtocolLogger    *logrus.Logger
+	Logger            *logrus.Logger
+	IsAutoupdated     bool
 }
 
 type dialError struct {
@@ -87,14 +93,16 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		Version:              c.ReportedVersion,
 		OS:                   fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH),
 		ExistingTunnelPolicy: policy,
-		PoolID:               c.LBPool,
+		PoolName:             c.LBPool,
 		Tags:                 c.Tags,
 		ConnectionID:         connectionID,
 		OriginLocalIP:        OriginLocalIP,
+		IsAutoupdated:        c.IsAutoupdated,
 	}
 }
 
 func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal chan struct{}) error {
+	Log = config.Logger
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-shutdownC
@@ -129,7 +137,7 @@ func ServeTunnelLoop(ctx context.Context, config *TunnelConfig, addr *net.TCPAdd
 		err, recoverable := ServeTunnel(ctx, config, addr, connectionID, connectedFuse, &backoff)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
-				log.Infof("Retrying in %s seconds", duration)
+				Log.Infof("Retrying in %s seconds", duration)
 				backoff.Backoff(ctx)
 				continue
 			}
@@ -162,11 +170,10 @@ func ServeTunnel(
 	// Returns error from parsing the origin URL or handshake errors
 	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID)
 	if err != nil {
-		errLog := log.WithError(err)
+		errLog := Log.WithError(err)
 		switch err.(type) {
 		case dialError:
 			errLog.Error("Unable to dial edge")
-			return err, false
 		case h2mux.MuxerHandshakeError:
 			errLog.Error("Handshake failed with edge server")
 		default:
@@ -207,24 +214,21 @@ func ServeTunnel(
 	registerErr := <-registerErrC
 	wg.Wait()
 	if err != nil {
-		log.WithError(err).Error("Tunnel error")
+		Log.WithError(err).Error("Tunnel error")
 		return err, true
 	}
 	if registerErr != nil {
 		// Don't retry on errors like entitlement failure or version too old
 		if e, ok := registerErr.(printableRegisterTunnelError); ok {
-			log.Error(e)
-			if e.permanent {
-				return e, false
-			}
-			return e.cause, true
+			Log.Error(e)
+			return e.cause, !e.permanent
 		} else if e, ok := registerErr.(dupConnRegisterTunnelError); ok {
-			log.Info("Already connected to this server, selecting a different one")
+			Log.Info("Already connected to this server, selecting a different one")
 			return e, true
 		}
 		// Only log errors to Sentry that may have been caused by the client side, to reduce dupes
 		raven.CaptureError(registerErr, nil)
-		log.Error("Cannot register")
+		Log.Error("Cannot register")
 		return err, true
 	}
 	return nil, false
@@ -241,7 +245,7 @@ func IsRPCStreamResponse(headers []h2mux.Header) bool {
 }
 
 func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
-	logger := log.WithField("subsystem", "rpc")
+	logger := Log.WithField("subsystem", "rpc")
 	logger.Debug("initiating RPC stream")
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
@@ -292,11 +296,11 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 		}
 	}
 
-	log.Infof("Registered at %s", registration.Url)
+	Log.Infof("Registered at %s", registration.Url)
 	return nil
 }
 
-func LogServerInfo(logger *log.Entry,
+func LogServerInfo(logger *logrus.Entry,
 	promise tunnelrpc.ServerInfo_Promise,
 	connectionID uint8,
 	metrics *TunnelMetrics,
@@ -311,7 +315,7 @@ func LogServerInfo(logger *log.Entry,
 		logger.WithError(err).Warn("Failed to retrieve server information")
 		return
 	}
-	log.Infof("Connected to %s", serverInfo.LocationName)
+	Log.Infof("Connected to %s", serverInfo.LocationName)
 	metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
 }
 
@@ -356,6 +360,7 @@ type TunnelHandler struct {
 	originUrl  string
 	muxer      *h2mux.Muxer
 	httpClient http.RoundTripper
+	tlsConfig  *tls.Config
 	tags       []tunnelpogs.Tag
 	metrics    *TunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
@@ -373,6 +378,7 @@ func NewTunnelHandler(ctx context.Context, config *TunnelConfig, addr string, co
 	h := &TunnelHandler{
 		originUrl:    url,
 		httpClient:   config.HTTPTransport,
+		tlsConfig:    config.ClientTlsConfig,
 		tags:         config.Tags,
 		metrics:      config.Metrics,
 		connectionID: uint8ToString(connectionID),
@@ -422,27 +428,43 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	h.metrics.incrementRequests(h.connectionID)
 	req, err := http.NewRequest("GET", h.originUrl, h2mux.MuxedStreamReader{MuxedStream: stream})
 	if err != nil {
-		log.WithError(err).Panic("Unexpected error from http.NewRequest")
+		Log.WithError(err).Panic("Unexpected error from http.NewRequest")
 	}
 	err = H2RequestHeadersToH1Request(stream.Headers, req)
 	if err != nil {
-		log.WithError(err).Error("invalid request received")
+		Log.WithError(err).Error("invalid request received")
 	}
 	h.AppendTagHeaders(req)
-	response, err := h.httpClient.RoundTrip(req)
-	if err != nil {
-		log.WithError(err).Error("HTTP request error")
-		stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: "502"}})
-		stream.Write([]byte("502 Bad Gateway"))
-		h.metrics.incrementResponses(h.connectionID, "502")
+
+	if websocket.IsWebSocketUpgrade(req) {
+		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
+		if err != nil {
+			h.logError(stream, err)
+		} else {
+			stream.WriteHeaders(H1ResponseToH2Response(response))
+			defer conn.Close()
+			websocket.Stream(conn.UnderlyingConn(), stream)
+		}
 	} else {
-		defer response.Body.Close()
-		stream.WriteHeaders(H1ResponseToH2Response(response))
-		io.Copy(stream, response.Body)
-		h.metrics.incrementResponses(h.connectionID, "200")
+		response, err := h.httpClient.RoundTrip(req)
+		if err != nil {
+			h.logError(stream, err)
+		} else {
+			defer response.Body.Close()
+			stream.WriteHeaders(H1ResponseToH2Response(response))
+			io.Copy(stream, response.Body)
+			h.metrics.incrementResponses(h.connectionID, "200")
+		}
 	}
 	h.metrics.decrementConcurrentRequests(h.connectionID)
 	return nil
+}
+
+func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
+	Log.WithError(err).Error("HTTP request error")
+	stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: "502"}})
+	stream.Write([]byte("502 Bad Gateway"))
+	h.metrics.incrementResponses(h.connectionID, "502")
 }
 
 func (h *TunnelHandler) UpdateMetrics() {

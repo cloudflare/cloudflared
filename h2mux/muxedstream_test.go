@@ -1,6 +1,7 @@
 package h2mux
 
 import (
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,4 +63,28 @@ func TestFlowControlSingleStream(t *testing.T) {
 	assert.False(t, stream.consumeReceiveWindow(testMaxWindowSize+1))
 	assert.Equal(t, testWindowSize<<2, stream.receiveWindow)
 	assert.Equal(t, testMaxWindowSize, stream.receiveWindowCurrentMax)
+}
+
+func TestMuxedStreamEOF(t *testing.T) {
+	for i := 0; i < 4096; i++ {
+		readyList := NewReadyList()
+		stream := &MuxedStream{
+			streamID:         1,
+			readBuffer:       NewSharedBuffer(),
+			receiveWindow:    65536,
+			receiveWindowMax: 65536,
+			sendWindow:       65536,
+			readyList:        readyList,
+		}
+
+		go func() { stream.Close() }()
+		n, err := stream.Read([]byte{0})
+		assert.Equal(t, io.EOF, err)
+		assert.Equal(t, 0, n)
+		// Write comes after read, because write buffers data before it is flushed. It wouldn't know about EOF
+		// until some time later. Calling read first forces it to know about EOF now.
+		n, err = stream.Write([]byte{1})
+		assert.Equal(t, io.EOF, err)
+		assert.Equal(t, 0, n)
+	}
 }

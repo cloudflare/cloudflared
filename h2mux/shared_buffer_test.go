@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func AssertIOReturnIsGood(t *testing.T, expected int) func(int, error) {
@@ -29,30 +31,35 @@ func TestSharedBuffer(t *testing.T) {
 
 func TestSharedBufferBlockingRead(t *testing.T) {
 	b := NewSharedBuffer()
-	testData := []byte("Hello world")
+	testData1 := []byte("Hello")
+	testData2 := []byte(" world")
 	result := make(chan []byte)
 	go func() {
-		bytesRead := make([]byte, len(testData))
-		AssertIOReturnIsGood(t, len(testData))(b.Read(bytesRead))
-		result <- bytesRead
+		bytesRead := make([]byte, len(testData1)+len(testData2))
+		nRead, err := b.Read(bytesRead)
+		AssertIOReturnIsGood(t, len(testData1))(nRead, err)
+		result <- bytesRead[:nRead]
+		nRead, err = b.Read(bytesRead)
+		AssertIOReturnIsGood(t, len(testData2))(nRead, err)
+		result <- bytesRead[:nRead]
 	}()
+	time.Sleep(time.Millisecond * 250)
 	select {
 	case <-result:
 		t.Fatalf("read returned early")
 	default:
 	}
-	AssertIOReturnIsGood(t, 5)(b.Write(testData[:5]))
-	select {
-	case <-result:
-		t.Fatalf("read returned early")
-	default:
-	}
-	AssertIOReturnIsGood(t, len(testData)-5)(b.Write(testData[5:]))
+	AssertIOReturnIsGood(t, len(testData1))(b.Write([]byte(testData1)))
 	select {
 	case r := <-result:
-		if string(r) != string(testData) {
-			t.Fatalf("expected read to return %s, got %s", testData, r)
-		}
+		assert.Equal(t, testData1, r)
+	case <-time.After(time.Second):
+		t.Fatalf("read timed out")
+	}
+	AssertIOReturnIsGood(t, len(testData2))(b.Write([]byte(testData2)))
+	select {
+	case r := <-result:
+		assert.Equal(t, testData2, r)
 	case <-time.After(time.Second):
 		t.Fatalf("read timed out")
 	}
@@ -85,7 +92,7 @@ func TestSharedBufferConcurrentReadWrite(t *testing.T) {
 		// Change block sizes in opposition to the write thread, to test blocking for new data.
 		for blockSize := 256; blockSize > 0; blockSize-- {
 			for i := 0; i < 256; i++ {
-				n, err := b.Read(block[:blockSize])
+				n, err := io.ReadFull(b, block[:blockSize])
 				if n != blockSize || err != nil {
 					t.Fatalf("read error: %d %s", n, err)
 				}

@@ -21,7 +21,7 @@ func NewSharedBuffer() *SharedBuffer {
 func (s *SharedBuffer) Read(p []byte) (n int, err error) {
 	totalRead := 0
 	s.cond.L.Lock()
-	for totalRead < len(p) {
+	for totalRead == 0 {
 		n, err = s.buffer.Read(p[totalRead:])
 		totalRead += n
 		if err == io.EOF {
@@ -29,6 +29,9 @@ func (s *SharedBuffer) Read(p []byte) (n int, err error) {
 				break
 			}
 			err = nil
+			if n > 0 {
+				break
+			}
 			s.cond.Wait()
 		}
 	}

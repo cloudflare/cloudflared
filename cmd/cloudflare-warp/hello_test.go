@@ -4,18 +4,30 @@ import (
 	"testing"
 )
 
-const testPort = "8080"
-
-func TestNewHelloWorldServer(t *testing.T) {
-	if NewHelloWorldServer() == nil {
-		t.Fatal("NewHelloWorldServer returned nil")
+func TestCreateListenerHostAndPortSuccess(t *testing.T) {
+	listener, err := createListener("localhost:1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listener.Addr().String() == "" {
+		t.Fatal("Fail to find available port")
 	}
 }
 
-func TestFindAvailablePort(t *testing.T) {
-	listener, err := findAvailablePort()
+func TestCreateListenerOnlyHostSuccess(t *testing.T) {
+	listener, err := createListener("localhost:")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if listener.Addr().String() == "" {
 		t.Fatal("Fail to find available port")
+	}
+}
+
+func TestCreateListenerOnlyPortSuccess(t *testing.T) {
+	listener, err := createListener(":8888")
+	if err != nil {
+		t.Fatal(err)
 	}
 	if listener.Addr().String() == "" {
 		t.Fatal("Fail to find available port")

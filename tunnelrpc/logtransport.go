@@ -4,7 +4,7 @@ package tunnelrpc
 import (
 	"bytes"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"zombiezen.com/go/capnproto2/encoding/text"
 	"zombiezen.com/go/capnproto2/rpc"

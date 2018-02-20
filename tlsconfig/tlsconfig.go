@@ -6,8 +6,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
+	"net"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	cli "gopkg.in/urfave/cli.v2"
 )
 
@@ -59,4 +60,44 @@ func LoadCert(certPath string) *x509.CertPool {
 		log.WithError(err).Fatalf("Error parsing certificate %s", certPath)
 	}
 	return ca
+}
+
+func LoadOriginCertsPool() *x509.CertPool {
+	// First, obtain the system certificate pool
+	certPool, systemCertPoolErr := x509.SystemCertPool()
+	if systemCertPoolErr != nil {
+		log.Warn("error obtaining the system certificates: %s", systemCertPoolErr)
+		certPool = x509.NewCertPool()
+	}
+
+	// Next, append the Cloudflare CA pool into the system pool
+	if !certPool.AppendCertsFromPEM([]byte(cloudflareRootCA)) {
+		log.Warn("could not append the CF certificate to the system certificate pool")
+
+		if systemCertPoolErr != nil { // Obtaining both certificates failed; this is a fatal error
+			log.WithError(systemCertPoolErr).Fatalf("Error loading the certificate pool")
+		}
+	}
+
+	// Finally, add the Hello certificate into the pool (since it's self-signed)
+	helloCertificate, err := GetHelloCertificateX509()
+	if err != nil {
+		log.Warn("error obtaining the Hello server certificate")
+	}
+
+	certPool.AddCert(helloCertificate)
+
+	return certPool
+}
+
+func CreateTunnelConfig(c *cli.Context, addrs []string) *tls.Config {
+	tlsConfig := CLIFlags{RootCA: "cacert"}.GetConfig(c)
+	if tlsConfig.RootCAs == nil {
+		tlsConfig.RootCAs = GetCloudflareRootCA()
+		tlsConfig.ServerName = "cftunnel.com"
+	} else if len(addrs) > 0 {
+		// Set for development environments and for testing specific origintunneld instances
+		tlsConfig.ServerName, _, _ = net.SplitHostPort(addrs[0])
+	}
+	return tlsConfig
 }
