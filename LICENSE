@@ -1,0 +1,155 @@
+SERVICES AGREEMENT
+
+Your installation of this software is symbol of your signature indicating that
+you accept the terms of this Services Agreement (this "Agreement").  This
+Agreement is a legal agreement between you (either an individual or a single
+entity) and CloudFlare, Inc. for the services being provided to you by
+CloudFlare or its authorized representative (the "Services"), including any
+computer software and any associated media, printed materials, and "online" or
+electronic documentation provided in connection with the Services (the
+"Software" and together with the Services are hereinafter collectively referred
+to as the "Solution").  If the user is not an individual, then "you" means your
+company, its officers, members, employees, agents, representatives, successors
+and assigns.  BY USING THE SOLUTION, YOU ARE INDICATING THAT YOU HAVE READ, AND
+AGREE TO BE BOUND BY, THE POLICIES, TERMS, AND CONDITIONS SET FORTH BELOW IN
+THEIR ENTIRETY WITHOUT LIMITATION OR QUALIFICATION, AS WELL AS BY ALL APPLICABLE
+LAWS AND REGULATIONS, AS IF YOU HAD HANDWRITTEN YOUR NAME ON A CONTRACT.  IF YOU
+DO NOT AGREE TO THESE TERMS AND CONDITIONS, YOU MAY NOT USE THE SOLUTION.
+
+1.    GRANT OF RIGHTS
+
+1.1	Grant of License.  The Solution is licensed by CloudFlare and its
+licensors, not sold.  Subject to the terms and conditions of this Agreement,
+CloudFlare hereby grants you a nonexclusive, nonsublicensable, nontransferable
+license to use the Solution.  You may examine source code, if provided to you,
+solely for the limited purpose of evaluating the Software for security flaws.
+You may also use the Service to create derivative works which are exclusively
+compatible with any CloudFlare product serviceand no other product or service.
+This license applies to the parts of the Solution developed by CloudFlare.  The
+Solution may also incorporate externally maintained libraries and other open software.
+These resources may be governed by other licenses.
+
+1.2	Restrictions.  The license granted herein is granted solely to you and
+not, by implication or otherwise, to any of your parents, subsidiaries or
+affiliates.  No right is granted hereunder to use the Solution to perform
+services for third parties. All rights not expressly granted hereunder are
+reserved to CloudFlare.  You may not use the Solution except as explicitly
+permitted under this Agreement.  You are expressly prohibited from modifying,
+adapting, translating, preparing derivative works from, decompiling, reverse
+engineering, disassembling or otherwise attempting to derive source code from
+the Software used to provide the Services or any internal data files generated
+by the Solution.  You are also prohibited from removing, obscuring or altering
+any copyright notice, trademarks, or other proprietary rights notices affixed to
+or associated with the Solution.
+
+1.3	Ownership.  As between the parties, CloudFlare and/or its licensors own
+and shall retain all right, title, and interest in and to the Solution,
+including any and all technology embodied therein, including all copyrights,
+patents, trade secrets, trade dress and other proprietary rights associated
+therewith, and any derivative works created there from.
+
+2.	LIMITATION OF LIABILITY
+
+YOU EXPRESSLY ACKNOWLEDGE AND AGREE THAT DOWNLOADING THE SOFTWARE IS AT YOUR
+SOLE RISK.  THE SOFTWARE IS PROVIDED "AS IS" AND WITHOUT WARRANTY OF ANY KIND
+AND CLOUDFLARE, ITS LICENSORS AND ITS AUTHORIZED REPRESENTATIVES (TOGETHER FOR
+PURPOSES HEREOF, "CLOUDFLARE") EXPRESSLY DISCLAIM ALL WARRANTIES, EXPRESS OR
+IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.  CLOUDFLARE DOES NOT
+WARRANT THAT THE FUNCTIONS CONTAINED IN THE SOFTWARE WILL MEET YOUR
+REQUIREMENTS, OR THAT THE OPERATION OF THE SOFTWARE WILL BE UNINTERRUPTED OR
+ERROR-FREE, OR THAT DEFECTS IN THE SOFTWARE WILL BE CORRECTED.  FURTHERMORE,
+CLOUDFLARE DOES NOT WARRANT OR MAKE ANY REPRESENTATIONS REGARDING THE SOFTWARE
+OR RELATED DOCUMENTATION IN TERMS OF THEIR CORRECTNESS, ACCURACY, RELIABILITY,
+OR OTHERWISE. NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY CLOUDFLARE SHALL
+CREATE A WARRANTY OR IN ANY WAY INCREASE THE SCOPE OF THIS WARRANTY.
+
+3.	CONFIDENTIALITY
+
+It may be necessary during the set up and performance of the Solution for the
+parties to exchange Confidential Information. "Confidential Information" means
+any information whether oral, or written, of a private, secret, proprietary or
+confidential nature, concerning either party or its business operations,
+including without limitation: (a) your data and (b) CloudFlare's access control
+systems, specialized network equipment and techniques related to the Solution,
+use policies, which include trade secrets of CloudFlare and its licensors. Each
+party agrees to use the same degree of care to protect the confidentiality of
+the Confidential Information of the other party and to prevent its unauthorized
+use or dissemination as it uses to protect its own Confidential Information of a
+similar nature, but in no event shall exercise less than due diligence and
+reasonable care. Each party agrees to use the Confidential Information of the
+other party only for purposes related to the performance of this Agreement. All
+Confidential Information remains the property of the party disclosing the
+information and no license or other rights to Confidential Information is
+granted or implied hereby.
+
+4.	TERM AND TERMINATION
+
+4.1	Term.  This Agreement shall be effective upon download or install of the
+Software.
+
+4.2	Termination. This Agreement may be terminated by CloudFlare or its
+authorized representative by written notice to you if any of the following
+events occur:  (i) you fail to pay any amounts due for the Services and the
+Solution when due and after written notice of such nonpayment has been given to
+you; (ii) you are in material breach of any term, condition, or provision of
+this Agreement or any other agreement executed by you with CloudFlare or its
+authorized representative in connection with the provision of the Solution and
+Services (a "Related Agreement"); or (iii) you terminate or suspend your
+business, becomes subject to any bankruptcy or insolvency proceeding under
+federal or state statutes, or become insolvent or subject to direct control by a
+trustee, receiver or similar authority.
+
+4.3	Effect of Termination.  Upon the termination of this Agreement for any
+reason: (1) all license rights granted hereunder shall terminate and (2) all
+Confidential Information shall be returned to the disclosing party or destroyed.
+
+5.	MISCELLANEOUS
+
+5.1	Assignment.  You may not assign any of your rights or delegate any of
+your obligations under this Agreement, whether by operation of law or otherwise,
+without the prior express written consent of CloudFlare or its authorized
+representative.  Any such assignment without the prior express written consent
+of CloudFlare or its authorized representative shall be void.  Subject to the
+foregoing, this Agreement will bind and inure to the benefit of the parties,
+their respective successors and permitted assigns.
+
+5.2	Waiver and Amendment.  No modification, amendment or waiver of any
+provision of this Agreement shall be effective unless in writing and signed by
+the party to be charged.  No failure or delay by either party in exercising any
+right, power, or remedy under this Agreement, except as specifically provided
+herein, shall operate as a waiver of any such right, power or remedy.  Without
+limiting the foregoing, terms and conditions on any purchase orders or similar
+materials submitted by you to CloudFlare or its authorized representative shall
+be of no force or effect.
+
+5.3	Governing Law.  This Agreement shall be governed by the laws of the State
+of California, USA, excluding conflict of laws and provisions, and excluding the
+United Nations Convention on Contracts for the International Sale of Goods.
+
+5.4	Notices.  All notices, demands or consents required or permitted under
+this Agreement shall be in writing.  Notice shall be sent to you at the e-mail
+address provided by you to CloudFlare or its authorized representative in
+connection with the Solution.
+
+5.5	Independent Contractors. The parties are independent contractors.
+Neither party shall be deemed to be an employee, agent, partner or legal
+representative of the other for any purpose and neither shall have any right,
+power or authority to create any obligation or responsibility on behalf of the
+other.
+
+5.6	Severability.  If any provision of this Agreement is held by a court of
+competent jurisdiction to be contrary to law, such provision shall be changed
+and interpreted so as to best accomplish the objectives of the original
+provision to the fullest extent allowed by law and the remaining provisions of
+this Agreement shall remain in full force and effect.
+
+5.7	Force Majeure.  CloudFlare shall not be liable to the other party for any
+failure or delay in performance caused by reasons beyond its reasonable control.
+
+5.8	Complete Understanding.  This Agreement and the Related Agreement
+constitute the final, complete and exclusive agreement between the parties with
+respect to the subject matter hereof, and supersedes all previous written and
+oral agreements and communications related to the subject matter of this
+Agreement.  To the extent this Agreement and the Related Agreement conflict,
+this Agreement shall control.
