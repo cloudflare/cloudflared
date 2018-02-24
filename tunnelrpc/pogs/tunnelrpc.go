@@ -47,11 +47,11 @@ type RegistrationOptions struct {
 	Version              string
 	OS                   string `capnp:"os"`
 	ExistingTunnelPolicy tunnelrpc.ExistingTunnelPolicy
-	// PoolName             string `capnp:"poolName"`       // TODO - see issue #2
-	Tags          []Tag
-	ConnectionID  uint8  `capnp:"connectionId"`
-	OriginLocalIP string `capnp:"originLocalIp"`
-	// IsAutoupdated        bool   `capnp:"isAutoupdated"`  // TODO - see issue #2
+	PoolName             string `capnp:"poolName"`
+	Tags                 []Tag
+	ConnectionID         uint8  `capnp:"connectionId"`
+	OriginLocalIP        string `capnp:"originLocalIp"`
+	IsAutoupdated        bool   `capnp:"isAutoupdated"`
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {

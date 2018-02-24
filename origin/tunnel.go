@@ -93,11 +93,11 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		Version:              c.ReportedVersion,
 		OS:                   fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH),
 		ExistingTunnelPolicy: policy,
-		// PoolName:             c.LBPool,        // TODO - see issue #2
-		Tags:          c.Tags,
-		ConnectionID:  connectionID,
-		OriginLocalIP: OriginLocalIP,
-		// IsAutoupdated:        c.IsAutoupdated, // TODO - see issue #2
+		PoolName:             c.LBPool,
+		Tags:                 c.Tags,
+		ConnectionID:         connectionID,
+		OriginLocalIP:        OriginLocalIP,
+		IsAutoupdated:        c.IsAutoupdated,
 	}
 }
 
