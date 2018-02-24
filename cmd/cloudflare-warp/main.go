@@ -1,13 +1,7 @@
 package main
 
 import (
-	"crypto/tls"
-	"encoding/hex"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,10 +12,9 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflare-warp/metrics"
-	"github.com/cloudflare/cloudflare-warp/origin"
 	"github.com/cloudflare/cloudflare-warp/tlsconfig"
-	tunnelpogs "github.com/cloudflare/cloudflare-warp/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflare-warp/validation"
+	"github.com/cloudflare/cloudflare-warp/warp"
 
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/raven-go"
@@ -98,9 +91,9 @@ WARNING:
 			Value: false,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name: "is-autoupdated",
-			Usage: "Signal the new process that Warp client has been autoupdated",
-			Value: false,
+			Name:   "is-autoupdated",
+			Usage:  "Signal the new process that Warp client has been autoupdated",
+			Value:  false,
 			Hidden: true,
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
@@ -316,8 +309,8 @@ WARNING:
 
 func startServer(c *cli.Context) {
 	var wg sync.WaitGroup
-	errC := make(chan error)
 	wg.Add(2)
+	errC := make(chan error)
 
 	// If the user choose to supply all options through env variables,
 	// c.NumFlags() == 0 && c.NArg() == 0. For warp to work, the user needs to at
@@ -326,6 +319,7 @@ func startServer(c *cli.Context) {
 		cli.ShowAppHelp(c)
 		return
 	}
+
 	logLevel, err := logrus.ParseLevel(c.String("loglevel"))
 	if err != nil {
 		Log.WithError(err).Fatal("Unknown logging level specified")
@@ -353,22 +347,16 @@ func startServer(c *cli.Context) {
 		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
 	}
 
-	hostname, err := validation.ValidateHostname(c.String("hostname"))
-	if err != nil {
-		Log.WithError(err).Fatal("Invalid hostname")
-
-	}
-	clientID := c.String("id")
-	if !c.IsSet("id") {
-		clientID = generateRandomClientID()
-	}
-
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
 		Log.WithError(err).Fatal("Tag parse failure")
 	}
 
-	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
+	validURL, err := validateUrl(c)
+	if err != nil {
+		Log.WithError(err).Fatal("Error validating url")
+	}
+
 	if c.IsSet("hello-world") {
 		wg.Add(1)
 		listener, err := createListener("127.0.0.1:")
@@ -381,86 +369,18 @@ func startServer(c *cli.Context) {
 			wg.Done()
 			listener.Close()
 		}()
-		c.Set("url", "https://"+listener.Addr().String())
+		validURL = "https://" + listener.Addr().String()
 	}
 
-	url, err := validateUrl(c)
-	if err != nil {
-		Log.WithError(err).Fatal("Error validating url")
-	}
-	Log.Infof("Proxying tunnel requests to %s", url)
+	Log.Infof("Proxying tunnel requests to %s", validURL)
 
 	// Fail if the user provided an old authentication method
 	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {
 		Log.Fatal("You don't need to give us your api-key anymore. Please use the new log in method. Just run cloudflare-warp login")
 	}
 
-	// Check that the user has acquired a certificate using the log in command
-	originCertPath, err := homedir.Expand(c.String("origincert"))
-	if err != nil {
-		Log.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
-	}
-	ok, err := fileExists(originCertPath)
-	if !ok {
-		Log.Fatalf(`Cannot find a valid certificate for your origin at the path:
-
-    %s
-
-If the path above is wrong, specify the path with the -origincert option.
-If you don't have a certificate signed by Cloudflare, run the command:
-
-    %s login
-`, originCertPath, os.Args[0])
-	}
-	// Easier to send the certificate as []byte via RPC than decoding it at this point
-	originCert, err := ioutil.ReadFile(originCertPath)
-	if err != nil {
-		Log.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
-	}
-
-	tunnelMetrics := origin.NewTunnelMetrics()
-	httpTransport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   c.Duration("proxy-connect-timeout"),
-			KeepAlive: c.Duration("proxy-tcp-keepalive"),
-			DualStack: !c.Bool("proxy-no-happy-eyeballs"),
-		}).DialContext,
-		MaxIdleConns:          c.Int("proxy-keepalive-connections"),
-		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
-		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: tlsconfig.LoadOriginCertsPool()},
-	}
-	tunnelConfig := &origin.TunnelConfig{
-		EdgeAddrs:         c.StringSlice("edge"),
-		OriginUrl:         url,
-		Hostname:          hostname,
-		OriginCert:        originCert,
-		TlsConfig:         tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
-		ClientTlsConfig:   httpTransport.TLSClientConfig,
-		Retries:           c.Uint("retries"),
-		HeartbeatInterval: c.Duration("heartbeat-interval"),
-		MaxHeartbeats:     c.Uint64("heartbeat-count"),
-		ClientID:          clientID,
-		ReportedVersion:   Version,
-		LBPool:            c.String("lb-pool"),
-		Tags:              tags,
-		HAConnections:     c.Int("ha-connections"),
-		HTTPTransport:     httpTransport,
-		Metrics:           tunnelMetrics,
-		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
-		ProtocolLogger:    protoLogger,
-		Logger:            Log,
-		IsAutoupdated:     c.Bool("is-autoupdated"),
-	}
 	connectedSignal := make(chan struct{})
-
 	go writePidFile(connectedSignal, c.String("pidfile"))
-	go func() {
-		errC <- origin.StartTunnelDaemon(tunnelConfig, shutdownC, connectedSignal)
-		wg.Done()
-	}()
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
@@ -468,6 +388,44 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	}
 	go func() {
 		errC <- metrics.ServeMetrics(metricsListener, shutdownC)
+		wg.Done()
+	}()
+
+	tlsConfig := tlsconfig.CLIFlags{RootCA: "cacert"}.GetConfig(c)
+
+	// Start the server
+	go func() {
+		errC <- warp.StartServer(warp.ServerConfig{
+			Hostname:   c.String("hostname"),
+			ServerURL:  validURL,
+			HelloWorld: c.IsSet("hello-world"),
+			Tags:       tags,
+			OriginCert: c.String("origincert"),
+
+			ConnectedChan: connectedSignal,
+			ShutdownChan:  shutdownC,
+
+			Timeout:   c.Duration("proxy-connect-timeout"),
+			KeepAlive: c.Duration("proxy-tcp-keepalive"),
+			DualStack: !c.Bool("proxy-no-happy-eyeballs"),
+
+			MaxIdleConns:        c.Int("proxy-keepalive-connections"),
+			IdleConnTimeout:     c.Duration("proxy-keepalive-timeout"),
+			TLSHandshakeTimeout: c.Duration("proxy-tls-timeout"),
+
+			EdgeAddrs:         c.StringSlice("edge"),
+			Retries:           c.Uint("retries"),
+			HeartbeatInterval: c.Duration("heartbeat-interval"),
+			MaxHeartbeats:     c.Uint64("heartbeat-count"),
+			LBPool:            c.String("lb-pool"),
+			HAConnections:     c.Int("ha-connections"),
+			MetricsUpdateFreq: c.Duration("metrics-update-freq"),
+			IsAutoupdated:     c.Bool("is-autoupdated"),
+			TLSConfig:         tlsConfig,
+			ReportedVersion:   Version,
+			ProtoLogger:       protoLogger,
+			Logger:            Log,
+		})
 		wg.Done()
 	}()
 
@@ -502,6 +460,14 @@ func WaitForSignal(errC chan error, shutdownC chan struct{}) error {
 	case <-shutdownC:
 	}
 	return nil
+}
+
+func login(c *cli.Context) error {
+	err := warp.Login(defaultConfigDir, credentialFile, c.String("url"))
+	if err != nil {
+		fmt.Println(err)
+	}
+	return err
 }
 
 func update(c *cli.Context) error {
@@ -584,13 +550,6 @@ func findInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, er
 	return nil, nil
 }
 
-func generateRandomClientID() string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	id := make([]byte, 32)
-	r.Read(id)
-	return hex.EncodeToString(id)
-}
-
 func writePidFile(waitForSignal chan struct{}, pidFile string) {
 	<-waitForSignal
 	daemon.SdNotify(false, "READY=1")
@@ -619,10 +578,10 @@ func validateUrl(c *cli.Context) (string, error) {
 }
 
 func initLogFile(c *cli.Context, protoLogger *logrus.Logger) error {
-	fileMode := os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC
+	fileMode := os.O_WRONLY | os.O_APPEND | os.O_CREATE | os.O_TRUNC
 	// do not truncate log file if the client has been autoupdated
 	if c.Bool("is-autoupdated") {
-		fileMode = os.O_WRONLY|os.O_APPEND|os.O_CREATE
+		fileMode = os.O_WRONLY | os.O_APPEND | os.O_CREATE
 	}
 	f, err := os.OpenFile(c.String("logfile"), fileMode, 0664)
 	if err != nil {

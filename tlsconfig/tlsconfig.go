@@ -90,8 +90,10 @@ func LoadOriginCertsPool() *x509.CertPool {
 	return certPool
 }
 
-func CreateTunnelConfig(c *cli.Context, addrs []string) *tls.Config {
-	tlsConfig := CLIFlags{RootCA: "cacert"}.GetConfig(c)
+func CreateTunnelConfig(tlsConfig *tls.Config, addrs []string) *tls.Config {
+	if tlsConfig == nil {
+		tlsConfig = new(tls.Config)
+	}
 	if tlsConfig.RootCAs == nil {
 		tlsConfig.RootCAs = GetCloudflareRootCA()
 		tlsConfig.ServerName = "cftunnel.com"

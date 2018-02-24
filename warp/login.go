@@ -1,4 +1,4 @@
-package main
+package warp
 
 import (
 	"crypto/rand"
@@ -15,15 +15,18 @@ import (
 	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
-	cli "gopkg.in/urfave/cli.v2"
 )
 
 const baseLoginURL = "https://www.cloudflare.com/a/warp"
 const baseCertStoreURL = "https://login.cloudflarewarp.com"
 const clientTimeout = time.Minute * 20
 
-func login(c *cli.Context) error {
-	configPath, err := homedir.Expand(defaultConfigDir)
+// Login obtains credentials from Cloudflare to enable
+// the creation of tunnels with the Warp service.
+// baseURL is the base URL from which to login to warp;
+// leave empty to use default.
+func Login(configDir, credentialFile, baseURL string) error {
+	configPath, err := homedir.Expand(configDir)
 	if err != nil {
 		return err
 	}
@@ -38,21 +41,20 @@ func login(c *cli.Context) error {
 	path := filepath.Join(configPath, credentialFile)
 	fileInfo, err := os.Stat(path)
 	if err == nil && fileInfo.Size() > 0 {
-		fmt.Fprintf(os.Stderr, `You have an existing certificate at %s which login would overwrite.
+		return fmt.Errorf(`You have an existing certificate at %s which login would overwrite.
 If this is intentional, please move or delete that file then run this command again.
 `, path)
-		return nil
 	}
 	if err != nil && err.(*os.PathError).Err != syscall.ENOENT {
 		return err
 	}
 
 	// for local debugging
-	baseURL := baseCertStoreURL
-	if c.IsSet("url") {
-		baseURL = c.String("url")
+	if baseURL == "" {
+		baseURL = baseCertStoreURL
 	}
-	// Generate a random post URL
+
+	// generate a random post URL
 	certURL := baseURL + generateRandomPath()
 	loginURL, err := url.Parse(baseLoginURL)
 	if err != nil {
@@ -67,7 +69,7 @@ If this is intentional, please move or delete that file then run this command ag
 
 %s
 
-Leave cloudflare-warp running to install the certificate automatically.
+Leave the program running to install the certificate automatically.
 `, loginURL.String())
 	} else {
 		fmt.Fprintf(os.Stderr, `A browser window should have opened at the following URL:
@@ -75,11 +77,10 @@ Leave cloudflare-warp running to install the certificate automatically.
 %s
 
 If the browser failed to open, open it yourself and visit the URL above.
-
 `, loginURL.String())
 	}
 
-	if download(certURL, path) {
+	if ok, err := download(certURL, path); ok && err == nil {
 		fmt.Fprintf(os.Stderr, `You have successfully logged in.
 If you wish to copy your credentials to a server, they have been saved to:
 %s
@@ -126,21 +127,24 @@ func open(url string) error {
 	return exec.Command(cmd, args...).Start()
 }
 
-func download(certURL, filePath string) bool {
+// download downloads a certificate at certURL to filePath.
+// It returns true if the certificate was successfully
+// downloaded; false otherwise, with any applicable error.
+// An error may be returned even if the certificate was
+// downloaded successfully.
+func download(certURL, filePath string) (bool, error) {
 	client := &http.Client{Timeout: clientTimeout}
 	// attempt a (long-running) certificate get
 	for i := 0; i < 20; i++ {
 		ok, err := tryDownload(client, certURL, filePath)
 		if ok {
-			putSuccess(client, certURL)
-			return true
+			return true, putSuccess(client, certURL)
 		}
 		if err != nil {
-			Log.WithError(err).Error("Error fetching certificate")
-			return false
+			return false, fmt.Errorf("fetching certificate: %v", err)
 		}
 	}
-	return false
+	return false, nil
 }
 
 func tryDownload(client *http.Client, certURL, filePath string) (ok bool, err error) {
@@ -175,20 +179,19 @@ func tryDownload(client *http.Client, certURL, filePath string) (ok bool, err er
 	}
 }
 
-func putSuccess(client *http.Client, certURL string) {
+func putSuccess(client *http.Client, certURL string) error {
 	// indicate success to the relay server
 	req, err := http.NewRequest("PUT", certURL+"/ok", nil)
 	if err != nil {
-		Log.WithError(err).Error("HTTP request error")
-		return
+		return fmt.Errorf("HTTP request error: %v", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		Log.WithError(err).Error("HTTP error")
-		return
+		return fmt.Errorf("HTTP error: %v", err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
-		Log.Errorf("Unexpected HTTP error code %d", resp.StatusCode)
+		return fmt.Errorf("unexpected HTTP status code %d", resp.StatusCode)
 	}
+	return nil
 }
