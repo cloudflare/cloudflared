@@ -398,7 +398,6 @@ func startServer(c *cli.Context) {
 		errC <- warp.StartServer(warp.ServerConfig{
 			Hostname:   c.String("hostname"),
 			ServerURL:  validURL,
-			HelloWorld: c.IsSet("hello-world"),
 			Tags:       tags,
 			OriginCert: c.String("origincert"),
 

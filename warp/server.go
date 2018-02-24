@@ -130,14 +130,9 @@ type ServerConfig struct {
 	// Required.
 	Hostname string
 
-	// The URL of the local web server. If empty (if there
-	// is no server), set HelloWorld to true for a demo.
+	// The URL of the local web server.
 	// Required.
 	ServerURL string
-
-	// If true, use the established tunnel to expose a
-	// test HTTP server. If false, ServerURL must be set.
-	HelloWorld bool
 
 	// The tunnel ID; leave blank to use a random ID.
 	ClientID string
