@@ -29,8 +29,6 @@ import (
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
-const defaultConfigDir = "~/.cloudflare-warp"
-const credentialFile = "cert.pem"
 const configFile = "config.yml"
 
 var listeners = gracenet.Net{}
@@ -112,7 +110,7 @@ WARNING:
 			Name:    "origincert",
 			Usage:   "Path to the certificate generated for your origin when you run cloudflare-warp login.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
-			Value:   filepath.Join(defaultConfigDir, credentialFile),
+			Value:   filepath.Join(warp.DefaultConfigDir, warp.DefaultCredentialFilename),
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "url",
@@ -462,7 +460,7 @@ func WaitForSignal(errC chan error, shutdownC chan struct{}) error {
 }
 
 func login(c *cli.Context) error {
-	err := warp.Login(defaultConfigDir, credentialFile, c.String("url"))
+	err := warp.Login(warp.DefaultConfigDir, warp.DefaultCredentialFilename, c.String("url"))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -531,7 +529,7 @@ func findInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, er
 	if context.IsSet("config") {
 		return altsrc.NewYamlSourceFromFile(context.String("config"))
 	}
-	dirPath, err := homedir.Expand(defaultConfigDir)
+	dirPath, err := homedir.Expand(warp.DefaultConfigDir)
 	if err != nil {
 		return nil, nil
 	}

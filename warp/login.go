@@ -17,35 +17,18 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 )
 
-const baseLoginURL = "https://www.cloudflare.com/a/warp"
-const baseCertStoreURL = "https://login.cloudflarewarp.com"
-const clientTimeout = time.Minute * 20
-
 // Login obtains credentials from Cloudflare to enable
 // the creation of tunnels with the Warp service.
 // baseURL is the base URL from which to login to warp;
 // leave empty to use default.
 func Login(configDir, credentialFile, baseURL string) error {
-	configPath, err := homedir.Expand(configDir)
-	if err != nil {
-		return err
-	}
-	ok, err := fileExists(configPath)
-	if !ok && err == nil {
-		// create config directory if doesn't already exist
-		err = os.Mkdir(configPath, 0700)
-	}
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(configPath, credentialFile)
-	fileInfo, err := os.Stat(path)
-	if err == nil && fileInfo.Size() > 0 {
+	credPath := filepath.Join(configDir, credentialFile)
+
+	if ok, err := HasExistingCertificate(configDir, credentialFile); ok && err == nil {
 		return fmt.Errorf(`You have an existing certificate at %s which login would overwrite.
 If this is intentional, please move or delete that file then run this command again.
-`, path)
-	}
-	if err != nil && err.(*os.PathError).Err != syscall.ENOENT {
+`, credPath)
+	} else if err != nil && err.(*os.PathError).Err != syscall.ENOENT {
 		return err
 	}
 
@@ -80,11 +63,11 @@ If the browser failed to open, open it yourself and visit the URL above.
 `, loginURL.String())
 	}
 
-	if ok, err := download(certURL, path); ok && err == nil {
+	if ok, err := download(certURL, credPath); ok && err == nil {
 		fmt.Fprintf(os.Stderr, `You have successfully logged in.
 If you wish to copy your credentials to a server, they have been saved to:
 %s
-`, path)
+`, credPath)
 	} else {
 		fmt.Fprintf(os.Stderr, `Failed to write the certificate due to the following error:
 %v
@@ -94,9 +77,29 @@ copy it to the following path:
 
 %s
 
-`, err, path)
+`, err, credPath)
 	}
 	return nil
+}
+
+// HasExistingCertificate returns true if a certificate in configDir
+// exists with name credentialFile.
+func HasExistingCertificate(configDir, credentialFile string) (bool, error) {
+	configPath, err := homedir.Expand(configDir)
+	if err != nil {
+		return false, err
+	}
+	ok, err := fileExists(configPath)
+	if !ok && err == nil {
+		// create config directory if doesn't already exist
+		err = os.Mkdir(configPath, 0700)
+	}
+	if err != nil {
+		return false, err
+	}
+	path := filepath.Join(configPath, credentialFile)
+	fileInfo, err := os.Stat(path)
+	return err == nil && fileInfo.Size() > 0, nil
 }
 
 // generateRandomPath generates a random URL to associate with the certificate.
@@ -195,3 +198,17 @@ func putSuccess(client *http.Client, certURL string) error {
 	}
 	return nil
 }
+
+const (
+	// The default directory in which to store configuration/credentials.
+	DefaultConfigDir = "~/.cloudflare-warp"
+
+	// The default credential filename.
+	DefaultCredentialFilename = "cert.pem"
+)
+
+const (
+	baseLoginURL     = "https://www.cloudflare.com/a/warp"
+	baseCertStoreURL = "https://login.cloudflarewarp.com"
+	clientTimeout    = 20 * time.Minute
+)

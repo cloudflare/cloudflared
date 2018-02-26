@@ -171,6 +171,7 @@ type ServerConfig struct {
 	IsAutoupdated     bool          // is-autoupdated
 
 	// The TLS client config used when making the tunnel.
+	// If not set, a sane default config will be created.
 	TLSConfig *tls.Config
 
 	// The version of the client to report

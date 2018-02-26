@@ -90,6 +90,8 @@ func LoadOriginCertsPool() *x509.CertPool {
 	return certPool
 }
 
+// CreateTunnelConfig creates a TLS configuration for a tunnel based on tlsConfig.
+// If tlsConfig is nil, one will be created.
 func CreateTunnelConfig(tlsConfig *tls.Config, addrs []string) *tls.Config {
 	if tlsConfig == nil {
 		tlsConfig = new(tls.Config)

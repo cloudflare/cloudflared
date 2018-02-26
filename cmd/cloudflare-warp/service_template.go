@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/cloudflare/cloudflare-warp/warp"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
@@ -118,7 +119,7 @@ func openFile(path string, create bool) (file *os.File, exists bool, err error) 
 
 func copyCertificate(configDir string) error {
 	// Copy certificate
-	destCredentialPath := filepath.Join(configDir, credentialFile)
+	destCredentialPath := filepath.Join(configDir, warp.DefaultCredentialFilename)
 	destFile, exists, err := openFile(destCredentialPath, true)
 	if err != nil {
 		return err
@@ -128,7 +129,7 @@ func copyCertificate(configDir string) error {
 	}
 	defer destFile.Close()
 
-	srcCredentialPath := filepath.Join(defaultConfigDir, credentialFile)
+	srcCredentialPath := filepath.Join(warp.DefaultConfigDir, warp.DefaultCredentialFilename)
 	srcFile, _, err := openFile(srcCredentialPath, false)
 	if err != nil {
 		return err
@@ -163,7 +164,7 @@ func copyCredentials(configDir string) error {
 	}
 	defer destFile.Close()
 
-	srcConfigPath := filepath.Join(defaultConfigDir, configFile)
+	srcConfigPath := filepath.Join(warp.DefaultConfigDir, configFile)
 	srcFile, _, err := openFile(srcConfigPath, false)
 	if err != nil {
 		fmt.Println("Your service needs a config file that at least specifies the hostname option.")
