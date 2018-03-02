@@ -36,14 +36,17 @@ import (
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
-const defaultConfigDir = "~/.cloudflare-warp"
 const credentialFile = "cert.pem"
-const configFile = "config.yml"
+const quickStartUrl = "https://developers.cloudflare.com/warp/quickstart/quickstart/"
 
 var listeners = gracenet.Net{}
 var Version = "DEV"
 var BuildTime = "unknown"
 var Log *logrus.Logger
+var defaultConfigFiles = []string{"config.yml", "config.yaml"}
+
+// Windows default config dir was ~/cloudflare-warp in documentation, let's keep it compatible
+var defaultConfigDirs = []string{"~/.cloudflare-warp", "~/cloudflare-warp"}
 
 // Shutdown channel used by the app. When closed, app must terminate.
 // May be closed by the Windows service runner.
@@ -86,6 +89,7 @@ WARNING:
 		&cli.StringFlag{
 			Name:  "config",
 			Usage: "Specifies a config file in YAML format.",
+			Value: findDefaultConfigPath(),
 		},
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:  "autoupdate-freq",
@@ -98,9 +102,9 @@ WARNING:
 			Value: false,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name: "is-autoupdated",
-			Usage: "Signal the new process that Warp client has been autoupdated",
-			Value: false,
+			Name:   "is-autoupdated",
+			Usage:  "Signal the new process that Warp client has been autoupdated",
+			Value:  false,
 			Hidden: true,
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
@@ -119,7 +123,7 @@ WARNING:
 			Name:    "origincert",
 			Usage:   "Path to the certificate generated for your origin when you run cloudflare-warp login.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
-			Value:   filepath.Join(defaultConfigDir, credentialFile),
+			Value:   findDefaultOriginCertPath(),
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "url",
@@ -131,6 +135,11 @@ WARNING:
 			Name:    "hostname",
 			Usage:   "Set a hostname on a Cloudflare zone to route traffic through this tunnel.",
 			EnvVars: []string{"TUNNEL_HOSTNAME"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "origin-server-name",
+			Usage:   "Hostname on the origin server certificate.",
+			EnvVars: []string{"TUNNEL_ORIGIN_SERVER_NAME"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "id",
@@ -267,9 +276,15 @@ WARNING:
 		Log = logrus.New()
 		inputSource, err := findInputSourceContext(context)
 		if err != nil {
+			Log.WithError(err).Infof("Cannot load configuration from %s", context.String("config"))
 			return err
 		} else if inputSource != nil {
-			return altsrc.ApplyInputSourceValues(context, inputSource, app.Flags)
+			err := altsrc.ApplyInputSourceValues(context, inputSource, app.Flags)
+			if err != nil {
+				Log.WithError(err).Infof("Cannot apply configuration from %s", context.String("config"))
+				return err
+			}
+			Log.Infof("Applied configuration from %s", context.String("config"))
 		}
 		return nil
 	}
@@ -323,6 +338,7 @@ func startServer(c *cli.Context) {
 	// c.NumFlags() == 0 && c.NArg() == 0. For warp to work, the user needs to at
 	// least provide a hostname.
 	if c.NumFlags() == 0 && c.NArg() == 0 && os.Getenv("TUNNEL_HOSTNAME") == "" {
+		Log.Infof("No arguments were provided. You need to at least specify the hostname for this tunnel. See %s", quickStartUrl)
 		cli.ShowAppHelp(c)
 		return
 	}
@@ -356,7 +372,6 @@ func startServer(c *cli.Context) {
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
 		Log.WithError(err).Fatal("Invalid hostname")
-
 	}
 	clientID := c.String("id")
 	if !c.IsSet("id") {
@@ -401,6 +416,9 @@ func startServer(c *cli.Context) {
 		Log.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
 	}
 	ok, err := fileExists(originCertPath)
+	if err != nil {
+		Log.Fatalf("Cannot check if origin cert exists at path %s", c.String("origincert"))
+	}
 	if !ok {
 		Log.Fatalf(`Cannot find a valid certificate for your origin at the path:
 
@@ -432,6 +450,11 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig:       &tls.Config{RootCAs: tlsconfig.LoadOriginCertsPool()},
 	}
+
+	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
+		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
+	}
+
 	tunnelConfig := &origin.TunnelConfig{
 		EdgeAddrs:         c.StringSlice("edge"),
 		OriginUrl:         url,
@@ -562,24 +585,40 @@ func fileExists(path string) (bool, error) {
 	return true, nil
 }
 
-func findInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, error) {
-	if context.IsSet("config") {
-		return altsrc.NewYamlSourceFromFile(context.String("config"))
-	}
-	dirPath, err := homedir.Expand(defaultConfigDir)
-	if err != nil {
-		return nil, nil
-	}
-	for _, path := range []string{
-		filepath.Join(dirPath, "/config.yml"),
-		filepath.Join(dirPath, "/config.yaml"),
-	} {
-		ok, err := fileExists(path)
-		if ok {
-			return altsrc.NewYamlSourceFromFile(path)
-		} else if err != nil {
-			return nil, err
+// returns the first path that contains a cert.pem file. If none of the defaultConfigDirs
+// (differs by OS for legacy reasons) contains a cert.pem file, return empty string
+func findDefaultOriginCertPath() string {
+	for _, defaultConfigDir := range defaultConfigDirs {
+		originCertPath, _ := homedir.Expand(filepath.Join(defaultConfigDir, credentialFile))
+		if ok, _ := fileExists(originCertPath); ok {
+			return originCertPath
 		}
+	}
+	return ""
+}
+
+// returns the firt path that contains a config file. If none of the combination of
+// defaultConfigDirs (differs by OS for legacy reasons) and defaultConfigFiles
+// contains a config file, return empty string
+func findDefaultConfigPath() string {
+	for _, configDir := range defaultConfigDirs {
+		for _, configFile := range defaultConfigFiles {
+			dirPath, err := homedir.Expand(configDir)
+			if err != nil {
+				return ""
+			}
+			path := filepath.Join(dirPath, configFile)
+			if ok, _ := fileExists(path); ok {
+				return path
+			}
+		}
+	}
+	return ""
+}
+
+func findInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, error) {
+	if context.String("config") != "" {
+		return altsrc.NewYamlSourceFromFile(context.String("config"))
 	}
 	return nil, nil
 }
@@ -619,22 +658,26 @@ func validateUrl(c *cli.Context) (string, error) {
 }
 
 func initLogFile(c *cli.Context, protoLogger *logrus.Logger) error {
-	fileMode := os.O_WRONLY|os.O_APPEND|os.O_CREATE|os.O_TRUNC
+	filePath, err := homedir.Expand(c.String("logfile"))
+	if err != nil {
+		return errors.Wrap(err, "Cannot resolve logfile path")
+	}
+
+	fileMode := os.O_WRONLY | os.O_APPEND | os.O_CREATE | os.O_TRUNC
 	// do not truncate log file if the client has been autoupdated
 	if c.Bool("is-autoupdated") {
-		fileMode = os.O_WRONLY|os.O_APPEND|os.O_CREATE
+		fileMode = os.O_WRONLY | os.O_APPEND | os.O_CREATE
 	}
-	f, err := os.OpenFile(c.String("logfile"), fileMode, 0664)
+	f, err := os.OpenFile(filePath, fileMode, 0664)
 	if err != nil {
-		errors.Wrap(err, fmt.Sprintf("Cannot open file %s", c.String("logfile")))
+		errors.Wrap(err, fmt.Sprintf("Cannot open file %s", filePath))
 	}
 	defer f.Close()
-
 	pathMap := lfshook.PathMap{
-		logrus.InfoLevel:  c.String("logfile"),
-		logrus.ErrorLevel: c.String("logfile"),
-		logrus.FatalLevel: c.String("logfile"),
-		logrus.PanicLevel: c.String("logfile"),
+		logrus.InfoLevel:  filePath,
+		logrus.ErrorLevel: filePath,
+		logrus.FatalLevel: filePath,
+		logrus.PanicLevel: filePath,
 	}
 
 	Log.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))

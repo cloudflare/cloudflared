@@ -23,7 +23,7 @@ const baseCertStoreURL = "https://login.cloudflarewarp.com"
 const clientTimeout = time.Minute * 20
 
 func login(c *cli.Context) error {
-	configPath, err := homedir.Expand(defaultConfigDir)
+	configPath, err := homedir.Expand(defaultConfigDirs[0])
 	if err != nil {
 		return err
 	}

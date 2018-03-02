@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	cli "gopkg.in/urfave/cli.v2"
 )
@@ -180,16 +181,20 @@ func installLinuxService(c *cli.Context) error {
 	}
 	templateArgs := ServiceTemplateArgs{Path: etPath}
 
-	if err = copyCredentials(serviceConfigDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to copy user configuration: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Before running the service, ensure that %s contains two files, %s and %s",
-			serviceConfigDir, credentialFile, configFile)
+	defaultConfigDir := filepath.Dir(c.String("config"))
+	defaultConfigFile := filepath.Base(c.String("config"))
+	if err = copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile); err != nil {
+		Log.WithError(err).Infof("Failed to copy user configuration. Before running the service, ensure that %s contains two files, %s and %s",
+			serviceConfigDir, credentialFile, defaultConfigFiles[0])
+		return err
 	}
 
 	switch {
 	case isSystemd():
+		Log.Infof("Using Systemd")
 		return installSystemd(&templateArgs)
 	default:
+		Log.Infof("Using Sysv")
 		return installSysv(&templateArgs)
 	}
 }
@@ -198,24 +203,30 @@ func installSystemd(templateArgs *ServiceTemplateArgs) error {
 	for _, serviceTemplate := range systemdTemplates {
 		err := serviceTemplate.Generate(templateArgs)
 		if err != nil {
+			Log.WithError(err).Infof("error generating service template")
 			return err
 		}
 	}
 	if err := runCommand("systemctl", "enable", "cloudflare-warp.service"); err != nil {
+		Log.WithError(err).Infof("systemctl enable cloudflare-warp.service error")
 		return err
 	}
 	if err := runCommand("systemctl", "start", "cloudflare-warp-update.timer"); err != nil {
+		Log.WithError(err).Infof("systemctl start cloudflare-warp-update.timer error")
 		return err
 	}
+	Log.Infof("systemctl daemon-reload")
 	return runCommand("systemctl", "daemon-reload")
 }
 
 func installSysv(templateArgs *ServiceTemplateArgs) error {
 	confPath, err := sysvTemplate.ResolvePath()
 	if err != nil {
+		Log.WithError(err).Infof("error resolving system path")
 		return err
 	}
 	if err := sysvTemplate.Generate(templateArgs); err != nil {
+		Log.WithError(err).Infof("error generating system template")
 		return err
 	}
 	for _, i := range [...]string{"2", "3", "4", "5"} {
@@ -234,29 +245,36 @@ func installSysv(templateArgs *ServiceTemplateArgs) error {
 func uninstallLinuxService(c *cli.Context) error {
 	switch {
 	case isSystemd():
+		Log.Infof("Using Systemd")
 		return uninstallSystemd()
 	default:
+		Log.Infof("Using Sysv")
 		return uninstallSysv()
 	}
 }
 
 func uninstallSystemd() error {
 	if err := runCommand("systemctl", "disable", "cloudflare-warp.service"); err != nil {
+		Log.WithError(err).Infof("systemctl disable cloudflare-warp.service error")
 		return err
 	}
 	if err := runCommand("systemctl", "stop", "cloudflare-warp-update.timer"); err != nil {
+		Log.WithError(err).Infof("systemctl stop cloudflare-warp-update.timer error")
 		return err
 	}
 	for _, serviceTemplate := range systemdTemplates {
 		if err := serviceTemplate.Remove(); err != nil {
+			Log.WithError(err).Infof("error removing service template")
 			return err
 		}
 	}
+	Log.Infof("Successfully uninstall cloudflare-warp service")
 	return nil
 }
 
 func uninstallSysv() error {
 	if err := sysvTemplate.Remove(); err != nil {
+		Log.WithError(err).Infof("error removing service template")
 		return err
 	}
 	for _, i := range [...]string{"2", "3", "4", "5"} {
@@ -269,5 +287,6 @@ func uninstallSysv() error {
 			continue
 		}
 	}
+	Log.Infof("Successfully uninstall cloudflare-warp service")
 	return nil
 }
