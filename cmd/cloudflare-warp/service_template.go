@@ -74,18 +74,21 @@ func runCommand(command string, args ...string) error {
 	cmd := exec.Command(command, args...)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		Log.WithError(err).Infof("error getting stderr pipe")
 		return fmt.Errorf("error getting stderr pipe: %v", err)
 	}
 	err = cmd.Start()
 	if err != nil {
+		Log.WithError(err).Infof("error starting %s", command)
 		return fmt.Errorf("error starting %s: %v", command, err)
 	}
 	commandErr, _ := ioutil.ReadAll(stderr)
 	if len(commandErr) > 0 {
-		fmt.Fprintf(os.Stderr, "%s: %s", command, commandErr)
+		Log.Errorf("%s: %s", command, commandErr)
 	}
 	err = cmd.Wait()
 	if err != nil {
+		Log.WithError(err).Infof("%s returned error", command)
 		return fmt.Errorf("%s returned with error: %v", command, err)
 	}
 	return nil
@@ -117,9 +120,8 @@ func openFile(path string, create bool) (file *os.File, exists bool, err error) 
 	return file, false, err
 }
 
-func copyCertificate(configDir string) error {
-	// Copy certificate
-	destCredentialPath := filepath.Join(configDir, warp.DefaultCredentialFilename)
+func copyCertificate(srcConfigDir, destConfigDir string) error {
+	destCredentialPath := filepath.Join(destConfigDir, warp.DefaultCredentialFilename)
 	destFile, exists, err := openFile(destCredentialPath, true)
 	if err != nil {
 		return err
@@ -129,13 +131,14 @@ func copyCertificate(configDir string) error {
 	}
 	defer destFile.Close()
 
-	srcCredentialPath := filepath.Join(warp.DefaultConfigDir, warp.DefaultCredentialFilename)
+	srcCredentialPath := filepath.Join(srcConfigDir, warp.DefaultCredentialFilename)
 	srcFile, _, err := openFile(srcCredentialPath, false)
 	if err != nil {
 		return err
 	}
 	defer srcFile.Close()
 
+	// Copy certificate
 	_, err = io.Copy(destFile, srcFile)
 	if err != nil {
 		return fmt.Errorf("unable to copy %s to %s: %v", srcCredentialPath, destCredentialPath, err)
@@ -144,19 +147,20 @@ func copyCertificate(configDir string) error {
 	return nil
 }
 
-func copyCredentials(configDir string) error {
-	if err := ensureConfigDirExists(configDir); err != nil {
+func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile string) error {
+	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
 		return err
 	}
 
-	if err := copyCertificate(configDir); err != nil {
+	if err := copyCertificate(defaultConfigDir, serviceConfigDir); err != nil {
 		return err
 	}
 
 	// Copy or create config
-	destConfigPath := filepath.Join(configDir, configFile)
+	destConfigPath := filepath.Join(serviceConfigDir, defaultConfigFile)
 	destFile, exists, err := openFile(destConfigPath, true)
 	if err != nil {
+		Log.WithError(err).Infof("cannot open %s", destConfigPath)
 		return err
 	} else if exists {
 		// config already exists, do nothing
@@ -164,7 +168,7 @@ func copyCredentials(configDir string) error {
 	}
 	defer destFile.Close()
 
-	srcConfigPath := filepath.Join(warp.DefaultConfigDir, configFile)
+	srcConfigPath := filepath.Join(defaultConfigDir, defaultConfigFile)
 	srcFile, _, err := openFile(srcConfigPath, false)
 	if err != nil {
 		fmt.Println("Your service needs a config file that at least specifies the hostname option.")
@@ -182,7 +186,7 @@ func copyCredentials(configDir string) error {
 		if err != nil {
 			return fmt.Errorf("unable to copy %s to %s: %v", srcConfigPath, destConfigPath, err)
 		}
-		fmt.Printf("Copied %s to %s", srcConfigPath, destConfigPath)
+		Log.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
 	}
 
 	return nil

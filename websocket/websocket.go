@@ -20,7 +20,7 @@ func IsWebSocketUpgrade(req *http.Request) bool {
 
 // ClientConnect creates a WebSocket client connection for provided request. Caller is responsible for closing.
 func ClientConnect(req *http.Request, tlsClientConfig *tls.Config) (*websocket.Conn, *http.Response, error) {
-	req.URL.Scheme = "wss"
+	req.URL.Scheme = changeRequestScheme(req)
 	d := &websocket.Dialer{TLSClientConfig: tlsClientConfig}
 	conn, response, err := d.Dial(req.URL.String(), nil)
 	if err != nil {
@@ -74,4 +74,17 @@ func sha1Base64(str string) string {
 // https://tools.ietf.org/html/rfc6455#section-1.3 describes this process in more detail.
 func generateAcceptKey(req *http.Request) string {
 	return sha1Base64(req.Header.Get("Sec-WebSocket-Key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+}
+
+// changeRequestScheme is needed as the gorilla websocket library requires the ws scheme.
+// (even though it changes it back to http/https, but ¯\_(ツ)_/¯.)
+func changeRequestScheme(req *http.Request) string {
+	switch req.URL.Scheme {
+	case "https":
+		return "wss"
+	case "http":
+		return "ws"
+	default:
+		return req.URL.Scheme
+	}
 }
