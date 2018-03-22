@@ -119,7 +119,7 @@ func validateScheme(scheme string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("Currently Cloudflare-Warp does not support %s protocol.", scheme)
+	return fmt.Errorf("Currently Argo Tunnel does not support %s protocol.", scheme)
 }
 
 func validateIP(scheme, host, port string) (string, error) {

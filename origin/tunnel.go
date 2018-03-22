@@ -15,11 +15,11 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cloudflare/cloudflare-warp/h2mux"
-	"github.com/cloudflare/cloudflare-warp/tunnelrpc"
-	tunnelpogs "github.com/cloudflare/cloudflare-warp/tunnelrpc/pogs"
-	"github.com/cloudflare/cloudflare-warp/validation"
-	"github.com/cloudflare/cloudflare-warp/websocket"
+	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/tunnelrpc"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/validation"
+	"github.com/cloudflare/cloudflared/websocket"
 
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
@@ -53,7 +53,7 @@ type TunnelConfig struct {
 	Tags              []tunnelpogs.Tag
 	HAConnections     int
 	HTTPTransport     http.RoundTripper
-	Metrics           *TunnelMetrics
+	Metrics           *tunnelMetrics
 	MetricsUpdateFreq time.Duration
 	ProtocolLogger    *logrus.Logger
 	Logger            *logrus.Logger
@@ -185,6 +185,7 @@ func ServeTunnel(
 	serveCtx, serveCancel := context.WithCancel(ctx)
 	registerErrC := make(chan error, 1)
 	go func() {
+		defer wg.Done()
 		err := RegisterTunnel(serveCtx, handler.muxer, config, connectionID, originLocalIP)
 		if err == nil {
 			connectedFuse.Fuse(true)
@@ -193,18 +194,18 @@ func ServeTunnel(
 			serveCancel()
 		}
 		registerErrC <- err
-		wg.Done()
 	}()
 	updateMetricsTickC := time.Tick(config.MetricsUpdateFreq)
 	go func() {
 		defer wg.Done()
+		connectionTag := uint8ToString(connectionID)
 		for {
 			select {
 			case <-serveCtx.Done():
 				handler.muxer.Shutdown()
 				return
 			case <-updateMetricsTickC:
-				handler.UpdateMetrics()
+				handler.UpdateMetrics(connectionTag)
 			}
 		}
 	}()
@@ -303,7 +304,7 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 func LogServerInfo(logger *logrus.Entry,
 	promise tunnelrpc.ServerInfo_Promise,
 	connectionID uint8,
-	metrics *TunnelMetrics,
+	metrics *tunnelMetrics,
 ) {
 	serverInfoMessage, err := promise.Struct()
 	if err != nil {
@@ -356,13 +357,17 @@ func H1ResponseToH2Response(h1 *http.Response) (h2 []h2mux.Header) {
 	return
 }
 
+func FindCfRayHeader(h1 *http.Request) string {
+	return h1.Header.Get("Cf-Ray")
+}
+
 type TunnelHandler struct {
 	originUrl  string
 	muxer      *h2mux.Muxer
 	httpClient http.RoundTripper
 	tlsConfig  *tls.Config
 	tags       []tunnelpogs.Tag
-	metrics    *TunnelMetrics
+	metrics    *tunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID string
 }
@@ -435,7 +440,8 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		Log.WithError(err).Error("invalid request received")
 	}
 	h.AppendTagHeaders(req)
-
+	cfRay := FindCfRayHeader(req)
+	h.logRequest(req, cfRay)
 	if websocket.IsWebSocketUpgrade(req) {
 		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
 		if err != nil {
@@ -444,6 +450,8 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			stream.WriteHeaders(H1ResponseToH2Response(response))
 			defer conn.Close()
 			websocket.Stream(conn.UnderlyingConn(), stream)
+			h.metrics.incrementResponses(h.connectionID, "200")
+			h.logResponse(response, cfRay)
 		}
 	} else {
 		response, err := h.httpClient.RoundTrip(req)
@@ -454,6 +462,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			stream.WriteHeaders(H1ResponseToH2Response(response))
 			io.Copy(stream, response.Body)
 			h.metrics.incrementResponses(h.connectionID, "200")
+			h.logResponse(response, cfRay)
 		}
 	}
 	h.metrics.decrementConcurrentRequests(h.connectionID)
@@ -467,9 +476,27 @@ func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
 	h.metrics.incrementResponses(h.connectionID, "502")
 }
 
-func (h *TunnelHandler) UpdateMetrics() {
-	flowCtlMetrics := h.muxer.FlowControlMetrics()
-	h.metrics.updateTunnelFlowControlMetrics(flowCtlMetrics)
+func (h *TunnelHandler) logRequest(req *http.Request, cfRay string) {
+	if cfRay != "" {
+		Log.WithField("CF-RAY", cfRay).Infof("%s %s %s", req.Method, req.URL, req.Proto)
+	} else {
+		Log.Warnf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", req.Method, req.URL, req.Proto)
+	}
+	Log.Debugf("Request Headers %+v", req.Header)
+}
+
+func (h *TunnelHandler) logResponse(r *http.Response, cfRay string) {
+	if cfRay != "" {
+		Log.WithField("CF-RAY", cfRay).Infof("%s", r.Status)
+	} else {
+		Log.Infof("%s", r.Status)
+	}
+	Log.Debugf("Response Headers %+v", r.Header)
+}
+
+
+func (h *TunnelHandler) UpdateMetrics(connectionID string) {
+	h.metrics.updateMuxerMetrics(connectionID, h.muxer.Metrics())
 }
 
 func uint8ToString(input uint8) string {

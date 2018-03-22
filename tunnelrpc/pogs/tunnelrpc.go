@@ -1,7 +1,7 @@
 package pogs
 
 import (
-	"github.com/cloudflare/cloudflare-warp/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"golang.org/x/net/context"
 	"zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"

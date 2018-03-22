@@ -19,6 +19,7 @@ type MuxedStream struct {
 	receiveWindowCurrentMax uint32
 	// limit set in http2 spec. 2^31-1
 	receiveWindowMax uint32
+
 	// nonzero if a WINDOW_UPDATE frame for a stream needs to be sent
 	windowUpdate uint32
 
@@ -37,10 +38,6 @@ type MuxedStream struct {
 	sentEOF bool
 	// true if the peer sent us an EOF
 	receivedEOF bool
-}
-
-type flowControlWindow struct {
-	receiveWindow, sendWindow uint32
 }
 
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
@@ -101,17 +98,21 @@ func (s *MuxedStream) WriteHeaders(headers []Header) error {
 		return ErrStreamHeadersSent
 	}
 	s.writeHeaders = headers
+	s.headersSent = false
 	s.writeNotify()
 	return nil
 }
 
-func (s *MuxedStream) FlowControlWindow() *flowControlWindow {
+func (s *MuxedStream) getReceiveWindow() uint32 {
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
-	return &flowControlWindow{
-		receiveWindow: s.receiveWindow,
-		sendWindow:    s.sendWindow,
-	}
+	return s.receiveWindow
+}
+
+func (s *MuxedStream) getSendWindow() uint32 {
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
+	return s.sendWindow
 }
 
 // writeNotify must happen while holding writeLock.
@@ -209,9 +210,7 @@ func (s *MuxedStream) getChunk() *streamChunk {
 	}
 
 	// Copies at most s.sendWindow bytes
-	//log.Infof("writeBuffer len %d stream %d", s.writeBuffer.Len(), s.streamID)
 	writeLen, _ := io.CopyN(&chunk.buffer, &s.writeBuffer, int64(s.sendWindow))
-	//log.Infof("writeLen %d stream %d", writeLen, s.streamID)
 	s.sendWindow -= uint32(writeLen)
 	s.receiveWindow += s.windowUpdate
 	s.windowUpdate = 0

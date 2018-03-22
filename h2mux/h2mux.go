@@ -59,6 +59,8 @@ type Muxer struct {
 	muxReader *MuxReader
 	// muxWriter is the write process.
 	muxWriter *MuxWriter
+	// muxMetricsUpdater is the process to update metrics
+	muxMetricsUpdater *muxMetricsUpdater
 	// newStreamChan is used to create new streams on the writer thread.
 	// The writer will assign the next available stream ID.
 	newStreamChan chan MuxedStreamRequest
@@ -133,6 +135,11 @@ func Handshake(
 	// set up reader/writer pair ready for serve
 	streamErrors := NewStreamErrorMap()
 	goAwayChan := make(chan http2.ErrCode, 1)
+	updateRTTChan := make(chan *roundTripMeasurement, 1)
+	updateReceiveWindowChan := make(chan uint32, 1)
+	updateSendWindowChan := make(chan uint32, 1)
+	updateInBoundBytesChan := make(chan uint64)
+	updateOutBoundBytesChan := make(chan uint64)
 	pingTimestamp := NewPingTimestamp()
 	connActive := NewSignal()
 	idleDuration := config.HeartbeatInterval
@@ -149,34 +156,48 @@ func Handshake(
 
 	m.explicitShutdown = NewBooleanFuse()
 	m.muxReader = &MuxReader{
-		f:                   m.f,
-		handler:             m.config.Handler,
-		streams:             m.streams,
-		readyList:           m.readyList,
-		streamErrors:        streamErrors,
-		goAwayChan:          goAwayChan,
-		abortChan:           m.abortChan,
-		pingTimestamp:       pingTimestamp,
-		connActive:          connActive,
-		initialStreamWindow: defaultWindowSize,
-		streamWindowMax:     maxWindowSize,
-		r:                   m.r,
+		f:                       m.f,
+		handler:                 m.config.Handler,
+		streams:                 m.streams,
+		readyList:               m.readyList,
+		streamErrors:            streamErrors,
+		goAwayChan:              goAwayChan,
+		abortChan:               m.abortChan,
+		pingTimestamp:           pingTimestamp,
+		connActive:              connActive,
+		initialStreamWindow:     defaultWindowSize,
+		streamWindowMax:         maxWindowSize,
+		r:                       m.r,
+		updateRTTChan:           updateRTTChan,
+		updateReceiveWindowChan: updateReceiveWindowChan,
+		updateSendWindowChan:    updateSendWindowChan,
+		updateInBoundBytesChan:  updateInBoundBytesChan,
 	}
 	m.muxWriter = &MuxWriter{
-		f:               m.f,
-		streams:         m.streams,
-		streamErrors:    streamErrors,
-		readyStreamChan: m.readyList.ReadyChannel(),
-		newStreamChan:   m.newStreamChan,
-		goAwayChan:      goAwayChan,
-		abortChan:       m.abortChan,
-		pingTimestamp:   pingTimestamp,
-		idleTimer:       NewIdleTimer(idleDuration, maxRetries),
-		connActiveChan:  connActive.WaitChannel(),
-		maxFrameSize:    defaultFrameSize,
+		f:                       m.f,
+		streams:                 m.streams,
+		streamErrors:            streamErrors,
+		readyStreamChan:         m.readyList.ReadyChannel(),
+		newStreamChan:           m.newStreamChan,
+		goAwayChan:              goAwayChan,
+		abortChan:               m.abortChan,
+		pingTimestamp:           pingTimestamp,
+		idleTimer:               NewIdleTimer(idleDuration, maxRetries),
+		connActiveChan:          connActive.WaitChannel(),
+		maxFrameSize:            defaultFrameSize,
+		updateReceiveWindowChan: updateReceiveWindowChan,
+		updateSendWindowChan:    updateSendWindowChan,
+		updateOutBoundBytesChan: updateOutBoundBytesChan,
 	}
 	m.muxWriter.headerEncoder = hpack.NewEncoder(&m.muxWriter.headerBuffer)
-
+	m.muxMetricsUpdater = newMuxMetricsUpdater(
+		updateRTTChan,
+		updateReceiveWindowChan,
+		updateSendWindowChan,
+		updateInBoundBytesChan,
+		updateOutBoundBytesChan,
+		m.abortChan,
+	)
 	return m, nil
 }
 
@@ -246,9 +267,13 @@ func (m *Muxer) Serve() error {
 		m.w.Close()
 		m.abort()
 	}()
+	go func() {
+		errChan <- m.muxMetricsUpdater.run(logger)
+	}()
 	err := <-errChan
 	go func() {
-		// discard error as other handler closes
+		// discard errors as other handler and muxMetricsUpdater close
+		<-errChan
 		<-errChan
 		close(errChan)
 	}()
@@ -318,14 +343,8 @@ func (m *Muxer) OpenStream(headers []Header, body io.Reader) (*MuxedStream, erro
 	}
 }
 
-// Return the estimated round-trip time.
-func (m *Muxer) RTT() RTTMeasurement {
-	return m.muxReader.RTT()
-}
-
-// Return min/max/average of send/receive window for all streams on this connection
-func (m *Muxer) FlowControlMetrics() *FlowControlMetrics {
-	return m.muxReader.FlowControlMetrics()
+func (m *Muxer) Metrics() *MuxerMetrics {
+	return m.muxMetricsUpdater.Metrics()
 }
 
 func (m *Muxer) abort() {

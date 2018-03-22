@@ -1,7 +1,7 @@
 using Go = import "go.capnp";
 @0xdb8274f9144abc7e;
 $Go.package("tunnelrpc");
-$Go.import("github.com/cloudflare/cloudflare-warp/tunnelrpc");
+$Go.import("github.com/cloudflare/cloudflared/tunnelrpc");
 
 struct Authentication {
     key @0 :Text;
@@ -35,7 +35,7 @@ struct RegistrationOptions {
     connectionId @6 :UInt8;
     # origin LAN IP
     originLocalIp @7 :Text;
-    # whether Warp client has been autoupdated
+    # whether Argo Tunnel client has been autoupdated
     isAutoupdated @8 :Bool;
 }
 

@@ -40,6 +40,14 @@ type MuxWriter struct {
 	headerEncoder *hpack.Encoder
 	// headerBuffer is the temporary buffer used by headerEncoder.
 	headerBuffer bytes.Buffer
+	// updateReceiveWindowChan is the channel to update receiveWindow size to muxerMetricsUpdater
+	updateReceiveWindowChan chan<- uint32
+	// updateSendWindowChan is the channel to update sendWindow size to muxerMetricsUpdater
+	updateSendWindowChan chan<- uint32
+	// bytesWrote is the amount of bytes wrote to data frame since the last time we send bytes wrote to metrics
+	bytesWrote AtomicCounter
+	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
+	updateOutBoundBytesChan chan<- uint64
 }
 
 type MuxedStreamRequest struct {
@@ -64,6 +72,20 @@ func (w *MuxWriter) run(parentLogger *log.Entry) error {
 		"dir":       "write",
 	})
 	defer logger.Debug("event loop finished")
+
+	// routine to periodically communicate bytesWrote
+	go func() {
+		tickC := time.Tick(updateFreq)
+		for {
+			select {
+			case <-w.abortChan:
+				return
+			case <-tickC:
+				w.updateOutBoundBytesChan <- w.bytesWrote.Count()
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-w.abortChan:
@@ -141,7 +163,8 @@ func (w *MuxWriter) run(parentLogger *log.Entry) error {
 func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger *log.Entry) error {
 	logger.Debug("writable")
 	chunk := stream.getChunk()
-
+	w.updateReceiveWindowChan <- stream.getReceiveWindow()
+	w.updateSendWindowChan <- stream.getSendWindow()
 	if chunk.sendHeadersFrame() {
 		err := w.writeHeaders(chunk.streamID, chunk.headers)
 		if err != nil {
@@ -154,7 +177,9 @@ func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger *log.Entry) erro
 	if chunk.sendWindowUpdateFrame() {
 		// Send a WINDOW_UPDATE frame to update our receive window.
 		// If the Stream ID is zero, the window update applies to the connection as a whole
-		// A WINDOW_UPDATE in a specific stream applies to the connection-level flow control as well.
+		// RFC7540 section-6.9.1 "A receiver that receives a flow-controlled frame MUST
+		// always account for  its contribution against the connection flow-control
+		// window, unless the receiver treats this as a connection error"
 		err := w.f.WriteWindowUpdate(chunk.streamID, chunk.windowUpdate)
 		if err != nil {
 			logger.WithError(err).Warn("error writing window update")
@@ -170,6 +195,8 @@ func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger *log.Entry) erro
 			logger.WithError(err).Warn("error writing data")
 			return err
 		}
+		// update the amount of data wrote
+		w.bytesWrote.IncrementBy(uint64(len(payload)))
 		logger.WithField("len", len(payload)).Debug("output data")
 
 		if sentEOF {
@@ -214,19 +241,16 @@ func (w *MuxWriter) writeHeaders(streamID uint32, headers []Header) error {
 		return err
 	}
 	blockSize := int(w.maxFrameSize)
-	continuation := false
 	endHeaders := len(encodedHeaders) == 0
 	for !endHeaders && err == nil {
 		blockFragment := encodedHeaders
 		if len(encodedHeaders) > blockSize {
 			blockFragment = blockFragment[:blockSize]
 			encodedHeaders = encodedHeaders[blockSize:]
-		} else {
-			endHeaders = true
-		}
-		if continuation {
+			// Send CONTINUATION frame if the headers can't be fit into 1 frame
 			err = w.f.WriteContinuation(streamID, endHeaders, blockFragment)
 		} else {
+			endHeaders = true
 			err = w.f.WriteHeaders(http2.HeadersFrameParam{
 				StreamID:      streamID,
 				EndHeaders:    endHeaders,

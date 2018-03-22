@@ -3,7 +3,6 @@ package h2mux
 import (
 	"encoding/binary"
 	"io"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -34,14 +33,18 @@ type MuxReader struct {
 	initialStreamWindow uint32
 	// The max value for the send window of a stream.
 	streamWindowMax uint32
-	// windowMetrics keeps track of min/max/average of send/receive windows for all streams
-	flowControlMetrics *FlowControlMetrics
-	metricsMutex       sync.Mutex
 	// r is a reference to the underlying connection used when shutting down.
 	r io.Closer
-	// rttMeasurement measures RTT based on ping timestamps.
-	rttMeasurement RTTMeasurement
-	rttMutex       sync.Mutex
+	// updateRTTChan is the channel to send new RTT measurement to muxerMetricsUpdater
+	updateRTTChan chan<- *roundTripMeasurement
+	// updateReceiveWindowChan is the channel to update receiveWindow size to muxerMetricsUpdater
+	updateReceiveWindowChan chan<- uint32
+	// updateSendWindowChan is the channel to update sendWindow size to muxerMetricsUpdater
+	updateSendWindowChan chan<- uint32
+	// bytesRead is the amount of bytes read from data frame since the last time we send bytes read to metrics
+	bytesRead AtomicCounter
+	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
+	updateInBoundBytesChan chan<- uint64
 }
 
 func (r *MuxReader) Shutdown() {
@@ -57,28 +60,26 @@ func (r *MuxReader) Shutdown() {
 	}()
 }
 
-func (r *MuxReader) RTT() RTTMeasurement {
-	r.rttMutex.Lock()
-	defer r.rttMutex.Unlock()
-	return r.rttMeasurement
-}
-
-func (r *MuxReader) FlowControlMetrics() *FlowControlMetrics {
-	r.metricsMutex.Lock()
-	defer r.metricsMutex.Unlock()
-	if r.flowControlMetrics != nil {
-		return r.flowControlMetrics
-	}
-	// No metrics available yet
-	return &FlowControlMetrics{}
-}
-
 func (r *MuxReader) run(parentLogger *log.Entry) error {
 	logger := parentLogger.WithFields(log.Fields{
 		"subsystem": "mux",
 		"dir":       "read",
 	})
 	defer logger.Debug("event loop finished")
+
+	// routine to periodically update bytesRead
+	go func() {
+		tickC := time.Tick(updateFreq)
+		for {
+			select {
+			case <-r.abortChan:
+				return
+			case <-tickC:
+				r.updateInBoundBytesChan <- r.bytesRead.Count()
+			}
+		}
+	}()
+
 	for {
 		frame, err := r.f.ReadFrame()
 		if err != nil {
@@ -120,6 +121,8 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 			r.receivePingData(f)
 		case *http2.GoAwayFrame:
 			err = r.receiveGoAway(f)
+		// The receiver of a flow-controlled frame sends a WINDOW_UPDATE frame as it
+		// consumes data and frees up space in flow-control windows
 		case *http2.WindowUpdateFrame:
 			err = r.updateStreamWindow(f)
 		default:
@@ -236,10 +239,11 @@ func (r *MuxReader) receiveFrameData(frame *http2.DataFrame, parentLogger *log.E
 	}
 	data := frame.Data()
 	if len(data) > 0 {
-		_, err = stream.readBuffer.Write(data)
+		n, err := stream.readBuffer.Write(data)
 		if err != nil {
 			return r.streamError(stream.streamID, http2.ErrCodeInternal)
 		}
+		r.bytesRead.IncrementBy(uint64(n))
 	}
 	if frame.Header().Flags.Has(http2.FlagDataEndStream) {
 		if stream.receiveEOF() {
@@ -253,6 +257,7 @@ func (r *MuxReader) receiveFrameData(frame *http2.DataFrame, parentLogger *log.E
 	if !stream.consumeReceiveWindow(uint32(len(data))) {
 		return r.streamError(stream.streamID, http2.ErrCodeFlowControl)
 	}
+	r.updateReceiveWindowChan <- stream.getReceiveWindow()
 	return nil
 }
 
@@ -263,10 +268,14 @@ func (r *MuxReader) receivePingData(frame *http2.PingFrame) {
 		r.pingTimestamp.Set(ts)
 		return
 	}
-	r.rttMutex.Lock()
-	r.rttMeasurement.Update(time.Unix(0, ts))
-	r.rttMutex.Unlock()
-	r.flowControlMetrics = r.streams.Metrics()
+
+	// Update updates the computed values with a new measurement.
+	// outgoingTime is the time that the probe was sent.
+	// We assume that time.Now() is the time we received that probe.
+	r.updateRTTChan <- &roundTripMeasurement{
+		receiveTime: time.Now(),
+		sendTime:    time.Unix(0, ts),
+	}
 }
 
 // Receive a GOAWAY from the peer. Gracefully shut down our connection.
@@ -293,6 +302,7 @@ func (r *MuxReader) updateStreamWindow(frame *http2.WindowUpdateFrame) error {
 		return nil
 	}
 	stream.replenishSendWindow(frame.Increment)
+	r.updateSendWindowChan <- stream.getSendWindow()
 	return nil
 }
 

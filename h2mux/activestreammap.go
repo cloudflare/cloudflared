@@ -24,12 +24,6 @@ type activeStreamMap struct {
 	ignoreNewStreams bool
 }
 
-type FlowControlMetrics struct {
-	AverageReceiveWindowSize, AverageSendWindowSize float64
-	MinReceiveWindowSize, MaxReceiveWindowSize      uint32
-	MinSendWindowSize, MaxSendWindowSize            uint32
-}
-
 func newActiveStreamMap(useClientStreamNumbers bool) *activeStreamMap {
 	m := &activeStreamMap{
 		streams:      make(map[uint32]*MuxedStream),
@@ -168,46 +162,4 @@ func (m *activeStreamMap) Abort() {
 		stream.Close()
 	}
 	m.ignoreNewStreams = true
-}
-
-func (m *activeStreamMap) Metrics() *FlowControlMetrics {
-	m.Lock()
-	defer m.Unlock()
-	var averageReceiveWindowSize, averageSendWindowSize float64
-	var minReceiveWindowSize, maxReceiveWindowSize, minSendWindowSize, maxSendWindowSize uint32
-	i := 0
-	// The first variable in the range expression for map is the key, not index.
-	for _, stream := range m.streams {
-		// iterative mean: a(t+1) = a(t) + (a(t)-x)/(t+1)
-		windows := stream.FlowControlWindow()
-		averageReceiveWindowSize += (float64(windows.receiveWindow) - averageReceiveWindowSize) / float64(i+1)
-		averageSendWindowSize += (float64(windows.sendWindow) - averageSendWindowSize) / float64(i+1)
-		if i == 0 {
-			maxReceiveWindowSize = windows.receiveWindow
-			minReceiveWindowSize = windows.receiveWindow
-			maxSendWindowSize = windows.sendWindow
-			minSendWindowSize = windows.sendWindow
-		} else {
-			if windows.receiveWindow > maxReceiveWindowSize {
-				maxReceiveWindowSize = windows.receiveWindow
-			} else if windows.receiveWindow < minReceiveWindowSize {
-				minReceiveWindowSize = windows.receiveWindow
-			}
-
-			if windows.sendWindow > maxSendWindowSize {
-				maxSendWindowSize = windows.sendWindow
-			} else if windows.sendWindow < minSendWindowSize {
-				minSendWindowSize = windows.sendWindow
-			}
-		}
-		i++
-	}
-	return &FlowControlMetrics{
-		MinReceiveWindowSize:     minReceiveWindowSize,
-		MaxReceiveWindowSize:     maxReceiveWindowSize,
-		AverageReceiveWindowSize: averageReceiveWindowSize,
-		MinSendWindowSize:        minSendWindowSize,
-		MaxSendWindowSize:        maxSendWindowSize,
-		AverageSendWindowSize:    averageSendWindowSize,
-	}
 }

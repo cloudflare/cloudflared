@@ -126,7 +126,7 @@ func TestValidateUrl(t *testing.T) {
 	assert.Equal(t, "https://hello.example.com", validUrl)
 
 	validUrl, err = ValidateUrl("ftp://alex:12345@hello.example.com:8080/robot.txt")
-	assert.Equal(t, "Currently Cloudflare-Warp does not support ftp protocol.", err.Error())
+	assert.Equal(t, "Currently Argo Tunnel does not support ftp protocol.", err.Error())
 	assert.Empty(t, validUrl)
 
 	validUrl, err = ValidateUrl("https://alex:12345@hello.example.com:8080")
