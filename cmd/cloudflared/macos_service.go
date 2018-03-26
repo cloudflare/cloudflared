@@ -49,8 +49,8 @@ var launchdTemplate = ServiceTemplate{
 		<string>/tmp/%s.err.log</string>
 		<key>KeepAlive</key>
 		<dict>
-			<key>NetworkState</key>
-			<true/>
+			<key>SuccessfulExit</key>
+			<false/>
 		</dict>
 		<key>ThrottleInterval</key>
 		<integer>20</integer>

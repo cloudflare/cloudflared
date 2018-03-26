@@ -11,8 +11,6 @@ import (
 const (
 	// Waiting time before retrying a failed tunnel connection
 	tunnelRetryDuration = time.Second * 10
-	// Limit on the exponential backoff time period. (2^5 = 32 minutes)
-	tunnelRetryLimit = 5
 	// SRV record resolution TTL
 	resolveTTL = time.Hour
 )
@@ -54,30 +52,31 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 	if err := s.initialize(ctx, connectedSignal); err != nil {
 		return err
 	}
-	tunnelsActive := s.config.HAConnections
-	tunnelsWaiting := []int{}
+	var tunnelsWaiting []int
 	backoff := BackoffHandler{MaxRetries: s.config.Retries, BaseTime: tunnelRetryDuration, RetryForever: true}
 	var backoffTimer <-chan time.Time
-	for tunnelsActive > 0 {
+
+	for {
 		select {
 		// Context cancelled
 		case <-ctx.Done():
-			for tunnelsActive > 0 {
+			for len(s.tunnelErrors) > 0 {
 				<-s.tunnelErrors
-				tunnelsActive--
 			}
+
 			return nil
 		// startTunnel returned with error
 		// (note that this may also be caused by context cancellation)
 		case tunnelError := <-s.tunnelErrors:
-			tunnelsActive--
 			if tunnelError.err != nil {
 				Log.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
+
 				if backoffTimer == nil {
 					backoffTimer = backoff.BackoffTimer()
 				}
+
 				// If the error is a dial error, the problem is likely to be network related
 				// try another addr before refreshing since we are likely to get back the
 				// same IPs in the same order. Same problem with duplicate connection error.
@@ -93,7 +92,6 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 			for _, index := range tunnelsWaiting {
 				go s.startTunnel(ctx, index, s.newConnectedTunnelSignal(index))
 			}
-			tunnelsActive += len(tunnelsWaiting)
 			tunnelsWaiting = nil
 		// Tunnel successfully connected
 		case <-s.nextConnectedSignal:
@@ -113,7 +111,6 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 			}
 		}
 	}
-	return fmt.Errorf("All tunnels terminated")
 }
 
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}) error {
@@ -135,7 +132,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct
 	case <-ctx.Done():
 		<-s.tunnelErrors
 		// Error can't be nil. A nil error signals that initialization succeed
-		return fmt.Errorf("Context was canceled")
+		return fmt.Errorf("context was canceled")
 	case tunnelError := <-s.tunnelErrors:
 		return tunnelError.err
 	case <-connectedSignal:
