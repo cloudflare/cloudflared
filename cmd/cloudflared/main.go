@@ -568,7 +568,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	var errCode int
 	err = WaitForSignal(errC, shutdownC)
 	if err != nil {
-		Log.WithError(err).Error("Quitting due to error")
+		Log.WithError(err).Fatal("Quitting due to error")
 		raven.CaptureErrorAndWait(err, nil)
 		errCode = 1
 	} else {

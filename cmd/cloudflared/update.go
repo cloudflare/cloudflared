@@ -2,7 +2,7 @@ package main
 
 import "github.com/equinox-io/equinox"
 
-const appID = "app_cwbQae3Tpea"
+const appID = "app_idCzgxYerVD"
 
 var publicKey = []byte(`
 -----BEGIN ECDSA PUBLIC KEY-----
