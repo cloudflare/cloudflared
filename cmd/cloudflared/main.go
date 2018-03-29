@@ -288,7 +288,7 @@ func main() {
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "proxy-dns-upstream",
 			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://dns.cloudflare.com/.well-known/dns-query"),
+			Value:   cli.NewStringSlice("https://cloudflare-dns.com/.well-known/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 		}),
 	}
@@ -375,7 +375,7 @@ func main() {
 				&cli.StringSliceFlag{
 					Name:    "upstream",
 					Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-					Value:   cli.NewStringSlice("https://dns.cloudflare.com/.well-known/dns-query"),
+					Value:   cli.NewStringSlice("https://cloudflare-dns.com/.well-known/dns-query"),
 					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 				},
 			},
