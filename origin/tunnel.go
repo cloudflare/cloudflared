@@ -35,7 +35,15 @@ const (
 
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
+	CloudflaredPingHeader    = "Cloudflard-Ping"
 )
+
+type DNSValidationConfig struct {
+       VerifyDNSPropagated bool
+       DNSPingRetries      uint
+       DNSInitWaitTime     time.Duration
+       PingFreq            time.Duration
+}
 
 type TunnelConfig struct {
 	EdgeAddrs         []string
@@ -58,6 +66,7 @@ type TunnelConfig struct {
 	ProtocolLogger    *logrus.Logger
 	Logger            *logrus.Logger
 	IsAutoupdated     bool
+	*DNSValidationConfig
 }
 
 type dialError struct {
@@ -297,7 +306,6 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 		}
 	}
 
-	Log.Infof("Registered at %s", registration.Url)
 	return nil
 }
 
@@ -361,6 +369,7 @@ func FindCfRayHeader(h1 *http.Request) string {
 	return h1.Header.Get("Cf-Ray")
 }
 
+
 type TunnelHandler struct {
 	originUrl  string
 	muxer      *h2mux.Muxer
@@ -370,6 +379,7 @@ type TunnelHandler struct {
 	metrics    *tunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID string
+	clientID    string
 }
 
 var dialer = net.Dialer{DualStack: true}
@@ -387,6 +397,7 @@ func NewTunnelHandler(ctx context.Context, config *TunnelConfig, addr string, co
 		tags:         config.Tags,
 		metrics:      config.Metrics,
 		connectionID: uint8ToString(connectionID),
+		clientID:     config.ClientID,
 	}
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
@@ -442,6 +453,10 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	h.AppendTagHeaders(req)
 	cfRay := FindCfRayHeader(req)
 	h.logRequest(req, cfRay)
+	if h.isCloudflaredPing(req) {
+		stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: fmt.Sprintf("%d", http.StatusOK)}})
+		return nil
+	}
 	if websocket.IsWebSocketUpgrade(req) {
 		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
 		if err != nil {
@@ -467,6 +482,13 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	}
 	h.metrics.decrementConcurrentRequests(h.connectionID)
 	return nil
+}
+
+func (h *TunnelHandler) isCloudflaredPing(h1 *http.Request) bool {
+	if h1.Header.Get(CloudflaredPingHeader) == h.clientID {
+		return true
+	}
+	return false
 }
 
 func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {

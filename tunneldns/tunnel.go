@@ -1,7 +1,6 @@
 package tunneldns
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -132,7 +131,7 @@ func CreateListener(address string, port uint16, upstreams []string) (*Listener,
 	}
 
 	// Format an endpoint
-	endpoint := fmt.Sprintf("dns://%s:%d", address, port)
+	endpoint := "dns://" + net.JoinHostPort(address, strconv.FormatUint(uint64(port), 10))
 
 	// Create the actual middleware server
 	server, err := dnsserver.NewServer(endpoint, []*dnsserver.Config{createConfig(address, port, NewMetricsPlugin(chain))})

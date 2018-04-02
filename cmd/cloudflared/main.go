@@ -43,6 +43,8 @@ const (
 	quickStartUrl       = "https://developers.cloudflare.com/argo-tunnel/quickstart/quickstart/"
 	noAutoupdateMessage = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
 	licenseUrl          = "https://developers.cloudflare.com/argo-tunnel/licence/"
+	minDNSInitWait      = time.Second * 15
+	minPingFreq         = time.Second * 2
 )
 
 var listeners = gracenet.Net{}
@@ -288,8 +290,33 @@ func main() {
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "proxy-dns-upstream",
 			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://cloudflare-dns.com/.well-known/dns-query"),
+			Value:   cli.NewStringSlice("https://cloudflare-dns.com/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "skip-hostname-propagation-check",
+			Usage:   "Flag to instruct cloudflared to skip checking whether DNS record for the hostname has been propagated.",
+			EnvVars: []string{"TUNNEL_SKIP_HOSTNAME_PROPAGATION_CHECK"},
+		}),
+		altsrc.NewUintFlag(&cli.UintFlag{
+			Name:  "hostname-propagated-retries",
+			Usage: "How many pings to test whether send DNS record has been propagated before reregistering tunnel",
+			Value: 25,
+			EnvVars: []string{"TUNNEL_HOSTNAME_PROPAGATED_RETRIES"},
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:  "init-wait-time",
+			Usage: "Initial waiting time to checking whether DNS record has propagated",
+			Value: minDNSInitWait,
+			EnvVars: []string{"TUNNEL_INIT_WAIT_TIME"},
+			Hidden: true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:  "ping-freq",
+			Usage: "Ping frequency for checking DNS record has propagated",
+			Value: minPingFreq,
+			EnvVars: []string{"TUNNEL_PING_FREQ"},
+			Hidden: true,
 		}),
 	}
 	app.Action = func(c *cli.Context) error {
@@ -375,7 +402,7 @@ func main() {
 				&cli.StringSliceFlag{
 					Name:    "upstream",
 					Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-					Value:   cli.NewStringSlice("https://cloudflare-dns.com/.well-known/dns-query"),
+					Value:   cli.NewStringSlice("https://cloudflare-dns.com/dns-query"),
 					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 				},
 			},
@@ -460,11 +487,15 @@ func startServer(c *cli.Context) {
 		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(c.Uint("proxy-dns-port")), c.StringSlice("proxy-dns-upstream"))
 		if err != nil {
 			listener.Stop()
-			Log.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
+			Log.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
 		}
 		go func() {
-			listener.Start()
-			<-shutdownC
+			err := listener.Start()
+			if err != nil {
+				Log.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
+			} else {
+				<-shutdownC
+			}
 			listener.Stop()
 			wg.Done()
 		}()
@@ -547,6 +578,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		ProtocolLogger:    protoLogger,
 		Logger:            Log,
 		IsAutoupdated:     c.Bool("is-autoupdated"),
+		DNSValidationConfig: getDNSValidationConfig(c),
 	}
 	connectedSignal := make(chan struct{})
 
@@ -791,4 +823,20 @@ func isAutoupdateEnabled(c *cli.Context) bool {
 	}
 
 	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
+}
+
+func getDNSValidationConfig(c *cli.Context) *origin.DNSValidationConfig {
+	dnsValidationConfig := &origin.DNSValidationConfig{
+		VerifyDNSPropagated: !c.Bool("skip-hostname-propagation-check"),
+		DNSPingRetries:    c.Uint("hostname-propagated-retries"),
+		DNSInitWaitTime:   c.Duration("init-wait-time"),
+		PingFreq:          c.Duration("ping-freq"),
+	}
+	if dnsValidationConfig.DNSInitWaitTime < minDNSInitWait {
+		dnsValidationConfig.DNSInitWaitTime = minDNSInitWait
+	}
+	if dnsValidationConfig.PingFreq < minPingFreq {
+		dnsValidationConfig.PingFreq = minPingFreq
+	}
+	return dnsValidationConfig
 }
