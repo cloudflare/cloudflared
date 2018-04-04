@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/net/context"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 const (
@@ -59,19 +59,21 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 	var tunnelsWaiting []int
 	backoff := BackoffHandler{MaxRetries: s.config.Retries, BaseTime: tunnelRetryDuration, RetryForever: true}
 	var backoffTimer <-chan time.Time
+	tunnelsActive := s.config.HAConnections
 
 	for {
 		select {
 		// Context cancelled
 		case <-ctx.Done():
-			for len(s.tunnelErrors) > 0 {
+			for tunnelsActive > 0 {
 				<-s.tunnelErrors
+				tunnelsActive--
 			}
-
 			return nil
 		// startTunnel returned with error
 		// (note that this may also be caused by context cancellation)
 		case tunnelError := <-s.tunnelErrors:
+			tunnelsActive--
 			if tunnelError.err != nil {
 				Log.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
@@ -96,6 +98,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 			for _, index := range tunnelsWaiting {
 				go s.startTunnel(ctx, index, s.newConnectedTunnelSignal(index))
 			}
+			tunnelsActive += len(tunnelsWaiting)
 			tunnelsWaiting = nil
 		// Tunnel successfully connected
 		case <-s.nextConnectedSignal:
@@ -217,7 +220,7 @@ func (s *Supervisor) verifyDNSPropagated(ctx context.Context) (err error) {
 }
 
 func (s *Supervisor) createPingRequestAndClient() (*http.Request, *http.Client, error) {
-	url := fmt.Sprintf("https://%s",s.config.Hostname)
+	url := fmt.Sprintf("https://%s", s.config.Hostname)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, nil, err
@@ -225,7 +228,7 @@ func (s *Supervisor) createPingRequestAndClient() (*http.Request, *http.Client, 
 	req.Header.Add(CloudflaredPingHeader, s.config.ClientID)
 	transport := s.config.HTTPTransport
 	if transport == nil {
-			transport = http.DefaultTransport
+		transport = http.DefaultTransport
 	}
 	return req, &http.Client{Transport: transport}, nil
 }

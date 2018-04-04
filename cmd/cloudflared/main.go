@@ -53,8 +53,9 @@ var BuildTime = "unknown"
 var Log *logrus.Logger
 var defaultConfigFiles = []string{"config.yml", "config.yaml"}
 
+// Launchd doesn't set root env variables, so there is default
 // Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
-var defaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp"}
+var defaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/usr/local/etc/cloudflared", "/etc/cloudflared"}
 
 // Shutdown channel used by the app. When closed, app must terminate.
 // May be closed by the Windows service runner.
@@ -74,6 +75,7 @@ func main() {
 	raven.SetDSN(sentryDSN)
 	raven.SetRelease(Version)
 	shutdownC = make(chan struct{})
+
 	app := &cli.App{}
 	app.Name = "cloudflared"
 	app.Copyright = fmt.Sprintf(`(c) %d Cloudflare Inc.
@@ -299,24 +301,31 @@ func main() {
 			EnvVars: []string{"TUNNEL_SKIP_HOSTNAME_PROPAGATION_CHECK"},
 		}),
 		altsrc.NewUintFlag(&cli.UintFlag{
-			Name:  "hostname-propagated-retries",
-			Usage: "How many pings to test whether send DNS record has been propagated before reregistering tunnel",
-			Value: 25,
+			Name:    "hostname-propagated-retries",
+			Usage:   "How many pings to test whether send DNS record has been propagated before reregistering tunnel",
+			Value:   25,
 			EnvVars: []string{"TUNNEL_HOSTNAME_PROPAGATED_RETRIES"},
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:  "init-wait-time",
-			Usage: "Initial waiting time to checking whether DNS record has propagated",
-			Value: minDNSInitWait,
+			Name:    "init-wait-time",
+			Usage:   "Initial waiting time to checking whether DNS record has propagated",
+			Value:   minDNSInitWait,
 			EnvVars: []string{"TUNNEL_INIT_WAIT_TIME"},
-			Hidden: true,
+			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:  "ping-freq",
-			Usage: "Ping frequency for checking DNS record has propagated",
-			Value: minPingFreq,
+			Name:    "ping-freq",
+			Usage:   "Ping frequency for checking DNS record has propagated",
+			Value:   minPingFreq,
 			EnvVars: []string{"TUNNEL_PING_FREQ"},
-			Hidden: true,
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    "grace-period",
+			Usage:   "Duration to accpet new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
+			Value:   time.Second * 30,
+			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
+			Hidden:  true,
 		}),
 	}
 	app.Action = func(c *cli.Context) error {
@@ -415,6 +424,7 @@ func main() {
 func startServer(c *cli.Context) {
 	var wg sync.WaitGroup
 	errC := make(chan error)
+	connectedSignal := make(chan struct{})
 	wg.Add(2)
 
 	// If the user choose to supply all options through env variables,
@@ -452,6 +462,33 @@ func startServer(c *cli.Context) {
 		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
 	}
 
+	if c.IsSet("proxy-dns") {
+		wg.Add(1)
+		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(c.Uint("proxy-dns-port")), c.StringSlice("proxy-dns-upstream"))
+		if err != nil {
+			listener.Stop()
+			Log.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
+		}
+		go func() {
+			err := listener.Start()
+			if err != nil {
+				Log.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
+			} else {
+				<-shutdownC
+			}
+			listener.Stop()
+			wg.Done()
+		}()
+
+		// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
+		if !c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world") {
+			go writePidFile(connectedSignal, c.String("pidfile"))
+			close(connectedSignal)
+			runServer(c, &wg, errC, shutdownC)
+			return
+		}
+	}
+
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
 		Log.WithError(err).Fatal("Invalid hostname")
@@ -480,25 +517,6 @@ func startServer(c *cli.Context) {
 			listener.Close()
 		}()
 		c.Set("url", "https://"+listener.Addr().String())
-	}
-
-	if c.IsSet("proxy-dns") {
-		wg.Add(1)
-		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(c.Uint("proxy-dns-port")), c.StringSlice("proxy-dns-upstream"))
-		if err != nil {
-			listener.Stop()
-			Log.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
-		}
-		go func() {
-			err := listener.Start()
-			if err != nil {
-				Log.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
-			} else {
-				<-shutdownC
-			}
-			listener.Stop()
-			wg.Done()
-		}()
 	}
 
 	url, err := validateUrl(c)
@@ -558,29 +576,29 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	}
 
 	tunnelConfig := &origin.TunnelConfig{
-		EdgeAddrs:         c.StringSlice("edge"),
-		OriginUrl:         url,
-		Hostname:          hostname,
-		OriginCert:        originCert,
-		TlsConfig:         tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
-		ClientTlsConfig:   httpTransport.TLSClientConfig,
-		Retries:           c.Uint("retries"),
-		HeartbeatInterval: c.Duration("heartbeat-interval"),
-		MaxHeartbeats:     c.Uint64("heartbeat-count"),
-		ClientID:          clientID,
-		ReportedVersion:   Version,
-		LBPool:            c.String("lb-pool"),
-		Tags:              tags,
-		HAConnections:     c.Int("ha-connections"),
-		HTTPTransport:     httpTransport,
-		Metrics:           tunnelMetrics,
-		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
-		ProtocolLogger:    protoLogger,
-		Logger:            Log,
-		IsAutoupdated:     c.Bool("is-autoupdated"),
+		EdgeAddrs:           c.StringSlice("edge"),
+		OriginUrl:           url,
+		Hostname:            hostname,
+		OriginCert:          originCert,
+		TlsConfig:           tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
+		ClientTlsConfig:     httpTransport.TLSClientConfig,
+		Retries:             c.Uint("retries"),
+		HeartbeatInterval:   c.Duration("heartbeat-interval"),
+		MaxHeartbeats:       c.Uint64("heartbeat-count"),
+		ClientID:            clientID,
+		ReportedVersion:     Version,
+		LBPool:              c.String("lb-pool"),
+		Tags:                tags,
+		HAConnections:       c.Int("ha-connections"),
+		HTTPTransport:       httpTransport,
+		Metrics:             tunnelMetrics,
+		MetricsUpdateFreq:   c.Duration("metrics-update-freq"),
+		ProtocolLogger:      protoLogger,
+		Logger:              Log,
+		IsAutoupdated:       c.Bool("is-autoupdated"),
+		GracePeriod:         c.Duration("grace-period"),
 		DNSValidationConfig: getDNSValidationConfig(c),
 	}
-	connectedSignal := make(chan struct{})
 
 	go writePidFile(connectedSignal, c.String("pidfile"))
 	go func() {
@@ -588,6 +606,10 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		wg.Done()
 	}()
 
+	runServer(c, &wg, errC, shutdownC)
+}
+
+func runServer(c *cli.Context, wg *sync.WaitGroup, errC chan error, shutdownC chan struct{}) {
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
 		Log.WithError(err).Fatal("Error opening metrics server listener")
@@ -619,6 +641,7 @@ func WaitForSignal(errC chan error, shutdownC chan struct{}) error {
 	signals := make(chan os.Signal, 10)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
+
 	select {
 	case err := <-errC:
 		close(shutdownC)
@@ -627,6 +650,7 @@ func WaitForSignal(errC chan error, shutdownC chan struct{}) error {
 		close(shutdownC)
 	case <-shutdownC:
 	}
+
 	return nil
 }
 
@@ -708,7 +732,7 @@ func findDefaultConfigPath() string {
 		for _, configFile := range defaultConfigFiles {
 			dirPath, err := homedir.Expand(configDir)
 			if err != nil {
-				return ""
+				continue
 			}
 			path := filepath.Join(dirPath, configFile)
 			if ok, _ := fileExists(path); ok {
@@ -828,9 +852,9 @@ func isAutoupdateEnabled(c *cli.Context) bool {
 func getDNSValidationConfig(c *cli.Context) *origin.DNSValidationConfig {
 	dnsValidationConfig := &origin.DNSValidationConfig{
 		VerifyDNSPropagated: !c.Bool("skip-hostname-propagation-check"),
-		DNSPingRetries:    c.Uint("hostname-propagated-retries"),
-		DNSInitWaitTime:   c.Duration("init-wait-time"),
-		PingFreq:          c.Duration("ping-freq"),
+		DNSPingRetries:      c.Uint("hostname-propagated-retries"),
+		DNSInitWaitTime:     c.Duration("init-wait-time"),
+		PingFreq:            c.Duration("ping-freq"),
 	}
 	if dnsValidationConfig.DNSInitWaitTime < minDNSInitWait {
 		dnsValidationConfig.DNSInitWaitTime = minDNSInitWait

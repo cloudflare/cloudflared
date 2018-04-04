@@ -57,4 +57,5 @@ struct ServerInfo {
 interface TunnelServer {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
+    unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
 }

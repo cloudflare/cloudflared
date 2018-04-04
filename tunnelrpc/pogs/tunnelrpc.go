@@ -52,6 +52,7 @@ type RegistrationOptions struct {
 	ConnectionID         uint8  `capnp:"connectionId"`
 	OriginLocalIP        string `capnp:"originLocalIp"`
 	IsAutoupdated        bool   `capnp:"isAutoupdated"`
+	gracePeriodNanoSec   int64  `capnp:"gracePeriodNanoSec"`
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {
@@ -86,6 +87,7 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 type TunnelServer interface {
 	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
+	UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error
 }
 
 func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {
@@ -138,6 +140,13 @@ func (i TunnelServer_PogsImpl) GetServerInfo(p tunnelrpc.TunnelServer_getServerI
 	return MarshalServerInfo(result, serverInfo)
 }
 
+func (i TunnelServer_PogsImpl) UnregisterTunnel(p tunnelrpc.TunnelServer_unregisterTunnel) error {
+	gracePeriodNanoSec := p.Params.GracePeriodNanoSec()
+	server.Ack(p.Options)
+	return i.impl.UnregisterTunnel(p.Ctx, gracePeriodNanoSec)
+
+}
+
 type TunnelServer_PogsClient struct {
 	Client capnp.Client
 	Conn   *rpc.Conn
@@ -185,4 +194,14 @@ func (c TunnelServer_PogsClient) GetServerInfo(ctx context.Context) (*ServerInfo
 		return nil, err
 	}
 	return UnmarshalServerInfo(retval)
+}
+
+func (c TunnelServer_PogsClient) UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error {
+	client := tunnelrpc.TunnelServer{Client: c.Client}
+	promise := client.UnregisterTunnel(ctx, func(p tunnelrpc.TunnelServer_unregisterTunnel_Params) error {
+		p.SetGracePeriodNanoSec(gracePeriodNanoSec)
+		return nil
+	})
+	_, err := promise.Struct()
+	return err
 }

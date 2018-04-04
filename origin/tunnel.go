@@ -39,10 +39,10 @@ const (
 )
 
 type DNSValidationConfig struct {
-       VerifyDNSPropagated bool
-       DNSPingRetries      uint
-       DNSInitWaitTime     time.Duration
-       PingFreq            time.Duration
+	VerifyDNSPropagated bool
+	DNSPingRetries      uint
+	DNSInitWaitTime     time.Duration
+	PingFreq            time.Duration
 }
 
 type TunnelConfig struct {
@@ -66,6 +66,7 @@ type TunnelConfig struct {
 	ProtocolLogger    *logrus.Logger
 	Logger            *logrus.Logger
 	IsAutoupdated     bool
+	GracePeriod       time.Duration
 	*DNSValidationConfig
 }
 
@@ -211,6 +212,8 @@ func ServeTunnel(
 		for {
 			select {
 			case <-serveCtx.Done():
+				// UnregisterTunnel blocks until the RPC call returns
+				UnregisterTunnel(handler.muxer, config.GracePeriod)
 				handler.muxer.Shutdown()
 				return
 			case <-updateMetricsTickC:
@@ -256,7 +259,7 @@ func IsRPCStreamResponse(headers []h2mux.Header) bool {
 
 func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
 	logger := Log.WithField("subsystem", "rpc")
-	logger.Debug("initiating RPC stream")
+	logger.Debug("initiating RPC stream to register")
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
 		{Name: ":scheme", Value: "capnp"},
@@ -307,6 +310,35 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	}
 
 	return nil
+}
+
+func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration) error {
+	logger := Log.WithField("subsystem", "rpc")
+	logger.Debug("initiating RPC stream to unregister")
+	stream, err := muxer.OpenStream([]h2mux.Header{
+		{Name: ":method", Value: "RPC"},
+		{Name: ":scheme", Value: "capnp"},
+		{Name: ":path", Value: "*"},
+	}, nil)
+	if err != nil {
+		// RPC stream open error
+		raven.CaptureError(err, nil)
+		return err
+	}
+	if !IsRPCStreamResponse(stream.Headers) {
+		// stream response error
+		raven.CaptureError(err, nil)
+		return err
+	}
+	ctx := context.Background()
+	conn := rpc.NewConn(
+		tunnelrpc.NewTransportLogger(logger, rpc.StreamTransport(stream)),
+		tunnelrpc.ConnLog(logger.WithField("subsystem", "rpc-transport")),
+	)
+	defer conn.Close()
+	ts := tunnelpogs.TunnelServer_PogsClient{Client: conn.Bootstrap(ctx)}
+	// gracePeriod is encoded in int64 using capnproto
+	return ts.UnregisterTunnel(ctx, gracePeriod.Nanoseconds())
 }
 
 func LogServerInfo(logger *logrus.Entry,
@@ -369,7 +401,6 @@ func FindCfRayHeader(h1 *http.Request) string {
 	return h1.Header.Get("Cf-Ray")
 }
 
-
 type TunnelHandler struct {
 	originUrl  string
 	muxer      *h2mux.Muxer
@@ -379,7 +410,7 @@ type TunnelHandler struct {
 	metrics    *tunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID string
-	clientID    string
+	clientID     string
 }
 
 var dialer = net.Dialer{DualStack: true}
@@ -515,7 +546,6 @@ func (h *TunnelHandler) logResponse(r *http.Response, cfRay string) {
 	}
 	Log.Debugf("Response Headers %+v", r.Header)
 }
-
 
 func (h *TunnelHandler) UpdateMetrics(connectionID string) {
 	h.metrics.updateMuxerMetrics(connectionID, h.muxer.Metrics())

@@ -682,11 +682,33 @@ func (c TunnelServer) GetServerInfo(ctx context.Context, params func(TunnelServe
 	}
 	return TunnelServer_getServerInfo_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
 }
+func (c TunnelServer) UnregisterTunnel(ctx context.Context, params func(TunnelServer_unregisterTunnel_Params) error, opts ...capnp.CallOption) TunnelServer_unregisterTunnel_Results_Promise {
+	if c.Client == nil {
+		return TunnelServer_unregisterTunnel_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0xea58385c65416035,
+			MethodID:      2,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
+			MethodName:    "unregisterTunnel",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 8, PointerCount: 0}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(TunnelServer_unregisterTunnel_Params{Struct: s}) }
+	}
+	return TunnelServer_unregisterTunnel_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
 
 type TunnelServer_Server interface {
 	RegisterTunnel(TunnelServer_registerTunnel) error
 
 	GetServerInfo(TunnelServer_getServerInfo) error
+
+	UnregisterTunnel(TunnelServer_unregisterTunnel) error
 }
 
 func TunnelServer_ServerToClient(s TunnelServer_Server) TunnelServer {
@@ -696,7 +718,7 @@ func TunnelServer_ServerToClient(s TunnelServer_Server) TunnelServer {
 
 func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []server.Method {
 	if cap(methods) == 0 {
-		methods = make([]server.Method, 0, 2)
+		methods = make([]server.Method, 0, 3)
 	}
 
 	methods = append(methods, server.Method{
@@ -727,6 +749,20 @@ func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []serv
 		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
 	})
 
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0xea58385c65416035,
+			MethodID:      2,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
+			MethodName:    "unregisterTunnel",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := TunnelServer_unregisterTunnel{c, opts, TunnelServer_unregisterTunnel_Params{Struct: p}, TunnelServer_unregisterTunnel_Results{Struct: r}}
+			return s.UnregisterTunnel(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 0},
+	})
+
 	return methods
 }
 
@@ -744,6 +780,14 @@ type TunnelServer_getServerInfo struct {
 	Options capnp.CallOptions
 	Params  TunnelServer_getServerInfo_Params
 	Results TunnelServer_getServerInfo_Results
+}
+
+// TunnelServer_unregisterTunnel holds the arguments for a server call to TunnelServer.unregisterTunnel.
+type TunnelServer_unregisterTunnel struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  TunnelServer_unregisterTunnel_Params
+	Results TunnelServer_unregisterTunnel_Results
 }
 
 type TunnelServer_registerTunnel_Params struct{ capnp.Struct }
@@ -1066,83 +1110,200 @@ func (p TunnelServer_getServerInfo_Results_Promise) Result() ServerInfo_Promise 
 	return ServerInfo_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
-const schema_db8274f9144abc7e = "x\xda\x9cUM\x88\x14W\x17\xbd\xe7\xbd\xee\xaa\x11z" +
-	"\xbe\x9e\xa2z@\x1b\xa4AF>\x95\x8c:Q\x83\x99" +
-	"H\xe6'j\xe8\xc9\x8c\xf6\x9b1\xc1\xbf\x80e\xf7\xb3" +
-	"\xa7&\xd5UMU\xb5\x89\x82\x9a\x88\x10\x08(1\x92" +
-	"E6Y\x08n\x02\xf9\xd9\x85@\x16f\x93,$d" +
-	"\x13\x02\x12\xb3\x89H@\x14\xc3` BB\x85W5" +
-	"\xd5]\x8eD\x83\xbb\xd7\xa7\xee\xbb\xf7\xdc{\xcf;\xbd" +
-	"\xf92\x1bg#\xf9My\"\xb1#\xafE;Z?" +
-	"\\~\xee\xc3k\xe7\xc8(\xb3\xe8\xf4\xd7S\xa5\x07\xe1" +
-	"\xd9\x9f\x89\xb0\xe5\x14;\x09\xf3\"\xd3\x89\xcc\xf3l/" +
-	"!\x1a\xac\xe2\xc6\xd5\x91\xdc\x97d\xfc\x1fDy\xae\x13" +
-	"m\xb9\xc2n\x83`~\xc5>'D\xab\xefN\xf6\xbb" +
-	"\xf7\xce^%\xa3\x8c^\xaa$\xf0\x00\x9f\x82\xd9RG" +
-	"\xd3\xe6*x\xea\xd0\xa5\x0f\xf2\xb7.}G\xa2\x8cl" +
-	"\xb4\xa6\xa2\xf39\x1f\xe6\xaa\x9c:\x0e\xe6\"\x10\xa2\xf2" +
-	"\x17/|6\xd9\xb8~mY\xee\x98\xde\x84\xb6h\xce" +
-	"\xa8{fU{\x93\x10\xb1[\xd6\xaa\xb7\x7fz\xf1F" +
-	"B4\xcerE\xfb\x15\x94\x8b\xf6\xbcvha\xc5\xa9" +
-	"\x9b7\x97Z\x80\xfa\xf4\x91\x16\xb7\xf0\xa96F\x88\xb6" +
-	"\x1d\x99\x90\x87\xb7\xef\xbfMF\x99?4\x8d\xef\xb5Q" +
-	"\x98\xbf\xc4E\xaek\xef\x9a#\xbaN\x14]8\xbds" +
-	"\xef\xf3k\xbeY\xcc\xa6[\xa5/\xaat\xc3\xbaJw" +
-	"l\xfb\x9d\x97\xd7^\xf8vq\x19\xeb8pF\xdf\x00" +
-	"\xf3u\x95\xc7<\xa0\x82\xef\xed\xfe\xf8\xc7r\xb1|\x7f" +
-	"\xd9<\xe2\xe9\x9d\xd2\x17`^\x8cc\xcf\xeb\xbf\xd1p" +
-	"\x14v\\W:~;W\xdf\x94\x1e\xeb\x1b\xebV\xdb" +
-	"m\x8f\xeez\xcb\x0eB\xdbm\xee\x8b\xf1\xb1\x9a\xe7\xd8" +
-	"\xf5\x135@\x14\xc0\x88\x8c\xd5\xa3D\x801x\x90\x08" +
-	"\xcc0&\x89\xc6\xec\xa6\xeb\xf92j\xd8A\xdds]" +
-	"I\xbc\x1e\x9e9j9\x96[\x97\xddB\xda\xa3\x85\x92" +
-	"\x02s\xd2?.\xfd\x8d\xbel\xdaA(\xfd\x04\x1c\xaa" +
-	"YE\xdfj\x05\xa2\xc0sD9\x10\x19\xbb\x0e\x12\x89" +
-	"\x9d\x1c\xa2\xc6`\x00%(pf\x8aHLs\x88\xfd" +
-	"\x0c\x06c\xa5\x98\xe1\xab\x93D\xa2\xc6!\x0e3D\x9e" +
-	"o7m\xf7%I\xdc\x0f\xd1O\x0c\xfd\x84h\xde\x0b" +
-	"B\xd7jI\"B\x81\x18\x0a\x843^;\xb4=7" +
-	"\xc0@OY\x04\x0c\x10\x1e7\xab\x89N8/\xdd\xd0" +
-	"\xae[\xea2Q<\xa6\x1e\xe55Db\x9cCLg" +
-	"(W\x9f\xcd\xf4\x91R\x9e9\xda\xebC\x7fC\x9eH" +
-	"YUd\xcb\xb2\x9d\xf4W\xda\xcc\x04\xe9\xaf\xf4b\x1e" +
-	"\xc7o6\x9e\xaa\x1f\xb3\xdb\xdb\xae\xc4\x1d*\x8eC]" +
-	"\x8ew\xd5\x04\xefp\x88?3\x1c\xffP\x13\xfc\x9dC" +
-	"\xfc\x95\xe1\xf8\xa0L$\xees\xcc\x82\x01\xbc\x04Nd" +
-	"\xfc\xfd\x09\xd1,8\xe6\x0a`0r\xbc\x84\x1c\x91\xb9" +
-	"\x02SDs}\x0a/)<\x9f+!Od\x1a\xd8" +
-	"@4WP\xf8:\x85k\xac\x04\x8d\xc8\\\x8b\x05\xa2" +
-	"\xb9!\x85oV\xb8\x9e/)\x85\x9b\xc3\xf0\x89\xe6\x9e" +
-	"Q\xf8v\x85\xf7\xad,\xa1\x8f\xc8\xdc\x16\xe3[\x15>" +
-	"\x0e\x86\xa8\xee\xd8\xd2\x0d\xab\x8d\xec:\x8fK?\xb0=" +
-	"7\xfd\xcd\xbd\xa0;/\xb9$p$Z\xabyE\xa5" +
-	"p\x14{VF@\x91\x10\xb5=\xcf\xd9\xf3\xb0L\x8a" +
-	"\xa1\xd5\x0c\xf0?B\x8d\x03\x03=W!(0\x8a\xf5" +
-	"_\x0fm*zn\xb5\x01\x8d\x18\xb4\xee\xde\xa6=\xaa" +
-	"\xd4-\xa7\xda\xee2\xb1\x83\x89N\xe8u\xdaTiX" +
-	"\xa1l\x00\xc4\x80\xccF\xd9\xf2\x8dV\xda\xa3\xfb\xac\xa6" +
-	"\xda`_w\x83\xeb7\x10\x89!\x0e\xb19\xb3\xc1a" +
-	"\xa5\xb2u\x1cb+CQI\xbd\xab\xa8\xe3\x96\xd3\x91" +
-	"\x8fh\xe7I\xcf\xb3)\xc3\xe4Tu\x8fyC5\xcb" +
-	"\xd7\xadV\xf0\x94\xb7geP\xec8a r\xdd\x1e" +
-	"\xfaG\x89D\x1f\x87(1\x8c\xf92\xe88!\x06z" +
-	"\xee\xb7\xec!\xf2\x7f+7\x96TI\xe6\x93'\xea\xfe" +
-	"\xe5 uZc\xe4$1c\xbd\x8e\x9e\xcb#5u" +
-	"c\xb5O\xcc\x18\xd4\xa3\xd4\x8bh,I;\x8e(\xed" +
-	"\x80*q\x0f\xe3\xa8\x01O\xebm\xb3\xb2\x12\xfc\x97\xfe" +
-	"SC\x7fr\xf7I\x9d\xa2b\xa6z\xcf\xe4] \x12" +
-	"\x05\x0e\xb1\x92!r\xbc%\x9b*\xee\xc9\x08\xe2q\xf6" +
-	"\x91\x10NM\xa4\xa8.\xab\xfc\x03\xdd\xfc\x96r\xb8\xc3" +
-	"\x1cb>\xa3=\xa9\xc0#\x1c\xc2\xc9\xb8\x87\xad|f" +
-	"\x9eC\x9c\xeb\xb9\xc7;\xef\x11\x89s\x1c\xe2}\x06]" +
-	"\xfa~JI\xef\xf8=\xcfs\xbc\xe6\xb4\xed\xca@=" +
-	"\xc2\xa5w\xa7>\xa9\xd7\xd6\x96~\xcbr\xa5\x8bp\xb7" +
-	"e;\x1d_*\xa1$O\xe8\x9f\x00\x00\x00\xff\xff\x0d" +
-	"v6\xc6"
+type TunnelServer_unregisterTunnel_Params struct{ capnp.Struct }
+
+// TunnelServer_unregisterTunnel_Params_TypeID is the unique identifier for the type TunnelServer_unregisterTunnel_Params.
+const TunnelServer_unregisterTunnel_Params_TypeID = 0x9b87b390babc2ccf
+
+func NewTunnelServer_unregisterTunnel_Params(s *capnp.Segment) (TunnelServer_unregisterTunnel_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 0})
+	return TunnelServer_unregisterTunnel_Params{st}, err
+}
+
+func NewRootTunnelServer_unregisterTunnel_Params(s *capnp.Segment) (TunnelServer_unregisterTunnel_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 0})
+	return TunnelServer_unregisterTunnel_Params{st}, err
+}
+
+func ReadRootTunnelServer_unregisterTunnel_Params(msg *capnp.Message) (TunnelServer_unregisterTunnel_Params, error) {
+	root, err := msg.RootPtr()
+	return TunnelServer_unregisterTunnel_Params{root.Struct()}, err
+}
+
+func (s TunnelServer_unregisterTunnel_Params) String() string {
+	str, _ := text.Marshal(0x9b87b390babc2ccf, s.Struct)
+	return str
+}
+
+func (s TunnelServer_unregisterTunnel_Params) GracePeriodNanoSec() int64 {
+	return int64(s.Struct.Uint64(0))
+}
+
+func (s TunnelServer_unregisterTunnel_Params) SetGracePeriodNanoSec(v int64) {
+	s.Struct.SetUint64(0, uint64(v))
+}
+
+// TunnelServer_unregisterTunnel_Params_List is a list of TunnelServer_unregisterTunnel_Params.
+type TunnelServer_unregisterTunnel_Params_List struct{ capnp.List }
+
+// NewTunnelServer_unregisterTunnel_Params creates a new list of TunnelServer_unregisterTunnel_Params.
+func NewTunnelServer_unregisterTunnel_Params_List(s *capnp.Segment, sz int32) (TunnelServer_unregisterTunnel_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 0}, sz)
+	return TunnelServer_unregisterTunnel_Params_List{l}, err
+}
+
+func (s TunnelServer_unregisterTunnel_Params_List) At(i int) TunnelServer_unregisterTunnel_Params {
+	return TunnelServer_unregisterTunnel_Params{s.List.Struct(i)}
+}
+
+func (s TunnelServer_unregisterTunnel_Params_List) Set(i int, v TunnelServer_unregisterTunnel_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+// TunnelServer_unregisterTunnel_Params_Promise is a wrapper for a TunnelServer_unregisterTunnel_Params promised by a client call.
+type TunnelServer_unregisterTunnel_Params_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelServer_unregisterTunnel_Params_Promise) Struct() (TunnelServer_unregisterTunnel_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelServer_unregisterTunnel_Params{s}, err
+}
+
+type TunnelServer_unregisterTunnel_Results struct{ capnp.Struct }
+
+// TunnelServer_unregisterTunnel_Results_TypeID is the unique identifier for the type TunnelServer_unregisterTunnel_Results.
+const TunnelServer_unregisterTunnel_Results_TypeID = 0xa29a916d4ebdd894
+
+func NewTunnelServer_unregisterTunnel_Results(s *capnp.Segment) (TunnelServer_unregisterTunnel_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return TunnelServer_unregisterTunnel_Results{st}, err
+}
+
+func NewRootTunnelServer_unregisterTunnel_Results(s *capnp.Segment) (TunnelServer_unregisterTunnel_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return TunnelServer_unregisterTunnel_Results{st}, err
+}
+
+func ReadRootTunnelServer_unregisterTunnel_Results(msg *capnp.Message) (TunnelServer_unregisterTunnel_Results, error) {
+	root, err := msg.RootPtr()
+	return TunnelServer_unregisterTunnel_Results{root.Struct()}, err
+}
+
+func (s TunnelServer_unregisterTunnel_Results) String() string {
+	str, _ := text.Marshal(0xa29a916d4ebdd894, s.Struct)
+	return str
+}
+
+// TunnelServer_unregisterTunnel_Results_List is a list of TunnelServer_unregisterTunnel_Results.
+type TunnelServer_unregisterTunnel_Results_List struct{ capnp.List }
+
+// NewTunnelServer_unregisterTunnel_Results creates a new list of TunnelServer_unregisterTunnel_Results.
+func NewTunnelServer_unregisterTunnel_Results_List(s *capnp.Segment, sz int32) (TunnelServer_unregisterTunnel_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
+	return TunnelServer_unregisterTunnel_Results_List{l}, err
+}
+
+func (s TunnelServer_unregisterTunnel_Results_List) At(i int) TunnelServer_unregisterTunnel_Results {
+	return TunnelServer_unregisterTunnel_Results{s.List.Struct(i)}
+}
+
+func (s TunnelServer_unregisterTunnel_Results_List) Set(i int, v TunnelServer_unregisterTunnel_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+// TunnelServer_unregisterTunnel_Results_Promise is a wrapper for a TunnelServer_unregisterTunnel_Results promised by a client call.
+type TunnelServer_unregisterTunnel_Results_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelServer_unregisterTunnel_Results_Promise) Struct() (TunnelServer_unregisterTunnel_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelServer_unregisterTunnel_Results{s}, err
+}
+
+const schema_db8274f9144abc7e = "x\xda\x9cU_\x88Te\x1b\x7f~\xef;3g\x84" +
+	"]g\x0fg\x04\xbf\xe1\x93\xe5\x93\x15\xff\xe0\xfa\xe9\xa7" +
+	"\xfb\xa1\xdb\x9f\xd9\xdd\xd4\x98m]\xe7\xdd\xd1\x10\xf5\xc2" +
+	"\xe3\xcc\xeb\xec\xd9f\xce\x19\xce9c)\xa4%B " +
+	"$\x96uc\x14\xe4e\x17\x15t\x11\x84\x81\xdd$\xe1" +
+	"\x85\x08\x19EB\x94l\xa1(\xd6\xa2\x90\x91\x9cx\xcf" +
+	"\xec\x999\xae\xa5\xd6\xdd9\xcf\xfb>\xcf\xf3{\xfe\xfc" +
+	"~\xef\xea\x1f\xd9\x10[\x93\xfc.I$6&S\xc1" +
+	"\xe3\xf5\x0b\xa7\xff\xff\xe6\xf9\xa3\xa4\xe7Xp\xe8\xcch" +
+	"\xf6\x8e\x7f\xe4[\"\xac\xbd\xc4\x0e\xc2\xb8\xca4\"c" +
+	"\x9am%\x04\x17V\x9e\xf9\xe4\xc4G\xaf\xbcEb)" +
+	"@\x94\xd0\x88\xd6\xdee\xbf\x81`\xe8<O\x08\xde\xf8" +
+	"\xfa\xd3\xf1\xfak\xa7N\x93\xbe4:\xdf\xc0\x19\xa3D" +
+	"\xb0\xa0\x80\xcbg\xd7$>n\x9d$\xb9:\xea\xe7\xd7" +
+	"\x94\xeb0\xff\x80\x10,\xba1\xd2m\xdf<r\x96\xf4" +
+	"\x1c:(Z\x17\xbf\xe7\xa30n\xabO\xe3\x97\xf0\xf2" +
+	"\xe8\xae\x93\xaf'\xa7O\x9e#\x91C\xfcvJ\xdd~" +
+	"5\xe1\xc2x7L\xfev\"\x00!\xc8}\xf8\xd8\xfb" +
+	"#\x95o\xce\xcf\x89\x1dV\xf6Ej\xc6\xb8\xa4\xfc\x8c" +
+	"\x8b\xa9\xe7\x09\x01\x9b6\xff\xf5\xd2WO^\x8e\x95\xd0" +
+	"\xaf\xfd\x00J\x04\xe3\xcf\xee\x9a\x9a\xf7\xe2\x95+\xb3%" +
+	"@\x1d\xfdG\x0bK\x18\xd0T\xf5\x03{\x86\xe5\xee\xf5" +
+	";\xae\x91\x9e\xe3\xf74r\xbb6\x08Cj*\x89\xa9" +
+	"\x9d3\xae\xaa\xaf\xe0\xf8\xa1\x8d[7,\xfel&\x1e" +
+	"\xee\xa26\xa3\xc2M\x87\xe1\xf6\xad\xbf\xfe\xf4\x92\xe3\x9f" +
+	"\xcf\xccA\x1d^L\xa6W\xc0X\x90V\x11\xf5t\x9e" +
+	"ps\xf3;_\xe62\xb9[s\xfa\x11vo =" +
+	"\x05\xa3\x10\xde\xdd\x94\xfe\x89\xfa\x03\xbfi\xdb\xb2\xe66" +
+	"\x12\xe5\xffF\x9f\xe5Ue\xb3a7\x067\xbd`y" +
+	"\xbeeW\xb7\x85\xf6|\xd1\xa9Y\xe5\x03E@t\x81" +
+	"\x11\xe9\x8b\x06\x89\x00}\xc1N\"0]\x1f!\xca[" +
+	"U\xdbqeP\xb1\xbc\xb2c\xdb\x92x\xd9?\xbc\xd7" +
+	"\xac\x99vY\xb6\x13\xa5\xeeO\xd4JP\x92\xee~\xe9" +
+	"\xaej\xda\xae\xacZ\x9e/\xdd\x96\xb9/_4]\xb3" +
+	"\xee\x89\x04O\x10%@\xa4w\x9f\"\x12=\x1c\xe2\xdf" +
+	"\x0cA\xd55\xcb\xb2(]XNe\xdc\xb4\x9d\x12\x97" +
+	"e$\x89!Ih'\x9d\xffw\x93NH\xafY\xf3" +
+	"=j{=\xd8\x7f\x8ew\xd1\xcc\x84\x90\xbb\xda\x907" +
+	"\xedT\x04\xe3\x10E\x06\x1d\xc8*\xca\xe8[F\x89\xc4" +
+	"\x18\x87\xd8\xc1\xa03\x96\x0d\xdb\xba}\x84H\x149\xc4" +
+	"n\x86\xc0q\xad\xaae?%\x89\xbb>\xba\x89\xa1\x9b" +
+	"\x10L:\x9eo\x9buID\xe8\"\x86.\xc2a\xa7" +
+	"\xe1[\x8e\xed\xa1\xa7C\x07\x02zb-\xf8\x93\x01\x0f" +
+	"7\xfdIi\xfbV\xd9T\xceD\xe1l;\x90\x17\x13" +
+	"\x89!\x0e1\x16\x83\\\xf8_\xac\x8e\x08\xf2\x96\xbd\x9d" +
+	":\xb4\xe7\xe4\x81\x08U\xaf\xac\x9bV-\xfa\x8b\x8a\x19" +
+	"&\xed\x99\xce\x9d\x07\xe1\x9b\x08\xbb\xea\x86\xe8\xb66z" +
+	"\xc3\x0a\x15\xc6\xbe6\xc6\x1b\xaa\x83\xd79\xc4\xaf1\x8c" +
+	"\xb7U\x07\x7f\xe6\x10\xbf\xc70\xde\xc9\x11\x89[\x1c\x13" +
+	"`\x00\xcf\x82\x13\xe9w\xdf#\x9a\x00G\xa9\x0b\x0cz" +
+	"\x82g\x91 2\xe6a\x94\xa8\x94V\xf6\xac\xb2'\x13" +
+	"Y$\x15\xb7\xb0\x82\xa8\xd4\xa5\xec\xcb\x94=\xc5\xb2H" +
+	"\x11\x19K0ET\xeaS\xf6\xd5\xca\xae%\xb3\x8a\x96" +
+	"F?\\\xa2\xd2Je_\xaf\xec\xe9\x85Y\xa4\x89\x8c" +
+	"\x81\xd0\xbeN\xd9\x87\xc0\x10\x94k\x96\xb4\xfdB%>" +
+	"\xce\xfd\xd2\xf5,\xc7\x8e\xfe\xb9\xe3\xb5\xfb%gY\x89" +
+	"\xd6\xae\x15\x9d\x8c\xa2%2\x1d\xe9& C\x08\x1a\x8e" +
+	"S\x1b\xbfwM2\xbeY\xf50\x9fP\xe4@OG" +
+	"\x0a\x09\xca\x18\x84\xa4-\xfb\x16e\x1c\xbbPA\x8a\x18" +
+	"R\xed\xb9\x8d9\xd4[6k\x85F\x1b\x89\xe5\x0d7" +
+	"}\xa7\xd9\xa0\xde\x8a\xe9\xcb\x0a@\x0c\x88M\x94\xcd\x9d" +
+	"hocp\x9bYU\x13L\xb7'\xb8|\x05\x91\xe8" +
+	"\xe3\x10\xabc\x13\xecW[\xb6\x8cC\xacc\xc8\xa8U" +
+	"oo\xd4~\xb3\xd6\x94\xf7\xed\xce\xc34\xa5*\xfd\xd6" +
+	"W\xc1\xde\xe7\xf4\x15MW3\xeb\xde?\xf4\x9e\x90^" +
+	"FIC\\\x8f\x06\x89D\x9aCd\x19\xf2n\xa8\x1c" +
+	"\xe8\xe9H\xf6\x1c\"\xf2\xbfJ\x97oei\xb10I" +
+	"\xd4~'\x11=\x0f\xba8HL/h\xe8<M\x88" +
+	"^\"\xfd\x09\x97\x98>\xa0\x81\xb5\x9ffDO\xb0\xbe" +
+	"\xfc\x181}\x89\x16D:E\xf9V\xca!\x04Qu" +
+	"\xd4\x1b\xd67\x84 \x12CDzF4\x84\"\x1e\xbd" +
+	"\xdd\xf7ii\xaf\xf7(\x1d\x8b\xde\xad\x87\xf7\xab\x95'" +
+	"\xa3\xf0\xaan\xc5\xe2N\x11\x89.\x0e\xb1\x90!\xa89" +
+	"\xb3\xc2\x96\x19\x8f\xad\xd0\x83\x04\xa7\x058\x92\x9d\x8cr" +
+	"V\xf1{\xda\xf1M\xa5\x89\xbb9\xc4dl[\xa52" +
+	"\xee\xe1\x10\xb5\x98\xdeXJ\x99&9\xc4\xd1\x8e\xde\xbc" +
+	"|\x8cH\x1c\xe5\x10'\x184\xe9\xba\x11$\xad\xe9v" +
+	"T\xb2\xe6T\xc7,[z\x8a\xb6\xb3LUG\x8a\x9f" +
+	"\x0d\xe9\xd6M[\xda\xf07\x9bV\xad\xe9J\xb5Z-" +
+	"\xd2\xfd\x11\x00\x00\xff\xffy%\x9bh"
 
 func init() {
 	schemas.Register(schema_db8274f9144abc7e,
 		0x84cb9536a2cf6d3c,
+		0x9b87b390babc2ccf,
+		0xa29a916d4ebdd894,
 		0xb70431c0dc014915,
 		0xc082ef6e0d42ed1d,
 		0xc793e50592935b4a,

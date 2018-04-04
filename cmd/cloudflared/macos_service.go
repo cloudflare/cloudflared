@@ -39,8 +39,10 @@ var launchdTemplate = ServiceTemplate{
 	<dict>
 		<key>Label</key>
 		<string>%s</string>
-		<key>Program</key>
-		<string>{{ .Path }}</string>
+		<key>ProgramArguments</key>
+		<array>
+			<string>{{ .Path }}</string>
+		</array>
 		<key>RunAtLoad</key>
 		<true/>
 		<key>StandardOutPath</key>
