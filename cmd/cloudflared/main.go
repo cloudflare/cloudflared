@@ -425,7 +425,7 @@ func startServer(c *cli.Context) {
 	var wg sync.WaitGroup
 	errC := make(chan error)
 	connectedSignal := make(chan struct{})
-	wg.Add(2)
+	dnsReadySignal := make(chan struct{})
 
 	// If the user choose to supply all options through env variables,
 	// c.NumFlags() == 0 && c.NArg() == 0. For cloudflared to work, the user needs to at
@@ -454,23 +454,16 @@ func startServer(c *cli.Context) {
 		}
 	}
 
-	if isAutoupdateEnabled(c) {
-		if initUpdate() {
-			return
-		}
-		Log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
-		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
-	}
-
 	if c.IsSet("proxy-dns") {
 		wg.Add(1)
 		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(c.Uint("proxy-dns-port")), c.StringSlice("proxy-dns-upstream"))
 		if err != nil {
+			close(dnsReadySignal)
 			listener.Stop()
 			Log.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
 		}
 		go func() {
-			err := listener.Start()
+			err := listener.Start(dnsReadySignal)
 			if err != nil {
 				Log.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
 			} else {
@@ -479,14 +472,26 @@ func startServer(c *cli.Context) {
 			listener.Stop()
 			wg.Done()
 		}()
+	} else {
+		close(dnsReadySignal)
+	}
 
-		// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
-		if !c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world") {
-			go writePidFile(connectedSignal, c.String("pidfile"))
-			close(connectedSignal)
-			runServer(c, &wg, errC, shutdownC)
+	if isAutoupdateEnabled(c) {
+		// Wait for proxy-dns to come up (if used)
+		<-dnsReadySignal
+		if initUpdate() {
 			return
 		}
+		Log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
+	}
+
+	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
+	if c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world")) {
+		go writePidFile(connectedSignal, c.String("pidfile"))
+		close(connectedSignal)
+		runServer(c, &wg, errC, shutdownC)
+		return
 	}
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
@@ -601,6 +606,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	}
 
 	go writePidFile(connectedSignal, c.String("pidfile"))
+	wg.Add(1)
 	go func() {
 		errC <- origin.StartTunnelDaemon(tunnelConfig, shutdownC, connectedSignal)
 		wg.Done()
@@ -610,6 +616,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 }
 
 func runServer(c *cli.Context, wg *sync.WaitGroup, errC chan error, shutdownC chan struct{}) {
+	wg.Add(1)
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
 		Log.WithError(err).Fatal("Error opening metrics server listener")

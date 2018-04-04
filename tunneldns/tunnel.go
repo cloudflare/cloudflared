@@ -40,11 +40,13 @@ func Run(c *cli.Context) error {
 	}
 
 	// Try to start the server
-	err = listener.Start()
+	readySignal := make(chan struct{})
+	err = listener.Start(readySignal)
 	if err != nil {
 		log.WithError(err).Errorf("Failed to start the listeners")
 		return listener.Stop()
 	}
+	<-readySignal
 
 	// Wait for signal
 	signals := make(chan os.Signal, 10)
@@ -74,7 +76,8 @@ func createConfig(address string, port uint16, p plugin.Handler) *dnsserver.Conf
 }
 
 // Start blocks for serving requests
-func (l *Listener) Start() error {
+func (l *Listener) Start(readySignal chan struct{}) error {
+	defer close(readySignal)
 	log.WithField("addr", l.server.Address()).Infof("Starting DNS over HTTPS proxy server")
 
 	// Start UDP listener
