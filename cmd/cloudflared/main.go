@@ -43,8 +43,6 @@ const (
 	quickStartUrl       = "https://developers.cloudflare.com/argo-tunnel/quickstart/quickstart/"
 	noAutoupdateMessage = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
 	licenseUrl          = "https://developers.cloudflare.com/argo-tunnel/licence/"
-	minDNSInitWait      = time.Second * 15
-	minPingFreq         = time.Second * 2
 )
 
 var listeners = gracenet.Net{}
@@ -294,31 +292,6 @@ func main() {
 			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
 			Value:   cli.NewStringSlice("https://cloudflare-dns.com/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "skip-hostname-propagation-check",
-			Usage:   "Flag to instruct cloudflared to skip checking whether DNS record for the hostname has been propagated.",
-			EnvVars: []string{"TUNNEL_SKIP_HOSTNAME_PROPAGATION_CHECK"},
-		}),
-		altsrc.NewUintFlag(&cli.UintFlag{
-			Name:    "hostname-propagated-retries",
-			Usage:   "How many pings to test whether send DNS record has been propagated before reregistering tunnel",
-			Value:   25,
-			EnvVars: []string{"TUNNEL_HOSTNAME_PROPAGATED_RETRIES"},
-		}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    "init-wait-time",
-			Usage:   "Initial waiting time to checking whether DNS record has propagated",
-			Value:   minDNSInitWait,
-			EnvVars: []string{"TUNNEL_INIT_WAIT_TIME"},
-			Hidden:  true,
-		}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    "ping-freq",
-			Usage:   "Ping frequency for checking DNS record has propagated",
-			Value:   minPingFreq,
-			EnvVars: []string{"TUNNEL_PING_FREQ"},
-			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "grace-period",
@@ -602,7 +575,6 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		Logger:              Log,
 		IsAutoupdated:       c.Bool("is-autoupdated"),
 		GracePeriod:         c.Duration("grace-period"),
-		DNSValidationConfig: getDNSValidationConfig(c),
 	}
 
 	go writePidFile(connectedSignal, c.String("pidfile"))
@@ -633,7 +605,7 @@ func runServer(c *cli.Context, wg *sync.WaitGroup, errC chan error, shutdownC ch
 		raven.CaptureErrorAndWait(err, nil)
 		errCode = 1
 	} else {
-		Log.Info("Quitting...")
+		Log.Info("Graceful shutdown...")
 	}
 	// Wait for clean exit, discarding all errors
 	go func() {
@@ -854,20 +826,4 @@ func isAutoupdateEnabled(c *cli.Context) bool {
 	}
 
 	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
-}
-
-func getDNSValidationConfig(c *cli.Context) *origin.DNSValidationConfig {
-	dnsValidationConfig := &origin.DNSValidationConfig{
-		VerifyDNSPropagated: !c.Bool("skip-hostname-propagation-check"),
-		DNSPingRetries:      c.Uint("hostname-propagated-retries"),
-		DNSInitWaitTime:     c.Duration("init-wait-time"),
-		PingFreq:            c.Duration("ping-freq"),
-	}
-	if dnsValidationConfig.DNSInitWaitTime < minDNSInitWait {
-		dnsValidationConfig.DNSInitWaitTime = minDNSInitWait
-	}
-	if dnsValidationConfig.PingFreq < minPingFreq {
-		dnsValidationConfig.PingFreq = minPingFreq
-	}
-	return dnsValidationConfig
 }

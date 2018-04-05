@@ -3,10 +3,8 @@ package origin
 import (
 	"fmt"
 	"net"
-	"net/http"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -144,12 +142,6 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct
 		return tunnelError.err
 	case <-connectedSignal:
 	}
-	if s.config.VerifyDNSPropagated {
-		err = s.verifyDNSPropagated(ctx)
-		if err != nil {
-			return errors.Wrap(err, "Failed to register tunnel")
-		}
-	}
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
 		go s.startTunnel(ctx, i, make(chan struct{}))
@@ -184,53 +176,6 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan 
 		}
 		err = ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal)
 	}
-}
-
-func (s *Supervisor) verifyDNSPropagated(ctx context.Context) (err error) {
-	Log.Infof("Waiting for %s DNS record to propagate...", s.config.Hostname)
-	time.Sleep(s.config.DNSInitWaitTime)
-	var lastResponseStatus string
-	tickC := time.Tick(s.config.PingFreq)
-	req, client, err := s.createPingRequestAndClient()
-	if err != nil {
-		return fmt.Errorf("Cannot create GET request to %s", s.config.Hostname)
-	}
-	for i := 0; i < int(s.config.DNSPingRetries); i++ {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("Context was canceled")
-		case <-tickC:
-			resp, err := client.Do(req)
-			if err != nil {
-				continue
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				Log.Infof("Tunnel created and available at %s", s.config.Hostname)
-				return nil
-			}
-			if i == 0 {
-				Log.Infof("First ping to origin through Argo Tunnel returned %s", resp.Status)
-			}
-			lastResponseStatus = resp.Status
-		}
-	}
-	Log.Infof("Last ping to origin through Argo Tunnel returned %s", lastResponseStatus)
-	return fmt.Errorf("Exceed DNS record validation retry limit")
-}
-
-func (s *Supervisor) createPingRequestAndClient() (*http.Request, *http.Client, error) {
-	url := fmt.Sprintf("https://%s", s.config.Hostname)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	req.Header.Add(CloudflaredPingHeader, s.config.ClientID)
-	transport := s.config.HTTPTransport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
-	return req, &http.Client{Transport: transport}, nil
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on

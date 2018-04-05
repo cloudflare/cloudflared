@@ -32,7 +32,7 @@ func runApp(app *cli.App) {
 }
 
 var launchdTemplate = ServiceTemplate{
-	Path: fmt.Sprintf("~/Library/LaunchAgents/%s.plist", launchAgentIdentifier),
+	Path: installPath(launchAgentIdentifier),
 	Content: fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -58,6 +58,19 @@ var launchdTemplate = ServiceTemplate{
 		<integer>20</integer>
 	</dict>
 </plist>`, launchAgentIdentifier, launchAgentIdentifier, launchAgentIdentifier),
+}
+
+func installPath(launchAgentIdentifier string) string {
+	const pathPattern = "%s/Library/LaunchAgents/%s.plist"
+
+	pathPrefix := "~"
+
+	// User is root, use /Library instead of home directory
+	if os.Geteuid() == 0 {
+		pathPrefix = ""
+	}
+
+	return fmt.Sprintf(pathPattern, pathPrefix, launchAgentIdentifier)
 }
 
 func installLaunchd(c *cli.Context) error {
