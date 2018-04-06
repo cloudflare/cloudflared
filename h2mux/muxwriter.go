@@ -45,7 +45,7 @@ type MuxWriter struct {
 	// updateSendWindowChan is the channel to update sendWindow size to muxerMetricsUpdater
 	updateSendWindowChan chan<- uint32
 	// bytesWrote is the amount of bytes wrote to data frame since the last time we send bytes wrote to metrics
-	bytesWrote AtomicCounter
+	bytesWrote *AtomicCounter
 	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
 	updateOutBoundBytesChan chan<- uint64
 }

@@ -140,6 +140,8 @@ func Handshake(
 	updateSendWindowChan := make(chan uint32, 1)
 	updateInBoundBytesChan := make(chan uint64)
 	updateOutBoundBytesChan := make(chan uint64)
+	inBoundCounter := NewAtomicCounter(0)
+	outBoundCounter := NewAtomicCounter(0)
 	pingTimestamp := NewPingTimestamp()
 	connActive := NewSignal()
 	idleDuration := config.HeartbeatInterval
@@ -171,6 +173,7 @@ func Handshake(
 		updateRTTChan:           updateRTTChan,
 		updateReceiveWindowChan: updateReceiveWindowChan,
 		updateSendWindowChan:    updateSendWindowChan,
+		bytesRead:               inBoundCounter,
 		updateInBoundBytesChan:  updateInBoundBytesChan,
 	}
 	m.muxWriter = &MuxWriter{
@@ -187,6 +190,7 @@ func Handshake(
 		maxFrameSize:            defaultFrameSize,
 		updateReceiveWindowChan: updateReceiveWindowChan,
 		updateSendWindowChan:    updateSendWindowChan,
+		bytesWrote:              outBoundCounter,
 		updateOutBoundBytesChan: updateOutBoundBytesChan,
 	}
 	m.muxWriter.headerEncoder = hpack.NewEncoder(&m.muxWriter.headerBuffer)

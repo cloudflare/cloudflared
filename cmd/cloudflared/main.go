@@ -275,7 +275,7 @@ func main() {
 			Usage:   "Run a DNS over HTTPS proxy server.",
 			EnvVars: []string{"TUNNEL_DNS"},
 		}),
-		altsrc.NewUintFlag(&cli.UintFlag{
+		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "proxy-dns-port",
 			Value:   53,
 			Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
@@ -290,7 +290,7 @@ func main() {
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "proxy-dns-upstream",
 			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://cloudflare-dns.com/dns-query"),
+			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
@@ -384,7 +384,7 @@ func main() {
 				&cli.StringSliceFlag{
 					Name:    "upstream",
 					Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-					Value:   cli.NewStringSlice("https://cloudflare-dns.com/dns-query"),
+					Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
 					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 				},
 			},
@@ -428,8 +428,12 @@ func startServer(c *cli.Context) {
 	}
 
 	if c.IsSet("proxy-dns") {
+		port := c.Int("proxy-dns-port")
+		if port <= 0 || port > 65535 {
+			Log.Fatal("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
+		}
 		wg.Add(1)
-		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(c.Uint("proxy-dns-port")), c.StringSlice("proxy-dns-upstream"))
+		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"))
 		if err != nil {
 			close(dnsReadySignal)
 			listener.Stop()

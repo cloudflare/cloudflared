@@ -42,7 +42,7 @@ type MuxReader struct {
 	// updateSendWindowChan is the channel to update sendWindow size to muxerMetricsUpdater
 	updateSendWindowChan chan<- uint32
 	// bytesRead is the amount of bytes read from data frame since the last time we send bytes read to metrics
-	bytesRead AtomicCounter
+	bytesRead *AtomicCounter
 	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
 	updateInBoundBytesChan chan<- uint64
 }

@@ -8,6 +8,10 @@ type AtomicCounter struct {
 	count uint64
 }
 
+func NewAtomicCounter(initCount uint64) *AtomicCounter{
+	return &AtomicCounter{count: initCount}
+}
+
 func (c *AtomicCounter) IncrementBy(number uint64) {
 	atomic.AddUint64(&c.count, number)
 }
