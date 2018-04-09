@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
+	"golang.org/x/net/http2"
 )
 
 const (
@@ -34,9 +35,16 @@ func NewUpstreamHTTPS(endpoint string) (Upstream, error) {
 
 	// Update TLS and HTTP client configuration
 	tls := &tls.Config{ServerName: u.Hostname()}
+	transport := &http.Transport{
+		TLSClientConfig:    tls,
+		DisableCompression: true,
+		MaxIdleConns:       1,
+	}
+	http2.ConfigureTransport(transport)
+
 	client := &http.Client{
 		Timeout:   time.Second * defaultTimeout,
-		Transport: &http.Transport{TLSClientConfig: tls},
+		Transport: transport,
 	}
 
 	return &UpstreamHTTPS{client: client, endpoint: u}, nil

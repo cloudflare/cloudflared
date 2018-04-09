@@ -61,16 +61,14 @@ var launchdTemplate = ServiceTemplate{
 }
 
 func installPath(launchAgentIdentifier string) string {
-	const pathPattern = "%s/Library/LaunchAgents/%s.plist"
+	pathPattern := "~/Library/LaunchAgents/%s.plist"
 
-	pathPrefix := "~"
-
-	// User is root, use /Library instead of home directory
+	// User is root, use /Library/LaunchDaemons instead of home directory
 	if os.Geteuid() == 0 {
-		pathPrefix = ""
+		pathPattern = "/Library/LaunchDaemons/%s.plist"
 	}
 
-	return fmt.Sprintf(pathPattern, pathPrefix, launchAgentIdentifier)
+	return fmt.Sprintf(pathPattern, launchAgentIdentifier)
 }
 
 func installLaunchd(c *cli.Context) error {
