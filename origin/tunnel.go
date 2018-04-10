@@ -53,7 +53,7 @@ type TunnelConfig struct {
 	Tags              []tunnelpogs.Tag
 	HAConnections     int
 	HTTPTransport     http.RoundTripper
-	Metrics           *tunnelMetrics
+	Metrics           *TunnelMetrics
 	MetricsUpdateFreq time.Duration
 	ProtocolLogger    *logrus.Logger
 	Logger            *logrus.Logger
@@ -335,7 +335,7 @@ func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration) error {
 func LogServerInfo(logger *logrus.Entry,
 	promise tunnelrpc.ServerInfo_Promise,
 	connectionID uint8,
-	metrics *tunnelMetrics,
+	metrics *TunnelMetrics,
 ) {
 	serverInfoMessage, err := promise.Struct()
 	if err != nil {
@@ -398,7 +398,7 @@ type TunnelHandler struct {
 	httpClient http.RoundTripper
 	tlsConfig  *tls.Config
 	tags       []tunnelpogs.Tag
-	metrics    *tunnelMetrics
+	metrics    *TunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID string
 }

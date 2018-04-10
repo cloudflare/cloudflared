@@ -27,7 +27,7 @@ type muxerMetrics struct {
 	outBoundRateMax  *prometheus.GaugeVec
 }
 
-type tunnelMetrics struct {
+type TunnelMetrics struct {
 	haConnections     prometheus.Gauge
 	totalRequests     prometheus.Counter
 	requestsPerTunnel *prometheus.CounterVec
@@ -229,7 +229,7 @@ func convertRTTMilliSec(t time.Duration) float64 {
 }
 
 // Metrics that can be collected without asking the edge
-func NewTunnelMetrics() *tunnelMetrics {
+func NewTunnelMetrics() *TunnelMetrics {
 	haConnections := prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "ha_connections",
@@ -305,7 +305,7 @@ func NewTunnelMetrics() *tunnelMetrics {
 	)
 	prometheus.MustRegister(serverLocations)
 
-	return &tunnelMetrics{
+	return &TunnelMetrics{
 		haConnections:                  haConnections,
 		totalRequests:                  totalRequests,
 		requestsPerTunnel:              requestsPerTunnel,
@@ -322,19 +322,19 @@ func NewTunnelMetrics() *tunnelMetrics {
 	}
 }
 
-func (t *tunnelMetrics) incrementHaConnections() {
+func (t *TunnelMetrics) incrementHaConnections() {
 	t.haConnections.Inc()
 }
 
-func (t *tunnelMetrics) decrementHaConnections() {
+func (t *TunnelMetrics) decrementHaConnections() {
 	t.haConnections.Dec()
 }
 
-func (t *tunnelMetrics) updateMuxerMetrics(connectionID string, metrics *h2mux.MuxerMetrics) {
+func (t *TunnelMetrics) updateMuxerMetrics(connectionID string, metrics *h2mux.MuxerMetrics) {
 	t.muxerMetrics.update(connectionID, metrics)
 }
 
-func (t *tunnelMetrics) incrementRequests(connectionID string) {
+func (t *TunnelMetrics) incrementRequests(connectionID string) {
 	t.concurrentRequestsLock.Lock()
 	var concurrentRequests uint64
 	var ok bool
@@ -356,7 +356,7 @@ func (t *tunnelMetrics) incrementRequests(connectionID string) {
 	t.concurrentRequestsPerTunnel.WithLabelValues(connectionID).Inc()
 }
 
-func (t *tunnelMetrics) decrementConcurrentRequests(connectionID string) {
+func (t *TunnelMetrics) decrementConcurrentRequests(connectionID string) {
 	t.concurrentRequestsLock.Lock()
 	if _, ok := t.concurrentRequests[connectionID]; ok {
 		t.concurrentRequests[connectionID] -= 1
@@ -368,13 +368,13 @@ func (t *tunnelMetrics) decrementConcurrentRequests(connectionID string) {
 	t.concurrentRequestsPerTunnel.WithLabelValues(connectionID).Dec()
 }
 
-func (t *tunnelMetrics) incrementResponses(connectionID, code string) {
+func (t *TunnelMetrics) incrementResponses(connectionID, code string) {
 	t.responseByCode.WithLabelValues(code).Inc()
 	t.responseCodePerTunnel.WithLabelValues(connectionID, code).Inc()
 
 }
 
-func (t *tunnelMetrics) registerServerLocation(connectionID, loc string) {
+func (t *TunnelMetrics) registerServerLocation(connectionID, loc string) {
 	t.locationLock.Lock()
 	defer t.locationLock.Unlock()
 	if oldLoc, ok := t.oldServerLocations[connectionID]; ok && oldLoc == loc {
