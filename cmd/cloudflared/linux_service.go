@@ -90,8 +90,8 @@ var sysvTemplate = ServiceTemplate{
 # Short-Description: Argo Tunnel
 # Description:       Argo Tunnel agent
 ### END INIT INFO
-cmd="{{.Path}} --config /etc/cloudflared/config.yml --origincert /etc/cloudflared/cert.pem --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s"
 name=$(basename $(readlink -f $0))
+cmd="{{.Path}} --config /etc/cloudflared/config.yml --origincert /etc/cloudflared/cert.pem --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s"
 pid_file="/var/run/$name.pid"
 stdout_log="/var/log/$name.log"
 stderr_log="/var/log/$name.err"
