@@ -73,7 +73,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil {
-				Log.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
+				logger.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -109,10 +109,10 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 			s.lastResolve = time.Now()
 			s.resolverC = nil
 			if result.err == nil {
-				Log.Debug("Service discovery refresh complete")
+				logger.Debug("Service discovery refresh complete")
 				s.edgeIPs = result.edgeIPs
 			} else {
-				Log.WithError(result.err).Error("Service discovery error")
+				logger.WithError(result.err).Error("Service discovery error")
 			}
 		}
 	}
@@ -121,12 +121,12 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}) error {
 	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 	if err != nil {
-		Log.Infof("ResolveEdgeIPs err")
+		logger.Infof("ResolveEdgeIPs err")
 		return err
 	}
 	s.edgeIPs = edgeIPs
 	if s.config.HAConnections > len(edgeIPs) {
-		Log.Warnf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, len(edgeIPs))
+		logger.Warnf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, len(edgeIPs))
 		s.config.HAConnections = len(edgeIPs)
 	}
 	s.lastResolve = time.Now()

@@ -11,12 +11,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/cloudflare/cloudflared/log"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -48,7 +48,7 @@ const (
 var listeners = gracenet.Net{}
 var Version = "DEV"
 var BuildTime = "unknown"
-var Log *logrus.Logger
+var logger = log.CreateLogger()
 var defaultConfigFiles = []string{"config.yml", "config.yaml"}
 
 // Launchd doesn't set root env variables, so there is default
@@ -58,15 +58,6 @@ var defaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/clou
 // Shutdown channel used by the app. When closed, app must terminate.
 // May be closed by the Windows service runner.
 var shutdownC chan struct{}
-
-type BuildAndRuntimeInfo struct {
-	GoOS        string                 `json:"go_os"`
-	GoVersion   string                 `json:"go_version"`
-	GoArch      string                 `json:"go_arch"`
-	WarpVersion string                 `json:"warp_version"`
-	WarpFlags   map[string]interface{} `json:"warp_flags"`
-	WarpEnvs    map[string]string      `json:"warp_envs"`
-}
 
 func main() {
 	metrics.RegisterBuildInfo(BuildTime, Version)
@@ -306,18 +297,17 @@ func main() {
 		return nil
 	}
 	app.Before = func(context *cli.Context) error {
-		Log = logrus.New()
 		inputSource, err := findInputSourceContext(context)
 		if err != nil {
-			Log.WithError(err).Infof("Cannot load configuration from %s", context.String("config"))
+			logger.WithError(err).Infof("Cannot load configuration from %s", context.String("config"))
 			return err
 		} else if inputSource != nil {
 			err := altsrc.ApplyInputSourceValues(context, inputSource, app.Flags)
 			if err != nil {
-				Log.WithError(err).Infof("Cannot apply configuration from %s", context.String("config"))
+				logger.WithError(err).Infof("Cannot apply configuration from %s", context.String("config"))
 				return err
 			}
-			Log.Infof("Applied configuration from %s", context.String("config"))
+			logger.Infof("Applied configuration from %s", context.String("config"))
 		}
 		return nil
 	}
@@ -404,45 +394,50 @@ func startServer(c *cli.Context) {
 	// c.NumFlags() == 0 && c.NArg() == 0. For cloudflared to work, the user needs to at
 	// least provide a hostname.
 	if c.NumFlags() == 0 && c.NArg() == 0 && os.Getenv("TUNNEL_HOSTNAME") == "" {
-		Log.Infof("No arguments were provided. You need to at least specify the hostname for this tunnel. See %s", quickStartUrl)
+		logger.Infof("No arguments were provided. You need to at least specify the hostname for this tunnel. See %s", quickStartUrl)
 		cli.ShowAppHelp(c)
 		return
 	}
 	logLevel, err := logrus.ParseLevel(c.String("loglevel"))
 	if err != nil {
-		Log.WithError(err).Fatal("Unknown logging level specified")
+		logger.WithError(err).Fatal("Unknown logging level specified")
 	}
-	Log.SetLevel(logLevel)
+	logger.SetLevel(logLevel)
 
 	protoLogLevel, err := logrus.ParseLevel(c.String("proto-loglevel"))
 	if err != nil {
-		Log.WithError(err).Fatal("Unknown protocol logging level specified")
+		logger.WithError(err).Fatal("Unknown protocol logging level specified")
 	}
 	protoLogger := logrus.New()
 	protoLogger.Level = protoLogLevel
 
 	if c.String("logfile") != "" {
 		if err := initLogFile(c, protoLogger); err != nil {
-			Log.Error(err)
+			logger.Error(err)
 		}
 	}
+
+	buildInfo := origin.GetBuildInfo()
+	logger.Infof("Build info: %+v", *buildInfo)
+	logger.Infof("Version %s", Version)
+	logClientOptions(c)
 
 	if c.IsSet("proxy-dns") {
 		port := c.Int("proxy-dns-port")
 		if port <= 0 || port > 65535 {
-			Log.Fatal("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
+			logger.Fatal("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
 		}
 		wg.Add(1)
 		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"))
 		if err != nil {
 			close(dnsReadySignal)
 			listener.Stop()
-			Log.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
+			logger.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
 		}
 		go func() {
 			err := listener.Start(dnsReadySignal)
 			if err != nil {
-				Log.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
+				logger.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
 			} else {
 				<-shutdownC
 			}
@@ -453,13 +448,14 @@ func startServer(c *cli.Context) {
 		close(dnsReadySignal)
 	}
 
-	if isAutoupdateEnabled(c) {
+	isRunningFromTerminal := isRunningFromTerminal()
+	if isAutoupdateEnabled(c, isRunningFromTerminal) {
 		// Wait for proxy-dns to come up (if used)
 		<-dnsReadySignal
 		if initUpdate() {
 			return
 		}
-		Log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
 	}
 
@@ -473,7 +469,7 @@ func startServer(c *cli.Context) {
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
-		Log.WithError(err).Fatal("Invalid hostname")
+		logger.WithError(err).Fatal("Invalid hostname")
 	}
 	clientID := c.String("id")
 	if !c.IsSet("id") {
@@ -482,7 +478,7 @@ func startServer(c *cli.Context) {
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		Log.WithError(err).Fatal("Tag parse failure")
+		logger.WithError(err).Fatal("Tag parse failure")
 	}
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
@@ -491,7 +487,7 @@ func startServer(c *cli.Context) {
 		listener, err := createListener("127.0.0.1:")
 		if err != nil {
 			listener.Close()
-			Log.WithError(err).Fatal("Cannot start Hello World Server")
+			logger.WithError(err).Fatal("Cannot start Hello World Server")
 		}
 		go func() {
 			startHelloWorldServer(listener, shutdownC)
@@ -503,26 +499,26 @@ func startServer(c *cli.Context) {
 
 	url, err := validateUrl(c)
 	if err != nil {
-		Log.WithError(err).Fatal("Error validating url")
+		logger.WithError(err).Fatal("Error validating url")
 	}
-	Log.Infof("Proxying tunnel requests to %s", url)
+	logger.Infof("Proxying tunnel requests to %s", url)
 
 	// Fail if the user provided an old authentication method
 	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {
-		Log.Fatal("You don't need to give us your api-key anymore. Please use the new log in method. Just run cloudflared login")
+		logger.Fatal("You don't need to give us your api-key anymore. Please use the new log in method. Just run cloudflared login")
 	}
 
 	// Check that the user has acquired a certificate using the log in command
 	originCertPath, err := homedir.Expand(c.String("origincert"))
 	if err != nil {
-		Log.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
+		logger.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
 	}
 	ok, err := fileExists(originCertPath)
 	if err != nil {
-		Log.Fatalf("Cannot check if origin cert exists at path %s", c.String("origincert"))
+		logger.Fatalf("Cannot check if origin cert exists at path %s", c.String("origincert"))
 	}
 	if !ok {
-		Log.Fatalf(`Cannot find a valid certificate for your origin at the path:
+		logger.Fatalf(`Cannot find a valid certificate for your origin at the path:
 
     %s
 
@@ -535,7 +531,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
-		Log.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
+		logger.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
 	}
 
 	tunnelMetrics := origin.NewTunnelMetrics()
@@ -558,27 +554,29 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	}
 
 	tunnelConfig := &origin.TunnelConfig{
-		EdgeAddrs:           c.StringSlice("edge"),
-		OriginUrl:           url,
-		Hostname:            hostname,
-		OriginCert:          originCert,
-		TlsConfig:           tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
-		ClientTlsConfig:     httpTransport.TLSClientConfig,
-		Retries:             c.Uint("retries"),
-		HeartbeatInterval:   c.Duration("heartbeat-interval"),
-		MaxHeartbeats:       c.Uint64("heartbeat-count"),
-		ClientID:            clientID,
-		ReportedVersion:     Version,
-		LBPool:              c.String("lb-pool"),
-		Tags:                tags,
-		HAConnections:       c.Int("ha-connections"),
-		HTTPTransport:       httpTransport,
-		Metrics:             tunnelMetrics,
-		MetricsUpdateFreq:   c.Duration("metrics-update-freq"),
-		ProtocolLogger:      protoLogger,
-		Logger:              Log,
-		IsAutoupdated:       c.Bool("is-autoupdated"),
-		GracePeriod:         c.Duration("grace-period"),
+		EdgeAddrs:         c.StringSlice("edge"),
+		OriginUrl:         url,
+		Hostname:          hostname,
+		OriginCert:        originCert,
+		TlsConfig:         tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
+		ClientTlsConfig:   httpTransport.TLSClientConfig,
+		Retries:           c.Uint("retries"),
+		HeartbeatInterval: c.Duration("heartbeat-interval"),
+		MaxHeartbeats:     c.Uint64("heartbeat-count"),
+		ClientID:          clientID,
+		BuildInfo:         buildInfo,
+		ReportedVersion:   Version,
+		LBPool:            c.String("lb-pool"),
+		Tags:              tags,
+		HAConnections:     c.Int("ha-connections"),
+		HTTPTransport:     httpTransport,
+		Metrics:           tunnelMetrics,
+		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
+		ProtocolLogger:    protoLogger,
+		Logger:            logger,
+		IsAutoupdated:     c.Bool("is-autoupdated"),
+		GracePeriod:       c.Duration("grace-period"),
+		RunFromTerminal:   isRunningFromTerminal,
 	}
 
 	go writePidFile(connectedSignal, c.String("pidfile"))
@@ -595,21 +593,21 @@ func runServer(c *cli.Context, wg *sync.WaitGroup, errC chan error, shutdownC ch
 	wg.Add(1)
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		Log.WithError(err).Fatal("Error opening metrics server listener")
+		logger.WithError(err).Fatal("Error opening metrics server listener")
 	}
 	go func() {
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC)
+		errC <- metrics.ServeMetrics(metricsListener, shutdownC, logger)
 		wg.Done()
 	}()
 
 	var errCode int
 	err = WaitForSignal(errC, shutdownC)
 	if err != nil {
-		Log.WithError(err).Fatal("Quitting due to error")
+		logger.WithError(err).Fatal("Quitting due to error")
 		raven.CaptureErrorAndWait(err, nil)
 		errCode = 1
 	} else {
-		Log.Info("Graceful shutdown...")
+		logger.Info("Graceful shutdown...")
 	}
 	// Wait for clean exit, discarding all errors
 	go func() {
@@ -648,7 +646,7 @@ func initUpdate() bool {
 	if updateApplied() {
 		os.Args = append(os.Args, "--is-autoupdated=true")
 		if _, err := listeners.StartProcess(); err != nil {
-			Log.WithError(err).Error("Unable to restart server automatically")
+			logger.WithError(err).Error("Unable to restart server automatically")
 			return false
 		}
 		return true
@@ -661,7 +659,7 @@ func autoupdate(freq time.Duration, shutdownC chan struct{}) {
 		if updateApplied() {
 			os.Args = append(os.Args, "--is-autoupdated=true")
 			if _, err := listeners.StartProcess(); err != nil {
-				Log.WithError(err).Error("Unable to restart server automatically")
+				logger.WithError(err).Error("Unable to restart server automatically")
 			}
 			close(shutdownC)
 			return
@@ -673,11 +671,11 @@ func autoupdate(freq time.Duration, shutdownC chan struct{}) {
 func updateApplied() bool {
 	releaseInfo := checkForUpdates()
 	if releaseInfo.Updated {
-		Log.Infof("Updated to version %s", releaseInfo.Version)
+		logger.Infof("Updated to version %s", releaseInfo.Version)
 		return true
 	}
 	if releaseInfo.Error != nil {
-		Log.WithError(releaseInfo.Error).Error("Update check failed")
+		logger.WithError(releaseInfo.Error).Error("Update check failed")
 	}
 	return false
 }
@@ -748,7 +746,7 @@ func writePidFile(waitForSignal chan struct{}, pidFile string) {
 	}
 	file, err := os.Create(pidFile)
 	if err != nil {
-		Log.WithError(err).Errorf("Unable to write pid to %s", pidFile)
+		logger.WithError(err).Errorf("Unable to write pid to %s", pidFile)
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "%d", os.Getpid())
@@ -790,16 +788,22 @@ func initLogFile(c *cli.Context, protoLogger *logrus.Logger) error {
 		logrus.PanicLevel: filePath,
 	}
 
-	Log.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
+	logger.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
 	protoLogger.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
 
-	flags := make(map[string]interface{})
-	envs := make(map[string]string)
+	return nil
+}
 
+func logClientOptions(c *cli.Context) {
+	flags := make(map[string]interface{})
 	for _, flag := range c.LocalFlagNames() {
 		flags[flag] = c.Generic(flag)
 	}
+	if len(flags) > 0 {
+		logger.Infof("Flags %v", flags)
+	}
 
+	envs := make(map[string]string)
 	// Find env variables for Argo Tunnel
 	for _, env := range os.Environ() {
 		// All Argo Tunnel env variables start with TUNNEL_
@@ -810,24 +814,33 @@ func initLogFile(c *cli.Context, protoLogger *logrus.Logger) error {
 			}
 		}
 	}
-
-	Log.Infof("Argo Tunnel build and runtime configuration: %+v", BuildAndRuntimeInfo{
-		GoOS:        runtime.GOOS,
-		GoVersion:   runtime.Version(),
-		GoArch:      runtime.GOARCH,
-		WarpVersion: Version,
-		WarpFlags:   flags,
-		WarpEnvs:    envs,
-	})
-
-	return nil
+	if len(envs) > 0 {
+		logger.Infof("Environmental variables %v", envs)
+	}
 }
 
-func isAutoupdateEnabled(c *cli.Context) bool {
-	if terminal.IsTerminal(int(os.Stdout.Fd())) {
-		Log.Info(noAutoupdateMessage)
+func isAutoupdateEnabled(c *cli.Context, isRunningFromTerminal bool) bool {
+	if isRunningFromTerminal {
+		logger.Info(noAutoupdateMessage)
 		return false
 	}
 
 	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
+}
+
+
+func isRunningFromTerminal() bool {
+	return terminal.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func userHomeDir() string {
+	// This returns the home dir of the executing user using OS-specific method
+	// for discovering the home dir. It's not recommended to call this function
+	// when the user has root permission as $HOME depends on what options the user
+	// use with sudo.
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		logger.WithError(err).Fatal("Cannot determine home directory for the user.")
+	}
+	return homeDir
 }

@@ -37,6 +37,8 @@ struct RegistrationOptions {
     originLocalIp @7 :Text;
     # whether Argo Tunnel client has been autoupdated
     isAutoupdated @8 :Bool;
+    # whether Argo Tunnel client is run from a terminal
+    runFromTerminal @9 :Bool;
 }
 
 struct Tag {

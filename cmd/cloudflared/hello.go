@@ -103,7 +103,7 @@ func hello(c *cli.Context) error {
 }
 
 func startHelloWorldServer(listener net.Listener, shutdownC <-chan struct{}) error {
-	Log.Infof("Starting Hello World server at %s", listener.Addr())
+	logger.Infof("Starting Hello World server at %s", listener.Addr())
 	serverName := defaultServerName
 	if hostname, err := os.Hostname(); err == nil {
 		serverName = hostname

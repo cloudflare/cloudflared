@@ -73,21 +73,21 @@ func runCommand(command string, args ...string) error {
 	cmd := exec.Command(command, args...)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		Log.WithError(err).Infof("error getting stderr pipe")
+		logger.WithError(err).Infof("error getting stderr pipe")
 		return fmt.Errorf("error getting stderr pipe: %v", err)
 	}
 	err = cmd.Start()
 	if err != nil {
-		Log.WithError(err).Infof("error starting %s", command)
+		logger.WithError(err).Infof("error starting %s", command)
 		return fmt.Errorf("error starting %s: %v", command, err)
 	}
 	commandErr, _ := ioutil.ReadAll(stderr)
 	if len(commandErr) > 0 {
-		Log.Errorf("%s: %s", command, commandErr)
+		logger.Errorf("%s: %s", command, commandErr)
 	}
 	err = cmd.Wait()
 	if err != nil {
-		Log.WithError(err).Infof("%s returned error", command)
+		logger.WithError(err).Infof("%s returned error", command)
 		return fmt.Errorf("%s returned with error: %v", command, err)
 	}
 	return nil
@@ -159,7 +159,7 @@ func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile strin
 	destConfigPath := filepath.Join(serviceConfigDir, defaultConfigFile)
 	destFile, exists, err := openFile(destConfigPath, true)
 	if err != nil {
-		Log.WithError(err).Infof("cannot open %s", destConfigPath)
+		logger.WithError(err).Infof("cannot open %s", destConfigPath)
 		return err
 	} else if exists {
 		// config already exists, do nothing
@@ -185,7 +185,7 @@ func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile strin
 		if err != nil {
 			return fmt.Errorf("unable to copy %s to %s: %v", srcConfigPath, destConfigPath, err)
 		}
-		Log.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
+		logger.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
 	}
 
 	return nil

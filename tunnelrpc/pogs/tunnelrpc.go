@@ -52,7 +52,7 @@ type RegistrationOptions struct {
 	ConnectionID         uint8  `capnp:"connectionId"`
 	OriginLocalIP        string `capnp:"originLocalIp"`
 	IsAutoupdated        bool   `capnp:"isAutoupdated"`
-	gracePeriodNanoSec   int64  `capnp:"gracePeriodNanoSec"`
+	RunFromTerminal      bool   `capnp:"runFromTerminal"`
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {

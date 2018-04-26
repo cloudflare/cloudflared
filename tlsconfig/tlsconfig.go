@@ -8,9 +8,11 @@ import (
 	"io/ioutil"
 	"net"
 
-	log "github.com/sirupsen/logrus"
-	cli "gopkg.in/urfave/cli.v2"
+	"github.com/cloudflare/cloudflared/log"
+	"gopkg.in/urfave/cli.v2"
 )
+
+var logger = log.CreateLogger()
 
 // CLIFlags names the flags used to configure TLS for a command or subsystem.
 // The nil value for a field means the flag is ignored.
@@ -29,7 +31,7 @@ func (f CLIFlags) GetConfig(c *cli.Context) *tls.Config {
 	if c.IsSet(f.Cert) && c.IsSet(f.Key) {
 		cert, err := tls.LoadX509KeyPair(c.String(f.Cert), c.String(f.Key))
 		if err != nil {
-			log.WithError(err).Fatal("Error parsing X509 key pair")
+			logger.WithError(err).Fatal("Error parsing X509 key pair")
 		}
 		config.Certificates = []tls.Certificate{cert}
 		config.BuildNameToCertificate()
@@ -53,11 +55,11 @@ func (f CLIFlags) GetConfig(c *cli.Context) *tls.Config {
 func LoadCert(certPath string) *x509.CertPool {
 	caCert, err := ioutil.ReadFile(certPath)
 	if err != nil {
-		log.WithError(err).Fatalf("Error reading certificate %s", certPath)
+		logger.WithError(err).Fatalf("Error reading certificate %s", certPath)
 	}
 	ca := x509.NewCertPool()
 	if !ca.AppendCertsFromPEM(caCert) {
-		log.WithError(err).Fatalf("Error parsing certificate %s", certPath)
+		logger.WithError(err).Fatalf("Error parsing certificate %s", certPath)
 	}
 	return ca
 }
@@ -66,23 +68,23 @@ func LoadOriginCertsPool() *x509.CertPool {
 	// First, obtain the system certificate pool
 	certPool, systemCertPoolErr := x509.SystemCertPool()
 	if systemCertPoolErr != nil {
-		log.Warn("error obtaining the system certificates: %s", systemCertPoolErr)
+		logger.Warnf("error obtaining the system certificates: %s", systemCertPoolErr)
 		certPool = x509.NewCertPool()
 	}
 
 	// Next, append the Cloudflare CA pool into the system pool
 	if !certPool.AppendCertsFromPEM([]byte(cloudflareRootCA)) {
-		log.Warn("could not append the CF certificate to the system certificate pool")
+		logger.Warn("could not append the CF certificate to the system certificate pool")
 
 		if systemCertPoolErr != nil { // Obtaining both certificates failed; this is a fatal error
-			log.WithError(systemCertPoolErr).Fatalf("Error loading the certificate pool")
+			logger.WithError(systemCertPoolErr).Fatalf("Error loading the certificate pool")
 		}
 	}
 
 	// Finally, add the Hello certificate into the pool (since it's self-signed)
 	helloCertificate, err := GetHelloCertificateX509()
 	if err != nil {
-		log.Warn("error obtaining the Hello server certificate")
+		logger.Warn("error obtaining the Hello server certificate")
 	}
 
 	certPool.AddCert(helloCertificate)
