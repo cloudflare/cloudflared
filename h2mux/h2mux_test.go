@@ -14,7 +14,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -135,12 +134,9 @@ func TestSingleStream(t *testing.T) {
 		if stream.Headers[0].Value != "headerValue" {
 			t.Fatalf("expected header value %s, got %s", "headerValue", stream.Headers[0].Value)
 		}
-		headers := []Header{
+		stream.WriteHeaders([]Header{
 			Header{Name: "response-header", Value: "responseValue"},
-		}
-		stream.WriteHeaders(headers)
-		assert.Equal(t, headers, stream.writeHeaders)
-		assert.False(t, stream.headersSent)
+		})
 		buf := []byte("Hello world")
 		stream.Write(buf)
 		// after this receive, the edge closed the stream
