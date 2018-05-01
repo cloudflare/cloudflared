@@ -1,0 +1,19 @@
+// {{.Node.Name}}_List is a list of {{.Node.Name}}.
+type {{.Node.Name}}_List struct{ {{.G.Capnp}}.List }
+
+// New{{.Node.Name}} creates a new list of {{.Node.Name}}.
+func New{{.Node.Name}}_List(s *{{.G.Capnp}}.Segment, sz int32) ({{.Node.Name}}_List, error) {
+	l, err := {{.G.Capnp}}.NewCompositeList(s, {{.G.ObjectSize .Node}}, sz)
+	return {{.Node.Name}}_List{l}, err
+}
+
+func (s {{.Node.Name}}_List) At(i int) {{.Node.Name}} { return {{.Node.Name}}{ s.List.Struct(i) } }
+
+func (s {{.Node.Name}}_List) Set(i int, v {{.Node.Name}}) error { return s.List.SetStruct(i, v.Struct) }
+{{if .StringMethod}}
+func (s {{.Node.Name}}_List) String() string {
+	str, _ := {{.G.Imports.Text}}.MarshalList({{.Node.Id|printf "%#x"}}, s.List)
+	return str
+}
+{{end}}
+

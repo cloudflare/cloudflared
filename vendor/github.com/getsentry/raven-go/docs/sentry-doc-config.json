@@ -1,0 +1,25 @@
+{
+  "support_level": "in-development",
+  "platforms": {
+    "go": {
+      "name": "Go",
+      "type": "language",
+      "doc_link": "",
+      "wizard": [
+        "index#installation",
+        "index#configuring-the-client",
+        "index#reporting-errors",
+        "index#reporting-panics"
+      ]
+    },
+    "go.http": {
+      "name": "net/http",
+      "type": "framework",
+      "doc_wizard": "integrations/http/",
+      "wizard": [
+        "integrations/http#installation",
+        "integrations/http#setup"
+      ]
+    }
+  }
+}

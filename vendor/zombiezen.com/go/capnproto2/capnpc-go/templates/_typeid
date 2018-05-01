@@ -1,0 +1,2 @@
+// {{.Name}}_TypeID is the unique identifier for the type {{.Name}}.
+const {{.Name}}_TypeID = {{.Id|printf "%#x"}}

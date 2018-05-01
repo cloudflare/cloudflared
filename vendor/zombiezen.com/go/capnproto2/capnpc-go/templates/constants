@@ -1,0 +1,14 @@
+{{with .Consts -}}
+// Constants defined in {{$.G.Basename}}.
+const (
+{{range .}}	{{.Name}} = {{$.G.Value . .Const.Type .Const.Value}}
+{{end}}
+)
+{{end}}
+{{with .Vars -}}
+// Constants defined in {{$.G.Basename}}.
+var (
+{{range .}}	{{.Name}} = {{$.G.Value . .Const.Type .Const.Value}}
+{{end}}
+)
+{{end}}

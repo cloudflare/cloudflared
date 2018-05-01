@@ -1,0 +1,5 @@
+*.test
+example/example
+
+docs/_build
+docs/doctrees

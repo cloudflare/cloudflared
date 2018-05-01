@@ -1,0 +1,3 @@
+startup --batch --host_jvm_args=-Xms2500m --host_jvm_args=-Xmx2500m
+build --noshow_progress --spawn_strategy=standalone --genrule_strategy=standalone --local_resources=1536,1.5,0.5
+test --noshow_progress --test_output=errors --spawn_strategy=standalone --genrule_strategy=standalone --test_strategy=standalone --local_resources=1536,1.5,0.5

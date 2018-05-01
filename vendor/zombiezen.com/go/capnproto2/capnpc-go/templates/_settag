@@ -1,0 +1,3 @@
+{{if .Field.HasDiscriminant -}}
+s.Struct.SetUint16({{.Node.DiscriminantOffset}}, {{.Field.DiscriminantValue}})
+{{end -}}

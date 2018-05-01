@@ -1,0 +1,10 @@
+func (s {{.Node.Name}}) {{.Field.Name|title}}() {{.ReturnType}} {
+	{{template "_checktag" . -}}
+	return {{.ReturnType}}(s.Struct.Uint{{.Bits}}({{.Offset}}){{with .Default}} ^ {{.}}{{end}})
+}
+
+func (s {{.Node.Name}}) Set{{.Field.Name|title}}(v {{.ReturnType}}) {
+	{{template "_settag" . -}}
+	s.Struct.SetUint{{.Bits}}({{.Offset}}, uint{{.Bits}}(v){{with .Default}}^{{.}}{{end}})
+}
+

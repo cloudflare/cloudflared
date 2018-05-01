@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "schema",
+    srcs = glob([
+        "*.capnp",
+        "capnp/*.capnp",
+    ]),
+)

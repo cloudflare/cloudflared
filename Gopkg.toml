@@ -1,0 +1,45 @@
+[[constraint]]
+  name = "github.com/facebookgo/grace"
+  branch = "master"
+
+[[constraint]]
+  name = "github.com/getsentry/raven-go"
+  branch = "master"
+
+[[constraint]]
+  name = "github.com/pkg/errors"
+  version = "0.8.0"
+
+[[constraint]]
+  name = "github.com/prometheus/client_golang"
+  version = "0.9.0-pre1"
+
+[[constraint]]
+  name = "github.com/sirupsen/logrus"
+  version = "1.0.3"
+
+[[constraint]]
+  name = "github.com/stretchr/testify"
+  version = "1.2.1"
+
+[[constraint]]
+  name = "golang.org/x/net"
+  branch = "master"
+
+[[constraint]]
+  name = "golang.org/x/sync"
+  branch = "master"
+
+[[constraint]]
+  name = "gopkg.in/urfave/cli.v2"
+  source = "https://github.com/cbranch/cli"
+  branch = "altsrc-parse-durations"
+
+[[constraint]]
+  name = "zombiezen.com/go/capnproto2"
+  source = "https://github.com/zombiezen/go-capnproto2"
+
+[[constraint]]
+  name = "github.com/gorilla/websocket"
+  version = "1.2.0"
+

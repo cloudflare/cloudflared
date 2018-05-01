@@ -1,0 +1,18 @@
+func (s {{.Node.Name}}) {{.Field.Name|title}}() {{.FieldType}} {
+	{{template "_checktag" . -}}
+	p, _ := s.Struct.Ptr({{.Field.Slot.Offset}})
+	return {{.FieldType}}{Client: p.Interface().Client()}
+}
+
+{{template "_hasfield" .}}
+
+func (s {{.Node.Name}}) Set{{.Field.Name|title}}(v {{.FieldType}}) error {
+	{{template "_settag" . -}}
+	if v.Client == nil {
+		return s.Struct.SetPtr({{.Field.Slot.Offset}}, capnp.Ptr{})
+	}
+	seg := s.Segment()
+	in := {{.G.Capnp}}.NewInterface(seg, seg.Message().AddCap(v.Client))
+	return s.Struct.SetPtr({{.Field.Slot.Offset}}, in.ToPtr())
+}
+

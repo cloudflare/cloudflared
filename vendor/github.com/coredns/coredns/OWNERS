@@ -1,0 +1,33 @@
+reviewers:
+  - bradbeam
+  - chrisohaver
+  - fastest963
+  - fturib
+  - greenpau
+  - grobie
+  - isolus
+  - johnbelamaric
+  - miekg
+  - pmoroney
+  - rajansandeep
+  - stp-ip
+  - superq
+  - varyoo
+  - yongtang
+
+approvers:
+  - chrisohaver
+  - johnbelamaric
+  - miekg
+  - yongtang
+
+features:
+  - comments
+  - reviewers
+  - aliases
+  - branches
+
+aliases:
+  - |
+    /plugin: (.*) -> /label add: plugin/$1
+

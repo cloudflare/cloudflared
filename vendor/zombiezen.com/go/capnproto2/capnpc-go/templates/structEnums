@@ -1,0 +1,17 @@
+type {{.Node.Name}}_Which uint16
+
+const (
+{{range .Fields}}	{{$.Node.Name}}_Which_{{.Name}} {{$.Node.Name}}_Which = {{.DiscriminantValue}}
+{{end}}
+)
+
+func (w {{.Node.Name}}_Which) String() string {
+	const s = {{.EnumString.ValueString|printf "%q"}}
+	switch w {
+	{{range $i, $f := .Fields}}case {{$.Node.Name}}_Which_{{.Name}}:
+		return s{{$.EnumString.SliceFor $i}}
+	{{end}}
+	}
+	return "{{.Node.Name}}_Which(" + {{.G.Imports.Strconv}}.FormatUint(uint64(w), 10) + ")"
+}
+

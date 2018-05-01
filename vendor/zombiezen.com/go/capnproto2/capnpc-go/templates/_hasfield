@@ -1,0 +1,9 @@
+func (s {{.Node.Name}}) Has{{.Field.Name|title}}() bool {
+	{{if .Field.HasDiscriminant -}}
+	if s.Struct.Uint16({{.Node.DiscriminantOffset}}) != {{.Field.DiscriminantValue}} {
+		return false
+	}
+	{{end -}}
+	p, err := s.Struct.Ptr({{.Field.Slot.Offset}})
+	return p.IsValid() || err != nil 
+}

@@ -1,0 +1,5 @@
+{{if gt .Node.StructNode.DiscriminantCount 0}}
+func (s {{.Node.Name}}) Which() {{.Node.Name}}_Which {
+	return {{.Node.Name}}_Which(s.Struct.Uint16({{.Node.DiscriminantOffset}}))
+}
+{{end -}}

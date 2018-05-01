@@ -1,0 +1,4 @@
+func (p {{.Node.Name}}_Promise) {{.Field.Name|title}}() *{{.G.Capnp}}.Pipeline {
+	return p.Pipeline.GetPipeline({{.Field.Slot.Offset}})
+}
+

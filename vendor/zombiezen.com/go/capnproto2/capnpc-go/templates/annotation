@@ -1,0 +1,1 @@
+const {{.Node.Name}} = uint64({{.Node.Id|printf "%#x"}})

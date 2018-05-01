@@ -1,0 +1,2 @@
+{{.G.Capnp}}.MustUnmarshalRootPtr({{.Value}})
+{{- /* no EOL */ -}}

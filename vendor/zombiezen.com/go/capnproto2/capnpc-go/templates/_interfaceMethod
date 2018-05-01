@@ -1,0 +1,4 @@
+			InterfaceID: {{.Interface.Id|printf "%#x"}},
+			MethodID: {{.ID}},
+			InterfaceName: {{.Interface.DisplayName|printf "%q"}},
+			MethodName: {{.OriginalName|printf "%q"}},
