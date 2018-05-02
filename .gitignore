@@ -1,0 +1,7 @@
+bin/
+tmp/
+guide/public
+/bin
+.idea
+.vscode
+\#*\#
