@@ -135,7 +135,7 @@ func TestSingleStream(t *testing.T) {
 			t.Fatalf("expected header value %s, got %s", "headerValue", stream.Headers[0].Value)
 		}
 		stream.WriteHeaders([]Header{
-			Header{Name: "response-header", Value: "responseValue"},
+			{Name: "response-header", Value: "responseValue"},
 		})
 		buf := []byte("Hello world")
 		stream.Write(buf)
@@ -153,7 +153,7 @@ func TestSingleStream(t *testing.T) {
 	muxPair.HandshakeAndServe(t)
 
 	stream, err := muxPair.EdgeMux.OpenStream(
-		[]Header{Header{Name: "test-header", Value: "headerValue"}},
+		[]Header{{Name: "test-header", Value: "headerValue"}},
 		nil,
 	)
 	if err != nil {
@@ -194,6 +194,7 @@ func TestSingleStream(t *testing.T) {
 func TestSingleStreamLargeResponseBody(t *testing.T) {
 	muxPair := NewDefaultMuxerPair()
 	bodySize := 1 << 24
+	streamReady := make(chan struct{})
 	muxPair.OriginMuxConfig.Handler = MuxedStreamFunc(func(stream *MuxedStream) error {
 		if len(stream.Headers) != 1 {
 			t.Fatalf("expected %d headers, got %d", 1, len(stream.Headers))
@@ -205,25 +206,30 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 			t.Fatalf("expected header value %s, got %s", "headerValue", stream.Headers[0].Value)
 		}
 		stream.WriteHeaders([]Header{
-			Header{Name: "response-header", Value: "responseValue"},
+			{Name: "response-header", Value: "responseValue"},
 		})
 		payload := make([]byte, bodySize)
 		for i := range payload {
 			payload[i] = byte(i % 256)
 		}
+		t.Log("Writing payload...")
 		n, err := stream.Write(payload)
+		t.Logf("Wrote %d bytes into the stream", n)
 		if err != nil {
 			t.Fatalf("origin write error: %s", err)
 		}
 		if n != len(payload) {
 			t.Fatalf("origin short write: %d/%d bytes", n, len(payload))
 		}
+		t.Log("Payload written; signaling that the stream is ready")
+		streamReady <- struct{}{}
+
 		return nil
 	})
 	muxPair.HandshakeAndServe(t)
 
 	stream, err := muxPair.EdgeMux.OpenStream(
-		[]Header{Header{Name: "test-header", Value: "headerValue"}},
+		[]Header{{Name: "test-header", Value: "headerValue"}},
 		nil,
 	)
 	if err != nil {
@@ -239,6 +245,10 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 		t.Fatalf("expected header value %s, got %s", "responseValue", stream.Headers[0].Value)
 	}
 	responseBody := make([]byte, bodySize)
+
+	<-streamReady
+	t.Log("Received stream ready signal; resuming the test")
+
 	n, err := io.ReadFull(stream, responseBody)
 	if err != nil {
 		t.Fatalf("error from (*MuxedStream).Read: %s", err)
@@ -261,7 +271,7 @@ func TestMultipleStreams(t *testing.T) {
 		}
 		log.Debugf("Got request for stream %s", stream.Headers[0].Value)
 		stream.WriteHeaders([]Header{
-			Header{Name: "response-token", Value: stream.Headers[0].Value},
+			{Name: "response-token", Value: stream.Headers[0].Value},
 		})
 		log.Debugf("Wrote headers for stream %s", stream.Headers[0].Value)
 		stream.Write([]byte("OK"))
@@ -277,7 +287,7 @@ func TestMultipleStreams(t *testing.T) {
 			defer wg.Done()
 			tokenString := fmt.Sprintf("%d", tokenId)
 			stream, err := muxPair.EdgeMux.OpenStream(
-				[]Header{Header{Name: "client-token", Value: tokenString}},
+				[]Header{{Name: "client-token", Value: tokenString}},
 				nil,
 			)
 			log.Debugf("Got headers for stream %d", tokenId)
@@ -328,6 +338,7 @@ func TestMultipleStreams(t *testing.T) {
 func TestMultipleStreamsFlowControl(t *testing.T) {
 	maxStreams := 32
 	errorsC := make(chan error, maxStreams)
+	streamReady := make(chan struct{})
 	responseSizes := make([]int32, maxStreams)
 	for i := 0; i < maxStreams; i++ {
 		responseSizes[i] = rand.Int31n(int32(defaultWindowSize << 4))
@@ -344,13 +355,14 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 			t.Fatalf("expected header value %s, got %s", "headerValue", stream.Headers[0].Value)
 		}
 		stream.WriteHeaders([]Header{
-			Header{Name: "response-header", Value: "responseValue"},
+			{Name: "response-header", Value: "responseValue"},
 		})
 		payload := make([]byte, responseSizes[(stream.streamID-2)/2])
 		for i := range payload {
 			payload[i] = byte(i % 256)
 		}
 		n, err := stream.Write(payload)
+		streamReady <- struct{}{}
 		if err != nil {
 			t.Fatalf("origin write error: %s", err)
 		}
@@ -367,7 +379,7 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 		go func(tokenId int) {
 			defer wg.Done()
 			stream, err := muxPair.EdgeMux.OpenStream(
-				[]Header{Header{Name: "test-header", Value: "headerValue"}},
+				[]Header{{Name: "test-header", Value: "headerValue"}},
 				nil,
 			)
 			if err != nil {
@@ -387,6 +399,7 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 				return
 			}
 
+			<-streamReady
 			responseBody := make([]byte, responseSizes[(stream.streamID-2)/2])
 			n, err := io.ReadFull(stream, responseBody)
 			if err != nil {
@@ -417,7 +430,7 @@ func TestGracefulShutdown(t *testing.T) {
 	muxPair := NewDefaultMuxerPair()
 	muxPair.OriginMuxConfig.Handler = MuxedStreamFunc(func(stream *MuxedStream) error {
 		stream.WriteHeaders([]Header{
-			Header{Name: "response-header", Value: "responseValue"},
+			{Name: "response-header", Value: "responseValue"},
 		})
 		<-sendC
 		log.Debugf("Writing %d bytes", len(responseBuf))
@@ -436,7 +449,7 @@ func TestGracefulShutdown(t *testing.T) {
 	muxPair.HandshakeAndServe(t)
 
 	stream, err := muxPair.EdgeMux.OpenStream(
-		[]Header{Header{Name: "test-header", Value: "headerValue"}},
+		[]Header{{Name: "test-header", Value: "headerValue"}},
 		nil,
 	)
 	// Start graceful shutdown of the edge mux - this should also close the origin mux when done
@@ -469,7 +482,7 @@ func TestUnexpectedShutdown(t *testing.T) {
 	muxPair.OriginMuxConfig.Handler = MuxedStreamFunc(func(stream *MuxedStream) error {
 		defer close(handlerFinishC)
 		stream.WriteHeaders([]Header{
-			Header{Name: "response-header", Value: "responseValue"},
+			{Name: "response-header", Value: "responseValue"},
 		})
 		<-sendC
 		n, err := stream.Read([]byte{0})
@@ -490,7 +503,7 @@ func TestUnexpectedShutdown(t *testing.T) {
 	muxPair.HandshakeAndServe(t)
 
 	stream, err := muxPair.EdgeMux.OpenStream(
-		[]Header{Header{Name: "test-header", Value: "headerValue"}},
+		[]Header{{Name: "test-header", Value: "headerValue"}},
 		nil,
 	)
 	// Close the underlying connection before telling the origin to write.
@@ -552,7 +565,7 @@ func TestOpenAfterDisconnect(t *testing.T) {
 		}
 
 		_, err := muxPair.EdgeMux.OpenStream(
-			[]Header{Header{Name: "test-header", Value: "headerValue"}},
+			[]Header{{Name: "test-header", Value: "headerValue"}},
 			nil,
 		)
 		if err != ErrConnectionClosed {

@@ -35,7 +35,7 @@ func login(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(configPath, credentialFile)
+	path := filepath.Join(configPath, defaultCredentialFile)
 	fileInfo, err := os.Stat(path)
 	if err == nil && fileInfo.Size() > 0 {
 		fmt.Fprintf(os.Stderr, `You have an existing certificate at %s which login would overwrite.

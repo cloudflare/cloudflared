@@ -1,8 +1,20 @@
 package main
 
-import "github.com/equinox-io/equinox"
+import (
+	"os"
+	"time"
 
-const appID = "app_idCzgxYerVD"
+	"golang.org/x/crypto/ssh/terminal"
+	"gopkg.in/urfave/cli.v2"
+
+	"github.com/equinox-io/equinox"
+	"github.com/facebookgo/grace/gracenet"
+)
+
+const (
+	appID               = "app_idCzgxYerVD"
+	noAutoupdateMessage = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
+)
 
 var publicKey = []byte(`
 -----BEGIN ECDSA PUBLIC KEY-----
@@ -38,4 +50,62 @@ func checkForUpdates() ReleaseInfo {
 	}
 
 	return ReleaseInfo{Updated: true, Version: resp.ReleaseVersion}
+}
+
+func update(_ *cli.Context) error {
+	if updateApplied() {
+		os.Exit(64)
+	}
+	return nil
+}
+
+func initUpdate(listeners *gracenet.Net) bool {
+	if updateApplied() {
+		os.Args = append(os.Args, "--is-autoupdated=true")
+		if _, err := listeners.StartProcess(); err != nil {
+			logger.WithError(err).Error("Unable to restart server automatically")
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func autoupdate(freq time.Duration, listeners *gracenet.Net, shutdownC chan struct{}) {
+	for {
+		if updateApplied() {
+			os.Args = append(os.Args, "--is-autoupdated=true")
+			if _, err := listeners.StartProcess(); err != nil {
+				logger.WithError(err).Error("Unable to restart server automatically")
+			}
+			close(shutdownC)
+			return
+		}
+		time.Sleep(freq)
+	}
+}
+
+func updateApplied() bool {
+	releaseInfo := checkForUpdates()
+	if releaseInfo.Updated {
+		logger.Infof("Updated to version %s", releaseInfo.Version)
+		return true
+	}
+	if releaseInfo.Error != nil {
+		logger.WithError(releaseInfo.Error).Error("Update check failed")
+	}
+	return false
+}
+
+func isAutoupdateEnabled(c *cli.Context) bool {
+	if isRunningFromTerminal() {
+		logger.Info(noAutoupdateMessage)
+		return false
+	}
+
+	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
+}
+
+func isRunningFromTerminal() bool {
+	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }

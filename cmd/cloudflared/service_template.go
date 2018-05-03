@@ -119,7 +119,7 @@ func openFile(path string, create bool) (file *os.File, exists bool, err error) 
 	return file, false, err
 }
 
-func copyCertificate(srcConfigDir, destConfigDir string) error {
+func copyCertificate(srcConfigDir, destConfigDir, credentialFile string) error {
 	destCredentialPath := filepath.Join(destConfigDir, credentialFile)
 	destFile, exists, err := openFile(destCredentialPath, true)
 	if err != nil {
@@ -146,12 +146,12 @@ func copyCertificate(srcConfigDir, destConfigDir string) error {
 	return nil
 }
 
-func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile string) error {
+func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile, defaultCredentialFile string) error {
 	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
 		return err
 	}
 
-	if err := copyCertificate(defaultConfigDir, serviceConfigDir); err != nil {
+	if err := copyCertificate(defaultConfigDir, serviceConfigDir, defaultCredentialFile); err != nil {
 		return err
 	}
 

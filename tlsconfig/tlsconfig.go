@@ -9,6 +9,7 @@ import (
 	"net"
 
 	"github.com/cloudflare/cloudflared/log"
+	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -64,21 +65,27 @@ func LoadCert(certPath string) *x509.CertPool {
 	return ca
 }
 
-func LoadOriginCertsPool() *x509.CertPool {
+func LoadGlobalCertPool() (*x509.CertPool, error) {
+	success := false
+
 	// First, obtain the system certificate pool
 	certPool, systemCertPoolErr := x509.SystemCertPool()
 	if systemCertPoolErr != nil {
 		logger.Warnf("error obtaining the system certificates: %s", systemCertPoolErr)
 		certPool = x509.NewCertPool()
+	} else {
+		success = true
 	}
 
 	// Next, append the Cloudflare CA pool into the system pool
-	if !certPool.AppendCertsFromPEM([]byte(cloudflareRootCA)) {
-		logger.Warn("could not append the CF certificate to the system certificate pool")
+	if !certPool.AppendCertsFromPEM(cloudflareRootCA) {
+		logger.Warn("could not append the CF certificate to the cloudflared certificate pool")
+	} else {
+		success = true
+	}
 
-		if systemCertPoolErr != nil { // Obtaining both certificates failed; this is a fatal error
-			logger.WithError(systemCertPoolErr).Fatalf("Error loading the certificate pool")
-		}
+	if success != true { // Obtaining any of the CAs has failed; this is a fatal error
+		return nil, errors.New("error loading any of the CAs into the global certificate pool")
 	}
 
 	// Finally, add the Hello certificate into the pool (since it's self-signed)
@@ -89,7 +96,34 @@ func LoadOriginCertsPool() *x509.CertPool {
 
 	certPool.AddCert(helloCertificate)
 
-	return certPool
+	return certPool, nil
+}
+
+func LoadOriginCertPool(originCAPoolPEM []byte) (*x509.CertPool, error) {
+	success := false
+
+	// Get the global pool
+	certPool, globalPoolErr := LoadGlobalCertPool()
+	if globalPoolErr != nil {
+		certPool = x509.NewCertPool()
+	} else {
+		success = true
+	}
+
+	// Then, add any custom origin CA pool the user may have passed
+	if originCAPoolPEM != nil {
+		if !certPool.AppendCertsFromPEM(originCAPoolPEM) {
+			logger.Warn("could not append the provided origin CA to the cloudflared certificate pool")
+		} else {
+			success = true
+		}
+	}
+
+	if success != true {
+		return nil, errors.New("error loading any of the CAs into the origin certificate pool")
+	}
+
+	return certPool, nil
 }
 
 func CreateTunnelConfig(c *cli.Context, addrs []string) *tls.Config {

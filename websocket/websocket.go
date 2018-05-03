@@ -13,16 +13,28 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var stripWebsocketHeaders = []string {
+	"Upgrade",
+	"Connection",
+	"Sec-Websocket-Key",
+	"Sec-Websocket-Version",
+	"Sec-Websocket-Extensions",
+}
+
 // IsWebSocketUpgrade checks to see if the request is a WebSocket connection.
 func IsWebSocketUpgrade(req *http.Request) bool {
 	return websocket.IsWebSocketUpgrade(req)
 }
 
-// ClientConnect creates a WebSocket client connection for provided request. Caller is responsible for closing.
+// ClientConnect creates a WebSocket client connection for provided request. Caller is responsible for closing
+// the connection. The response body may not contain the entire response and does
+// not need to be closed by the application.
 func ClientConnect(req *http.Request, tlsClientConfig *tls.Config) (*websocket.Conn, *http.Response, error) {
 	req.URL.Scheme = changeRequestScheme(req)
+	wsHeaders := websocketHeaders(req)
+
 	d := &websocket.Dialer{TLSClientConfig: tlsClientConfig}
-	conn, response, err := d.Dial(req.URL.String(), nil)
+	conn, response, err := d.Dial(req.URL.String(), wsHeaders)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -60,6 +72,21 @@ func Stream(conn, backendConn io.ReadWriter) {
 
 	// If one side is done, we are done.
 	<-proxyDone
+}
+
+// the gorilla websocket library sets its own Upgrade, Connection, Sec-WebSocket-Key,
+// Sec-WebSocket-Version and Sec-Websocket-Extensions headers.
+// https://github.com/gorilla/websocket/blob/master/client.go#L189-L194.
+func websocketHeaders(req *http.Request) http.Header {
+	wsHeaders := make(http.Header)
+	for key, val := range req.Header {
+			wsHeaders[key] = val
+	}
+	// Assume the header keys are in canonical format.
+	for _,  header := range stripWebsocketHeaders {
+		wsHeaders.Del(header)
+	}
+	return wsHeaders
 }
 
 // sha1Base64 sha1 and then base64 encodes str.

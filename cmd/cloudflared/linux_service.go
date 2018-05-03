@@ -10,7 +10,7 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
-func runApp(app *cli.App) {
+func runApp(app *cli.App, shutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel system service",
@@ -183,9 +183,9 @@ func installLinuxService(c *cli.Context) error {
 
 	defaultConfigDir := filepath.Dir(c.String("config"))
 	defaultConfigFile := filepath.Base(c.String("config"))
-	if err = copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile); err != nil {
+	if err = copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile, defaultCredentialFile); err != nil {
 		logger.WithError(err).Infof("Failed to copy user configuration. Before running the service, ensure that %s contains two files, %s and %s",
-			serviceConfigDir, credentialFile, defaultConfigFiles[0])
+			serviceConfigDir, defaultCredentialFile, defaultConfigFiles[0])
 		return err
 	}
 

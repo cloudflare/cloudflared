@@ -123,7 +123,12 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 	}
 }
 
-func ServeTunnelLoop(ctx context.Context, config *TunnelConfig, addr *net.TCPAddr, connectionID uint8, connectedSignal chan struct{}) error {
+func ServeTunnelLoop(ctx context.Context,
+	config *TunnelConfig,
+	addr *net.TCPAddr,
+	connectionID uint8,
+	connectedSignal chan struct{},
+) error {
 	config.Metrics.incrementHaConnections()
 	defer config.Metrics.decrementHaConnections()
 	backoff := BackoffHandler{MaxRetries: config.Retries}
@@ -482,6 +487,8 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		} else {
 			stream.WriteHeaders(H1ResponseToH2Response(response))
 			defer conn.Close()
+			// Copy to/from stream to the undelying connection. Use the underlying
+			// connection because cloudflared doesn't operate on the message themselves
 			websocket.Stream(conn.UnderlyingConn(), stream)
 			h.metrics.incrementResponses(h.connectionID, "200")
 			h.logResponse(response, cfRay)

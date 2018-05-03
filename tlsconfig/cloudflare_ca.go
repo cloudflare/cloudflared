@@ -5,7 +5,7 @@ import (
 )
 
 // TODO: remove the Origin CA root certs when migrated to Authenticated Origin Pull certs
-const cloudflareRootCA = `
+var cloudflareRootCA = []byte(`
 Issuer: C=US, ST=California, L=San Francisco, O=CloudFlare, Inc., OU=CloudFlare Origin SSL ECC Certificate Authority
 -----BEGIN CERTIFICATE-----
 MIICiDCCAi6gAwIBAgIUXZP3MWb8MKwBE1Qbawsp1sfA/Y4wCgYIKoZIzj0EAwIw
@@ -83,7 +83,7 @@ Bz+1CD4D/bWrs3cC9+kk/jFmrrAymZlkFX8tDb5aXASSLJjUjcptci9SKqtI2h0J
 wUGkD7+bQAr+7vr8/R+CBmNMe7csE8NeEX6lVMF7Dh0a1YKQa6hUN18bBuYgTMuT
 QzMmZpRpIBB321ZBlcnlxiTJvWxvbCPHKHj20VwwAz7LONF59s84ZsOqfoBv8gKM
 s0s5dsq5zpLeaw==
------END CERTIFICATE-----`
+-----END CERTIFICATE-----`)
 
 func GetCloudflareRootCA() *x509.CertPool {
 	ca := x509.NewCertPool()

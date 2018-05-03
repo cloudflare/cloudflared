@@ -21,7 +21,7 @@ const (
 	windowsServiceDescription = "Argo Tunnel agent"
 )
 
-func runApp(app *cli.App) {
+func runApp(app *cli.App, shutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel Windows service",
@@ -59,7 +59,7 @@ func runApp(app *cli.App) {
 	elog.Info(1, fmt.Sprintf("%s service starting", windowsServiceName))
 	// Run executes service name by calling windowsService which is a Handler
 	// interface that implements Execute method
-	err = svc.Run(windowsServiceName, &windowsService{app: app, elog: elog})
+	err = svc.Run(windowsServiceName, &windowsService{app: app, elog: elog, shutdownC: shutdownC})
 	if err != nil {
 		elog.Error(1, fmt.Sprintf("%s service failed: %v", windowsServiceName, err))
 		return
@@ -68,8 +68,9 @@ func runApp(app *cli.App) {
 }
 
 type windowsService struct {
-	app  *cli.App
-	elog *eventlog.Log
+	app       *cli.App
+	elog      *eventlog.Log
+	shutdownC chan struct{}
 }
 
 // called by the package code at the start of the service
@@ -98,7 +99,7 @@ loop:
 			}
 		}
 	}
-	close(shutdownC)
+	close(s.shutdownC)
 	changes <- svc.Status{State: svc.StopPending}
 	return
 }

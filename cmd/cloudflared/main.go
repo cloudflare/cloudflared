@@ -1,69 +1,47 @@
 package main
 
 import (
-	"crypto/tls"
-	"encoding/hex"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
-	"net"
-	"net/http"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"strings"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
-	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/cloudflare/cloudflared/validation"
 
-	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/raven-go"
 	"github.com/mitchellh/go-homedir"
-	"github.com/rifflock/lfshook"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
 
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/pkg/errors"
+	"github.com/facebookgo/grace/gracenet"
 )
 
 const (
-	sentryDSN           = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
-	credentialFile      = "cert.pem"
-	quickStartUrl       = "https://developers.cloudflare.com/argo-tunnel/quickstart/quickstart/"
-	noAutoupdateMessage = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
-	licenseUrl          = "https://developers.cloudflare.com/argo-tunnel/licence/"
+	sentryDSN       = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
+	quickStartUrl   = developerPortal + "/quickstart/quickstart/"
+	serviceUrl      = developerPortal + "/reference/service/"
+	argumentsUrl    = developerPortal + "/reference/arguments/"
+	licenseUrl      = developerPortal + "/licence/"
 )
 
-var listeners = gracenet.Net{}
-var Version = "DEV"
-var BuildTime = "unknown"
-var logger = log.CreateLogger()
-var defaultConfigFiles = []string{"config.yml", "config.yaml"}
-
-// Launchd doesn't set root env variables, so there is default
-// Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
-var defaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/usr/local/etc/cloudflared", "/etc/cloudflared"}
-
-// Shutdown channel used by the app. When closed, app must terminate.
-// May be closed by the Windows service runner.
-var shutdownC chan struct{}
+var (
+	Version   = "DEV"
+	BuildTime = "unknown"
+)
 
 func main() {
 	metrics.RegisterBuildInfo(BuildTime, Version)
 	raven.SetDSN(sentryDSN)
 	raven.SetRelease(Version)
-	shutdownC = make(chan struct{})
+
+	// Shutdown channel used by the app. When closed, app must terminate.
+	// May be closed by the Windows service runner.
+	shutdownC := make(chan struct{})
 
 	app := &cli.App{}
 	app.Name = "cloudflared"
@@ -118,6 +96,11 @@ func main() {
 			Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
 			Value:   findDefaultOriginCertPath(),
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "origin-ca-pool",
+			Usage:   "Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
+			EnvVars: []string{"TUNNEL_ORIGIN_CA_POOL"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "url",
@@ -293,10 +276,13 @@ func main() {
 		}),
 	}
 	app.Action = func(c *cli.Context) error {
-		raven.CapturePanic(func() { startServer(c) }, nil)
+		raven.CapturePanic(func() { startServer(c, shutdownC) }, nil)
 		return nil
 	}
 	app.Before = func(context *cli.Context) error {
+		if context.String("config") == "" {
+			logger.Warnf("Cannot determine default configuration path. No file %v in %v", defaultConfigFiles, defaultConfigDirs)
+		}
 		inputSource, err := findInputSourceContext(context)
 		if err != nil {
 			logger.WithError(err).Infof("Cannot load configuration from %s", context.String("config"))
@@ -337,7 +323,7 @@ func main() {
 		},
 		{
 			Name:   "hello",
-			Action: hello,
+			Action: helloWorld,
 			Usage:  "Run a simple \"Hello World\" server for testing Argo Tunnel.",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
@@ -381,41 +367,31 @@ func main() {
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 		},
 	}
-	runApp(app)
+	runApp(app, shutdownC)
 }
 
-func startServer(c *cli.Context) {
+func startServer(c *cli.Context, shutdownC chan struct{}) {
 	var wg sync.WaitGroup
+	listeners := gracenet.Net{}
 	errC := make(chan error)
 	connectedSignal := make(chan struct{})
 	dnsReadySignal := make(chan struct{})
+	graceShutdownSignal := make(chan struct{})
 
-	// If the user choose to supply all options through env variables,
-	// c.NumFlags() == 0 && c.NArg() == 0. For cloudflared to work, the user needs to at
-	// least provide a hostname.
-	if c.NumFlags() == 0 && c.NArg() == 0 && os.Getenv("TUNNEL_HOSTNAME") == "" {
-		logger.Infof("No arguments were provided. You need to at least specify the hostname for this tunnel. See %s", quickStartUrl)
-		cli.ShowAppHelp(c)
+	// check whether client provides enough flags or env variables. If not, print help.
+	if ok := enoughOptionsSet(c); !ok {
 		return
 	}
-	logLevel, err := logrus.ParseLevel(c.String("loglevel"))
-	if err != nil {
-		logger.WithError(err).Fatal("Unknown logging level specified")
-	}
-	logger.SetLevel(logLevel)
 
-	protoLogLevel, err := logrus.ParseLevel(c.String("proto-loglevel"))
-	if err != nil {
-		logger.WithError(err).Fatal("Unknown protocol logging level specified")
-	}
-	protoLogger := logrus.New()
-	protoLogger.Level = protoLogLevel
-
+	configMainLogger(c)
+	protoLogger := configProtoLogger(c)
 	if c.String("logfile") != "" {
-		if err := initLogFile(c, protoLogger); err != nil {
+		if err := initLogFile(c, logger, protoLogger); err != nil {
 			logger.Error(err)
 		}
 	}
+
+	handleDeprecatedOptions(c)
 
 	buildInfo := origin.GetBuildInfo()
 	logger.Infof("Build info: %+v", *buildInfo)
@@ -423,191 +399,98 @@ func startServer(c *cli.Context) {
 	logClientOptions(c)
 
 	if c.IsSet("proxy-dns") {
-		port := c.Int("proxy-dns-port")
-		if port <= 0 || port > 65535 {
-			logger.Fatal("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
-		}
 		wg.Add(1)
-		listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"))
-		if err != nil {
-			close(dnsReadySignal)
-			listener.Stop()
-			logger.WithError(err).Fatal("Cannot create the DNS over HTTPS proxy server")
-		}
 		go func() {
-			err := listener.Start(dnsReadySignal)
-			if err != nil {
-				logger.WithError(err).Fatal("Cannot start the DNS over HTTPS proxy server")
-			} else {
-				<-shutdownC
-			}
-			listener.Stop()
-			wg.Done()
+			defer wg.Done()
+			runDNSProxyServer(c, dnsReadySignal, shutdownC)
 		}()
 	} else {
 		close(dnsReadySignal)
 	}
 
-	isRunningFromTerminal := isRunningFromTerminal()
-	if isAutoupdateEnabled(c, isRunningFromTerminal) {
-		// Wait for proxy-dns to come up (if used)
-		<-dnsReadySignal
-		if initUpdate() {
+	// Wait for proxy-dns to come up (if used)
+	<-dnsReadySignal
+
+	// update needs to be after DNS proxy is up to resolve equinox server address
+	if isAutoupdateEnabled(c) {
+		if initUpdate(&listeners) {
 			return
 		}
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
-		go autoupdate(c.Duration("autoupdate-freq"), shutdownC)
+		go autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
 	}
 
-	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
-	if c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world")) {
-		go writePidFile(connectedSignal, c.String("pidfile"))
-		close(connectedSignal)
-		runServer(c, &wg, errC, shutdownC)
-		return
-	}
-
-	hostname, err := validation.ValidateHostname(c.String("hostname"))
-	if err != nil {
-		logger.WithError(err).Fatal("Invalid hostname")
-	}
-	clientID := c.String("id")
-	if !c.IsSet("id") {
-		clientID = generateRandomClientID()
-	}
-
-	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
-	if err != nil {
-		logger.WithError(err).Fatal("Tag parse failure")
-	}
-
-	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
-	if c.IsSet("hello-world") {
-		wg.Add(1)
-		listener, err := createListener("127.0.0.1:")
-		if err != nil {
-			listener.Close()
-			logger.WithError(err).Fatal("Cannot start Hello World Server")
-		}
-		go func() {
-			startHelloWorldServer(listener, shutdownC)
-			wg.Done()
-			listener.Close()
-		}()
-		c.Set("url", "https://"+listener.Addr().String())
-	}
-
-	url, err := validateUrl(c)
-	if err != nil {
-		logger.WithError(err).Fatal("Error validating url")
-	}
-	logger.Infof("Proxying tunnel requests to %s", url)
-
-	// Fail if the user provided an old authentication method
-	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {
-		logger.Fatal("You don't need to give us your api-key anymore. Please use the new log in method. Just run cloudflared login")
-	}
-
-	// Check that the user has acquired a certificate using the log in command
-	originCertPath, err := homedir.Expand(c.String("origincert"))
-	if err != nil {
-		logger.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
-	}
-	ok, err := fileExists(originCertPath)
-	if err != nil {
-		logger.Fatalf("Cannot check if origin cert exists at path %s", c.String("origincert"))
-	}
-	if !ok {
-		logger.Fatalf(`Cannot find a valid certificate for your origin at the path:
-
-    %s
-
-If the path above is wrong, specify the path with the -origincert option.
-If you don't have a certificate signed by Cloudflare, run the command:
-
-    %s login
-`, originCertPath, os.Args[0])
-	}
-	// Easier to send the certificate as []byte via RPC than decoding it at this point
-	originCert, err := ioutil.ReadFile(originCertPath)
-	if err != nil {
-		logger.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
-	}
-
-	tunnelMetrics := origin.NewTunnelMetrics()
-	httpTransport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   c.Duration("proxy-connect-timeout"),
-			KeepAlive: c.Duration("proxy-tcp-keepalive"),
-			DualStack: !c.Bool("proxy-no-happy-eyeballs"),
-		}).DialContext,
-		MaxIdleConns:          c.Int("proxy-keepalive-connections"),
-		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
-		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: tlsconfig.LoadOriginCertsPool()},
-	}
-
-	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
-		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
-	}
-
-	tunnelConfig := &origin.TunnelConfig{
-		EdgeAddrs:         c.StringSlice("edge"),
-		OriginUrl:         url,
-		Hostname:          hostname,
-		OriginCert:        originCert,
-		TlsConfig:         tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
-		ClientTlsConfig:   httpTransport.TLSClientConfig,
-		Retries:           c.Uint("retries"),
-		HeartbeatInterval: c.Duration("heartbeat-interval"),
-		MaxHeartbeats:     c.Uint64("heartbeat-count"),
-		ClientID:          clientID,
-		BuildInfo:         buildInfo,
-		ReportedVersion:   Version,
-		LBPool:            c.String("lb-pool"),
-		Tags:              tags,
-		HAConnections:     c.Int("ha-connections"),
-		HTTPTransport:     httpTransport,
-		Metrics:           tunnelMetrics,
-		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
-		ProtocolLogger:    protoLogger,
-		Logger:            logger,
-		IsAutoupdated:     c.Bool("is-autoupdated"),
-		GracePeriod:       c.Duration("grace-period"),
-		RunFromTerminal:   isRunningFromTerminal,
-	}
-
-	go writePidFile(connectedSignal, c.String("pidfile"))
-	wg.Add(1)
-	go func() {
-		errC <- origin.StartTunnelDaemon(tunnelConfig, shutdownC, connectedSignal)
-		wg.Done()
-	}()
-
-	runServer(c, &wg, errC, shutdownC)
-}
-
-func runServer(c *cli.Context, wg *sync.WaitGroup, errC chan error, shutdownC chan struct{}) {
-	wg.Add(1)
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
 		logger.WithError(err).Fatal("Error opening metrics server listener")
 	}
+	defer metricsListener.Close()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		errC <- metrics.ServeMetrics(metricsListener, shutdownC, logger)
-		wg.Done()
 	}()
 
+	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
+	if dnsProxyStandAlone(c) {
+		if c.IsSet("pidfile") {
+			go writePidFile(connectedSignal, c.String("pidfile"))
+			close(connectedSignal)
+		}
+		// no grace period, handle SIGINT/SIGTERM immediately
+		waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, 0)
+		return
+	}
+
+	if c.IsSet("hello-world") {
+		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
+		if err != nil {
+			logger.WithError(err).Fatal("Cannot start Hello World Server")
+		}
+		defer helloListener.Close()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			hello.StartHelloWorldServer(logger, helloListener, shutdownC)
+		}()
+		c.Set("url", "https://"+helloListener.Addr().String())
+	}
+
+	tunnelConfig := prepareTunnelConfig(c, buildInfo, logger, protoLogger)
+
+	if c.IsSet("pidFile") {
+		go writePidFile(connectedSignal, c.String("pidfile"))
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownSignal, connectedSignal)
+	}()
+
+	waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, c.Duration("grace-period"))
+}
+
+func waitToShutdown(wg *sync.WaitGroup,
+	errC chan error,
+	shutdownC, graceShutdownSignal chan struct{},
+	gracePeriod time.Duration,
+) {
+	var err error
+	if gracePeriod > 0 {
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownSignal, gracePeriod)
+	} else {
+		err = waitForSignal(errC, shutdownC)
+		close(graceShutdownSignal)
+	}
+
 	var errCode int
-	err = WaitForSignal(errC, shutdownC)
 	if err != nil {
 		logger.WithError(err).Fatal("Quitting due to error")
 		raven.CaptureErrorAndWait(err, nil)
 		errCode = 1
 	} else {
-		logger.Info("Graceful shutdown...")
+		logger.Info("Quitting...")
 	}
 	// Wait for clean exit, discarding all errors
 	go func() {
@@ -616,126 +499,6 @@ func runServer(c *cli.Context, wg *sync.WaitGroup, errC chan error, shutdownC ch
 	}()
 	wg.Wait()
 	os.Exit(errCode)
-}
-
-func WaitForSignal(errC chan error, shutdownC chan struct{}) error {
-	signals := make(chan os.Signal, 10)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
-	defer signal.Stop(signals)
-
-	select {
-	case err := <-errC:
-		close(shutdownC)
-		return err
-	case <-signals:
-		close(shutdownC)
-	case <-shutdownC:
-	}
-
-	return nil
-}
-
-func update(_ *cli.Context) error {
-	if updateApplied() {
-		os.Exit(64)
-	}
-	return nil
-}
-
-func initUpdate() bool {
-	if updateApplied() {
-		os.Args = append(os.Args, "--is-autoupdated=true")
-		if _, err := listeners.StartProcess(); err != nil {
-			logger.WithError(err).Error("Unable to restart server automatically")
-			return false
-		}
-		return true
-	}
-	return false
-}
-
-func autoupdate(freq time.Duration, shutdownC chan struct{}) {
-	for {
-		if updateApplied() {
-			os.Args = append(os.Args, "--is-autoupdated=true")
-			if _, err := listeners.StartProcess(); err != nil {
-				logger.WithError(err).Error("Unable to restart server automatically")
-			}
-			close(shutdownC)
-			return
-		}
-		time.Sleep(freq)
-	}
-}
-
-func updateApplied() bool {
-	releaseInfo := checkForUpdates()
-	if releaseInfo.Updated {
-		logger.Infof("Updated to version %s", releaseInfo.Version)
-		return true
-	}
-	if releaseInfo.Error != nil {
-		logger.WithError(releaseInfo.Error).Error("Update check failed")
-	}
-	return false
-}
-
-func fileExists(path string) (bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// ignore missing files
-			return false, nil
-		}
-		return false, err
-	}
-	f.Close()
-	return true, nil
-}
-
-// returns the first path that contains a cert.pem file. If none of the defaultConfigDirs
-// (differs by OS for legacy reasons) contains a cert.pem file, return empty string
-func findDefaultOriginCertPath() string {
-	for _, defaultConfigDir := range defaultConfigDirs {
-		originCertPath, _ := homedir.Expand(filepath.Join(defaultConfigDir, credentialFile))
-		if ok, _ := fileExists(originCertPath); ok {
-			return originCertPath
-		}
-	}
-	return ""
-}
-
-// returns the firt path that contains a config file. If none of the combination of
-// defaultConfigDirs (differs by OS for legacy reasons) and defaultConfigFiles
-// contains a config file, return empty string
-func findDefaultConfigPath() string {
-	for _, configDir := range defaultConfigDirs {
-		for _, configFile := range defaultConfigFiles {
-			dirPath, err := homedir.Expand(configDir)
-			if err != nil {
-				continue
-			}
-			path := filepath.Join(dirPath, configFile)
-			if ok, _ := fileExists(path); ok {
-				return path
-			}
-		}
-	}
-	return ""
-}
-
-func findInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, error) {
-	if context.String("config") != "" {
-		return altsrc.NewYamlSourceFromFile(context.String("config"))
-	}
-	return nil, nil
-}
-
-func generateRandomClientID() string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	id := make([]byte, 32)
-	r.Read(id)
-	return hex.EncodeToString(id)
 }
 
 func writePidFile(waitForSignal chan struct{}, pidFile string) {
@@ -750,87 +513,6 @@ func writePidFile(waitForSignal chan struct{}, pidFile string) {
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "%d", os.Getpid())
-}
-
-// validate url. It can be either from --url or argument
-func validateUrl(c *cli.Context) (string, error) {
-	var url = c.String("url")
-	if c.NArg() > 0 {
-		if c.IsSet("url") {
-			return "", errors.New("Specified origin urls using both --url and argument. Decide which one you want, I can only support one.")
-		}
-		url = c.Args().Get(0)
-	}
-	validUrl, err := validation.ValidateUrl(url)
-	return validUrl, err
-}
-
-func initLogFile(c *cli.Context, protoLogger *logrus.Logger) error {
-	filePath, err := homedir.Expand(c.String("logfile"))
-	if err != nil {
-		return errors.Wrap(err, "Cannot resolve logfile path")
-	}
-
-	fileMode := os.O_WRONLY | os.O_APPEND | os.O_CREATE | os.O_TRUNC
-	// do not truncate log file if the client has been autoupdated
-	if c.Bool("is-autoupdated") {
-		fileMode = os.O_WRONLY | os.O_APPEND | os.O_CREATE
-	}
-	f, err := os.OpenFile(filePath, fileMode, 0664)
-	if err != nil {
-		errors.Wrap(err, fmt.Sprintf("Cannot open file %s", filePath))
-	}
-	defer f.Close()
-	pathMap := lfshook.PathMap{
-		logrus.InfoLevel:  filePath,
-		logrus.ErrorLevel: filePath,
-		logrus.FatalLevel: filePath,
-		logrus.PanicLevel: filePath,
-	}
-
-	logger.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
-	protoLogger.Hooks.Add(lfshook.NewHook(pathMap, &logrus.JSONFormatter{}))
-
-	return nil
-}
-
-func logClientOptions(c *cli.Context) {
-	flags := make(map[string]interface{})
-	for _, flag := range c.LocalFlagNames() {
-		flags[flag] = c.Generic(flag)
-	}
-	if len(flags) > 0 {
-		logger.Infof("Flags %v", flags)
-	}
-
-	envs := make(map[string]string)
-	// Find env variables for Argo Tunnel
-	for _, env := range os.Environ() {
-		// All Argo Tunnel env variables start with TUNNEL_
-		if strings.Contains(env, "TUNNEL_") {
-			vars := strings.Split(env, "=")
-			if len(vars) == 2 {
-				envs[vars[0]] = vars[1]
-			}
-		}
-	}
-	if len(envs) > 0 {
-		logger.Infof("Environmental variables %v", envs)
-	}
-}
-
-func isAutoupdateEnabled(c *cli.Context, isRunningFromTerminal bool) bool {
-	if isRunningFromTerminal {
-		logger.Info(noAutoupdateMessage)
-		return false
-	}
-
-	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
-}
-
-
-func isRunningFromTerminal() bool {
-	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }
 
 func userHomeDir() string {

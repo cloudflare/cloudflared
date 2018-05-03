@@ -13,7 +13,7 @@ const (
 	launchdIdentifier = "com.cloudflare.cloudflared"
 )
 
-func runApp(app *cli.App) {
+func runApp(app *cli.App, shutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel launch agent",
@@ -91,12 +91,12 @@ func stderrPath() string {
 func installLaunchd(c *cli.Context) error {
 	if isRootUser() {
 		logger.Infof("Installing Argo Tunnel client as a system launch daemon. " +
-		"Argo Tunnel client will run at boot")
+			"Argo Tunnel client will run at boot")
 	} else {
 		logger.Infof("Installing Argo Tunnel client as an user launch agent. " +
-		"Note that Argo Tunnel client will only run when the user is logged in. " +
-		"If you want to run Argo Tunnel client at boot, install with root permission. " +
-		"For more information, visit https://developers.cloudflare.com/argo-tunnel/reference/service/")
+			"Note that Argo Tunnel client will only run when the user is logged in. " +
+			"If you want to run Argo Tunnel client at boot, install with root permission. " +
+			"For more information, visit https://developers.cloudflare.com/argo-tunnel/reference/service/")
 	}
 	etPath, err := os.Executable()
 	if err != nil {
@@ -120,7 +120,6 @@ func installLaunchd(c *cli.Context) error {
 }
 
 func uninstallLaunchd(c *cli.Context) error {
-
 	if isRootUser() {
 		logger.Infof("Uninstalling Argo Tunnel as a system launch daemon")
 	} else {

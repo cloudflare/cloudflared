@@ -43,7 +43,7 @@ func NewUpstreamHTTPS(endpoint string) (Upstream, error) {
 	http2.ConfigureTransport(transport)
 
 	client := &http.Client{
-		Timeout:   time.Second * defaultTimeout,
+		Timeout:   defaultTimeout,
 		Transport: transport,
 	}
 

@@ -8,6 +8,6 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
-func runApp(app *cli.App) {
+func runApp(app *cli.App, shutdownC chan struct{}) {
 	app.Run(os.Args)
 }
