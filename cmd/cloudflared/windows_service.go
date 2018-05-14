@@ -51,7 +51,7 @@ func runApp(app *cli.App, shutdownC chan struct{}) {
 
 	elog, err := eventlog.Open(windowsServiceName)
 	if err != nil {
-		logger.WithError(err).Infof("Cannot open event log for %s", windowsServiceName)
+		logger.WithError(err).Errorf("Cannot open event log for %s", windowsServiceName)
 		return
 	}
 	defer elog.Close()
@@ -108,12 +108,12 @@ func installWindowsService(c *cli.Context) error {
 	logger.Infof("Installing Argo Tunnel Windows service")
 	exepath, err := os.Executable()
 	if err != nil {
-		logger.Infof("Cannot find path name that start the process")
+		logger.Errorf("Cannot find path name that start the process")
 		return err
 	}
 	m, err := mgr.Connect()
 	if err != nil {
-		logger.WithError(err).Infof("Cannot establish a connection to the service control manager")
+		logger.WithError(err).Errorf("Cannot establish a connection to the service control manager")
 		return err
 	}
 	defer m.Disconnect()
@@ -126,14 +126,14 @@ func installWindowsService(c *cli.Context) error {
 	config := mgr.Config{StartType: mgr.StartAutomatic, DisplayName: windowsServiceDescription}
 	s, err = m.CreateService(windowsServiceName, exepath, config)
 	if err != nil {
-		logger.Infof("Cannot install service %s", windowsServiceName)
+		logger.Errorf("Cannot install service %s", windowsServiceName)
 		return err
 	}
 	defer s.Close()
 	err = eventlog.InstallAsEventCreate(windowsServiceName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	if err != nil {
 		s.Delete()
-		logger.WithError(err).Infof("Cannot install event logger")
+		logger.WithError(err).Errorf("Cannot install event logger")
 		return fmt.Errorf("SetupEventLogSource() failed: %s", err)
 	}
 	return nil
@@ -143,13 +143,13 @@ func uninstallWindowsService(c *cli.Context) error {
 	logger.Infof("Uninstalling Argo Tunnel Windows Service")
 	m, err := mgr.Connect()
 	if err != nil {
-		logger.Infof("Cannot establish a connection to the service control manager")
+		logger.Errorf("Cannot establish a connection to the service control manager")
 		return err
 	}
 	defer m.Disconnect()
 	s, err := m.OpenService(windowsServiceName)
 	if err != nil {
-		logger.Infof("service %s is not installed", windowsServiceName)
+		logger.Errorf("service %s is not installed", windowsServiceName)
 		return fmt.Errorf("service %s is not installed", windowsServiceName)
 	}
 	defer s.Close()
@@ -160,7 +160,7 @@ func uninstallWindowsService(c *cli.Context) error {
 	}
 	err = eventlog.Remove(windowsServiceName)
 	if err != nil {
-		logger.Infof("Cannot remove event logger")
+		logger.Errorf("Cannot remove event logger")
 		return fmt.Errorf("RemoveEventLogSource() failed: %s", err)
 	}
 	return nil

@@ -18,6 +18,7 @@ import (
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -275,9 +276,15 @@ func main() {
 			Hidden:  true,
 		}),
 	}
-	app.Action = func(c *cli.Context) error {
-		raven.CapturePanic(func() { startServer(c, shutdownC) }, nil)
-		return nil
+	app.Action = func(c *cli.Context) (err error) {
+		tags := make(map[string]string)
+		tags["hostname"] = c.String("hostname")
+		raven.SetTagsContext(tags)
+		raven.CapturePanicAndWait(func() { err = startServer(c, shutdownC) }, nil)
+		if err != nil {
+			raven.CaptureErrorAndWait(err, nil)
+		}
+		return err
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.String("config") == "" {
@@ -370,7 +377,7 @@ func main() {
 	runApp(app, shutdownC)
 }
 
-func startServer(c *cli.Context, shutdownC chan struct{}) {
+func startServer(c *cli.Context, shutdownC chan struct{}) error {
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
@@ -380,18 +387,26 @@ func startServer(c *cli.Context, shutdownC chan struct{}) {
 
 	// check whether client provides enough flags or env variables. If not, print help.
 	if ok := enoughOptionsSet(c); !ok {
-		return
+		return nil
 	}
 
-	configMainLogger(c)
-	protoLogger := configProtoLogger(c)
+	if err := configMainLogger(c); err != nil {
+		return errors.Wrap(err, "Error configuring logger")
+	}
+
+	protoLogger, err := configProtoLogger(c)
+	if err != nil {
+		return errors.Wrap(err, "Error configuring protocol logger")
+	}
 	if c.String("logfile") != "" {
 		if err := initLogFile(c, logger, protoLogger); err != nil {
 			logger.Error(err)
 		}
 	}
 
-	handleDeprecatedOptions(c)
+	if err := handleDeprecatedOptions(c); err != nil {
+		return err
+	}
 
 	buildInfo := origin.GetBuildInfo()
 	logger.Infof("Build info: %+v", *buildInfo)
@@ -402,7 +417,7 @@ func startServer(c *cli.Context, shutdownC chan struct{}) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runDNSProxyServer(c, dnsReadySignal, shutdownC)
+			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC)
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -414,15 +429,20 @@ func startServer(c *cli.Context, shutdownC chan struct{}) {
 	// update needs to be after DNS proxy is up to resolve equinox server address
 	if isAutoupdateEnabled(c) {
 		if initUpdate(&listeners) {
-			return
+			return nil
 		}
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
-		go autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
+		wg.Add(1)
+		go func(){
+			defer wg.Done()
+			autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
+		}()
 	}
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		logger.WithError(err).Fatal("Error opening metrics server listener")
+		logger.WithError(err).Error("Error opening metrics server listener")
+		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
 	wg.Add(1)
@@ -438,14 +458,14 @@ func startServer(c *cli.Context, shutdownC chan struct{}) {
 			close(connectedSignal)
 		}
 		// no grace period, handle SIGINT/SIGTERM immediately
-		waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, 0)
-		return
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, 0)
 	}
 
 	if c.IsSet("hello-world") {
 		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
 		if err != nil {
-			logger.WithError(err).Fatal("Cannot start Hello World Server")
+			logger.WithError(err).Error("Cannot start Hello World Server")
+			return errors.Wrap(err, "Cannot start Hello World Server")
 		}
 		defer helloListener.Close()
 		wg.Add(1)
@@ -456,7 +476,10 @@ func startServer(c *cli.Context, shutdownC chan struct{}) {
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
-	tunnelConfig := prepareTunnelConfig(c, buildInfo, logger, protoLogger)
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, logger, protoLogger)
+	if err != nil {
+		return err
+	}
 
 	if c.IsSet("pidFile") {
 		go writePidFile(connectedSignal, c.String("pidfile"))
@@ -468,14 +491,14 @@ func startServer(c *cli.Context, shutdownC chan struct{}) {
 		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownSignal, connectedSignal)
 	}()
 
-	waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, c.Duration("grace-period"))
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, c.Duration("grace-period"))
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
 	errC chan error,
 	shutdownC, graceShutdownSignal chan struct{},
 	gracePeriod time.Duration,
-) {
+) error {
 	var err error
 	if gracePeriod > 0 {
 		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownSignal, gracePeriod)
@@ -484,11 +507,8 @@ func waitToShutdown(wg *sync.WaitGroup,
 		close(graceShutdownSignal)
 	}
 
-	var errCode int
 	if err != nil {
-		logger.WithError(err).Fatal("Quitting due to error")
-		raven.CaptureErrorAndWait(err, nil)
-		errCode = 1
+		logger.WithError(err).Error("Quitting due to error")
 	} else {
 		logger.Info("Quitting...")
 	}
@@ -498,7 +518,7 @@ func waitToShutdown(wg *sync.WaitGroup,
 		}
 	}()
 	wg.Wait()
-	os.Exit(errCode)
+	return err
 }
 
 func writePidFile(waitForSignal chan struct{}, pidFile string) {
@@ -515,14 +535,15 @@ func writePidFile(waitForSignal chan struct{}, pidFile string) {
 	fmt.Fprintf(file, "%d", os.Getpid())
 }
 
-func userHomeDir() string {
+func userHomeDir() (string, error) {
 	// This returns the home dir of the executing user using OS-specific method
 	// for discovering the home dir. It's not recommended to call this function
 	// when the user has root permission as $HOME depends on what options the user
 	// use with sudo.
 	homeDir, err := homedir.Dir()
 	if err != nil {
-		logger.WithError(err).Fatal("Cannot determine home directory for the user.")
+		logger.WithError(err).Error("Cannot determine home directory for the user")
+		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
-	return homeDir
+	return homeDir, nil
 }

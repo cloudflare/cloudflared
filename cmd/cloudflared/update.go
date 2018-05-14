@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"time"
 
 	"golang.org/x/crypto/ssh/terminal"
@@ -12,8 +13,9 @@ import (
 )
 
 const (
-	appID               = "app_idCzgxYerVD"
-	noAutoupdateMessage = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
+	appID                    = "app_idCzgxYerVD"
+	noUpdateInShellMessage   = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
+	noUpdateOnWindowsMessage = "cloudflared will not automatically update on Windows systems."
 )
 
 var publicKey = []byte(`
@@ -98,8 +100,13 @@ func updateApplied() bool {
 }
 
 func isAutoupdateEnabled(c *cli.Context) bool {
+	if runtime.GOOS == "windows" {
+		logger.Info(noUpdateOnWindowsMessage)
+		return false
+	}
+
 	if isRunningFromTerminal() {
-		logger.Info(noAutoupdateMessage)
+		logger.Info(noUpdateInShellMessage)
 		return false
 	}
 

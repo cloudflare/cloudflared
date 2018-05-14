@@ -16,22 +16,25 @@ import (
 
 var logger = log.CreateLogger()
 
-func configMainLogger(c *cli.Context) {
+func configMainLogger(c *cli.Context) error {
 	logLevel, err := logrus.ParseLevel(c.String("loglevel"))
 	if err != nil {
-		logger.WithError(err).Fatal("Unknown logging level specified")
+		logger.WithError(err).Error("Unknown logging level specified")
+		return errors.Wrap(err, "Unknown logging level specified")
 	}
 	logger.SetLevel(logLevel)
+	return nil
 }
 
-func configProtoLogger(c *cli.Context) *logrus.Logger {
+func configProtoLogger(c *cli.Context) (*logrus.Logger, error) {
 	protoLogLevel, err := logrus.ParseLevel(c.String("proto-loglevel"))
 	if err != nil {
 		logger.WithError(err).Fatal("Unknown protocol logging level specified")
+		return nil, errors.Wrap(err, "Unknown protocol logging level specified")
 	}
 	protoLogger := logrus.New()
 	protoLogger.Level = protoLogLevel
-	return protoLogger
+	return protoLogger, nil
 }
 
 func initLogFile(c *cli.Context, loggers ...*logrus.Logger) error {

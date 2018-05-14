@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -113,11 +114,13 @@ func enoughOptionsSet(c *cli.Context) bool {
 	return true
 }
 
-func handleDeprecatedOptions(c *cli.Context) {
+func handleDeprecatedOptions(c *cli.Context) error {
 	// Fail if the user provided an old authentication method
 	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {
-		logger.Fatal("You don't need to give us your api-key anymore. Please use the new login method. Just run cloudflared login")
+		logger.Error("You don't need to give us your api-key anymore. Please use the new login method. Just run cloudflared login")
+		return fmt.Errorf("Client provided deprecated options")
 	}
+	return nil
 }
 
 // validate url. It can be either from --url or argument
@@ -162,26 +165,30 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world"))
 }
 
-func getOriginCert(c *cli.Context) []byte {
+func getOriginCert(c *cli.Context) ([]byte, error) {
 	if c.String("origincert") == "" {
 		logger.Warnf("Cannot determine default origin certificate path. No file %s in %v", defaultCredentialFile, defaultConfigDirs)
 		if isRunningFromTerminal() {
-			logger.Fatalf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
+			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
+			return nil, fmt.Errorf("Client didn't specify origincert path when running from terminal")
 		} else {
-			logger.Fatalf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
+			logger.Errorf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
+			return nil, fmt.Errorf("Client didn't specify origincert path")
 		}
 	}
 	// Check that the user has acquired a certificate using the login command
 	originCertPath, err := homedir.Expand(c.String("origincert"))
 	if err != nil {
-		logger.WithError(err).Fatalf("Cannot resolve path %s", c.String("origincert"))
+		logger.WithError(err).Errorf("Cannot resolve path %s", c.String("origincert"))
+		return nil, fmt.Errorf("Cannot resolve path %s", c.String("origincert"))
 	}
 	ok, err := fileExists(originCertPath)
 	if err != nil {
-		logger.Fatalf("Cannot check if origin cert exists at path %s", c.String("origincert"))
+		logger.Errorf("Cannot check if origin cert exists at path %s", c.String("origincert"))
+		return nil, fmt.Errorf("Cannot check if origin cert exists at path %s", c.String("origincert"))
 	}
 	if !ok {
-		logger.Fatalf(`Cannot find a valid certificate for your origin at the path:
+		logger.Errorf(`Cannot find a valid certificate for your origin at the path:
 
     %s
 
@@ -190,19 +197,22 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
     %s login
 `, originCertPath, os.Args[0])
+	return nil, fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
 	}
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
-		logger.WithError(err).Fatalf("Cannot read %s to load origin certificate", originCertPath)
+		logger.WithError(err).Errorf("Cannot read %s to load origin certificate", originCertPath)
+		return nil, fmt.Errorf("Cannot read %s to load origin certificate", originCertPath)
 	}
-	return originCert
+	return originCert, nil
 }
 
-func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, protoLogger *logrus.Logger) *origin.TunnelConfig {
+func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, protoLogger *logrus.Logger) (*origin.TunnelConfig, error) {
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
-		logger.WithError(err).Fatal("Invalid hostname")
+		logger.WithError(err).Error("Invalid hostname")
+		return nil, errors.Wrap(err, "Invalid hostname")
 	}
 	clientID := c.String("id")
 	if !c.IsSet("id") {
@@ -211,22 +221,28 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, pr
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		logger.WithError(err).Fatal("Tag parse failure")
+		logger.WithError(err).Error("Tag parse failure")
+		return nil, errors.Wrap(err, "Tag parse failure")
 	}
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
 
 	url, err := validateUrl(c)
 	if err != nil {
-		logger.WithError(err).Fatal("Error validating url")
+		logger.WithError(err).Error("Error validating url")
+		return nil, errors.Wrap(err, "Error validating url")
 	}
 	logger.Infof("Proxying tunnel requests to %s", url)
 
-	originCert := getOriginCert(c)
-
-	originCertPool, err := loadCertPool(c)
+	originCert, err := getOriginCert(c)
 	if err != nil {
-		logger.Fatal(err)
+		return nil, errors.Wrap(err, "Error getting origin cert")
+	}
+
+	originCertPool, err := loadCertPool(c, logger)
+	if err != nil {
+		logger.WithError(err).Error("Error loading cert pool")
+		return nil, errors.Wrap(err, "Error loading cert pool")
 	}
 
 	tunnelMetrics := origin.NewTunnelMetrics()
@@ -272,10 +288,10 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, pr
 		IsAutoupdated:     c.Bool("is-autoupdated"),
 		GracePeriod:       c.Duration("grace-period"),
 		RunFromTerminal:   isRunningFromTerminal(),
-	}
+	}, nil
 }
 
-func loadCertPool(c *cli.Context) (*x509.CertPool, error) {
+func loadCertPool(c *cli.Context, logger *logrus.Logger) (*x509.CertPool, error) {
 	const originCAPoolFlag = "origin-ca-pool"
 	originCAPoolFilename := c.String(originCAPoolFlag)
 	var originCustomCAPool []byte
@@ -291,6 +307,11 @@ func loadCertPool(c *cli.Context) (*x509.CertPool, error) {
 	originCertPool, err := tlsconfig.LoadOriginCertPool(originCustomCAPool)
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading the certificate pool")
+	}
+
+	// Windows users should be notified that they can use the flag
+	if runtime.GOOS == "windows" && originCAPoolFilename == "" {
+		logger.Infof("cloudflared does not support loading the system root certificate pool on Windows. Please use the --%s to specify it", originCAPoolFlag)
 	}
 
 	return originCertPool, nil

@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"gopkg.in/urfave/cli.v2"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -33,9 +35,10 @@ func runApp(app *cli.App, shutdownC chan struct{}) {
 	app.Run(os.Args)
 }
 
-var launchdTemplate = ServiceTemplate{
-	Path: installPath(),
-	Content: fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemplate {
+	return &ServiceTemplate{
+		Path: installPath,
+		Content: fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
@@ -59,33 +62,46 @@ var launchdTemplate = ServiceTemplate{
 		<key>ThrottleInterval</key>
 		<integer>20</integer>
 	</dict>
-</plist>`, launchdIdentifier, stdoutPath(), stderrPath()),
+</plist>`, launchdIdentifier, stdoutPath, stderrPath),
+	}
 }
 
 func isRootUser() bool {
 	return os.Geteuid() == 0
 }
 
-func installPath() string {
+func installPath() (string, error) {
 	// User is root, use /Library/LaunchDaemons instead of home directory
 	if isRootUser() {
-		return fmt.Sprintf("/Library/LaunchDaemons/%s.plist", launchdIdentifier)
+		return fmt.Sprintf("/Library/LaunchDaemons/%s.plist", launchdIdentifier), nil
 	}
-	return fmt.Sprintf("%s/Library/LaunchAgents/%s.plist", userHomeDir(), launchdIdentifier)
+	userHomeDir, err := userHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/Library/LaunchAgents/%s.plist", userHomeDir, launchdIdentifier), nil
 }
 
-func stdoutPath() string {
+func stdoutPath() (string, error) {
 	if isRootUser() {
-		return fmt.Sprintf("/Library/Logs/%s.out.log", launchdIdentifier)
+		return fmt.Sprintf("/Library/Logs/%s.out.log", launchdIdentifier), nil
 	}
-	return fmt.Sprintf("%s/Library/Logs/%s.out.log", userHomeDir(), launchdIdentifier)
+	userHomeDir, err := userHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/Library/Logs/%s.out.log", userHomeDir, launchdIdentifier), nil
 }
 
-func stderrPath() string {
+func stderrPath() (string, error) {
 	if isRootUser() {
-		return fmt.Sprintf("/Library/Logs/%s.err.log", launchdIdentifier)
+		return fmt.Sprintf("/Library/Logs/%s.err.log", launchdIdentifier), nil
 	}
-	return fmt.Sprintf("%s/Library/Logs/%s.err.log", userHomeDir(), launchdIdentifier)
+	userHomeDir, err := userHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/Library/Logs/%s.err.log", userHomeDir, launchdIdentifier), nil
 }
 
 func installLaunchd(c *cli.Context) error {
@@ -100,13 +116,30 @@ func installLaunchd(c *cli.Context) error {
 	}
 	etPath, err := os.Executable()
 	if err != nil {
-		logger.WithError(err).Infof("error determining executable path")
-		return fmt.Errorf("error determining executable path: %v", err)
+		logger.WithError(err).Errorf("Error determining executable path")
+		return fmt.Errorf("Error determining executable path: %v", err)
+	}
+	installPath, err := installPath()
+	if err != nil {
+		return errors.Wrap(err, "Error determining install path")
+	}
+	stdoutPath, err := stdoutPath()
+	if err != nil {
+		return errors.Wrap(err, "error determining stdout path")
+	}
+	stderrPath, err := stderrPath()
+	if err != nil {
+		return errors.Wrap(err, "error determining stderr path")
+	}
+	launchdTemplate := newLaunchdTemplate(installPath, stdoutPath, stderrPath)
+	if err != nil {
+		logger.WithError(err).Errorf("error creating launchd template")
+		return errors.Wrap(err, "error creating launchd template")
 	}
 	templateArgs := ServiceTemplateArgs{Path: etPath}
 	err = launchdTemplate.Generate(&templateArgs)
 	if err != nil {
-		logger.WithError(err).Infof("error generating launchd template")
+		logger.WithError(err).Errorf("error generating launchd template")
 		return err
 	}
 	plistPath, err := launchdTemplate.ResolvePath()
@@ -115,7 +148,7 @@ func installLaunchd(c *cli.Context) error {
 		return err
 	}
 
-	logger.Infof("Outputs are logged to %s and %s", stderrPath(), stdoutPath())
+	logger.Infof("Outputs are logged to %s and %s", stderrPath, stdoutPath)
 	return runCommand("launchctl", "load", plistPath)
 }
 
@@ -124,6 +157,22 @@ func uninstallLaunchd(c *cli.Context) error {
 		logger.Infof("Uninstalling Argo Tunnel as a system launch daemon")
 	} else {
 		logger.Infof("Uninstalling Argo Tunnel as an user launch agent")
+	}
+	installPath, err := installPath()
+	if err != nil {
+		return errors.Wrap(err, "error determining install path")
+	}
+	stdoutPath, err := stdoutPath()
+	if err != nil {
+		return errors.Wrap(err, "error determining stdout path")
+	}
+	stderrPath, err := stderrPath()
+	if err != nil {
+		return errors.Wrap(err, "error determining stderr path")
+	}
+	launchdTemplate := newLaunchdTemplate(installPath, stdoutPath, stderrPath)
+	if err != nil {
+		return errors.Wrap(err, "error creating launchd template")
 	}
 	plistPath, err := launchdTemplate.ResolvePath()
 	if err != nil {
@@ -136,6 +185,6 @@ func uninstallLaunchd(c *cli.Context) error {
 		return err
 	}
 
-	logger.Infof("Outputs are logged to %s and %s", stderrPath(), stdoutPath())
+	logger.Infof("Outputs are logged to %s and %s", stderrPath, stdoutPath)
 	return launchdTemplate.Remove()
 }
