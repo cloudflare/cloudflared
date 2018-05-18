@@ -61,29 +61,26 @@ func update(_ *cli.Context) error {
 	return nil
 }
 
-func initUpdate(listeners *gracenet.Net) bool {
-	if updateApplied() {
-		os.Args = append(os.Args, "--is-autoupdated=true")
-		if _, err := listeners.StartProcess(); err != nil {
-			logger.WithError(err).Error("Unable to restart server automatically")
-			return false
-		}
-		return true
-	}
-	return false
-}
-
-func autoupdate(freq time.Duration, listeners *gracenet.Net, shutdownC chan struct{}) {
+func autoupdate(freq time.Duration, listeners *gracenet.Net, shutdownC chan struct{}) error {
+	tickC := time.Tick(freq)
 	for {
 		if updateApplied() {
 			os.Args = append(os.Args, "--is-autoupdated=true")
-			if _, err := listeners.StartProcess(); err != nil {
+			pid, err := listeners.StartProcess()
+			if err != nil {
 				logger.WithError(err).Error("Unable to restart server automatically")
+				return err
 			}
-			close(shutdownC)
-			return
+			// stop old process after autoupdate. Otherwise we create a new process
+			// after each update
+			logger.Infof("PID of the new process is %d", pid)
+			return nil
 		}
-		time.Sleep(freq)
+		select {
+		case <-tickC:
+		case <-shutdownC:
+			return nil
+		}
 	}
 }
 

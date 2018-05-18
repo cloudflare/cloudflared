@@ -22,7 +22,7 @@ func testChannelClosed(t *testing.T, c chan struct{}) {
 	case <-c:
 		return
 	default:
-		t.Fatal("Channel should be readable")
+		t.Fatal("Channel should be closed")
 	}
 }
 
@@ -35,6 +35,7 @@ func TestWaitForSignal(t *testing.T) {
 		errC <- serverErr
 	}()
 
+	// received error, shutdownC should be closed
 	err := waitForSignal(errC, shutdownC)
 	assert.Equal(t, serverErr, err)
 	testChannelClosed(t, shutdownC)
@@ -72,14 +73,25 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 		errC <- serverErr
 	}()
 
+	// received error, both shutdownC and graceshutdownC should be closed
 	err := waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
 	assert.Equal(t, serverErr, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
 
+	// shutdownC closed, graceshutdownC should also be closed and no error
+	errC = make(chan error)
+	shutdownC = make(chan struct{})
+	graceshutdownC = make(chan struct{})
+	close(shutdownC)
+	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+	assert.NoError(t, err)
+	testChannelClosed(t, shutdownC)
+	testChannelClosed(t, graceshutdownC)
+
+
 	// Test handling SIGTERM & SIGINT
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		//var wg sync.WaitGroup
 		errC := make(chan error)
 		shutdownC = make(chan struct{})
 		graceshutdownC = make(chan struct{})

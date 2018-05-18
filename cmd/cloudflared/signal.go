@@ -48,6 +48,7 @@ func waitForSignalWithGraceShutdown(errC chan error, shutdownC, graceShutdownSig
 		}
 		close(shutdownC)
 	case <-shutdownC:
+		close(graceShutdownSignal)
 	}
 
 	return nil

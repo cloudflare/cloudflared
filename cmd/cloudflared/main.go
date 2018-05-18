@@ -428,14 +428,11 @@ func startServer(c *cli.Context, shutdownC chan struct{}) error {
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
 	if isAutoupdateEnabled(c) {
-		if initUpdate(&listeners) {
-			return nil
-		}
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
 		go func(){
 			defer wg.Done()
-			autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
+			errC <- autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
 		}()
 	}
 
@@ -451,12 +448,14 @@ func startServer(c *cli.Context, shutdownC chan struct{}) error {
 		errC <- metrics.ServeMetrics(metricsListener, shutdownC, logger)
 	}()
 
+	go notifySystemd(connectedSignal)
+	if c.IsSet("pidFile") {
+		go writePidFile(connectedSignal, c.String("pidfile"))
+	}
+
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
 	if dnsProxyStandAlone(c) {
-		if c.IsSet("pidfile") {
-			go writePidFile(connectedSignal, c.String("pidfile"))
-			close(connectedSignal)
-		}
+		close(connectedSignal)
 		// no grace period, handle SIGINT/SIGTERM immediately
 		return waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, 0)
 	}
@@ -479,10 +478,6 @@ func startServer(c *cli.Context, shutdownC chan struct{}) error {
 	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, logger, protoLogger)
 	if err != nil {
 		return err
-	}
-
-	if c.IsSet("pidFile") {
-		go writePidFile(connectedSignal, c.String("pidfile"))
 	}
 
 	wg.Add(1)
@@ -521,12 +516,13 @@ func waitToShutdown(wg *sync.WaitGroup,
 	return err
 }
 
-func writePidFile(waitForSignal chan struct{}, pidFile string) {
+func notifySystemd(waitForSignal chan struct{}) {
 	<-waitForSignal
 	daemon.SdNotify(false, "READY=1")
-	if pidFile == "" {
-		return
-	}
+}
+
+func writePidFile(waitForSignal chan struct{}, pidFile string) {
+	<-waitForSignal
 	file, err := os.Create(pidFile)
 	if err != nil {
 		logger.WithError(err).Errorf("Unable to write pid to %s", pidFile)
