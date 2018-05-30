@@ -1,6 +1,7 @@
 package h2mux
 
 import (
+	"context"
 	"io"
 	"strings"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -256,31 +258,31 @@ func joinErrorsWithTimeout(errChan <-chan error, receiveCount int, timeout time.
 	return nil
 }
 
-func (m *Muxer) Serve() error {
+func (m *Muxer) Serve(ctx context.Context) error {
 	logger := m.config.Logger.WithField("name", m.config.Name)
-	errChan := make(chan error)
-	go func() {
-		errChan <- m.muxReader.run(logger)
+	errGroup, _ := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		err := m.muxReader.run(logger)
 		m.explicitShutdown.Fuse(false)
 		m.r.Close()
 		m.abort()
-	}()
-	go func() {
-		errChan <- m.muxWriter.run(logger)
+		return err
+	})
+
+	errGroup.Go(func() error {
+		err := m.muxWriter.run(logger)
 		m.explicitShutdown.Fuse(false)
 		m.w.Close()
 		m.abort()
-	}()
-	go func() {
-		errChan <- m.muxMetricsUpdater.run(logger)
-	}()
-	err := <-errChan
-	go func() {
-		// discard errors as other handler and muxMetricsUpdater close
-		<-errChan
-		<-errChan
-		close(errChan)
-	}()
+		return err
+	})
+
+	errGroup.Go(func() error {
+		err := m.muxMetricsUpdater.run(logger)
+		return err
+	})
+
+	err := errGroup.Wait()
 	if isUnexpectedTunnelError(err, m.explicitShutdown.Value()) {
 		return err
 	}

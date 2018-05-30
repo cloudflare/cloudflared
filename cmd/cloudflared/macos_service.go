@@ -15,7 +15,7 @@ const (
 	launchdIdentifier = "com.cloudflare.cloudflared"
 )
 
-func runApp(app *cli.App, shutdownC chan struct{}) {
+func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel launch agent",

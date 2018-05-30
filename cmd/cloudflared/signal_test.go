@@ -89,6 +89,15 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
 
+	// graceshutdownC closed, shutdownC should also be closed and no error
+	errC = make(chan error)
+	shutdownC = make(chan struct{})
+	graceshutdownC = make(chan struct{})
+	close(graceshutdownC)
+	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+	assert.NoError(t, err)
+	testChannelClosed(t, shutdownC)
+	testChannelClosed(t, graceshutdownC)
 
 	// Test handling SIGTERM & SIGINT
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {

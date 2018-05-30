@@ -360,8 +360,6 @@ func (t *TunnelMetrics) decrementConcurrentRequests(connectionID string) {
 	t.concurrentRequestsLock.Lock()
 	if _, ok := t.concurrentRequests[connectionID]; ok {
 		t.concurrentRequests[connectionID] -= 1
-	} else {
-		logger.Error("Concurrent requests per tunnel metrics went wrong; you can't decrement concurrent requests count without increment it first.")
 	}
 	t.concurrentRequestsLock.Unlock()
 

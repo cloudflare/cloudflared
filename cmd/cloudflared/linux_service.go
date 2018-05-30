@@ -10,7 +10,7 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
-func runApp(app *cli.App, shutdownC chan struct{}) {
+func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel system service",

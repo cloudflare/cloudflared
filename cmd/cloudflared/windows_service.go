@@ -31,7 +31,7 @@ const (
 	serviceConfigFailureActionsFlag = 4
 )
 
-func runApp(app *cli.App, shutdownC chan struct{}) {
+func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel Windows service",
@@ -70,7 +70,7 @@ func runApp(app *cli.App, shutdownC chan struct{}) {
 	// Run executes service name by calling windowsService which is a Handler
 	// interface that implements Execute method.
 	// It will set service status to stop after Execute returns
-	err = svc.Run(windowsServiceName, &windowsService{app: app, elog: elog, shutdownC: shutdownC})
+	err = svc.Run(windowsServiceName, &windowsService{app: app, elog: elog, shutdownC: shutdownC, graceShutdownC: graceShutdownC})
 	if err != nil {
 		elog.Error(1, fmt.Sprintf("%s service failed: %v", windowsServiceName, err))
 		return
@@ -79,9 +79,10 @@ func runApp(app *cli.App, shutdownC chan struct{}) {
 }
 
 type windowsService struct {
-	app       *cli.App
-	elog      *eventlog.Log
-	shutdownC chan struct{}
+	app            *cli.App
+	elog           *eventlog.Log
+	shutdownC      chan struct{}
+	graceShutdownC chan struct{}
 }
 
 // called by the package code at the start of the service
@@ -103,7 +104,7 @@ func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, stat
 				statusChan <- c.CurrentStatus
 			case svc.Stop:
 				s.elog.Info(1, "received stop control request")
-				close(s.shutdownC)
+				close(s.graceShutdownC)
 				statusChan <- svc.Status{State: svc.StopPending}
 			case svc.Shutdown:
 				s.elog.Info(1, "received shutdown control request")

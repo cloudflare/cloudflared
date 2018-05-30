@@ -2,6 +2,7 @@ package h2mux
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -78,11 +79,12 @@ func (p *DefaultMuxerPair) Handshake(t *testing.T) {
 }
 
 func (p *DefaultMuxerPair) HandshakeAndServe(t *testing.T) {
+	ctx := context.Background()
 	p.Handshake(t)
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
-		err := p.EdgeMux.Serve()
+		err := p.EdgeMux.Serve(ctx)
 		if err != nil && err != io.EOF && err != io.ErrClosedPipe {
 			t.Errorf("error in edge muxer Serve(): %s", err)
 		}
@@ -90,7 +92,7 @@ func (p *DefaultMuxerPair) HandshakeAndServe(t *testing.T) {
 		wg.Done()
 	}()
 	go func() {
-		err := p.OriginMux.Serve()
+		err := p.OriginMux.Serve(ctx)
 		if err != nil && err != io.EOF && err != io.ErrClosedPipe {
 			t.Errorf("error in origin muxer Serve(): %s", err)
 		}

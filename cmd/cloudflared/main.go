@@ -40,9 +40,12 @@ func main() {
 	raven.SetDSN(sentryDSN)
 	raven.SetRelease(Version)
 
-	// Shutdown channel used by the app. When closed, app must terminate.
-	// May be closed by the Windows service runner.
+	// Force shutdown channel used by the app. When closed, app must terminate.
+	// Windows service manager closes this channel when it receives shutdown command.
 	shutdownC := make(chan struct{})
+	// Graceful shutdown channel used by the app. When closed, app must terminate.
+	// Windows service manager closes this channel when it receives stop command.
+	graceShutdownC := make(chan struct{})
 
 	app := &cli.App{}
 	app.Name = "cloudflared"
@@ -280,7 +283,7 @@ func main() {
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
-		raven.CapturePanicAndWait(func() { err = startServer(c, shutdownC) }, nil)
+		raven.CapturePanicAndWait(func() { err = startServer(c, shutdownC, graceShutdownC) }, nil)
 		if err != nil {
 			raven.CaptureErrorAndWait(err, nil)
 		}
@@ -374,16 +377,15 @@ func main() {
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 		},
 	}
-	runApp(app, shutdownC)
+	runApp(app, shutdownC, graceShutdownC)
 }
 
-func startServer(c *cli.Context, shutdownC chan struct{}) error {
+func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error {
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
 	connectedSignal := make(chan struct{})
 	dnsReadySignal := make(chan struct{})
-	graceShutdownSignal := make(chan struct{})
 
 	// check whether client provides enough flags or env variables. If not, print help.
 	if ok := enoughOptionsSet(c); !ok {
@@ -430,7 +432,7 @@ func startServer(c *cli.Context, shutdownC chan struct{}) error {
 	if isAutoupdateEnabled(c) {
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
-		go func(){
+		go func() {
 			defer wg.Done()
 			errC <- autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
 		}()
@@ -457,7 +459,7 @@ func startServer(c *cli.Context, shutdownC chan struct{}) error {
 	if dnsProxyStandAlone(c) {
 		close(connectedSignal)
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, 0)
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0)
 	}
 
 	if c.IsSet("hello-world") {
@@ -483,23 +485,23 @@ func startServer(c *cli.Context, shutdownC chan struct{}) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownSignal, connectedSignal)
+		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownC, connectedSignal)
 	}()
 
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownSignal, c.Duration("grace-period"))
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
 	errC chan error,
-	shutdownC, graceShutdownSignal chan struct{},
+	shutdownC, graceShutdownC chan struct{},
 	gracePeriod time.Duration,
 ) error {
 	var err error
 	if gracePeriod > 0 {
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownSignal, gracePeriod)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod)
 	} else {
 		err = waitForSignal(errC, shutdownC)
-		close(graceShutdownSignal)
+		close(graceShutdownC)
 	}
 
 	if err != nil {

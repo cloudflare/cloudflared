@@ -51,6 +51,7 @@ func NewSupervisor(config *TunnelConfig) *Supervisor {
 }
 
 func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) error {
+	logger := s.config.Logger
 	if err := s.initialize(ctx, connectedSignal); err != nil {
 		return err
 	}
@@ -119,6 +120,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}) err
 }
 
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}) error {
+	logger := s.config.Logger
 	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 	if err != nil {
 		logger.Infof("ResolveEdgeIPs err")
