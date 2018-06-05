@@ -37,6 +37,18 @@ func (f CLIFlags) GetConfig(c *cli.Context) *tls.Config {
 		config.Certificates = []tls.Certificate{cert}
 		config.BuildNameToCertificate()
 	}
+	return f.finishGettingConfig(c, config)
+}
+
+func (f CLIFlags) GetConfigReloadableCert(c *cli.Context, cr *CertReloader) *tls.Config {
+	config := &tls.Config{
+		GetCertificate: cr.Cert,
+	}
+	config.BuildNameToCertificate()
+	return f.finishGettingConfig(c, config)
+}
+
+func (f CLIFlags) finishGettingConfig(c *cli.Context, config *tls.Config) *tls.Config {
 	if c.IsSet(f.ClientCert) {
 		// set of root certificate authorities that servers use if required to verify a client certificate
 		// by the policy in ClientAuth

@@ -66,8 +66,8 @@ func UnmarshalRegistrationOptions(s tunnelrpc.RegistrationOptions) (*Registratio
 }
 
 type Tag struct {
-	Name  string
-	Value string
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type ServerInfo struct {
