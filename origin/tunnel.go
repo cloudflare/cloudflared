@@ -23,13 +23,13 @@ import (
 	raven "github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
 	_ "github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	rpc "zombiezen.com/go/capnproto2/rpc"
 )
 
 const (
 	dialTimeout = 15 * time.Second
-
+	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
 )
@@ -53,8 +53,8 @@ type TunnelConfig struct {
 	HTTPTransport     http.RoundTripper
 	Metrics           *TunnelMetrics
 	MetricsUpdateFreq time.Duration
-	ProtocolLogger    *logrus.Logger
-	Logger            *logrus.Logger
+	ProtocolLogger    *log.Logger
+	Logger            *log.Logger
 	IsAutoupdated     bool
 	GracePeriod       time.Duration
 	RunFromTerminal   bool
@@ -196,9 +196,9 @@ func ServeTunnel(
 	tags["ha"] = connectionTag
 
 	// Returns error from parsing the origin URL or handshake errors
-	handler, originLocalIP, err := NewTunnelHandler(ctx, logger, config, addr.String(), connectionID)
+	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID)
 	if err != nil {
-		errLog := logger.WithError(err)
+		errLog := config.Logger.WithError(err)
 		switch err.(type) {
 		case dialError:
 			errLog.Error("Unable to dial edge")
@@ -214,7 +214,7 @@ func ServeTunnel(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		err := RegisterTunnel(serveCtx, logger, handler.muxer, config, connectionID, originLocalIP)
+		err := RegisterTunnel(serveCtx, handler.muxer, config, connectionID, originLocalIP)
 		if err == nil {
 			connectedFuse.Fuse(true)
 			backoff.SetGracePeriod()
@@ -226,9 +226,9 @@ func ServeTunnel(
 		updateMetricsTickC := time.Tick(config.MetricsUpdateFreq)
 		for {
 			select {
-		  case <-serveCtx.Done():
+			case <-serveCtx.Done():
 				// UnregisterTunnel blocks until the RPC call returns
-				err := UnregisterTunnel(logger, handler.muxer, config.GracePeriod)
+				err := UnregisterTunnel(handler.muxer, config.GracePeriod, config.Logger)
 				handler.muxer.Shutdown()
 				return err
 			case <-updateMetricsTickC:
@@ -241,7 +241,7 @@ func ServeTunnel(
 		// All routines should stop when muxer finish serving. When muxer is shutdown
 		// gracefully, it doesn't return an error, so we need to return errMuxerShutdown
 		// here to notify other routines to stop
-		err := handler.muxer.Serve(serveCtx);
+		err := handler.muxer.Serve(serveCtx)
 		if err == nil {
 			return muxerShutdownError{}
 		}
@@ -285,8 +285,8 @@ func IsRPCStreamResponse(headers []h2mux.Header) bool {
 	return true
 }
 
-func RegisterTunnel(ctx context.Context, logger *logrus.Entry, muxer *h2mux.Muxer, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
-	logger.Debug("initiating RPC stream to register")
+func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
+	config.Logger.Debug("initiating RPC stream to register")
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
 		{Name: ":scheme", Value: "capnp"},
@@ -301,8 +301,8 @@ func RegisterTunnel(ctx context.Context, logger *logrus.Entry, muxer *h2mux.Muxe
 		return clientRegisterTunnelError{cause: err}
 	}
 	conn := rpc.NewConn(
-		tunnelrpc.NewTransportLogger(logger.WithField("subsystem", "rpc-register"), rpc.StreamTransport(stream)),
-		tunnelrpc.ConnLog(logger.WithField("subsystem", "rpc-transport")),
+		tunnelrpc.NewTransportLogger(config.Logger.WithField("subsystem", "rpc-register"), rpc.StreamTransport(stream)),
+		tunnelrpc.ConnLog(config.Logger.WithField("subsystem", "rpc-transport")),
 	)
 	defer conn.Close()
 	ts := tunnelpogs.TunnelServer_PogsClient{Client: conn.Bootstrap(ctx)}
@@ -317,13 +317,13 @@ func RegisterTunnel(ctx context.Context, logger *logrus.Entry, muxer *h2mux.Muxe
 		config.Hostname,
 		config.RegistrationOptions(connectionID, originLocalIP),
 	)
-	LogServerInfo(logger, serverInfoPromise.Result(), connectionID, config.Metrics)
+	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, config.Logger)
 	if err != nil {
 		// RegisterTunnel RPC failure
 		return clientRegisterTunnelError{cause: err}
 	}
 	for _, logLine := range registration.LogLines {
-		logger.Info(logLine)
+		config.Logger.Info(logLine)
 	}
 	if registration.Err == DuplicateConnectionError {
 		return dupConnRegisterTunnelError{}
@@ -334,10 +334,12 @@ func RegisterTunnel(ctx context.Context, logger *logrus.Entry, muxer *h2mux.Muxe
 		}
 	}
 
+	config.Logger.Info("Tunnel ID: " + registration.TunnelID)
+
 	return nil
 }
 
-func UnregisterTunnel(logger *logrus.Entry, muxer *h2mux.Muxer, gracePeriod time.Duration) error {
+func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log.Logger) error {
 	logger.Debug("initiating RPC stream to unregister")
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
@@ -363,10 +365,11 @@ func UnregisterTunnel(logger *logrus.Entry, muxer *h2mux.Muxer, gracePeriod time
 	return ts.UnregisterTunnel(ctx, gracePeriod.Nanoseconds())
 }
 
-func LogServerInfo(logger *logrus.Entry,
+func LogServerInfo(
 	promise tunnelrpc.ServerInfo_Promise,
 	connectionID uint8,
 	metrics *TunnelMetrics,
+	logger *log.Logger,
 ) {
 	serverInfoMessage, err := promise.Struct()
 	if err != nil {
@@ -432,14 +435,13 @@ type TunnelHandler struct {
 	metrics    *TunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID string
-	logger       *logrus.Entry
+	logger       *log.Logger
 }
 
 var dialer = net.Dialer{DualStack: true}
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
 func NewTunnelHandler(ctx context.Context,
-	logger *logrus.Entry,
 	config *TunnelConfig,
 	addr string,
 	connectionID uint8,
@@ -455,7 +457,7 @@ func NewTunnelHandler(ctx context.Context,
 		tags:         config.Tags,
 		metrics:      config.Metrics,
 		connectionID: uint8ToString(connectionID),
-		logger:       logger,
+		logger:       config.Logger,
 	}
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
@@ -484,7 +486,7 @@ func NewTunnelHandler(ctx context.Context,
 		IsClient:          true,
 		HeartbeatInterval: config.HeartbeatInterval,
 		MaxHeartbeats:     config.MaxHeartbeats,
-		Logger:            config.ProtocolLogger,
+		Logger:            config.ProtocolLogger.WithFields(log.Fields{}),
 	})
 	if err != nil {
 		return h, "", errors.New("TLS handshake error")
@@ -510,7 +512,8 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	}
 	h.AppendTagHeaders(req)
 	cfRay := FindCfRayHeader(req)
-	h.logRequest(req, cfRay)
+	lbProbe := isLBProbeRequest(req)
+	h.logRequest(req, cfRay, lbProbe)
 	if websocket.IsWebSocketUpgrade(req) {
 		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
 		if err != nil {
@@ -522,7 +525,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			// connection because cloudflared doesn't operate on the message themselves
 			websocket.Stream(conn.UnderlyingConn(), stream)
 			h.metrics.incrementResponses(h.connectionID, "200")
-			h.logResponse(response, cfRay)
+			h.logResponse(response, cfRay, lbProbe)
 		}
 	} else {
 		response, err := h.httpClient.RoundTrip(req)
@@ -533,7 +536,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			stream.WriteHeaders(H1ResponseToH2Response(response))
 			io.Copy(stream, response.Body)
 			h.metrics.incrementResponses(h.connectionID, "200")
-			h.logResponse(response, cfRay)
+			h.logResponse(response, cfRay, lbProbe)
 		}
 	}
 	h.metrics.decrementConcurrentRequests(h.connectionID)
@@ -547,18 +550,22 @@ func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
 	h.metrics.incrementResponses(h.connectionID, "502")
 }
 
-func (h *TunnelHandler) logRequest(req *http.Request, cfRay string) {
+func (h *TunnelHandler) logRequest(req *http.Request, cfRay string, lbProbe bool) {
 	if cfRay != "" {
 		h.logger.WithField("CF-RAY", cfRay).Infof("%s %s %s", req.Method, req.URL, req.Proto)
+	} else if lbProbe {
+		h.logger.Debugf("Load Balancer health check %s %s %s", req.Method, req.URL, req.Proto)
 	} else {
 		h.logger.Warnf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", req.Method, req.URL, req.Proto)
 	}
 	h.logger.Debugf("Request Headers %+v", req.Header)
 }
 
-func (h *TunnelHandler) logResponse(r *http.Response, cfRay string) {
+func (h *TunnelHandler) logResponse(r *http.Response, cfRay string, lbProbe bool) {
 	if cfRay != "" {
 		h.logger.WithField("CF-RAY", cfRay).Infof("%s", r.Status)
+	} else if lbProbe {
+		h.logger.Debugf("Response to Load Balancer health check %s", r.Status)
 	} else {
 		h.logger.Infof("%s", r.Status)
 	}
@@ -571,4 +578,8 @@ func (h *TunnelHandler) UpdateMetrics(connectionID string) {
 
 func uint8ToString(input uint8) string {
 	return strconv.FormatUint(uint64(input), 10)
+}
+
+func isLBProbeRequest(req *http.Request) bool {
+	return strings.HasPrefix(req.UserAgent(), lbProbeUserAgentPrefix)
 }

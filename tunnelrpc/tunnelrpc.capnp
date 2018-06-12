@@ -17,6 +17,8 @@ struct TunnelRegistration {
     logLines @2 :List(Text);
     # In case of error, whether the client should attempt to reconnect.
     permanentFailure @3 :Bool;
+    # Displayed to user
+    tunnelID @4 :Text;
 }
 
 struct RegistrationOptions {

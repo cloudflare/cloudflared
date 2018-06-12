@@ -2,6 +2,7 @@ package pogs
 
 import (
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
@@ -30,6 +31,7 @@ type TunnelRegistration struct {
 	Url              string
 	LogLines         []string
 	PermanentFailure bool
+	TunnelID         string `capnp:"tunnelID"`
 }
 
 func MarshalTunnelRegistration(s tunnelrpc.TunnelRegistration, p *TunnelRegistration) error {
@@ -124,6 +126,7 @@ func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerT
 	if err != nil {
 		return err
 	}
+	log.Info(registration.TunnelID)
 	return MarshalTunnelRegistration(result, registration)
 }
 

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/cloudflared/metallog"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -46,7 +47,7 @@ type MuxerConfig struct {
 	// The minimum number of heartbeats to send before terminating the connection.
 	MaxHeartbeats uint64
 	// Logger to use
-	Logger *log.Logger
+	Logger *log.Entry
 }
 
 type Muxer struct {
@@ -95,7 +96,7 @@ func Handshake(
 		config.Timeout = defaultTimeout
 	}
 	if config.Logger == nil {
-		config.Logger = log.New()
+		config.Logger = metallog.New().WithFields(log.Fields{})
 	}
 	// Initialise connection state fields
 	m := &Muxer{
@@ -259,10 +260,9 @@ func joinErrorsWithTimeout(errChan <-chan error, receiveCount int, timeout time.
 }
 
 func (m *Muxer) Serve(ctx context.Context) error {
-	logger := m.config.Logger.WithField("name", m.config.Name)
 	errGroup, _ := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		err := m.muxReader.run(logger)
+		err := m.muxReader.run(m.config.Logger)
 		m.explicitShutdown.Fuse(false)
 		m.r.Close()
 		m.abort()
@@ -270,7 +270,7 @@ func (m *Muxer) Serve(ctx context.Context) error {
 	})
 
 	errGroup.Go(func() error {
-		err := m.muxWriter.run(logger)
+		err := m.muxWriter.run(m.config.Logger)
 		m.explicitShutdown.Fuse(false)
 		m.w.Close()
 		m.abort()
@@ -278,7 +278,7 @@ func (m *Muxer) Serve(ctx context.Context) error {
 	})
 
 	errGroup.Go(func() error {
-		err := m.muxMetricsUpdater.run(logger)
+		err := m.muxMetricsUpdater.run(m.config.Logger)
 		return err
 	})
 
