@@ -398,3 +398,15 @@ func (t *TunnelMetrics) registerServerLocation(metricLabelValues []string, loc s
 	t.serverLocations.WithLabelValues(labelValues...).Inc()
 	t.oldServerLocations[hashKey] = loc
 }
+
+// SetServerLocation is called by the tunnelHandler when the tunnel opens
+func (t *TunnelMetrics) SetServerLocation(metricLabelValues []string, loc string) {
+	labelValues := append(metricLabelValues, loc)
+	t.serverLocations.WithLabelValues(labelValues...).Set(1)
+}
+
+// UnsetServerLocation is called by the tunnelHandler when the tunnel closes, or at least is known to be closed
+func (t *TunnelMetrics) UnsetServerLocation(metricLabelValues []string, loc string) {
+	labelValues := append(metricLabelValues, loc)
+	t.serverLocations.WithLabelValues(labelValues...).Set(0)
+}

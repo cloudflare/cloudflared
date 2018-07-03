@@ -482,10 +482,11 @@ func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error 
 		return err
 	}
 
+	metricsLabels := map[string]string{"application": "cloudflared"}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownC, connectedSignal)
+		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownC, connectedSignal, metricsLabels)
 	}()
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))

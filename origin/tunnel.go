@@ -118,7 +118,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal chan struct{}) error {
+func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal chan struct{}, metricsLabels map[string]string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-shutdownC
@@ -126,13 +126,13 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 	}()
 	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
 	if config.HAConnections > 1 {
-		return NewSupervisor(config).Run(ctx, connectedSignal)
+		return NewSupervisor(config).Run(ctx, connectedSignal, metricsLabels)
 	} else {
 		addrs, err := ResolveEdgeIPs(config.EdgeAddrs)
 		if err != nil {
 			return err
 		}
-		return ServeTunnelLoop(ctx, config, addrs[0], 0, connectedSignal)
+		return ServeTunnelLoop(ctx, config, addrs[0], 0, connectedSignal, metricsLabels)
 	}
 }
 
@@ -141,6 +141,7 @@ func ServeTunnelLoop(ctx context.Context,
 	addr *net.TCPAddr,
 	connectionID uint8,
 	connectedSignal chan struct{},
+	metricsLabels map[string]string,
 ) error {
 	logger := config.Logger
 	config.Metrics.incrementHaConnections()
@@ -156,7 +157,7 @@ func ServeTunnelLoop(ctx context.Context,
 	// Ensure the above goroutine will terminate if we return without connecting
 	defer connectedFuse.Fuse(false)
 	for {
-		err, recoverable := ServeTunnel(ctx, config, addr, connectionID, connectedFuse, &backoff)
+		err, recoverable := ServeTunnel(ctx, config, addr, connectionID, connectedFuse, &backoff, metricsLabels)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
 				logger.Infof("Retrying in %s seconds", duration)
@@ -175,6 +176,7 @@ func ServeTunnel(
 	connectionID uint8,
 	connectedFuse *h2mux.BooleanFuse,
 	backoff *BackoffHandler,
+	metricsLabels map[string]string,
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -195,8 +197,17 @@ func ServeTunnel(
 	tags := make(map[string]string)
 	tags["ha"] = connectionTag
 
+	metricsLabelKeys := make([]string, len(metricsLabels))
+	metricsLabelValues := make([]string, len(metricsLabels))
+	i := 0
+	for k, v := range metricsLabels {
+		metricsLabelKeys[i] = k
+		metricsLabelValues[i] = v
+		i++
+	}
+
 	// Returns error from parsing the origin URL or handshake errors
-	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID)
+	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID, metricsLabelKeys, metricsLabelValues)
 	if err != nil {
 		errLog := config.Logger.WithError(err)
 		switch err.(type) {
@@ -214,7 +225,7 @@ func ServeTunnel(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		err := RegisterTunnel(serveCtx, handler.muxer, config, connectionID, originLocalIP)
+		err := RegisterTunnel(serveCtx, handler, config, connectionID, originLocalIP)
 		if err == nil {
 			connectedFuse.Fuse(true)
 			backoff.SetGracePeriod()
@@ -285,8 +296,10 @@ func IsRPCStreamResponse(headers []h2mux.Header) bool {
 	return true
 }
 
-func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
+// RegisterTunnel returns the name of the location connected to, or an error
+func RegisterTunnel(ctx context.Context, handler *TunnelHandler, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
 	config.Logger.Debug("initiating RPC stream to register")
+	muxer := handler.muxer
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
 		{Name: ":scheme", Value: "capnp"},
@@ -317,11 +330,12 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 		config.Hostname,
 		config.RegistrationOptions(connectionID, originLocalIP),
 	)
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, config.Logger)
 	if err != nil {
 		// RegisterTunnel RPC failure
 		return clientRegisterTunnelError{cause: err}
 	}
+	LogServerInfo(serverInfoPromise.Result(), connectionID, handler, config.Logger)
+
 	for _, logLine := range registration.LogLines {
 		config.Logger.Info(logLine)
 	}
@@ -368,21 +382,21 @@ func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log
 func LogServerInfo(
 	promise tunnelrpc.ServerInfo_Promise,
 	connectionID uint8,
-	metrics *TunnelMetrics,
+	handler *TunnelHandler,
 	logger *log.Logger,
 ) {
 	serverInfoMessage, err := promise.Struct()
 	if err != nil {
 		logger.WithError(err).Warn("Failed to retrieve server information")
-		return
 	}
 	serverInfo, err := tunnelpogs.UnmarshalServerInfo(serverInfoMessage)
 	if err != nil {
 		logger.WithError(err).Warn("Failed to retrieve server information")
-		return
 	}
 	logger.Infof("Connected to %s", serverInfo.LocationName)
-	// metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
+
+	metricsLabels := handler.getCombinedMetricsLabels(uint8ToString(connectionID))
+	handler.metrics.registerServerLocation(metricsLabels, serverInfo.LocationName)
 }
 
 func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
@@ -449,19 +463,23 @@ func NewTunnelHandler(ctx context.Context,
 	config *TunnelConfig,
 	addr string,
 	connectionID uint8,
+	baseMetricsLabelKeys []string,
+	baseMetricsLabelValues []string,
 ) (*TunnelHandler, string, error) {
 	originURL, err := validation.ValidateUrl(config.OriginUrl)
 	if err != nil {
 		return nil, "", fmt.Errorf("Unable to parse origin url %#v", originURL)
 	}
 	h := &TunnelHandler{
-		originUrl:    originURL,
-		httpClient:   config.HTTPTransport,
-		tlsConfig:    config.ClientTlsConfig,
-		tags:         config.Tags,
-		metrics:      config.Metrics,
-		connectionID: uint8ToString(connectionID),
-		logger:       config.Logger,
+		originUrl:              originURL,
+		httpClient:             config.HTTPTransport,
+		tlsConfig:              config.ClientTlsConfig,
+		tags:                   config.Tags,
+		metrics:                config.Metrics,
+		connectionID:           uint8ToString(connectionID),
+		baseMetricsLabelKeys:   baseMetricsLabelKeys,
+		baseMetricsLabelValues: baseMetricsLabelValues,
+		logger:                 config.Logger,
 	}
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
