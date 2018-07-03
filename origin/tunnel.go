@@ -542,6 +542,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	h.logRequest(req, cfRay, lbProbe)
 	if websocket.IsWebSocketUpgrade(req) {
 		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
+		h.logger.WithFields(log.Fields{"connectionID": h.connectionID, "status": response.StatusCode}).Info("incrementResponses")
 		h.metrics.incrementResponses(h.getCombinedMetricsLabels(h.connectionID), response.StatusCode)
 		if err != nil {
 			h.logError(stream, err)
@@ -555,6 +556,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		}
 	} else {
 		response, err := h.httpClient.RoundTrip(req)
+		h.logger.WithFields(log.Fields{"connectionID": h.connectionID, "status": response.StatusCode}).Info("incrementResponses")
 		h.metrics.incrementResponses(h.getCombinedMetricsLabels(h.connectionID), response.StatusCode)
 		if err != nil {
 			h.logError(stream, err)

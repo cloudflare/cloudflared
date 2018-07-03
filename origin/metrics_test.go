@@ -9,7 +9,8 @@ import (
 )
 
 // can only be called once
-var m = NewTunnelMetrics()
+var testMetrics = make([]string, 0)
+var m = NewTunnelMetrics(testMetrics)
 
 func TestConcurrentRequestsSingleTunnel(t *testing.T) {
 	routines := 20
@@ -92,7 +93,6 @@ func TestConcurrentRequestsMultiTunnel(t *testing.T) {
 	}
 
 }
-
 func TestRegisterServerLocation(t *testing.T) {
 	tunnels := 20
 	var wg sync.WaitGroup
