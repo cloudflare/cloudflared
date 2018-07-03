@@ -1,6 +1,8 @@
 package origin
 
 import (
+	"hash/fnv"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,25 +30,25 @@ type muxerMetrics struct {
 }
 
 type TunnelMetrics struct {
-	haConnections     prometheus.Gauge
-	totalRequests     prometheus.Counter
-	requestsPerTunnel *prometheus.CounterVec
+	haConnections prometheus.Gauge
+	totalRequests prometheus.Counter
+	requests      *prometheus.CounterVec
 	// concurrentRequestsLock is a mutex for concurrentRequests and maxConcurrentRequests
 	concurrentRequestsLock      sync.Mutex
 	concurrentRequestsPerTunnel *prometheus.GaugeVec
-	// concurrentRequests records count of concurrent requests for each tunnel
-	concurrentRequests             map[string]uint64
+	// concurrentRequests records count of concurrent requests for each tunnel, keyed by hash of label values
+	concurrentRequests             map[uint64]uint64
 	maxConcurrentRequestsPerTunnel *prometheus.GaugeVec
-	// concurrentRequests records max count of concurrent requests for each tunnel
-	maxConcurrentRequests map[string]uint64
+	// concurrentRequests records max count of concurrent requests for each tunnel, keyed by hash of label values
+	maxConcurrentRequests map[uint64]uint64
 	timerRetries          prometheus.Gauge
-	responseByCode        *prometheus.CounterVec
-	responseCodePerTunnel *prometheus.CounterVec
-	serverLocations       *prometheus.GaugeVec
+
+	reponses        *prometheus.CounterVec
+	serverLocations *prometheus.GaugeVec
 	// locationLock is a mutex for oldServerLocations
 	locationLock sync.Mutex
 	// oldServerLocations stores the last server the tunnel was connected to
-	oldServerLocations map[string]string
+	oldServerLocations map[uint64]string
 
 	muxerMetrics *muxerMetrics
 }
@@ -206,22 +208,22 @@ func newMuxerMetrics() *muxerMetrics {
 	}
 }
 
-func (m *muxerMetrics) update(connectionID string, metrics *h2mux.MuxerMetrics) {
-	m.rtt.WithLabelValues(connectionID).Set(convertRTTMilliSec(metrics.RTT))
-	m.rttMin.WithLabelValues(connectionID).Set(convertRTTMilliSec(metrics.RTTMin))
-	m.rttMax.WithLabelValues(connectionID).Set(convertRTTMilliSec(metrics.RTTMax))
-	m.receiveWindowAve.WithLabelValues(connectionID).Set(metrics.ReceiveWindowAve)
-	m.sendWindowAve.WithLabelValues(connectionID).Set(metrics.SendWindowAve)
-	m.receiveWindowMin.WithLabelValues(connectionID).Set(float64(metrics.ReceiveWindowMin))
-	m.receiveWindowMax.WithLabelValues(connectionID).Set(float64(metrics.ReceiveWindowMax))
-	m.sendWindowMin.WithLabelValues(connectionID).Set(float64(metrics.SendWindowMin))
-	m.sendWindowMax.WithLabelValues(connectionID).Set(float64(metrics.SendWindowMax))
-	m.inBoundRateCurr.WithLabelValues(connectionID).Set(float64(metrics.InBoundRateCurr))
-	m.inBoundRateMin.WithLabelValues(connectionID).Set(float64(metrics.InBoundRateMin))
-	m.inBoundRateMax.WithLabelValues(connectionID).Set(float64(metrics.InBoundRateMax))
-	m.outBoundRateCurr.WithLabelValues(connectionID).Set(float64(metrics.OutBoundRateCurr))
-	m.outBoundRateMin.WithLabelValues(connectionID).Set(float64(metrics.OutBoundRateMin))
-	m.outBoundRateMax.WithLabelValues(connectionID).Set(float64(metrics.OutBoundRateMax))
+func (m *muxerMetrics) update(metricLabelValues []string, metrics *h2mux.MuxerMetrics) {
+	m.rtt.WithLabelValues(metricLabelValues...).Set(convertRTTMilliSec(metrics.RTT))
+	m.rttMin.WithLabelValues(metricLabelValues...).Set(convertRTTMilliSec(metrics.RTTMin))
+	m.rttMax.WithLabelValues(metricLabelValues...).Set(convertRTTMilliSec(metrics.RTTMax))
+	m.receiveWindowAve.WithLabelValues(metricLabelValues...).Set(metrics.ReceiveWindowAve)
+	m.sendWindowAve.WithLabelValues(metricLabelValues...).Set(metrics.SendWindowAve)
+	m.receiveWindowMin.WithLabelValues(metricLabelValues...).Set(float64(metrics.ReceiveWindowMin))
+	m.receiveWindowMax.WithLabelValues(metricLabelValues...).Set(float64(metrics.ReceiveWindowMax))
+	m.sendWindowMin.WithLabelValues(metricLabelValues...).Set(float64(metrics.SendWindowMin))
+	m.sendWindowMax.WithLabelValues(metricLabelValues...).Set(float64(metrics.SendWindowMax))
+	m.inBoundRateCurr.WithLabelValues(metricLabelValues...).Set(float64(metrics.InBoundRateCurr))
+	m.inBoundRateMin.WithLabelValues(metricLabelValues...).Set(float64(metrics.InBoundRateMin))
+	m.inBoundRateMax.WithLabelValues(metricLabelValues...).Set(float64(metrics.InBoundRateMax))
+	m.outBoundRateCurr.WithLabelValues(metricLabelValues...).Set(float64(metrics.OutBoundRateCurr))
+	m.outBoundRateMin.WithLabelValues(metricLabelValues...).Set(float64(metrics.OutBoundRateMin))
+	m.outBoundRateMax.WithLabelValues(metricLabelValues...).Set(float64(metrics.OutBoundRateMax))
 }
 
 func convertRTTMilliSec(t time.Duration) float64 {
@@ -278,14 +280,14 @@ func NewTunnelMetrics() *TunnelMetrics {
 		})
 	prometheus.MustRegister(timerRetries)
 
-	responseByCode := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "argotunnel_response_by_code",
-			Help: "Count of responses by HTTP status code",
-		},
-		[]string{"status_code"},
-	)
-	prometheus.MustRegister(responseByCode)
+	// responseByCode := prometheus.NewCounterVec(
+	// 	prometheus.CounterOpts{
+	// 		Name: "argotunnel_response_by_code",
+	// 		Help: "Count of responses by HTTP status code",
+	// 	},
+	// 	[]string{"status_code"},
+	// )
+	// prometheus.MustRegister(responseByCode)
 
 	responseCodePerTunnel := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -308,18 +310,26 @@ func NewTunnelMetrics() *TunnelMetrics {
 	return &TunnelMetrics{
 		haConnections:                  haConnections,
 		totalRequests:                  totalRequests,
-		requestsPerTunnel:              requestsPerTunnel,
+		requests:                       requestsPerTunnel,
 		concurrentRequestsPerTunnel:    concurrentRequestsPerTunnel,
-		concurrentRequests:             make(map[string]uint64),
+		concurrentRequests:             make(map[uint64]uint64),
 		maxConcurrentRequestsPerTunnel: maxConcurrentRequestsPerTunnel,
-		maxConcurrentRequests:          make(map[string]uint64),
+		maxConcurrentRequests:          make(map[uint64]uint64),
 		timerRetries:                   timerRetries,
-		responseByCode:                 responseByCode,
-		responseCodePerTunnel:          responseCodePerTunnel,
-		serverLocations:                serverLocations,
-		oldServerLocations:             make(map[string]string),
-		muxerMetrics:                   newMuxerMetrics(),
+
+		reponses:           responseCodePerTunnel,
+		serverLocations:    serverLocations,
+		oldServerLocations: make(map[uint64]string),
+		muxerMetrics:       newMuxerMetrics(),
 	}
+}
+
+func hashLabelValues(labelValues []string) uint64 {
+	h := fnv.New64()
+	for _, text := range labelValues {
+		h.Write([]byte(text))
+	}
+	return h.Sum64()
 }
 
 func (t *TunnelMetrics) incrementHaConnections() {
@@ -330,56 +340,61 @@ func (t *TunnelMetrics) decrementHaConnections() {
 	t.haConnections.Dec()
 }
 
-func (t *TunnelMetrics) updateMuxerMetrics(connectionID string, metrics *h2mux.MuxerMetrics) {
-	t.muxerMetrics.update(connectionID, metrics)
+func (t *TunnelMetrics) updateMuxerMetrics(metricLabelValues []string, metrics *h2mux.MuxerMetrics) {
+	t.muxerMetrics.update(metricLabelValues, metrics)
 }
 
-func (t *TunnelMetrics) incrementRequests(connectionID string) {
+func (t *TunnelMetrics) incrementRequests(metricLabelValues []string) {
 	t.concurrentRequestsLock.Lock()
 	var concurrentRequests uint64
 	var ok bool
-	if concurrentRequests, ok = t.concurrentRequests[connectionID]; ok {
-		t.concurrentRequests[connectionID] += 1
+	hashKey := hashLabelValues(metricLabelValues)
+	if concurrentRequests, ok = t.concurrentRequests[hashKey]; ok {
+		t.concurrentRequests[hashKey] += 1
 		concurrentRequests++
 	} else {
-		t.concurrentRequests[connectionID] = 1
+		t.concurrentRequests[hashKey] = 1
 		concurrentRequests = 1
 	}
-	if maxConcurrentRequests, ok := t.maxConcurrentRequests[connectionID]; (ok && maxConcurrentRequests < concurrentRequests) || !ok {
-		t.maxConcurrentRequests[connectionID] = concurrentRequests
-		t.maxConcurrentRequestsPerTunnel.WithLabelValues(connectionID).Set(float64(concurrentRequests))
+	if maxConcurrentRequests, ok := t.maxConcurrentRequests[hashKey]; (ok && maxConcurrentRequests < concurrentRequests) || !ok {
+		t.maxConcurrentRequests[hashKey] = concurrentRequests
+		t.maxConcurrentRequestsPerTunnel.WithLabelValues(metricLabelValues...).Set(float64(concurrentRequests))
 	}
 	t.concurrentRequestsLock.Unlock()
 
 	t.totalRequests.Inc()
-	t.requestsPerTunnel.WithLabelValues(connectionID).Inc()
-	t.concurrentRequestsPerTunnel.WithLabelValues(connectionID).Inc()
+	t.requests.WithLabelValues(metricLabelValues...).Inc()
+	t.concurrentRequestsPerTunnel.WithLabelValues(metricLabelValues...).Inc()
 }
 
-func (t *TunnelMetrics) decrementConcurrentRequests(connectionID string) {
+func (t *TunnelMetrics) decrementConcurrentRequests(metricLabelValues []string) {
 	t.concurrentRequestsLock.Lock()
-	if _, ok := t.concurrentRequests[connectionID]; ok {
-		t.concurrentRequests[connectionID] -= 1
+	hashKey := hashLabelValues(metricLabelValues)
+	if _, ok := t.concurrentRequests[hashKey]; ok {
+		t.concurrentRequests[hashKey] -= 1
 	}
 	t.concurrentRequestsLock.Unlock()
 
-	t.concurrentRequestsPerTunnel.WithLabelValues(connectionID).Dec()
+	t.concurrentRequestsPerTunnel.WithLabelValues(metricLabelValues...).Dec()
 }
 
-func (t *TunnelMetrics) incrementResponses(connectionID, code string) {
-	t.responseByCode.WithLabelValues(code).Inc()
-	t.responseCodePerTunnel.WithLabelValues(connectionID, code).Inc()
+func (t *TunnelMetrics) incrementResponses(metricLabelValues []string, responseCode int) {
+	labelValues := append(metricLabelValues, strconv.Itoa(responseCode))
+	t.reponses.WithLabelValues(labelValues...).Inc()
 
 }
 
-func (t *TunnelMetrics) registerServerLocation(connectionID, loc string) {
+func (t *TunnelMetrics) registerServerLocation(metricLabelValues []string, loc string) {
 	t.locationLock.Lock()
 	defer t.locationLock.Unlock()
-	if oldLoc, ok := t.oldServerLocations[connectionID]; ok && oldLoc == loc {
+	hashKey := hashLabelValues(metricLabelValues)
+	if oldLoc, ok := t.oldServerLocations[hashKey]; ok && oldLoc == loc {
 		return
 	} else if ok {
-		t.serverLocations.WithLabelValues(connectionID, oldLoc).Dec()
+		labelValues := append(metricLabelValues, oldLoc)
+		t.serverLocations.WithLabelValues(labelValues...).Dec()
 	}
-	t.serverLocations.WithLabelValues(connectionID, loc).Inc()
-	t.oldServerLocations[connectionID] = loc
+	labelValues := append(metricLabelValues, loc)
+	t.serverLocations.WithLabelValues(labelValues...).Inc()
+	t.oldServerLocations[hashKey] = loc
 }

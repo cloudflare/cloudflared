@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	dialTimeout = 15 * time.Second
+	dialTimeout              = 15 * time.Second
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
@@ -382,7 +382,7 @@ func LogServerInfo(
 		return
 	}
 	logger.Infof("Connected to %s", serverInfo.LocationName)
-	metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
+	// metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
 }
 
 func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
@@ -433,6 +433,10 @@ type TunnelHandler struct {
 	tlsConfig  *tls.Config
 	tags       []tunnelpogs.Tag
 	metrics    *TunnelMetrics
+
+	baseMetricsLabelKeys   []string
+	baseMetricsLabelValues []string
+
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID string
 	logger       *log.Logger
@@ -500,8 +504,12 @@ func (h *TunnelHandler) AppendTagHeaders(r *http.Request) {
 	}
 }
 
+func (h *TunnelHandler) getCombinedMetricsLabels(connectionID string) []string {
+	return append(h.baseMetricsLabelValues, connectionID)
+}
+
 func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
-	h.metrics.incrementRequests(h.connectionID)
+	h.metrics.incrementRequests(h.getCombinedMetricsLabels(h.connectionID))
 	req, err := http.NewRequest("GET", h.originUrl, h2mux.MuxedStreamReader{MuxedStream: stream})
 	if err != nil {
 		h.logger.WithError(err).Panic("Unexpected error from http.NewRequest")
@@ -516,6 +524,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	h.logRequest(req, cfRay, lbProbe)
 	if websocket.IsWebSocketUpgrade(req) {
 		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
+		h.metrics.incrementResponses(h.getCombinedMetricsLabels(h.connectionID), response.StatusCode)
 		if err != nil {
 			h.logError(stream, err)
 		} else {
@@ -524,22 +533,22 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			// Copy to/from stream to the undelying connection. Use the underlying
 			// connection because cloudflared doesn't operate on the message themselves
 			websocket.Stream(conn.UnderlyingConn(), stream)
-			h.metrics.incrementResponses(h.connectionID, "200")
 			h.logResponse(response, cfRay, lbProbe)
 		}
 	} else {
 		response, err := h.httpClient.RoundTrip(req)
+		h.metrics.incrementResponses(h.getCombinedMetricsLabels(h.connectionID), response.StatusCode)
 		if err != nil {
 			h.logError(stream, err)
 		} else {
 			defer response.Body.Close()
 			stream.WriteHeaders(H1ResponseToH2Response(response))
 			io.Copy(stream, response.Body)
-			h.metrics.incrementResponses(h.connectionID, "200")
+
 			h.logResponse(response, cfRay, lbProbe)
 		}
 	}
-	h.metrics.decrementConcurrentRequests(h.connectionID)
+	h.metrics.decrementConcurrentRequests(h.getCombinedMetricsLabels(h.connectionID))
 	return nil
 }
 
@@ -547,7 +556,7 @@ func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
 	h.logger.WithError(err).Error("HTTP request error")
 	stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: "502"}})
 	stream.Write([]byte("502 Bad Gateway"))
-	h.metrics.incrementResponses(h.connectionID, "502")
+
 }
 
 func (h *TunnelHandler) logRequest(req *http.Request, cfRay string, lbProbe bool) {
@@ -573,7 +582,8 @@ func (h *TunnelHandler) logResponse(r *http.Response, cfRay string, lbProbe bool
 }
 
 func (h *TunnelHandler) UpdateMetrics(connectionID string) {
-	h.metrics.updateMuxerMetrics(connectionID, h.muxer.Metrics())
+	// why only updateMuxerMetrics
+	h.metrics.updateMuxerMetrics(h.getCombinedMetricsLabels(h.connectionID), h.muxer.Metrics())
 }
 
 func uint8ToString(input uint8) string {
