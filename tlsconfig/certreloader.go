@@ -55,7 +55,7 @@ func (cr *CertReloader) LoadCert() {
 
 	// Keep the old certificate if there's a problem reading the new one.
 	if err != nil {
-		raven.CaptureErrorAndWait(fmt.Errorf("Error parsing X509 key pair: %v", err), nil)
+		raven.CaptureError(fmt.Errorf("Error parsing X509 key pair: %v", err), nil)
 		return
 	}
 	cr.certificate = &cert

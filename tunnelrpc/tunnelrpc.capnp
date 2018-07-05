@@ -41,6 +41,8 @@ struct RegistrationOptions {
     isAutoupdated @8 :Bool;
     # whether Argo Tunnel client is run from a terminal
     runFromTerminal @9 :Bool;
+    # cross stream compression setting, 0 - off, 3 - high
+    compressionQuality @10 :UInt64;
 }
 
 struct Tag {

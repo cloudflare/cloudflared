@@ -1,6 +1,7 @@
 package h2mux
 
 import (
+	"bytes"
 	"io"
 	"testing"
 
@@ -15,6 +16,7 @@ func TestFlowControlSingleStream(t *testing.T) {
 	stream := &MuxedStream{
 		responseHeadersReceived: make(chan struct{}),
 		readBuffer:              NewSharedBuffer(),
+		writeBuffer:             &bytes.Buffer{},
 		receiveWindow:           testWindowSize,
 		receiveWindowCurrentMax: testWindowSize,
 		receiveWindowMax:        testMaxWindowSize,

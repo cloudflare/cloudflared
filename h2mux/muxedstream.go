@@ -6,6 +6,17 @@ import (
 	"sync"
 )
 
+type ReadWriteLengther interface {
+	io.ReadWriter
+	Reset()
+	Len() int
+}
+
+type ReadWriteClosedCloser interface {
+	io.ReadWriteCloser
+	Closed() bool
+}
+
 type MuxedStream struct {
 	Headers []Header
 
@@ -13,7 +24,7 @@ type MuxedStream struct {
 
 	responseHeadersReceived chan struct{}
 
-	readBuffer    *SharedBuffer
+	readBuffer    ReadWriteClosedCloser
 	receiveWindow uint32
 	// current window size limit. Exponentially increase it when it's exhausted
 	receiveWindowCurrentMax uint32
@@ -25,7 +36,7 @@ type MuxedStream struct {
 
 	writeLock sync.Mutex
 	// The zero value for Buffer is an empty buffer ready to use.
-	writeBuffer bytes.Buffer
+	writeBuffer ReadWriteLengther
 
 	sendWindow uint32
 
@@ -38,14 +49,31 @@ type MuxedStream struct {
 	sentEOF bool
 	// true if the peer sent us an EOF
 	receivedEOF bool
+
+	// dictionary that was used to compress the stream
+	receivedUseDict bool
+	method          string
+	contentType     string
+	path            string
+	dictionaries    h2Dictionaries
+	readBufferLock  sync.RWMutex
 }
 
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
+	if s.dictionaries.read != nil {
+		s.readBufferLock.RLock()
+		b := s.readBuffer
+		s.readBufferLock.RUnlock()
+		return b.Read(p)
+	}
 	return s.readBuffer.Read(p)
 }
 
 func (s *MuxedStream) Write(p []byte) (n int, err error) {
-	s.writeLock.Lock()
+	ok := assignDictToStream(s, p)
+	if !ok {
+		s.writeLock.Lock()
+	}
 	defer s.writeLock.Unlock()
 	if s.writeEOF {
 		return 0, io.EOF
@@ -87,6 +115,9 @@ func (s *MuxedStream) CloseWrite() error {
 		return io.EOF
 	}
 	s.writeEOF = true
+	if c, ok := s.writeBuffer.(io.Closer); ok {
+		c.Close()
+	}
 	s.writeNotify()
 	return nil
 }
@@ -97,6 +128,15 @@ func (s *MuxedStream) WriteHeaders(headers []Header) error {
 	if s.writeHeaders != nil {
 		return ErrStreamHeadersSent
 	}
+
+	if s.dictionaries.write != nil {
+		dictWriter := s.dictionaries.write.getDictWriter(s, headers)
+		if dictWriter != nil {
+			s.writeBuffer = dictWriter
+		}
+
+	}
+
 	s.writeHeaders = headers
 	s.headersSent = false
 	s.writeNotify()
@@ -210,7 +250,7 @@ func (s *MuxedStream) getChunk() *streamChunk {
 	}
 
 	// Copies at most s.sendWindow bytes
-	writeLen, _ := io.CopyN(&chunk.buffer, &s.writeBuffer, int64(s.sendWindow))
+	writeLen, _ := io.CopyN(&chunk.buffer, s.writeBuffer, int64(s.sendWindow))
 	s.sendWindow -= uint32(writeLen)
 	s.receiveWindow += s.windowUpdate
 	s.windowUpdate = 0

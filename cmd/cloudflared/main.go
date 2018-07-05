@@ -95,6 +95,11 @@ func main() {
 			EnvVars: []string{"TUNNEL_CACERT"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "no-tls-verify",
+			Usage:   "Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted. Note: The connection from your machine to Cloudflare's Edge is still encrypted.",
+			EnvVars: []string{"NO_TLS_VERIFY"},
+		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "origincert",
 			Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
@@ -273,19 +278,31 @@ func main() {
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "grace-period",
-			Usage:   "Duration to accpet new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
+			Usage:   "Duration to accept new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
 			Value:   time.Second * 30,
 			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
 			Hidden:  true,
+		}),
+		altsrc.NewUintFlag(&cli.UintFlag{
+			Name:    "compression-quality",
+			Value:   0,
+			Usage:   "Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high",
+			EnvVars: []string{"TUNNEL_COMPRESSION_LEVEL"},
+			Hidden:  true,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "no-chunked-encoding",
+			Usage:   "Disables chunked transfer encoding; useful if you are running a WSGI server.",
+			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 		}),
 	}
 	app.Action = func(c *cli.Context) (err error) {
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
-		raven.CapturePanicAndWait(func() { err = startServer(c, shutdownC, graceShutdownC) }, nil)
+		raven.CapturePanic(func() { err = startServer(c, shutdownC, graceShutdownC) }, nil)
 		if err != nil {
-			raven.CaptureErrorAndWait(err, nil)
+			raven.CaptureError(err, nil)
 		}
 		return err
 	}

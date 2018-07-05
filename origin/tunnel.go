@@ -1,6 +1,7 @@
 package origin
 
 import (
+	"bufio"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -28,36 +29,39 @@ import (
 )
 
 const (
-	dialTimeout = 15 * time.Second
+	dialTimeout              = 15 * time.Second
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
 )
 
 type TunnelConfig struct {
-	EdgeAddrs         []string
-	OriginUrl         string
-	Hostname          string
-	OriginCert        []byte
-	TlsConfig         *tls.Config
-	ClientTlsConfig   *tls.Config
-	Retries           uint
-	HeartbeatInterval time.Duration
-	MaxHeartbeats     uint64
-	ClientID          string
-	BuildInfo         *BuildInfo
-	ReportedVersion   string
-	LBPool            string
-	Tags              []tunnelpogs.Tag
-	HAConnections     int
-	HTTPTransport     http.RoundTripper
-	Metrics           *TunnelMetrics
-	MetricsUpdateFreq time.Duration
-	ProtocolLogger    *log.Logger
-	Logger            *log.Logger
-	IsAutoupdated     bool
-	GracePeriod       time.Duration
-	RunFromTerminal   bool
+	EdgeAddrs          []string
+	OriginUrl          string
+	Hostname           string
+	OriginCert         []byte
+	TlsConfig          *tls.Config
+	ClientTlsConfig    *tls.Config
+	Retries            uint
+	HeartbeatInterval  time.Duration
+	MaxHeartbeats      uint64
+	ClientID           string
+	BuildInfo          *BuildInfo
+	ReportedVersion    string
+	LBPool             string
+	Tags               []tunnelpogs.Tag
+	HAConnections      int
+	HTTPTransport      http.RoundTripper
+	Metrics            *TunnelMetrics
+	MetricsUpdateFreq  time.Duration
+	ProtocolLogger     *log.Logger
+	Logger             *log.Logger
+	IsAutoupdated      bool
+	GracePeriod        time.Duration
+	RunFromTerminal    bool
+	NoChunkedEncoding  bool
+	WSGI               bool
+	CompressionQuality uint64
 }
 
 type dialError struct {
@@ -115,6 +119,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		OriginLocalIP:        OriginLocalIP,
 		IsAutoupdated:        c.IsAutoupdated,
 		RunFromTerminal:      c.RunFromTerminal,
+		CompressionQuality:   c.CompressionQuality,
 	}
 }
 
@@ -261,14 +266,14 @@ func ServeTunnel(
 			return castedErr.cause, !castedErr.permanent
 		case clientRegisterTunnelError:
 			logger.WithError(castedErr.cause).Error("Register tunnel error on client side")
-			raven.CaptureErrorAndWait(castedErr.cause, tags)
+			raven.CaptureError(castedErr.cause, tags)
 			return err, true
 		case muxerShutdownError:
 			logger.Infof("Muxer shutdown")
 			return err, true
 		default:
 			logger.WithError(err).Error("Serve tunnel error")
-			raven.CaptureErrorAndWait(err, tags)
+			raven.CaptureError(err, tags)
 			return err, true
 		}
 	}
@@ -335,7 +340,7 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	}
 
 	config.Logger.Info("Tunnel ID: " + registration.TunnelID)
-
+	config.Logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
 	return nil
 }
 
@@ -434,8 +439,9 @@ type TunnelHandler struct {
 	tags       []tunnelpogs.Tag
 	metrics    *TunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
-	connectionID string
-	logger       *log.Logger
+	connectionID      string
+	logger            *log.Logger
+	noChunkedEncoding bool
 }
 
 var dialer = net.Dialer{DualStack: true}
@@ -451,13 +457,14 @@ func NewTunnelHandler(ctx context.Context,
 		return nil, "", fmt.Errorf("Unable to parse origin url %#v", originURL)
 	}
 	h := &TunnelHandler{
-		originUrl:    originURL,
-		httpClient:   config.HTTPTransport,
-		tlsConfig:    config.ClientTlsConfig,
-		tags:         config.Tags,
-		metrics:      config.Metrics,
-		connectionID: uint8ToString(connectionID),
-		logger:       config.Logger,
+		originUrl:         originURL,
+		httpClient:        config.HTTPTransport,
+		tlsConfig:         config.ClientTlsConfig,
+		tags:              config.Tags,
+		metrics:           config.Metrics,
+		connectionID:      uint8ToString(connectionID),
+		logger:            config.Logger,
+		noChunkedEncoding: config.NoChunkedEncoding,
 	}
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
@@ -481,12 +488,13 @@ func NewTunnelHandler(ctx context.Context,
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
 	h.muxer, err = h2mux.Handshake(edgeConn, edgeConn, h2mux.MuxerConfig{
-		Timeout:           5 * time.Second,
-		Handler:           h,
-		IsClient:          true,
-		HeartbeatInterval: config.HeartbeatInterval,
-		MaxHeartbeats:     config.MaxHeartbeats,
-		Logger:            config.ProtocolLogger.WithFields(log.Fields{}),
+		Timeout:            5 * time.Second,
+		Handler:            h,
+		IsClient:           true,
+		HeartbeatInterval:  config.HeartbeatInterval,
+		MaxHeartbeats:      config.MaxHeartbeats,
+		Logger:             config.ProtocolLogger.WithFields(log.Fields{}),
+		CompressionQuality: h2mux.CompressionSetting(config.CompressionQuality),
 	})
 	if err != nil {
 		return h, "", errors.New("TLS handshake error")
@@ -528,19 +536,55 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			h.logResponse(response, cfRay, lbProbe)
 		}
 	} else {
+		// Support for WSGI Servers by switching transfer encoding from chunked to gzip/deflate
+		if h.noChunkedEncoding {
+			req.TransferEncoding = []string{"gzip", "deflate"}
+			cLength, err := strconv.Atoi(req.Header.Get("Content-Length"))
+			if err == nil {
+				req.ContentLength = int64(cLength)
+			}
+		}
+
 		response, err := h.httpClient.RoundTrip(req)
+
 		if err != nil {
 			h.logError(stream, err)
 		} else {
 			defer response.Body.Close()
 			stream.WriteHeaders(H1ResponseToH2Response(response))
-			io.Copy(stream, response.Body)
+			if h.isEventStream(response) {
+				h.writeEventStream(stream, response.Body)
+			} else {
+				// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
+				// compression generates dictionary on first write
+				io.CopyBuffer(stream, response.Body, make([]byte, 512*1024))
+			}
+
 			h.metrics.incrementResponses(h.connectionID, "200")
 			h.logResponse(response, cfRay, lbProbe)
 		}
 	}
 	h.metrics.decrementConcurrentRequests(h.connectionID)
 	return nil
+}
+
+func (h *TunnelHandler) writeEventStream(stream *h2mux.MuxedStream, responseBody io.ReadCloser) {
+	reader := bufio.NewReader(responseBody)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		stream.Write(line)
+	}
+}
+
+func (h *TunnelHandler) isEventStream(response *http.Response) bool {
+	if response.Header.Get("content-type") == "text/event-stream" {
+		h.logger.Debug("Detected Server-Side Events from Origin")
+		return true
+	}
+	return false
 }
 
 func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {

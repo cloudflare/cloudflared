@@ -48,6 +48,8 @@ type MuxWriter struct {
 	bytesWrote *AtomicCounter
 	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
 	updateOutBoundBytesChan chan<- uint64
+
+	useDictChan <-chan useDictRequest
 }
 
 type MuxedStreamRequest struct {
@@ -156,6 +158,13 @@ func (w *MuxWriter) run(parentLogger *log.Entry) error {
 				return err
 			}
 			w.idleTimer.MarkActive()
+		case useDict := <-w.useDictChan:
+			err := w.writeUseDictionary(useDict)
+			if err != nil {
+				logger.WithError(err).Warn("error writing use dictionary")
+				return err
+			}
+			w.idleTimer.MarkActive()
 		}
 	}
 }
@@ -258,5 +267,21 @@ func (w *MuxWriter) writeHeaders(streamID uint32, headers []Header) error {
 			})
 		}
 	}
+	return err
+}
+
+func (w *MuxWriter) writeUseDictionary(dictRequest useDictRequest) error {
+	err := w.f.WriteRawFrame(FrameUseDictionary, 0, dictRequest.streamID, []byte{byte(dictRequest.dictID)})
+	if err != nil {
+		return err
+	}
+	payload := make([]byte, 0, 64)
+	for _, set := range dictRequest.setDict {
+		payload = append(payload, byte(set.dictID))
+		payload = appendVarInt(payload, 7, uint64(set.dictSZ))
+		payload = append(payload, 0x80) // E = 1, D = 0, Truncate = 0
+	}
+
+	err = w.f.WriteRawFrame(FrameSetDictionary, FlagSetDictionaryAppend, dictRequest.streamID, payload)
 	return err
 }

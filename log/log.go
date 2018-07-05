@@ -5,6 +5,7 @@ package log
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/mattn/go-colorable"
@@ -23,8 +24,7 @@ type JSONFormatter struct {
 func CreateLogger() *logrus.Logger {
 	logger := logrus.New()
 	logger.Out = colorable.NewColorableStderr()
-	logger.Formatter = &logrus.TextFormatter{ForceColors: true}
-
+	logger.Formatter = &logrus.TextFormatter{ForceColors: runtime.GOOS == "windows"}
 	return logger
 }
 

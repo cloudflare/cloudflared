@@ -40,6 +40,8 @@ type muxMetricsUpdater struct {
 	updateOutBoundBytesChan <-chan uint64
 	// shutdownC is to signal the muxerMetricsUpdater to shutdown
 	abortChan <-chan struct{}
+
+	compBytesBefore, compBytesAfter *AtomicCounter
 }
 
 type MuxerMetrics struct {
@@ -48,6 +50,14 @@ type MuxerMetrics struct {
 	ReceiveWindowMin, ReceiveWindowMax, SendWindowMin, SendWindowMax uint32
 	InBoundRateCurr, InBoundRateMin, InBoundRateMax                  uint64
 	OutBoundRateCurr, OutBoundRateMin, OutBoundRateMax               uint64
+	CompBytesBefore, CompBytesAfter                                  *AtomicCounter
+}
+
+func (m *MuxerMetrics) CompRateAve() float64 {
+	if m.CompBytesBefore.Value() == 0 {
+		return 1.
+	}
+	return float64(m.CompBytesAfter.Value()) / float64(m.CompBytesBefore.Value())
 }
 
 type roundTripMeasurement struct {
@@ -68,9 +78,9 @@ type flowControlData struct {
 }
 
 type rate struct {
-	curr uint64
+	curr     uint64
 	min, max uint64
-	lock sync.RWMutex
+	lock     sync.RWMutex
 }
 
 func newMuxMetricsUpdater(
@@ -80,6 +90,7 @@ func newMuxMetricsUpdater(
 	updateInBoundBytesChan <-chan uint64,
 	updateOutBoundBytesChan <-chan uint64,
 	abortChan <-chan struct{},
+	compBytesBefore, compBytesAfter *AtomicCounter,
 ) *muxMetricsUpdater {
 	return &muxMetricsUpdater{
 		rttData:                 newRTTData(),
@@ -93,6 +104,8 @@ func newMuxMetricsUpdater(
 		updateInBoundBytesChan:  updateInBoundBytesChan,
 		updateOutBoundBytesChan: updateOutBoundBytesChan,
 		abortChan:               abortChan,
+		compBytesBefore:         compBytesBefore,
+		compBytesAfter:          compBytesAfter,
 	}
 }
 
@@ -103,6 +116,7 @@ func (updater *muxMetricsUpdater) Metrics() *MuxerMetrics {
 	m.SendWindowAve, m.SendWindowMin, m.SendWindowMax = updater.sendWindowData.metrics()
 	m.InBoundRateCurr, m.InBoundRateMin, m.InBoundRateMax = updater.inBoundRate.get()
 	m.OutBoundRateCurr, m.OutBoundRateMin, m.OutBoundRateMax = updater.outBoundRate.get()
+	m.CompBytesBefore, m.CompBytesAfter = updater.compBytesBefore, updater.compBytesAfter
 	return m
 }
 

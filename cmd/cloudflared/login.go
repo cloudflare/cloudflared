@@ -18,7 +18,7 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
-const baseLoginURL = "https://www.cloudflare.com/a/warp"
+const baseLoginURL = "https://dash.cloudflare.com/warp"
 const baseCertStoreURL = "https://login.cloudflarewarp.com"
 const clientTimeout = time.Minute * 20
 

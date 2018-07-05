@@ -1,8 +1,10 @@
 package h2mux
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
+	"net/url"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -45,6 +47,8 @@ type MuxReader struct {
 	bytesRead *AtomicCounter
 	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
 	updateInBoundBytesChan chan<- uint64
+	// dictionaries holds the h2 cross-stream compression dictionaries
+	dictionaries h2Dictionaries
 }
 
 func (r *MuxReader) Shutdown() {
@@ -125,6 +129,15 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 		// consumes data and frees up space in flow-control windows
 		case *http2.WindowUpdateFrame:
 			err = r.updateStreamWindow(f)
+		case *http2.UnknownFrame:
+			switch f.Header().Type {
+			case FrameUseDictionary:
+				err = r.receiveUseDictionary(f)
+			case FrameSetDictionary:
+				err = r.receiveSetDictionary(f)
+			default:
+				err = ErrUnexpectedFrameType
+			}
 		default:
 			err = ErrUnexpectedFrameType
 		}
@@ -139,11 +152,13 @@ func (r *MuxReader) newMuxedStream(streamID uint32) *MuxedStream {
 	return &MuxedStream{
 		streamID:                streamID,
 		readBuffer:              NewSharedBuffer(),
+		writeBuffer:             &bytes.Buffer{},
 		receiveWindow:           r.initialStreamWindow,
 		receiveWindowCurrentMax: r.initialStreamWindow,
 		receiveWindowMax:        r.streamWindowMax,
 		sendWindow:              r.initialStreamWindow,
 		readyList:               r.readyList,
+		dictionaries:            r.dictionaries,
 	}
 }
 
@@ -207,10 +222,23 @@ func (r *MuxReader) receiveHeaderData(frame *http2.MetaHeadersFrame) error {
 			return r.defaultStreamErrorHandler(err, frame.Header())
 		}
 	}
-	headers := make([]Header, len(frame.Fields))
-	for i, header := range frame.Fields {
-		headers[i].Name = header.Name
-		headers[i].Value = header.Value
+	headers := make([]Header, 0, len(frame.Fields))
+	for _, header := range frame.Fields {
+		switch header.Name {
+		case ":method":
+			stream.method = header.Value
+		case ":path":
+			u, err := url.Parse(header.Value)
+			if err == nil {
+				stream.path = u.Path
+			}
+		case "accept-encoding":
+			// remove accept-encoding if dictionaries are enabled
+			if r.dictionaries.write != nil {
+				continue
+			}
+		}
+		headers = append(headers, Header{Name: header.Name, Value: header.Value})
 	}
 	stream.Headers = headers
 	if frame.Header().Flags.Has(http2.FlagHeadersEndStream) {
@@ -286,6 +314,140 @@ func (r *MuxReader) receiveGoAway(frame *http2.GoAwayFrame) error {
 	for i := frame.LastStreamID + 2; i <= lastStream; i++ {
 		if stream, ok := r.streams.Get(i); ok {
 			stream.Close()
+		}
+	}
+	return nil
+}
+
+// Receive a USE_DICTIONARY from the peer. Setup dictionary for stream.
+func (r *MuxReader) receiveUseDictionary(frame *http2.UnknownFrame) error {
+	payload := frame.Payload()
+	streamID := frame.StreamID
+
+	// Check frame is formatted properly
+	if len(payload) != 1 {
+		return r.streamError(streamID, http2.ErrCodeProtocol)
+	}
+
+	stream, err := r.getStreamForFrame(frame)
+	if err != nil {
+		return err
+	}
+
+	if stream.receivedUseDict == true || stream.dictionaries.read == nil {
+		return r.streamError(streamID, http2.ErrCodeInternal)
+	}
+
+	stream.receivedUseDict = true
+	dictID := payload[0]
+
+	dictReader := stream.dictionaries.read.newReader(stream.readBuffer.(*SharedBuffer), dictID)
+	if dictReader == nil {
+		return r.streamError(streamID, http2.ErrCodeInternal)
+	}
+
+	stream.readBufferLock.Lock()
+	stream.readBuffer = dictReader
+	stream.readBufferLock.Unlock()
+
+	return nil
+}
+
+// Receive a SET_DICTIONARY from the peer. Update dictionaries accordingly.
+func (r *MuxReader) receiveSetDictionary(frame *http2.UnknownFrame) (err error) {
+
+	payload := frame.Payload()
+	flags := frame.Flags
+
+	stream, err := r.getStreamForFrame(frame)
+	if err != nil && err != ErrClosedStream {
+		return err
+	}
+	reader, ok := stream.readBuffer.(*h2DictionaryReader)
+	if !ok {
+		return r.streamError(frame.StreamID, http2.ErrCodeProtocol)
+	}
+
+	// A SetDictionary frame consists of several
+	// Dictionary-Entries that specify how existing dictionaries
+	// are to be updated using the current stream data
+	// +---------------+---------------+
+	// |   Dictionary-Entry (+)    ...
+	// +---------------+---------------+
+
+	for {
+		// Each Dictionary-Entry is formatted as follows:
+		// +-------------------------------+
+		// |       Dictionary-ID (8)       |
+		// +---+---------------------------+
+		// | P |        Size (7+)          |
+		// +---+---------------------------+
+		// | E?| D?|  Truncate? (6+)       |
+		// +---+---------------------------+
+		// |           Offset? (8+)        |
+		// +-------------------------------+
+
+		var size, truncate, offset uint64
+		var p, e, d bool
+
+		// Parse a single Dictionary-Entry
+		if len(payload) < 2 { // Must have at least id and size
+			return MuxerStreamError{"unexpected EOF", http2.ErrCodeProtocol}
+		}
+
+		dictID := uint8(payload[0])
+		p = (uint8(payload[1]) >> 7) == 1
+		payload, size, err = http2ReadVarInt(7, payload[1:])
+		if err != nil {
+			return
+		}
+
+		if flags.Has(FlagSetDictionaryAppend) {
+			// Presence of FlagSetDictionaryAppend means we expect e, d and truncate
+			if len(payload) < 1 {
+				return MuxerStreamError{"unexpected EOF", http2.ErrCodeProtocol}
+			}
+			e = (uint8(payload[0]) >> 7) == 1
+			d = (uint8((payload[0])>>6) & 1) == 1
+			payload, truncate, err = http2ReadVarInt(6, payload)
+			if err != nil {
+				return
+			}
+		}
+
+		if flags.Has(FlagSetDictionaryOffset) {
+			// Presence of FlagSetDictionaryOffset means we expect offset
+			if len(payload) < 1 {
+				return MuxerStreamError{"unexpected EOF", http2.ErrCodeProtocol}
+			}
+			payload, offset, err = http2ReadVarInt(8, payload)
+			if err != nil {
+				return
+			}
+		}
+
+		setdict := setDictRequest{streamID: stream.streamID,
+			dictID:   dictID,
+			dictSZ:   size,
+			truncate: truncate,
+			offset:   offset,
+			P:        p,
+			E:        e,
+			D:        d}
+
+		// Find the right dictionary
+		dict, err := r.dictionaries.read.getDictByID(dictID)
+		if err != nil {
+			return err
+		}
+
+		// Register a dictionary update order for the dictionary and reader
+		updateEntry := &dictUpdate{reader: reader, dictionary: dict, s: setdict}
+		dict.queue = append(dict.queue, updateEntry)
+		reader.queue = append(reader.queue, updateEntry)
+		// End of frame
+		if len(payload) == 0 {
+			break
 		}
 	}
 	return nil

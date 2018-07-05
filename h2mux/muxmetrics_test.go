@@ -61,7 +61,7 @@ func TestFlowControlDataUpdate(t *testing.T) {
 	for i := 1; i <= dataPoints; i++ {
 		size := maxWindowSize - uint32(i)
 		f.update(size)
-		assert.Equal(t, max - uint32(1), f.max)
+		assert.Equal(t, max-uint32(1), f.max)
 		assert.Equal(t, size, f.min)
 
 		assert.Equal(t, i, f.queue.Len())
@@ -94,12 +94,15 @@ func TestMuxMetricsUpdater(t *testing.T) {
 	updateOutBoundBytesChan := make(chan uint64)
 	abortChan := make(chan struct{})
 	errChan := make(chan error)
+	compBefore, compAfter := NewAtomicCounter(0), NewAtomicCounter(0)
 	m := newMuxMetricsUpdater(updateRTTChan,
 		updateReceiveWindowChan,
 		updateSendWindowChan,
 		updateInBoundBytesChan,
 		updateOutBoundBytesChan,
 		abortChan,
+		compBefore,
+		compAfter,
 	)
 	logger := log.NewEntry(log.New())
 

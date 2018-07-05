@@ -25,6 +25,9 @@ type muxerMetrics struct {
 	outBoundRateCurr *prometheus.GaugeVec
 	outBoundRateMin  *prometheus.GaugeVec
 	outBoundRateMax  *prometheus.GaugeVec
+	compBytesBefore  *prometheus.GaugeVec
+	compBytesAfter   *prometheus.GaugeVec
+	compRateAve      *prometheus.GaugeVec
 }
 
 type TunnelMetrics struct {
@@ -187,6 +190,33 @@ func newMuxerMetrics() *muxerMetrics {
 	)
 	prometheus.MustRegister(outBoundRateMax)
 
+	compBytesBefore := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "comp_bytes_before",
+			Help: "Bytes sent via cross-stream compression, pre compression",
+		},
+		[]string{"connection_id"},
+	)
+	prometheus.MustRegister(compBytesBefore)
+
+	compBytesAfter := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "comp_bytes_after",
+			Help: "Bytes sent via cross-stream compression, post compression",
+		},
+		[]string{"connection_id"},
+	)
+	prometheus.MustRegister(compBytesAfter)
+
+	compRateAve := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "comp_rate_ave",
+			Help: "Average outbound cross-stream compression ratio",
+		},
+		[]string{"connection_id"},
+	)
+	prometheus.MustRegister(compRateAve)
+
 	return &muxerMetrics{
 		rtt:              rtt,
 		rttMin:           rttMin,
@@ -203,6 +233,9 @@ func newMuxerMetrics() *muxerMetrics {
 		outBoundRateCurr: outBoundRateCurr,
 		outBoundRateMin:  outBoundRateMin,
 		outBoundRateMax:  outBoundRateMax,
+		compBytesBefore:  compBytesBefore,
+		compBytesAfter:   compBytesAfter,
+		compRateAve:      compRateAve,
 	}
 }
 
@@ -222,6 +255,9 @@ func (m *muxerMetrics) update(connectionID string, metrics *h2mux.MuxerMetrics) 
 	m.outBoundRateCurr.WithLabelValues(connectionID).Set(float64(metrics.OutBoundRateCurr))
 	m.outBoundRateMin.WithLabelValues(connectionID).Set(float64(metrics.OutBoundRateMin))
 	m.outBoundRateMax.WithLabelValues(connectionID).Set(float64(metrics.OutBoundRateMax))
+	m.compBytesBefore.WithLabelValues(connectionID).Set(float64(metrics.CompBytesBefore.Value()))
+	m.compBytesAfter.WithLabelValues(connectionID).Set(float64(metrics.CompBytesAfter.Value()))
+	m.compRateAve.WithLabelValues(connectionID).Set(float64(metrics.CompRateAve()))
 }
 
 func convertRTTMilliSec(t time.Duration) float64 {

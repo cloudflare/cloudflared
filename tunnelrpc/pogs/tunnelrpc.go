@@ -55,6 +55,7 @@ type RegistrationOptions struct {
 	OriginLocalIP        string `capnp:"originLocalIp"`
 	IsAutoupdated        bool   `capnp:"isAutoupdated"`
 	RunFromTerminal      bool   `capnp:"runFromTerminal"`
+	CompressionQuality   uint64 `capnp:"compressionQuality"`
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {

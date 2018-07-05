@@ -1,6 +1,7 @@
 package h2mux
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"strings"
@@ -47,7 +48,8 @@ type MuxerConfig struct {
 	// The minimum number of heartbeats to send before terminating the connection.
 	MaxHeartbeats uint64
 	// Logger to use
-	Logger *log.Entry
+	Logger             *log.Entry
+	CompressionQuality CompressionSetting
 }
 
 type Muxer struct {
@@ -78,6 +80,8 @@ type Muxer struct {
 	// explicitShutdown records whether the Muxer is closing because Shutdown was called, or due to another
 	// error.
 	explicitShutdown *BooleanFuse
+
+	compressionQuality CompressionPreset
 }
 
 type Header struct {
@@ -109,10 +113,18 @@ func Handshake(
 		readyList:     NewReadyList(),
 		streams:       newActiveStreamMap(config.IsClient),
 	}
-	m.f.ReadMetaHeaders = hpack.NewDecoder(4096, func(hpack.HeaderField) {})
 
+	m.f.ReadMetaHeaders = hpack.NewDecoder(4096, func(hpack.HeaderField) {})
 	// Initialise the settings to identify this connection and confirm the other end is sane.
 	handshakeSetting := http2.Setting{ID: SettingMuxerMagic, Val: MuxerMagicEdge}
+	compressionSetting := http2.Setting{ID: SettingCompression, Val: config.CompressionQuality.toH2Setting()}
+	if CompressionIsSupported() {
+		log.Debug("Compression is supported")
+		m.compressionQuality = config.CompressionQuality.getPreset()
+	} else {
+		log.Debug("Compression is not supported")
+	}
+
 	expectedMagic := MuxerMagicOrigin
 	if config.IsClient {
 		handshakeSetting.Val = MuxerMagicOrigin
@@ -120,7 +132,7 @@ func Handshake(
 	}
 	errChan := make(chan error, 2)
 	// Simultaneously send our settings and verify the peer's settings.
-	go func() { errChan <- m.f.WriteSettings(handshakeSetting) }()
+	go func() { errChan <- m.f.WriteSettings(handshakeSetting, compressionSetting) }()
 	go func() { errChan <- m.readPeerSettings(expectedMagic) }()
 	err := joinErrorsWithTimeout(errChan, 2, config.Timeout, ErrHandshakeTimeout)
 	if err != nil {
@@ -197,6 +209,9 @@ func Handshake(
 		updateOutBoundBytesChan: updateOutBoundBytesChan,
 	}
 	m.muxWriter.headerEncoder = hpack.NewEncoder(&m.muxWriter.headerBuffer)
+
+	compBytesBefore, compBytesAfter := NewAtomicCounter(0), NewAtomicCounter(0)
+
 	m.muxMetricsUpdater = newMuxMetricsUpdater(
 		updateRTTChan,
 		updateReceiveWindowChan,
@@ -204,7 +219,24 @@ func Handshake(
 		updateInBoundBytesChan,
 		updateOutBoundBytesChan,
 		m.abortChan,
+		compBytesBefore,
+		compBytesAfter,
 	)
+
+	if m.compressionQuality.dictSize > 0 && m.compressionQuality.nDicts > 0 {
+		nd, sz := m.compressionQuality.nDicts, m.compressionQuality.dictSize
+		writeDicts, dictChan := newH2WriteDictionaries(
+			nd,
+			sz,
+			m.compressionQuality.quality,
+			compBytesBefore,
+			compBytesAfter,
+		)
+		readDicts := newH2ReadDictionaries(nd, sz)
+		m.muxReader.dictionaries = h2Dictionaries{read: &readDicts, write: writeDicts}
+		m.muxWriter.useDictChan = dictChan
+	}
+
 	return m, nil
 }
 
@@ -226,6 +258,23 @@ func (m *Muxer) readPeerSettings(magic uint32) error {
 	}
 	if magic != peerMagic {
 		return ErrBadHandshakeWrongMagic
+	}
+	peerCompression, ok := settingsFrame.Value(SettingCompression)
+	if !ok {
+		m.compressionQuality = compressionPresets[CompressionNone]
+		return nil
+	}
+	ver, fmt, sz, nd := parseCompressionSettingVal(peerCompression)
+	if ver != compressionVersion || fmt != compressionFormat || sz == 0 || nd == 0 {
+		m.compressionQuality = compressionPresets[CompressionNone]
+		return nil
+	}
+	// Values used for compression are the mimimum between the two peers
+	if sz < m.compressionQuality.dictSize {
+		m.compressionQuality.dictSize = sz
+	}
+	if nd < m.compressionQuality.nDicts {
+		m.compressionQuality.nDicts = nd
 	}
 	return nil
 }
@@ -328,13 +377,16 @@ func (m *Muxer) OpenStream(headers []Header, body io.Reader) (*MuxedStream, erro
 	stream := &MuxedStream{
 		responseHeadersReceived: make(chan struct{}),
 		readBuffer:              NewSharedBuffer(),
+		writeBuffer:             &bytes.Buffer{},
 		receiveWindow:           defaultWindowSize,
 		receiveWindowCurrentMax: defaultWindowSize, // Initial window size limit. exponentially increase it when receiveWindow is exhausted
 		receiveWindowMax:        maxWindowSize,
 		sendWindow:              defaultWindowSize,
 		readyList:               m.readyList,
 		writeHeaders:            headers,
+		dictionaries:            m.muxReader.dictionaries,
 	}
+
 	select {
 	// Will be received by mux writer
 	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: body}:

@@ -195,9 +195,9 @@ func getOriginCert(c *cli.Context) ([]byte, error) {
 If the path above is wrong, specify the path with the -origincert option.
 If you don't have a certificate signed by Cloudflare, run the command:
 
-    %s login
+	%s login
 `, originCertPath, os.Args[0])
-	return nil, fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
+		return nil, fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
 	}
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
@@ -257,7 +257,7 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, pr
 		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
 		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: originCertPool},
+		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: c.IsSet("no-tls-verify")},
 	}
 
 	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
@@ -265,29 +265,31 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, pr
 	}
 
 	return &origin.TunnelConfig{
-		EdgeAddrs:         c.StringSlice("edge"),
-		OriginUrl:         url,
-		Hostname:          hostname,
-		OriginCert:        originCert,
-		TlsConfig:         tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
-		ClientTlsConfig:   httpTransport.TLSClientConfig,
-		Retries:           c.Uint("retries"),
-		HeartbeatInterval: c.Duration("heartbeat-interval"),
-		MaxHeartbeats:     c.Uint64("heartbeat-count"),
-		ClientID:          clientID,
-		BuildInfo:         buildInfo,
-		ReportedVersion:   Version,
-		LBPool:            c.String("lb-pool"),
-		Tags:              tags,
-		HAConnections:     c.Int("ha-connections"),
-		HTTPTransport:     httpTransport,
-		Metrics:           tunnelMetrics,
-		MetricsUpdateFreq: c.Duration("metrics-update-freq"),
-		ProtocolLogger:    protoLogger,
-		Logger:            logger,
-		IsAutoupdated:     c.Bool("is-autoupdated"),
-		GracePeriod:       c.Duration("grace-period"),
-		RunFromTerminal:   isRunningFromTerminal(),
+		EdgeAddrs:          c.StringSlice("edge"),
+		OriginUrl:          url,
+		Hostname:           hostname,
+		OriginCert:         originCert,
+		TlsConfig:          tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
+		ClientTlsConfig:    httpTransport.TLSClientConfig,
+		Retries:            c.Uint("retries"),
+		HeartbeatInterval:  c.Duration("heartbeat-interval"),
+		MaxHeartbeats:      c.Uint64("heartbeat-count"),
+		ClientID:           clientID,
+		BuildInfo:          buildInfo,
+		ReportedVersion:    Version,
+		LBPool:             c.String("lb-pool"),
+		Tags:               tags,
+		HAConnections:      c.Int("ha-connections"),
+		HTTPTransport:      httpTransport,
+		Metrics:            tunnelMetrics,
+		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
+		ProtocolLogger:     protoLogger,
+		Logger:             logger,
+		IsAutoupdated:      c.Bool("is-autoupdated"),
+		GracePeriod:        c.Duration("grace-period"),
+		RunFromTerminal:    isRunningFromTerminal(),
+		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
+		CompressionQuality: c.Uint64("compression-quality"),
 	}, nil
 }
 
