@@ -9,8 +9,9 @@ import (
 )
 
 // can only be called once
-var testMetrics = make([]string, 0)
-var m = NewTunnelMetrics(testMetrics)
+// There's no TunnelHandler in these tests to keep track of baseMetricsKeys
+var emptyMetricKeys = make([]string, 0)
+var m = NewTunnelMetrics(emptyMetricKeys)
 
 func TestConcurrentRequestsSingleTunnel(t *testing.T) {
 	routines := 20
@@ -27,10 +28,10 @@ func TestConcurrentRequestsSingleTunnel(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	assert.Len(t, m.concurrentRequests, 1)
-	assert.Equal(t, uint64(routines), m.concurrentRequests[hashKey])
-	assert.Len(t, m.maxConcurrentRequests, 1)
-	assert.Equal(t, uint64(routines), m.maxConcurrentRequests[hashKey])
+	assert.Len(t, m.concurrentRequestsCounter, 1)
+	assert.Equal(t, uint64(routines), m.concurrentRequestsCounter[hashKey])
+	assert.Len(t, m.maxConcurrentRequestsCounter, 1)
+	assert.Equal(t, uint64(routines), m.maxConcurrentRequestsCounter[hashKey])
 
 	wg.Add(routines / 2)
 	for i := 0; i < routines/2; i++ {
@@ -40,13 +41,13 @@ func TestConcurrentRequestsSingleTunnel(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	assert.Equal(t, uint64(routines-routines/2), m.concurrentRequests[hashKey])
-	assert.Equal(t, uint64(routines), m.maxConcurrentRequests[hashKey])
+	assert.Equal(t, uint64(routines-routines/2), m.concurrentRequestsCounter[hashKey])
+	assert.Equal(t, uint64(routines), m.maxConcurrentRequestsCounter[hashKey])
 }
 
 func TestConcurrentRequestsMultiTunnel(t *testing.T) {
-	m.concurrentRequests = make(map[uint64]uint64)
-	m.maxConcurrentRequests = make(map[uint64]uint64)
+	m.concurrentRequestsCounter = make(map[uint64]uint64)
+	m.maxConcurrentRequestsCounter = make(map[uint64]uint64)
 	tunnels := 20
 	var wg sync.WaitGroup
 	wg.Add(tunnels)
@@ -62,13 +63,13 @@ func TestConcurrentRequestsMultiTunnel(t *testing.T) {
 	}
 	wg.Wait()
 
-	assert.Len(t, m.concurrentRequests, tunnels)
-	assert.Len(t, m.maxConcurrentRequests, tunnels)
+	assert.Len(t, m.concurrentRequestsCounter, tunnels)
+	assert.Len(t, m.maxConcurrentRequestsCounter, tunnels)
 	for i := 0; i < tunnels; i++ {
 		labels := []string{strconv.Itoa(i)}
 		hashKey := hashLabelValues(labels)
-		assert.Equal(t, uint64(i+1), m.concurrentRequests[hashKey])
-		assert.Equal(t, uint64(i+1), m.maxConcurrentRequests[hashKey])
+		assert.Equal(t, uint64(i+1), m.concurrentRequestsCounter[hashKey])
+		assert.Equal(t, uint64(i+1), m.maxConcurrentRequestsCounter[hashKey])
 	}
 
 	wg.Add(tunnels)
@@ -83,13 +84,13 @@ func TestConcurrentRequestsMultiTunnel(t *testing.T) {
 	}
 	wg.Wait()
 
-	assert.Len(t, m.concurrentRequests, tunnels)
-	assert.Len(t, m.maxConcurrentRequests, tunnels)
+	assert.Len(t, m.concurrentRequestsCounter, tunnels)
+	assert.Len(t, m.maxConcurrentRequestsCounter, tunnels)
 	for i := 0; i < tunnels; i++ {
 		labels := []string{strconv.Itoa(i)}
 		hashKey := hashLabelValues(labels)
-		assert.Equal(t, uint64(0), m.concurrentRequests[hashKey])
-		assert.Equal(t, uint64(i+1), m.maxConcurrentRequests[hashKey])
+		assert.Equal(t, uint64(0), m.concurrentRequestsCounter[hashKey])
+		assert.Equal(t, uint64(i+1), m.maxConcurrentRequestsCounter[hashKey])
 	}
 
 }

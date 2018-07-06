@@ -50,7 +50,7 @@ func NewSupervisor(config *TunnelConfig) *Supervisor {
 	}
 }
 
-func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}, metricsLabels map[string]string) error {
+func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}, metricsLabels MetricsLabelList) error {
 	logger := s.config.Logger
 	if err := s.initialize(ctx, connectedSignal, metricsLabels); err != nil {
 		return err
@@ -119,7 +119,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}, met
 	}
 }
 
-func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}, metricsLabels map[string]string) error {
+func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}, metricsLabels MetricsLabelList) error {
 	logger := s.config.Logger
 	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 	if err != nil {
@@ -154,7 +154,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct
 
 // startTunnel starts the first tunnel connection. The resulting error will be sent on
 // s.tunnelErrors. It will send a signal via connectedSignal if registration succeed
-func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan struct{}, metricsLabels map[string]string) {
+func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan struct{}, metricsLabels MetricsLabelList) {
 	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal, metricsLabels)
 	defer func() {
 		s.tunnelErrors <- tunnelError{index: 0, err: err}
@@ -182,7 +182,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan 
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
 // s.tunnelErrors.
-func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal chan struct{}, metricsLabels map[string]string) {
+func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal chan struct{}, metricsLabels MetricsLabelList) {
 	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(index), uint8(index), connectedSignal, metricsLabels)
 	s.tunnelErrors <- tunnelError{index: index, err: err}
 }

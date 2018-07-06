@@ -118,7 +118,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal chan struct{}, metricsLabels map[string]string) error {
+func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal chan struct{}, metricsLabels MetricsLabelList) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-shutdownC
@@ -141,7 +141,7 @@ func ServeTunnelLoop(ctx context.Context,
 	addr *net.TCPAddr,
 	connectionID uint8,
 	connectedSignal chan struct{},
-	metricsLabels map[string]string,
+	metricsLabels MetricsLabelList,
 ) error {
 	logger := config.Logger
 	config.Metrics.incrementHaConnections()
@@ -176,7 +176,7 @@ func ServeTunnel(
 	connectionID uint8,
 	connectedFuse *h2mux.BooleanFuse,
 	backoff *BackoffHandler,
-	metricsLabels map[string]string,
+	metricsLabels MetricsLabelList,
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -197,17 +197,8 @@ func ServeTunnel(
 	tags := make(map[string]string)
 	tags["ha"] = connectionTag
 
-	metricsLabelKeys := make([]string, len(metricsLabels))
-	metricsLabelValues := make([]string, len(metricsLabels))
-	i := 0
-	for k, v := range metricsLabels {
-		metricsLabelKeys[i] = k
-		metricsLabelValues[i] = v
-		i++
-	}
-
 	// Returns error from parsing the origin URL or handshake errors
-	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID, metricsLabelKeys, metricsLabelValues)
+	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID, metricsLabels)
 	if err != nil {
 		errLog := config.Logger.WithError(err)
 		switch err.(type) {
@@ -225,7 +216,7 @@ func ServeTunnel(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		err := RegisterTunnel(serveCtx, handler, config, connectionID, originLocalIP)
+		err := RegisterTunnel(serveCtx, handler, config, originLocalIP)
 		if err == nil {
 			connectedFuse.Fuse(true)
 			backoff.SetGracePeriod()
@@ -243,7 +234,7 @@ func ServeTunnel(
 				handler.muxer.Shutdown()
 				return err
 			case <-updateMetricsTickC:
-				handler.UpdateMetrics(connectionTag)
+				handler.updateMetrics()
 			}
 		}
 	})
@@ -296,8 +287,7 @@ func IsRPCStreamResponse(headers []h2mux.Header) bool {
 	return true
 }
 
-// RegisterTunnel returns the name of the location connected to, or an error
-func RegisterTunnel(ctx context.Context, handler *TunnelHandler, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
+func RegisterTunnel(ctx context.Context, handler *TunnelHandler, config *TunnelConfig, originLocalIP string) error {
 	config.Logger.Debug("initiating RPC stream to register")
 	muxer := handler.muxer
 	stream, err := muxer.OpenStream([]h2mux.Header{
@@ -328,13 +318,13 @@ func RegisterTunnel(ctx context.Context, handler *TunnelHandler, config *TunnelC
 		ctx,
 		config.OriginCert,
 		config.Hostname,
-		config.RegistrationOptions(connectionID, originLocalIP),
+		config.RegistrationOptions(handler.connectionID, originLocalIP),
 	)
 	if err != nil {
 		// RegisterTunnel RPC failure
 		return clientRegisterTunnelError{cause: err}
 	}
-	LogServerInfo(serverInfoPromise.Result(), connectionID, handler, config.Logger)
+	LogServerInfo(serverInfoPromise.Result(), handler, config.Logger)
 
 	for _, logLine := range registration.LogLines {
 		config.Logger.Info(logLine)
@@ -381,7 +371,6 @@ func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log
 
 func LogServerInfo(
 	promise tunnelrpc.ServerInfo_Promise,
-	connectionID uint8,
 	handler *TunnelHandler,
 	logger *log.Logger,
 ) {
@@ -395,8 +384,7 @@ func LogServerInfo(
 	}
 	logger.Infof("Connected to %s", serverInfo.LocationName)
 
-	metricsLabels := handler.getCombinedMetricsLabels(uint8ToString(connectionID))
-	handler.metrics.registerServerLocation(metricsLabels, serverInfo.LocationName)
+	handler.registerServerLocationMetrics(serverInfo.LocationName)
 }
 
 func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
@@ -448,11 +436,10 @@ type TunnelHandler struct {
 	tags       []tunnelpogs.Tag
 	metrics    *TunnelMetrics
 
-	baseMetricsLabelKeys   []string
-	baseMetricsLabelValues []string
+	baseMetricsLabels MetricsLabelList
 
-	// connectionID is only used by metrics, and prometheus requires labels to be string
-	connectionID string
+	// connectionID is used by metrics and is converted to string when used as a prometheus label
+	connectionID uint8
 	logger       *log.Logger
 }
 
@@ -463,23 +450,21 @@ func NewTunnelHandler(ctx context.Context,
 	config *TunnelConfig,
 	addr string,
 	connectionID uint8,
-	baseMetricsLabelKeys []string,
-	baseMetricsLabelValues []string,
+	baseMetricsLabels MetricsLabelList,
 ) (*TunnelHandler, string, error) {
 	originURL, err := validation.ValidateUrl(config.OriginUrl)
 	if err != nil {
 		return nil, "", fmt.Errorf("Unable to parse origin url %#v", originURL)
 	}
 	h := &TunnelHandler{
-		originUrl:              originURL,
-		httpClient:             config.HTTPTransport,
-		tlsConfig:              config.ClientTlsConfig,
-		tags:                   config.Tags,
-		metrics:                config.Metrics,
-		connectionID:           uint8ToString(connectionID),
-		baseMetricsLabelKeys:   baseMetricsLabelKeys,
-		baseMetricsLabelValues: baseMetricsLabelValues,
-		logger:                 config.Logger,
+		originUrl:         originURL,
+		httpClient:        config.HTTPTransport,
+		tlsConfig:         config.ClientTlsConfig,
+		tags:              config.Tags,
+		metrics:           config.Metrics,
+		connectionID:      connectionID,
+		baseMetricsLabels: baseMetricsLabels,
+		logger:            config.Logger,
 	}
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
@@ -522,12 +507,8 @@ func (h *TunnelHandler) AppendTagHeaders(r *http.Request) {
 	}
 }
 
-func (h *TunnelHandler) getCombinedMetricsLabels(connectionID string) []string {
-	return append(h.baseMetricsLabelValues, connectionID)
-}
-
 func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
-	h.metrics.incrementRequests(h.getCombinedMetricsLabels(h.connectionID))
+	h.incrementRequestMetrics()
 	req, err := http.NewRequest("GET", h.originUrl, h2mux.MuxedStreamReader{MuxedStream: stream})
 	if err != nil {
 		h.logger.WithError(err).Panic("Unexpected error from http.NewRequest")
@@ -542,8 +523,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	h.logRequest(req, cfRay, lbProbe)
 	if websocket.IsWebSocketUpgrade(req) {
 		conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
-		h.logger.WithFields(log.Fields{"connectionID": h.connectionID, "status": response.StatusCode}).Info("incrementResponses")
-		h.metrics.incrementResponses(h.getCombinedMetricsLabels(h.connectionID), response.StatusCode)
+		h.incrementResponseMetrics(response.StatusCode)
 		if err != nil {
 			h.logError(stream, err)
 		} else {
@@ -556,8 +536,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		}
 	} else {
 		response, err := h.httpClient.RoundTrip(req)
-		h.logger.WithFields(log.Fields{"connectionID": h.connectionID, "status": response.StatusCode}).Info("incrementResponses")
-		h.metrics.incrementResponses(h.getCombinedMetricsLabels(h.connectionID), response.StatusCode)
+		h.incrementResponseMetrics(response.StatusCode)
 		if err != nil {
 			h.logError(stream, err)
 		} else {
@@ -568,7 +547,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			h.logResponse(response, cfRay, lbProbe)
 		}
 	}
-	h.metrics.decrementConcurrentRequests(h.getCombinedMetricsLabels(h.connectionID))
+	h.decrementConcurrentRequestMetrics()
 	return nil
 }
 
@@ -601,9 +580,41 @@ func (h *TunnelHandler) logResponse(r *http.Response, cfRay string, lbProbe bool
 	h.logger.Debugf("Response Headers %+v", r.Header)
 }
 
-func (h *TunnelHandler) UpdateMetrics(connectionID string) {
-	// why only updateMuxerMetrics
-	h.metrics.updateMuxerMetrics(h.getCombinedMetricsLabels(h.connectionID), h.muxer.Metrics())
+func (h *TunnelHandler) getCombinedMetricsLabels(values ...string) []string {
+	return append(h.baseMetricsLabels.Values, values...)
+}
+
+func (h *TunnelHandler) incrementResponseMetrics(statusCode int) {
+	h.metrics.incrementResponses(
+		h.getCombinedMetricsLabels(uint8ToString(h.connectionID)),
+		statusCode,
+	)
+}
+
+func (h *TunnelHandler) decrementConcurrentRequestMetrics() {
+	h.metrics.decrementConcurrentRequests(
+		h.getCombinedMetricsLabels(uint8ToString(h.connectionID)),
+	)
+}
+
+func (h *TunnelHandler) incrementRequestMetrics() {
+	h.metrics.incrementRequests(
+		h.getCombinedMetricsLabels(uint8ToString(h.connectionID)),
+	)
+}
+
+func (h *TunnelHandler) updateMetrics() {
+	h.metrics.updateMuxerMetrics(
+		h.getCombinedMetricsLabels(uint8ToString(h.connectionID)),
+		h.muxer.Metrics(),
+	)
+}
+
+func (h *TunnelHandler) registerServerLocationMetrics(location string) {
+	h.metrics.registerServerLocation(
+		h.getCombinedMetricsLabels(uint8ToString(h.connectionID)),
+		location,
+	)
 }
 
 func uint8ToString(input uint8) string {

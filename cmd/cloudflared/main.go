@@ -482,7 +482,10 @@ func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error 
 		return err
 	}
 
-	metricsLabels := map[string]string{"application": "cloudflared"}
+	metricsLabels := origin.MetricsLabelList{
+		Keys:   []string{"application"},
+		Values: []string{"cloudflared"},
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
