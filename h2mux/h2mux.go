@@ -123,6 +123,7 @@ func Handshake(
 		m.compressionQuality = config.CompressionQuality.getPreset()
 	} else {
 		log.Debug("Compression is not supported")
+		compressionSetting = http2.Setting{ID: SettingCompression, Val: 0}
 	}
 
 	expectedMagic := MuxerMagicOrigin

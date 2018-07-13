@@ -468,7 +468,7 @@ func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error 
 	}()
 
 	go notifySystemd(connectedSignal)
-	if c.IsSet("pidFile") {
+	if c.IsSet("pidfile") {
 		go writePidFile(connectedSignal, c.String("pidfile"))
 	}
 
