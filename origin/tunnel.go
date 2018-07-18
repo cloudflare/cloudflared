@@ -596,7 +596,7 @@ func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
 
 func (h *TunnelHandler) logRequest(req *http.Request, cfRay string, lbProbe bool) {
 	if cfRay != "" {
-		h.logger.WithField("CF-RAY", cfRay).Infof("%s %s %s", req.Method, req.URL, req.Proto)
+		h.logger.WithField("CF-RAY", cfRay).Debugf("%s %s %s", req.Method, req.URL, req.Proto)
 	} else if lbProbe {
 		h.logger.Debugf("Load Balancer health check %s %s %s", req.Method, req.URL, req.Proto)
 	} else {
@@ -607,7 +607,7 @@ func (h *TunnelHandler) logRequest(req *http.Request, cfRay string, lbProbe bool
 
 func (h *TunnelHandler) logResponse(r *http.Response, cfRay string, lbProbe bool) {
 	if cfRay != "" {
-		h.logger.WithField("CF-RAY", cfRay).Infof("%s", r.Status)
+		h.logger.WithField("CF-RAY", cfRay).Debugf("%s", r.Status)
 	} else if lbProbe {
 		h.logger.Debugf("Response to Load Balancer health check %s", r.Status)
 	} else {
