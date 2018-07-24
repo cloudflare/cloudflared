@@ -1,0 +1,14 @@
+pinned_go: &pinned_go go=1.9.3-1
+build_dir: &build_dir /cfsetup_build/src/github.com/cloudflare/cloudflared/
+stretch:
+  build:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+    post-cache:
+      - export GOPATH=/cfsetup_build/
+      - export CGO_ENABLED=1
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - make all
