@@ -5,7 +5,7 @@ package h2mux
 import (
 	"io"
 
-	"code.cfops.it/go/brotli"
+	"github.com/cloudflare/brotli-go"
 )
 
 func CompressionIsSupported() bool {

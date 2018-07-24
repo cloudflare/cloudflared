@@ -26,6 +26,7 @@
   version = "2018.01.18"
 
 [[projects]]
+  branch = "master"
   name = "github.com/coredns/coredns"
   packages = [
     "core/dnsserver",
@@ -40,6 +41,7 @@
     "plugin/pkg/cache",
     "plugin/pkg/dnstest",
     "plugin/pkg/dnsutil",
+    "plugin/pkg/doh",
     "plugin/pkg/edns",
     "plugin/pkg/fuzz",
     "plugin/pkg/log",
@@ -48,11 +50,11 @@
     "plugin/pkg/response",
     "plugin/pkg/trace",
     "plugin/pkg/uniq",
+    "plugin/pkg/watch",
     "plugin/test",
     "request"
   ]
-  revision = "f78f30231df90da6184d5f811ecf9c06b0160c2b"
-  version = "v1.1.4"
+  revision = "992e7928c7c258628d2b13b769acc86781b9faea"
 
 [[projects]]
   name = "github.com/coreos/go-systemd"
@@ -398,6 +400,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "42fdf43f93aac410675bb8134097b51c90c110dc4c77595b8d2fb7c7876bd3d2"
+  inputs-digest = "a2d109989dfc76050eeb638546c012e192b5dc71d248c9d27cfa3f3282927966"
   solver-name = "gps-cdcl"
   solver-version = 1

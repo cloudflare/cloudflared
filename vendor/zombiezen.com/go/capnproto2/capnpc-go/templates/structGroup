@@ -1,4 +1,0 @@
-func (s {{.Node.Name}}) {{.Field.Name|title}}() {{.Group.Name}} { return {{.Group.Name}}(s) }
-{{if .Field.HasDiscriminant}}
-func (s {{.Node.Name}}) Set{{.Field.Name|title}}() { {{template "_settag" .}} }
-{{end}}

@@ -26,8 +26,13 @@ type Request struct {
 	do   *bool // nil: nothing, otherwise *do value
 	// TODO(miek): opt record itself as well?
 
-	// Cache lowercase qname.
-	name string
+	// Caches
+	name      string // lowercase qname.
+	ip        string // client's ip.
+	port      string // client's port.
+	family    int    // transport's family.
+	localPort string // server's port.
+	localIP   string // server's ip.
 }
 
 // NewWithQuestion returns a new request based on the old, but with a new question
@@ -40,26 +45,73 @@ func (r *Request) NewWithQuestion(name string, typ uint16) Request {
 
 // IP gets the (remote) IP address of the client making the request.
 func (r *Request) IP() string {
+	if r.ip != "" {
+		return r.ip
+	}
+
 	ip, _, err := net.SplitHostPort(r.W.RemoteAddr().String())
 	if err != nil {
-		return r.W.RemoteAddr().String()
+		r.ip = r.W.RemoteAddr().String()
+		return r.ip
 	}
-	return ip
+
+	r.ip = ip
+	return r.ip
 }
 
-// Port gets the (remote) Port of the client making the request.
+// LocalIP gets the (local) IP address of server handling the request.
+func (r *Request) LocalIP() string {
+	if r.localIP != "" {
+		return r.localIP
+	}
+
+	ip, _, err := net.SplitHostPort(r.W.LocalAddr().String())
+	if err != nil {
+		r.localIP = r.W.LocalAddr().String()
+		return r.localIP
+	}
+
+	r.localIP = ip
+	return r.localIP
+}
+
+// Port gets the (remote) port of the client making the request.
 func (r *Request) Port() string {
+	if r.port != "" {
+		return r.port
+	}
+
 	_, port, err := net.SplitHostPort(r.W.RemoteAddr().String())
 	if err != nil {
-		return "0"
+		r.port = "0"
+		return r.port
 	}
-	return port
+
+	r.port = port
+	return r.port
+}
+
+// LocalPort gets the local port of the server handling the request.
+func (r *Request) LocalPort() string {
+	if r.localPort != "" {
+		return r.localPort
+	}
+
+	_, port, err := net.SplitHostPort(r.W.LocalAddr().String())
+	if err != nil {
+		r.localPort = "0"
+		return r.localPort
+	}
+
+	r.localPort = port
+	return r.localPort
 }
 
 // RemoteAddr returns the net.Addr of the client that sent the current request.
-func (r *Request) RemoteAddr() string {
-	return r.W.RemoteAddr().String()
-}
+func (r *Request) RemoteAddr() string { return r.W.RemoteAddr().String() }
+
+// LocalAddr returns the net.Addr of the server handling the current request.
+func (r *Request) LocalAddr() string { return r.W.LocalAddr().String() }
 
 // Proto gets the protocol used as the transport. This will be udp or tcp.
 func (r *Request) Proto() string { return Proto(r.W) }
@@ -78,6 +130,10 @@ func Proto(w dns.ResponseWriter) string {
 
 // Family returns the family of the transport, 1 for IPv4 and 2 for IPv6.
 func (r *Request) Family() int {
+	if r.family != 0 {
+		return r.family
+	}
+
 	var a net.IP
 	ip := r.W.RemoteAddr()
 	if i, ok := ip.(*net.UDPAddr); ok {
@@ -88,9 +144,11 @@ func (r *Request) Family() int {
 	}
 
 	if a.To4() != nil {
-		return 1
+		r.family = 1
+		return r.family
 	}
-	return 2
+	r.family = 2
+	return r.family
 }
 
 // Do returns if the request has the DO (DNSSEC OK) bit set.
@@ -371,6 +429,11 @@ func (r *Request) ErrorMessage(rcode int) *dns.Msg {
 // Clear clears all caching from Request s.
 func (r *Request) Clear() {
 	r.name = ""
+	r.ip = ""
+	r.localIP = ""
+	r.port = ""
+	r.localPort = ""
+	r.family = 0
 }
 
 // Match checks if the reply matches the qname and qtype from the request, it returns

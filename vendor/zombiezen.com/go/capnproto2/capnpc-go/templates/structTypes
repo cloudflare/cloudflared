@@ -1,8 +1,0 @@
-{{with .Annotations.Doc -}}
-// {{.}}
-{{end -}}
-type {{.Node.Name}} {{if .IsBase -}}
-struct{ {{.G.Capnp}}.Struct }
-{{- else -}}
-{{.BaseNode.Name}}
-{{- end}}

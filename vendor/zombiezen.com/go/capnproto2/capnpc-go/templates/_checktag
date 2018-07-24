@@ -1,5 +1,0 @@
-{{if .Field.HasDiscriminant -}}
-if s.Struct.Uint16({{.Node.DiscriminantOffset}}) != {{.Field.DiscriminantValue}} {
-  panic({{printf "Which() != %s" .Field.Name | printf "%q"}})
-}
-{{end -}}

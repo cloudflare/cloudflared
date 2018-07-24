@@ -1,8 +1,0 @@
-const schema_{{.FileID|printf "%x"}} = {{.SchemaLiteral}}
-
-func init() {
-  {{.G.Imports.Schemas}}.Register(schema_{{.FileID|printf "%x"}},
-  	{{- range .NodeIDs}}
-	{{.|printf "%#x"}},
-	{{- end}})
-}

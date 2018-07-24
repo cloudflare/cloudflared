@@ -1,1 +1,0 @@
-func (p {{.Node.Name}}_Promise) {{.Field.Name|title}}() {{.Group.Name}}_Promise { return {{.Group.Name}}_Promise{p.Pipeline} }

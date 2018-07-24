@@ -27,8 +27,8 @@ func (c *Cache) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 
 	server := metrics.WithServer(ctx)
 
-	i, ttl := c.get(now, state, server)
-	if i != nil && ttl > 0 {
+	i, found := c.get(now, state, server)
+	if i != nil && found {
 		resp := i.toMsg(r, now)
 
 		state.SizeAndDo(resp)
@@ -36,24 +36,23 @@ func (c *Cache) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 		w.WriteMsg(resp)
 
 		if c.prefetch > 0 {
+			ttl := i.ttl(now)
 			i.Freq.Update(c.duration, now)
 
 			threshold := int(math.Ceil(float64(c.percentage) / 100 * float64(i.origTTL)))
 			if i.Freq.Hits() >= c.prefetch && ttl <= threshold {
-				go func() {
+				cw := newPrefetchResponseWriter(server, state, c)
+				go func(w dns.ResponseWriter) {
 					cachePrefetches.WithLabelValues(server).Inc()
+					plugin.NextOrFailure(c.Name(), c.Next, ctx, w, r)
+
 					// When prefetching we loose the item i, and with it the frequency
 					// that we've gathered sofar. See we copy the frequencies info back
 					// into the new item that was stored in the cache.
-					prr := &ResponseWriter{ResponseWriter: w, Cache: c,
-						prefetch: true, state: state,
-						server: server}
-					plugin.NextOrFailure(c.Name(), c.Next, ctx, prr, r)
-
 					if i1 := c.exists(state); i1 != nil {
 						i1.Freq.Reset(now, i.Freq.Hits())
 					}
-				}()
+				}(cw)
 			}
 		}
 		return dns.RcodeSuccess, nil
@@ -66,20 +65,20 @@ func (c *Cache) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 // Name implements the Handler interface.
 func (c *Cache) Name() string { return "cache" }
 
-func (c *Cache) get(now time.Time, state request.Request, server string) (*item, int) {
+func (c *Cache) get(now time.Time, state request.Request, server string) (*item, bool) {
 	k := hash(state.Name(), state.QType(), state.Do())
 
-	if i, ok := c.ncache.Get(k); ok {
+	if i, ok := c.ncache.Get(k); ok && i.(*item).ttl(now) > 0 {
 		cacheHits.WithLabelValues(server, Denial).Inc()
-		return i.(*item), i.(*item).ttl(now)
+		return i.(*item), true
 	}
 
-	if i, ok := c.pcache.Get(k); ok {
+	if i, ok := c.pcache.Get(k); ok && i.(*item).ttl(now) > 0 {
 		cacheHits.WithLabelValues(server, Success).Inc()
-		return i.(*item), i.(*item).ttl(now)
+		return i.(*item), true
 	}
 	cacheMisses.WithLabelValues(server).Inc()
-	return nil, 0
+	return nil, false
 }
 
 func (c *Cache) exists(state request.Request) *item {

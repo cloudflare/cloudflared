@@ -1,8 +1,0 @@
-// {{.Node.Name}}_Promise is a wrapper for a {{.Node.Name}} promised by a client call.
-type {{.Node.Name}}_Promise struct { *{{.G.Capnp}}.Pipeline }
-
-func (p {{.Node.Name}}_Promise) Struct() ({{.Node.Name}}, error) {
-	s, err := p.Pipeline.Struct()
-	return {{.Node.Name}}{s}, err
-}
-

@@ -1,3 +1,7 @@
+[prune]
+  go-tests = true
+  unused-packages = true
+
 [[constraint]]
   name = "github.com/facebookgo/grace"
   branch = "master"
@@ -43,3 +47,6 @@
   name = "github.com/gorilla/websocket"
   version = "1.2.0"
 
+[[constraint]]
+  name = "github.com/coredns/coredns"
+  branch = "master"
