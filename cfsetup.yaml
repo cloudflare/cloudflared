@@ -11,4 +11,28 @@ stretch:
       - export CGO_ENABLED=1
       - export GOOS=linux
       - export GOARCH=amd64
-      - make all
+      - make cloudflared
+  build-deb:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - fakeroot
+      - rubygem-fpm
+    post-cache:
+      - export GOPATH=/cfsetup_build/
+      - export CGO_ENABLED=1
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - make cloudflared-deb
+  test:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+    post-cache:
+      - export GOPATH=/cfsetup_build/
+      - export CGO_ENABLED=1
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - make test
