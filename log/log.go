@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	DefaultTimestampFormat = time.RFC3339
+	DefaultTimestampFormat = time.RFC3339Nano
 )
 
 type JSONFormatter struct {
