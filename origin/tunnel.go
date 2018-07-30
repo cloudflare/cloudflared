@@ -545,6 +545,9 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 			}
 		}
 
+		// Request origin to keep connection alive to improve performance
+		req.Header.Set("Connection", "keep-alive")
+
 		response, err := h.httpClient.RoundTrip(req)
 
 		if err != nil {
