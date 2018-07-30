@@ -13,6 +13,8 @@ import (
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunneldns"
 
+	rapid "github.com/cloudflare/cloudflared/cmd/rapid"
+
 	"github.com/getsentry/raven-go"
 	"github.com/mitchellh/go-homedir"
 	"gopkg.in/urfave/cli.v2"
@@ -399,6 +401,54 @@ func main() {
 				},
 			},
 			ArgsUsage: " ", // can't be the empty string or we get the default output
+		},
+		{
+			Name: "rapid",
+			Action: func(c *cli.Context) error {
+				tags := make(map[string]string)
+				tags["hostname"] = c.String("hostname")
+				raven.SetTagsContext(tags)
+
+				go rapid.StartProxy(c, logger)
+
+				var err error
+				raven.CapturePanic(func() { err = startServer(c, shutdownC, graceShutdownC) }, nil)
+				if err != nil {
+					raven.CaptureError(err, nil)
+				}
+				return err
+			},
+			Before: func(c *cli.Context) error {
+				if c.String("config") == "" {
+					logger.Warnf("Cannot determine default configuration path. No file %v in %v", defaultConfigFiles, defaultConfigDirs)
+				}
+				inputSource, err := findInputSourceContext(c)
+				if err != nil {
+					logger.WithError(err).Infof("Cannot load configuration from %s", c.String("config"))
+					return err
+				} else if inputSource != nil {
+					err := altsrc.ApplyInputSourceValues(c, inputSource, app.Flags)
+					if err != nil {
+						logger.WithError(err).Infof("Cannot apply configuration from %s", c.String("config"))
+						return err
+					}
+					logger.Infof("Applied configuration from %s", c.String("config"))
+				}
+				return nil
+			},
+			Usage: "Rapid is an SQL over HTTP reverse proxy",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "db",
+					Value: false,
+					Usage: "Enable the SQL Gateway Proxy",
+				},
+				&cli.StringFlag{
+					Name:  "address",
+					Value: "",
+					Usage: "Database connection string: db://user:pass",
+				},
+			},
 		},
 	}
 	runApp(app, shutdownC, graceShutdownC)
