@@ -6,12 +6,16 @@ import (
 	"os"
 	"runtime/trace"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/cloudflare/cloudflared/cmd/sqlgateway"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunneldns"
+
+	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/getsentry/raven-go"
 	"github.com/mitchellh/go-homedir"
@@ -399,6 +403,59 @@ func main() {
 				},
 			},
 			ArgsUsage: " ", // can't be the empty string or we get the default output
+		},
+		{
+			Name: "db",
+			Action: func(c *cli.Context) error {
+				tags := make(map[string]string)
+				tags["hostname"] = c.String("hostname")
+				raven.SetTagsContext(tags)
+
+				fmt.Printf("\nSQL Database Password: ")
+				pass, err := terminal.ReadPassword(int(syscall.Stdin))
+				if err != nil {
+					logger.Error(err)
+				}
+
+				go sqlgateway.StartProxy(c, logger, string(pass))
+
+				raven.CapturePanic(func() { err = startServer(c, shutdownC, graceShutdownC) }, nil)
+				if err != nil {
+					raven.CaptureError(err, nil)
+				}
+				return err
+			},
+			Before: func(c *cli.Context) error {
+				if c.String("config") == "" {
+					logger.Warnf("Cannot determine default configuration path. No file %v in %v", defaultConfigFiles, defaultConfigDirs)
+				}
+				inputSource, err := findInputSourceContext(c)
+				if err != nil {
+					logger.WithError(err).Infof("Cannot load configuration from %s", c.String("config"))
+					return err
+				} else if inputSource != nil {
+					err := altsrc.ApplyInputSourceValues(c, inputSource, app.Flags)
+					if err != nil {
+						logger.WithError(err).Infof("Cannot apply configuration from %s", c.String("config"))
+						return err
+					}
+					logger.Infof("Applied configuration from %s", c.String("config"))
+				}
+				return nil
+			},
+			Usage: "SQL Gateway is an SQL over HTTP reverse proxy",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "db",
+					Value: true,
+					Usage: "Enable the SQL Gateway Proxy",
+				},
+				&cli.StringFlag{
+					Name:  "address",
+					Value: "",
+					Usage: "Database connection string: db://user:pass",
+				},
+			},
 		},
 	}
 	runApp(app, shutdownC, graceShutdownC)

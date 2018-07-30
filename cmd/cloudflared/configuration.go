@@ -123,14 +123,12 @@ func handleDeprecatedOptions(c *cli.Context) error {
 	return nil
 }
 
-// validate url. It can be either from --url or argument
 func validateUrl(c *cli.Context) (string, error) {
 	var url = c.String("url")
 	if c.NArg() > 0 {
-		if c.IsSet("url") {
-			return "", errors.New("Specified origin urls using both --url and argument. Decide which one you want, I can only support one.")
+		if !c.IsSet("url") {
+			return "", errors.New("Please specify an origin URL.")
 		}
-		url = c.Args().Get(0)
 	}
 	validUrl, err := validation.ValidateUrl(url)
 	return validUrl, err
