@@ -60,7 +60,8 @@ func (f CLIFlags) finishGettingConfig(c *cli.Context, config *tls.Config) *tls.C
 	if c.IsSet(f.RootCA) {
 		config.RootCAs = LoadCert(c.String(f.RootCA))
 	}
-
+	// we optimize CurveP256
+	config.CurvePreferences = []tls.CurveID{tls.CurveP256}
 	return config
 }
 
