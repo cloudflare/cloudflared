@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/trace"
 	"sync"
 	"time"
 
@@ -295,6 +296,13 @@ func main() {
 			Usage:   "Disables chunked transfer encoding; useful if you are running a WSGI server.",
 			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "trace-output",
+			Value:   "cloudflared.trace.out",
+			Usage:   "Name of trace output file.",
+			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
+			Hidden:  true,
+		}),
 	}
 	app.Action = func(c *cli.Context) (err error) {
 		tags := make(map[string]string)
@@ -398,6 +406,23 @@ func main() {
 }
 
 func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error {
+	traceFile, err := os.Create(c.String("trace-output"))
+	if err != nil {
+		logger.WithError(err).Errorf("Failed to create trace output file %s", c.String("trace-output"))
+		return errors.Wrap(err, "Error creating trace output file")
+	}
+	defer func() {
+		if err := traceFile.Close(); err != nil {
+			logger.WithError(err).Error("Failed to close trace output file")
+		}
+	}()
+
+	if err := trace.Start(traceFile); err != nil {
+		logger.WithError(err).Error("Failed to start trace")
+		return errors.Wrap(err, "Error starting tracing")
+	}
+	defer trace.Stop()
+
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
