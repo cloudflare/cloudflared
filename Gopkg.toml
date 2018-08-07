@@ -50,3 +50,7 @@
 [[constraint]]
   name = "github.com/coredns/coredns"
   branch = "master"
+
+[[override]]
+  name = "github.com/mholt/caddy"
+  branch = "master"
