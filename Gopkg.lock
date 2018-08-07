@@ -35,7 +35,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:bbacd47c5969077c96bedf231d500ede08aa8fe5bc8e596539026694f18bb799"
+  digest = "1:af68c8bdac3ceaf46c67f0c43cc1ee5f10e705d8e04f8a63fa41231d0be6b0fb"
   name = "github.com/coredns/coredns"
   packages = [
     "core/dnsserver",
@@ -64,7 +64,7 @@
     "request",
   ]
   pruneopts = "UT"
-  revision = "18a77cd04557b810eba96a7239d39ee2d7a92157"
+  revision = "992e7928c7c258628d2b13b769acc86781b9faea"
 
 [[projects]]
   digest = "1:1da3a221f0bc090792d3a2a080ff09008427c0e0f0533a4ed6abd8994421da73"
@@ -201,7 +201,7 @@
     "telemetry",
   ]
   pruneopts = "UT"
-  revision = "3e0695ee31819685b2368f449ab65625256d2518"
+  revision = "d3b731e9255b72d4571a5aac125634cf1b6031dc"
 
 [[projects]]
   digest = "1:463e4140189f8194f9121ca1c7fe3b8e9e9a2ab3d949b43c835c21034927dc62"

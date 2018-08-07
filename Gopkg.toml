@@ -51,6 +51,10 @@
   name = "github.com/coredns/coredns"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/cloudflare/brotli-go"
+  branch = "master"
+
 [[override]]
   name = "github.com/mholt/caddy"
   branch = "master"
