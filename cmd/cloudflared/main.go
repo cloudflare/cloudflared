@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"runtime/trace"
 	"sync"
@@ -298,10 +299,8 @@ func main() {
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "trace-output",
-			Value:   "cloudflared.trace.out",
-			Usage:   "Name of trace output file.",
+			Usage:   "Name of trace output file, generated when cloudflared stops.",
 			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
-			Hidden:  true,
 		}),
 	}
 	app.Action = func(c *cli.Context) (err error) {
@@ -406,23 +405,6 @@ func main() {
 }
 
 func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error {
-	traceFile, err := os.Create(c.String("trace-output"))
-	if err != nil {
-		logger.WithError(err).Errorf("Failed to create trace output file %s", c.String("trace-output"))
-		return errors.Wrap(err, "Error creating trace output file")
-	}
-	defer func() {
-		if err := traceFile.Close(); err != nil {
-			logger.WithError(err).Error("Failed to close trace output file")
-		}
-	}()
-
-	if err := trace.Start(traceFile); err != nil {
-		logger.WithError(err).Error("Failed to start trace")
-		return errors.Wrap(err, "Error starting tracing")
-	}
-	defer trace.Stop()
-
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
@@ -442,6 +424,31 @@ func startServer(c *cli.Context, shutdownC, graceShutdownC chan struct{}) error 
 	if err != nil {
 		return errors.Wrap(err, "Error configuring protocol logger")
 	}
+
+	if c.IsSet("trace-output") {
+		tmpTraceFile, err := ioutil.TempFile("", "trace")
+		if err != nil {
+			logger.WithError(err).Error("Failed to create new temporary file to save trace output")
+		}
+
+		defer func() {
+			if err := tmpTraceFile.Close(); err != nil {
+				logger.WithError(err).Error("Failed to close trace output file %s", tmpTraceFile.Name())
+			}
+			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
+				logger.WithError(err).Errorf("Failed to rename temporary trace output file %s to %s", tmpTraceFile.Name(), c.String("trace-output"))
+			} else {
+				os.Remove(tmpTraceFile.Name())
+			}
+		}()
+
+		if err := trace.Start(tmpTraceFile); err != nil {
+			logger.WithError(err).Error("Failed to start trace")
+			return errors.Wrap(err, "Error starting tracing")
+		}
+		defer trace.Stop()
+	}
+
 	if c.String("logfile") != "" {
 		if err := initLogFile(c, logger, protoLogger); err != nil {
 			logger.Error(err)
