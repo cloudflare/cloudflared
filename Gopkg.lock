@@ -27,10 +27,10 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:35a3540009bb774a9999458966abc4bbdfd830c0662d7d73a66f4a324dd94e77"
+  digest = "1:e5003c19d396d8b3cf1324ea0bf49b00f13e9466d0297d1268b641f1c617c3a2"
   name = "github.com/cloudflare/brotli-go"
   packages = ["."]
-  pruneopts = "UT"
+  pruneopts = "T"
   revision = "18c9f6c67e3dfc12e0ddaca748d2887f97a7ac28"
 
 [[projects]]

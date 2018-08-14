@@ -2,6 +2,12 @@
   go-tests = true
   unused-packages = true
 
+  [[prune.project]]
+    name = "github.com/cloudflare/brotli-go"
+    unused-packages = false
+
+
+
 [[constraint]]
   name = "github.com/facebookgo/grace"
   branch = "master"
