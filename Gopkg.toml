@@ -64,3 +64,11 @@
 [[override]]
   name = "github.com/mholt/caddy"
   branch = "master"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/coreos/go-oidc"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"

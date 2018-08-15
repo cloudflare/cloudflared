@@ -30,8 +30,12 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	app.Run(os.Args)
 }
 
-const serviceConfigDir = "/etc/cloudflared"
+const (
+	serviceConfigDir      = "/etc/cloudflared"
+	defaultCredentialFile = "cert.pem"
+)
 
+var defaultConfigFiles = []string{"config.yml", "config.yaml"}
 var systemdTemplates = []ServiceTemplate{
 	{
 		Path: "/etc/systemd/system/cloudflared.service",

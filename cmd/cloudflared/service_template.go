@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"text/template"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/mitchellh/go-homedir"
 )
 
@@ -94,7 +95,7 @@ func runCommand(command string, args ...string) error {
 }
 
 func ensureConfigDirExists(configDir string) error {
-	ok, err := fileExists(configDir)
+	ok, err := config.FileExists(configDir)
 	if !ok && err == nil {
 		err = os.Mkdir(configDir, 0700)
 	}
