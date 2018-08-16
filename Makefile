@@ -34,6 +34,20 @@ cloudflared-deb: cloudflared
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t deb --deb-compression bzip2 \
 		-a $(GOARCH) -v $(VERSION) -n cloudflared
 
+.PHONY: cloudflared-darwin-amd64.tgz
+cloudflared-darwin-amd64.tgz: cloudflared
+	tar czf cloudflared-darwin-amd64.tgz cloudflared
+	rm cloudflared
+
+.PHONY: homebrew-upload
+homebrew-upload: cloudflared-darwin-amd64.tgz
+	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $$^ $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz
+	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz  $(S3_URI)/cloudflared-stable-$1.tgz
+		
+.PHONY: homebrew-release 
+homebrew-release: homebrew-upload
+	./publish-homebrew-formula.sh cloudflared-darwin-amd64.tgz $(VERSION) homebrew-cloudflare
+
 .PHONY: release
 release: bin/equinox
 	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
