@@ -403,7 +403,7 @@ func main() {
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 		},
 		{
-			Name: "rapid",
+			Name: "db",
 			Action: func(c *cli.Context) error {
 				tags := make(map[string]string)
 				tags["hostname"] = c.String("hostname")
@@ -436,11 +436,11 @@ func main() {
 				}
 				return nil
 			},
-			Usage: "Rapid is an SQL over HTTP reverse proxy",
+			Usage: "SQL Gateway is an SQL over HTTP reverse proxy",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "db",
-					Value: false,
+					Value: true,
 					Usage: "Enable the SQL Gateway Proxy",
 				},
 				&cli.StringFlag{

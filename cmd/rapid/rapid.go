@@ -49,9 +49,9 @@ type Proxy struct {
 func StartProxy(c *cli.Context, logger *logrus.Logger) error {
 	proxy := NewProxy(c, logger)
 
-	logger.Infof("Starting Rapid SQL Proxy on port %s", c.String("port"))
+	logger.Infof("Starting Rapid SQL Proxy on port %s", strings.Split(c.String("url"), ":")[1])
 
-	err := http.ListenAndServe(":"+c.String("port"), proxy.Router)
+	err := http.ListenAndServe(":"+strings.Split(c.String("url"), ":")[1], proxy.Router)
 	if err != nil {
 		return err
 	}
