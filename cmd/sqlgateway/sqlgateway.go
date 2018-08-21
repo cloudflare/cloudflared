@@ -1,4 +1,4 @@
-package rapid
+package sqlgateway
 
 import (
 	"database/sql"
@@ -46,10 +46,10 @@ type Proxy struct {
 	Logger   *logrus.Logger
 }
 
-func StartProxy(c *cli.Context, logger *logrus.Logger) error {
-	proxy := NewProxy(c, logger)
+func StartProxy(c *cli.Context, logger *logrus.Logger, password string) error {
+	proxy := NewProxy(c, logger, password)
 
-	logger.Infof("Starting Rapid SQL Proxy on port %s", strings.Split(c.String("url"), ":")[1])
+	logger.Infof("Starting SQL Gateway Proxy on port %s", strings.Split(c.String("url"), ":")[1])
 
 	err := http.ListenAndServe(":"+strings.Split(c.String("url"), ":")[1], proxy.Router)
 	if err != nil {
@@ -68,17 +68,16 @@ func randID(n int, c *cli.Context) string {
 	return fmt.Sprintf("%s&%s", c.String("hostname"), b)
 }
 
-// db://user:pass@dbname
-func parseInfo(input string) (string, string, string, string) {
+// db://user@dbname
+func parseInfo(input string) (string, string, string) {
 	p1 := strings.Split(input, "://")
-	p2 := strings.Split(p1[1], ":")
-	p3 := strings.Split(p2[1], "@")
-	return p1[0], p2[0], p3[0], p3[1]
+	p2 := strings.Split(p1[1], "@")
+	return p1[0], p2[0], p2[1]
 }
 
-func NewProxy(c *cli.Context, logger *logrus.Logger) *Proxy {
+func NewProxy(c *cli.Context, logger *logrus.Logger, pass string) *Proxy {
 	rand.Seed(time.Now().UnixNano())
-	driver, user, pass, dbname := parseInfo(c.String("address"))
+	driver, user, dbname := parseInfo(c.String("address"))
 	proxy := Proxy{
 		Context:  c,
 		Router:   mux.NewRouter(),
@@ -93,7 +92,7 @@ func NewProxy(c *cli.Context, logger *logrus.Logger) *Proxy {
 	logger.Info(fmt.Sprintf(`
 
 	--------------------
-	Rapid SQL Proxy
+	SQL Gateway Proxy
 	Token: %s
 	--------------------
 

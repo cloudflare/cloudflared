@@ -6,14 +6,16 @@ import (
 	"os"
 	"runtime/trace"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/cloudflare/cloudflared/cmd/sqlgateway"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunneldns"
 
-	rapid "github.com/cloudflare/cloudflared/cmd/rapid"
+	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/getsentry/raven-go"
 	"github.com/mitchellh/go-homedir"
@@ -409,9 +411,14 @@ func main() {
 				tags["hostname"] = c.String("hostname")
 				raven.SetTagsContext(tags)
 
-				go rapid.StartProxy(c, logger)
+				fmt.Printf("\nSQL Database Password: ")
+				pass, err := terminal.ReadPassword(int(syscall.Stdin))
+				if err != nil {
+					logger.Error(err)
+				}
 
-				var err error
+				go sqlgateway.StartProxy(c, logger, string(pass))
+
 				raven.CapturePanic(func() { err = startServer(c, shutdownC, graceShutdownC) }, nil)
 				if err != nil {
 					raven.CaptureError(err, nil)
