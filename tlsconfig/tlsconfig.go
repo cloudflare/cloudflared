@@ -11,6 +11,7 @@ import (
 	"github.com/cloudflare/cloudflared/log"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
+	"runtime"
 )
 
 var logger = log.CreateLogger()
@@ -84,7 +85,9 @@ func LoadGlobalCertPool() (*x509.CertPool, error) {
 	// First, obtain the system certificate pool
 	certPool, systemCertPoolErr := x509.SystemCertPool()
 	if systemCertPoolErr != nil {
-		logger.Warnf("error obtaining the system certificates: %s", systemCertPoolErr)
+		if runtime.GOOS != "windows" {
+			logger.Warnf("error obtaining the system certificates: %s", systemCertPoolErr)
+		}
 		certPool = x509.NewCertPool()
 	} else {
 		success = true
