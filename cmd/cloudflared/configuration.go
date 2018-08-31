@@ -36,6 +36,11 @@ var (
 	defaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/usr/local/etc/cloudflared", "/etc/cloudflared"}
 )
 
+// NoAdditionalMetricsLabels returns an empty slice of label keys or label values
+func NoAdditionalMetricsLabels() []string {
+	return make([]string, 0)
+}
+
 const defaultCredentialFile = "cert.pem"
 
 func fileExists(path string) (bool, error) {
@@ -243,7 +248,7 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, pr
 		return nil, errors.Wrap(err, "Error loading cert pool")
 	}
 
-	tunnelMetrics := origin.NewTunnelMetrics()
+	tunnelMetrics := origin.InitializeTunnelMetrics(NoAdditionalMetricsLabels())
 	httpTransport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -289,6 +294,11 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, logger, pr
 		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
 		CompressionQuality: c.Uint64("compression-quality"),
 	}, nil
+}
+
+// newMetricsUpdater returns a default implementation with no additional metrics label values
+func newMetricsUpdater(config *origin.TunnelConfig) (origin.TunnelMetricsUpdater, error) {
+	return origin.NewTunnelMetricsUpdater(config.Metrics, NoAdditionalMetricsLabels())
 }
 
 func loadCertPool(c *cli.Context, logger *logrus.Logger) (*x509.CertPool, error) {
