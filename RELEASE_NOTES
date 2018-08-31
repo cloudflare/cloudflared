@@ -1,0 +1,21 @@
+2018.8.0
+- 2018-05-01 Initial commit
+- 2018-05-03 TUN-595: Add License/Readme files to cloudflared
+- 2018-05-01 TUN-528: Move cloudflared into a separate repo
+- 2018-07-24 TUN-813: Clean up cloudflared dependencies
+- 2018-07-25 TUN-814: Handle error in CreateTLSListener before closing listener
+- 2018-07-24 TUN-804: create Makefile recipe to build cloudflared and run tests
+- 2018-07-26 TUN-817: Increase the log time precision
+- 2018-07-30 TUN-828: Added Connection: keep-alive header
+- 2018-07-30 TUN-829: prefer p256 curve
+- 2018-07-31 TUN-834: Enable tracing on cloudflared
+- 2018-08-07 TUN-820: Fix caddyfile gitignore
+- 2018-07-25 TUN-804: create make recipe for building deb package
+- 2018-08-07 TUN-861: Disable cloudflared tracing by default; preserve the latest tracefile
+- 2018-08-07 TUN-857: Pull the brotli-go dependency from Github
+- 2018-08-14 TUN-897: Bring back missing Brotli files
+- 2018-07-26 TUN-804: create makefile recipe to release cloudflared using equinox
+- 2018-08-15 TUN-901: makefile target for homebrew release
+- 2018-07-30 TUN-801: Rapid SQL Proxy
+- 2018-08-27 TUN-833: Don't log system root certificate loading failure on Windows
+
