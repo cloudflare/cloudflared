@@ -94,7 +94,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 	// not a labelled vector
 	haConnections := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "ha_connections",
+			Name: "argo_ha_connections",
 			Help: "Number of active HA connections",
 		},
 	)
@@ -103,14 +103,14 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 	// not a labelled vector
 	timerRetries := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "timer_retries",
+			Name: "argo_timer_retries",
 			Help: "Unacknowledged heart beats count",
 		})
 	prometheus.MustRegister(timerRetries)
 
 	requests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "requests",
+			Name: "argo_http_request",
 			Help: "Count of requests",
 		},
 		labelKeys,
@@ -119,7 +119,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	responses := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "responses",
+			Name: "argo_http_response",
 			Help: "Count of responses",
 		},
 		append(labelKeys, statusKey),
@@ -128,7 +128,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	rtt := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rtt",
+			Name: "argo_rtt",
 			Help: "Round-trip time in millisecond",
 		},
 		labelKeys,
@@ -137,7 +137,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	rttMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rtt_min",
+			Name: "argo_rtt_min",
 			Help: "Shortest round-trip time in millisecond",
 		},
 		labelKeys,
@@ -146,7 +146,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	rttMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rtt_max",
+			Name: "argo_rtt_max",
 			Help: "Longest round-trip time in millisecond",
 		},
 		labelKeys,
@@ -155,7 +155,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	receiveWindowAve := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "receive_window_ave",
+			Name: "argo_receive_window_ave",
 			Help: "Average receive window size in bytes",
 		},
 		labelKeys,
@@ -164,7 +164,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	sendWindowAve := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "send_window_ave",
+			Name: "argo_send_window_ave",
 			Help: "Average send window size in bytes",
 		},
 		labelKeys,
@@ -173,7 +173,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	receiveWindowMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "receive_window_min",
+			Name: "argo_receive_window_min",
 			Help: "Smallest receive window size in bytes",
 		},
 		labelKeys,
@@ -182,7 +182,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	receiveWindowMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "receive_window_max",
+			Name: "argo_receive_window_max",
 			Help: "Largest receive window size in bytes",
 		},
 		labelKeys,
@@ -191,7 +191,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	sendWindowMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "send_window_min",
+			Name: "argo_send_window_min",
 			Help: "Smallest send window size in bytes",
 		},
 		labelKeys,
@@ -200,7 +200,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	sendWindowMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "send_window_max",
+			Name: "argo_send_window_max",
 			Help: "Largest send window size in bytes",
 		},
 		labelKeys,
@@ -209,7 +209,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	inBoundRateCurr := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "inbound_bytes_per_sec_curr",
+			Name: "argo_inbound_bytes_per_sec_curr",
 			Help: "Current inbounding bytes per second, 0 if there is no incoming connection",
 		},
 		labelKeys,
@@ -218,7 +218,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	inBoundRateMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "inbound_bytes_per_sec_min",
+			Name: "argo_inbound_bytes_per_sec_min",
 			Help: "Minimum non-zero inbounding bytes per second",
 		},
 		labelKeys,
@@ -227,7 +227,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	inBoundRateMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "inbound_bytes_per_sec_max",
+			Name: "argo_inbound_bytes_per_sec_max",
 			Help: "Maximum inbounding bytes per second",
 		},
 		labelKeys,
@@ -236,7 +236,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	outBoundRateCurr := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "outbound_bytes_per_sec_curr",
+			Name: "argo_outbound_bytes_per_sec_curr",
 			Help: "Current outbounding bytes per second, 0 if there is no outgoing traffic",
 		},
 		labelKeys,
@@ -245,7 +245,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	outBoundRateMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "outbound_bytes_per_sec_min",
+			Name: "argo_outbound_bytes_per_sec_min",
 			Help: "Minimum non-zero outbounding bytes per second",
 		},
 		labelKeys,
@@ -254,7 +254,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	outBoundRateMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "outbound_bytes_per_sec_max",
+			Name: "argo_outbound_bytes_per_sec_max",
 			Help: "Maximum outbounding bytes per second",
 		},
 		labelKeys,
@@ -263,7 +263,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	compBytesBefore := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "comp_bytes_before",
+			Name: "argo_comp_bytes_before",
 			Help: "Bytes sent via cross-stream compression, pre compression",
 		},
 		labelKeys,
@@ -272,7 +272,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	compBytesAfter := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "comp_bytes_after",
+			Name: "argo_comp_bytes_after",
 			Help: "Bytes sent via cross-stream compression, post compression",
 		},
 		labelKeys,
@@ -281,7 +281,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	compRateAve := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "comp_rate_ave",
+			Name: "argo_comp_rate_ave",
 			Help: "Average outbound cross-stream compression ratio",
 		},
 		labelKeys,
