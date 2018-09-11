@@ -464,7 +464,7 @@ func NewTunnelHandler(ctx context.Context,
 ) (*TunnelHandler, string, error) {
 	originURL, err := validation.ValidateUrl(config.OriginUrl)
 	if err != nil {
-		return nil, "", fmt.Errorf("Unable to parse origin url %#v", originURL)
+		return nil, "", fmt.Errorf("unable to parse origin URL %#v", originURL)
 	}
 	h := &TunnelHandler{
 		originUrl:         originURL,

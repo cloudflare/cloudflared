@@ -6,7 +6,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
+	"net/http"
 )
 
 const defaultScheme = "http"
@@ -48,7 +50,7 @@ func ValidateHostname(hostname string) (string, error) {
 
 func ValidateUrl(originUrl string) (string, error) {
 	if originUrl == "" {
-		return "", fmt.Errorf("Url should not be empty")
+		return "", fmt.Errorf("URL should not be empty")
 	}
 
 	if net.ParseIP(originUrl) != nil {
@@ -133,4 +135,45 @@ func validateIP(scheme, host, port string) (string, error) {
 		return fmt.Sprintf("%s://[%s]", scheme, host), nil
 	}
 	return fmt.Sprintf("%s://%s", scheme, host), nil
+}
+
+func ValidateHTTPService(originURL string, transport http.RoundTripper) error {
+	parsedURL, err := url.Parse(originURL)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Transport: transport}
+
+	initialResponse, initialErr := client.Get(parsedURL.String())
+	if initialErr != nil || initialResponse.StatusCode != http.StatusOK {
+		// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
+		oldScheme := parsedURL.Scheme
+		parsedURL.Scheme = toggleProtocol(parsedURL.Scheme)
+
+		secondResponse, _ := client.Get(parsedURL.String())
+
+		if secondResponse != nil && secondResponse.StatusCode == http.StatusOK { // Worked this time--advise the user to switch protocols
+			return errors.Errorf(
+				"%s doesn't seem to work over %s, but does seem to work over %s. Consider changing the origin URL to %s",
+				parsedURL.Hostname(),
+				oldScheme,
+				parsedURL.Scheme,
+				parsedURL,
+			)
+		}
+	}
+
+	return initialErr
+}
+
+func toggleProtocol(httpProtocol string) string {
+	switch httpProtocol {
+	case "http":
+		return "https"
+	case "https":
+		return "http"
+	default:
+		return httpProtocol
+	}
 }
