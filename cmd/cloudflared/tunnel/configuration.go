@@ -58,24 +58,6 @@ func generateRandomClientID() string {
 	return hex.EncodeToString(id)
 }
 
-func enoughOptionsSet(c *cli.Context) bool {
-	// For cloudflared to work, the user needs to at least provide a hostname,
-	// or runs as stand alone DNS proxy .
-	// When using sudo, use -E flag to preserve env vars
-	if c.NumFlags() == 0 && c.NArg() == 0 && os.Getenv("TUNNEL_HOSTNAME") == "" && os.Getenv("TUNNEL_DNS") == "" {
-		if isRunningFromTerminal() {
-			logger.Errorf("No arguments were provided. You need to at least specify the hostname for this tunnel. See %s", quickStartUrl)
-			logger.Infof("If you want to run Argo Tunnel client as a stand alone DNS proxy, run with --proxy-dns option or set TUNNEL_DNS environment variable.")
-		} else {
-			logger.Errorf("You need to specify all the options in a configuration file, or use environment variables. See %s and %s", serviceUrl, argumentsUrl)
-			logger.Infof("If you want to run Argo Tunnel client as a stand alone DNS proxy, specify proxy-dns option in the configuration file, or set TUNNEL_DNS environment variable.")
-		}
-		cli.ShowAppHelp(c)
-		return false
-	}
-	return true
-}
-
 func handleDeprecatedOptions(c *cli.Context) error {
 	// Fail if the user provided an old authentication method
 	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {

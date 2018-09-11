@@ -10,7 +10,7 @@ import (
 func TestValidateHostname(t *testing.T) {
 	var inputHostname string
 	hostname, err := ValidateHostname(inputHostname)
-	assert.Equal(t, err, fmt.Errorf("Hostname should not be empty"))
+	assert.Equal(t, err, nil)
 	assert.Empty(t, hostname)
 
 	inputHostname = "hello.example.com"
