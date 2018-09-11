@@ -400,7 +400,7 @@ func Commands() []*cli.Command {
 		Upon connecting, you are assigned a unique subdomain on cftunnel.com.
 		You need to specify a hostname on a zone you control.
 		A DNS record will be created to CNAME your hostname to the unique subdomain on cftunnel.com.
-	 
+
 		Requests made to Cloudflare's servers for your hostname will be proxied
 		through the tunnel to your local webserver.`,
 		Subcommands: cmds,
@@ -428,11 +428,6 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	if c.String("config") == "" {
 		logger.Warnf("Cannot determine default configuration path. No file %v in %v", defaultConfigFiles, config.DefaultConfigDirs)
-	}
-
-	// check whether client provides enough flags or env variables. If not, print help.
-	if ok := enoughOptionsSet(c); !ok {
-		return nil
 	}
 
 	if err := configMainLogger(c); err != nil {

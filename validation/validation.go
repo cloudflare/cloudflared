@@ -15,7 +15,7 @@ var supportedProtocol = [2]string{"http", "https"}
 
 func ValidateHostname(hostname string) (string, error) {
 	if hostname == "" {
-		return "", fmt.Errorf("Hostname should not be empty")
+		return "", nil
 	}
 	// users gives url(contains schema) not just hostname
 	if strings.Contains(hostname, ":") || strings.Contains(hostname, "%3A") {
