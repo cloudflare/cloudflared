@@ -87,7 +87,7 @@ func Flags() []cli.Flag {
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "url",
-			Value:   "https://localhost:8080",
+			Value:   "http://localhost:8080",
 			Usage:   "Connect to the local webserver at `URL`.",
 			EnvVars: []string{"TUNNEL_URL"},
 		}),

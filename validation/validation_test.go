@@ -4,7 +4,15 @@ import (
 	"fmt"
 	"testing"
 
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"github.com/stretchr/testify/assert"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 )
 
 func TestValidateHostname(t *testing.T) {
@@ -42,7 +50,7 @@ func TestValidateHostname(t *testing.T) {
 
 func TestValidateUrl(t *testing.T) {
 	validUrl, err := ValidateUrl("")
-	assert.Equal(t, fmt.Errorf("Url should not be empty"), err)
+	assert.Equal(t, fmt.Errorf("URL should not be empty"), err)
 	assert.Empty(t, validUrl)
 
 	validUrl, err = ValidateUrl("https://localhost:8080")
@@ -133,4 +141,103 @@ func TestValidateUrl(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "https://hello.example.com:8080", validUrl)
 
+}
+
+func TestToggleProtocol(t *testing.T) {
+	assert.Equal(t, "https", toggleProtocol("http"))
+	assert.Equal(t, "http", toggleProtocol("https"))
+	assert.Equal(t, "random", toggleProtocol("random"))
+	assert.Equal(t, "", toggleProtocol(""))
+}
+
+func TestValidateHTTPService_HTTP2HTTP(t *testing.T) {
+	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	assert.NoError(t, err)
+	defer server.Close()
+
+	assert.Equal(t, nil, ValidateHTTPService("http://example.com/", client.Transport))
+}
+
+func TestValidateHTTPService_ServerNonOKResponse(t *testing.T) {
+	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+	}))
+	assert.NoError(t, err)
+	defer server.Close()
+
+	assert.Equal(t, nil, ValidateHTTPService("http://example.com/", client.Transport))
+}
+
+func TestValidateHTTPService_HTTPS2HTTP(t *testing.T) {
+	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	assert.NoError(t, err)
+	defer server.Close()
+
+	assert.Equal(t,
+		"example.com doesn't seem to work over https, but does seem to work over http. Consider changing the origin URL to http://example.com:1234/",
+		ValidateHTTPService("https://example.com:1234/", client.Transport).Error())
+}
+
+func TestValidateHTTPService_HTTPS2HTTPS(t *testing.T) {
+	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	assert.NoError(t, err)
+	defer server.Close()
+
+	assert.Equal(t, nil, ValidateHTTPService("https://example.com/", client.Transport))
+}
+
+func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
+	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	assert.NoError(t, err)
+	defer server.Close()
+
+	assert.Equal(t,
+		"example.com doesn't seem to work over http, but does seem to work over https. Consider changing the origin URL to https://example.com:1234/",
+		ValidateHTTPService("http://example.com:1234/", client.Transport).Error())
+}
+
+func createMockServerAndClient(handler http.Handler) (*httptest.Server, *http.Client, error) {
+	client := http.DefaultClient
+	server := httptest.NewServer(handler)
+
+	client.Transport = &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			return url.Parse(server.URL)
+		},
+	}
+
+	return server, client, nil
+}
+
+func createSecureMockServerAndClient(handler http.Handler) (*httptest.Server, *http.Client, error) {
+	client := http.DefaultClient
+	server := httptest.NewTLSServer(handler)
+
+	cert, err := x509.ParseCertificate(server.TLS.Certificates[0].Certificate[0])
+	if err != nil {
+		server.Close()
+		return nil, nil, err
+	}
+
+	certpool := x509.NewCertPool()
+	certpool.AddCert(cert)
+
+	client.Transport = &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return net.Dial("tcp", server.URL[strings.LastIndex(server.URL, "/")+1:])
+		},
+		TLSClientConfig: &tls.Config{
+			RootCAs: certpool,
+		},
+	}
+
+	return server, client, nil
 }

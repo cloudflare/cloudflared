@@ -171,12 +171,12 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
 
-	url, err := validateUrl(c)
+	originURL, err := validateUrl(c)
 	if err != nil {
-		logger.WithError(err).Error("Error validating url")
-		return nil, errors.Wrap(err, "Error validating url")
+		logger.WithError(err).Error("Error validating origin URL")
+		return nil, errors.Wrap(err, "Error validating origin URL")
 	}
-	logger.Infof("Proxying tunnel requests to %s", url)
+	logger.Infof("Proxying tunnel requests to %s", originURL)
 
 	originCert, err := getOriginCert(c)
 	if err != nil {
@@ -208,9 +208,15 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
 	}
 
+	err = validation.ValidateHTTPService(originURL, httpTransport)
+	if err != nil {
+		logger.WithError(err).Error("unable to connect to the origin")
+		return nil, errors.Wrap(err, "unable to connect to the origin")
+	}
+
 	return &origin.TunnelConfig{
 		EdgeAddrs:          c.StringSlice("edge"),
-		OriginUrl:          url,
+		OriginUrl:          originURL,
 		Hostname:           hostname,
 		OriginCert:         originCert,
 		TlsConfig:          tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
