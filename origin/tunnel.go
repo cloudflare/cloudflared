@@ -339,7 +339,9 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 		}
 	}
 
-	config.Logger.Info("Tunnel ID: " + registration.TunnelID)
+	if registration.TunnelID != "" {
+		config.Logger.Info("Tunnel ID: " + registration.TunnelID)
+	}
 	config.Logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
 	return nil
 }
