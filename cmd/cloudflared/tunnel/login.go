@@ -13,7 +13,7 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
-const baseLoginURL = "https://dash.cloudflare.com/warp"
+const baseLoginURL = "https://dash.cloudflare.com/argotunnel"
 
 func login(c *cli.Context) error {
 	path, ok, err := checkForExistingCert()
