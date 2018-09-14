@@ -32,7 +32,8 @@ func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger *logrus.Logg
 		WriteTimeout: 10 * time.Second,
 	}
 
-	http.Handle("/metrics", promhttp.Handler())
+	metricsPath := "/metrics"
+	http.Handle(metricsPath, promhttp.Handler())
 
 	wg.Add(1)
 	go func() {

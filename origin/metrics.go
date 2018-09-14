@@ -94,7 +94,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 	// not a labelled vector
 	haConnections := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "argo_ha_connections",
+			Name: "argo_ha_connection_count",
 			Help: "Number of active HA connections",
 		},
 	)
@@ -103,14 +103,14 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 	// not a labelled vector
 	timerRetries := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "argo_timer_retries",
+			Name: "argo_timer_retry_count",
 			Help: "Unacknowledged heart beats count",
 		})
 	prometheus.MustRegister(timerRetries)
 
 	requests := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "argo_http_request",
+			Name: "argo_http_request_count",
 			Help: "Count of requests",
 		},
 		labelKeys,
@@ -119,7 +119,7 @@ func InitializeTunnelMetrics(commonLabelKeys []string) *TunnelMetrics {
 
 	responses := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "argo_http_response",
+			Name: "argo_http_response_count",
 			Help: "Count of responses",
 		},
 		append(labelKeys, statusKey),
