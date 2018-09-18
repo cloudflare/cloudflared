@@ -98,7 +98,7 @@ func Commands() []*cli.Command {
 				},
 			},
 			ArgsUsage: " ", // can't be the empty string or we get the default output
-			Hidden:    true,
+			Hidden:    false,
 		},
 		{
 			Name: "db",

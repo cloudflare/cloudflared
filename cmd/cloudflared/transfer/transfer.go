@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	baseStoreURL  = "https://login.cloudflarewarp.com"
+	baseStoreURL  = "https://login.cloudflarewarp.com/"
 	clientTimeout = time.Second * 60
 )
 
@@ -32,12 +32,12 @@ var logger = log.CreateLogger()
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(c *cli.Context, transferURL *url.URL, resourceName, path string, shouldEncrypt bool) ([]byte, error) {
+func Run(c *cli.Context, transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool) ([]byte, error) {
 	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
 	}
-	requestURL, err := buildRequestURL(transferURL, resourceName, encrypterClient.PublicKey(), true)
+	requestURL, err := buildRequestURL(transferURL, key, value+encrypterClient.PublicKey(), shouldEncrypt)
 	if err != nil {
 		return nil, err
 	}
@@ -58,19 +58,23 @@ func Run(c *cli.Context, transferURL *url.URL, resourceName, path string, should
 	var resourceData []byte
 
 	if shouldEncrypt {
-		buf, key, err := transferRequest(filepath.Join(baseURL, "transfer", encrypterClient.PublicKey()))
+		buf, key, err := transferRequest(baseURL + filepath.Join("transfer", encrypterClient.PublicKey()))
 		if err != nil {
 			return nil, err
 		}
 
-		decrypted, err := encrypterClient.Decrypt(buf, key)
+		decodedBuf, err := base64.StdEncoding.DecodeString(string(buf))
+		if err != nil {
+			return nil, err
+		}
+		decrypted, err := encrypterClient.Decrypt(decodedBuf, key)
 		if err != nil {
 			return nil, err
 		}
 
 		resourceData = decrypted
 	} else {
-		buf, _, err := transferRequest(filepath.Join(baseURL, encrypterClient.PublicKey()))
+		buf, _, err := transferRequest(baseURL + filepath.Join(encrypterClient.PublicKey()))
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +88,7 @@ func Run(c *cli.Context, transferURL *url.URL, resourceName, path string, should
 	return resourceData, nil
 }
 
-// buildRequestURL creates a request suitable for a resource transfer.
+// BuildRequestURL creates a request suitable for a resource transfer.
 // it will return a constructed url based off the base url and query key/value provided.
 // follow will follow redirects.
 func buildRequestURL(baseURL *url.URL, key, value string, follow bool) (string, error) {
@@ -106,8 +110,9 @@ func buildRequestURL(baseURL *url.URL, key, value string, follow bool) (string, 
 // transferRequest downloads the requested resource from the request URL
 func transferRequest(requestURL string) ([]byte, string, error) {
 	client := &http.Client{Timeout: clientTimeout}
+	const pollAttempts = 10
 	// we do "long polling" on the endpoint to get the resource.
-	for i := 0; i < 20; i++ {
+	for i := 0; i < pollAttempts; i++ {
 		buf, key, err := poll(client, requestURL)
 		if err != nil {
 			return nil, "", err
@@ -143,12 +148,7 @@ func poll(client *http.Client, requestURL string) ([]byte, string, error) {
 	if _, err := io.Copy(buf, resp.Body); err != nil {
 		return nil, "", err
 	}
-
-	decodedBuf, err := base64.StdEncoding.DecodeString(string(buf.Bytes()))
-	if err != nil {
-		return nil, "", err
-	}
-	return decodedBuf, resp.Header.Get("service-public-key"), nil
+	return buf.Bytes(), resp.Header.Get("service-public-key"), nil
 }
 
 // putSuccess tells the server we successfully downloaded the resource

@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
+
+	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
@@ -84,6 +87,11 @@ func flags() []cli.Flag {
 
 func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionFunc {
 	return func(c *cli.Context) (err error) {
+		if isRunningFromTerminal() {
+			logger.Error("Use of cloudflared without commands is deprecated.")
+			cli.ShowAppHelp(c)
+			return nil
+		}
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
@@ -124,4 +132,8 @@ func userHomeDir() (string, error) {
 		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
 	return homeDir, nil
+}
+
+func isRunningFromTerminal() bool {
+	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }

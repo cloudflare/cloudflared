@@ -21,24 +21,28 @@ import (
 var logger = log.CreateLogger()
 
 // fetchToken will either load a stored token or generate a new one
-func fetchToken(c *cli.Context, appURL *url.URL) error {
+func fetchToken(c *cli.Context, appURL *url.URL) (string, error) {
 	if token, err := getTokenIfExists(appURL); token != "" && err == nil {
 		fmt.Fprintf(os.Stdout, "You have an existing token:\n\n%s\n\n", token)
-		return nil
+		return token, nil
 	}
 
 	path, err := generateFilePathForTokenURL(appURL)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	token, err := transfer.Run(c, appURL, "token", path, true)
+	// this weird parameter is the resource name (token) and the key/value
+	// we want to send to the transfer service. the key is token and the value
+	// is blank (basically just the id generated in the transfer service)
+	const resourceName, key, value = "token", "token", ""
+	token, err := transfer.Run(c, appURL, resourceName, key, value, path, true)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", string(token))
-	return nil
+	return string(token), nil
 }
 
 // getTokenIfExists will return the token from local storage if it exists

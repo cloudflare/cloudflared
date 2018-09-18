@@ -47,7 +47,7 @@ type Encrypter struct {
 // New returns a new encrypter with initialized keypair
 func New(privateKey, publicKey string) (*Encrypter, error) {
 	e := &Encrypter{}
-	key, pubKey, err := e.fetchOrGenerateKeys(privateKey, publicKey)
+	pubKey, key, err := e.fetchOrGenerateKeys(privateKey, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func New(privateKey, publicKey string) (*Encrypter, error) {
 
 // PublicKey returns a base64 encoded public key. Useful for transport (like in HTTP requests)
 func (e *Encrypter) PublicKey() string {
-	return base64.StdEncoding.EncodeToString(e.publicKey[:])
+	return base64.URLEncoding.EncodeToString(e.publicKey[:])
 }
 
 // Decrypt data that was encrypted using our publicKey. It will use our privateKey and the sender's publicKey to decrypt
@@ -122,7 +122,7 @@ func (e *Encrypter) fetchOrGenerateKeys(privateKey, publicKey string) (*[32]byte
 	} else if err != nil {
 		return nil, nil, err
 	}
-	return key, pub, nil
+	return pub, key, nil
 }
 
 // writeKey will write a key to disk in DER format (it's a standard pem key)
@@ -166,7 +166,7 @@ func (e *Encrypter) fetchKey(filename string) (*[32]byte, error) {
 
 // decodePublicKey will base64 decode the provided key to the box representation
 func (e *Encrypter) decodePublicKey(key string) (*[32]byte, error) {
-	pub, err := base64.StdEncoding.DecodeString(key)
+	pub, err := base64.URLEncoding.DecodeString(key)
 	if err != nil {
 		return nil, err
 	}
