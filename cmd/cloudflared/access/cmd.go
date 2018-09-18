@@ -7,13 +7,14 @@ import (
 	"os"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
+	"golang.org/x/net/idna"
 
 	"github.com/cloudflare/cloudflared/log"
 	raven "github.com/getsentry/raven-go"
 	cli "gopkg.in/urfave/cli.v2"
 )
 
-const sentryDSN = "https://5a81ca98270b4aee89d4d9913b259fec:583d2c118b384712aa8b91afbdabde81@sentry.cfops.it/170" // we probably need a public accessable url.
+const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
 
 // Flags return the global flags for Access related commands (hopefully none)
 func Flags() []cli.Flag {
@@ -37,7 +38,7 @@ func Commands() []*cli.Command {
 					Action: login,
 					Usage:  "login <url of access application>",
 					Description: `The login subcommand initiates an authentication flow with your identity provider.
-					The subcommand will launch a browser. For headless systems, a URL is provided.
+					The subcommand will launch a browser. For headless systems, a url is provided.
 					Once authenticated with your identity provider, the login command will generate a JSON Web Token (JWT)
 					scoped to your identity, the application you intend to reach, and valid for a session duration set by your 
 					administrator. cloudflared stores the token in local storage.`,
@@ -52,15 +53,10 @@ func Commands() []*cli.Command {
 					Name:   "curl",
 					Action: curl,
 					Usage:  "curl <args>",
-					Description: `The curl subcommand wraps curl and automatically injects the JWT into a cf-jwt-access-assertion 
+					Description: `The curl subcommand wraps curl and automatically injects the JWT into a cf-access-token
 					header when using curl to reach an application behind Access.`,
-					ArgsUsage: "nojwt will allow the curl request to continue even if the jwt is not present.",
-					Flags: []cli.Flag{
-						&cli.BoolFlag{
-							Name:    "allow-request",
-							Aliases: []string{"ar"},
-						},
-					},
+					ArgsUsage:       "allow-request will allow the curl request to continue even if the jwt is not present.",
+					SkipFlagParsing: true,
 				},
 				{
 					Name:        "token",
@@ -86,10 +82,10 @@ func login(c *cli.Context) error {
 	args := c.Args()
 	appURL, err := url.Parse(args.First())
 	if args.Len() < 1 || err != nil {
-		logger.Errorf("Please provide the URL of the Access application\n")
+		logger.Errorf("Please provide the url of the Access application\n")
 		return err
 	}
-	if err := fetchToken(c, appURL); err != nil {
+	if _, err := fetchToken(c, appURL); err != nil {
 		logger.Errorf("Failed to fetch token: %s\n", err)
 		return err
 	}
@@ -107,36 +103,26 @@ func curl(c *cli.Context) error {
 		return errors.New("incorrect args")
 	}
 
-	var appURL *url.URL
-	cmdArgs := args.Slice()
-	for _, arg := range cmdArgs {
-		u, err := url.ParseRequestURI(arg)
-		if err != nil {
-			continue
-		}
-		appURL = u
-		break
+	cmdArgs, appURL, allowRequest, err := buildCurlCmdArgs(args.Slice())
+	if err != nil {
+		return err
 	}
 
 	token, err := getTokenIfExists(appURL)
 	if err != nil || token == "" {
-		if !c.Bool("nojwt") {
-			if err := fetchToken(c, appURL); err != nil {
-				logger.Errorf("Failed to refresh token: %s\n", err)
-				return err
-			}
-			token, err = getTokenIfExists(appURL)
-			if err != nil {
-				logger.Errorf("Failed pull existing token: %s\n", err)
-				return err
-			}
-		} else {
+		if allowRequest {
 			logger.Warn("You don't have an Access token set. Please run access token <access application> to fetch one.")
+			return shell.Run("curl", cmdArgs...)
+		}
+		token, err = fetchToken(c, appURL)
+		if err != nil {
+			logger.Error("Failed to refresh token: ", err)
+			return err
 		}
 	}
 
 	cmdArgs = append(cmdArgs, "-H")
-	cmdArgs = append(cmdArgs, fmt.Sprintf("cf-jwt-access-assertion=%s", token))
+	cmdArgs = append(cmdArgs, fmt.Sprintf("cf-access-token: %s", token))
 	return shell.Run("curl", cmdArgs...)
 }
 
@@ -145,7 +131,7 @@ func token(c *cli.Context) error {
 	raven.SetDSN(sentryDSN)
 	appURL, err := url.Parse(c.String("app"))
 	if err != nil || c.NumFlags() < 1 {
-		fmt.Fprintln(os.Stderr, "Please provide access application.")
+		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
 	}
 	token, err := getTokenIfExists(appURL)
@@ -159,4 +145,54 @@ func token(c *cli.Context) error {
 		return err
 	}
 	return nil
+}
+
+// processURL will preprocess the string (parse to a url, convert to punycode, etc).
+func processURL(s string) (*url.URL, error) {
+	u, err := url.ParseRequestURI(s)
+	if err != nil {
+		return nil, err
+	}
+	host, err := idna.ToASCII(u.Hostname())
+	if err != nil { // we fail to convert to punycode, just return the url we parsed.
+		return u, nil
+	}
+	if u.Port() != "" {
+		u.Host = fmt.Sprintf("%s:%s", host, u.Port())
+	} else {
+		u.Host = host
+	}
+
+	return u, nil
+}
+
+// buildCurlCmdArgs will build the curl cmd args
+func buildCurlCmdArgs(cmdArgs []string) ([]string, *url.URL, bool, error) {
+	allowRequest, iAllowRequest := false, 0
+	var appURL *url.URL
+	for i, arg := range cmdArgs {
+		if arg == "-allow-request" || arg == "-ar" {
+			iAllowRequest = i
+			allowRequest = true
+		}
+
+		u, err := processURL(arg)
+		if err == nil {
+			appURL = u
+			cmdArgs[i] = appURL.String()
+		}
+	}
+
+	if appURL == nil {
+		logger.Error("Please provide a valid URL.")
+		return cmdArgs, appURL, allowRequest, errors.New("invalid url")
+	}
+
+	if allowRequest {
+		// remove from cmdArgs
+		cmdArgs[iAllowRequest] = cmdArgs[len(cmdArgs)-1]
+		cmdArgs = cmdArgs[:len(cmdArgs)-1]
+	}
+
+	return cmdArgs, appURL, allowRequest, nil
 }
