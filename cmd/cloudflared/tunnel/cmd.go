@@ -262,7 +262,6 @@ func Flags() []cli.Flag {
 			Value:   0,
 			Usage:   "Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high",
 			EnvVars: []string{"TUNNEL_COMPRESSION_LEVEL"},
-			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "no-chunked-encoding",
