@@ -46,8 +46,9 @@ func main() {
 	app.Copyright = fmt.Sprintf(`(c) %d Cloudflare Inc.
    Use is subject to the license agreement at %s`, time.Now().Year(), licenseUrl)
 	app.Version = fmt.Sprintf("%s (built %s)", Version, BuildTime)
-	app.Description = `cloudflared connects your machine (virtual or otherwise) to Cloudflare's global network. 
-	You can use it to route web traffic to this machine, configure powerful access control, and more.`
+	app.Description = `cloudflared connects your machine or user identity to Cloudflare's global network. 
+	You can use it to authenticate a session to reach an API behind Access, route web traffic to this machine,
+	and configure access control.`
 	app.Flags = flags()
 	app.Action = action(Version, shutdownC, graceShutdownC)
 	app.Before = before(app.Flags)
