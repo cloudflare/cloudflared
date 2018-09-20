@@ -167,15 +167,26 @@ func Commands() []*cli.Command {
 		Name:      "tunnel",
 		Action:    tunnel,
 		Category:  "Tunnel",
-		Usage:     "Cloudflare reverse tunnelling proxy agent",
-		ArgsUsage: "origin-url",
-		Description: `A reverse tunnel proxy agent that connects to Cloudflare's infrastructure.
-		Upon connecting, you are assigned a unique subdomain on cftunnel.com.
-		You need to specify a hostname on a zone you control.
-		A DNS record will be created to CNAME your hostname to the unique subdomain on cftunnel.com.
+		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
+		ArgsUsage: "[origin-url]",
+		Description: `Argo Tunnel asks you to specify a hostname on a Cloudflare-powered
+		domain you control and a local address. Traffic from that hostname is routed
+		(optionally via a Cloudflare Load Balancer) to this machine and appears on the
+		specified port where it can be served.
 
-		Requests made to Cloudflare's servers for your hostname will be proxied
-		through the tunnel to your local webserver.`,
+		This feature requires your Cloudflare account be subscribed to the Argo Smart Routing feature.
+
+		To use, begin by calling login to download a certificate:
+
+		  cloudflared tunnel login
+
+		With your certificate installed you can then launch your first tunnel,
+		replacing my.site.com with a subdomain of your site:
+
+		  cloudflared tunnel --hostname my.site.com --url http://localhost:8080
+
+		If you have a web server running on port 8080 (in this example), it will be available on
+		the internet!`,
 		Subcommands: subcommands,
 		Flags:       tunnelFlags(false),
 	})
