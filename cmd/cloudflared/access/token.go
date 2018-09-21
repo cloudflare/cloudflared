@@ -15,15 +15,13 @@ import (
 	"github.com/coreos/go-oidc/jose"
 	"github.com/coreos/go-oidc/oidc"
 	homedir "github.com/mitchellh/go-homedir"
-	cli "gopkg.in/urfave/cli.v2"
 )
 
 var logger = log.CreateLogger()
 
-// fetchToken will either load a stored token or generate a new one
-func fetchToken(c *cli.Context, appURL *url.URL) (string, error) {
+// FetchToken will either load a stored token or generate a new one
+func FetchToken(appURL *url.URL) (string, error) {
 	if token, err := getTokenIfExists(appURL); token != "" && err == nil {
-		fmt.Fprintf(os.Stdout, "You have an existing token:\n\n%s\n\n", token)
 		return token, nil
 	}
 
@@ -36,12 +34,11 @@ func fetchToken(c *cli.Context, appURL *url.URL) (string, error) {
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
 	const resourceName, key, value = "token", "token", ""
-	token, err := transfer.Run(c, appURL, resourceName, key, value, path, true)
+	token, err := transfer.Run(appURL, resourceName, key, value, path, true)
 	if err != nil {
 		return "", err
 	}
 
-	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", string(token))
 	return string(token), nil
 }
 

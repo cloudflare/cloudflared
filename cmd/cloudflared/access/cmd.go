@@ -86,10 +86,12 @@ func login(c *cli.Context) error {
 		logger.Errorf("Please provide the url of the Access application\n")
 		return err
 	}
-	if _, err := fetchToken(c, appURL); err != nil {
+	token, err := FetchToken(appURL)
+	if err != nil {
 		logger.Errorf("Failed to fetch token: %s\n", err)
 		return err
 	}
+	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", string(token))
 
 	return nil
 }
@@ -115,7 +117,7 @@ func curl(c *cli.Context) error {
 			logger.Warn("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return shell.Run("curl", cmdArgs...)
 		}
-		token, err = fetchToken(c, appURL)
+		token, err = FetchToken(appURL)
 		if err != nil {
 			logger.Error("Failed to refresh token: ", err)
 			return err

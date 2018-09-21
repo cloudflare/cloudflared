@@ -3,6 +3,7 @@ package tunnel
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"runtime/trace"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/pkg/errors"
@@ -136,6 +138,21 @@ func Commands() []*cli.Command {
 				},
 			},
 			Hidden: true,
+		},
+		{
+			Name:        "ssh",
+			Action:      ssh,
+			Usage:       `ssh -o ProxyCommand="cloudflared tunnel ssh --hostname %h" ssh.warptunnels.org`,
+			ArgsUsage:   "[origin-url]",
+			Description: `The ssh subcommand wraps sends data over a WebSocket proxy to the Cloudflare edge.`,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name: "hostname",
+				},
+				&cli.StringFlag{
+					Name: "url",
+				},
+			},
 		},
 	}
 
@@ -308,6 +325,20 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
+	if c.IsSet("ws-proxy-server") {
+		listener, err := net.Listen("tcp", "127.0.0.1:")
+		if err != nil {
+			logger.WithError(err).Error("Cannot start Websocket Proxy Server")
+			return errors.Wrap(err, "Cannot start Websocket Proxy Server")
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errC <- websocket.StartProxyServer(logger, listener, c.String("remote"), shutdownC)
+		}()
+		c.Set("url", "http://"+listener.Addr().String())
+	}
+
 	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, protoLogger)
 	if err != nil {
 		return err
@@ -448,6 +479,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "remote",
+			Value:   "localhost:22",
+			Usage:   "Connect to the local server over tcp at `remote`.",
+			EnvVars: []string{"TUNNEL_REMOTE"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "hostname",
 			Usage:   "Set a hostname on a Cloudflare zone to route traffic through this tunnel.",
 			EnvVars: []string{"TUNNEL_HOSTNAME"},
@@ -547,6 +585,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:   false,
 			Usage:   "Run Hello World Server",
 			EnvVars: []string{"TUNNEL_HELLO_WORLD"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "ws-proxy-server",
+			Value:   false,
+			Usage:   "Run WS proxy Server",
+			EnvVars: []string{"TUNNEL_WS_PROXY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{

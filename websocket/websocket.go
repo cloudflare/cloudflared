@@ -9,16 +9,55 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/sirupsen/logrus"
 )
 
-var stripWebsocketHeaders = []string {
+const (
+	// Time allowed to write a message to the peer.
+	writeWait = 10 * time.Second
+
+	// Time allowed to read the next pong message from the peer.
+	pongWait = 60 * time.Second
+
+	// Send pings to peer with this period. Must be less than pongWait.
+	pingPeriod = (pongWait * 9) / 10
+)
+
+var stripWebsocketHeaders = []string{
 	"Upgrade",
 	"Connection",
 	"Sec-Websocket-Key",
 	"Sec-Websocket-Version",
 	"Sec-Websocket-Extensions",
+}
+
+// Conn is a wrapper around the standard gorilla websocket
+// but implements a ReadWriter
+type Conn struct {
+	*websocket.Conn
+}
+
+// Read will read messages from the websocket connection
+func (c *Conn) Read(p []byte) (int, error) {
+	_, message, err := c.Conn.ReadMessage()
+	if err != nil {
+		return 0, err
+	}
+
+	return copy(p, message), nil
+
+}
+
+// Write will write messages to the websocket connection
+func (c *Conn) Write(p []byte) (int, error) {
+	if err := c.Conn.WriteMessage(websocket.BinaryMessage, p); err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }
 
 // IsWebSocketUpgrade checks to see if the request is a WebSocket connection.
@@ -36,7 +75,7 @@ func ClientConnect(req *http.Request, tlsClientConfig *tls.Config) (*websocket.C
 	d := &websocket.Dialer{TLSClientConfig: tlsClientConfig}
 	conn, response, err := d.Dial(req.URL.String(), wsHeaders)
 	if err != nil {
-		return nil, nil, err
+		return nil, response, err
 	}
 	response.Header.Set("Sec-WebSocket-Accept", generateAcceptKey(req))
 	return conn, response, err
@@ -74,16 +113,58 @@ func Stream(conn, backendConn io.ReadWriter) {
 	<-proxyDone
 }
 
+// StartProxyServer will start a websocket server that will decode
+// the websocket data and write the resulting data to the provided
+// address
+func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote string, shutdownC <-chan struct{}) error {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+
+	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: nil}
+	go func() {
+		<-shutdownC
+		httpServer.Close()
+	}()
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		stream, err := net.Dial("tcp", remote)
+		if err != nil {
+			logger.WithError(err).Error("Cannot connect to remote.")
+			return
+		}
+		defer stream.Close()
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			logger.WithError(err).Error("failed to upgrade")
+			return
+		}
+		conn.SetReadDeadline(time.Now().Add(pongWait))
+		conn.SetPongHandler(func(string) error { conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+		done := make(chan struct{})
+		go pinger(logger, conn, done)
+		defer func() {
+			<-done
+			conn.Close()
+		}()
+		Stream(&Conn{conn}, stream)
+	})
+
+	return httpServer.Serve(listener)
+}
+
 // the gorilla websocket library sets its own Upgrade, Connection, Sec-WebSocket-Key,
 // Sec-WebSocket-Version and Sec-Websocket-Extensions headers.
 // https://github.com/gorilla/websocket/blob/master/client.go#L189-L194.
 func websocketHeaders(req *http.Request) http.Header {
 	wsHeaders := make(http.Header)
 	for key, val := range req.Header {
-			wsHeaders[key] = val
+		wsHeaders[key] = val
 	}
 	// Assume the header keys are in canonical format.
-	for _,  header := range stripWebsocketHeaders {
+	for _, header := range stripWebsocketHeaders {
 		wsHeaders.Del(header)
 	}
 	return wsHeaders
@@ -113,5 +194,21 @@ func changeRequestScheme(req *http.Request) string {
 		return "ws"
 	default:
 		return req.URL.Scheme
+	}
+}
+
+// pinger simulates the websocket connection to keep it alive
+func pinger(logger *logrus.Logger, ws *websocket.Conn, done chan struct{}) {
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(writeWait)); err != nil {
+				logger.WithError(err).Debug("failed to send ping message")
+			}
+		case <-done:
+			return
+		}
 	}
 }

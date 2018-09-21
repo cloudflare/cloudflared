@@ -33,7 +33,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	_, err = transfer.Run(c, loginURL, "cert", "callback", callbackStoreURL, path, false)
+	_, err = transfer.Run(loginURL, "cert", "callback", callbackStoreURL, path, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to write the certificate due to the following error:\n%v\n\nYour browser will download the certificate instead. You will have to manually\ncopy it to the following path:\n\n%s\n", err, path)
 		return err

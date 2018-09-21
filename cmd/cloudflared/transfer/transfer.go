@@ -16,7 +16,6 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/encrypter"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/log"
-	cli "gopkg.in/urfave/cli.v2"
 )
 
 const (
@@ -32,7 +31,7 @@ var logger = log.CreateLogger()
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(c *cli.Context, transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool) ([]byte, error) {
+func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool) ([]byte, error) {
 	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -49,16 +48,10 @@ func Run(c *cli.Context, transferURL *url.URL, resourceName, key, value, path st
 		fmt.Fprintf(os.Stdout, "A browser window should have opened at the following URL:\n\n%s\n\nIf the browser failed to open, open it yourself and visit the URL above.\n", requestURL)
 	}
 
-	// for local debugging
-	baseURL := baseStoreURL
-	if c.IsSet("url") {
-		baseURL = c.String("url")
-	}
-
 	var resourceData []byte
 
 	if shouldEncrypt {
-		buf, key, err := transferRequest(baseURL + filepath.Join("transfer", encrypterClient.PublicKey()))
+		buf, key, err := transferRequest(baseStoreURL + filepath.Join("transfer", encrypterClient.PublicKey()))
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +67,7 @@ func Run(c *cli.Context, transferURL *url.URL, resourceName, key, value, path st
 
 		resourceData = decrypted
 	} else {
-		buf, _, err := transferRequest(baseURL + filepath.Join(encrypterClient.PublicKey()))
+		buf, _, err := transferRequest(baseStoreURL + filepath.Join(encrypterClient.PublicKey()))
 		if err != nil {
 			return nil, err
 		}
