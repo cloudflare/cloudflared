@@ -32,6 +32,7 @@ func Commands() []*cli.Command {
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are 
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected 
 			applications from the command line.`,
+			Hidden: true, // This is hidden until we official launch access cli auth
 			Subcommands: []*cli.Command{
 				{
 					Name:   "login",
