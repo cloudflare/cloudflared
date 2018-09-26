@@ -635,7 +635,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewUintFlag(&cli.UintFlag{
 			Name:    "compression-quality",
 			Value:   0,
-			Usage:   "Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high",
+			Usage:   "(beta) Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high.",
 			EnvVars: []string{"TUNNEL_COMPRESSION_LEVEL"},
 			Hidden:  shouldHide,
 		}),
