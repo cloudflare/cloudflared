@@ -19,6 +19,8 @@ struct TunnelRegistration {
     permanentFailure @3 :Bool;
     # Displayed to user
     tunnelID @4 :Text;
+    # Certificate that authorizes the origin to run tunnels on the given url.
+    originCert @5 :Text;
 }
 
 struct RegistrationOptions {
