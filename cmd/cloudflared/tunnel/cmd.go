@@ -231,7 +231,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				logger.WithError(err).Error("Failed to close trace output file %s", tmpTraceFile.Name())
+				logger.WithError(err).Errorf("Failed to close trace output file %s", tmpTraceFile.Name())
 			}
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
 				logger.WithError(err).Errorf("Failed to rename temporary trace output file %s to %s", tmpTraceFile.Name(), c.String("trace-output"))
