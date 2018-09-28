@@ -20,7 +20,7 @@ struct TunnelRegistration {
     # Displayed to user
     tunnelID @4 :Text;
     # Certificate that authorizes the origin to run tunnels on the given url.
-    originCert @5 :Text;
+    originCert @5 :Data;
 }
 
 struct RegistrationOptions {

@@ -32,7 +32,7 @@ type TunnelRegistration struct {
 	LogLines         []string
 	PermanentFailure bool
 	TunnelID         string `capnp:"tunnelID"`
-	OriginCert       string `capnp:"originCert"`
+	OriginCert       []byte `capnp:"originCert"`
 }
 
 func MarshalTunnelRegistration(s tunnelrpc.TunnelRegistration, p *TunnelRegistration) error {
