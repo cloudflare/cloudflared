@@ -123,7 +123,7 @@ func Commands() []*cli.Command {
 			},
 			Before: func(c *cli.Context) error {
 				if c.String("config") == "" {
-					logger.Warnf("Cannot determine default configuration path. No file %v in %v", defaultConfigFiles, config.DefaultConfigDirs)
+					logger.Warnf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
 				}
 				inputSource, err := config.FindInputSourceContext(c)
 				if err != nil {
@@ -211,7 +211,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
-		logger.Warnf("Cannot determine default configuration path. No file %v in %v", defaultConfigFiles, config.DefaultConfigDirs)
+		logger.Warnf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
 	}
 
 	if err := configMainLogger(c); err != nil {

@@ -10,12 +10,15 @@ import (
 )
 
 var (
-	defaultConfigFiles = []string{"config.yml", "config.yaml"}
+	// File names from which we attempt to read configuration.
+	DefaultConfigFiles = []string{"config.yml", "config.yaml"}
 
 	// Launchd doesn't set root env variables, so there is default
 	// Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
 	DefaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/usr/local/etc/cloudflared", "/etc/cloudflared"}
 )
+
+const DefaultCredentialFile = "cert.pem"
 
 // FileExists checks to see if a file exist at the provided path.
 func FileExists(path string) (bool, error) {
@@ -40,11 +43,11 @@ func FindInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, er
 }
 
 // FindDefaultConfigPath returns the first path that contains a config file.
-// If none of the combination of defaultConfigDirs (differs by OS for legacy reasons)
-// and defaultConfigFiles contains a config file, return empty string.
+// If none of the combination of DefaultConfigDirs and DefaultConfigFiles
+// contains a config file, return empty string.
 func FindDefaultConfigPath() string {
 	for _, configDir := range DefaultConfigDirs {
-		for _, configFile := range defaultConfigFiles {
+		for _, configFile := range DefaultConfigFiles {
 			dirPath, err := homedir.Expand(configDir)
 			if err != nil {
 				continue

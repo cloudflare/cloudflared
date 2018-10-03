@@ -56,7 +56,7 @@ func checkForExistingCert() (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	path := filepath.Join(configPath, defaultCredentialFile)
+	path := filepath.Join(configPath, config.DefaultCredentialFile)
 	fileInfo, err := os.Stat(path)
 	if err == nil && fileInfo.Size() > 0 {
 		return path, true, nil

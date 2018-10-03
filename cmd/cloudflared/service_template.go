@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"text/template"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
@@ -120,8 +119,7 @@ func openFile(path string, create bool) (file *os.File, exists bool, err error) 
 	return file, false, err
 }
 
-func copyCertificate(srcConfigDir, destConfigDir, credentialFile string) error {
-	destCredentialPath := filepath.Join(destConfigDir, credentialFile)
+func copyCredential(srcCredentialPath, destCredentialPath string) error {
 	destFile, exists, err := openFile(destCredentialPath, true)
 	if err != nil {
 		return err
@@ -131,7 +129,6 @@ func copyCertificate(srcConfigDir, destConfigDir, credentialFile string) error {
 	}
 	defer destFile.Close()
 
-	srcCredentialPath := filepath.Join(srcConfigDir, credentialFile)
 	srcFile, _, err := openFile(srcCredentialPath, false)
 	if err != nil {
 		return err
@@ -147,17 +144,8 @@ func copyCertificate(srcConfigDir, destConfigDir, credentialFile string) error {
 	return nil
 }
 
-func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile, defaultCredentialFile string) error {
-	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
-		return err
-	}
-
-	if err := copyCertificate(defaultConfigDir, serviceConfigDir, defaultCredentialFile); err != nil {
-		return err
-	}
-
+func copyConfig(srcConfigPath, destConfigPath string) error {
 	// Copy or create config
-	destConfigPath := filepath.Join(serviceConfigDir, defaultConfigFile)
 	destFile, exists, err := openFile(destConfigPath, true)
 	if err != nil {
 		logger.WithError(err).Infof("cannot open %s", destConfigPath)
@@ -168,7 +156,6 @@ func copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile, defa
 	}
 	defer destFile.Close()
 
-	srcConfigPath := filepath.Join(defaultConfigDir, defaultConfigFile)
 	srcFile, _, err := openFile(srcConfigPath, false)
 	if err != nil {
 		fmt.Println("Your service needs a config file that at least specifies the hostname option.")

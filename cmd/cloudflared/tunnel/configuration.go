@@ -30,20 +30,17 @@ import (
 )
 
 var (
-	defaultConfigFiles = []string{"config.yml", "config.yaml"}
-	developerPortal    = "https://developers.cloudflare.com/argo-tunnel"
-	quickStartUrl      = developerPortal + "/quickstart/quickstart/"
-	serviceUrl         = developerPortal + "/reference/service/"
-	argumentsUrl       = developerPortal + "/reference/arguments/"
+	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
+	quickStartUrl   = developerPortal + "/quickstart/quickstart/"
+	serviceUrl      = developerPortal + "/reference/service/"
+	argumentsUrl    = developerPortal + "/reference/arguments/"
 )
 
-const defaultCredentialFile = "cert.pem"
-
-// returns the first path that contains a cert.pem file. If none of the defaultConfigDirs
-// (differs by OS for legacy reasons) contains a cert.pem file, return empty string
+// returns the first path that contains a cert.pem file. If none of the DefaultConfigDirs
+// contains a cert.pem file, return empty string
 func findDefaultOriginCertPath() string {
 	for _, defaultConfigDir := range config.DefaultConfigDirs {
-		originCertPath, _ := homedir.Expand(filepath.Join(defaultConfigDir, defaultCredentialFile))
+		originCertPath, _ := homedir.Expand(filepath.Join(defaultConfigDir, config.DefaultCredentialFile))
 		if ok, _ := config.FileExists(originCertPath); ok {
 			return originCertPath
 		}
@@ -111,7 +108,7 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 
 func getOriginCert(c *cli.Context) ([]byte, error) {
 	if c.String("origincert") == "" {
-		logger.Warnf("Cannot determine default origin certificate path. No file %s in %v", defaultCredentialFile, config.DefaultConfigDirs)
+		logger.Warnf("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigDirs)
 		if isRunningFromTerminal() {
 			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
 			return nil, fmt.Errorf("Client didn't specify origincert path when running from terminal")
