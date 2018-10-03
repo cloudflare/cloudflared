@@ -26,13 +26,13 @@ func Commands() []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:     "access",
-			Category: "Access",
+			Category: "Access (BETA)",
 			Usage:    "access <subcommand>",
-			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
+			Description: `(BETA) Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are 
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected 
-			applications from the command line.`,
-			Hidden: true, // This is hidden until we official launch access cli auth
+			applications from the command line. This feature is considered beta. Your feedback is greatly appreciated!
+			https://cfl.re/CLIAuthBeta`,
 			Subcommands: []*cli.Command{
 				{
 					Name:   "login",
