@@ -1,3 +1,24 @@
+2018.10.0
+- 2018-08-15 AUTH-910, AUTH-1049, AUTH-1068, AUTH-1056: Generate and store Access tokens with E2EE option, curl/cmd wrapper
+- 2018-09-11 TUN-890: To support free tunnels, hostname can now be ""
+- 2018-09-12 TUN-810: Cloudflared should open dash/argotunnel not dash/warp
+- 2018-09-12 TUN-985: Don't display tunnel ID if it's empty string
+- 2018-09-11 TUN-881: Display trial zone URL upon successful registration
+- 2018-09-11 TUN-868: HTTP/HTTPS mismatch should have a better error message
+- 2018-09-19 TUN-1028: Unhide cloudflared compression flag
+- 2018-09-20 AUTH-1139: refactored cloudflared help menu
+- 2018-09-20 TUN-1035: New text for cloudflared tunnel --help
+- 2018-09-18 AUTH-1136: addressing beta feedback
+- 2018-09-26 AUTH-1165: hide access command
+- 2018-09-26 TUN-1046: Document that delta compression is a beta feature
+- 2018-09-28 TUN-1056: Lint error broke build
+- 2018-09-27 TUN-1052: Origintunneld can send back an Origincert to Cloudflared
+- 2018-09-28 TUN-1052: Changing type of OriginCert to :Data
+- 2018-10-01 TUN-1062: Makefile target for regenerating Capn Proto definitions
+- 2018-10-02 TUN-1064: Revert OriginCert capnp changes in Cloudflared. Reverts commits a1ee2342e97 and 8c756c45785.
+- 2018-10-03 TUN-1076: Pin capnproto2 to version 2.17.1
+- 2018-10-03 AUTH-1199: unhide access command, added beta label
+
 2018.8.0
 - 2018-05-01 Initial commit
 - 2018-05-03 TUN-595: Add License/Readme files to cloudflared
