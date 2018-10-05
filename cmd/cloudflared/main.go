@@ -46,6 +46,8 @@ func main() {
 
 	app := &cli.App{}
 	app.Name = "cloudflared"
+	app.Usage = "Cloudflare's command-line tool and agent"
+	app.ArgsUsage = "origin-url"
 	app.Copyright = fmt.Sprintf(`(c) %d Cloudflare Inc.
    Use is subject to the license agreement at %s`, time.Now().Year(), licenseUrl)
 	app.Version = fmt.Sprintf("%s (built %s)", Version, BuildTime)
