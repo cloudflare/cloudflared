@@ -8,7 +8,6 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/log"
@@ -17,7 +16,6 @@ import (
 	"github.com/getsentry/raven-go"
 	"github.com/mitchellh/go-homedir"
 	"gopkg.in/urfave/cli.v2"
-	"gopkg.in/urfave/cli.v2/altsrc"
 
 	"github.com/pkg/errors"
 )
@@ -56,7 +54,7 @@ func main() {
 	and configure access control.`
 	app.Flags = flags()
 	app.Action = action(Version, shutdownC, graceShutdownC)
-	app.Before = before(app.Flags)
+	app.Before = tunnel.Before
 	app.Commands = commands()
 
 	tunnel.Init(Version, shutdownC, graceShutdownC) // we need this to support the tunnel sub command...
@@ -102,24 +100,6 @@ func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionF
 			raven.CaptureError(err, nil)
 		}
 		return err
-	}
-}
-
-func before(flags []cli.Flag) cli.BeforeFunc {
-	return func(context *cli.Context) error {
-		inputSource, err := config.FindInputSourceContext(context)
-		if err != nil {
-			logger.WithError(err).Infof("Cannot load configuration from %s", context.String("config"))
-			return err
-		} else if inputSource != nil {
-			err := altsrc.ApplyInputSourceValues(context, inputSource, flags)
-			if err != nil {
-				logger.WithError(err).Infof("Cannot apply configuration from %s", context.String("config"))
-				return err
-			}
-			logger.Infof("Applied configuration from %s", context.String("config"))
-		}
-		return nil
 	}
 }
 

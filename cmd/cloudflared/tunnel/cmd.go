@@ -121,25 +121,8 @@ func Commands() []*cli.Command {
 				}
 				return err
 			},
-			Before: func(c *cli.Context) error {
-				if c.String("config") == "" {
-					logger.Warnf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
-				}
-				inputSource, err := config.FindInputSourceContext(c)
-				if err != nil {
-					logger.WithError(err).Infof("Cannot load configuration from %s", c.String("config"))
-					return err
-				} else if inputSource != nil {
-					err := altsrc.ApplyInputSourceValues(c, inputSource, c.App.Flags)
-					if err != nil {
-						logger.WithError(err).Infof("Cannot apply configuration from %s", c.String("config"))
-						return err
-					}
-					logger.Infof("Applied configuration from %s", c.String("config"))
-				}
-				return nil
-			},
-			Usage: "SQL Gateway is an SQL over HTTP reverse proxy",
+			Before: Before,
+			Usage:  "SQL Gateway is an SQL over HTTP reverse proxy",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  "db",
@@ -166,6 +149,7 @@ func Commands() []*cli.Command {
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",
 		Action:    tunnel,
+		Before:    Before,
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
 		ArgsUsage: "[origin-url]",
@@ -336,6 +320,25 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}()
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))
+}
+
+func Before(c *cli.Context) error {
+	if c.String("config") == "" {
+		logger.Warnf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
+	}
+	inputSource, err := config.FindInputSourceContext(c)
+	if err != nil {
+		logger.WithError(err).Infof("Cannot load configuration from %s", c.String("config"))
+		return err
+	} else if inputSource != nil {
+		err := altsrc.ApplyInputSourceValues(c, inputSource, c.App.Flags)
+		if err != nil {
+			logger.WithError(err).Infof("Cannot apply configuration from %s", c.String("config"))
+			return err
+		}
+		logger.Infof("Applied configuration from %s", c.String("config"))
+	}
+	return nil
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
