@@ -1,3 +1,9 @@
+2018.10.1
+- 2018-10-03 TUN-1012: Normalize config filename for Linux services
+- 2018-10-05 TUN-1081: cloudflared now generates UUIDs
+- 2018-10-05 TUN-1083: fixed incorrect help menu
+- 2018-10-05 TUN-1086: fixed config option
+
 2018.10.0
 - 2018-08-15 AUTH-910, AUTH-1049, AUTH-1068, AUTH-1056: Generate and store Access tokens with E2EE option, curl/cmd wrapper
 - 2018-09-11 TUN-890: To support free tunnels, hostname can now be ""
