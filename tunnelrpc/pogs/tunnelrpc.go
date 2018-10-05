@@ -1,9 +1,11 @@
 package pogs
 
 import (
+	"context"
+
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	"zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
@@ -56,6 +58,7 @@ type RegistrationOptions struct {
 	IsAutoupdated        bool   `capnp:"isAutoupdated"`
 	RunFromTerminal      bool   `capnp:"runFromTerminal"`
 	CompressionQuality   uint64 `capnp:"compressionQuality"`
+	UUID                 string `capnp:"uuid"`
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {

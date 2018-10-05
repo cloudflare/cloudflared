@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"net"
 	"net/http"
@@ -103,7 +104,7 @@ func (e clientRegisterTunnelError) Error() string {
 	return e.cause.Error()
 }
 
-func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string) *tunnelpogs.RegistrationOptions {
+func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
 	policy := tunnelrpc.ExistingTunnelPolicy_balance
 	if c.HAConnections <= 1 && c.LBPool == "" {
 		policy = tunnelrpc.ExistingTunnelPolicy_disconnect
@@ -120,6 +121,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		IsAutoupdated:        c.IsAutoupdated,
 		RunFromTerminal:      c.RunFromTerminal,
 		CompressionQuality:   c.CompressionQuality,
+		UUID:                 uuid.String(),
 	}
 }
 
@@ -316,11 +318,15 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	serverInfoPromise := tsClient.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
+	uuid, err := uuid.NewRandom()
+	if err != nil {
+		return clientRegisterTunnelError{cause: err}
+	}
 	registration, err := ts.RegisterTunnel(
 		ctx,
 		config.OriginCert,
 		config.Hostname,
-		config.RegistrationOptions(connectionID, originLocalIP),
+		config.RegistrationOptions(connectionID, originLocalIP, uuid),
 	)
 	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, config.Logger)
 	if err != nil {
