@@ -1,3 +1,6 @@
+2018.10.2
+- 2018-10-06 TUN-1093: Revert cloudflared to 2018.8.0
+
 2018.10.1
 - 2018-10-03 TUN-1012: Normalize config filename for Linux services
 - 2018-10-05 TUN-1081: cloudflared now generates UUIDs
