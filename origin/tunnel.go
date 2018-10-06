@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"net"
 	"net/http"
@@ -104,7 +103,7 @@ func (e clientRegisterTunnelError) Error() string {
 	return e.cause.Error()
 }
 
-func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
+func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string) *tunnelpogs.RegistrationOptions {
 	policy := tunnelrpc.ExistingTunnelPolicy_balance
 	if c.HAConnections <= 1 && c.LBPool == "" {
 		policy = tunnelrpc.ExistingTunnelPolicy_disconnect
@@ -121,7 +120,6 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		IsAutoupdated:        c.IsAutoupdated,
 		RunFromTerminal:      c.RunFromTerminal,
 		CompressionQuality:   c.CompressionQuality,
-		UUID:                 uuid.String(),
 	}
 }
 
@@ -318,15 +316,11 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	serverInfoPromise := tsClient.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
-	uuid, err := uuid.NewRandom()
-	if err != nil {
-		return clientRegisterTunnelError{cause: err}
-	}
 	registration, err := ts.RegisterTunnel(
 		ctx,
 		config.OriginCert,
 		config.Hostname,
-		config.RegistrationOptions(connectionID, originLocalIP, uuid),
+		config.RegistrationOptions(connectionID, originLocalIP),
 	)
 	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, config.Logger)
 	if err != nil {
@@ -345,17 +339,7 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 		}
 	}
 
-	if registration.TunnelID != "" {
-		config.Logger.Info("Tunnel ID: " + registration.TunnelID)
-	}
-
-	// Print out the user's trial zone URL in a nice box (if they requested and got one)
-	if isTrialTunnel := config.Hostname == "" && registration.Url != ""; isTrialTunnel {
-		for _, line := range asciiBox(trialZoneMsg(registration.Url), 2) {
-			config.Logger.Infoln(line)
-		}
-	}
-
+	config.Logger.Info("Tunnel ID: " + registration.TunnelID)
 	config.Logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
 	return nil
 }
@@ -470,7 +454,7 @@ func NewTunnelHandler(ctx context.Context,
 ) (*TunnelHandler, string, error) {
 	originURL, err := validation.ValidateUrl(config.OriginUrl)
 	if err != nil {
-		return nil, "", fmt.Errorf("unable to parse origin URL %#v", originURL)
+		return nil, "", fmt.Errorf("Unable to parse origin url %#v", originURL)
 	}
 	h := &TunnelHandler{
 		originUrl:         originURL,
@@ -645,36 +629,4 @@ func uint8ToString(input uint8) string {
 
 func isLBProbeRequest(req *http.Request) bool {
 	return strings.HasPrefix(req.UserAgent(), lbProbeUserAgentPrefix)
-}
-
-// Print out the given lines in a nice ASCII box.
-func asciiBox(lines []string, padding int) (box []string) {
-	maxLen := maxLen(lines)
-	spacer := strings.Repeat(" ", padding)
-
-	border := "+" + strings.Repeat("-", maxLen+(padding*2)) + "+"
-
-	box = append(box, border)
-	for _, line := range lines {
-		box = append(box, "|"+spacer+line+strings.Repeat(" ", maxLen-len(line))+spacer+"|")
-	}
-	box = append(box, border)
-	return
-}
-
-func maxLen(lines []string) int {
-	max := 0
-	for _, line := range lines {
-		if len(line) > max {
-			max = len(line)
-		}
-	}
-	return max
-}
-
-func trialZoneMsg(url string) []string {
-	return []string{
-		"Your free tunnel has started! Visit it:",
-		"  " + url,
-	}
 }

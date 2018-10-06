@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	cli "gopkg.in/urfave/cli.v2"
 )
 
@@ -31,13 +30,7 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	app.Run(os.Args)
 }
 
-// The directory and files that are used by the service.
-// These are hard-coded in the templates below.
-const (
-	serviceConfigDir      = "/etc/cloudflared"
-	serviceConfigFile     = "config.yml"
-	serviceCredentialFile = "cert.pem"
-)
+const serviceConfigDir = "/etc/cloudflared"
 
 var systemdTemplates = []ServiceTemplate{
 	{
@@ -181,23 +174,6 @@ func isSystemd() bool {
 	return false
 }
 
-func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile string) error {
-	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
-		return err
-	}
-	srcCredentialPath := filepath.Join(userConfigDir, userCredentialFile)
-	destCredentialPath := filepath.Join(serviceConfigDir, serviceCredentialFile)
-	if err := copyCredential(srcCredentialPath, destCredentialPath); err != nil {
-		return err
-	}
-	srcConfigPath := filepath.Join(userConfigDir, userConfigFile)
-	destConfigPath := filepath.Join(serviceConfigDir, serviceConfigFile)
-	if err := copyConfig(srcConfigPath, destConfigPath); err != nil {
-		return err
-	}
-	return nil
-}
-
 func installLinuxService(c *cli.Context) error {
 	etPath, err := os.Executable()
 	if err != nil {
@@ -205,12 +181,11 @@ func installLinuxService(c *cli.Context) error {
 	}
 	templateArgs := ServiceTemplateArgs{Path: etPath}
 
-	userConfigDir := filepath.Dir(c.String("config"))
-	userConfigFile := filepath.Base(c.String("config"))
-	userCredentialFile := config.DefaultCredentialFile
-	if err = copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile); err != nil {
+	defaultConfigDir := filepath.Dir(c.String("config"))
+	defaultConfigFile := filepath.Base(c.String("config"))
+	if err = copyCredentials(serviceConfigDir, defaultConfigDir, defaultConfigFile, defaultCredentialFile); err != nil {
 		logger.WithError(err).Infof("Failed to copy user configuration. Before running the service, ensure that %s contains two files, %s and %s",
-			serviceConfigDir, serviceCredentialFile, serviceConfigFile)
+			serviceConfigDir, defaultCredentialFile, defaultConfigFiles[0])
 		return err
 	}
 

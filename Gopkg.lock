@@ -57,32 +57,10 @@
   revision = "992e7928c7c258628d2b13b769acc86781b9faea"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/coreos/go-oidc"
-  packages = [
-    "http",
-    "jose",
-    "key",
-    "oauth2",
-    "oidc"
-  ]
-  revision = "a93f71fdfe73d2c0f5413c0565eea0af6523a6df"
-
-[[projects]]
   name = "github.com/coreos/go-systemd"
   packages = ["daemon"]
   revision = "39ca1b05acc7ad1220e09f133283b8859a8b71ab"
   version = "v17"
-
-[[projects]]
-  name = "github.com/coreos/pkg"
-  packages = [
-    "health",
-    "httputil",
-    "timeutil"
-  ]
-  revision = "97fdf19511ea361ae1c100dd393cc47f8dcfa1e1"
-  version = "v4"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -174,12 +152,6 @@
   name = "github.com/grpc-ecosystem/grpc-opentracing"
   packages = ["go/otgrpc"]
   revision = "8e809c8a86450a29b90dcc9efbf062d0fe6d9746"
-
-[[projects]]
-  name = "github.com/jonboulle/clockwork"
-  packages = ["."]
-  revision = "2eee05ed794112d45db504eb05aa693efd2b8b09"
-  version = "v0.1.0"
 
 [[projects]]
   branch = "master"
@@ -310,14 +282,8 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = [
-    "curve25519",
     "ed25519",
     "ed25519/internal/edwards25519",
-    "internal/subtle",
-    "nacl/box",
-    "nacl/secretbox",
-    "poly1305",
-    "salsa20/salsa",
     "ssh/terminal"
   ]
   revision = "a49355c7e3f8fe157a85be2f77e6e269a0f89602"
@@ -461,6 +427,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ee681bef3527e49801c841e313f98b40116eafe8b60be21273956eeb96487486"
+  inputs-digest = "9aac6a0260101988582bfa55d39559e53cf8ccd7e37caad3350aeea768f5bdb2"
   solver-name = "gps-cdcl"
   solver-version = 1

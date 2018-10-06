@@ -22,7 +22,6 @@ import (
 const (
 	windowsServiceName        = "Cloudflared"
 	windowsServiceDescription = "Argo Tunnel agent"
-	windowsServiceUrl         = "https://developers.cloudflare.com/argo-tunnel/reference/service/"
 
 	recoverActionDelay      = time.Second * 20
 	failureCountResetPeriod = time.Hour * 24
@@ -164,7 +163,7 @@ func installWindowsService(c *cli.Context) error {
 	err = configRecoveryOption(s.Handle)
 	if err != nil {
 		logger.WithError(err).Errorf("Cannot set service recovery actions")
-		logger.Infof("See %s to manually configure service recovery actions", windowsServiceUrl)
+		logger.Infof("See %s to manually configure service recovery actions", serviceUrl)
 	}
 	return nil
 }
