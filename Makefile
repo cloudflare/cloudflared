@@ -55,3 +55,7 @@ release: bin/equinox
 bin/equinox:
 	mkdir -p bin
 	curl -s https://bin.equinox.io/c/75JtLRTsJ3n/release-tool-beta-$(EQUINOX_PLATFORM).tgz | tar xz -C bin/
+
+.PHONY: tunnel-deps
+tunnel-deps:
+	capnp compile -ogo -I ./tunnelrpc tunnelrpc/tunnelrpc.capnp

@@ -43,6 +43,7 @@ struct RegistrationOptions {
     runFromTerminal @9 :Bool;
     # cross stream compression setting, 0 - off, 3 - high
     compressionQuality @10 :UInt64;
+    uuid @11 :Text;
 }
 
 struct Tag {

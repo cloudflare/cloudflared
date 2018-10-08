@@ -48,6 +48,7 @@
 [[constraint]]
   name = "zombiezen.com/go/capnproto2"
   source = "https://github.com/zombiezen/go-capnproto2"
+  version = "2.17.1"
 
 [[constraint]]
   name = "github.com/gorilla/websocket"
@@ -64,3 +65,11 @@
 [[override]]
   name = "github.com/mholt/caddy"
   branch = "master"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/coreos/go-oidc"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/crypto"
