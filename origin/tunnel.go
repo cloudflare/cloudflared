@@ -350,9 +350,14 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	}
 
 	// Print out the user's trial zone URL in a nice box (if they requested and got one)
-	if isTrialTunnel := config.Hostname == "" && registration.Url != ""; isTrialTunnel {
-		for _, line := range asciiBox(trialZoneMsg(registration.Url), 2) {
-			config.Logger.Infoln(line)
+	if isTrialTunnel := config.Hostname == ""; isTrialTunnel {
+		if url, err := url.Parse(registration.Url); err == nil {
+			for _, line := range asciiBox(trialZoneMsg(url.String()), 2) {
+				config.Logger.Infoln(line)
+			}
+		} else {
+			config.Logger.Errorln("Failed to connect tunnel, please try again.")
+			return fmt.Errorf("empty URL in response from Cloudflare edge")
 		}
 	}
 
