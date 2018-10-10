@@ -1,3 +1,8 @@
+2018.10.3
+- 2018-10-08 TUN-1099: Bring back changes in 2018.10.1
+- 2018-10-08 TUN-1098: removed deprecation error
+- 2018-10-08 TUN-1101: False negatives in Cloudflared error reporting
+
 2018.10.2
 - 2018-10-06 TUN-1093: Revert cloudflared to 2018.8.0
 
