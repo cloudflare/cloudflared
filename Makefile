@@ -23,6 +23,10 @@ endif
 .PHONY: all
 all: cloudflared test
 
+.PHONY: clean
+clean:
+	go clean
+
 .PHONY: cloudflared
 cloudflared:
 	go build -v $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared

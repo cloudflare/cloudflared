@@ -35,6 +35,8 @@ type MuxReader struct {
 	initialStreamWindow uint32
 	// The max value for the send window of a stream.
 	streamWindowMax uint32
+	// The max size for the write buffer of a stream
+	streamWriteBufferMaxLen int
 	// r is a reference to the underlying connection used when shutting down.
 	r io.Closer
 	// updateRTTChan is the channel to send new RTT measurement to muxerMetricsUpdater
@@ -153,6 +155,8 @@ func (r *MuxReader) newMuxedStream(streamID uint32) *MuxedStream {
 		streamID:                streamID,
 		readBuffer:              NewSharedBuffer(),
 		writeBuffer:             &bytes.Buffer{},
+		writeBufferMaxLen:       r.streamWriteBufferMaxLen,
+		writeBufferHasSpace:     make(chan struct{}, 1),
 		receiveWindow:           r.initialStreamWindow,
 		receiveWindowCurrentMax: r.initialStreamWindow,
 		receiveWindowMax:        r.streamWindowMax,

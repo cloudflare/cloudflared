@@ -39,20 +39,26 @@ func NewDefaultMuxerPair() *DefaultMuxerPair {
 	origin, edge := net.Pipe()
 	return &DefaultMuxerPair{
 		OriginMuxConfig: MuxerConfig{
-			Timeout: time.Second,
-			IsClient: true,
-			Name: "origin",
-			Logger: log.NewEntry(log.New()),
+			Timeout:                 time.Second,
+			IsClient:                true,
+			Name:                    "origin",
+			Logger:                  log.NewEntry(log.New()),
+			DefaultWindowSize:       (1 << 8) - 1,
+			MaxWindowSize:           (1 << 15) - 1,
+			StreamWriteBufferMaxLen: 1024,
 		},
-		OriginConn:      origin,
-		EdgeMuxConfig:   MuxerConfig{
-			Timeout: time.Second,
-			IsClient: false,
-			Name: "edge",
-			Logger: log.NewEntry(log.New()),
+		OriginConn: origin,
+		EdgeMuxConfig: MuxerConfig{
+			Timeout:                 time.Second,
+			IsClient:                false,
+			Name:                    "edge",
+			Logger:                  log.NewEntry(log.New()),
+			DefaultWindowSize:       (1 << 8) - 1,
+			MaxWindowSize:           (1 << 15) - 1,
+			StreamWriteBufferMaxLen: 1024,
 		},
-		EdgeConn:        edge,
-		doneC:           make(chan struct{}),
+		EdgeConn: edge,
+		doneC:    make(chan struct{}),
 	}
 }
 
@@ -60,22 +66,22 @@ func NewCompressedMuxerPair(quality CompressionSetting) *DefaultMuxerPair {
 	origin, edge := net.Pipe()
 	return &DefaultMuxerPair{
 		OriginMuxConfig: MuxerConfig{
-			Timeout: time.Second,
-			IsClient: true,
-			Name: "origin",
+			Timeout:            time.Second,
+			IsClient:           true,
+			Name:               "origin",
 			CompressionQuality: quality,
-			Logger: log.NewEntry(log.New()),
+			Logger:             log.NewEntry(log.New()),
 		},
-		OriginConn:      origin,
-		EdgeMuxConfig:   MuxerConfig{
-			Timeout: time.Second,
-			IsClient: false,
-			Name: "edge",
+		OriginConn: origin,
+		EdgeMuxConfig: MuxerConfig{
+			Timeout:            time.Second,
+			IsClient:           false,
+			Name:               "edge",
 			CompressionQuality: quality,
-			Logger: log.NewEntry(log.New()),
+			Logger:             log.NewEntry(log.New()),
 		},
-		EdgeConn:        edge,
-		doneC:           make(chan struct{}),
+		EdgeConn: edge,
+		doneC:    make(chan struct{}),
 	}
 }
 
@@ -230,7 +236,6 @@ func TestSingleStream(t *testing.T) {
 func TestSingleStreamLargeResponseBody(t *testing.T) {
 	muxPair := NewDefaultMuxerPair()
 	bodySize := 1 << 24
-	streamReady := make(chan struct{})
 	muxPair.OriginMuxConfig.Handler = MuxedStreamFunc(func(stream *MuxedStream) error {
 		if len(stream.Headers) != 1 {
 			t.Fatalf("expected %d headers, got %d", 1, len(stream.Headers))
@@ -257,8 +262,6 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 		if n != len(payload) {
 			t.Fatalf("origin short write: %d/%d bytes", n, len(payload))
 		}
-		t.Log("Payload written; signaling that the stream is ready")
-		streamReady <- struct{}{}
 
 		return nil
 	})
@@ -281,9 +284,6 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 		t.Fatalf("expected header value %s, got %s", "responseValue", stream.Headers[0].Value)
 	}
 	responseBody := make([]byte, bodySize)
-
-	<-streamReady
-	t.Log("Received stream ready signal; resuming the test")
 
 	n, err := io.ReadFull(stream, responseBody)
 	if err != nil {
@@ -367,14 +367,13 @@ func TestMultipleStreams(t *testing.T) {
 		log.Error(err)
 	}
 	if testFail {
-		t.Fatalf("TestMultipleStreamsFlowControl failed")
+		t.Fatalf("TestMultipleStreams failed")
 	}
 }
 
 func TestMultipleStreamsFlowControl(t *testing.T) {
 	maxStreams := 32
 	errorsC := make(chan error, maxStreams)
-	streamReady := make(chan struct{})
 	responseSizes := make([]int32, maxStreams)
 	for i := 0; i < maxStreams; i++ {
 		responseSizes[i] = rand.Int31n(int32(defaultWindowSize << 4))
@@ -398,7 +397,6 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 			payload[i] = byte(i % 256)
 		}
 		n, err := stream.Write(payload)
-		streamReady <- struct{}{}
 		if err != nil {
 			t.Fatalf("origin write error: %s", err)
 		}
@@ -435,7 +433,6 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 				return
 			}
 
-			<-streamReady
 			responseBody := make([]byte, responseSizes[(stream.streamID-2)/2])
 			n, err := io.ReadFull(stream, responseBody)
 			if err != nil {
@@ -782,9 +779,11 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 		}
 
 		wg.Add(len(paths))
+		errorsC := make(chan error, len(paths))
 
 		for i, s := range paths {
 			go func(i int, path string) {
+				defer wg.Done()
 				stream, err := muxPair.EdgeMux.OpenStream(
 					[]Header{
 						{Name: ":method", Value: "GET"},
@@ -805,22 +804,30 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 				responseBody := make([]byte, len(expectBody)*2)
 				n, err := stream.Read(responseBody)
 				if err != nil {
-					log.Printf("error from (*MuxedStream).Read: %s", err)
-					t.Fatalf("error from (*MuxedStream).Read: %s", err)
+					errorsC <- fmt.Errorf("stream %d error from (*MuxedStream).Read: %s", stream.streamID, err)
+					return
 				}
 				if n != len(expectBody) {
-					log.Printf("expected response body to have %d bytes, got %d", len(expectBody), n)
-					t.Fatalf("expected response body to have %d bytes, got %d", len(expectBody), n)
+					errorsC <- fmt.Errorf("stream %d expected response body to have %d bytes, got %d", stream.streamID, len(expectBody), n)
+					return
 				}
 				if string(responseBody[:n]) != expectBody {
-					log.Printf("expected response body %s, got %s", expectBody, responseBody[:n])
-					t.Fatalf("expected response body %s, got %s", expectBody, responseBody[:n])
+					errorsC <- fmt.Errorf("stream %d expected response body %s, got %s", stream.streamID, expectBody, responseBody[:n])
+					return
 				}
-				wg.Done()
 			}(i, s)
-			time.Sleep(1 * time.Millisecond)
 		}
+
 		wg.Wait()
+		close(errorsC)
+		testFail := false
+		for err := range errorsC {
+			testFail = true
+			log.Error(err)
+		}
+		if testFail {
+			t.Fatalf("TestMultipleStreams failed")
+		}
 
 		if q > CompressionNone && muxPair.OriginMux.muxMetricsUpdater.compBytesBefore.Value() <= 10*muxPair.OriginMux.muxMetricsUpdater.compBytesAfter.Value() {
 			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")

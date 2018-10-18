@@ -23,47 +23,55 @@ func TestFlowControlSingleStream(t *testing.T) {
 		sendWindow:              testWindowSize,
 		readyList:               NewReadyList(),
 	}
+	var tempWindowUpdate uint32
+	var tempStreamChunk *streamChunk
+
 	assert.True(t, stream.consumeReceiveWindow(testWindowSize/2))
 	dataSent := testWindowSize / 2
 	assert.Equal(t, testWindowSize-dataSent, stream.receiveWindow)
 	assert.Equal(t, testWindowSize, stream.receiveWindowCurrentMax)
-	assert.Equal(t, uint32(0), stream.windowUpdate)
-	tempWindowUpdate := stream.windowUpdate
-
-	streamChunk := stream.getChunk()
-	assert.Equal(t, tempWindowUpdate, streamChunk.windowUpdate)
-	assert.Equal(t, testWindowSize-dataSent, stream.receiveWindow)
-	assert.Equal(t, uint32(0), stream.windowUpdate)
 	assert.Equal(t, testWindowSize, stream.sendWindow)
+	assert.Equal(t, uint32(0), stream.windowUpdate)
+
+	tempStreamChunk = stream.getChunk()
+	assert.Equal(t, uint32(0), tempStreamChunk.windowUpdate)
+	assert.Equal(t, testWindowSize-dataSent, stream.receiveWindow)
+	assert.Equal(t, testWindowSize, stream.receiveWindowCurrentMax)
+	assert.Equal(t, testWindowSize, stream.sendWindow)
+	assert.Equal(t, uint32(0), stream.windowUpdate)
 
 	assert.True(t, stream.consumeReceiveWindow(2))
 	dataSent += 2
 	assert.Equal(t, testWindowSize-dataSent, stream.receiveWindow)
 	assert.Equal(t, testWindowSize<<1, stream.receiveWindowCurrentMax)
-	assert.Equal(t, (testWindowSize<<1)-stream.receiveWindow, stream.windowUpdate)
+	assert.Equal(t, testWindowSize, stream.sendWindow)
+	assert.Equal(t, testWindowSize, stream.windowUpdate)
 	tempWindowUpdate = stream.windowUpdate
 
-	streamChunk = stream.getChunk()
-	assert.Equal(t, tempWindowUpdate, streamChunk.windowUpdate)
-	assert.Equal(t, testWindowSize<<1, stream.receiveWindow)
-	assert.Equal(t, uint32(0), stream.windowUpdate)
+	tempStreamChunk = stream.getChunk()
+	assert.Equal(t, tempWindowUpdate, tempStreamChunk.windowUpdate)
+	assert.Equal(t, (testWindowSize<<1)-dataSent, stream.receiveWindow)
+	assert.Equal(t, testWindowSize<<1, stream.receiveWindowCurrentMax)
 	assert.Equal(t, testWindowSize, stream.sendWindow)
+	assert.Equal(t, uint32(0), stream.windowUpdate)
 
 	assert.True(t, stream.consumeReceiveWindow(testWindowSize+10))
-	dataSent = testWindowSize + 10
+	dataSent += testWindowSize + 10
 	assert.Equal(t, (testWindowSize<<1)-dataSent, stream.receiveWindow)
 	assert.Equal(t, testWindowSize<<2, stream.receiveWindowCurrentMax)
-	assert.Equal(t, (testWindowSize<<2)-stream.receiveWindow, stream.windowUpdate)
+	assert.Equal(t, testWindowSize, stream.sendWindow)
+	assert.Equal(t, testWindowSize<<1, stream.windowUpdate)
 	tempWindowUpdate = stream.windowUpdate
 
-	streamChunk = stream.getChunk()
-	assert.Equal(t, tempWindowUpdate, streamChunk.windowUpdate)
-	assert.Equal(t, testWindowSize<<2, stream.receiveWindow)
-	assert.Equal(t, uint32(0), stream.windowUpdate)
+	tempStreamChunk = stream.getChunk()
+	assert.Equal(t, tempWindowUpdate, tempStreamChunk.windowUpdate)
+	assert.Equal(t, (testWindowSize<<2)-dataSent, stream.receiveWindow)
+	assert.Equal(t, testWindowSize<<2, stream.receiveWindowCurrentMax)
 	assert.Equal(t, testWindowSize, stream.sendWindow)
+	assert.Equal(t, uint32(0), stream.windowUpdate)
 
 	assert.False(t, stream.consumeReceiveWindow(testMaxWindowSize+1))
-	assert.Equal(t, testWindowSize<<2, stream.receiveWindow)
+	assert.Equal(t, (testWindowSize<<2)-dataSent, stream.receiveWindow)
 	assert.Equal(t, testMaxWindowSize, stream.receiveWindowCurrentMax)
 }
 

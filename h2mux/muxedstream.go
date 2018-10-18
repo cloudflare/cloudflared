@@ -17,32 +17,51 @@ type ReadWriteClosedCloser interface {
 	Closed() bool
 }
 
+// MuxedStream is logically an HTTP/2 stream, with an additional buffer for outgoing data.
 type MuxedStream struct {
-	Headers []Header
-
 	streamID uint32
 
+	// The "Receive" end of the stream
+	readBufferLock sync.RWMutex
+	readBuffer     ReadWriteClosedCloser
+	// This is the amount of bytes that are in our receive window
+	// (how much data we can receive into this stream).
+	receiveWindow uint32
+	// current receive window size limit. Exponentially increase it when it's exhausted
+	receiveWindowCurrentMax uint32
+	// hard limit set in http2 spec. 2^31-1
+	receiveWindowMax uint32
+	// The desired size increment for receiveWindow.
+	// If this is nonzero, a WINDOW_UPDATE frame needs to be sent.
+	windowUpdate uint32
+	// The headers that were most recently received.
+	// Particularly:
+	//     * for an eyeball-initiated stream (as passed to TunnelHandler::ServeStream),
+	//       these are the request headers
+	//     * for a cloudflared-initiated stream (as created by Register/UnregisterTunnel),
+	//       these are the response headers.
+	// They are useful in both of these contexts; hence `Headers` is public.
+	Headers []Header
+	// For use in the context of a cloudflared-initiated stream.
 	responseHeadersReceived chan struct{}
 
-	readBuffer    ReadWriteClosedCloser
-	receiveWindow uint32
-	// current window size limit. Exponentially increase it when it's exhausted
-	receiveWindowCurrentMax uint32
-	// limit set in http2 spec. 2^31-1
-	receiveWindowMax uint32
-
-	// nonzero if a WINDOW_UPDATE frame for a stream needs to be sent
-	windowUpdate uint32
-
-	writeLock sync.Mutex
-	// The zero value for Buffer is an empty buffer ready to use.
+	// The "Send" end of the stream
+	writeLock   sync.Mutex
 	writeBuffer ReadWriteLengther
-
+	// The maximum capacity that the send buffer should grow to.
+	writeBufferMaxLen int
+	// A channel to be notified when the send buffer is not full.
+	writeBufferHasSpace chan struct{}
+	// This is the amount of bytes that are in the peer's receive window
+	// (how much data we can send from this stream).
 	sendWindow uint32
-
-	readyList    *ReadyList
+	// Reference to the muxer's readyList; signal this for stream data to be sent.
+	readyList *ReadyList
+	// The headers that should be sent, and a flag so we only send them once.
 	headersSent  bool
 	writeHeaders []Header
+
+	// EOF-related fields
 	// true if the write end of this stream has been closed
 	writeEOF bool
 	// true if we have sent EOF to the peer
@@ -50,40 +69,63 @@ type MuxedStream struct {
 	// true if the peer sent us an EOF
 	receivedEOF bool
 
-	// dictionary that was used to compress the stream
+	// Compression-related fields
 	receivedUseDict bool
 	method          string
 	contentType     string
 	path            string
 	dictionaries    h2Dictionaries
-	readBufferLock  sync.RWMutex
 }
 
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
+	var readBuffer ReadWriteClosedCloser
 	if s.dictionaries.read != nil {
 		s.readBufferLock.RLock()
-		b := s.readBuffer
+		readBuffer = s.readBuffer
 		s.readBufferLock.RUnlock()
-		return b.Read(p)
+	} else {
+		readBuffer = s.readBuffer
 	}
-	return s.readBuffer.Read(p)
+	n, err = readBuffer.Read(p)
+	s.replenishReceiveWindow(uint32(n))
+	return
 }
 
-func (s *MuxedStream) Write(p []byte) (n int, err error) {
+// Blocks until len(p) bytes have been written to the buffer
+func (s *MuxedStream) Write(p []byte) (int, error) {
+	// If assignDictToStream returns success, then it will have acquired the
+	// writeLock. Otherwise we must acquire it ourselves.
 	ok := assignDictToStream(s, p)
 	if !ok {
 		s.writeLock.Lock()
 	}
 	defer s.writeLock.Unlock()
+
 	if s.writeEOF {
 		return 0, io.EOF
 	}
-	n, err = s.writeBuffer.Write(p)
-	if n != len(p) || err != nil {
-		return n, err
+	totalWritten := 0
+	for totalWritten < len(p) {
+		// If the buffer is full, block till there is more room.
+		// Use a loop to recheck the buffer size after the lock is reacquired.
+		for s.writeBufferMaxLen <= s.writeBuffer.Len() {
+			s.writeLock.Unlock()
+			<-s.writeBufferHasSpace
+			s.writeLock.Lock()
+		}
+		amountToWrite := len(p) - totalWritten
+		spaceAvailable := s.writeBufferMaxLen - s.writeBuffer.Len()
+		if spaceAvailable < amountToWrite {
+			amountToWrite = spaceAvailable
+		}
+		amountWritten, err := s.writeBuffer.Write(p[totalWritten : totalWritten+amountToWrite])
+		totalWritten += amountWritten
+		if err != nil {
+			return totalWritten, err
+		}
+		s.writeNotify()
 	}
-	s.writeNotify()
-	return n, nil
+	return totalWritten, nil
 }
 
 func (s *MuxedStream) Close() error {
@@ -164,9 +206,9 @@ func (s *MuxedStream) writeNotify() {
 // receive window (how much data we can send).
 func (s *MuxedStream) replenishSendWindow(bytes uint32) {
 	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
 	s.sendWindow += bytes
 	s.writeNotify()
-	s.writeLock.Unlock()
 }
 
 // Call by muxreader when it receives a data frame
@@ -178,15 +220,28 @@ func (s *MuxedStream) consumeReceiveWindow(bytes uint32) bool {
 		return false
 	}
 	s.receiveWindow -= bytes
-	if s.receiveWindow < s.receiveWindowCurrentMax/2 {
+	if s.receiveWindow < s.receiveWindowCurrentMax/2 && s.receiveWindowCurrentMax < s.receiveWindowMax {
 		// exhausting client send window (how much data client can send)
-		if s.receiveWindowCurrentMax < s.receiveWindowMax {
-			s.receiveWindowCurrentMax <<= 1
+		// and there is room to grow the receive window
+		newMax := s.receiveWindowCurrentMax << 1
+		if newMax > s.receiveWindowMax {
+			newMax = s.receiveWindowMax
 		}
-		s.windowUpdate += s.receiveWindowCurrentMax - s.receiveWindow
+		s.windowUpdate += newMax - s.receiveWindowCurrentMax
+		s.receiveWindowCurrentMax = newMax
+		// notify MuxWriter to write WINDOW_UPDATE frame
 		s.writeNotify()
 	}
 	return true
+}
+
+// Arranges for the MuxWriter to send a WINDOW_UPDATE
+// Called by MuxedStream::Read when data has left the read buffer.
+func (s *MuxedStream) replenishReceiveWindow(bytes uint32) {
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
+	s.windowUpdate += bytes
+	s.writeNotify()
 }
 
 // receiveEOF should be called when the peer indicates no more data will be sent.
@@ -226,7 +281,8 @@ type streamChunk struct {
 	// true if a HEADERS frame should be sent
 	sendHeaders bool
 	headers     []Header
-	// nonzero if a WINDOW_UPDATE frame should be sent
+	// nonzero if a WINDOW_UPDATE frame should be sent;
+	// in that case, it is the increment value to use
 	windowUpdate uint32
 	// true if data frames should be sent
 	sendData bool
@@ -249,11 +305,23 @@ func (s *MuxedStream) getChunk() *streamChunk {
 		eof:          s.writeEOF && uint32(s.writeBuffer.Len()) <= s.sendWindow,
 	}
 
-	// Copies at most s.sendWindow bytes
+	// Copy at most s.sendWindow bytes, adjust the sendWindow accordingly
 	writeLen, _ := io.CopyN(&chunk.buffer, s.writeBuffer, int64(s.sendWindow))
 	s.sendWindow -= uint32(writeLen)
+
+	// Non-blocking channel send. This will allow MuxedStream::Write() to continue, if needed
+	if s.writeBuffer.Len() < s.writeBufferMaxLen {
+		select {
+		case s.writeBufferHasSpace <- struct{}{}:
+		default:
+		}
+	}
+
+	// When we write the chunk, we'll write the WINDOW_UPDATE frame if needed
 	s.receiveWindow += s.windowUpdate
 	s.windowUpdate = 0
+
+	// When we write the chunk, we'll write the headers if needed
 	s.headersSent = true
 
 	// if this chunk contains the end of the stream, close the stream now

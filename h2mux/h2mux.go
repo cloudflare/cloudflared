@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	defaultFrameSize  uint32        = 1 << 14 // Minimum frame size in http2 spec
-	defaultWindowSize uint32        = 65535
-	maxWindowSize     uint32        = (1 << 31) - 1 // 2^31-1 = 2147483647, max window size specified in http2 spec
-	defaultTimeout    time.Duration = 5 * time.Second
-	defaultRetries    uint64        = 5
+	defaultFrameSize         uint32        = 1 << 14       // Minimum frame size in http2 spec
+	defaultWindowSize        uint32        = (1 << 16) - 1 // Minimum window size in http2 spec
+	maxWindowSize            uint32        = (1 << 31) - 1 // 2^31-1 = 2147483647, max window size in http2 spec
+	defaultTimeout           time.Duration = 5 * time.Second
+	defaultRetries           uint64        = 5
+	defaultWriteBufferMaxLen int           = 1024 * 1024 * 512 // 500mb
 
 	SettingMuxerMagic http2.SettingID = 0x42db
 	MuxerMagicOrigin  uint32          = 0xa2e43c8b
@@ -49,6 +50,12 @@ type MuxerConfig struct {
 	// Logger to use
 	Logger             *log.Entry
 	CompressionQuality CompressionSetting
+	// Initial size for HTTP2 flow control windows
+	DefaultWindowSize uint32
+	// Largest allowable size for HTTP2 flow control windows
+	MaxWindowSize uint32
+	// Largest allowable capacity for the buffer of data to be sent
+	StreamWriteBufferMaxLen int
 }
 
 type Muxer struct {
@@ -97,6 +104,15 @@ func Handshake(
 	// Set default config values
 	if config.Timeout == 0 {
 		config.Timeout = defaultTimeout
+	}
+	if config.DefaultWindowSize == 0 {
+		config.DefaultWindowSize = defaultWindowSize
+	}
+	if config.MaxWindowSize == 0 {
+		config.MaxWindowSize = maxWindowSize
+	}
+	if config.StreamWriteBufferMaxLen == 0 {
+		config.StreamWriteBufferMaxLen = defaultWriteBufferMaxLen
 	}
 	// Initialise connection state fields
 	m := &Muxer{
@@ -179,8 +195,9 @@ func Handshake(
 		abortChan:               m.abortChan,
 		pingTimestamp:           pingTimestamp,
 		connActive:              connActive,
-		initialStreamWindow:     defaultWindowSize,
-		streamWindowMax:         maxWindowSize,
+		initialStreamWindow:     m.config.DefaultWindowSize,
+		streamWindowMax:         m.config.MaxWindowSize,
+		streamWriteBufferMaxLen: m.config.StreamWriteBufferMaxLen,
 		r:                       m.r,
 		updateRTTChan:           updateRTTChan,
 		updateReceiveWindowChan: updateReceiveWindowChan,
@@ -375,10 +392,12 @@ func (m *Muxer) OpenStream(headers []Header, body io.Reader) (*MuxedStream, erro
 		responseHeadersReceived: make(chan struct{}),
 		readBuffer:              NewSharedBuffer(),
 		writeBuffer:             &bytes.Buffer{},
-		receiveWindow:           defaultWindowSize,
-		receiveWindowCurrentMax: defaultWindowSize, // Initial window size limit. exponentially increase it when receiveWindow is exhausted
-		receiveWindowMax:        maxWindowSize,
-		sendWindow:              defaultWindowSize,
+		writeBufferMaxLen:       m.config.StreamWriteBufferMaxLen,
+		writeBufferHasSpace:     make(chan struct{}, 1),
+		receiveWindow:           m.config.DefaultWindowSize,
+		receiveWindowCurrentMax: m.config.DefaultWindowSize,
+		receiveWindowMax:        m.config.MaxWindowSize,
+		sendWindow:              m.config.DefaultWindowSize,
 		readyList:               m.readyList,
 		writeHeaders:            headers,
 		dictionaries:            m.muxReader.dictionaries,
