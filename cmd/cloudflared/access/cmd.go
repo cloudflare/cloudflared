@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"golang.org/x/net/idna"
 
 	"github.com/cloudflare/cloudflared/log"
@@ -15,6 +16,17 @@ import (
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
+
+var (
+	logger         = log.CreateLogger()
+	shutdownC      chan struct{}
+	graceShutdownC chan struct{}
+)
+
+// Init will initialize and store vars from the main program
+func Init(s, g chan struct{}) {
+	shutdownC, graceShutdownC = s, g
+}
 
 // Flags return the global flags for Access related commands (hopefully none)
 func Flags() []cli.Flag {
@@ -61,7 +73,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "token",
-					Action:      token,
+					Action:      generateToken,
 					Usage:       "token -app=<url of access application>",
 					ArgsUsage:   "url of Access application",
 					Description: `The token subcommand produces a JWT which can be used to authenticate requests.`,
@@ -70,6 +82,30 @@ func Commands() []*cli.Command {
 							Name: "app",
 						},
 					},
+				},
+				{
+					Name:        "ssh",
+					Action:      ssh,
+					Usage:       "",
+					ArgsUsage:   "",
+					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
+					Hidden:      true,
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name: "hostname",
+						},
+						&cli.StringFlag{
+							Name:   "url",
+							Hidden: true,
+						},
+					},
+				},
+				{
+					Name:        "ssh-config",
+					Action:      sshConfig,
+					Usage:       "ssh-config",
+					Description: `Prints an example configuration ~/.ssh/config`,
+					Hidden:      true,
 				},
 			},
 		},
@@ -86,7 +122,7 @@ func login(c *cli.Context) error {
 		logger.Errorf("Please provide the url of the Access application\n")
 		return err
 	}
-	token, err := FetchToken(appURL)
+	token, err := token.FetchToken(appURL)
 	if err != nil {
 		logger.Errorf("Failed to fetch token: %s\n", err)
 		return err
@@ -111,13 +147,13 @@ func curl(c *cli.Context) error {
 		return err
 	}
 
-	token, err := getTokenIfExists(appURL)
-	if err != nil || token == "" {
+	tok, err := token.GetTokenIfExists(appURL)
+	if err != nil || tok == "" {
 		if allowRequest {
 			logger.Warn("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return shell.Run("curl", cmdArgs...)
 		}
-		token, err = FetchToken(appURL)
+		tok, err = token.FetchToken(appURL)
 		if err != nil {
 			logger.Error("Failed to refresh token: ", err)
 			return err
@@ -125,29 +161,37 @@ func curl(c *cli.Context) error {
 	}
 
 	cmdArgs = append(cmdArgs, "-H")
-	cmdArgs = append(cmdArgs, fmt.Sprintf("cf-access-token: %s", token))
+	cmdArgs = append(cmdArgs, fmt.Sprintf("cf-access-token: %s", tok))
 	return shell.Run("curl", cmdArgs...)
 }
 
 // token dumps provided token to stdout
-func token(c *cli.Context) error {
+func generateToken(c *cli.Context) error {
 	raven.SetDSN(sentryDSN)
 	appURL, err := url.Parse(c.String("app"))
 	if err != nil || c.NumFlags() < 1 {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
 	}
-	token, err := getTokenIfExists(appURL)
-	if err != nil || token == "" {
+	tok, err := token.GetTokenIfExists(appURL)
+	if err != nil || tok == "" {
 		fmt.Fprintln(os.Stderr, "Unable to find token for provided application. Please run token command to generate token.")
 		return err
 	}
 
-	if _, err := fmt.Fprint(os.Stdout, token); err != nil {
+	if _, err := fmt.Fprint(os.Stdout, tok); err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to write token to stdout.")
 		return err
 	}
 	return nil
+}
+
+// sshConfig prints an example SSH config to stdout
+func sshConfig(c *cli.Context) error {
+	_, err := os.Stdout.Write([]byte(`Add this configuration block to your $HOME/.ssh/config
+		Host <your hostname>
+		    ProxyCommand cloudflared access ssh --hostname %h` + "\n"))
+	return err
 }
 
 // processURL will preprocess the string (parse to a url, convert to punycode, etc).

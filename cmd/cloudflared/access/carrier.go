@@ -1,9 +1,10 @@
-package tunnel
+package access
 
 import (
 	"net/url"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/pkg/errors"
 	cli "gopkg.in/urfave/cli.v2"
@@ -15,13 +16,12 @@ import (
 // (which you can put Access in front of)
 func ssh(c *cli.Context) error {
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
-	if err != nil {
-		logger.WithError(err).Error("Invalid hostname")
-		return errors.Wrap(err, "invalid hostname")
+	if err != nil || c.String("hostname") == "" {
+		return cli.ShowCommandHelp(c, "ssh")
 	}
 
 	if c.NArg() > 0 || c.IsSet("url") {
-		localForwarder, err := validateUrl(c)
+		localForwarder, err := config.ValidateUrl(c)
 		if err != nil {
 			logger.WithError(err).Error("Error validating origin URL")
 			return errors.Wrap(err, "error validating origin URL")

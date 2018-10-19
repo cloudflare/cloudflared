@@ -1,9 +1,11 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/cloudflare/cloudflared/validation"
 	homedir "github.com/mitchellh/go-homedir"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
@@ -59,4 +61,17 @@ func FindDefaultConfigPath() string {
 		}
 	}
 	return ""
+}
+
+// ValidateUrl will validate url flag correctness. It can be either from --url or argument
+func ValidateUrl(c *cli.Context) (string, error) {
+	var url = c.String("url")
+	if c.NArg() > 0 {
+		if c.IsSet("url") {
+			return "", errors.New("Specified origin urls using both --url and argument. Decide which one you want, I can only support one.")
+		}
+		url = c.Args().Get(0)
+	}
+	validUrl, err := validation.ValidateUrl(url)
+	return validUrl, err
 }

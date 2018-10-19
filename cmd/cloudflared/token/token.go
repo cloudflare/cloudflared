@@ -1,4 +1,4 @@
-package access
+package token
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ var logger = log.CreateLogger()
 
 // FetchToken will either load a stored token or generate a new one
 func FetchToken(appURL *url.URL) (string, error) {
-	if token, err := getTokenIfExists(appURL); token != "" && err == nil {
+	if token, err := GetTokenIfExists(appURL); token != "" && err == nil {
 		return token, nil
 	}
 
@@ -42,8 +42,8 @@ func FetchToken(appURL *url.URL) (string, error) {
 	return string(token), nil
 }
 
-// getTokenIfExists will return the token from local storage if it exists
-func getTokenIfExists(url *url.URL) (string, error) {
+// GetTokenIfExists will return the token from local storage if it exists
+func GetTokenIfExists(url *url.URL) (string, error) {
 	path, err := generateFilePathForTokenURL(url)
 	if err != nil {
 		return "", err

@@ -55,6 +55,7 @@ func main() {
 	app.Commands = commands()
 
 	tunnel.Init(Version, shutdownC, graceShutdownC) // we need this to support the tunnel sub command...
+	access.Init(shutdownC, graceShutdownC)
 	runApp(app, shutdownC, graceShutdownC)
 }
 

@@ -136,6 +136,10 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote strin
 		}
 		defer stream.Close()
 
+		if !websocket.IsWebSocketUpgrade(r) {
+			w.Write(nonWebSocketRequestPage())
+			return
+		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			logger.WithError(err).Error("failed to upgrade")
