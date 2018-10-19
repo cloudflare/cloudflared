@@ -64,19 +64,6 @@ func handleDeprecatedOptions(c *cli.Context) error {
 	return nil
 }
 
-// validate url. It can be either from --url or argument
-func validateUrl(c *cli.Context) (string, error) {
-	var url = c.String("url")
-	if c.NArg() > 0 {
-		if c.IsSet("url") {
-			return "", errors.New("Specified origin urls using both --url and argument. Decide which one you want, I can only support one.")
-		}
-		url = c.Args().Get(0)
-	}
-	validUrl, err := validation.ValidateUrl(url)
-	return validUrl, err
-}
-
 func logClientOptions(c *cli.Context) {
 	flags := make(map[string]interface{})
 	for _, flag := range c.LocalFlagNames() {
@@ -168,7 +155,7 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
 
-	originURL, err := validateUrl(c)
+	originURL, err := config.ValidateUrl(c)
 	if err != nil {
 		logger.WithError(err).Error("Error validating origin URL")
 		return nil, errors.Wrap(err, "Error validating origin URL")

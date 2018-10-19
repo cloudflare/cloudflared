@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/sirupsen/logrus"
 )
@@ -121,7 +121,7 @@ func buildAccessRequest(originURL string) (*http.Request, error) {
 		return nil, err
 	}
 
-	token, err := access.FetchToken(req.URL)
+	token, err := token.FetchToken(req.URL)
 	if err != nil {
 		return nil, err
 	}
