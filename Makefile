@@ -16,6 +16,10 @@ ifeq ($(EQUINOX_IS_DRAFT), true)
 	EQUINOX_FLAGS := --draft $(EQUINOX_FLAGS)
 endif
 
+ifeq ($(GOARCH),)
+	GOARCH := amd64
+endif
+
 .PHONY: all
 all: cloudflared test
 
@@ -32,7 +36,7 @@ cloudflared-deb: cloudflared
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t deb --deb-compression bzip2 \
-		-a $(GOARCH) -v $(VERSION) -n cloudflared
+		-a $(GOARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
 
 .PHONY: cloudflared-darwin-amd64.tgz
 cloudflared-darwin-amd64.tgz: cloudflared

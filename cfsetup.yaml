@@ -1,6 +1,6 @@
 pinned_go: &pinned_go go=1.9.3-1
 build_dir: &build_dir /cfsetup_build/src/github.com/cloudflare/cloudflared/
-stretch:
+stretch: &stretch
   build:
     build_dir: *build_dir
     builddeps:
@@ -87,3 +87,5 @@ stretch:
       - export GOOS=linux
       - export GOARCH=amd64
       - make test
+
+jessie: *stretch
