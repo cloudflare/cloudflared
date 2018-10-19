@@ -431,6 +431,12 @@ func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
 				return fmt.Errorf("invalid path")
 			}
 			h1.URL = resolved
+		case "content-length":
+			contentLength, err := strconv.ParseInt(header.Value, 10, 64)
+			if err != nil {
+				return fmt.Errorf("unparseable content length")
+			}
+			h1.ContentLength = contentLength
 		default:
 			h1.Header.Add(http.CanonicalHeaderKey(header.Name), header.Value)
 		}
