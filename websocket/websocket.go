@@ -167,6 +167,7 @@ func websocketHeaders(req *http.Request) http.Header {
 	for _, header := range stripWebsocketHeaders {
 		wsHeaders.Del(header)
 	}
+	wsHeaders.Set("Host", req.Host) // See TUN-1097
 	return wsHeaders
 }
 
