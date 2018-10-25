@@ -1,3 +1,9 @@
+2018.10.4
+- 2018-09-21 AUTH-1070: added SSH/protocol forwarding
+- 2018-10-19 AUTH-1235: fixed packaging of deb dev file
+- 2018-10-19 TUN-1097: Host missing from WebSocket request
+- 2018-10-19 AUTH-1188: UX Review and Changes for CLI SSH Access
+
 2018.10.3
 - 2018-10-08 TUN-1099: Bring back changes in 2018.10.1
 - 2018-10-08 TUN-1098: removed deprecation error
