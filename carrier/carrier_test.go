@@ -66,11 +66,16 @@ func TestStartServer(t *testing.T) {
 	defer ts.Close()
 
 	go func() {
-		StartServer(logger, listenerAddress, "http://"+ts.Listener.Addr().String(), shutdownC)
+		err := StartServer(logger, listenerAddress, "http://"+ts.Listener.Addr().String(), shutdownC)
+		if err != nil {
+			t.Fatalf("Error starting server: %v", err)
+		}
 	}()
 
 	conn, err := net.Dial("tcp", listenerAddress)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Error connecting to server: %v", err)
+	}
 	conn.Write([]byte(message))
 
 	readBuffer := make([]byte, len(message))

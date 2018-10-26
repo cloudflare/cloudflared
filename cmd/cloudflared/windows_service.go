@@ -87,7 +87,20 @@ type windowsService struct {
 }
 
 // called by the package code at the start of the service
-func (s *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
+func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
+	// the arguments passed here are only meaningful if they were manually
+	// specified by the user, e.g. using the Services console or `sc start`.
+	// https://docs.microsoft.com/en-us/windows/desktop/services/service-entry-point
+	// https://stackoverflow.com/a/6235139
+	var args []string
+	if len(serviceArgs) > 1 {
+		args = serviceArgs
+	} else {
+		// fall back to the arguments from ImagePath (or, as sc calls it, binPath)
+		args = os.Args
+	}
+	s.elog.Info(1, fmt.Sprintf("%s service arguments: %v", windowsServiceName, args))
+
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	statusChan <- svc.Status{State: svc.StartPending}
 	errC := make(chan error)
