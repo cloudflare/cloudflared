@@ -6,9 +6,10 @@ import (
 	"net/url"
 	"strings"
 
+	"net/http"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
-	"net/http"
 )
 
 const defaultScheme = "http"
@@ -137,7 +138,7 @@ func validateIP(scheme, host, port string) (string, error) {
 	return fmt.Sprintf("%s://%s", scheme, host), nil
 }
 
-func ValidateHTTPService(originURL string, transport http.RoundTripper) error {
+func ValidateHTTPService(originURL string, hostname string, transport http.RoundTripper) error {
 	parsedURL, err := url.Parse(originURL)
 	if err != nil {
 		return err
@@ -145,18 +146,27 @@ func ValidateHTTPService(originURL string, transport http.RoundTripper) error {
 
 	client := &http.Client{Transport: transport}
 
-	initialResponse, initialErr := client.Get(parsedURL.String())
+	initialRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
+	if err != nil {
+		return err
+	}
+	initialRequest.Host = hostname
+	initialResponse, initialErr := client.Do(initialRequest)
 	if initialErr != nil || initialResponse.StatusCode != http.StatusOK {
 		// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
 		oldScheme := parsedURL.Scheme
 		parsedURL.Scheme = toggleProtocol(parsedURL.Scheme)
 
-		secondResponse, _ := client.Get(parsedURL.String())
-
+		secondRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
+		if err != nil {
+			return err
+		}
+		secondRequest.Host = hostname
+		secondResponse, _ := client.Do(secondRequest)
 		if secondResponse != nil && secondResponse.StatusCode == http.StatusOK { // Worked this time--advise the user to switch protocols
 			return errors.Errorf(
 				"%s doesn't seem to work over %s, but does seem to work over %s. Consider changing the origin URL to %s",
-				parsedURL.Hostname(),
+				parsedURL.Host,
 				oldScheme,
 				parsedURL.Scheme,
 				parsedURL,

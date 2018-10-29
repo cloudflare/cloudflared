@@ -192,7 +192,7 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
 	}
 
-	err = validation.ValidateHTTPService(originURL, httpTransport)
+	err = validation.ValidateHTTPService(originURL, hostname, httpTransport)
 	if err != nil {
 		logger.WithError(err).Error("unable to connect to the origin")
 		return nil, errors.Wrap(err, "unable to connect to the origin")

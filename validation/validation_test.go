@@ -7,12 +7,13 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/stretchr/testify/assert"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateHostname(t *testing.T) {
@@ -151,57 +152,88 @@ func TestToggleProtocol(t *testing.T) {
 }
 
 func TestValidateHTTPService_HTTP2HTTP(t *testing.T) {
+	originURL := "http://127.0.0.1/"
+	hostname := "example.com"
 	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, hostname, r.Host)
 		w.WriteHeader(200)
 	}))
 	assert.NoError(t, err)
 	defer server.Close()
 
-	assert.Equal(t, nil, ValidateHTTPService("http://example.com/", client.Transport))
+	assert.Equal(t, nil, ValidateHTTPService(originURL, hostname, client.Transport))
 }
 
 func TestValidateHTTPService_ServerNonOKResponse(t *testing.T) {
+	originURL := "http://127.0.0.1/"
+	hostname := "example.com"
 	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			assert.Equal(t, "127.0.0.1:443", r.Host)
+		} else {
+			assert.Equal(t, hostname, r.Host)
+		}
 		w.WriteHeader(400)
 	}))
 	assert.NoError(t, err)
 	defer server.Close()
 
-	assert.Equal(t, nil, ValidateHTTPService("http://example.com/", client.Transport))
+	assert.Equal(t, nil, ValidateHTTPService(originURL, hostname, client.Transport))
 }
 
 func TestValidateHTTPService_HTTPS2HTTP(t *testing.T) {
+	originURL := "https://127.0.0.1:1234/"
+	hostname := "example.com"
 	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			assert.Equal(t, "127.0.0.1:1234", r.Host)
+		} else {
+			assert.Equal(t, hostname, r.Host)
+		}
 		w.WriteHeader(200)
 	}))
 	assert.NoError(t, err)
 	defer server.Close()
 
 	assert.Equal(t,
-		"example.com doesn't seem to work over https, but does seem to work over http. Consider changing the origin URL to http://example.com:1234/",
-		ValidateHTTPService("https://example.com:1234/", client.Transport).Error())
+		"127.0.0.1:1234 doesn't seem to work over https, but does seem to work over http. Consider changing the origin URL to http://127.0.0.1:1234/",
+		ValidateHTTPService(originURL, hostname, client.Transport).Error())
 }
 
 func TestValidateHTTPService_HTTPS2HTTPS(t *testing.T) {
+	originURL := "https://127.0.0.1/"
+	hostname := "example.com"
 	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			assert.Equal(t, "127.0.0.1:443", r.Host)
+		} else {
+			assert.Equal(t, hostname, r.Host)
+		}
 		w.WriteHeader(200)
 	}))
 	assert.NoError(t, err)
 	defer server.Close()
 
-	assert.Equal(t, nil, ValidateHTTPService("https://example.com/", client.Transport))
+	assert.Equal(t, nil, ValidateHTTPService(originURL, hostname, client.Transport))
 }
 
 func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
+	originURL := "http://127.0.0.1:1234/"
+	hostname := "example.com"
 	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			assert.Equal(t, "127.0.0.1:1234", r.Host)
+		} else {
+			assert.Equal(t, hostname, r.Host)
+		}
 		w.WriteHeader(200)
 	}))
 	assert.NoError(t, err)
 	defer server.Close()
 
 	assert.Equal(t,
-		"example.com doesn't seem to work over http, but does seem to work over https. Consider changing the origin URL to https://example.com:1234/",
-		ValidateHTTPService("http://example.com:1234/", client.Transport).Error())
+		"127.0.0.1:1234 doesn't seem to work over http, but does seem to work over https. Consider changing the origin URL to https://127.0.0.1:1234/",
+		ValidateHTTPService(originURL, hostname, client.Transport).Error())
 }
 
 func createMockServerAndClient(handler http.Handler) (*httptest.Server, *http.Client, error) {
