@@ -1,3 +1,9 @@
+2018.10.5
+- 2018-10-18 TUN-968: Flow control for large requests/responses
+- 2018-10-26 TUN-1158: Windows: use process arguments rather than trivial service arguments
+- 2018-10-20 #30: Fix the Content-Length header for HTTP2->HTTP1
+- 2018-10-29 TUN-1160: pass Host header during origin url validation
+
 2018.10.4
 - 2018-09-21 AUTH-1070: added SSH/protocol forwarding
 - 2018-10-19 AUTH-1235: fixed packaging of deb dev file
