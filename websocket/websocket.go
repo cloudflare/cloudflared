@@ -150,7 +150,7 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote strin
 		done := make(chan struct{})
 		go pinger(logger, conn, done)
 		defer func() {
-			<-done
+			done <- struct{}{}
 			conn.Close()
 		}()
 		Stream(&Conn{conn}, stream)
