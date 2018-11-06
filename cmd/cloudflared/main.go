@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
@@ -26,6 +27,17 @@ var (
 	Version   = "DEV"
 	BuildTime = "unknown"
 	logger    = log.CreateLogger()
+	// Mostly network errors that we don't want reported back to Sentry, this is done by substring match.
+	ignoredErrors = []string{
+		"connection reset by peer",
+		"An existing connection was forcibly closed by the remote host.",
+		"use of closed connection",
+		"You need to enable Argo Smart Routing",
+		"3001 connection closed",
+		"3002 connection dropped",
+		"rpc exception: dial tcp",
+		"rpc exception: EOF",
+	}
 )
 
 func main() {
@@ -97,7 +109,7 @@ func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionF
 		raven.SetTagsContext(tags)
 		raven.CapturePanic(func() { err = tunnel.StartServer(c, version, shutdownC, graceShutdownC) }, nil)
 		if err != nil {
-			raven.CaptureError(err, nil)
+			handleError(err)
 		}
 		return err
 	}
@@ -114,4 +126,15 @@ func userHomeDir() (string, error) {
 		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
 	return homeDir, nil
+}
+
+// In order to keep the amount of noise sent to Sentry low, typical network errors can be filtered out here by a substring match.
+func handleError(err error) {
+	errorMessage := err.Error()
+	for _, ignoredErrorMessage := range ignoredErrors {
+		if strings.Contains(errorMessage, ignoredErrorMessage) {
+			return
+		}
+	}
+	raven.CaptureError(err, nil)
 }
