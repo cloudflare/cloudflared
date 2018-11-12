@@ -311,7 +311,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
-	if uri, _ := url.Parse(c.String("url")); uri.Scheme == "ssh" {
+	if uri, err := url.Parse(c.String("url")); err == nil && uri.Scheme == "ssh" {
 		host := uri.Host
 		if uri.Port() == "" { // default to 22
 			host = uri.Hostname() + ":22"
