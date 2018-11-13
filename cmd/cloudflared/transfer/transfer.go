@@ -83,21 +83,19 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 
 // BuildRequestURL creates a request suitable for a resource transfer.
 // it will return a constructed url based off the base url and query key/value provided.
-// follow will follow redirects.
-func buildRequestURL(baseURL *url.URL, key, value string, follow bool) (string, error) {
+// cli will build a url for cli transfer request.
+func buildRequestURL(baseURL *url.URL, key, value string, cli bool) (string, error) {
 	q := baseURL.Query()
 	q.Set(key, value)
 	baseURL.RawQuery = q.Encode()
-	if !follow {
+	if !cli {
 		return baseURL.String(), nil
 	}
 
-	response, err := http.Get(baseURL.String())
-	if err != nil {
-		return "", err
-	}
-	return response.Request.URL.String(), nil
-
+	q.Set("redirect_url", baseURL.String()) // we add the token as a query param on both the redirect_url
+	baseURL.RawQuery = q.Encode()           // and this actual baseURL.
+	baseURL.Path = "cdn-cgi/access/cli"
+	return baseURL.String(), nil
 }
 
 // transferRequest downloads the requested resource from the request URL
