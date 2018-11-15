@@ -89,14 +89,12 @@ func Commands() []*cli.Command {
 					Usage:       "",
 					ArgsUsage:   "",
 					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
-					Hidden:      true,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
 							Name: "hostname",
 						},
 						&cli.StringFlag{
-							Name:   "url",
-							Hidden: true,
+							Name: "url",
 						},
 					},
 				},
@@ -105,7 +103,6 @@ func Commands() []*cli.Command {
 					Action:      sshConfig,
 					Usage:       "ssh-config",
 					Description: `Prints an example configuration ~/.ssh/config`,
-					Hidden:      true,
 				},
 			},
 		},

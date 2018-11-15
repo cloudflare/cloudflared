@@ -89,6 +89,7 @@ func createWebsocketStream(originURL string) (*websocket.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	wsConn, resp, err := websocket.ClientConnect(req, nil)
 	if err != nil && resp != nil && resp.StatusCode > 300 {
 		location, err := resp.Location()
@@ -125,7 +126,14 @@ func buildAccessRequest(originURL string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("cf-access-token", token)
 
-	return req, nil
+	// We need to create a new request as FetchToken will modify req (boo mutable)
+	// as it has to follow redirect on the API and such, so here we init a new one
+	originRequest, err := http.NewRequest(http.MethodGet, originURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	originRequest.Header.Set("cf-access-token", token)
+
+	return originRequest, nil
 }
