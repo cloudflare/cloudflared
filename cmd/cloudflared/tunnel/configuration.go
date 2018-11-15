@@ -198,12 +198,18 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 		return nil, errors.Wrap(err, "unable to connect to the origin")
 	}
 
+	toEdgeTLSConfig, err := createTunnelConfig(c)
+	if err != nil {
+		logger.WithError(err).Error("unable to create TLS config to connect with edge")
+		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
+	}
+
 	return &origin.TunnelConfig{
 		EdgeAddrs:          c.StringSlice("edge"),
 		OriginUrl:          originURL,
 		Hostname:           hostname,
 		OriginCert:         originCert,
-		TlsConfig:          tlsconfig.CreateTunnelConfig(c, c.StringSlice("edge")),
+		TlsConfig:          toEdgeTLSConfig,
 		ClientTlsConfig:    httpTransport.TLSClientConfig,
 		Retries:            c.Uint("retries"),
 		HeartbeatInterval:  c.Duration("heartbeat-interval"),
@@ -240,7 +246,7 @@ func loadCertPool(c *cli.Context, logger *logrus.Logger) (*x509.CertPool, error)
 		}
 	}
 
-	originCertPool, err := tlsconfig.LoadOriginCertPool(originCustomCAPool)
+	originCertPool, err := loadOriginCertPool(originCustomCAPool)
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading the certificate pool")
 	}
@@ -251,6 +257,86 @@ func loadCertPool(c *cli.Context, logger *logrus.Logger) (*x509.CertPool, error)
 	}
 
 	return originCertPool, nil
+}
+
+func loadOriginCertPool(originCAPoolPEM []byte) (*x509.CertPool, error) {
+	// Get the global pool
+	certPool, err := loadGlobalCertPool()
+	if err != nil {
+		return nil, err
+	}
+
+	// Then, add any custom origin CA pool the user may have passed
+	if originCAPoolPEM != nil {
+		if !certPool.AppendCertsFromPEM(originCAPoolPEM) {
+			logger.Warn("could not append the provided origin CA to the cloudflared certificate pool")
+		}
+	}
+
+	return certPool, nil
+}
+
+func loadGlobalCertPool() (*x509.CertPool, error) {
+	// First, obtain the system certificate pool
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		if runtime.GOOS != "windows" {
+			logger.WithError(err).Warn("error obtaining the system certificates")
+		}
+		certPool = x509.NewCertPool()
+	}
+
+	// Next, append the Cloudflare CAs into the system pool
+	cfRootCA, err := tlsconfig.GetCloudflareRootCA()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not append Cloudflare Root CAs to cloudflared certificate pool")
+	}
+	for _, cert := range cfRootCA {
+		certPool.AddCert(cert)
+	}
+
+	// Finally, add the Hello certificate into the pool (since it's self-signed)
+	helloCert, err := tlsconfig.GetHelloCertificateX509()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not append Hello server certificate to cloudflared certificate pool")
+	}
+	certPool.AddCert(helloCert)
+
+	return certPool, nil
+}
+
+func createTunnelConfig(c *cli.Context) (*tls.Config, error) {
+	var rootCAs []string
+	if c.String("cacert") != "" {
+		rootCAs = append(rootCAs, c.String("cacert"))
+	}
+	edgeAddrs := c.StringSlice("edge")
+
+	userConfig := &tlsconfig.TLSParameters{RootCAs: rootCAs}
+	tlsConfig, err := tlsconfig.GetConfig(userConfig)
+	if err != nil {
+		return nil, err
+	}
+	if tlsConfig.RootCAs == nil {
+		rootCAPool := x509.NewCertPool()
+		cfRootCA, err := tlsconfig.GetCloudflareRootCA()
+		if err != nil {
+			return nil, errors.Wrap(err, "could not append Cloudflare Root CAs to cloudflared certificate pool")
+		}
+		for _, cert := range cfRootCA {
+			rootCAPool.AddCert(cert)
+		}
+		tlsConfig.RootCAs = rootCAPool
+		tlsConfig.ServerName = "cftunnel.com"
+	} else if len(edgeAddrs) > 0 {
+		// Set for development environments and for testing specific origintunneld instances
+		tlsConfig.ServerName, _, _ = net.SplitHostPort(edgeAddrs[0])
+	}
+
+	if tlsConfig.ServerName == "" && !tlsConfig.InsecureSkipVerify {
+		return nil, fmt.Errorf("either ServerName or InsecureSkipVerify must be specified in the tls.Config")
+	}
+	return tlsConfig, nil
 }
 
 func isRunningFromTerminal() bool {

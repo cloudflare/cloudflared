@@ -438,7 +438,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "cacert",
-			Usage:   "Certificate Authority authenticating the Cloudflare tunnel connection.",
+			Usage:   "Certificate Authority authenticating connections with Cloudflare's edge network.",
 			EnvVars: []string{"TUNNEL_CACERT"},
 			Hidden:  true,
 		}),

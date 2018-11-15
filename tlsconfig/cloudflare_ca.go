@@ -2,6 +2,7 @@ package tlsconfig
 
 import (
 	"crypto/x509"
+	"encoding/pem"
 )
 
 // TODO: remove the Origin CA root certs when migrated to Authenticated Origin Pull certs
@@ -85,11 +86,26 @@ QzMmZpRpIBB321ZBlcnlxiTJvWxvbCPHKHj20VwwAz7LONF59s84ZsOqfoBv8gKM
 s0s5dsq5zpLeaw==
 -----END CERTIFICATE-----`)
 
-func GetCloudflareRootCA() *x509.CertPool {
-	ca := x509.NewCertPool()
-	if !ca.AppendCertsFromPEM([]byte(cloudflareRootCA)) {
-		// should never happen
-		panic("failure loading Cloudflare origin CA pem")
+func GetCloudflareRootCA() ([]*x509.Certificate, error) {
+	var certs []*x509.Certificate
+	pemBlocks := cloudflareRootCA
+	for len(pemBlocks) > 0 {
+		var block *pem.Block
+		block, pemBlocks = pem.Decode(pemBlocks)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+
+		certs = append(certs, cert)
 	}
-	return ca
+
+	return certs, nil
 }

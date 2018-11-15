@@ -2,18 +2,17 @@ package websocket
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"math/rand"
 	"net/http"
 	"testing"
 
-	"github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
-
-	"golang.org/x/net/websocket"
-
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/tlsconfig"
+	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/net/websocket"
 )
 
 const (
@@ -40,8 +39,10 @@ func testRequest(t *testing.T, url string, stream io.ReadWriter) *http.Request {
 }
 
 func websocketClientTLSConfig(t *testing.T) *tls.Config {
-	certPool, err := tlsconfig.LoadOriginCertPool(nil)
+	certPool := x509.NewCertPool()
+	helloCert, err := tlsconfig.GetHelloCertificateX509()
 	assert.NoError(t, err)
+	certPool.AddCert(helloCert)
 	assert.NotNil(t, certPool)
 	return &tls.Config{RootCAs: certPool}
 }

@@ -2,14 +2,10 @@ package tlsconfig
 
 import (
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"sync"
 
-	tunnellog "github.com/cloudflare/cloudflared/log"
 	"github.com/getsentry/raven-go"
-	log "github.com/sirupsen/logrus"
-	"gopkg.in/urfave/cli.v2"
 )
 
 // CertReloader can load and reload a TLS certificate from a particular filepath.
@@ -21,18 +17,14 @@ type CertReloader struct {
 	keyPath     string
 }
 
-// NewCertReloader makes a CertReloader, memorizing the filepaths in the context/flags.
-func NewCertReloader(c *cli.Context, f CLIFlags) (*CertReloader, error) {
-	if !c.IsSet(f.Cert) {
-		return nil, errors.New("CertReloader: cert not provided")
-	}
-	if !c.IsSet(f.Key) {
-		return nil, errors.New("CertReloader: key not provided")
-	}
+// NewCertReloader makes a CertReloader. It loads the cert during initialization to make sure certPath and keyPath are valid
+func NewCertReloader(certPath, keyPath string) (*CertReloader, error) {
 	cr := new(CertReloader)
-	cr.certPath = c.String(f.Cert)
-	cr.keyPath = c.String(f.Key)
-	cr.LoadCert()
+	cr.certPath = certPath
+	cr.keyPath = keyPath
+	if err := cr.LoadCert(); err != nil {
+		return nil, err
+	}
 	return cr, nil
 }
 
@@ -45,18 +37,17 @@ func (cr *CertReloader) Cert(clientHello *tls.ClientHelloInfo) (*tls.Certificate
 
 // LoadCert loads a TLS certificate from the CertReloader's specified filepath.
 // Call this after writing a new certificate to the disk (e.g. after renewing a certificate)
-func (cr *CertReloader) LoadCert() {
+func (cr *CertReloader) LoadCert() error {
 	cr.Lock()
 	defer cr.Unlock()
 
-	log.SetFormatter(&tunnellog.JSONFormatter{})
-	log.Info("Reloading certificate")
 	cert, err := tls.LoadX509KeyPair(cr.certPath, cr.keyPath)
 
 	// Keep the old certificate if there's a problem reading the new one.
 	if err != nil {
 		raven.CaptureError(fmt.Errorf("Error parsing X509 key pair: %v", err), nil)
-		return
+		return err
 	}
 	cr.certificate = &cert
+	return nil
 }
