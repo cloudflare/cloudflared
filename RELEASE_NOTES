@@ -1,3 +1,10 @@
+2018.11.0
+- 2018-10-31 AUTH-1282: Fixed an issue where we were receiving as opposed sending on the channel.
+- 2018-11-06 TUN-1179: Fix log message in cmd/cloudflared/transfer.Run
+- 2018-11-13 AUTH-1308: get jwt even when you are already logged in
+- 2018-11-12 TUN-1190: check URL parse error when starting SSH proxy server
+- 2018-11-15 AUTH-1320: Fixed request issue and unhide the ssh command
+
 2018.10.5
 - 2018-10-18 TUN-968: Flow control for large requests/responses
 - 2018-10-26 TUN-1158: Windows: use process arguments rather than trivial service arguments
