@@ -24,16 +24,21 @@ type TLSParameters struct {
 // GetConfig returns a TLS configuration according to the Config set by the user.
 func GetConfig(p *TLSParameters) (*tls.Config, error) {
 	tlsconfig := &tls.Config{}
-	if p.GetCertificate != nil {
-		tlsconfig.GetCertificate = p.GetCertificate.Cert
-		tlsconfig.BuildNameToCertificate()
-	} else if p.Cert != "" && p.Key != "" {
+	if p.Cert != "" && p.Key != "" {
 		cert, err := tls.LoadX509KeyPair(p.Cert, p.Key)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error parsing X509 key pair")
 		}
 		tlsconfig.Certificates = []tls.Certificate{cert}
+		// BuildNameToCertificate parses Certificates and builds NameToCertificate from common name
+		// and SAN fields of leaf certificates
 		tlsconfig.BuildNameToCertificate()
+	}
+
+	if p.GetCertificate != nil {
+		// GetCertificate is called when client supplies SNI info or Certificates is empty.
+		// Order of retrieving certificate is GetCertificate, NameToCertificate and lastly first element of Certificates
+		tlsconfig.GetCertificate = p.GetCertificate.Cert
 	}
 
 	if len(p.ClientCAs) > 0 {
