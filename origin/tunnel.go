@@ -292,7 +292,13 @@ func IsRPCStreamResponse(headers []h2mux.Header) bool {
 	return true
 }
 
-func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfig, connectionID uint8, originLocalIP string) error {
+func RegisterTunnel(
+	ctx context.Context,
+	muxer *h2mux.Muxer,
+	config *TunnelConfig,
+	connectionID uint8,
+	originLocalIP string,
+) error {
 	config.Logger.Debug("initiating RPC stream to register")
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
@@ -346,7 +352,8 @@ func RegisterTunnel(ctx context.Context, muxer *h2mux.Muxer, config *TunnelConfi
 	}
 
 	if registration.TunnelID != "" {
-		config.Logger.Info("Tunnel ID: " + registration.TunnelID)
+		config.Metrics.tunnelsHA.AddTunnelID(connectionID, registration.TunnelID)
+		config.Logger.Infof("Each HA connection's tunnel IDs: %v", config.Metrics.tunnelsHA.String())
 	}
 
 	// Print out the user's trial zone URL in a nice box (if they requested and got one)

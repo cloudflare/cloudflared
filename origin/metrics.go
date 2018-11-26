@@ -52,6 +52,7 @@ type TunnelMetrics struct {
 	oldServerLocations map[string]string
 
 	muxerMetrics *muxerMetrics
+	tunnelsHA    tunnelsForHA
 }
 
 func newMuxerMetrics() *muxerMetrics {
@@ -355,6 +356,7 @@ func NewTunnelMetrics() *TunnelMetrics {
 		serverLocations:                serverLocations,
 		oldServerLocations:             make(map[string]string),
 		muxerMetrics:                   newMuxerMetrics(),
+		tunnelsHA:                      NewTunnelsForHA(),
 	}
 }
 
@@ -375,7 +377,7 @@ func (t *TunnelMetrics) incrementRequests(connectionID string) {
 	var concurrentRequests uint64
 	var ok bool
 	if concurrentRequests, ok = t.concurrentRequests[connectionID]; ok {
-		t.concurrentRequests[connectionID] += 1
+		t.concurrentRequests[connectionID]++
 		concurrentRequests++
 	} else {
 		t.concurrentRequests[connectionID] = 1
@@ -395,7 +397,7 @@ func (t *TunnelMetrics) incrementRequests(connectionID string) {
 func (t *TunnelMetrics) decrementConcurrentRequests(connectionID string) {
 	t.concurrentRequestsLock.Lock()
 	if _, ok := t.concurrentRequests[connectionID]; ok {
-		t.concurrentRequests[connectionID] -= 1
+		t.concurrentRequests[connectionID]--
 	}
 	t.concurrentRequestsLock.Unlock()
 
