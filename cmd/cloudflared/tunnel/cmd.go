@@ -57,20 +57,6 @@ func Commands() []*cli.Command {
 			Hidden: true,
 		},
 		{
-			Name:   "hello",
-			Action: helloWorld,
-			Usage:  "Run a simple \"Hello World\" server for testing Argo Tunnel.",
-			Flags: []cli.Flag{
-				&cli.IntFlag{
-					Name:  "port",
-					Usage: "Listen on the selected port.",
-					Value: 8080,
-				},
-			},
-			ArgsUsage: " ", // can't be the empty string or we get the default output
-			Hidden:    true,
-		},
-		{
 			Name:   "proxy-dns",
 			Action: tunneldns.Run,
 			Usage:  "Run a DNS over HTTPS proxy server.",
