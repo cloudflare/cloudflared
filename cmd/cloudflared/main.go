@@ -19,7 +19,7 @@ import (
 
 const (
 	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
-	licenseUrl      = developerPortal + "/licence/"
+	licenseUrl      = developerPortal + "/license/"
 )
 
 var (
