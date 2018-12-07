@@ -144,15 +144,20 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 		return err
 	}
 
-	client := &http.Client{Transport: transport}
+	client := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 
 	initialRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
 	if err != nil {
 		return err
 	}
 	initialRequest.Host = hostname
-	initialResponse, initialErr := client.Do(initialRequest)
-	if initialErr != nil || initialResponse.StatusCode != http.StatusOK {
+	_, initialErr := client.Do(initialRequest)
+	if initialErr != nil {
 		// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
 		oldScheme := parsedURL.Scheme
 		parsedURL.Scheme = toggleProtocol(parsedURL.Scheme)
@@ -162,8 +167,8 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 			return err
 		}
 		secondRequest.Host = hostname
-		secondResponse, _ := client.Do(secondRequest)
-		if secondResponse != nil && secondResponse.StatusCode == http.StatusOK { // Worked this time--advise the user to switch protocols
+		_, secondErr := client.Do(secondRequest)
+		if secondErr == nil { // Worked this time--advise the user to switch protocols
 			return errors.Errorf(
 				"%s doesn't seem to work over %s, but does seem to work over %s. Consider changing the origin URL to %s",
 				parsedURL.Host,
