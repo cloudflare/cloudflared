@@ -1,3 +1,11 @@
+2018.12.0
+- 2018-11-15 TUN-1196: Allow TLS config client CA and root CA to be constructed from multiple certificates
+- 2018-11-20 TUN-1209: TLS Config Certificates and GetCertificate can both be set
+- 2018-11-26 TUN-1212: Expose tunnel_id in metrics
+- 2018-11-30 TUN-1204: remove 'cloudflared hello' command
+- 2018-12-04 Fix license URL typo
+- 2018-12-07 TUN-1250: ValidateHTTPService shouldn't follow 302s
+
 2018.11.0
 - 2018-10-31 AUTH-1282: Fixed an issue where we were receiving as opposed sending on the channel.
 - 2018-11-06 TUN-1179: Fix log message in cmd/cloudflared/transfer.Run
