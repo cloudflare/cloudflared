@@ -1,3 +1,6 @@
+2018.12.1
+- 2018-12-11 TUN-1270: cloudflared panic (HA metrics missing label)
+
 2018.12.0
 - 2018-11-15 TUN-1196: Allow TLS config client CA and root CA to be constructed from multiple certificates
 - 2018-11-20 TUN-1209: TLS Config Certificates and GetCertificate can both be set
