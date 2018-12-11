@@ -35,11 +35,12 @@ func NewTunnelsForHA() tunnelsForHA {
 func (t *tunnelsForHA) AddTunnelID(haConn uint8, tunnelID string) {
 	t.Lock()
 	defer t.Unlock()
+	haStr := fmt.Sprintf("%v", haConn)
 	if oldTunnelID, ok := t.entries[haConn]; ok {
-		t.metrics.WithLabelValues(oldTunnelID).Dec()
+		t.metrics.WithLabelValues(oldTunnelID, haStr).Dec()
 	}
 	t.entries[haConn] = tunnelID
-	t.metrics.WithLabelValues(tunnelID, fmt.Sprintf("%v", haConn)).Inc()
+	t.metrics.WithLabelValues(tunnelID, haStr).Inc()
 }
 
 func (t *tunnelsForHA) String() string {
