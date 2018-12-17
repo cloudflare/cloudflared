@@ -83,8 +83,15 @@ func flags() []cli.Flag {
 	return append(flags, access.Flags()...)
 }
 
+func isEmptyInvocation(c *cli.Context) bool {
+	return c.NArg() == 0 && c.NumFlags() == 0
+}
+
 func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionFunc {
 	return func(c *cli.Context) (err error) {
+		if isEmptyInvocation(c) {
+			cli.ShowAppHelpAndExit(c, 1)
+		}
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
