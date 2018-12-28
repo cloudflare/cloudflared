@@ -39,6 +39,7 @@ func NewUpstreamHTTPS(endpoint string) (Upstream, error) {
 		TLSClientConfig:    tls,
 		DisableCompression: true,
 		MaxIdleConns:       1,
+		Proxy:              http.ProxyFromEnvironment,
 	}
 	http2.ConfigureTransport(transport)
 
