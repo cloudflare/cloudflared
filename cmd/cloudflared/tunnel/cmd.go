@@ -25,7 +25,7 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/pkg/errors"
-	cli "gopkg.in/urfave/cli.v2"
+	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
 )
 
@@ -176,7 +176,7 @@ func Init(v string, s, g chan struct{}) {
 }
 
 func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}) error {
-	raven.SetDSN(sentryDSN)
+	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
@@ -209,7 +209,10 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
 				logger.WithError(err).Errorf("Failed to rename temporary trace output file %s to %s", tmpTraceFile.Name(), c.String("trace-output"))
 			} else {
-				os.Remove(tmpTraceFile.Name())
+				err := os.Remove(tmpTraceFile.Name())
+				if err != nil {
+					logger.WithError(err).Errorf("Failed to remove the temporary trace file %s", tmpTraceFile.Name())
+				}
 			}
 		}()
 
@@ -335,12 +338,12 @@ func Before(c *cli.Context) error {
 	}
 	inputSource, err := config.FindInputSourceContext(c)
 	if err != nil {
-		logger.WithError(err).Debugf("Cannot load configuration from %s", c.String("config"))
+		logger.WithError(err).Errorf("Cannot load configuration from %s", c.String("config"))
 		return err
 	} else if inputSource != nil {
 		err := altsrc.ApplyInputSourceValues(c, inputSource, c.App.Flags)
 		if err != nil {
-			logger.WithError(err).Debugf("Cannot apply configuration from %s", c.String("config"))
+			logger.WithError(err).Errorf("Cannot apply configuration from %s", c.String("config"))
 			return err
 		}
 		logger.Debugf("Applied configuration from %s", c.String("config"))
