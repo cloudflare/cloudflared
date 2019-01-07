@@ -96,7 +96,7 @@ func runCommand(command string, args ...string) error {
 func ensureConfigDirExists(configDir string) error {
 	ok, err := config.FileExists(configDir)
 	if !ok && err == nil {
-		err = os.Mkdir(configDir, 0700)
+		err = os.Mkdir(configDir, 0755)
 	}
 	return err
 }
