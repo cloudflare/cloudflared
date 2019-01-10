@@ -230,6 +230,7 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 		RunFromTerminal:    isRunningFromTerminal(),
 		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
 		CompressionQuality: c.Uint64("compression-quality"),
+		IncidentLookup:     origin.NewIncidentLookup(),
 	}, nil
 }
 

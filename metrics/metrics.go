@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -8,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 
 	"github.com/prometheus/client_golang/prometheus"

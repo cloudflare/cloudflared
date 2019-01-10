@@ -1,6 +1,8 @@
 package tunneldns
 
 import (
+	"context"
+
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics/vars"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
@@ -8,7 +10,6 @@ import (
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/net/context"
 )
 
 // MetricsPlugin is an adapter for CoreDNS and built-in metrics

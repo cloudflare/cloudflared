@@ -1,9 +1,8 @@
 package origin
 
 import (
+	"context"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 // Redeclare time functions so they can be overridden in tests.

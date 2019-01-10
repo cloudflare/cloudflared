@@ -3,9 +3,9 @@ package tunnelrpc
 
 import (
 	"bytes"
+	"context"
 
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	"zombiezen.com/go/capnproto2/encoding/text"
 	"zombiezen.com/go/capnproto2/rpc"
 	rpccapnp "zombiezen.com/go/capnproto2/std/capnp/rpc"

@@ -1,11 +1,10 @@
 package origin
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 const (

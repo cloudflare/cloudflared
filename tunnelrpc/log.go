@@ -1,8 +1,9 @@
 package tunnelrpc
 
 import (
+	"context"
+
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
 	"zombiezen.com/go/capnproto2/rpc"
 )

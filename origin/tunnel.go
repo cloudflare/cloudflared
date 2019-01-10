@@ -2,9 +2,9 @@ package origin
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"net"
 	"net/http"
@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -23,6 +22,7 @@ import (
 	"github.com/cloudflare/cloudflared/websocket"
 
 	raven "github.com/getsentry/raven-go"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	_ "github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -63,6 +63,7 @@ type TunnelConfig struct {
 	NoChunkedEncoding  bool
 	WSGI               bool
 	CompressionQuality uint64
+	IncidentLookup     IncidentLookup
 }
 
 type dialError struct {
@@ -265,6 +266,9 @@ func ServeTunnel(
 			logger.WithError(castedErr.cause).Error("Register tunnel error from server side")
 			// Don't send registration error return from server to Sentry. They are
 			// logged on server side
+			if incidents := config.IncidentLookup.ActiveIncidents(); len(incidents) > 0 {
+				logger.Error(activeIncidentsMsg(incidents))
+			}
 			return castedErr.cause, !castedErr.permanent
 		case clientRegisterTunnelError:
 			logger.WithError(castedErr.cause).Error("Register tunnel error on client side")
@@ -695,4 +699,18 @@ func trialZoneMsg(url string) []string {
 		"Your free tunnel has started! Visit it:",
 		"  " + url,
 	}
+}
+
+func activeIncidentsMsg(incidents []Incident) string {
+	preamble := "There is an active Cloudflare incident that may be related:"
+	if len(incidents) > 1 {
+		preamble = "There are active Cloudflare incidents that may be related:"
+	}
+	incidentStrings := []string{}
+	for _, incident := range incidents {
+		incidentString := fmt.Sprintf("%s (%s)", incident.Name, incident.URL())
+		incidentStrings = append(incidentStrings, incidentString)
+	}
+	return preamble + " " + strings.Join(incidentStrings, "; ")
+
 }

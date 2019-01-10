@@ -1,10 +1,9 @@
 package origin
 
 import (
+	"context"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 func immediateTimeAfter(time.Duration) <-chan time.Time {
