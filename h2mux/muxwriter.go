@@ -40,14 +40,11 @@ type MuxWriter struct {
 	headerEncoder *hpack.Encoder
 	// headerBuffer is the temporary buffer used by headerEncoder.
 	headerBuffer bytes.Buffer
-	// updateReceiveWindowChan is the channel to update receiveWindow size to muxerMetricsUpdater
-	updateReceiveWindowChan chan<- uint32
-	// updateSendWindowChan is the channel to update sendWindow size to muxerMetricsUpdater
-	updateSendWindowChan chan<- uint32
-	// bytesWrote is the amount of bytes wrote to data frame since the last time we send bytes wrote to metrics
+
+	// metricsUpdater is used to report metrics
+	metricsUpdater muxMetricsUpdater
+	// bytesWrote is the amount of bytes written to data frames since the last time we called metricsUpdater.updateOutBoundBytes()
 	bytesWrote *AtomicCounter
-	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
-	updateOutBoundBytesChan chan<- uint64
 
 	useDictChan <-chan useDictRequest
 }
@@ -83,7 +80,7 @@ func (w *MuxWriter) run(parentLogger *log.Entry) error {
 			case <-w.abortChan:
 				return
 			case <-tickC:
-				w.updateOutBoundBytesChan <- w.bytesWrote.Count()
+				w.metricsUpdater.updateOutBoundBytes(w.bytesWrote.Count())
 			}
 		}
 	}()
@@ -172,8 +169,8 @@ func (w *MuxWriter) run(parentLogger *log.Entry) error {
 func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger *log.Entry) error {
 	logger.Debug("writable")
 	chunk := stream.getChunk()
-	w.updateReceiveWindowChan <- stream.getReceiveWindow()
-	w.updateSendWindowChan <- stream.getSendWindow()
+	w.metricsUpdater.updateReceiveWindow(stream.getReceiveWindow())
+	w.metricsUpdater.updateSendWindow(stream.getSendWindow())
 	if chunk.sendHeadersFrame() {
 		err := w.writeHeaders(chunk.streamID, chunk.headers)
 		if err != nil {

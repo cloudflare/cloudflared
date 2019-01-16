@@ -86,24 +86,11 @@ func TestFlowControlDataUpdate(t *testing.T) {
 }
 
 func TestMuxMetricsUpdater(t *testing.T) {
-	t.Skip("Race condition")
-	updateRTTChan := make(chan *roundTripMeasurement)
-	updateReceiveWindowChan := make(chan uint32)
-	updateSendWindowChan := make(chan uint32)
-	updateInBoundBytesChan := make(chan uint64)
-	updateOutBoundBytesChan := make(chan uint64)
-	abortChan := make(chan struct{})
+	t.Skip("Inherently racy test due to muxMetricsUpdaterImpl.run()")
 	errChan := make(chan error)
+	abortChan := make(chan struct{})
 	compBefore, compAfter := NewAtomicCounter(0), NewAtomicCounter(0)
-	m := newMuxMetricsUpdater(updateRTTChan,
-		updateReceiveWindowChan,
-		updateSendWindowChan,
-		updateInBoundBytesChan,
-		updateOutBoundBytesChan,
-		abortChan,
-		compBefore,
-		compAfter,
-	)
+	m := newMuxMetricsUpdater(abortChan, compBefore, compAfter)
 	logger := log.NewEntry(log.New())
 
 	go func() {
@@ -116,42 +103,44 @@ func TestMuxMetricsUpdater(t *testing.T) {
 	// mock muxReader
 	readerStart := time.Now()
 	rm := &roundTripMeasurement{receiveTime: readerStart, sendTime: readerStart}
-	updateRTTChan <- rm
+	m.updateRTT(rm)
 	go func() {
 		defer wg.Done()
-		// Becareful if dataPoints is not divisibile by 4
+		assert.Equal(t, 0, dataPoints%4,
+			"dataPoints is not divisible by 4; this test should be adjusted accordingly")
 		readerSend := readerStart.Add(time.Millisecond)
 		for i := 1; i <= dataPoints/4; i++ {
 			readerReceive := readerSend.Add(time.Duration(i) * time.Millisecond)
 			rm := &roundTripMeasurement{receiveTime: readerReceive, sendTime: readerSend}
-			updateRTTChan <- rm
+			m.updateRTT(rm)
 			readerSend = readerReceive.Add(time.Millisecond)
+			m.updateReceiveWindow(uint32(i))
+			m.updateSendWindow(uint32(i))
 
-			updateReceiveWindowChan <- uint32(i)
-			updateSendWindowChan <- uint32(i)
-
-			updateInBoundBytesChan <- uint64(i)
+			m.updateInBoundBytes(uint64(i))
 		}
 	}()
 
 	// mock muxWriter
 	go func() {
 		defer wg.Done()
+		assert.Equal(t, 0, dataPoints%4,
+			"dataPoints is not divisible by 4; this test should be adjusted accordingly")
 		for j := dataPoints/4 + 1; j <= dataPoints/2; j++ {
-			updateReceiveWindowChan <- uint32(j)
-			updateSendWindowChan <- uint32(j)
+			m.updateReceiveWindow(uint32(j))
+			m.updateSendWindow(uint32(j))
 
-			// should always be disgard since the send time is before readerSend
+			// should always be disgarded since the send time is before readerSend
 			rm := &roundTripMeasurement{receiveTime: readerStart, sendTime: readerStart.Add(-time.Duration(j*dataPoints) * time.Millisecond)}
-			updateRTTChan <- rm
+			m.updateRTT(rm)
 
-			updateOutBoundBytesChan <- uint64(j)
+			m.updateOutBoundBytes(uint64(j))
 		}
 
 	}()
 	wg.Wait()
 
-	metrics := m.Metrics()
+	metrics := m.metrics()
 	points := dataPoints / 2
 	assert.Equal(t, time.Millisecond, metrics.RTTMin)
 	assert.Equal(t, time.Duration(dataPoints/4)*time.Millisecond, metrics.RTTMax)

@@ -1,15 +1,23 @@
 package h2mux
 
+import "sync"
+
 // ReadyList multiplexes several event signals onto a single channel.
 type ReadyList struct {
+	// signalC is used to signal that a stream can be enqueued
 	signalC chan uint32
-	waitC   chan uint32
+	// waitC is used to signal the ID of the first ready descriptor
+	waitC chan uint32
+	// doneC is used to signal that run should terminate
+	doneC     chan struct{}
+	closeOnce sync.Once
 }
 
 func NewReadyList() *ReadyList {
 	rl := &ReadyList{
 		signalC: make(chan uint32),
 		waitC:   make(chan uint32),
+		doneC:   make(chan struct{}),
 	}
 	go rl.run()
 	return rl
@@ -17,7 +25,11 @@ func NewReadyList() *ReadyList {
 
 // ID is the stream ID
 func (r *ReadyList) Signal(ID uint32) {
-	r.signalC <- ID
+	select {
+	case r.signalC <- ID:
+	// ReadyList already closed
+	case <-r.doneC:
+	}
 }
 
 func (r *ReadyList) ReadyChannel() <-chan uint32 {
@@ -25,7 +37,9 @@ func (r *ReadyList) ReadyChannel() <-chan uint32 {
 }
 
 func (r *ReadyList) Close() {
-	close(r.signalC)
+	r.closeOnce.Do(func() {
+		close(r.doneC)
+	})
 }
 
 func (r *ReadyList) run() {
@@ -35,28 +49,25 @@ func (r *ReadyList) run() {
 	activeDescriptors := newReadyDescriptorMap()
 	for {
 		if firstReady == nil {
-			// Wait for first ready descriptor
-			i, ok := <-r.signalC
-			if !ok {
-				// closed
+			select {
+			case i := <-r.signalC:
+				firstReady = activeDescriptors.SetIfMissing(i)
+			case <-r.doneC:
 				return
 			}
-			firstReady = activeDescriptors.SetIfMissing(i)
 		}
 		select {
 		case r.waitC <- firstReady.ID:
 			activeDescriptors.Delete(firstReady.ID)
 			firstReady = queue.Dequeue()
-		case i, ok := <-r.signalC:
-			if !ok {
-				// closed
-				return
-			}
+		case i := <-r.signalC:
 			newReady := activeDescriptors.SetIfMissing(i)
 			if newReady != nil {
 				// key doesn't exist
 				queue.Enqueue(newReady)
 			}
+		case <-r.doneC:
+			return
 		}
 	}
 }

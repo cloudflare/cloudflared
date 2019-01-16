@@ -3,36 +3,59 @@ package h2mux
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestReadyList(t *testing.T) {
+func assertEmpty(t *testing.T, rl *ReadyList) {
+	select {
+	case <-rl.ReadyChannel():
+		t.Fatal("Spurious wakeup")
+	default:
+	}
+}
+
+func assertClosed(t *testing.T, rl *ReadyList) {
+	select {
+	case _, ok := <-rl.ReadyChannel():
+		assert.False(t, ok, "ReadyChannel was not closed")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("Timeout")
+	}
+}
+
+func receiveWithTimeout(t *testing.T, rl *ReadyList) uint32 {
+	select {
+	case i := <-rl.ReadyChannel():
+		return i
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("Timeout")
+		return 0
+	}
+}
+
+func TestReadyListEmpty(t *testing.T) {
 	rl := NewReadyList()
-	c := rl.ReadyChannel()
-	// helper functions
-	assertEmpty := func() {
-		select {
-		case <-c:
-			t.Fatalf("Spurious wakeup")
-		default:
-		}
-	}
-	receiveWithTimeout := func() uint32 {
-		select {
-		case i := <-c:
-			return i
-		case <-time.After(100 * time.Millisecond):
-			t.Fatalf("Timeout")
-			return 0
-		}
-	}
+
 	// no signals, receive should fail
-	assertEmpty()
+	assertEmpty(t, rl)
+}
+func TestReadyListSignal(t *testing.T) {
+	rl := NewReadyList()
+	assertEmpty(t, rl)
+
 	rl.Signal(0)
-	if receiveWithTimeout() != 0 {
+	if receiveWithTimeout(t, rl) != 0 {
 		t.Fatalf("Received wrong ID of signalled event")
 	}
-	// no new signals, receive should fail
-	assertEmpty()
+
+	assertEmpty(t, rl)
+}
+
+func TestReadyListMultipleSignals(t *testing.T) {
+	rl := NewReadyList()
+	assertEmpty(t, rl)
+
 	// Signals should not block;
 	// Duplicate unhandled signals should not cause multiple wakeups
 	signalled := [5]bool{}
@@ -42,11 +65,44 @@ func TestReadyList(t *testing.T) {
 	}
 	// All signals should be received once (in any order)
 	for range signalled {
-		i := receiveWithTimeout()
+		i := receiveWithTimeout(t, rl)
 		if signalled[i] {
 			t.Fatalf("Received signal %d more than once", i)
 		}
 		signalled[i] = true
+	}
+	for i := range signalled {
+		if !signalled[i] {
+			t.Fatalf("Never received signal %d", i)
+		}
+	}
+	assertEmpty(t, rl)
+}
+
+func TestReadyListClose(t *testing.T) {
+	rl := NewReadyList()
+	rl.Close()
+
+	// readyList.run() occurs in a separate goroutine,
+	// so there's no way to directly check that run() has terminated.
+	// Perform an indirect check: is the ready channel closed?
+	assertClosed(t, rl)
+
+	// a second rl.Close() shouldn't cause a panic
+	rl.Close()
+
+	// Signal shouldn't block after Close()
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 5; i++ {
+			rl.Signal(uint32(i))
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Test timed out")
 	}
 }
 

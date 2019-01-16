@@ -17,7 +17,24 @@ const (
 	updateFreq = time.Second
 )
 
-type muxMetricsUpdater struct {
+type muxMetricsUpdater interface {
+	// metrics returns the latest metrics
+	metrics() *MuxerMetrics
+	// run is a blocking call to start the event loop
+	run(logger *log.Entry) error
+	// updateRTTChan is called by muxReader to report new RTT measurements
+	updateRTT(rtt *roundTripMeasurement)
+	//updateReceiveWindowChan is called by muxReader and muxWriter when receiveWindow size is updated
+	updateReceiveWindow(receiveWindow uint32)
+	//updateSendWindowChan is called by muxReader and muxWriter when sendWindow size is updated
+	updateSendWindow(sendWindow uint32)
+	// updateInBoundBytesChan is called  periodicallyby muxReader to report bytesRead
+	updateInBoundBytes(inBoundBytes uint64)
+	// updateOutBoundBytesChan is called periodically by muxWriter to report bytesWrote
+	updateOutBoundBytes(outBoundBytes uint64)
+}
+
+type muxMetricsUpdaterImpl struct {
 	// rttData keeps record of rtt, rttMin, rttMax and last measured time
 	rttData *rttData
 	// receiveWindowData keeps record of receive window measurement
@@ -28,16 +45,16 @@ type muxMetricsUpdater struct {
 	inBoundRate *rate
 	// outBoundRate is outgoing bytes/sec
 	outBoundRate *rate
-	// updateRTTChan is the channel to receive new RTT measurement from muxReader
-	updateRTTChan <-chan *roundTripMeasurement
-	//updateReceiveWindowChan is the channel to receive updated receiveWindow size from muxReader and muxWriter
-	updateReceiveWindowChan <-chan uint32
-	//updateSendWindowChan is the channel to receive updated sendWindow size from muxReader and muxWriter
-	updateSendWindowChan <-chan uint32
-	// updateInBoundBytesChan us the channel to receive bytesRead from muxReader
-	updateInBoundBytesChan <-chan uint64
-	// updateOutBoundBytesChan us the channel to receive bytesWrote from muxWriter
-	updateOutBoundBytesChan <-chan uint64
+	// updateRTTChan is the channel to receive new RTT measurement
+	updateRTTChan chan *roundTripMeasurement
+	//updateReceiveWindowChan is the channel to receive updated receiveWindow size
+	updateReceiveWindowChan chan uint32
+	//updateSendWindowChan is the channel to receive updated sendWindow size
+	updateSendWindowChan chan uint32
+	// updateInBoundBytesChan us the channel to receive bytesRead
+	updateInBoundBytesChan chan uint64
+	// updateOutBoundBytesChan us the channel to receive bytesWrote
+	updateOutBoundBytesChan chan uint64
 	// shutdownC is to signal the muxerMetricsUpdater to shutdown
 	abortChan <-chan struct{}
 
@@ -84,15 +101,16 @@ type rate struct {
 }
 
 func newMuxMetricsUpdater(
-	updateRTTChan <-chan *roundTripMeasurement,
-	updateReceiveWindowChan <-chan uint32,
-	updateSendWindowChan <-chan uint32,
-	updateInBoundBytesChan <-chan uint64,
-	updateOutBoundBytesChan <-chan uint64,
 	abortChan <-chan struct{},
 	compBytesBefore, compBytesAfter *AtomicCounter,
-) *muxMetricsUpdater {
-	return &muxMetricsUpdater{
+) muxMetricsUpdater {
+	updateRTTChan := make(chan *roundTripMeasurement, 1)
+	updateReceiveWindowChan := make(chan uint32, 1)
+	updateSendWindowChan := make(chan uint32, 1)
+	updateInBoundBytesChan := make(chan uint64)
+	updateOutBoundBytesChan := make(chan uint64)
+
+	return &muxMetricsUpdaterImpl{
 		rttData:                 newRTTData(),
 		receiveWindowData:       newFlowControlData(),
 		sendWindowData:          newFlowControlData(),
@@ -109,7 +127,7 @@ func newMuxMetricsUpdater(
 	}
 }
 
-func (updater *muxMetricsUpdater) Metrics() *MuxerMetrics {
+func (updater *muxMetricsUpdaterImpl) metrics() *MuxerMetrics {
 	m := &MuxerMetrics{}
 	m.RTT, m.RTTMin, m.RTTMax = updater.rttData.metrics()
 	m.ReceiveWindowAve, m.ReceiveWindowMin, m.ReceiveWindowMax = updater.receiveWindowData.metrics()
@@ -120,7 +138,7 @@ func (updater *muxMetricsUpdater) Metrics() *MuxerMetrics {
 	return m
 }
 
-func (updater *muxMetricsUpdater) run(parentLogger *log.Entry) error {
+func (updater *muxMetricsUpdaterImpl) run(parentLogger *log.Entry) error {
 	logger := parentLogger.WithFields(log.Fields{
 		"subsystem": "mux",
 		"dir":       "metrics",
@@ -149,6 +167,43 @@ func (updater *muxMetricsUpdater) run(parentLogger *log.Entry) error {
 			go updater.outBoundRate.update(outBoundBytes)
 			logger.Debugf("Outbound bytes %d", outBoundBytes)
 		}
+	}
+}
+
+func (updater *muxMetricsUpdaterImpl) updateRTT(rtt *roundTripMeasurement) {
+	select {
+	case updater.updateRTTChan <- rtt:
+	case <-updater.abortChan:
+	}
+
+}
+
+func (updater *muxMetricsUpdaterImpl) updateReceiveWindow(receiveWindow uint32) {
+	select {
+	case updater.updateReceiveWindowChan <- receiveWindow:
+	case <-updater.abortChan:
+	}
+}
+
+func (updater *muxMetricsUpdaterImpl) updateSendWindow(sendWindow uint32) {
+	select {
+	case updater.updateSendWindowChan <- sendWindow:
+	case <-updater.abortChan:
+	}
+}
+
+func (updater *muxMetricsUpdaterImpl) updateInBoundBytes(inBoundBytes uint64) {
+	select {
+	case updater.updateInBoundBytesChan <- inBoundBytes:
+	case <-updater.abortChan:
+	}
+
+}
+
+func (updater *muxMetricsUpdaterImpl) updateOutBoundBytes(outBoundBytes uint64) {
+	select {
+	case updater.updateOutBoundBytesChan <- outBoundBytes:
+	case <-updater.abortChan:
 	}
 }
 

@@ -829,7 +829,8 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 			t.Fatalf("TestMultipleStreams failed")
 		}
 
-		if q > CompressionNone && muxPair.OriginMux.muxMetricsUpdater.compBytesBefore.Value() <= 10*muxPair.OriginMux.muxMetricsUpdater.compBytesAfter.Value() {
+		originMuxMetrics := muxPair.OriginMux.Metrics()
+		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
 			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
 		}
 	}
@@ -927,7 +928,8 @@ func TestSampleSiteWithDictionaries(t *testing.T) {
 		}
 		wg.Wait()
 
-		if q > CompressionNone && muxPair.OriginMux.muxMetricsUpdater.compBytesBefore.Value() <= 10*muxPair.OriginMux.muxMetricsUpdater.compBytesAfter.Value() {
+		originMuxMetrics := muxPair.OriginMux.Metrics()
+		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
 			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
 		}
 	}
@@ -960,7 +962,8 @@ func TestLongSiteWithDictionaries(t *testing.T) {
 		}
 		wg.Wait()
 
-		if q > CompressionNone && muxPair.OriginMux.muxMetricsUpdater.compBytesBefore.Value() <= 100*muxPair.OriginMux.muxMetricsUpdater.compBytesAfter.Value() {
+		originMuxMetrics := muxPair.OriginMux.Metrics()
+		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 100*originMuxMetrics.CompBytesAfter.Value() {
 			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
 		}
 	}

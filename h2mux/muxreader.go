@@ -39,16 +39,10 @@ type MuxReader struct {
 	streamWriteBufferMaxLen int
 	// r is a reference to the underlying connection used when shutting down.
 	r io.Closer
-	// updateRTTChan is the channel to send new RTT measurement to muxerMetricsUpdater
-	updateRTTChan chan<- *roundTripMeasurement
-	// updateReceiveWindowChan is the channel to update receiveWindow size to muxerMetricsUpdater
-	updateReceiveWindowChan chan<- uint32
-	// updateSendWindowChan is the channel to update sendWindow size to muxerMetricsUpdater
-	updateSendWindowChan chan<- uint32
-	// bytesRead is the amount of bytes read from data frame since the last time we send bytes read to metrics
+	// metricsUpdater is used to report metrics
+	metricsUpdater muxMetricsUpdater
+	// bytesRead is the amount of bytes read from data frames since the last time we called metricsUpdater.updateInBoundBytes()
 	bytesRead *AtomicCounter
-	// updateOutBoundBytesChan is the channel to send bytesWrote to muxerMetricsUpdater
-	updateInBoundBytesChan chan<- uint64
 	// dictionaries holds the h2 cross-stream compression dictionaries
 	dictionaries h2Dictionaries
 }
@@ -81,7 +75,7 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 			case <-r.abortChan:
 				return
 			case <-tickC:
-				r.updateInBoundBytesChan <- r.bytesRead.Count()
+				r.metricsUpdater.updateInBoundBytes(r.bytesRead.Count())
 			}
 		}
 	}()
@@ -289,7 +283,7 @@ func (r *MuxReader) receiveFrameData(frame *http2.DataFrame, parentLogger *log.E
 	if !stream.consumeReceiveWindow(uint32(len(data))) {
 		return r.streamError(stream.streamID, http2.ErrCodeFlowControl)
 	}
-	r.updateReceiveWindowChan <- stream.getReceiveWindow()
+	r.metricsUpdater.updateReceiveWindow(stream.getReceiveWindow())
 	return nil
 }
 
@@ -301,13 +295,13 @@ func (r *MuxReader) receivePingData(frame *http2.PingFrame) {
 		return
 	}
 
-	// Update updates the computed values with a new measurement.
-	// outgoingTime is the time that the probe was sent.
-	// We assume that time.Now() is the time we received that probe.
-	r.updateRTTChan <- &roundTripMeasurement{
+	// Update the computed RTT aggregations with a new measurement.
+	// `ts` is the time that the probe was sent.
+	// We assume that `time.Now()` is the time we received that probe.
+	r.metricsUpdater.updateRTT(&roundTripMeasurement{
 		receiveTime: time.Now(),
 		sendTime:    time.Unix(0, ts),
-	}
+	})
 }
 
 // Receive a GOAWAY from the peer. Gracefully shut down our connection.
@@ -468,7 +462,7 @@ func (r *MuxReader) updateStreamWindow(frame *http2.WindowUpdateFrame) error {
 		return nil
 	}
 	stream.replenishSendWindow(frame.Increment)
-	r.updateSendWindowChan <- stream.getSendWindow()
+	r.metricsUpdater.updateSendWindow(stream.getSendWindow())
 	return nil
 }
 

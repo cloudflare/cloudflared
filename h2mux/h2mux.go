@@ -71,7 +71,7 @@ type Muxer struct {
 	// muxWriter is the write process.
 	muxWriter *MuxWriter
 	// muxMetricsUpdater is the process to update metrics
-	muxMetricsUpdater *muxMetricsUpdater
+	muxMetricsUpdater muxMetricsUpdater
 	// newStreamChan is used to create new streams on the writer thread.
 	// The writer will assign the next available stream ID.
 	newStreamChan chan MuxedStreamRequest
@@ -163,11 +163,6 @@ func Handshake(
 	// set up reader/writer pair ready for serve
 	streamErrors := NewStreamErrorMap()
 	goAwayChan := make(chan http2.ErrCode, 1)
-	updateRTTChan := make(chan *roundTripMeasurement, 1)
-	updateReceiveWindowChan := make(chan uint32, 1)
-	updateSendWindowChan := make(chan uint32, 1)
-	updateInBoundBytesChan := make(chan uint64)
-	updateOutBoundBytesChan := make(chan uint64)
 	inBoundCounter := NewAtomicCounter(0)
 	outBoundCounter := NewAtomicCounter(0)
 	pingTimestamp := NewPingTimestamp()
@@ -184,6 +179,14 @@ func Handshake(
 		config.Logger.Warn("Minimum number of unacked heartbeats to send before closing the connection has been adjusted to ", maxRetries)
 	}
 
+	compBytesBefore, compBytesAfter := NewAtomicCounter(0), NewAtomicCounter(0)
+
+	m.muxMetricsUpdater = newMuxMetricsUpdater(
+		m.abortChan,
+		compBytesBefore,
+		compBytesAfter,
+	)
+
 	m.explicitShutdown = NewBooleanFuse()
 	m.muxReader = &MuxReader{
 		f:                       m.f,
@@ -198,44 +201,26 @@ func Handshake(
 		initialStreamWindow:     m.config.DefaultWindowSize,
 		streamWindowMax:         m.config.MaxWindowSize,
 		streamWriteBufferMaxLen: m.config.StreamWriteBufferMaxLen,
-		r:                       m.r,
-		updateRTTChan:           updateRTTChan,
-		updateReceiveWindowChan: updateReceiveWindowChan,
-		updateSendWindowChan:    updateSendWindowChan,
-		bytesRead:               inBoundCounter,
-		updateInBoundBytesChan:  updateInBoundBytesChan,
+		r:              m.r,
+		metricsUpdater: m.muxMetricsUpdater,
+		bytesRead:      inBoundCounter,
 	}
 	m.muxWriter = &MuxWriter{
-		f:                       m.f,
-		streams:                 m.streams,
-		streamErrors:            streamErrors,
-		readyStreamChan:         m.readyList.ReadyChannel(),
-		newStreamChan:           m.newStreamChan,
-		goAwayChan:              goAwayChan,
-		abortChan:               m.abortChan,
-		pingTimestamp:           pingTimestamp,
-		idleTimer:               NewIdleTimer(idleDuration, maxRetries),
-		connActiveChan:          connActive.WaitChannel(),
-		maxFrameSize:            defaultFrameSize,
-		updateReceiveWindowChan: updateReceiveWindowChan,
-		updateSendWindowChan:    updateSendWindowChan,
-		bytesWrote:              outBoundCounter,
-		updateOutBoundBytesChan: updateOutBoundBytesChan,
+		f:               m.f,
+		streams:         m.streams,
+		streamErrors:    streamErrors,
+		readyStreamChan: m.readyList.ReadyChannel(),
+		newStreamChan:   m.newStreamChan,
+		goAwayChan:      goAwayChan,
+		abortChan:       m.abortChan,
+		pingTimestamp:   pingTimestamp,
+		idleTimer:       NewIdleTimer(idleDuration, maxRetries),
+		connActiveChan:  connActive.WaitChannel(),
+		maxFrameSize:    defaultFrameSize,
+		metricsUpdater:  m.muxMetricsUpdater,
+		bytesWrote:      outBoundCounter,
 	}
 	m.muxWriter.headerEncoder = hpack.NewEncoder(&m.muxWriter.headerBuffer)
-
-	compBytesBefore, compBytesAfter := NewAtomicCounter(0), NewAtomicCounter(0)
-
-	m.muxMetricsUpdater = newMuxMetricsUpdater(
-		updateRTTChan,
-		updateReceiveWindowChan,
-		updateSendWindowChan,
-		updateInBoundBytesChan,
-		updateOutBoundBytesChan,
-		m.abortChan,
-		compBytesBefore,
-		compBytesAfter,
-	)
 
 	if m.compressionQuality.dictSize > 0 && m.compressionQuality.nDicts > 0 {
 		nd, sz := m.compressionQuality.nDicts, m.compressionQuality.dictSize
@@ -322,6 +307,12 @@ func joinErrorsWithTimeout(errChan <-chan error, receiveCount int, timeout time.
 	return nil
 }
 
+// Serve runs the event loops that comprise h2mux:
+// - MuxReader.run()
+// - MuxWriter.run()
+// - muxMetricsUpdater.run()
+// In the normal case, Shutdown() is called concurrently with Serve() to stop
+// these loops.
 func (m *Muxer) Serve(ctx context.Context) error {
 	errGroup, _ := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
@@ -352,6 +343,7 @@ func (m *Muxer) Serve(ctx context.Context) error {
 	return nil
 }
 
+// Shutdown is called to initiate the "happy path" of muxer termination.
 func (m *Muxer) Shutdown() {
 	m.explicitShutdown.Fuse(true)
 	m.muxReader.Shutdown()
@@ -418,12 +410,13 @@ func (m *Muxer) OpenStream(headers []Header, body io.Reader) (*MuxedStream, erro
 }
 
 func (m *Muxer) Metrics() *MuxerMetrics {
-	return m.muxMetricsUpdater.Metrics()
+	return m.muxMetricsUpdater.metrics()
 }
 
 func (m *Muxer) abort() {
 	m.abortOnce.Do(func() {
 		close(m.abortChan)
+		m.readyList.Close()
 		m.streams.Abort()
 	})
 }
