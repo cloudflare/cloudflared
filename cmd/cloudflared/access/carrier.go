@@ -17,19 +17,32 @@ import (
 // useful for proxying other protocols (like ssh) over websockets
 // (which you can put Access in front of)
 func ssh(c *cli.Context) error {
-	hostname, err := validation.ValidateHostname(c.String("hostname"))
-	if err != nil || c.String("hostname") == "" {
+	// get the hostname from the cmdline and error out if its not provided
+	rawHostName := c.String(sshHostnameFlag)
+	hostname, err := validation.ValidateHostname(rawHostName)
+	if err != nil || rawHostName == "" {
 		return cli.ShowCommandHelp(c, "ssh")
 	}
-	headers := buildRequestHeaders(c.StringSlice("header"))
-	if c.IsSet("service-token-id") {
-		headers.Add("CF-Access-Client-Id", c.String("service-token-id"))
+	originURL := "https://" + hostname
+
+	// get the headers from the cmdline and add them
+	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
+	if c.IsSet(sshTokenIDFlag) {
+		headers.Add("CF-Access-Client-Id", c.String(sshTokenIDFlag))
 	}
-	if c.IsSet("service-token-secret") {
-		headers.Add("CF-Access-Client-Secret", c.String("service-token-secret"))
+	if c.IsSet(sshTokenSecretFlag) {
+		headers.Add("CF-Access-Client-Secret", c.String(sshTokenSecretFlag))
 	}
 
-	if c.NArg() > 0 || c.IsSet("url") {
+	genCertBool := c.Bool(sshGenCertFlag)
+
+	options := &carrier.StartOptions{
+		OriginURL:     originURL,
+		Headers:       headers,
+		ShouldGenCert: genCertBool,
+	}
+
+	if c.NArg() > 0 || c.IsSet(sshURLFlag) {
 		localForwarder, err := config.ValidateUrl(c)
 		if err != nil {
 			logger.WithError(err).Error("Error validating origin URL")
@@ -40,10 +53,10 @@ func ssh(c *cli.Context) error {
 			logger.WithError(err).Error("Error validating origin URL")
 			return errors.Wrap(err, "error validating origin URL")
 		}
-		return carrier.StartServer(logger, forwarder.Host, "https://"+hostname, shutdownC, headers)
+		return carrier.StartServer(logger, forwarder.Host, shutdownC, options)
 	}
 
-	return carrier.StartClient(logger, "https://"+hostname, &carrier.StdinoutStream{}, headers)
+	return carrier.StartClient(logger, &carrier.StdinoutStream{}, options)
 }
 
 func buildRequestHeaders(values []string) http.Header {

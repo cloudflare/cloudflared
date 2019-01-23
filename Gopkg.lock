@@ -376,17 +376,19 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:9afbc3e330bd691e0eb0e704d05cc182b5c62ea71c5691c99fa5e82f06b628b6"
+  digest = "1:a84d5ec8b40a827962ea250f2cf03434138ccae9d83fcac12fb49b70c70b80cc"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
     "ed25519",
     "ed25519/internal/edwards25519",
+    "internal/chacha20",
     "internal/subtle",
     "nacl/box",
     "nacl/secretbox",
     "poly1305",
     "salsa20/salsa",
+    "ssh",
     "ssh/terminal",
   ]
   pruneopts = "UT"
@@ -588,6 +590,7 @@
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
     "golang.org/x/crypto/nacl/box",
+    "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/terminal",
     "golang.org/x/net/context",
     "golang.org/x/net/http2",

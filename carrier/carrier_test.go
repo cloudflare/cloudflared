@@ -48,7 +48,12 @@ func TestStartClient(t *testing.T) {
 	defer ts.Close()
 
 	buf := newTestStream()
-	err := StartClient(logger, "http://"+ts.Listener.Addr().String(), buf, nil)
+	options := &StartOptions{
+		OriginURL:     "http://" + ts.Listener.Addr().String(),
+		Headers:       nil,
+		ShouldGenCert: false,
+	}
+	err := StartClient(logger, buf, options)
 	assert.NoError(t, err)
 	buf.Write([]byte(message))
 
@@ -67,9 +72,14 @@ func TestStartServer(t *testing.T) {
 	shutdownC := make(chan struct{})
 	ts := newTestWebSocketServer()
 	defer ts.Close()
+	options := &StartOptions{
+		OriginURL:     "http://" + ts.Listener.Addr().String(),
+		Headers:       nil,
+		ShouldGenCert: false,
+	}
 
 	go func() {
-		err := Serve(logger, listener, "http://"+ts.Listener.Addr().String(), shutdownC, nil)
+		err := Serve(logger, listener, shutdownC, options)
 		if err != nil {
 			t.Fatalf("Error running server: %v", err)
 		}

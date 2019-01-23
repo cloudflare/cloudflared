@@ -16,6 +16,15 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
+const (
+	sshHostnameFlag    = "hostname"
+	sshURLFlag         = "url"
+	sshHeaderFlag      = "header"
+	sshTokenIDFlag     = "service-token-id"
+	sshTokenSecretFlag = "service-token-secret"
+	sshGenCertFlag     = "gen-cert"
+)
+
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
 
 var (
@@ -93,27 +102,31 @@ func Commands() []*cli.Command {
 					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name:  "hostname",
-							Usage: "specifics the hostname of your application.",
+							Name:  sshHostnameFlag,
+							Usage: "specify the hostname of your application.",
 						},
 						&cli.StringFlag{
-							Name:  "url",
-							Usage: "specifics the host:port to forward data to Cloudflare edge.",
+							Name:  sshURLFlag,
+							Usage: "specify the host:port to forward data to Cloudflare edge.",
 						},
 						&cli.StringSliceFlag{
-							Name:    "header",
+							Name:    sshHeaderFlag,
 							Aliases: []string{"H"},
-							Usage:   "specific additional headers you wish to send.",
+							Usage:   "specify additional headers you wish to send.",
 						},
 						&cli.StringSliceFlag{
-							Name:    "service-token-id",
+							Name:    sshTokenIDFlag,
 							Aliases: []string{"id"},
-							Usage:   "specific an Access service token ID you wish to use.",
+							Usage:   "specify an Access service token ID you wish to use.",
 						},
 						&cli.StringSliceFlag{
-							Name:    "service-token-secret",
+							Name:    sshTokenSecretFlag,
 							Aliases: []string{"secret"},
-							Usage:   "specific an Access service token secret you wish to use.",
+							Usage:   "specify an Access service token secret you wish to use.",
+						},
+						&cli.BoolFlag{
+							Name:  sshGenCertFlag,
+							Usage: "specify if you wish to generate short lived certs.",
 						},
 					},
 				},
