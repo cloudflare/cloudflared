@@ -21,6 +21,7 @@ import (
 const (
 	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
 	licenseUrl      = developerPortal + "/license/"
+	versionText     = "Print the version"
 )
 
 var (
@@ -51,6 +52,12 @@ func main() {
 	// Windows service manager closes this channel when it receives stop command.
 	graceShutdownC := make(chan struct{})
 
+	cli.VersionFlag = &cli.BoolFlag{
+		Name:    "version",
+		Aliases: []string{"v", "V"},
+		Usage:   versionText,
+	}
+
 	app := &cli.App{}
 	app.Name = "cloudflared"
 	app.Usage = "Cloudflare's command-line tool and agent"
@@ -64,14 +71,14 @@ func main() {
 	app.Flags = flags()
 	app.Action = action(Version, shutdownC, graceShutdownC)
 	app.Before = tunnel.Before
-	app.Commands = commands()
+	app.Commands = commands(cli.ShowVersion)
 
 	tunnel.Init(Version, shutdownC, graceShutdownC) // we need this to support the tunnel sub command...
 	access.Init(shutdownC, graceShutdownC)
 	runApp(app, shutdownC, graceShutdownC)
 }
 
-func commands() []*cli.Command {
+func commands(version func(c *cli.Context)) []*cli.Command {
 	cmds := []*cli.Command{
 		{
 			Name:      "update",
@@ -83,6 +90,15 @@ If a new version exists, updates the agent binary and quits.
 Otherwise, does nothing.
 
 To determine if an update happened in a script, check for error code 64.`,
+		},
+		{
+			Name: "version",
+			Action: func(c *cli.Context) (err error) {
+				version(c)
+				return nil
+			},
+			Usage:       versionText,
+			Description: versionText,
 		},
 	}
 	cmds = append(cmds, tunnel.Commands()...)
