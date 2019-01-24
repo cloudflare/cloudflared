@@ -41,11 +41,12 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 		return nil, err
 	}
 
+	// See AUTH-1423 for why we use stderr (the way git wraps ssh)
 	err = shell.OpenBrowser(requestURL)
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "Please open the following URL and log in with your Cloudflare account:\n\n%s\n\nLeave cloudflared running to download the %s automatically.\n", requestURL, resourceName)
+		fmt.Fprintf(os.Stderr, "Please open the following URL and log in with your Cloudflare account:\n\n%s\n\nLeave cloudflared running to download the %s automatically.\n", requestURL, resourceName)
 	} else {
-		fmt.Fprintf(os.Stdout, "A browser window should have opened at the following URL:\n\n%s\n\nIf the browser failed to open, open it yourself and visit the URL above.\n", requestURL)
+		fmt.Fprintf(os.Stderr, "A browser window should have opened at the following URL:\n\n%s\n\nIf the browser failed to open, open it yourself and visit the URL above.\n", requestURL)
 	}
 
 	var resourceData []byte
