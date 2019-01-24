@@ -65,7 +65,7 @@ func Commands() []*cli.Command {
 				{
 					Name:   "curl",
 					Action: curl,
-					Usage:  "curl <args>",
+					Usage:  "curl [--allow-request, -ar] <url> [<curl args>...]",
 					Description: `The curl subcommand wraps curl and automatically injects the JWT into a cf-access-token
 					header when using curl to reach an application behind Access.`,
 					ArgsUsage:       "allow-request will allow the curl request to continue even if the jwt is not present.",
@@ -139,7 +139,8 @@ func curl(c *cli.Context) error {
 		return errors.New("incorrect args")
 	}
 
-	cmdArgs, appURL, allowRequest, err := buildCurlCmdArgs(args.Slice())
+	cmdArgs, allowRequest := parseAllowRequest(args.Slice())
+	appURL, err := getAppURL(cmdArgs)
 	if err != nil {
 		return err
 	}
@@ -191,12 +192,45 @@ func sshConfig(c *cli.Context) error {
 	return err
 }
 
+// getAppURL will pull the appURL needed for fetching a user's Access token
+func getAppURL(cmdArgs []string) (*url.URL, error) {
+	if len(cmdArgs) < 1 {
+		logger.Error("Please provide a valid URL as the first argument to curl.")
+		return nil, errors.New("not a valid url")
+	}
+
+	u, err := processURL(cmdArgs[0])
+	if err != nil {
+		logger.Error("Please provide a valid URL as the first argument to curl.")
+		return nil, err
+	}
+
+	return u, err
+}
+
+// parseAllowRequest will parse cmdArgs and return a copy of the args and result
+// of the allow request was present
+func parseAllowRequest(cmdArgs []string) ([]string, bool) {
+	if len(cmdArgs) > 1 {
+		if cmdArgs[0] == "--allow-request" || cmdArgs[0] == "-ar" {
+			return cmdArgs[1:], true
+		}
+	}
+
+	return cmdArgs, false
+}
+
 // processURL will preprocess the string (parse to a url, convert to punycode, etc).
 func processURL(s string) (*url.URL, error) {
 	u, err := url.ParseRequestURI(s)
 	if err != nil {
 		return nil, err
 	}
+
+	if u.Host == "" {
+		return nil, errors.New("not a valid host")
+	}
+
 	host, err := idna.ToASCII(u.Hostname())
 	if err != nil { // we fail to convert to punycode, just return the url we parsed.
 		return u, nil
@@ -208,35 +242,4 @@ func processURL(s string) (*url.URL, error) {
 	}
 
 	return u, nil
-}
-
-// buildCurlCmdArgs will build the curl cmd args
-func buildCurlCmdArgs(cmdArgs []string) ([]string, *url.URL, bool, error) {
-	allowRequest, iAllowRequest := false, 0
-	var appURL *url.URL
-	for i, arg := range cmdArgs {
-		if arg == "-allow-request" || arg == "-ar" {
-			iAllowRequest = i
-			allowRequest = true
-		}
-
-		u, err := processURL(arg)
-		if err == nil {
-			appURL = u
-			cmdArgs[i] = appURL.String()
-		}
-	}
-
-	if appURL == nil {
-		logger.Error("Please provide a valid URL.")
-		return cmdArgs, appURL, allowRequest, errors.New("invalid url")
-	}
-
-	if allowRequest {
-		// remove from cmdArgs
-		cmdArgs[iAllowRequest] = cmdArgs[len(cmdArgs)-1]
-		cmdArgs = cmdArgs[:len(cmdArgs)-1]
-	}
-
-	return cmdArgs, appURL, allowRequest, nil
 }
