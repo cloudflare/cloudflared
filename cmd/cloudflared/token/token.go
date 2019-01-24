@@ -62,7 +62,8 @@ func GetTokenIfExists(url *url.URL) (string, error) {
 		return "", err
 	}
 	ident, err := oidc.IdentityFromClaims(claims)
-	if err == nil && ident.ExpiresAt.After(time.Now()) {
+	// AUTH-1404, reauth if the token is about to expire within 15 minutes
+	if err == nil && ident.ExpiresAt.After(time.Now().Add(time.Minute*15)) {
 		return token.Encode(), nil
 	}
 	return "", err
