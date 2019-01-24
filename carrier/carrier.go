@@ -71,7 +71,7 @@ func serveConnection(logger *logrus.Logger, c net.Conn, originURL string) {
 func serveStream(logger *logrus.Logger, originURL string, conn io.ReadWriter) error {
 	wsConn, err := createWebsocketStream(originURL)
 	if err != nil {
-		logger.WithError(err).Error("failed to create websocket stream")
+		logger.WithError(err).Errorf("failed to connect to %s\n", originURL)
 		return err
 	}
 	defer wsConn.Close()
