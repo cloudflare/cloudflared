@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/encrypter"
@@ -52,7 +51,7 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 	var resourceData []byte
 
 	if shouldEncrypt {
-		buf, key, err := transferRequest(baseStoreURL + filepath.Join("transfer", encrypterClient.PublicKey()))
+		buf, key, err := transferRequest(baseStoreURL + "transfer/" + encrypterClient.PublicKey())
 		if err != nil {
 			return nil, err
 		}
@@ -68,7 +67,7 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 
 		resourceData = decrypted
 	} else {
-		buf, _, err := transferRequest(baseStoreURL + filepath.Join(encrypterClient.PublicKey()))
+		buf, _, err := transferRequest(baseStoreURL + encrypterClient.PublicKey())
 		if err != nil {
 			return nil, err
 		}
