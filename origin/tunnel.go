@@ -636,25 +636,41 @@ func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
 }
 
 func (h *TunnelHandler) logRequest(req *http.Request, cfRay string, lbProbe bool) {
+	logger := log.NewEntry(h.logger)
 	if cfRay != "" {
-		h.logger.WithField("CF-RAY", cfRay).Debugf("%s %s %s", req.Method, req.URL, req.Proto)
+		logger = logger.WithField("CF-RAY", cfRay)
+		logger.Debugf("%s %s %s", req.Method, req.URL, req.Proto)
 	} else if lbProbe {
-		h.logger.Debugf("Load Balancer health check %s %s %s", req.Method, req.URL, req.Proto)
+		logger.Debugf("Load Balancer health check %s %s %s", req.Method, req.URL, req.Proto)
 	} else {
-		h.logger.Warnf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", req.Method, req.URL, req.Proto)
+		logger.Warnf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", req.Method, req.URL, req.Proto)
 	}
-	h.logger.Debugf("Request Headers %+v", req.Header)
+	logger.Debugf("Request Headers %+v", req.Header)
+
+	if contentLen := req.ContentLength; contentLen == -1 {
+		logger.Debugf("Request Content length unknown")
+	} else {
+		logger.Debugf("Request content length %d", contentLen)
+	}
 }
 
 func (h *TunnelHandler) logResponse(r *http.Response, cfRay string, lbProbe bool) {
+	logger := log.NewEntry(h.logger)
 	if cfRay != "" {
-		h.logger.WithField("CF-RAY", cfRay).Debugf("%s", r.Status)
+		logger = logger.WithField("CF-RAY", cfRay)
+		logger.Debugf("%s", r.Status)
 	} else if lbProbe {
-		h.logger.Debugf("Response to Load Balancer health check %s", r.Status)
+		logger.Debugf("Response to Load Balancer health check %s", r.Status)
 	} else {
-		h.logger.Infof("%s", r.Status)
+		logger.Infof("%s", r.Status)
 	}
-	h.logger.Debugf("Response Headers %+v", r.Header)
+	logger.Debugf("Response Headers %+v", r.Header)
+
+	if contentLen := r.ContentLength; contentLen == -1 {
+		logger.Debugf("Response content length unknown")
+	} else {
+		logger.Debugf("Response content length %d", contentLen)
+	}
 }
 
 func (h *TunnelHandler) UpdateMetrics(connectionID string) {

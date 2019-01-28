@@ -534,7 +534,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "loglevel",
 			Value:   "info",
-			Usage:   "Application logging level {panic, fatal, error, warn, info, debug}",
+			Usage:   "Application logging level {panic, fatal, error, warn, info, debug}. " + debugLevelWarning,
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),

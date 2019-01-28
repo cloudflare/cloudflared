@@ -13,6 +13,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+const debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
+	"Response status, content length and header will also be logged in debug level."
+
 var logger = log.CreateLogger()
 
 func configMainLogger(c *cli.Context) error {
@@ -22,6 +25,9 @@ func configMainLogger(c *cli.Context) error {
 		return errors.Wrap(err, "Unknown logging level specified")
 	}
 	logger.SetLevel(logLevel)
+	if logLevel == logrus.DebugLevel {
+		logger.Warn(debugLevelWarning)
+	}
 	return nil
 }
 
