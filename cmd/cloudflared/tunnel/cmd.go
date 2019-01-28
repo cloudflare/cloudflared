@@ -191,9 +191,9 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return errors.Wrap(err, "Error configuring logger")
 	}
 
-	protoLogger, err := configProtoLogger(c)
+	transportLogger, err := configTransportLogger(c)
 	if err != nil {
-		return errors.Wrap(err, "Error configuring protocol logger")
+		return errors.Wrap(err, "Error configuring transport logger")
 	}
 
 	if c.IsSet("trace-output") {
@@ -224,7 +224,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}
 
 	if c.String("logfile") != "" {
-		if err := initLogFile(c, logger, protoLogger); err != nil {
+		if err := initLogFile(c, logger, transportLogger); err != nil {
 			logger.Error(err)
 		}
 	}
@@ -318,7 +318,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "http://"+listener.Addr().String())
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, protoLogger)
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
 	if err != nil {
 		return err
 	}
@@ -539,10 +539,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "proto-loglevel",
+			Name:    "transport-loglevel",
+			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
 			Value:   "warn",
-			Usage:   "Protocol logging level {panic, fatal, error, warn, info, debug}",
-			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL"},
+			Usage:   "Transport logging level(previously called protocol logging level) {panic, fatal, error, warn, info, debug}",
+			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewUintFlag(&cli.UintFlag{

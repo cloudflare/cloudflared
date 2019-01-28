@@ -136,7 +136,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	return originCert, nil
 }
 
-func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version string, logger, protoLogger *logrus.Logger) (*origin.TunnelConfig, error) {
+func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version string, logger, transportLogger *logrus.Logger) (*origin.TunnelConfig, error) {
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
 		logger.WithError(err).Error("Invalid hostname")
@@ -223,7 +223,7 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 		HTTPTransport:      httpTransport,
 		Metrics:            tunnelMetrics,
 		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
-		ProtocolLogger:     protoLogger,
+		TransportLogger:    transportLogger,
 		Logger:             logger,
 		IsAutoupdated:      c.Bool("is-autoupdated"),
 		GracePeriod:        c.Duration("grace-period"),

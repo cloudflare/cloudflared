@@ -55,7 +55,7 @@ type TunnelConfig struct {
 	HTTPTransport      http.RoundTripper
 	Metrics            *TunnelMetrics
 	MetricsUpdateFreq  time.Duration
-	ProtocolLogger     *log.Logger
+	TransportLogger    *log.Logger
 	Logger             *log.Logger
 	IsAutoupdated      bool
 	GracePeriod        time.Duration
@@ -236,7 +236,7 @@ func ServeTunnel(
 			select {
 			case <-serveCtx.Done():
 				// UnregisterTunnel blocks until the RPC call returns
-				err := UnregisterTunnel(handler.muxer, config.GracePeriod, config.Logger)
+				err := UnregisterTunnel(handler.muxer, config.GracePeriod, config.TransportLogger)
 				handler.muxer.Shutdown()
 				return err
 			case <-updateMetricsTickC:
@@ -303,7 +303,7 @@ func RegisterTunnel(
 	connectionID uint8,
 	originLocalIP string,
 ) error {
-	config.Logger.Debug("initiating RPC stream to register")
+	config.TransportLogger.Debug("initiating RPC stream to register")
 	stream, err := muxer.OpenStream([]h2mux.Header{
 		{Name: ":method", Value: "RPC"},
 		{Name: ":scheme", Value: "capnp"},
@@ -318,8 +318,8 @@ func RegisterTunnel(
 		return clientRegisterTunnelError{cause: err}
 	}
 	conn := rpc.NewConn(
-		tunnelrpc.NewTransportLogger(config.Logger.WithField("subsystem", "rpc-register"), rpc.StreamTransport(stream)),
-		tunnelrpc.ConnLog(config.Logger.WithField("subsystem", "rpc-transport")),
+		tunnelrpc.NewTransportLogger(config.TransportLogger.WithField("subsystem", "rpc-register"), rpc.StreamTransport(stream)),
+		tunnelrpc.ConnLog(config.TransportLogger.WithField("subsystem", "rpc-transport")),
 	)
 	defer conn.Close()
 	ts := tunnelpogs.TunnelServer_PogsClient{Client: conn.Bootstrap(ctx)}
@@ -531,7 +531,7 @@ func NewTunnelHandler(ctx context.Context,
 		IsClient:           true,
 		HeartbeatInterval:  config.HeartbeatInterval,
 		MaxHeartbeats:      config.MaxHeartbeats,
-		Logger:             config.ProtocolLogger.WithFields(log.Fields{}),
+		Logger:             config.TransportLogger.WithFields(log.Fields{}),
 		CompressionQuality: h2mux.CompressionSetting(config.CompressionQuality),
 	})
 	if err != nil {

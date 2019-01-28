@@ -25,15 +25,15 @@ func configMainLogger(c *cli.Context) error {
 	return nil
 }
 
-func configProtoLogger(c *cli.Context) (*logrus.Logger, error) {
-	protoLogLevel, err := logrus.ParseLevel(c.String("proto-loglevel"))
+func configTransportLogger(c *cli.Context) (*logrus.Logger, error) {
+	transportLogLevel, err := logrus.ParseLevel(c.String("transport-loglevel"))
 	if err != nil {
-		logger.WithError(err).Fatal("Unknown protocol logging level specified")
-		return nil, errors.Wrap(err, "Unknown protocol logging level specified")
+		logger.WithError(err).Fatal("Unknown transport logging level specified")
+		return nil, errors.Wrap(err, "Unknown transport logging level specified")
 	}
-	protoLogger := logrus.New()
-	protoLogger.Level = protoLogLevel
-	return protoLogger, nil
+	transportLogger := logrus.New()
+	transportLogger.Level = transportLogLevel
+	return transportLogger, nil
 }
 
 func initLogFile(c *cli.Context, loggers ...*logrus.Logger) error {
