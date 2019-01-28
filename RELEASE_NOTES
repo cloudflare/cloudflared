@@ -1,3 +1,19 @@
+2019.1.0
+- 2018-12-10 TUN-1231: Horizontal overflow wrapping on the Hello page
+- 2018-12-17 TUN-1140: Show usage if invoked with no args or config
+- 2018-11-06 TUN-632 Filter out common network exceptions from going to Sentry on StartServer
+- 2019-01-07 TUN-1138: Install cloudflared service directory with 755 permissions
+- 2019-01-07 TUN-1265: Silent exit when failing to parse config
+- 2019-01-10 TUN-1350: Enhance error messages with cloudflarestatus.com link, if relevant
+- 2019-01-16 TUN-1358: Close readyList after Muxer.Serve() has stopped running
+- 2019-01-24 AUTH-1423: move from stdout to stderr
+- 2019-01-24 AUTH-1404: reauth if the token is about to expire within 15 minutes
+- 2019-01-24 AUTH-1459: improved ssh streaming error message
+- 2019-01-24 AUTH-1211: print all the versions
+- 2019-01-24 AUTH-1337: fix url path
+- 2019-01-28 TUN-1418: Rename ProtocolLogger to TransportLogger, and use TransportLogger to log RPC events.
+- 2019-01-28 TUN-1419: Identify request/response headers/content length with ray ID
+
 2018.12.1
 - 2018-12-11 TUN-1270: cloudflared panic (HA metrics missing label)
 
