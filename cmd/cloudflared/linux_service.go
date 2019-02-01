@@ -84,7 +84,8 @@ WantedBy=timers.target
 var sysvTemplate = ServiceTemplate{
 	Path:     "/etc/init.d/cloudflared",
 	FileMode: 0755,
-	Content: `# For RedHat and cousins:
+	Content: `#!/bin/sh
+# For RedHat and cousins:
 # chkconfig: 2345 99 01
 # description: Argo Tunnel agent
 # processname: {{.Path}}
