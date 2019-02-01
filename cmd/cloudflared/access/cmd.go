@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
@@ -191,10 +192,9 @@ func generateToken(c *cli.Context) error {
 
 // sshConfig prints an example SSH config to stdout
 func sshConfig(c *cli.Context) error {
-	_, err := os.Stdout.Write([]byte(`Add this configuration block to your $HOME/.ssh/config
-		Host <your hostname>
-		    ProxyCommand cloudflared access ssh --hostname %h` + "\n"))
-	return err
+	outputMessage := "Add this configuration block to your %s/.ssh/config:\n\nHost [your hostname]\n\tProxyCommand %s access ssh --hostname %%h\n"
+	logger.Printf(outputMessage, os.Getenv("HOME"), cloudflaredPath())
+	return nil
 }
 
 // getAppURL will pull the appURL needed for fetching a user's Access token
@@ -247,4 +247,24 @@ func processURL(s string) (*url.URL, error) {
 	}
 
 	return u, nil
+}
+
+// cloudflaredPath pulls the full path of cloudflared on disk
+func cloudflaredPath() string {
+	for _, p := range strings.Split(os.Getenv("PATH"), ":") {
+		path := fmt.Sprintf("%s/%s", p, "cloudflared")
+		if isFileThere(path) {
+			return path
+		}
+	}
+	return "cloudflared"
+}
+
+// isFileThere will check for the presence of candidate path
+func isFileThere(candidate string) bool {
+	fi, err := os.Stat(candidate)
+	if err != nil || fi.IsDir() || !fi.Mode().IsRegular() {
+		return false
+	}
+	return true
 }
