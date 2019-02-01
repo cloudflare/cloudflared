@@ -300,11 +300,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
-	if uri, err := url.Parse(c.String("url")); err == nil && uri.Scheme == "ssh" {
-		host := uri.Host
-		if uri.Port() == "" { // default to 22
-			host = uri.Hostname() + ":22"
-		}
+	if host := hostnameFromURI(c.String("url")); host != "" {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
 			logger.WithError(err).Error("Cannot start Websocket Proxy Server")
@@ -391,6 +387,27 @@ func writePidFile(waitForSignal chan struct{}, pidFile string) {
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "%d", os.Getpid())
+}
+
+func hostnameFromURI(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return ""
+	}
+	switch u.Scheme {
+	case "ssh":
+		return addPortIfMissing(u, 22)
+	case "rdp":
+		return addPortIfMissing(u, 3389)
+	}
+	return ""
+}
+
+func addPortIfMissing(uri *url.URL, port int) string {
+	if uri.Port() != "" {
+		return uri.Host
+	}
+	return fmt.Sprintf("%s:%d", uri.Hostname(), port)
 }
 
 func tunnelFlags(shouldHide bool) []cli.Flag {
