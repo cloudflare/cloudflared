@@ -132,15 +132,21 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 		<-shutdownC
 		cancel()
 	}()
+
+	u, err := uuid.NewRandom()
+	if err != nil {
+		return err
+	}
+
 	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
 	if config.HAConnections > 1 {
-		return NewSupervisor(config).Run(ctx, connectedSignal)
+		return NewSupervisor(config).Run(ctx, connectedSignal, u)
 	} else {
 		addrs, err := ResolveEdgeIPs(config.EdgeAddrs)
 		if err != nil {
 			return err
 		}
-		return ServeTunnelLoop(ctx, config, addrs[0], 0, connectedSignal)
+		return ServeTunnelLoop(ctx, config, addrs[0], 0, connectedSignal, u)
 	}
 }
 
@@ -149,6 +155,7 @@ func ServeTunnelLoop(ctx context.Context,
 	addr *net.TCPAddr,
 	connectionID uint8,
 	connectedSignal chan struct{},
+	u uuid.UUID,
 ) error {
 	logger := config.Logger
 	config.Metrics.incrementHaConnections()
@@ -164,7 +171,7 @@ func ServeTunnelLoop(ctx context.Context,
 	// Ensure the above goroutine will terminate if we return without connecting
 	defer connectedFuse.Fuse(false)
 	for {
-		err, recoverable := ServeTunnel(ctx, config, addr, connectionID, connectedFuse, &backoff)
+		err, recoverable := ServeTunnel(ctx, config, addr, connectionID, connectedFuse, &backoff, u)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
 				logger.Infof("Retrying in %s seconds", duration)
@@ -183,6 +190,7 @@ func ServeTunnel(
 	connectionID uint8,
 	connectedFuse *h2mux.BooleanFuse,
 	backoff *BackoffHandler,
+	u uuid.UUID,
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -222,7 +230,7 @@ func ServeTunnel(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		err := RegisterTunnel(serveCtx, handler.muxer, config, connectionID, originLocalIP)
+		err := RegisterTunnel(serveCtx, handler.muxer, config, connectionID, originLocalIP, u)
 		if err == nil {
 			connectedFuse.Fuse(true)
 			backoff.SetGracePeriod()
@@ -302,6 +310,7 @@ func RegisterTunnel(
 	config *TunnelConfig,
 	connectionID uint8,
 	originLocalIP string,
+	uuid uuid.UUID,
 ) error {
 	config.TransportLogger.Debug("initiating RPC stream to register")
 	stream, err := muxer.OpenStream([]h2mux.Header{
@@ -328,10 +337,6 @@ func RegisterTunnel(
 	serverInfoPromise := tsClient.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
-	uuid, err := uuid.NewRandom()
-	if err != nil {
-		return clientRegisterTunnelError{cause: err}
-	}
 	registration, err := ts.RegisterTunnel(
 		ctx,
 		config.OriginCert,
