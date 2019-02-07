@@ -1,7 +1,9 @@
 package access
 
 import (
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
@@ -19,6 +21,7 @@ func ssh(c *cli.Context) error {
 	if err != nil || c.String("hostname") == "" {
 		return cli.ShowCommandHelp(c, "ssh")
 	}
+	headers := buildRequestHeaders(c.StringSlice("header"))
 
 	if c.NArg() > 0 || c.IsSet("url") {
 		localForwarder, err := config.ValidateUrl(c)
@@ -31,8 +34,19 @@ func ssh(c *cli.Context) error {
 			logger.WithError(err).Error("Error validating origin URL")
 			return errors.Wrap(err, "error validating origin URL")
 		}
-		return carrier.StartServer(logger, forwarder.Host, "https://"+hostname, shutdownC)
+		return carrier.StartServer(logger, forwarder.Host, "https://"+hostname, shutdownC, headers)
 	}
 
-	return carrier.StartClient(logger, "https://"+hostname, &carrier.StdinoutStream{})
+	return carrier.StartClient(logger, "https://"+hostname, &carrier.StdinoutStream{}, headers)
+}
+
+func buildRequestHeaders(values []string) http.Header {
+	headers := make(http.Header)
+	for _, valuePair := range values {
+		split := strings.Split(valuePair, ":")
+		if len(split) > 1 {
+			headers.Add(strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+		}
+	}
+	return headers
 }

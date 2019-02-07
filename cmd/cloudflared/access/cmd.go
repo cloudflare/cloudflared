@@ -96,6 +96,10 @@ func Commands() []*cli.Command {
 						&cli.StringFlag{
 							Name: "url",
 						},
+						&cli.StringSliceFlag{
+							Name:    "header",
+							Aliases: []string{"H"},
+						},
 					},
 				},
 				{

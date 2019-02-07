@@ -48,7 +48,7 @@ func TestStartClient(t *testing.T) {
 	defer ts.Close()
 
 	buf := newTestStream()
-	err := StartClient(logger, "http://"+ts.Listener.Addr().String(), buf)
+	err := StartClient(logger, "http://"+ts.Listener.Addr().String(), buf, nil)
 	assert.NoError(t, err)
 	buf.Write([]byte(message))
 
@@ -66,7 +66,7 @@ func TestStartServer(t *testing.T) {
 	defer ts.Close()
 
 	go func() {
-		err := StartServer(logger, listenerAddress, "http://"+ts.Listener.Addr().String(), shutdownC)
+		err := StartServer(logger, listenerAddress, "http://"+ts.Listener.Addr().String(), shutdownC, nil)
 		if err != nil {
 			t.Fatalf("Error starting server: %v", err)
 		}

@@ -34,13 +34,13 @@ func (c *StdinoutStream) Write(p []byte) (int, error) {
 
 // StartClient will copy the data from stdin/stdout over a WebSocket connection
 // to the edge (originURL)
-func StartClient(logger *logrus.Logger, originURL string, stream io.ReadWriter) error {
-	return serveStream(logger, originURL, stream)
+func StartClient(logger *logrus.Logger, originURL string, stream io.ReadWriter, headers http.Header) error {
+	return serveStream(logger, originURL, stream, headers)
 }
 
 // StartServer will setup a server on a specified port and copy data over a WebSocket connection
 // to the edge (originURL)
-func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-chan struct{}) error {
+func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-chan struct{}, headers http.Header) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		logger.WithError(err).Error("failed to start forwarding server")
@@ -56,20 +56,20 @@ func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-c
 			if err != nil {
 				return err
 			}
-			go serveConnection(logger, conn, originURL)
+			go serveConnection(logger, conn, originURL, headers)
 		}
 	}
 }
 
 // serveConnection handles connections for the StartServer call
-func serveConnection(logger *logrus.Logger, c net.Conn, originURL string) {
+func serveConnection(logger *logrus.Logger, c net.Conn, originURL string, headers http.Header) {
 	defer c.Close()
-	serveStream(logger, originURL, c)
+	serveStream(logger, originURL, c, headers)
 }
 
 // serveStream will serve the data over the WebSocket stream
-func serveStream(logger *logrus.Logger, originURL string, conn io.ReadWriter) error {
-	wsConn, err := createWebsocketStream(originURL)
+func serveStream(logger *logrus.Logger, originURL string, conn io.ReadWriter, headers http.Header) error {
+	wsConn, err := createWebsocketStream(originURL, headers)
 	if err != nil {
 		logger.WithError(err).Errorf("failed to connect to %s\n", originURL)
 		return err
@@ -84,11 +84,12 @@ func serveStream(logger *logrus.Logger, originURL string, conn io.ReadWriter) er
 // createWebsocketStream will create a WebSocket connection to stream data over
 // It also handles redirects from Access and will present that flow if
 // the token is not present on the request
-func createWebsocketStream(originURL string) (*websocket.Conn, error) {
+func createWebsocketStream(originURL string, headers http.Header) (*websocket.Conn, error) {
 	req, err := http.NewRequest(http.MethodGet, originURL, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header = headers
 
 	wsConn, resp, err := websocket.ClientConnect(req, nil)
 	if err != nil && resp != nil && resp.StatusCode > 300 {
