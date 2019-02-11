@@ -1,3 +1,11 @@
+2019.2.0
+- 2019-01-24 AUTH-1462: better curl arg parsing
+- 2019-02-01 TUN-1456: Only make one UUID
+- 2019-01-30 cloudflared/linux_service: Add missing /etc/init.d shebang
+- 2019-02-07 AUTH-1511: Add custom headers for ssh command
+- 2019-02-01 AUTH-1503: Added RDP support
+- 2019-02-01 AUTH-1403: Print the paths in the ssh-config instructions
+
 2019.1.0
 - 2018-12-10 TUN-1231: Horizontal overflow wrapping on the Hello page
 - 2018-12-17 TUN-1140: Show usage if invoked with no args or config
