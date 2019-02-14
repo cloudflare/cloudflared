@@ -37,8 +37,10 @@ const (
 )
 
 type TunnelConfig struct {
+	// OriginUrl may not be used if a user specifies a unix socket.
+	OriginUrl string
+
 	EdgeAddrs          []string
-	OriginUrl          string
 	Hostname           string
 	OriginCert         []byte
 	TlsConfig          *tls.Config
