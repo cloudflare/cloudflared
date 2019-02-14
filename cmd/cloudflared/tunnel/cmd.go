@@ -477,6 +477,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "unix-socket",
+			Usage:   "Path to unix socket to use instead of --url",
+			EnvVars: []string{"TUNNEL_UNIX_SOCKET"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "hostname",
 			Usage:   "Set a hostname on a Cloudflare zone to route traffic through this tunnel.",
 			EnvVars: []string{"TUNNEL_HOSTNAME"},

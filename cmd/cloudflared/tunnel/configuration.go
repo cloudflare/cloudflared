@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -160,7 +161,6 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 		logger.WithError(err).Error("Error validating origin URL")
 		return nil, errors.Wrap(err, "Error validating origin URL")
 	}
-	logger.Infof("Proxying tunnel requests to %s", originURL)
 
 	originCert, err := getOriginCert(c)
 	if err != nil {
@@ -175,17 +175,35 @@ func prepareTunnelConfig(c *cli.Context, buildInfo *origin.BuildInfo, version st
 
 	tunnelMetrics := origin.NewTunnelMetrics()
 	httpTransport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   c.Duration("proxy-connect-timeout"),
-			KeepAlive: c.Duration("proxy-tcp-keepalive"),
-			DualStack: !c.Bool("proxy-no-happy-eyeballs"),
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
 		MaxIdleConns:          c.Int("proxy-keepalive-connections"),
 		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
 		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: c.IsSet("no-tls-verify")},
+	}
+
+	dialContext := (&net.Dialer{
+		Timeout:   c.Duration("proxy-connect-timeout"),
+		KeepAlive: c.Duration("proxy-tcp-keepalive"),
+		DualStack: !c.Bool("proxy-no-happy-eyeballs"),
+	}).DialContext
+
+	if c.IsSet("unix-socket") {
+		unixSocket, err := config.ValidateUnixSocket(c)
+		if err != nil {
+			logger.WithError(err).Error("Error validating --unix-socket")
+			return nil, errors.Wrap(err, "Error validating --unix-socket")
+		}
+
+		logger.Infof("Proxying tunnel requests to unix:%s", unixSocket)
+		httpTransport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			// if --unix-socket specified, enforce network type "unix"
+			return dialContext(ctx, "unix", unixSocket)
+		}
+	} else {
+		logger.Infof("Proxying tunnel requests to %s", originURL)
+		httpTransport.DialContext = dialContext
 	}
 
 	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
