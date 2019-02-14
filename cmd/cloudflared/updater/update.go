@@ -30,45 +30,56 @@ EKx0BZogHSor9Wy5VztdFaAaVbsJiCbO
 	logger = log.CreateLogger()
 )
 
-type ReleaseInfo struct {
+type UpdateOutcome struct {
 	Updated bool
 	Version string
 	Error   error
 }
 
-func checkForUpdates() ReleaseInfo {
+func (uo *UpdateOutcome) noUpdate() bool {
+	return uo.Error != nil && uo.Updated == false
+}
+
+func checkForUpdateAndApply() UpdateOutcome {
 	var opts equinox.Options
 	if err := opts.SetPublicKeyPEM(publicKey); err != nil {
-		return ReleaseInfo{Error: err}
+		return UpdateOutcome{Error: err}
 	}
 
 	resp, err := equinox.Check(appID, opts)
 	switch {
 	case err == equinox.NotAvailableErr:
-		return ReleaseInfo{}
+		return UpdateOutcome{}
 	case err != nil:
-		return ReleaseInfo{Error: err}
+		return UpdateOutcome{Error: err}
 	}
 
 	err = resp.Apply()
 	if err != nil {
-		return ReleaseInfo{Error: err}
+		return UpdateOutcome{Error: err}
 	}
 
-	return ReleaseInfo{Updated: true, Version: resp.ReleaseVersion}
+	return UpdateOutcome{Updated: true, Version: resp.ReleaseVersion}
 }
 
 func Update(_ *cli.Context) error {
-	if updateApplied() {
-		os.Exit(64)
+	updateOutcome := loggedUpdate()
+	if updateOutcome.Error != nil {
+		os.Exit(10)
 	}
-	return nil
+
+	if updateOutcome.noUpdate() {
+		logger.Infof("cloudflared is up to date (%s)", updateOutcome.Version)
+	}
+
+	return updateOutcome.Error
 }
 
 func Autoupdate(freq time.Duration, listeners *gracenet.Net, shutdownC chan struct{}) error {
 	tickC := time.Tick(freq)
 	for {
-		if updateApplied() {
+		updateOutcome := loggedUpdate()
+		if updateOutcome.Updated {
 			os.Args = append(os.Args, "--is-autoupdated=true")
 			pid, err := listeners.StartProcess()
 			if err != nil {
@@ -88,16 +99,17 @@ func Autoupdate(freq time.Duration, listeners *gracenet.Net, shutdownC chan stru
 	}
 }
 
-func updateApplied() bool {
-	releaseInfo := checkForUpdates()
-	if releaseInfo.Updated {
-		logger.Infof("Updated to version %s", releaseInfo.Version)
-		return true
+// Checks for an update and applies it if one is available
+func loggedUpdate() UpdateOutcome {
+	updateOutcome := checkForUpdateAndApply()
+	if updateOutcome.Updated {
+		logger.Infof("cloudflared has been updated to version %s", updateOutcome.Version)
 	}
-	if releaseInfo.Error != nil {
-		logger.WithError(releaseInfo.Error).Error("Update check failed")
+	if updateOutcome.Error != nil {
+		logger.WithError(updateOutcome.Error).Error("update check failed")
 	}
-	return false
+
+	return updateOutcome
 }
 
 func IsAutoupdateEnabled(c *cli.Context) bool {
