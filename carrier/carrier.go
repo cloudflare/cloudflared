@@ -46,6 +46,7 @@ func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-c
 		logger.WithError(err).Error("failed to start forwarding server")
 		return err
 	}
+	logger.Info("Started listening on ", address)
 	defer listener.Close()
 	for {
 		select {
