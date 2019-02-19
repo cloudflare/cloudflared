@@ -11,9 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -26,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	_ "github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	rpc "zombiezen.com/go/capnproto2/rpc"
 )
 
@@ -64,6 +64,7 @@ type TunnelConfig struct {
 	WSGI               bool
 	CompressionQuality uint64
 	IncidentLookup     IncidentLookup
+	CloseConnOnce      *sync.Once // Used to close connectedSignal no more than once
 }
 
 type dialError struct {
@@ -161,11 +162,10 @@ func ServeTunnelLoop(ctx context.Context,
 	config.Metrics.incrementHaConnections()
 	defer config.Metrics.decrementHaConnections()
 	backoff := BackoffHandler{MaxRetries: config.Retries}
-	// Used to close connectedSignal no more than once
 	connectedFuse := h2mux.NewBooleanFuse()
 	go func() {
 		if connectedFuse.Await() {
-			close(connectedSignal)
+			config.CloseConnOnce.Do(func() { close(connectedSignal) })
 		}
 	}()
 	// Ensure the above goroutine will terminate if we return without connecting

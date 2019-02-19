@@ -181,6 +181,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	listeners := gracenet.Net{}
 	errC := make(chan error)
 	connectedSignal := make(chan struct{})
+	closeConnOnce := sync.Once{}
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
@@ -280,7 +281,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
 	if dnsProxyStandAlone(c) {
-		close(connectedSignal)
+		closeConnOnce.Do(func() { close(connectedSignal) })
 		// no grace period, handle SIGINT/SIGTERM immediately
 		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0)
 	}
@@ -315,6 +316,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}
 
 	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
+	tunnelConfig.CloseConnOnce = &closeConnOnce
 	if err != nil {
 		return err
 	}
