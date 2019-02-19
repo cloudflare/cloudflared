@@ -51,6 +51,9 @@ type TunnelMetrics struct {
 	// oldServerLocations stores the last server the tunnel was connected to
 	oldServerLocations map[string]string
 
+	regSuccess prometheus.Counter
+	regFail    *prometheus.CounterVec
+
 	muxerMetrics *muxerMetrics
 	tunnelsHA    tunnelsForHA
 }
@@ -342,6 +345,22 @@ func NewTunnelMetrics() *TunnelMetrics {
 	)
 	prometheus.MustRegister(serverLocations)
 
+	registerFail := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "tunnel_register_fail",
+			Help: "Count of tunnel registration errors by type",
+		},
+		[]string{"error"},
+	)
+	prometheus.MustRegister(registerFail)
+
+	registerSuccess := prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "tunnel_register_success",
+			Help: "Count of successful tunnel registrations",
+		})
+	prometheus.MustRegister(registerSuccess)
+
 	return &TunnelMetrics{
 		haConnections:                  haConnections,
 		totalRequests:                  totalRequests,
@@ -357,6 +376,8 @@ func NewTunnelMetrics() *TunnelMetrics {
 		oldServerLocations:             make(map[string]string),
 		muxerMetrics:                   newMuxerMetrics(),
 		tunnelsHA:                      NewTunnelsForHA(),
+		regSuccess:                     registerSuccess,
+		regFail:                        registerFail,
 	}
 }
 

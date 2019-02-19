@@ -351,13 +351,9 @@ func RegisterTunnel(
 	for _, logLine := range registration.LogLines {
 		config.Logger.Info(logLine)
 	}
-	if registration.Err == DuplicateConnectionError {
-		return dupConnRegisterTunnelError{}
-	} else if registration.Err != "" {
-		return serverRegisterTunnelError{
-			cause:     fmt.Errorf("Server error: %s", registration.Err),
-			permanent: registration.PermanentFailure,
-		}
+
+	if regErr := processRegisterTunnelError(registration.Err, registration.PermanentFailure, config.Metrics); regErr != nil {
+		return regErr
 	}
 
 	if registration.TunnelID != "" {
@@ -379,6 +375,22 @@ func RegisterTunnel(
 
 	config.Logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
 	return nil
+}
+
+func processRegisterTunnelError(err string, permanentFailure bool, metrics *TunnelMetrics) error {
+	if err == "" {
+		metrics.regSuccess.Inc()
+		return nil
+	}
+
+	metrics.regFail.WithLabelValues(err).Inc()
+	if err == DuplicateConnectionError {
+		return dupConnRegisterTunnelError{}
+	}
+	return serverRegisterTunnelError{
+		cause:     fmt.Errorf("Server error: %s", err),
+		permanent: permanentFailure,
+	}
 }
 
 func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log.Logger) error {
