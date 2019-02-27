@@ -1,3 +1,10 @@
+2019.2.1
+- 2019-02-14 TUN-1381:  should tell you if you're on the latest version rather than just exiting silently
+- 2019-02-15 TUN-1467: build with Go 1.11
+- 2019-02-15 AUTH-1519: Added logging
+- 2019-02-19 TUN-1525: cloudflared metrics for registration success/fail
+- 2019-02-19 TUN-1510: Wrap the close() in sync.Once.Do
+
 2019.2.0
 - 2019-01-24 AUTH-1462: better curl arg parsing
 - 2019-02-01 TUN-1456: Only make one UUID
