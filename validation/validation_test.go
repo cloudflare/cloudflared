@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"testing"
+	"time"
 
 	"context"
 	"crypto/tls"
@@ -381,6 +382,36 @@ func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
 	assert.NoError(t, err)
 	defer redirectServer.Close()
 	assert.Error(t, ValidateHTTPService(originURL, hostname, redirectClient.Transport))
+}
+
+// error path 3: origin URL is nonresponsive
+func TestValidateHTTPService_NonResponsiveOrigin(t *testing.T) {
+	originURL := "https://127.0.0.1/"
+	hostname := "example.com"
+	oldValidationTimeout := validationTimeout
+	defer func() {
+		validationTimeout = oldValidationTimeout
+	}()
+	validationTimeout = 500 * time.Millisecond
+
+	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			assert.Equal(t, "127.0.0.1:443", r.Host)
+		} else {
+			assert.Equal(t, hostname, r.Host)
+		}
+		time.Sleep(1 * time.Second)
+		w.WriteHeader(200)
+	}))
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+	defer server.Close()
+
+	err = ValidateHTTPService(originURL, hostname, client.Transport)
+	if err, ok := err.(net.Error); assert.True(t, ok) {
+		assert.True(t, err.Timeout())
+	}
 }
 
 type testRoundTripper func(req *http.Request) (*http.Response, error)

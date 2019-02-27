@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 
 	"net/http"
 
@@ -14,7 +15,10 @@ import (
 
 const defaultScheme = "http"
 
-var supportedProtocol = [2]string{"http", "https"}
+var (
+	supportedProtocol = [2]string{"http", "https"}
+	validationTimeout = time.Duration(30 * time.Second)
+)
 
 func ValidateHostname(hostname string) (string, error) {
 	if hostname == "" {
@@ -149,6 +153,7 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
+		Timeout: validationTimeout,
 	}
 
 	initialRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
