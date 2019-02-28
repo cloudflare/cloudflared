@@ -315,8 +315,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "http://"+listener.Addr().String())
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
-	tunnelConfig.CloseConnOnce = &closeConnOnce
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger, &closeConnOnce)
 	if err != nil {
 		return err
 	}
