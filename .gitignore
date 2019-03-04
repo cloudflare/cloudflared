@@ -8,3 +8,4 @@ guide/public
 .vscode
 \#*\#
 cscope.*
+cloudflared

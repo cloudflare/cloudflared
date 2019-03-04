@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/cloudflare/cloudflared/signal"
+
 	"github.com/google/uuid"
 )
 
@@ -51,7 +53,7 @@ func NewSupervisor(config *TunnelConfig) *Supervisor {
 	}
 }
 
-func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}, u uuid.UUID) error {
+func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, u uuid.UUID) error {
 	logger := s.config.Logger
 	if err := s.initialize(ctx, connectedSignal, u); err != nil {
 		return err
@@ -120,7 +122,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal chan struct{}, u u
 	}
 }
 
-func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct{}, u uuid.UUID) error {
+func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal, u uuid.UUID) error {
 	logger := s.config.Logger
 	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
 	if err != nil {
@@ -143,11 +145,12 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct
 		return fmt.Errorf("context was canceled")
 	case tunnelError := <-s.tunnelErrors:
 		return tunnelError.err
-	case <-connectedSignal:
+	case <-connectedSignal.Wait():
 	}
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
-		go s.startTunnel(ctx, i, make(chan struct{}), u)
+		ch := signal.New(make(chan struct{}))
+		go s.startTunnel(ctx, i, ch, u)
 		time.Sleep(registrationInterval)
 	}
 	return nil
@@ -155,7 +158,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal chan struct
 
 // startTunnel starts the first tunnel connection. The resulting error will be sent on
 // s.tunnelErrors. It will send a signal via connectedSignal if registration succeed
-func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan struct{}, u uuid.UUID) {
+func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *signal.Signal, u uuid.UUID) {
 	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal, u)
 	defer func() {
 		s.tunnelErrors <- tunnelError{index: 0, err: err}
@@ -183,17 +186,17 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal chan 
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
 // s.tunnelErrors.
-func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal chan struct{}, u uuid.UUID) {
+func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal *signal.Signal, u uuid.UUID) {
 	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(index), uint8(index), connectedSignal, u)
 	s.tunnelErrors <- tunnelError{index: index, err: err}
 }
 
-func (s *Supervisor) newConnectedTunnelSignal(index int) chan struct{} {
-	signal := make(chan struct{})
-	s.tunnelsConnecting[index] = signal
-	s.nextConnectedSignal = signal
+func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {
+	sig := make(chan struct{})
+	s.tunnelsConnecting[index] = sig
+	s.nextConnectedSignal = sig
 	s.nextConnectedIndex = index
-	return signal
+	return signal.New(sig)
 }
 
 func (s *Supervisor) waitForNextTunnel(index int) bool {

@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
+	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/coreos/go-systemd/daemon"
@@ -180,8 +181,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
-	connectedSignal := make(chan struct{})
-	closeConnOnce := sync.Once{}
+	connectedSignal := signal.New(make(chan struct{}))
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
@@ -281,7 +281,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
 	if dnsProxyStandAlone(c) {
-		closeConnOnce.Do(func() { close(connectedSignal) })
+		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
 		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0)
 	}
@@ -315,7 +315,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "http://"+listener.Addr().String())
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger, &closeConnOnce)
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
 	if err != nil {
 		return err
 	}
@@ -375,13 +375,13 @@ func waitToShutdown(wg *sync.WaitGroup,
 	return err
 }
 
-func notifySystemd(waitForSignal chan struct{}) {
-	<-waitForSignal
+func notifySystemd(waitForSignal *signal.Signal) {
+	<-waitForSignal.Wait()
 	daemon.SdNotify(false, "READY=1")
 }
 
-func writePidFile(waitForSignal chan struct{}, pidFile string) {
-	<-waitForSignal
+func writePidFile(waitForSignal *signal.Signal, pidFile string) {
+	<-waitForSignal.Wait()
 	file, err := os.Create(pidFile)
 	if err != nil {
 		logger.WithError(err).Errorf("Unable to write pid to %s", pidFile)

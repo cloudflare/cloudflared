@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
@@ -127,7 +128,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal chan struct{}) error {
+func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal *signal.Signal) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-shutdownC
@@ -155,7 +156,7 @@ func ServeTunnelLoop(ctx context.Context,
 	config *TunnelConfig,
 	addr *net.TCPAddr,
 	connectionID uint8,
-	connectedSignal chan struct{},
+	connectedSignal *signal.Signal,
 	u uuid.UUID,
 ) error {
 	logger := config.Logger
@@ -165,7 +166,7 @@ func ServeTunnelLoop(ctx context.Context,
 	connectedFuse := h2mux.NewBooleanFuse()
 	go func() {
 		if connectedFuse.Await() {
-			config.CloseConnOnce.Do(func() { close(connectedSignal) })
+			connectedSignal.Notify()
 		}
 	}()
 	// Ensure the above goroutine will terminate if we return without connecting

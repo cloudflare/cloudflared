@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
@@ -142,7 +141,6 @@ func prepareTunnelConfig(
 	buildInfo *origin.BuildInfo,
 	version string, logger,
 	transportLogger *logrus.Logger,
-	closeConnOnce *sync.Once,
 ) (*origin.TunnelConfig, error) {
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
@@ -238,7 +236,6 @@ func prepareTunnelConfig(
 		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
 		CompressionQuality: c.Uint64("compression-quality"),
 		IncidentLookup:     origin.NewIncidentLookup(),
-		CloseConnOnce:      closeConnOnce,
 	}, nil
 }
 
