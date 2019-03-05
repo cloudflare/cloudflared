@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -30,6 +31,10 @@ const (
 	// not defined in golang.org/x/sys/windows package
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/ms681988(v=vs.85).aspx
 	serviceConfigFailureActionsFlag = 4
+
+	// ERROR_FAILED_SERVICE_CONTROLLER_CONNECT
+	// https://docs.microsoft.com/en-us/windows/desktop/debug/system-error-codes--1000-1299-
+	serviceControllerConnectionFailure = 1063
 )
 
 func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
@@ -50,16 +55,48 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 		},
 	})
 
+	// `IsAnInteractiveSession()` isn't exactly equivalent to "should the
+	// process run as a normal EXE?" There are legitimate non-service cases,
+	// like running cloudflared in a GCP startup script, for which
+	// `IsAnInteractiveSession()` returns false. For more context, see:
+	//     https://github.com/judwhite/go-svc/issues/6
+	// It seems that the "correct way" to check "is this a normal EXE?" is:
+	//     1. attempt to connect to the Service Control Manager
+	//     2. get ERROR_FAILED_SERVICE_CONTROLLER_CONNECT
+	// This involves actually trying to start the service.
+
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
 		logger.Fatalf("failed to determine if we are running in an interactive session: %v", err)
 	}
-
 	if isIntSess {
 		app.Run(os.Args)
 		return
 	}
 
+	// Run executes service name by calling windowsService which is a Handler
+	// interface that implements Execute method.
+	// It will set service status to stop after Execute returns
+	err = svc.Run(windowsServiceName, &windowsService{app: app, shutdownC: shutdownC, graceShutdownC: graceShutdownC})
+	if err != nil {
+		if errno, ok := err.(syscall.Errno); ok && int(errno) == serviceControllerConnectionFailure {
+			// Hack: assume this is a false negative from the IsAnInteractiveSession() check above.
+			// Run the app in "interactive" mode anyway.
+			app.Run(os.Args)
+			return
+		}
+		logger.Fatalf("%s service failed: %v", windowsServiceName, err)
+	}
+}
+
+type windowsService struct {
+	app            *cli.App
+	shutdownC      chan struct{}
+	graceShutdownC chan struct{}
+}
+
+// called by the package code at the start of the service
+func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
 	elog, err := eventlog.Open(windowsServiceName)
 	if err != nil {
 		logger.WithError(err).Errorf("Cannot open event log for %s", windowsServiceName)
@@ -68,26 +105,10 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	defer elog.Close()
 
 	elog.Info(1, fmt.Sprintf("%s service starting", windowsServiceName))
-	// Run executes service name by calling windowsService which is a Handler
-	// interface that implements Execute method.
-	// It will set service status to stop after Execute returns
-	err = svc.Run(windowsServiceName, &windowsService{app: app, elog: elog, shutdownC: shutdownC, graceShutdownC: graceShutdownC})
-	if err != nil {
-		elog.Error(1, fmt.Sprintf("%s service failed: %v", windowsServiceName, err))
-		return
-	}
-	elog.Info(1, fmt.Sprintf("%s service stopped", windowsServiceName))
-}
+	defer func() {
+		elog.Info(1, fmt.Sprintf("%s service stopped", windowsServiceName))
+	}()
 
-type windowsService struct {
-	app            *cli.App
-	elog           *eventlog.Log
-	shutdownC      chan struct{}
-	graceShutdownC chan struct{}
-}
-
-// called by the package code at the start of the service
-func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
 	// the arguments passed here are only meaningful if they were manually
 	// specified by the user, e.g. using the Services console or `sc start`.
 	// https://docs.microsoft.com/en-us/windows/desktop/services/service-entry-point
@@ -99,7 +120,7 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 		// fall back to the arguments from ImagePath (or, as sc calls it, binPath)
 		args = os.Args
 	}
-	s.elog.Info(1, fmt.Sprintf("%s service arguments: %v", windowsServiceName, args))
+	elog.Info(1, fmt.Sprintf("%s service arguments: %v", windowsServiceName, args))
 
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	statusChan <- svc.Status{State: svc.StartPending}
@@ -114,26 +135,26 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Interrogate:
-				s.elog.Info(1, fmt.Sprintf("control request 1 #%d", c))
+				elog.Info(1, fmt.Sprintf("control request 1 #%d", c))
 				statusChan <- c.CurrentStatus
 			case svc.Stop:
-				s.elog.Info(1, "received stop control request")
+				elog.Info(1, "received stop control request")
 				close(s.graceShutdownC)
 				statusChan <- svc.Status{State: svc.StopPending}
 			case svc.Shutdown:
-				s.elog.Info(1, "received shutdown control request")
+				elog.Info(1, "received shutdown control request")
 				close(s.shutdownC)
 				statusChan <- svc.Status{State: svc.StopPending}
 			default:
-				s.elog.Error(1, fmt.Sprintf("unexpected control request #%d", c))
+				elog.Error(1, fmt.Sprintf("unexpected control request #%d", c))
 			}
 		case err := <-errC:
 			ssec = true
 			if err != nil {
-				s.elog.Error(1, fmt.Sprintf("cloudflared terminated with error %v", err))
+				elog.Error(1, fmt.Sprintf("cloudflared terminated with error %v", err))
 				errno = 1
 			} else {
-				s.elog.Info(1, "cloudflared terminated without error")
+				elog.Info(1, "cloudflared terminated without error")
 				errno = 0
 			}
 			return
