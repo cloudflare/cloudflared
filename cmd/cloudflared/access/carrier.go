@@ -22,6 +22,12 @@ func ssh(c *cli.Context) error {
 		return cli.ShowCommandHelp(c, "ssh")
 	}
 	headers := buildRequestHeaders(c.StringSlice("header"))
+	if c.IsSet("service-token-id") {
+		headers.Add("CF-Access-Client-Id", c.String("service-token-id"))
+	}
+	if c.IsSet("service-token-secret") {
+		headers.Add("CF-Access-Client-Secret", c.String("service-token-secret"))
+	}
 
 	if c.NArg() > 0 || c.IsSet("url") {
 		localForwarder, err := config.ValidateUrl(c)

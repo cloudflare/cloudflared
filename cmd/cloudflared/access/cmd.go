@@ -93,14 +93,27 @@ func Commands() []*cli.Command {
 					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name: "hostname",
+							Name:  "hostname",
+							Usage: "specifics the hostname of your application.",
 						},
 						&cli.StringFlag{
-							Name: "url",
+							Name:  "url",
+							Usage: "specifics the host:port to forward data to Cloudflare edge.",
 						},
 						&cli.StringSliceFlag{
 							Name:    "header",
 							Aliases: []string{"H"},
+							Usage:   "specific additional headers you wish to send.",
+						},
+						&cli.StringSliceFlag{
+							Name:    "service-token-id",
+							Aliases: []string{"id"},
+							Usage:   "specific an Access service token ID you wish to use.",
+						},
+						&cli.StringSliceFlag{
+							Name:    "service-token-secret",
+							Aliases: []string{"secret"},
+							Usage:   "specific an Access service token secret you wish to use.",
 						},
 					},
 				},
