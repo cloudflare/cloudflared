@@ -63,7 +63,17 @@ func FindDefaultConfigPath() string {
 	return ""
 }
 
+// ValidateUnixSocket ensures --unix-socket param is used exclusively
+// i.e. it fails if a user specifies both --url and --unix-socket
+func ValidateUnixSocket(c *cli.Context) (string, error) {
+	if c.IsSet("unix-socket") && (c.IsSet("url") || c.NArg() > 0) {
+		return "", errors.New("--unix-socket must be used exclusivly.")
+	}
+	return c.String("unix-socket"), nil
+}
+
 // ValidateUrl will validate url flag correctness. It can be either from --url or argument
+// Notice ValidateUnixSocket, it will enforce --unix-socket is not used with --url or argument
 func ValidateUrl(c *cli.Context) (string, error) {
 	var url = c.String("url")
 	if c.NArg() > 0 {
