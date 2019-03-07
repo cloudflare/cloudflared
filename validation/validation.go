@@ -14,7 +14,7 @@ import (
 
 const defaultScheme = "http"
 
-var supportedProtocol = [2]string{"http", "https"}
+var supportedProtocol = [2]string{"http", "https", "rdp"}
 
 func ValidateHostname(hostname string) (string, error) {
 	if hostname == "" {
