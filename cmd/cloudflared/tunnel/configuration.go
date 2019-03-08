@@ -70,8 +70,16 @@ func logClientOptions(c *cli.Context) {
 	for _, flag := range c.LocalFlagNames() {
 		flags[flag] = c.Generic(flag)
 	}
+
+	sliceFlags := []string{"header", "tag", "proxy-dns-upstream", "upstream", "edge"}
+	for _, sliceFlag := range sliceFlags {
+		if len(c.StringSlice(sliceFlag)) > 0 {
+			flags[sliceFlag] = strings.Join(c.StringSlice(sliceFlag), ", ")
+		}
+	}
+
 	if len(flags) > 0 {
-		logger.Infof("Flags %v", flags)
+		logger.WithFields(flags).Info("Flags")
 	}
 
 	envs := make(map[string]string)
