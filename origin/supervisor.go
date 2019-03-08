@@ -124,7 +124,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, u 
 
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal, u uuid.UUID) error {
 	logger := s.config.Logger
-	edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
+	edgeIPs, err := ResolveEdgeIPs(logger, s.config.EdgeAddrs)
 	if err != nil {
 		logger.Infof("ResolveEdgeIPs err")
 		return err
@@ -223,7 +223,7 @@ func (s *Supervisor) refreshEdgeIPs() {
 	}
 	s.resolverC = make(chan resolveResult)
 	go func() {
-		edgeIPs, err := ResolveEdgeIPs(s.config.EdgeAddrs)
+		edgeIPs, err := ResolveEdgeIPs(s.config.Logger, s.config.EdgeAddrs)
 		s.resolverC <- resolveResult{edgeIPs: edgeIPs, err: err}
 	}()
 }

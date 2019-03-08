@@ -1,8 +1,14 @@
 package origin
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
+	"time"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -10,9 +16,25 @@ const (
 	srvService = "warp"
 	srvProto   = "tcp"
 	srvName    = "cloudflarewarp.com"
+
+	// Used to fallback to DoT when we can't use the default resolver to
+	// discover HA Warp servers (GitHub issue #75).
+	dotServerName = "cloudflare-dns.com"
+	dotServerAddr = "1.1.1.1:853"
+	dotTimeout    = time.Duration(15 * time.Second)
 )
 
-func ResolveEdgeIPs(addresses []string) ([]*net.TCPAddr, error) {
+var friendlyDNSErrorLines = []string{
+	`Please try the following things to diagnose this issue:`,
+	`  1. ensure that cloudflarewarp.com is returning "warp" service records.`,
+	`     Run your system's equivalent of: dig srv _warp._tcp.cloudflarewarp.com`,
+	`  2. ensure that your DNS resolver is not returning compressed SRV records.`,
+	`     See GitHub issue https://github.com/golang/go/issues/27546`,
+	`     For example, you could use Cloudflare's 1.1.1.1 as your resolver:`,
+	`     https://developers.cloudflare.com/1.1.1.1/setting-up-1.1.1.1/`,
+}
+
+func ResolveEdgeIPs(logger *log.Logger, addresses []string) ([]*net.TCPAddr, error) {
 	if len(addresses) > 0 {
 		var tcpAddrs []*net.TCPAddr
 		for _, address := range addresses {
@@ -28,7 +50,30 @@ func ResolveEdgeIPs(addresses []string) ([]*net.TCPAddr, error) {
 	// HA service discovery lookup
 	_, addrs, err := net.LookupSRV(srvService, srvProto, srvName)
 	if err != nil {
-		return nil, err
+		// Try to fall back to DoT from Cloudflare directly.
+		//
+		// Note: Instead of DoT, we could also have used DoH. Either of these:
+		//     - directly via the JSON API (https://1.1.1.1/dns-query?ct=application/dns-json&name=_warp._tcp.cloudflarewarp.com&type=srv)
+		//     - indirectly via `tunneldns.NewUpstreamHTTPS()`
+		// But both of these cases miss out on a key feature from the stdlib:
+		//     "The returned records are sorted by priority and randomized by weight within a priority."
+		//     (https://golang.org/pkg/net/#Resolver.LookupSRV)
+		// Does this matter? I don't know. It may someday. Let's use DoT so we don't need to worry about it.
+		// See also: Go feature request for stdlib-supported DoH: https://github.com/golang/go/issues/27552
+		r := fallbackResolver(dotServerName, dotServerAddr)
+		ctx, cancel := context.WithTimeout(context.Background(), dotTimeout)
+		defer cancel()
+		_, fallbackAddrs, fallbackErr := r.LookupSRV(ctx, srvService, srvProto, srvName)
+		if fallbackErr != nil || len(fallbackAddrs) == 0 {
+			// use the original DNS error `err` in messages, not `fallbackErr`
+			logger.Errorln("Error looking up Cloudflare edge IPs: the DNS query failed:", err)
+			for _, s := range friendlyDNSErrorLines {
+				logger.Errorln(s)
+			}
+			return nil, errors.Wrap(err, "Could not lookup srv records on _warp._tcp.cloudflarewarp.com")
+		}
+		// Accept the fallback results and keep going
+		addrs = fallbackAddrs
 	}
 	var resolvedIPsPerCNAME [][]*net.TCPAddr
 	var lookupErr error
@@ -79,4 +124,20 @@ func FlattenServiceIPs(ipsByService [][]*net.TCPAddr) []*net.TCPAddr {
 		ipsByService = filtered
 	}
 	return result
+}
+
+// Inspiration: https://github.com/artyom/dot/blob/master/dot.go
+func fallbackResolver(serverName, serverAddress string) *net.Resolver {
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, _ string, _ string) (net.Conn, error) {
+			var dialer net.Dialer
+			conn, err := dialer.DialContext(ctx, "tcp", serverAddress)
+			if err != nil {
+				return nil, err
+			}
+			tlsConfig := &tls.Config{ServerName: serverName}
+			return tls.Client(conn, tlsConfig), nil
+		},
+	}
 }

@@ -146,7 +146,7 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 	if config.HAConnections > 1 {
 		return NewSupervisor(config).Run(ctx, connectedSignal, u)
 	} else {
-		addrs, err := ResolveEdgeIPs(config.EdgeAddrs)
+		addrs, err := ResolveEdgeIPs(config.Logger, config.EdgeAddrs)
 		if err != nil {
 			return err
 		}
