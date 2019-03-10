@@ -14,7 +14,7 @@ import (
 
 const defaultScheme = "http"
 
-var supportedProtocol = [2]string{"http", "https"}
+var supportedProtocols = []string{"http", "https", "rdp"}
 
 func ValidateHostname(hostname string) (string, error) {
 	if hostname == "" {
@@ -117,7 +117,7 @@ func ValidateUrl(originUrl string) (string, error) {
 }
 
 func validateScheme(scheme string) error {
-	for _, protocol := range supportedProtocol {
+	for _, protocol := range supportedProtocols {
 		if scheme == protocol {
 			return nil
 		}
