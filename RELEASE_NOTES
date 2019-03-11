@@ -1,3 +1,14 @@
+2019.3.0
+- 2018-12-28 make http transport aware of proxy from envvar
+- 2019-02-28 TUN-1559: fix nil dereference in TunnelConfig.CloseConnOnce
+- 2019-03-04 TUN-1451: Make non-interactive, non-service execution possible on Windows
+- 2019-03-04 TUN-1562: Refactor connectedSignal to be safe to close multiple times
+- 2019-02-27 TUN-1550: Add validation timeout for non-responsive origins
+- 2019-03-06 AUTH-1531: Named flags for ssh service tokens
+- 2019-02-14 Support unix sockets.
+- 2019-03-08 TUN-1389: Non-scalar flags in a cloudflared config.yml don't get logged
+- 2019-03-07 TUN-1522: If we can't get SRV from default resolver, get them from 1.1.1.1 DoT
+
 2019.2.1
 - 2019-02-14 TUN-1381:  should tell you if you're on the latest version rather than just exiting silently
 - 2019-02-15 TUN-1467: build with Go 1.11
