@@ -16,7 +16,7 @@ import (
 const defaultScheme = "http"
 
 var (
-	supportedProtocol = [2]string{"http", "https"}
+	supportedProtocols = []string{"http", "https", "rdp"}
 	validationTimeout = time.Duration(30 * time.Second)
 )
 
@@ -121,7 +121,7 @@ func ValidateUrl(originUrl string) (string, error) {
 }
 
 func validateScheme(scheme string) error {
-	for _, protocol := range supportedProtocol {
+	for _, protocol := range supportedProtocols {
 		if scheme == protocol {
 			return nil
 		}
