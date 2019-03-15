@@ -53,6 +53,7 @@ type TunnelMetrics struct {
 
 	regSuccess prometheus.Counter
 	regFail    *prometheus.CounterVec
+	rpcFail    *prometheus.CounterVec
 
 	muxerMetrics *muxerMetrics
 	tunnelsHA    tunnelsForHA
@@ -345,6 +346,15 @@ func NewTunnelMetrics() *TunnelMetrics {
 	)
 	prometheus.MustRegister(serverLocations)
 
+	rpcFail := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "tunnel_rpc_fail",
+			Help: "Count of RPC connection errors by type",
+		},
+		[]string{"error"},
+	)
+	prometheus.MustRegister(rpcFail)
+
 	registerFail := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "tunnel_register_fail",
@@ -378,6 +388,7 @@ func NewTunnelMetrics() *TunnelMetrics {
 		tunnelsHA:                      NewTunnelsForHA(),
 		regSuccess:                     registerSuccess,
 		regFail:                        registerFail,
+		rpcFail:                        rpcFail,
 	}
 }
 

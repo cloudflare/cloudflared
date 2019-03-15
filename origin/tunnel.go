@@ -24,6 +24,7 @@ import (
 	raven "github.com/getsentry/raven-go"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	_ "github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -103,6 +104,11 @@ func (e serverRegisterTunnelError) Error() string {
 // RegisterTunnel error from client
 type clientRegisterTunnelError struct {
 	cause error
+}
+
+func newClientRegisterTunnelError(cause error, counter *prometheus.CounterVec) clientRegisterTunnelError {
+	counter.WithLabelValues(cause.Error()).Inc()
+	return clientRegisterTunnelError{cause: cause}
 }
 
 func (e clientRegisterTunnelError) Error() string {
@@ -323,11 +329,11 @@ func RegisterTunnel(
 	}, nil)
 	if err != nil {
 		// RPC stream open error
-		return clientRegisterTunnelError{cause: err}
+		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
 	}
 	if !IsRPCStreamResponse(stream.Headers) {
 		// stream response error
-		return clientRegisterTunnelError{cause: err}
+		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
 	}
 	conn := rpc.NewConn(
 		tunnelrpc.NewTransportLogger(config.TransportLogger.WithField("subsystem", "rpc-register"), rpc.StreamTransport(stream)),
@@ -349,7 +355,7 @@ func RegisterTunnel(
 	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, config.Logger)
 	if err != nil {
 		// RegisterTunnel RPC failure
-		return clientRegisterTunnelError{cause: err}
+		return newClientRegisterTunnelError(err, config.Metrics.regFail)
 	}
 	for _, logLine := range registration.LogLines {
 		config.Logger.Info(logLine)
