@@ -1,3 +1,8 @@
+2019.3.1
+- 2019-03-09 Add rdp as a supported protocol in URL validation (#76)
+- 2019-03-15 TUN-1613: improved cloudflared RegisterTunnel fail metrics
+- 2019-03-17 TUN-1615: revert miekg/dns to last known working revision
+
 2019.3.0
 - 2018-12-28 make http transport aware of proxy from envvar
 - 2019-02-28 TUN-1559: fix nil dereference in TunnelConfig.CloseConnOnce
