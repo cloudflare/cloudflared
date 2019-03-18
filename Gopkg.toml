@@ -81,3 +81,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/cloudflare/golibs"
+
+[[constraint]]
+  name = "github.com/google/uuid"
+  version = "v1.1.1"

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -36,6 +37,7 @@ const (
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
+	isDeclarativeTunnel      = false
 )
 
 type TunnelConfig struct {
@@ -151,9 +153,24 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 
 	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
 	if config.HAConnections > 1 {
+		if isDeclarativeTunnel {
+			return connection.NewSupervisor(&connection.CloudflaredConfig{
+				ConnectionConfig: &connection.ConnectionConfig{
+					TLSConfig:         config.TlsConfig,
+					HeartbeatInterval: config.HeartbeatInterval,
+					MaxHeartbeats:     config.MaxHeartbeats,
+					Logger:            config.Logger.WithField("subsystem", "connection_supervisor"),
+				},
+				OriginCert:    config.OriginCert,
+				Tags:          config.Tags,
+				EdgeAddrs:     config.EdgeAddrs,
+				HAConnections: uint(config.HAConnections),
+				Logger:        config.Logger,
+			}).Run(ctx)
+		}
 		return NewSupervisor(config).Run(ctx, connectedSignal, u)
 	} else {
-		addrs, err := ResolveEdgeIPs(config.Logger, config.EdgeAddrs)
+		addrs, err := connection.ResolveEdgeIPs(config.Logger, config.EdgeAddrs)
 		if err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-package origin
+package connection
 
 import (
 	"context"
