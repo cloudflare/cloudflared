@@ -2,8 +2,10 @@ package pogs
 
 import (
 	"context"
+	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/google/uuid"
 
 	log "github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2"
@@ -71,6 +73,80 @@ func UnmarshalRegistrationOptions(s tunnelrpc.RegistrationOptions) (*Registratio
 	return p, err
 }
 
+type ServerHello struct {
+	ConnectResult *ConnectResult
+	CloudflaredID uuid.UUID
+}
+
+// CapnpServerHello is ServerHello respresented in Cap'n Proto build-in types
+type CapnpServerHello struct {
+	ConnectResult *ConnectResult
+	CloudflaredID []byte
+}
+
+func MarshalServerHello(s tunnelrpc.CapnpServerHello, p *ServerHello) error {
+	cloudflaredIDBytes, err := p.CloudflaredID.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	capnpServerHello := &CapnpServerHello{
+		ConnectResult: p.ConnectResult,
+		CloudflaredID: cloudflaredIDBytes,
+	}
+	return pogs.Insert(tunnelrpc.CapnpServerHello_TypeID, s.Struct, capnpServerHello)
+}
+
+func UnmarshalServerHello(s tunnelrpc.CapnpServerHello) (*ServerHello, error) {
+	p := new(CapnpServerHello)
+	err := pogs.Extract(p, tunnelrpc.CapnpServerHello_TypeID, s.Struct)
+	if err != nil {
+		return nil, err
+	}
+	cloudflaredID, err := uuid.FromBytes(p.CloudflaredID)
+	if err != nil {
+		log.Errorf("fail to unmarshal %+v", p.CloudflaredID)
+		return nil, err
+	}
+	return &ServerHello{
+		ConnectResult: p.ConnectResult,
+		CloudflaredID: cloudflaredID,
+	}, nil
+}
+
+type ConnectResult struct {
+	Err        *ConnectError
+	ServerInfo ServerInfo
+}
+
+func MarshalConnectResult(s tunnelrpc.ConnectResult, p *ConnectResult) error {
+	return pogs.Insert(tunnelrpc.ConnectResult_TypeID, s.Struct, p)
+}
+
+func UnmarshalConnectResult(s tunnelrpc.ConnectResult) (*ConnectResult, error) {
+	p := new(ConnectResult)
+	err := pogs.Extract(p, tunnelrpc.ConnectResult_TypeID, s.Struct)
+	return p, err
+}
+
+type ConnectError struct {
+	Cause      string
+	RetryAfter time.Duration
+}
+
+func MarshalConnectError(s tunnelrpc.ConnectError, p *ConnectError) error {
+	return pogs.Insert(tunnelrpc.ConnectError_TypeID, s.Struct, p)
+}
+
+func UnmarshalConnectError(s tunnelrpc.ConnectError) (*ConnectError, error) {
+	p := new(ConnectError)
+	err := pogs.Extract(p, tunnelrpc.ConnectError_TypeID, s.Struct)
+	return p, err
+}
+
+func (e *ConnectError) Error() string {
+	return e.Cause
+}
+
 type Tag struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -90,10 +166,71 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 	return p, err
 }
 
+type HelloParameters struct {
+	OriginCert          []byte
+	Tags                []Tag
+	NumPreviousAttempts uint8
+}
+
+func MarshalHelloParameters(s tunnelrpc.HelloParameters, p *HelloParameters) error {
+	return pogs.Insert(tunnelrpc.HelloParameters_TypeID, s.Struct, p)
+}
+
+func UnmarshalHelloParameters(s tunnelrpc.HelloParameters) (*HelloParameters, error) {
+	p := new(HelloParameters)
+	err := pogs.Extract(p, tunnelrpc.HelloParameters_TypeID, s.Struct)
+	return p, err
+}
+
+type ConnectParameters struct {
+	OriginCert          []byte
+	CloudflaredID       uuid.UUID
+	NumPreviousAttempts uint8
+}
+
+// CapnpConnectParameters is ConnectParameters represented in Cap'n Proto build-in types
+type CapnpConnectParameters struct {
+	OriginCert          []byte
+	CloudflaredID       []byte
+	NumPreviousAttempts uint8
+}
+
+func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectParameters) error {
+	cloudflaredIDBytes, err := p.CloudflaredID.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	capnpConnectParameters := &CapnpConnectParameters{
+		OriginCert:          p.OriginCert,
+		CloudflaredID:       cloudflaredIDBytes,
+		NumPreviousAttempts: p.NumPreviousAttempts,
+	}
+	return pogs.Insert(tunnelrpc.CapnpConnectParameters_TypeID, s.Struct, capnpConnectParameters)
+}
+
+func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectParameters, error) {
+	p := new(CapnpConnectParameters)
+	err := pogs.Extract(p, tunnelrpc.CapnpConnectParameters_TypeID, s.Struct)
+	if err != nil {
+		return nil, err
+	}
+	cloudflaredID, err := uuid.FromBytes(p.CloudflaredID)
+	if err != nil {
+		return nil, err
+	}
+	return &ConnectParameters{
+		OriginCert:          p.OriginCert,
+		CloudflaredID:       cloudflaredID,
+		NumPreviousAttempts: p.NumPreviousAttempts,
+	}, nil
+}
+
 type TunnelServer interface {
 	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
 	UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error
+	Hello(ctx context.Context, parameters *HelloParameters) (*ServerHello, error)
+	Connect(ctx context.Context, paramaters *ConnectParameters) (*ConnectResult, error)
 }
 
 func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {
@@ -151,7 +288,48 @@ func (i TunnelServer_PogsImpl) UnregisterTunnel(p tunnelrpc.TunnelServer_unregis
 	gracePeriodNanoSec := p.Params.GracePeriodNanoSec()
 	server.Ack(p.Options)
 	return i.impl.UnregisterTunnel(p.Ctx, gracePeriodNanoSec)
+}
 
+func (i TunnelServer_PogsImpl) Hello(p tunnelrpc.TunnelServer_hello) error {
+	parameters, err := p.Params.Parameters()
+	if err != nil {
+		return err
+	}
+	pogsParameters, err := UnmarshalHelloParameters(parameters)
+	if err != nil {
+		return err
+	}
+	server.Ack(p.Options)
+	serverHello, err := i.impl.Hello(p.Ctx, pogsParameters)
+	if err != nil {
+		return err
+	}
+	result, err := p.Results.NewResult()
+	if err != nil {
+		return err
+	}
+	return MarshalServerHello(result, serverHello)
+}
+
+func (i TunnelServer_PogsImpl) Connect(p tunnelrpc.TunnelServer_connect) error {
+	paramaters, err := p.Params.Parameters()
+	if err != nil {
+		return err
+	}
+	pogsParameters, err := UnmarshalConnectParameters(paramaters)
+	if err != nil {
+		return err
+	}
+	server.Ack(p.Options)
+	connectResult, err := i.impl.Connect(p.Ctx, pogsParameters)
+	if err != nil {
+		return err
+	}
+	result, err := p.Results.NewResult()
+	if err != nil {
+		return err
+	}
+	return MarshalConnectResult(result, connectResult)
 }
 
 type TunnelServer_PogsClient struct {
@@ -211,4 +389,48 @@ func (c TunnelServer_PogsClient) UnregisterTunnel(ctx context.Context, gracePeri
 	})
 	_, err := promise.Struct()
 	return err
+}
+
+func (c TunnelServer_PogsClient) Hello(ctx context.Context,
+	parameters *HelloParameters,
+) (*ServerHello, error) {
+	client := tunnelrpc.TunnelServer{Client: c.Client}
+	promise := client.Hello(ctx, func(p tunnelrpc.TunnelServer_hello_Params) error {
+		helloParameters, err := p.NewParameters()
+		if err != nil {
+			return err
+		}
+		err = MarshalHelloParameters(helloParameters, parameters)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	retval, err := promise.Result().Struct()
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalServerHello(retval)
+}
+
+func (c TunnelServer_PogsClient) Connect(ctx context.Context,
+	parameters *ConnectParameters,
+) (*ConnectResult, error) {
+	client := tunnelrpc.TunnelServer{Client: c.Client}
+	promise := client.Connect(ctx, func(p tunnelrpc.TunnelServer_connect_Params) error {
+		connectParameters, err := p.NewParameters()
+		if err != nil {
+			return err
+		}
+		err = MarshalConnectParameters(connectParameters, parameters)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	retval, err := promise.Result().Struct()
+	if err != nil {
+		return nil, err
+	}
+	return UnmarshalConnectResult(retval)
 }

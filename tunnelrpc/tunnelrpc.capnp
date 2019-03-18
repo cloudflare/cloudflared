@@ -46,6 +46,43 @@ struct RegistrationOptions {
     uuid @11 :Text;
 }
 
+struct HelloParameters {
+    # certificate and token to prove ownership of a zone
+    originCert @0 :Data;
+    # user defined labels for this cloudflared
+    tags @1 :List(Tag);
+    # number of previous attempts to send Hello
+    numPreviousAttempts @2 :UInt8;
+}
+
+struct CapnpConnectParameters {
+    # certificate and token to prove ownership of a zone
+    originCert @0 :Data; 
+    # UUID assigned to this cloudflared obtained from Hello
+    cloudflaredID @1 :Data; 
+    # number of previous attempts to send Connect
+    numPreviousAttempts @2 :UInt8;
+}
+
+struct CapnpServerHello {
+    connectResult @0 :ConnectResult;
+    # UUID assigned to this cloudflared
+    cloudflaredID @1 :Data;
+}
+
+struct ConnectResult {
+    err @0 :ConnectError;
+    # Information about the server this connection is established with
+    serverInfo @1 :ServerInfo;
+}
+
+struct ConnectError {
+    cause @0 :Text;
+    # How long should this connection wait to retry in ns
+    retryAfter @1 :Int64;
+    shoudRetry @2 :Bool;
+}
+
 struct Tag {
     name @0 :Text;
     value @1 :Text;
@@ -65,4 +102,8 @@ interface TunnelServer {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
+    # originCert is used to verify ownership of a zone and hostnames it can serve
+    # tags are client-defined tags to associate with the cloudflared
+    hello @3(parameters :HelloParameters) -> (result: CapnpServerHello);
+    connect @4(parameters :CapnpConnectParameters) -> (result :ConnectResult);
 }
