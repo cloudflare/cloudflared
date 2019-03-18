@@ -59,6 +59,10 @@
   branch = "master"
 
 [[constraint]]
+  name = "github.com/miekg/dns"
+  revision = "6da3249dfb57fbaa16efafcd8744cee8809d80cd"
+
+[[constraint]]
   name = "github.com/cloudflare/brotli-go"
   branch = "master"
 

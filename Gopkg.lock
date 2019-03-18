@@ -281,12 +281,14 @@
   revision = "d3b731e9255b72d4571a5aac125634cf1b6031dc"
 
 [[projects]]
-  digest = "1:463e4140189f8194f9121ca1c7fe3b8e9e9a2ab3d949b43c835c21034927dc62"
+  digest = "1:73f788f2df39614dd7d9e75c8ca5fb8b4a68937b5e6d4a15e4c3a596f6f8c07b"
   name = "github.com/miekg/dns"
-  packages = ["."]
+  packages = [
+    ".",
+    "internal/socket",
+  ]
   pruneopts = "UT"
-  revision = "5a2b9fab83ff0f8bfc99684bd5f43a37abe560f1"
-  version = "v1.0.8"
+  revision = "6da3249dfb57fbaa16efafcd8744cee8809d80cd"
 
 [[projects]]
   branch = "master"
@@ -412,20 +414,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:011ee76ffb757c7c91a3e61cf5d6f367d1fd5dd08e16a4e6ae688e7759f8509a"
+  digest = "1:9513f8a0f1f6918181b7d744225b1931ffacafeb57067a1c26893a51058afb80"
   name = "golang.org/x/net"
   packages = [
-    "bpf",
     "context",
     "http/httpguts",
     "http2",
     "http2/hpack",
     "idna",
-    "internal/iana",
-    "internal/socket",
     "internal/timeseries",
-    "ipv4",
-    "ipv6",
     "trace",
     "websocket",
   ]

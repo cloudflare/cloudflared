@@ -595,13 +595,6 @@ func UnpackRR(msg []byte, off int) (rr RR, off1 int, err error) {
 	if err != nil {
 		return nil, len(msg), err
 	}
-
-	return UnpackRRWithHeader(h, msg, off)
-}
-
-// UnpackRRWithHeader unpacks the record type specific payload given an existing
-// RR_Header.
-func UnpackRRWithHeader(h RR_Header, msg []byte, off int) (rr RR, off1 int, err error) {
 	end := off + int(h.Rdlength)
 
 	if fn, known := typeToUnpack[h.Rrtype]; !known {
@@ -619,8 +612,8 @@ func UnpackRRWithHeader(h RR_Header, msg []byte, off int) (rr RR, off1 int, err 
 // If we cannot unpack the whole array, then it will return nil
 func unpackRRslice(l int, msg []byte, off int) (dst1 []RR, off1 int, err error) {
 	var r RR
-	// Don't pre-allocate, l may be under attacker control
-	var dst []RR
+	// Optimistically make dst be the length that was sent
+	dst := make([]RR, 0, l)
 	for i := 0; i < l; i++ {
 		off1 := off
 		r, off, err = UnpackRR(msg, off)
@@ -691,20 +684,18 @@ func (dns *Msg) Pack() (msg []byte, err error) {
 	return dns.PackBuffer(nil)
 }
 
-// PackBuffer packs a Msg, using the given buffer buf. If buf is too small a new buffer is allocated.
+// PackBuffer packs a Msg, using the given buffer buf. If buf is too small
+// a new buffer is allocated.
 func (dns *Msg) PackBuffer(buf []byte) (msg []byte, err error) {
-	var compression map[string]int
-	if dns.Compress {
-		compression = make(map[string]int) // Compression pointer mappings.
-	}
-	return dns.packBufferWithCompressionMap(buf, compression)
-}
-
-// packBufferWithCompressionMap packs a Msg, using the given buffer buf.
-func (dns *Msg) packBufferWithCompressionMap(buf []byte, compression map[string]int) (msg []byte, err error) {
 	// We use a similar function in tsig.go's stripTsig.
+	var (
+		dh          Header
+		compression map[string]int
+	)
 
-	var dh Header
+	if dns.Compress {
+		compression = make(map[string]int) // Compression pointer mappings
+	}
 
 	if dns.Rcode < 0 || dns.Rcode > 0xFFF {
 		return nil, ErrRcode
@@ -716,11 +707,12 @@ func (dns *Msg) packBufferWithCompressionMap(buf []byte, compression map[string]
 			return nil, ErrExtendedRcode
 		}
 		opt.SetExtendedRcode(uint8(dns.Rcode >> 4))
+		dns.Rcode &= 0xF
 	}
 
 	// Convert convenient Msg into wire-like Header.
 	dh.Id = dns.Id
-	dh.Bits = uint16(dns.Opcode)<<11 | uint16(dns.Rcode&0xF)
+	dh.Bits = uint16(dns.Opcode)<<11 | uint16(dns.Rcode)
 	if dns.Response {
 		dh.Bits |= _QR
 	}
@@ -819,19 +811,13 @@ func (dns *Msg) Unpack(msg []byte) (err error) {
 	dns.CheckingDisabled = (dh.Bits & _CD) != 0
 	dns.Rcode = int(dh.Bits & 0xF)
 
-	// If we are at the end of the message we should return *just* the
-	// header. This can still be useful to the caller. 9.9.9.9 sends these
-	// when responding with REFUSED for instance.
 	if off == len(msg) {
-		// reset sections before returning
-		dns.Question, dns.Answer, dns.Ns, dns.Extra = nil, nil, nil, nil
-		return nil
+		return ErrTruncated
 	}
 
-	// Qdcount, Ancount, Nscount, Arcount can't be trusted, as they are
-	// attacker controlled. This means we can't use them to pre-allocate
-	// slices.
-	dns.Question = nil
+	// Optimistically use the count given to us in the header
+	dns.Question = make([]Question, 0, int(dh.Qdcount))
+
 	for i := 0; i < int(dh.Qdcount); i++ {
 		off1 := off
 		var q Question
@@ -923,138 +909,94 @@ func (dns *Msg) String() string {
 // than packing it, measuring the size and discarding the buffer.
 func (dns *Msg) Len() int { return compressedLen(dns, dns.Compress) }
 
-func compressedLenWithCompressionMap(dns *Msg, compression map[string]int) int {
-	l := 12 // Message header is always 12 bytes
-	for _, r := range dns.Question {
-		compressionLenHelper(compression, r.Name, l)
-		l += r.len()
-	}
-	l += compressionLenSlice(l, compression, dns.Answer)
-	l += compressionLenSlice(l, compression, dns.Ns)
-	l += compressionLenSlice(l, compression, dns.Extra)
-	return l
-}
-
 // compressedLen returns the message length when in compressed wire format
 // when compress is true, otherwise the uncompressed length is returned.
 func compressedLen(dns *Msg, compress bool) int {
 	// We always return one more than needed.
+	l := 12 // Message header is always 12 bytes
 	if compress {
 		compression := map[string]int{}
-		return compressedLenWithCompressionMap(dns, compression)
-	}
-	l := 12 // Message header is always 12 bytes
-
-	for _, r := range dns.Question {
-		l += r.len()
-	}
-	for _, r := range dns.Answer {
-		if r != nil {
+		for _, r := range dns.Question {
+			l += r.len()
+			compressionLenHelper(compression, r.Name)
+		}
+		l += compressionLenSlice(compression, dns.Answer)
+		l += compressionLenSlice(compression, dns.Ns)
+		l += compressionLenSlice(compression, dns.Extra)
+	} else {
+		for _, r := range dns.Question {
 			l += r.len()
 		}
-	}
-	for _, r := range dns.Ns {
-		if r != nil {
-			l += r.len()
+		for _, r := range dns.Answer {
+			if r != nil {
+				l += r.len()
+			}
+		}
+		for _, r := range dns.Ns {
+			if r != nil {
+				l += r.len()
+			}
+		}
+		for _, r := range dns.Extra {
+			if r != nil {
+				l += r.len()
+			}
 		}
 	}
-	for _, r := range dns.Extra {
-		if r != nil {
-			l += r.len()
-		}
-	}
-
 	return l
 }
 
-func compressionLenSlice(lenp int, c map[string]int, rs []RR) int {
-	initLen := lenp
+func compressionLenSlice(c map[string]int, rs []RR) int {
+	var l int
 	for _, r := range rs {
 		if r == nil {
 			continue
 		}
-		// TmpLen is to track len of record at 14bits boudaries
-		tmpLen := lenp
-
-		x := r.len()
-		// track this length, and the global length in len, while taking compression into account for both.
-		k, ok, _ := compressionLenSearch(c, r.Header().Name)
+		l += r.len()
+		k, ok := compressionLenSearch(c, r.Header().Name)
 		if ok {
-			// Size of x is reduced by k, but we add 1 since k includes the '.' and label descriptor take 2 bytes
-			// so, basically x:= x - k - 1 + 2
-			x += 1 - k
+			l += 1 - k
 		}
-
-		tmpLen += compressionLenHelper(c, r.Header().Name, tmpLen)
-		k, ok, _ = compressionLenSearchType(c, r)
+		compressionLenHelper(c, r.Header().Name)
+		k, ok = compressionLenSearchType(c, r)
 		if ok {
-			x += 1 - k
+			l += 1 - k
 		}
-		lenp += x
-		tmpLen = lenp
-		tmpLen += compressionLenHelperType(c, r, tmpLen)
-
+		compressionLenHelperType(c, r)
 	}
-	return lenp - initLen
+	return l
 }
 
-// Put the parts of the name in the compression map, return the size in bytes added in payload
-func compressionLenHelper(c map[string]int, s string, currentLen int) int {
-	if currentLen > maxCompressionOffset {
-		// We won't be able to add any label that could be re-used later anyway
-		return 0
-	}
-	if _, ok := c[s]; ok {
-		return 0
-	}
-	initLen := currentLen
+// Put the parts of the name in the compression map.
+func compressionLenHelper(c map[string]int, s string) {
 	pref := ""
-	prev := s
 	lbs := Split(s)
-	for j := 0; j < len(lbs); j++ {
+	for j := len(lbs) - 1; j >= 0; j-- {
 		pref = s[lbs[j]:]
-		currentLen += len(prev) - len(pref)
-		prev = pref
 		if _, ok := c[pref]; !ok {
-			// If first byte label is within the first 14bits, it might be re-used later
-			if currentLen < maxCompressionOffset {
-				c[pref] = currentLen
-			}
-		} else {
-			added := currentLen - initLen
-			if j > 0 {
-				// We added a new PTR
-				added += 2
-			}
-			return added
+			c[pref] = len(pref)
 		}
 	}
-	return currentLen - initLen
 }
 
 // Look for each part in the compression map and returns its length,
 // keep on searching so we get the longest match.
-// Will return the size of compression found, whether a match has been
-// found and the size of record if added in payload
-func compressionLenSearch(c map[string]int, s string) (int, bool, int) {
+func compressionLenSearch(c map[string]int, s string) (int, bool) {
 	off := 0
 	end := false
 	if s == "" { // don't bork on bogus data
-		return 0, false, 0
+		return 0, false
 	}
-	fullSize := 0
 	for {
 		if _, ok := c[s[off:]]; ok {
-			return len(s[off:]), true, fullSize + off
+			return len(s[off:]), true
 		}
 		if end {
 			break
 		}
-		// Each label descriptor takes 2 bytes, add it
-		fullSize += 2
 		off, end = NextLabel(s, off)
 	}
-	return 0, false, fullSize + len(s)
+	return 0, false
 }
 
 // Copy returns a new RR which is a deep-copy of r.

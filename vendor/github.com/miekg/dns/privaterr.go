@@ -56,7 +56,8 @@ func (r *PrivateRR) len() int { return r.Hdr.len() + r.Data.Len() }
 func (r *PrivateRR) copy() RR {
 	// make new RR like this:
 	rr := mkPrivateRR(r.Hdr.Rrtype)
-	rr.Hdr = r.Hdr
+	newh := r.Hdr.copyHeader()
+	rr.Hdr = *newh
 
 	err := r.Data.Copy(rr.Data)
 	if err != nil {
