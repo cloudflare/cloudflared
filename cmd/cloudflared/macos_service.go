@@ -55,10 +55,7 @@ func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemp
 		<key>StandardErrorPath</key>
 		<string>%s</string>
 		<key>KeepAlive</key>
-		<dict>
-			<key>SuccessfulExit</key>
-			<false/>
-		</dict>
+		<true/>
 		<key>ThrottleInterval</key>
 		<integer>20</integer>
 	</dict>
