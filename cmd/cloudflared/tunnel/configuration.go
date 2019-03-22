@@ -156,6 +156,7 @@ func prepareTunnelConfig(
 		logger.WithError(err).Error("Invalid hostname")
 		return nil, errors.Wrap(err, "Invalid hostname")
 	}
+	isFreeTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
 		clientID = generateRandomClientID()
@@ -175,9 +176,12 @@ func prepareTunnelConfig(
 		return nil, errors.Wrap(err, "Error validating origin URL")
 	}
 
-	originCert, err := getOriginCert(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error getting origin cert")
+	var originCert []byte
+	if !isFreeTunnel {
+		originCert, err = getOriginCert(c)
+		if err != nil {
+			return nil, errors.Wrap(err, "Error getting origin cert")
+		}
 	}
 
 	originCertPool, err := loadCertPool(c, logger)
@@ -262,6 +266,7 @@ func prepareTunnelConfig(
 		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
 		CompressionQuality: c.Uint64("compression-quality"),
 		IncidentLookup:     origin.NewIncidentLookup(),
+		IsFreeTunnel:       isFreeTunnel,
 	}, nil
 }
 

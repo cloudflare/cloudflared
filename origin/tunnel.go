@@ -69,6 +69,7 @@ type TunnelConfig struct {
 	CompressionQuality uint64
 	IncidentLookup     IncidentLookup
 	CloseConnOnce      *sync.Once // Used to close connectedSignal no more than once
+	IsFreeTunnel       bool
 }
 
 type dialError struct {
