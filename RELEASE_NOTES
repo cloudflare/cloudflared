@@ -1,3 +1,7 @@
+2019.3.2
+- 2019-03-22 TUN-1637: Free tunnels shouldn't require cert.pem
+- 2019-03-18 TUN-1604: Define Connect RPC call
+
 2019.3.1
 - 2019-03-09 Add rdp as a supported protocol in URL validation (#76)
 - 2019-03-15 TUN-1613: improved cloudflared RegisterTunnel fail metrics
