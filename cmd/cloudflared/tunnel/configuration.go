@@ -4,10 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -21,13 +19,13 @@ import (
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
-	"golang.org/x/crypto/ssh/terminal"
 
-	"github.com/sirupsen/logrus"
-	"gopkg.in/urfave/cli.v2"
-
+	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh/terminal"
+	"gopkg.in/urfave/cli.v2"
 )
 
 var (
@@ -49,11 +47,13 @@ func findDefaultOriginCertPath() string {
 	return ""
 }
 
-func generateRandomClientID() string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	id := make([]byte, 32)
-	r.Read(id)
-	return hex.EncodeToString(id)
+func generateRandomClientID(logger *logrus.Logger) (string, error) {
+	u, err := uuid.NewRandom()
+	if err != nil {
+		logger.WithError(err).Error("couldn't create UUID for client ID")
+		return "", err
+	}
+	return u.String(), nil
 }
 
 func handleDeprecatedOptions(c *cli.Context) error {
@@ -159,7 +159,10 @@ func prepareTunnelConfig(
 	isFreeTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
-		clientID = generateRandomClientID()
+		clientID, err = generateRandomClientID(logger)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
