@@ -28,11 +28,11 @@ clean:
 	go clean
 
 .PHONY: cloudflared
-cloudflared:
+cloudflared: tunnel-deps
 	go build -v $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: test
-test:
+test: vet
 	go test -v -race $(VERSION_FLAGS) ./...
 
 .PHONY: cloudflared-deb
@@ -51,8 +51,8 @@ cloudflared-darwin-amd64.tgz: cloudflared
 homebrew-upload: cloudflared-darwin-amd64.tgz
 	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $$^ $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz
 	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz  $(S3_URI)/cloudflared-stable-$1.tgz
-		
-.PHONY: homebrew-release 
+
+.PHONY: homebrew-release
 homebrew-release: homebrew-upload
 	./publish-homebrew-formula.sh cloudflared-darwin-amd64.tgz $(VERSION) homebrew-cloudflare
 
@@ -65,5 +65,15 @@ bin/equinox:
 	curl -s https://bin.equinox.io/c/75JtLRTsJ3n/release-tool-beta-$(EQUINOX_PLATFORM).tgz | tar xz -C bin/
 
 .PHONY: tunnel-deps
-tunnel-deps:
-	capnp compile -ogo -I ./tunnelrpc tunnelrpc/tunnelrpc.capnp
+tunnel-deps: tunnelrpc/tunnelrpc.capnp.go
+
+tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
+	which capnp  # https://capnproto.org/install.html
+	which capnpc-go  # go get zombiezen.com/go/capnproto2/capnpc-go
+	capnp compile -ogo:tunnelrpc -I ./tunnelrpc tunnelrpc/tunnelrpc.capnp
+
+.PHONY: vet
+vet:
+	go vet -tests=false ./...
+	which go-sumtype  # go get github.com/BurntSushi/go-sumtype
+	go-sumtype $$(go list ./...)

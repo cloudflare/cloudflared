@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	log "github.com/sirupsen/logrus"
-	"zombiezen.com/go/capnproto2"
+	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
