@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	// HTTP2 error codes: https://http2.github.io/http2-spec/#ErrorCodes
 	ErrHandshakeTimeout               = MuxerHandshakeError{"1000 handshake timeout"}
 	ErrBadHandshakeNotSettings        = MuxerHandshakeError{"1001 unexpected response"}
 	ErrBadHandshakeUnexpectedAck      = MuxerHandshakeError{"1002 unexpected response"}
@@ -22,6 +23,7 @@ var (
 	ErrStreamHeadersSent = MuxerApplicationError{"3000 headers already sent"}
 	ErrConnectionClosed  = MuxerApplicationError{"3001 connection closed"}
 	ErrConnectionDropped = MuxerApplicationError{"3002 connection dropped"}
+	ErrOpenStreamTimeout = MuxerApplicationError{"3003 open stream timeout"}
 
 	ErrClosedStream = MuxerStreamError{"4000 stream closed", http2.ErrCodeStreamClosed}
 )

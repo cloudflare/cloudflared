@@ -34,6 +34,7 @@ import (
 
 const (
 	dialTimeout              = 15 * time.Second
+	openStreamTimeout        = 30 * time.Second
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
@@ -339,11 +340,7 @@ func RegisterTunnel(
 	uuid uuid.UUID,
 ) error {
 	config.TransportLogger.Debug("initiating RPC stream to register")
-	stream, err := muxer.OpenStream([]h2mux.Header{
-		{Name: ":method", Value: "RPC"},
-		{Name: ":scheme", Value: "capnp"},
-		{Name: ":path", Value: "*"},
-	}, nil)
+	stream, err := openStream(ctx, muxer)
 	if err != nil {
 		// RPC stream open error
 		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
@@ -421,11 +418,8 @@ func processRegisterTunnelError(err string, permanentFailure bool, metrics *Tunn
 
 func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log.Logger) error {
 	logger.Debug("initiating RPC stream to unregister")
-	stream, err := muxer.OpenStream([]h2mux.Header{
-		{Name: ":method", Value: "RPC"},
-		{Name: ":scheme", Value: "capnp"},
-		{Name: ":path", Value: "*"},
-	}, nil)
+	ctx := context.Background()
+	stream, err := openStream(ctx, muxer)
 	if err != nil {
 		// RPC stream open error
 		return err
@@ -434,7 +428,6 @@ func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log
 		// stream response error
 		return err
 	}
-	ctx := context.Background()
 	conn := rpc.NewConn(
 		tunnelrpc.NewTransportLogger(logger.WithField("subsystem", "rpc-unregister"), rpc.StreamTransport(stream)),
 		tunnelrpc.ConnLog(logger.WithField("subsystem", "rpc-transport")),
@@ -443,6 +436,16 @@ func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log
 	ts := tunnelpogs.TunnelServer_PogsClient{Client: conn.Bootstrap(ctx)}
 	// gracePeriod is encoded in int64 using capnproto
 	return ts.UnregisterTunnel(ctx, gracePeriod.Nanoseconds())
+}
+
+func openStream(ctx context.Context, muxer *h2mux.Muxer) (*h2mux.MuxedStream, error) {
+	openStreamCtx, cancel := context.WithTimeout(ctx, openStreamTimeout)
+	defer cancel()
+	return muxer.OpenStream(openStreamCtx, []h2mux.Header{
+		{Name: ":method", Value: "RPC"},
+		{Name: ":scheme", Value: "capnp"},
+		{Name: ":path", Value: "*"},
+	}, nil)
 }
 
 func LogServerInfo(

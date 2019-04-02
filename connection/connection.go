@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	dialTimeout = 5 * time.Second
+	dialTimeout       = 5 * time.Second
+	openStreamTimeout = 30 * time.Second
 )
 
 type dialError struct {
@@ -70,7 +71,9 @@ func (h *h2muxHandler) serve(ctx context.Context) error {
 
 // Connect is used to establish connections with cloudflare's edge network
 func (h *h2muxHandler) connect(ctx context.Context, parameters *tunnelpogs.ConnectParameters) (*tunnelpogs.ConnectResult, error) {
-	conn, err := h.newRPConn()
+	openStreamCtx, cancel := context.WithTimeout(ctx, openStreamTimeout)
+	defer cancel()
+	conn, err := h.newRPConn(openStreamCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to create new RPC connection")
 	}
@@ -83,8 +86,8 @@ func (h *h2muxHandler) shutdown() {
 	h.muxer.Shutdown()
 }
 
-func (h *h2muxHandler) newRPConn() (*rpc.Conn, error) {
-	stream, err := h.muxer.OpenStream([]h2mux.Header{
+func (h *h2muxHandler) newRPConn(ctx context.Context) (*rpc.Conn, error) {
+	stream, err := h.muxer.OpenStream(ctx, []h2mux.Header{
 		{Name: ":method", Value: "RPC"},
 		{Name: ":scheme", Value: "capnp"},
 		{Name: ":path", Value: "*"},

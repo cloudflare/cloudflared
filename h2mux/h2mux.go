@@ -379,7 +379,7 @@ func isConnectionClosedError(err error) bool {
 
 // OpenStream opens a new data stream with the given headers.
 // Called by proxy server and tunnel
-func (m *Muxer) OpenStream(headers []Header, body io.Reader) (*MuxedStream, error) {
+func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader) (*MuxedStream, error) {
 	stream := &MuxedStream{
 		responseHeadersReceived: make(chan struct{}),
 		readBuffer:              NewSharedBuffer(),
@@ -397,15 +397,20 @@ func (m *Muxer) OpenStream(headers []Header, body io.Reader) (*MuxedStream, erro
 
 	select {
 	// Will be received by mux writer
-	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: body}:
+	case <-ctx.Done():
+		return nil, ErrOpenStreamTimeout
 	case <-m.abortChan:
 		return nil, ErrConnectionClosed
+	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: body}:
 	}
+
 	select {
+	case <-ctx.Done():
+		return nil, ErrOpenStreamTimeout
+	case <-m.abortChan:
+		return nil, ErrConnectionClosed
 	case <-stream.responseHeadersReceived:
 		return stream, nil
-	case <-m.abortChan:
-		return nil, ErrConnectionClosed
 	}
 }
 
