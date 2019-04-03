@@ -1,3 +1,7 @@
+2019.4.0
+- 2019-03-28 TUN-1648: ConnectionID is now a UUID
+- 2019-04-01 TUN-1673: Conflate Hello and Connect RPCs
+
 2019.3.2
 - 2019-03-22 TUN-1637: Free tunnels shouldn't require cert.pem
 - 2019-03-18 TUN-1604: Define Connect RPC call
