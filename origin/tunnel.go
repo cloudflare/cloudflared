@@ -37,41 +37,40 @@ const (
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
-	isDeclarativeTunnel      = false
 )
 
 type TunnelConfig struct {
+	BuildInfo            *BuildInfo
+	ClientID             string
+	ClientTlsConfig      *tls.Config
+	CloseConnOnce        *sync.Once // Used to close connectedSignal no more than once
+	CompressionQuality   uint64
+	EdgeAddrs            []string
+	GracePeriod          time.Duration
+	HAConnections        int
+	HTTPTransport        http.RoundTripper
+	HeartbeatInterval    time.Duration
+	Hostname             string
+	IncidentLookup       IncidentLookup
+	IsAutoupdated        bool
+	IsFreeTunnel         bool
+	LBPool               string
+	Logger               *log.Logger
+	MaxHeartbeats        uint64
+	Metrics              *TunnelMetrics
+	MetricsUpdateFreq    time.Duration
+	NoChunkedEncoding    bool
+	OriginCert           []byte
+	ReportedVersion      string
+	Retries              uint
+	RunFromTerminal      bool
+	Tags                 []tunnelpogs.Tag
+	TlsConfig            *tls.Config
+	TransportLogger      *log.Logger
+	UseDeclarativeTunnel bool
+	WSGI                 bool
 	// OriginUrl may not be used if a user specifies a unix socket.
 	OriginUrl string
-
-	EdgeAddrs          []string
-	Hostname           string
-	OriginCert         []byte
-	TlsConfig          *tls.Config
-	ClientTlsConfig    *tls.Config
-	Retries            uint
-	HeartbeatInterval  time.Duration
-	MaxHeartbeats      uint64
-	ClientID           string
-	BuildInfo          *BuildInfo
-	ReportedVersion    string
-	LBPool             string
-	Tags               []tunnelpogs.Tag
-	HAConnections      int
-	HTTPTransport      http.RoundTripper
-	Metrics            *TunnelMetrics
-	MetricsUpdateFreq  time.Duration
-	TransportLogger    *log.Logger
-	Logger             *log.Logger
-	IsAutoupdated      bool
-	GracePeriod        time.Duration
-	RunFromTerminal    bool
-	NoChunkedEncoding  bool
-	WSGI               bool
-	CompressionQuality uint64
-	IncidentLookup     IncidentLookup
-	CloseConnOnce      *sync.Once // Used to close connectedSignal no more than once
-	IsFreeTunnel       bool
 }
 
 type dialError struct {
@@ -153,7 +152,7 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 
 	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
 	if config.HAConnections > 1 {
-		if isDeclarativeTunnel {
+		if config.UseDeclarativeTunnel {
 			return connection.NewSupervisor(&connection.CloudflaredConfig{
 				ConnectionConfig: &connection.ConnectionConfig{
 					TLSConfig:         config.TlsConfig,

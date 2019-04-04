@@ -689,5 +689,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "use-declarative-tunnels",
+			Usage:   "Test establishing connections with declarative tunnel methods.",
+			EnvVars: []string{"TUNNEL_USE_DECLARATIVE"},
+			Hidden:  true,
+		}),
 	}
 }
