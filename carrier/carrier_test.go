@@ -58,7 +58,10 @@ func TestStartClient(t *testing.T) {
 }
 
 func TestStartServer(t *testing.T) {
-	listenerAddress := "localhost:1117"
+	listener, err := net.Listen("tcp", "localhost:")
+	if err != nil {
+		t.Fatalf("Error starting listener: %v", err)
+	}
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
 	logger := logrus.New()
 	shutdownC := make(chan struct{})
@@ -66,16 +69,13 @@ func TestStartServer(t *testing.T) {
 	defer ts.Close()
 
 	go func() {
-		err := StartServer(logger, listenerAddress, "http://"+ts.Listener.Addr().String(), shutdownC, nil)
+		err := Serve(logger, listener, "http://"+ts.Listener.Addr().String(), shutdownC, nil)
 		if err != nil {
-			t.Fatalf("Error starting server: %v", err)
+			t.Fatalf("Error running server: %v", err)
 		}
 	}()
 
-	conn, err := net.Dial("tcp", listenerAddress)
-	if err != nil {
-		t.Fatalf("Error connecting to server: %v", err)
-	}
+	conn, err := net.Dial("tcp", listener.Addr().String())
 	conn.Write([]byte(message))
 
 	readBuffer := make([]byte, len(message))

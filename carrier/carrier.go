@@ -38,8 +38,8 @@ func StartClient(logger *logrus.Logger, originURL string, stream io.ReadWriter, 
 	return serveStream(logger, originURL, stream, headers)
 }
 
-// StartServer will setup a server on a specified port and copy data over a WebSocket connection
-// to the edge (originURL)
+// StartServer will setup a listener on a specified address/port and then
+// forward connections to the origin by calling `Serve()`.
 func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-chan struct{}, headers http.Header) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -47,6 +47,14 @@ func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-c
 		return err
 	}
 	logger.Info("Started listening on ", address)
+	return Serve(logger, listener, originURL, shutdownC, headers)
+}
+
+// Serve accepts incoming connections on the specified net.Listener.
+// Each connection is handled in a new goroutine: its data is copied over a
+// WebSocket connection to the edge (originURL).
+// `Serve` always closes `listener`.
+func Serve(logger *logrus.Logger, listener net.Listener, originURL string, shutdownC <-chan struct{}, headers http.Header) error {
 	defer listener.Close()
 	for {
 		select {
@@ -62,7 +70,7 @@ func StartServer(logger *logrus.Logger, address, originURL string, shutdownC <-c
 	}
 }
 
-// serveConnection handles connections for the StartServer call
+// serveConnection handles connections for the Serve() call
 func serveConnection(logger *logrus.Logger, c net.Conn, originURL string, headers http.Header) {
 	defer c.Close()
 	serveStream(logger, originURL, c, headers)
