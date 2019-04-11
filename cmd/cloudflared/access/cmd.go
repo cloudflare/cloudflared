@@ -73,6 +73,14 @@ func Commands() []*cli.Command {
 					SkipFlagParsing: true,
 				},
 				{
+					Name:   "gitConfig",
+					Action: gitConfig,
+					Usage:  "gitConfig <repo_url>",
+					Description: `The gitConfig subcommand configures your git to injects the JWT into a cf-access-token
+					header when using git to reach an application behind Access.`,
+					SkipFlagParsing: true,
+				},
+				{
 					Name:        "token",
 					Action:      generateToken,
 					Usage:       "token -app=<url of access application>",
@@ -180,6 +188,41 @@ func curl(c *cli.Context) error {
 	cmdArgs = append(cmdArgs, "-H")
 	cmdArgs = append(cmdArgs, fmt.Sprintf("cf-access-token: %s", tok))
 	return shell.Run("curl", cmdArgs...)
+}
+
+/* gitConfig modifies your ~/.gitconfig file to
+pass Access JWT along in request
+*/
+func gitConfig(c *cli.Context) error {
+	raven.SetDSN(sentryDSN)
+	logger := log.CreateLogger()
+	args := c.Args()
+	if args.Len() < 1 {
+		logger.Error("Please provide the access app and command you wish to run.")
+		return errors.New("incorrect args")
+	}
+
+	cmdArgs := args.Slice()
+	appURL, err := getAppURL(cmdArgs)
+	if err != nil {
+		return err
+	}
+	tok, err := token.GetTokenIfExists(appURL)
+	if err != nil || tok == "" {
+		tok, err = token.FetchToken(appURL)
+		if err != nil {
+			logger.Error("Failed to refresh token: ", err)
+			return err
+		}
+	}
+
+	gitArgs := []string{
+		"config",
+		"--global",
+		fmt.Sprintf("http.https://%s.extraheader", appURL.Hostname()),
+		fmt.Sprintf("cf-access-token:%s", tok),
+	}
+	return shell.Run("git", gitArgs...)
 }
 
 // token dumps provided token to stdout
