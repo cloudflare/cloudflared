@@ -55,8 +55,9 @@ type TunnelMetrics struct {
 	regFail    *prometheus.CounterVec
 	rpcFail    *prometheus.CounterVec
 
-	muxerMetrics *muxerMetrics
-	tunnelsHA    tunnelsForHA
+	muxerMetrics        *muxerMetrics
+	tunnelsHA           tunnelsForHA
+	userHostnamesCounts *prometheus.CounterVec
 }
 
 func newMuxerMetrics() *muxerMetrics {
@@ -364,6 +365,15 @@ func NewTunnelMetrics() *TunnelMetrics {
 	)
 	prometheus.MustRegister(registerFail)
 
+	userHostnamesCounts := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "user_hostnames_counts",
+			Help: "Which user hostnames cloudflared is serving",
+		},
+		[]string{"userHostname"},
+	)
+	prometheus.MustRegister(userHostnamesCounts)
+
 	registerSuccess := prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "tunnel_register_success",
@@ -389,6 +399,7 @@ func NewTunnelMetrics() *TunnelMetrics {
 		regSuccess:                     registerSuccess,
 		regFail:                        registerFail,
 		rpcFail:                        rpcFail,
+		userHostnamesCounts:            userHostnamesCounts,
 	}
 }
 

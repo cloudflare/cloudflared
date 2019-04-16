@@ -396,6 +396,8 @@ func RegisterTunnel(
 		}
 	}
 
+	config.Metrics.userHostnamesCounts.WithLabelValues(registration.Url).Inc()
+
 	config.Logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
 	return nil
 }
