@@ -10,35 +10,35 @@
 
 [[constraint]]
   name = "github.com/facebookgo/grace"
-  branch = "master"
+  revision = "75cf19382434e82df4dd84953f566b8ad23d6e9e"
 
 [[constraint]]
   name = "github.com/getsentry/raven-go"
-  branch = "master"
+  revision = "ed7bcb39ff10f39ab08e317ce16df282845852fa"
 
 [[constraint]]
   name = "github.com/pkg/errors"
-  version = "0.8.0"
+  version = "=0.8.0"
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
-  version = "0.9.0-pre1"
+  version = "=0.9.0-pre1"
 
 [[constraint]]
   name = "github.com/sirupsen/logrus"
-  version = "1.0.3"
+  version = "=1.0.3"
 
 [[constraint]]
   name = "github.com/stretchr/testify"
-  version = "1.2.1"
+  version = "=1.2.1"
 
 [[constraint]]
   name = "golang.org/x/net"
-  branch = "master"
+  branch = "master"  # master required by github.com/miekg/dns
 
 [[constraint]]
   name = "golang.org/x/sync"
-  branch = "master"
+  revision = "1d60e4601c6fd243af51cc01ddf169918a5407ca"
 
 [[constraint]]
   name = "gopkg.in/urfave/cli.v2"
@@ -48,40 +48,40 @@
 [[constraint]]
   name = "zombiezen.com/go/capnproto2"
   source = "https://github.com/zombiezen/go-capnproto2"
-  version = "2.17.1"
+  version = "=2.17.1"
 
 [[constraint]]
   name = "github.com/gorilla/websocket"
-  version = "1.2.0"
+  version = "=1.2.0"
 
 [[constraint]]
   name = "github.com/coredns/coredns"
-  branch = "master"
+  version = "=1.2.0"
 
 [[constraint]]
   name = "github.com/miekg/dns"
-  revision = "6da3249dfb57fbaa16efafcd8744cee8809d80cd"
+  version = "=1.1.8"
 
 [[constraint]]
   name = "github.com/cloudflare/brotli-go"
-  branch = "master"
+  revision = "18c9f6c67e3dfc12e0ddaca748d2887f97a7ac28"
 
 [[override]]
   name = "github.com/mholt/caddy"
-  branch = "master"
+  revision = "d3b731e9255b72d4571a5aac125634cf1b6031dc"
 
 [[constraint]]
-  branch = "master"
   name = "github.com/coreos/go-oidc"
+  revision = "a93f71fdfe73d2c0f5413c0565eea0af6523a6df"
 
 [[constraint]]
-  branch = "master"
   name = "golang.org/x/crypto"
+  branch = "master"  # master required by github.com/miekg/dns
 
 [[constraint]]
-  branch = "master"
   name = "github.com/cloudflare/golibs"
+  revision = "333127dbecfcc23a8db7d9a4f52785d23aff44a1"
 
 [[constraint]]
   name = "github.com/google/uuid"
-  version = "v1.1.1"
+  version = "=1.1.1"

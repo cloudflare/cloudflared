@@ -76,6 +76,8 @@ func NewHook(output interface{}, formatter logrus.Formatter) *LfsHook {
 // SetFormatter sets the format that will be used by hook.
 // If using text formatter, this method will disable color output to make the log file more readable.
 func (hook *LfsHook) SetFormatter(formatter logrus.Formatter) {
+	hook.lock.Lock()
+	defer hook.lock.Unlock()
 	if formatter == nil {
 		formatter = defaultFormatter
 	} else {
@@ -91,12 +93,16 @@ func (hook *LfsHook) SetFormatter(formatter logrus.Formatter) {
 
 // SetDefaultPath sets default path for levels that don't have any defined output path.
 func (hook *LfsHook) SetDefaultPath(defaultPath string) {
+	hook.lock.Lock()
+	defer hook.lock.Unlock()
 	hook.defaultPath = defaultPath
 	hook.hasDefaultPath = true
 }
 
 // SetDefaultWriter sets default writer for levels that don't have any defined writer.
 func (hook *LfsHook) SetDefaultWriter(defaultWriter io.Writer) {
+	hook.lock.Lock()
+	defer hook.lock.Unlock()
 	hook.defaultWriter = defaultWriter
 	hook.hasDefaultWriter = true
 }
@@ -104,6 +110,8 @@ func (hook *LfsHook) SetDefaultWriter(defaultWriter io.Writer) {
 // Fire writes the log file to defined path or using the defined writer.
 // User who run this function needs write permissions to the file or directory if the file does not yet exist.
 func (hook *LfsHook) Fire(entry *logrus.Entry) error {
+	hook.lock.Lock()
+	defer hook.lock.Unlock()
 	if hook.writers != nil || hook.hasDefaultWriter {
 		return hook.ioWrite(entry)
 	} else if hook.paths != nil || hook.hasDefaultPath {
@@ -121,9 +129,6 @@ func (hook *LfsHook) ioWrite(entry *logrus.Entry) error {
 		err    error
 		ok     bool
 	)
-
-	hook.lock.Lock()
-	defer hook.lock.Unlock()
 
 	if writer, ok = hook.writers[entry.Level]; !ok {
 		if hook.hasDefaultWriter {
@@ -153,9 +158,6 @@ func (hook *LfsHook) fileWrite(entry *logrus.Entry) error {
 		err  error
 		ok   bool
 	)
-
-	hook.lock.Lock()
-	defer hook.lock.Unlock()
 
 	if path, ok = hook.paths[entry.Level]; !ok {
 		if hook.hasDefaultPath {

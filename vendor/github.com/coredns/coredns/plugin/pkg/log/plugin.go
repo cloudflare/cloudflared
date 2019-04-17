@@ -3,7 +3,6 @@ package log
 import (
 	"fmt"
 	golog "log"
-	"os"
 )
 
 // P is a logger that includes the plugin doing the logging.
@@ -58,11 +57,5 @@ func (p P) Error(v ...interface{}) { p.log(err, v...) }
 
 // Errorf logs as log.Errorf.
 func (p P) Errorf(format string, v ...interface{}) { p.logf(err, format, v...) }
-
-// Fatal logs as log.Fatal and calls os.Exit(1).
-func (p P) Fatal(v ...interface{}) { p.log(fatal, v...); os.Exit(1) }
-
-// Fatalf logs as log.Fatalf and calls os.Exit(1).
-func (p P) Fatalf(format string, v ...interface{}) { p.logf(fatal, format, v...); os.Exit(1) }
 
 func pFormat(s string) string { return "plugin/" + s + ": " }

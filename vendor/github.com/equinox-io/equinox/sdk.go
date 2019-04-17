@@ -131,8 +131,16 @@ func (o *Options) SetPublicKeyPEM(pembytes []byte) error {
 // a successful check that found no update from other errors like a failed
 // network connection.
 func Check(appID string, opts Options) (Response, error) {
-	var r Response
+	var req, err = checkRequest(appID, &opts)
 
+	if err != nil {
+		return Response{}, err
+	}
+
+	return doCheckRequest(opts, req)
+}
+
+func checkRequest(appID string, opts *Options) (*http.Request, error) {
 	if opts.Channel == "" {
 		opts.Channel = "stable"
 	}
@@ -140,7 +148,7 @@ func Check(appID string, opts Options) (Response, error) {
 		var err error
 		opts.TargetPath, err = osext.Executable()
 		if err != nil {
-			return r, err
+			return nil, err
 		}
 	}
 	if opts.OS == "" {
@@ -172,11 +180,17 @@ func Check(appID string, opts Options) (Response, error) {
 
 	req, err := http.NewRequest("POST", opts.CheckURL, bytes.NewReader(payload))
 	if err != nil {
-		return r, err
+		return nil, err
 	}
+
 	req.Header.Set("Accept", fmt.Sprintf("application/json; q=1; version=%s; charset=utf-8", protocolVersion))
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.Close = true
 
+	return req, err
+}
+
+func doCheckRequest(opts Options, req *http.Request) (r Response, err error) {
 	resp, err := opts.HTTPClient.Do(req)
 	if err != nil {
 		return r, err
@@ -236,6 +250,16 @@ func computeChecksum(path string) string {
 //
 // Error is nil if and only if the entire update completes successfully.
 func (r Response) Apply() error {
+	var req, opts, err = r.applyRequest()
+
+	if err != nil {
+		return err
+	}
+
+	return r.applyUpdate(req, opts)
+}
+
+func (r Response) applyRequest() (*http.Request, update.Options, error) {
 	opts := update.Options{
 		TargetPath: r.opts.TargetPath,
 		TargetMode: r.opts.TargetMode,
@@ -250,15 +274,16 @@ func (r Response) Apply() error {
 	}
 
 	if err := opts.CheckPermissions(); err != nil {
-		return err
+		return nil, opts, err
 	}
 
 	req, err := http.NewRequest("GET", r.downloadURL, nil)
-	if err != nil {
-		return err
-	}
+	return req, opts, err
+}
 
+func (r Response) applyUpdate(req *http.Request, opts update.Options) error {
 	// fetch the update
+	req.Close = true
 	resp, err := r.opts.HTTPClient.Do(req)
 	if err != nil {
 		return err
