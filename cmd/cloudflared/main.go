@@ -11,17 +11,15 @@ import (
 	"github.com/cloudflare/cloudflared/log"
 	"github.com/cloudflare/cloudflared/metrics"
 
-	"github.com/getsentry/raven-go"
-	"github.com/mitchellh/go-homedir"
-	"gopkg.in/urfave/cli.v2"
+	raven "github.com/getsentry/raven-go"
+	homedir "github.com/mitchellh/go-homedir"
+	cli "gopkg.in/urfave/cli.v2"
 
 	"github.com/pkg/errors"
 )
 
 const (
-	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
-	licenseUrl      = developerPortal + "/license/"
-	versionText     = "Print the version"
+	versionText = "Print the version"
 )
 
 var (
@@ -62,10 +60,15 @@ func main() {
 	app.Name = "cloudflared"
 	app.Usage = "Cloudflare's command-line tool and agent"
 	app.ArgsUsage = "origin-url"
-	app.Copyright = fmt.Sprintf(`(c) %d Cloudflare Inc.
-   Use is subject to the license agreement at %s`, time.Now().Year(), licenseUrl)
+	app.Copyright = fmt.Sprintf(
+		`(c) %d Cloudflare Inc.
+   Your installation of cloudflared software constitutes a symbol of your signature indicating that you accept
+   the terms of the Cloudflare License (https://developers.cloudflare.com/argo-tunnel/license/),
+   Terms (https://www.cloudflare.com/terms/) and Privacy Policy (https://www.cloudflare.com/privacypolicy/).`,
+		time.Now().Year(),
+	)
 	app.Version = fmt.Sprintf("%s (built %s)", Version, BuildTime)
-	app.Description = `cloudflared connects your machine or user identity to Cloudflare's global network. 
+	app.Description = `cloudflared connects your machine or user identity to Cloudflare's global network.
 	You can use it to authenticate a session to reach an API behind Access, route web traffic to this machine,
 	and configure access control.`
 	app.Flags = flags()
