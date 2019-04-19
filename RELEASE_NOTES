@@ -1,3 +1,13 @@
+2019.4.1
+- 2019-03-18 TUN-1626: Create new supervisor to establish connection with origintunneld
+- 2019-04-04 TUN-1619: Add flag to test declarative tunnels.
+- 2019-04-05 TUN-1577: decompose carrier.StartServer to make TestStartServer less flappy
+- 2019-03-29 TUN-1606: Define CloudflaredConfig RPC structure, interface for cloudflared's RPC server
+- 2019-04-02 TUN-1682: Add context to OpenStream to prevent it from blocking indefinitely.
+- 2019-04-16 TUN-1732: cloudflared metrics should track userHostnames
+- 2019-04-17 TUN-1734: Pin packages at exact versions
+- 2019-04-18 TUN-1669: Update license message in help text. Also fix test
+
 2019.4.0
 - 2019-03-28 TUN-1648: ConnectionID is now a UUID
 - 2019-04-01 TUN-1673: Conflate Hello and Connect RPCs
