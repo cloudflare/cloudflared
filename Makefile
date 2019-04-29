@@ -31,6 +31,10 @@ clean:
 cloudflared: tunnel-deps
 	go build -v $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
+.PHONY: container
+container:
+	docker build -t cloudflare/cloudflared:"$(VERSION)" .
+
 .PHONY: test
 test: vet
 	go test -v -race $(VERSION_FLAGS) ./...
