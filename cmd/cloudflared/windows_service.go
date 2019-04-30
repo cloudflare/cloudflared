@@ -135,14 +135,11 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Interrogate:
-				elog.Info(1, fmt.Sprintf("control request 1 #%d", c))
 				statusChan <- c.CurrentStatus
 			case svc.Stop:
-				elog.Info(1, "received stop control request")
 				close(s.graceShutdownC)
 				statusChan <- svc.Status{State: svc.StopPending}
 			case svc.Shutdown:
-				elog.Info(1, "received shutdown control request")
 				close(s.shutdownC)
 				statusChan <- svc.Status{State: svc.StopPending}
 			default:
