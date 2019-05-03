@@ -21,12 +21,13 @@ const (
 )
 
 type CloudflaredConfig struct {
-	ConnectionConfig *ConnectionConfig
-	OriginCert       []byte
-	Tags             []tunnelpogs.Tag
-	EdgeAddrs        []string
-	HAConnections    uint
-	Logger           *logrus.Logger
+	ConnectionConfig   *ConnectionConfig
+	OriginCert         []byte
+	Tags               []tunnelpogs.Tag
+	EdgeAddrs          []string
+	HAConnections      uint
+	Logger             *logrus.Logger
+	CloudflaredVersion string
 }
 
 // Supervisor is a stateful object that manages connections with the edge
@@ -140,6 +141,7 @@ func (s *Supervisor) connect(ctx context.Context,
 		OriginCert:          config.OriginCert,
 		CloudflaredID:       cloudflaredID,
 		NumPreviousAttempts: 0,
+		CloudflaredVersion:  config.CloudflaredVersion,
 	}
 	return h.connect(ctx, connectParameters)
 }

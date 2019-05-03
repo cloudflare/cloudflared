@@ -132,6 +132,7 @@ type ConnectParameters struct {
 	CloudflaredID       uuid.UUID
 	NumPreviousAttempts uint8
 	Tags                []Tag
+	CloudflaredVersion  string
 }
 
 // CapnpConnectParameters is ConnectParameters represented in Cap'n Proto build-in types
@@ -140,6 +141,7 @@ type CapnpConnectParameters struct {
 	CloudflaredID       []byte
 	NumPreviousAttempts uint8
 	Tags                []Tag
+	CloudflaredVersion  string
 }
 
 func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectParameters) error {
@@ -151,6 +153,7 @@ func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectPara
 		OriginCert:          p.OriginCert,
 		CloudflaredID:       cloudflaredIDBytes,
 		NumPreviousAttempts: p.NumPreviousAttempts,
+		CloudflaredVersion:  p.CloudflaredVersion,
 	}
 	return pogs.Insert(tunnelrpc.CapnpConnectParameters_TypeID, s.Struct, capnpConnectParameters)
 }
@@ -169,6 +172,7 @@ func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectPar
 		OriginCert:          p.OriginCert,
 		CloudflaredID:       cloudflaredID,
 		NumPreviousAttempts: p.NumPreviousAttempts,
+		CloudflaredVersion:  p.CloudflaredVersion,
 	}, nil
 }
 

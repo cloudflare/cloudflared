@@ -55,6 +55,8 @@ struct CapnpConnectParameters {
     numPreviousAttempts @2 :UInt8;
     # user defined labels for this cloudflared
     tags @3 :List(Tag);
+    # release version of cloudflared
+    cloudflaredVersion @4 :Text;
 }
 
 struct ConnectResult {

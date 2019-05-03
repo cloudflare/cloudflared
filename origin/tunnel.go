@@ -161,11 +161,12 @@ func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connecte
 					MaxHeartbeats:     config.MaxHeartbeats,
 					Logger:            config.Logger.WithField("subsystem", "connection_supervisor"),
 				},
-				OriginCert:    config.OriginCert,
-				Tags:          config.Tags,
-				EdgeAddrs:     config.EdgeAddrs,
-				HAConnections: uint(config.HAConnections),
-				Logger:        config.Logger,
+				OriginCert:         config.OriginCert,
+				Tags:               config.Tags,
+				EdgeAddrs:          config.EdgeAddrs,
+				HAConnections:      uint(config.HAConnections),
+				Logger:             config.Logger,
+				CloudflaredVersion: config.ReportedVersion,
 			}).Run(ctx)
 		}
 		return NewSupervisor(config).Run(ctx, connectedSignal, u)

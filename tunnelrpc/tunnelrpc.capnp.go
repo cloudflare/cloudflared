@@ -106,11 +106,6 @@ func (s Authentication_List) At(i int) Authentication { return Authentication{s.
 
 func (s Authentication_List) Set(i int, v Authentication) error { return s.List.SetStruct(i, v.Struct) }
 
-func (s Authentication_List) String() string {
-	str, _ := text.MarshalList(0xc082ef6e0d42ed1d, s.List)
-	return str
-}
-
 // Authentication_Promise is a wrapper for a Authentication promised by a client call.
 type Authentication_Promise struct{ *capnp.Pipeline }
 
@@ -249,11 +244,6 @@ func (s TunnelRegistration_List) At(i int) TunnelRegistration {
 
 func (s TunnelRegistration_List) Set(i int, v TunnelRegistration) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s TunnelRegistration_List) String() string {
-	str, _ := text.MarshalList(0xf41a0f001ad49e46, s.List)
-	return str
 }
 
 // TunnelRegistration_Promise is a wrapper for a TunnelRegistration promised by a client call.
@@ -485,11 +475,6 @@ func (s RegistrationOptions_List) Set(i int, v RegistrationOptions) error {
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s RegistrationOptions_List) String() string {
-	str, _ := text.MarshalList(0xc793e50592935b4a, s.List)
-	return str
-}
-
 // RegistrationOptions_Promise is a wrapper for a RegistrationOptions promised by a client call.
 type RegistrationOptions_Promise struct{ *capnp.Pipeline }
 
@@ -504,12 +489,12 @@ type CapnpConnectParameters struct{ capnp.Struct }
 const CapnpConnectParameters_TypeID = 0xa78f37418c1077c8
 
 func NewCapnpConnectParameters(s *capnp.Segment) (CapnpConnectParameters, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 4})
 	return CapnpConnectParameters{st}, err
 }
 
 func NewRootCapnpConnectParameters(s *capnp.Segment) (CapnpConnectParameters, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 4})
 	return CapnpConnectParameters{st}, err
 }
 
@@ -584,12 +569,31 @@ func (s CapnpConnectParameters) NewTags(n int32) (Tag_List, error) {
 	return l, err
 }
 
+func (s CapnpConnectParameters) CloudflaredVersion() (string, error) {
+	p, err := s.Struct.Ptr(3)
+	return p.Text(), err
+}
+
+func (s CapnpConnectParameters) HasCloudflaredVersion() bool {
+	p, err := s.Struct.Ptr(3)
+	return p.IsValid() || err != nil
+}
+
+func (s CapnpConnectParameters) CloudflaredVersionBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(3)
+	return p.TextBytes(), err
+}
+
+func (s CapnpConnectParameters) SetCloudflaredVersion(v string) error {
+	return s.Struct.SetText(3, v)
+}
+
 // CapnpConnectParameters_List is a list of CapnpConnectParameters.
 type CapnpConnectParameters_List struct{ capnp.List }
 
 // NewCapnpConnectParameters creates a new list of CapnpConnectParameters.
 func NewCapnpConnectParameters_List(s *capnp.Segment, sz int32) (CapnpConnectParameters_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3}, sz)
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 4}, sz)
 	return CapnpConnectParameters_List{l}, err
 }
 
@@ -599,11 +603,6 @@ func (s CapnpConnectParameters_List) At(i int) CapnpConnectParameters {
 
 func (s CapnpConnectParameters_List) Set(i int, v CapnpConnectParameters) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s CapnpConnectParameters_List) String() string {
-	str, _ := text.MarshalList(0xa78f37418c1077c8, s.List)
-	return str
 }
 
 // CapnpConnectParameters_Promise is a wrapper for a CapnpConnectParameters promised by a client call.
@@ -702,11 +701,6 @@ func (s ConnectResult_List) At(i int) ConnectResult { return ConnectResult{s.Lis
 
 func (s ConnectResult_List) Set(i int, v ConnectResult) error { return s.List.SetStruct(i, v.Struct) }
 
-func (s ConnectResult_List) String() string {
-	str, _ := text.MarshalList(0xff8d9848747c956a, s.List)
-	return str
-}
-
 // ConnectResult_Promise is a wrapper for a ConnectResult promised by a client call.
 type ConnectResult_Promise struct{ *capnp.Pipeline }
 
@@ -795,11 +789,6 @@ func NewConnectError_List(s *capnp.Segment, sz int32) (ConnectError_List, error)
 func (s ConnectError_List) At(i int) ConnectError { return ConnectError{s.List.Struct(i)} }
 
 func (s ConnectError_List) Set(i int, v ConnectError) error { return s.List.SetStruct(i, v.Struct) }
-
-func (s ConnectError_List) String() string {
-	str, _ := text.MarshalList(0xb14ce48f4e2abb0d, s.List)
-	return str
-}
 
 // ConnectError_Promise is a wrapper for a ConnectError promised by a client call.
 type ConnectError_Promise struct{ *capnp.Pipeline }
@@ -949,11 +938,6 @@ func (s CloudflaredConfig_List) Set(i int, v CloudflaredConfig) error {
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s CloudflaredConfig_List) String() string {
-	str, _ := text.MarshalList(0x984a5b060f122dd1, s.List)
-	return str
-}
-
 // CloudflaredConfig_Promise is a wrapper for a CloudflaredConfig promised by a client call.
 type CloudflaredConfig_Promise struct{ *capnp.Pipeline }
 
@@ -1037,9 +1021,6 @@ func (s ReverseProxyConfig_origin) Which() ReverseProxyConfig_origin_Which {
 	return ReverseProxyConfig_origin_Which(s.Struct.Uint16(0))
 }
 func (s ReverseProxyConfig_origin) Http() (HTTPOriginConfig, error) {
-	if s.Struct.Uint16(0) != 0 {
-		panic("Which() != http")
-	}
 	p, err := s.Struct.Ptr(1)
 	return HTTPOriginConfig{Struct: p.Struct()}, err
 }
@@ -1070,9 +1051,6 @@ func (s ReverseProxyConfig_origin) NewHttp() (HTTPOriginConfig, error) {
 }
 
 func (s ReverseProxyConfig_origin) Socket() (UnixSocketOriginConfig, error) {
-	if s.Struct.Uint16(0) != 1 {
-		panic("Which() != socket")
-	}
 	p, err := s.Struct.Ptr(1)
 	return UnixSocketOriginConfig{Struct: p.Struct()}, err
 }
@@ -1103,9 +1081,6 @@ func (s ReverseProxyConfig_origin) NewSocket() (UnixSocketOriginConfig, error) {
 }
 
 func (s ReverseProxyConfig_origin) Websocket() (WebSocketOriginConfig, error) {
-	if s.Struct.Uint16(0) != 2 {
-		panic("Which() != websocket")
-	}
 	p, err := s.Struct.Ptr(1)
 	return WebSocketOriginConfig{Struct: p.Struct()}, err
 }
@@ -1136,9 +1111,6 @@ func (s ReverseProxyConfig_origin) NewWebsocket() (WebSocketOriginConfig, error)
 }
 
 func (s ReverseProxyConfig_origin) HelloWorld() (HelloWorldOriginConfig, error) {
-	if s.Struct.Uint16(0) != 3 {
-		panic("Which() != helloWorld")
-	}
 	p, err := s.Struct.Ptr(1)
 	return HelloWorldOriginConfig{Struct: p.Struct()}, err
 }
@@ -1215,11 +1187,6 @@ func (s ReverseProxyConfig_List) At(i int) ReverseProxyConfig {
 
 func (s ReverseProxyConfig_List) Set(i int, v ReverseProxyConfig) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s ReverseProxyConfig_List) String() string {
-	str, _ := text.MarshalList(0xc766a92976e389c4, s.List)
-	return str
 }
 
 // ReverseProxyConfig_Promise is a wrapper for a ReverseProxyConfig promised by a client call.
@@ -1319,11 +1286,6 @@ func (s UnixSocketOriginConfig_List) Set(i int, v UnixSocketOriginConfig) error 
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s UnixSocketOriginConfig_List) String() string {
-	str, _ := text.MarshalList(0x935185ed60218ea3, s.List)
-	return str
-}
-
 // UnixSocketOriginConfig_Promise is a wrapper for a UnixSocketOriginConfig promised by a client call.
 type UnixSocketOriginConfig_Promise struct{ *capnp.Pipeline }
 
@@ -1391,11 +1353,6 @@ func (s WebSocketOriginConfig_List) At(i int) WebSocketOriginConfig {
 
 func (s WebSocketOriginConfig_List) Set(i int, v WebSocketOriginConfig) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s WebSocketOriginConfig_List) String() string {
-	str, _ := text.MarshalList(0xf9c895683ed9ac4c, s.List)
-	return str
 }
 
 // WebSocketOriginConfig_Promise is a wrapper for a WebSocketOriginConfig promised by a client call.
@@ -1551,11 +1508,6 @@ func (s HTTPOriginConfig_List) Set(i int, v HTTPOriginConfig) error {
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s HTTPOriginConfig_List) String() string {
-	str, _ := text.MarshalList(0xe4a6a1bc139211b4, s.List)
-	return str
-}
-
 // HTTPOriginConfig_Promise is a wrapper for a HTTPOriginConfig promised by a client call.
 type HTTPOriginConfig_Promise struct{ *capnp.Pipeline }
 
@@ -1654,11 +1606,6 @@ func (s DoHProxyConfig_List) At(i int) DoHProxyConfig { return DoHProxyConfig{s.
 
 func (s DoHProxyConfig_List) Set(i int, v DoHProxyConfig) error { return s.List.SetStruct(i, v.Struct) }
 
-func (s DoHProxyConfig_List) String() string {
-	str, _ := text.MarshalList(0xb167b0bebe562cd0, s.List)
-	return str
-}
-
 // DoHProxyConfig_Promise is a wrapper for a DoHProxyConfig promised by a client call.
 type DoHProxyConfig_Promise struct{ *capnp.Pipeline }
 
@@ -1707,11 +1654,6 @@ func (s HelloWorldOriginConfig_List) At(i int) HelloWorldOriginConfig {
 
 func (s HelloWorldOriginConfig_List) Set(i int, v HelloWorldOriginConfig) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s HelloWorldOriginConfig_List) String() string {
-	str, _ := text.MarshalList(0x8891f360e47c30d3, s.List)
-	return str
 }
 
 // HelloWorldOriginConfig_Promise is a wrapper for a HelloWorldOriginConfig promised by a client call.
@@ -1797,11 +1739,6 @@ func NewTag_List(s *capnp.Segment, sz int32) (Tag_List, error) {
 func (s Tag_List) At(i int) Tag { return Tag{s.List.Struct(i)} }
 
 func (s Tag_List) Set(i int, v Tag) error { return s.List.SetStruct(i, v.Struct) }
-
-func (s Tag_List) String() string {
-	str, _ := text.MarshalList(0xcbd96442ae3bb01a, s.List)
-	return str
-}
 
 // Tag_Promise is a wrapper for a Tag promised by a client call.
 type Tag_Promise struct{ *capnp.Pipeline }
@@ -1928,11 +1865,6 @@ func (s ServerInfo_List) At(i int) ServerInfo { return ServerInfo{s.List.Struct(
 
 func (s ServerInfo_List) Set(i int, v ServerInfo) error { return s.List.SetStruct(i, v.Struct) }
 
-func (s ServerInfo_List) String() string {
-	str, _ := text.MarshalList(0xf2c68e2547ec3866, s.List)
-	return str
-}
-
 // ServerInfo_Promise is a wrapper for a ServerInfo promised by a client call.
 type ServerInfo_Promise struct{ *capnp.Pipeline }
 
@@ -2010,11 +1942,6 @@ func (s UseConfigurationResult_List) Set(i int, v UseConfigurationResult) error 
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s UseConfigurationResult_List) String() string {
-	str, _ := text.MarshalList(0xd58a254e7a792b87, s.List)
-	return str
-}
-
 // UseConfigurationResult_Promise is a wrapper for a UseConfigurationResult promised by a client call.
 type UseConfigurationResult_Promise struct{ *capnp.Pipeline }
 
@@ -2037,7 +1964,7 @@ func (c TunnelServer) RegisterTunnel(ctx context.Context, params func(TunnelServ
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      0,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "registerTunnel",
 		},
 		Options: capnp.NewCallOptions(opts),
@@ -2057,7 +1984,7 @@ func (c TunnelServer) GetServerInfo(ctx context.Context, params func(TunnelServe
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      1,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "getServerInfo",
 		},
 		Options: capnp.NewCallOptions(opts),
@@ -2077,7 +2004,7 @@ func (c TunnelServer) UnregisterTunnel(ctx context.Context, params func(TunnelSe
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      2,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "unregisterTunnel",
 		},
 		Options: capnp.NewCallOptions(opts),
@@ -2097,7 +2024,7 @@ func (c TunnelServer) Connect(ctx context.Context, params func(TunnelServer_conn
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      3,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "connect",
 		},
 		Options: capnp.NewCallOptions(opts),
@@ -2133,7 +2060,7 @@ func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []serv
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      0,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "registerTunnel",
 		},
 		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
@@ -2147,7 +2074,7 @@ func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []serv
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      1,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "getServerInfo",
 		},
 		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
@@ -2161,7 +2088,7 @@ func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []serv
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      2,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "unregisterTunnel",
 		},
 		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
@@ -2175,7 +2102,7 @@ func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []serv
 		Method: capnp.Method{
 			InterfaceID:   0xea58385c65416035,
 			MethodID:      3,
-			InterfaceName: "tunnelrpc.capnp:TunnelServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
 			MethodName:    "connect",
 		},
 		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
@@ -2320,11 +2247,6 @@ func (s TunnelServer_registerTunnel_Params_List) Set(i int, v TunnelServer_regis
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s TunnelServer_registerTunnel_Params_List) String() string {
-	str, _ := text.MarshalList(0xb70431c0dc014915, s.List)
-	return str
-}
-
 // TunnelServer_registerTunnel_Params_Promise is a wrapper for a TunnelServer_registerTunnel_Params promised by a client call.
 type TunnelServer_registerTunnel_Params_Promise struct{ *capnp.Pipeline }
 
@@ -2404,11 +2326,6 @@ func (s TunnelServer_registerTunnel_Results_List) Set(i int, v TunnelServer_regi
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s TunnelServer_registerTunnel_Results_List) String() string {
-	str, _ := text.MarshalList(0xf2c122394f447e8e, s.List)
-	return str
-}
-
 // TunnelServer_registerTunnel_Results_Promise is a wrapper for a TunnelServer_registerTunnel_Results promised by a client call.
 type TunnelServer_registerTunnel_Results_Promise struct{ *capnp.Pipeline }
 
@@ -2461,11 +2378,6 @@ func (s TunnelServer_getServerInfo_Params_List) At(i int) TunnelServer_getServer
 
 func (s TunnelServer_getServerInfo_Params_List) Set(i int, v TunnelServer_getServerInfo_Params) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s TunnelServer_getServerInfo_Params_List) String() string {
-	str, _ := text.MarshalList(0xdc3ed6801961e502, s.List)
-	return str
 }
 
 // TunnelServer_getServerInfo_Params_Promise is a wrapper for a TunnelServer_getServerInfo_Params promised by a client call.
@@ -2543,11 +2455,6 @@ func (s TunnelServer_getServerInfo_Results_List) Set(i int, v TunnelServer_getSe
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s TunnelServer_getServerInfo_Results_List) String() string {
-	str, _ := text.MarshalList(0xe3e37d096a5b564e, s.List)
-	return str
-}
-
 // TunnelServer_getServerInfo_Results_Promise is a wrapper for a TunnelServer_getServerInfo_Results promised by a client call.
 type TunnelServer_getServerInfo_Results_Promise struct{ *capnp.Pipeline }
 
@@ -2610,11 +2517,6 @@ func (s TunnelServer_unregisterTunnel_Params_List) Set(i int, v TunnelServer_unr
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s TunnelServer_unregisterTunnel_Params_List) String() string {
-	str, _ := text.MarshalList(0x9b87b390babc2ccf, s.List)
-	return str
-}
-
 // TunnelServer_unregisterTunnel_Params_Promise is a wrapper for a TunnelServer_unregisterTunnel_Params promised by a client call.
 type TunnelServer_unregisterTunnel_Params_Promise struct{ *capnp.Pipeline }
 
@@ -2663,11 +2565,6 @@ func (s TunnelServer_unregisterTunnel_Results_List) At(i int) TunnelServer_unreg
 
 func (s TunnelServer_unregisterTunnel_Results_List) Set(i int, v TunnelServer_unregisterTunnel_Results) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s TunnelServer_unregisterTunnel_Results_List) String() string {
-	str, _ := text.MarshalList(0xa29a916d4ebdd894, s.List)
-	return str
 }
 
 // TunnelServer_unregisterTunnel_Results_Promise is a wrapper for a TunnelServer_unregisterTunnel_Results promised by a client call.
@@ -2743,11 +2640,6 @@ func (s TunnelServer_connect_Params_List) At(i int) TunnelServer_connect_Params 
 
 func (s TunnelServer_connect_Params_List) Set(i int, v TunnelServer_connect_Params) error {
 	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s TunnelServer_connect_Params_List) String() string {
-	str, _ := text.MarshalList(0xa766b24d4fe5da35, s.List)
-	return str
 }
 
 // TunnelServer_connect_Params_Promise is a wrapper for a TunnelServer_connect_Params promised by a client call.
@@ -2829,11 +2721,6 @@ func (s TunnelServer_connect_Results_List) Set(i int, v TunnelServer_connect_Res
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s TunnelServer_connect_Results_List) String() string {
-	str, _ := text.MarshalList(0xfeac5c8f4899ef7c, s.List)
-	return str
-}
-
 // TunnelServer_connect_Results_Promise is a wrapper for a TunnelServer_connect_Results promised by a client call.
 type TunnelServer_connect_Results_Promise struct{ *capnp.Pipeline }
 
@@ -2860,7 +2747,7 @@ func (c CloudflaredServer) UseConfiguration(ctx context.Context, params func(Clo
 		Method: capnp.Method{
 			InterfaceID:   0xf548cef9dea2a4a1,
 			MethodID:      0,
-			InterfaceName: "tunnelrpc.capnp:CloudflaredServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:CloudflaredServer",
 			MethodName:    "useConfiguration",
 		},
 		Options: capnp.NewCallOptions(opts),
@@ -2890,7 +2777,7 @@ func CloudflaredServer_Methods(methods []server.Method, s CloudflaredServer_Serv
 		Method: capnp.Method{
 			InterfaceID:   0xf548cef9dea2a4a1,
 			MethodID:      0,
-			InterfaceName: "tunnelrpc.capnp:CloudflaredServer",
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:CloudflaredServer",
 			MethodName:    "useConfiguration",
 		},
 		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
@@ -2978,11 +2865,6 @@ func (s CloudflaredServer_useConfiguration_Params_List) Set(i int, v Cloudflared
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s CloudflaredServer_useConfiguration_Params_List) String() string {
-	str, _ := text.MarshalList(0xbcae494a1cb9c358, s.List)
-	return str
-}
-
 // CloudflaredServer_useConfiguration_Params_Promise is a wrapper for a CloudflaredServer_useConfiguration_Params promised by a client call.
 type CloudflaredServer_useConfiguration_Params_Promise struct{ *capnp.Pipeline }
 
@@ -3062,11 +2944,6 @@ func (s CloudflaredServer_useConfiguration_Results_List) Set(i int, v Cloudflare
 	return s.List.SetStruct(i, v.Struct)
 }
 
-func (s CloudflaredServer_useConfiguration_Results_List) String() string {
-	str, _ := text.MarshalList(0xabe155b01da72ed9, s.List)
-	return str
-}
-
 // CloudflaredServer_useConfiguration_Results_Promise is a wrapper for a CloudflaredServer_useConfiguration_Results promised by a client call.
 type CloudflaredServer_useConfiguration_Results_Promise struct{ *capnp.Pipeline }
 
@@ -3079,194 +2956,197 @@ func (p CloudflaredServer_useConfiguration_Results_Promise) Result() UseConfigur
 	return UseConfigurationResult_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
-const schema_db8274f9144abc7e = "x\xda\xa4X}l\x1c\xd5\xb5?g\xee\xae\xd7v\xec" +
-	"\xec\x8eg\x8dC\x84e\xf0\x0b\xd2#/\x89\x02yy" +
-	"/\xf8\xbdb;\xb1\x837\xe4c\xc7k\x07\x08A\xca" +
-	"x\xf7\xda\x9edvf3\x1fI\x8c\x02\x81()I" +
-	"\xc4G\x12\x88DR\xa8\x88K\x1b\xa0)\x0d\x94\x0aA" +
-	"\x13\x04jU\x90\x10\x85\xb4\xa5jh\xa8\x84 *E" +
-	"\x8d(_R\x83\x08S\x9d\x99\x9d\x99\xf5\xdai\x82\xfa" +
-	"\xcf\xea\xee\xb9g\xee9\xf7\x9c\xdf\xf9\xb8g\xfe\x9aD" +
-	"\x97pm\xfc\x85i\x00\xf2\xaex\x8d\xfb\xff\xc5\xb7\xc6" +
-	"\xff\xe7\xc0\x1b;@L\x09\xee]\xc7\x97\xa5\xcf\xd9\xdb" +
-	"\xff\x04\x80\x0b^\x8d\xcfF\xe9d<\x01 \xbd\x19_" +
-	"\x05\xe8\xfen\xfe\xd6\x0f\xd7}\xbeo\x17\x88)\x8c8" +
-	"c\x09\x80\x05g\xe2\x1d(}\x19O\x00s\x7f\xf0\xc0" +
-	"U\xeb\xce\xee\x94\x1f\x9a\xc8\x15Gb;Il\xef{" +
-	"G\xbe\x17\xef\x04tO\xcemJ\xd6\xdc\xb6\xec\x11\x90" +
-	"SXS\xc1-\x10\xf7\xf9x\x13J\x8d5\xb4\xac\xab" +
-	"y\x0d\x01\xdd\xb7\xe6\x1c\x7fi\xef\xcf\xee\xfd\x1e\xc8\xad" +
-	"\x88\xe0\x8b\xbe\xaa\xf6i\x04\x94\xae\xad\xa5\xf3\x1e\xfe\xe3" +
-	"\x89\x95\xc5}\x87\xc6Al\x0d\xf6o\xad}\x0e!\xe6" +
-	".|\xf7\xcc\xaa\x15\xcf\x0d\x1f\xf1w|u2\xb5C" +
-	"\xf4\xe9\xa0\xf7\xe9\xeb\x9bS\xf7u\xff\xef\x83GH\x95" +
-	"J\xc5\x19q\x8e\xd5v\xa0\xb4\xbb\x96\x14\xdfY\xfb\x17" +
-	"@w\xcf\xf5'V\x7f\xfe]\xebi\x90\xff\x03c\xee" +
-	"\xafv\x7f\xb0\xe9\x9a\xa7\x86_\x83A!\x811\xe2\xaf" +
-	"\xeb\xa7\x93w\xd6\x11\xef\xa9yGZ\x8f\x0d\xbe\xffc" +
-	"\x10\xdbC\xd1J\xfd\xbb\xc4\xe0\xd4\x93\xe8\xc6_\xcc^" +
-	"\xf9\xe0\x87\xcb\x9f%\xd1B\x95\xcd\xa4\x03\xf5\x1fK\x87" +
-	"\xebi\xf5X\xfdO\x01\xdd\xb7\xe7\xac~\xf9\xe5c#" +
-	"\xcfV\xebI&\x93\xbe3\xed+)3\x8dV\xbd\xd3" +
-	"\x88\xb99\x83\xa7_\xb96\xf6B\xf9\xd6\xde]\xceM" +
-	";D\xa2\xeb\x1a\x88\xe1\x96_\xbex\xc5\xb2\xcc3\xc7" +
-	"+u{\xaa\xe1\xb7\xc4p\xa2\x81tk=\xbb\xb8Q" +
-	"\xffd\xfb+U\xee\xa4\x93\xa43\x0d_I\x9f6\xd0" +
-	"\xea\xacwXh\x069\x85\xb1jo\xeen\x9c\x89\xd2" +
-	"\xc1FZ\x1eh\xbc\x99\xbc\xb9\xec\xb6\x87\xf6\xc7\xcf<" +
-	"\xf4Z\xf5\xb5\x13\xc4\xf3\xde\xf4v\x94\xceN\xa7\xe5_" +
-	"\xa7\x1f\x11\x00\xdd\x99\xc7\xfe\xef\x99\xc5\x85SoTi" +
-	"\xe2\xdd\xfb\x1dq\\zO\xa4\xd5)q3\xa0{\xef" +
-	"\x7f\x8d\xdd\xb1\xf2\xea=\xefT\x1b\xc9\xbb\xdf\xc2\xa6\x0e" +
-	"\x94z\x9b\x88\xbb\xbb\x89\xb8\x853\xca\xe5w\xff\xe1\x86" +
-	"\xd3\x15\xa89\xdc\xb4\x9fP\xb3r\xf5m\xeb\xeb\xee\xfc" +
-	"\xe0\x83J\xd4\xeck\xf2\xecw\xb8\x89\xcc\xf3\xbc\xb8_" +
-	":~\xf8G\x1f\x92\xa0x5j^m\xaaG\xe9$" +
-	"\x09Z\xf0f\x93KW^\xb8\xae\x9b\xaf]t\xcb\xc7" +
-	" \xa6Xe\xb0I\xe7\xd3\x1fKu\xcd\xc4\x19oN" +
-	"\xa0\xf4sZ\xba\x0f\xdc\xd5\xb3\xea\xfa\xf6W?\xab\x94" +
-	"\xfeX\xf38I\xffI3I\x1f^\xf4\xb7\x1b\xaf~" +
-	"\xe0\xd7\x9fM\x11k\xd2\x9b\xcd\xefJ\xa7\x9a=\xe3\x10" +
-	"\xef'K\xbf\xff\xfb\x99\xc9\x99_T\x19\xc4\xbb\xec\xb9" +
-	"\xe6\x99(\xd5]\xe6I\xbf\xac\x8d\xf4<\xfc\xc4\xf8\x9f" +
-	"\xcf\xfd\xa6\xef\xcbj=\x17,liB\xa9\xb7\xc5\xb3" +
-	"]\xcb\x8d\xd2FZ\xb9\xcb\x8f\x9e\xbaa\xf4\xc0\xeb\xe7" +
-	"\xa6\x0a\xf9[[\xaeCI\xf5>\xe0-\xa4\xf3\xd6O" +
-	"\x0e\xf6=\xb8\xf6\xe87\x95\x97\xda\xd9\xb2\x9e.\xb5\xcf" +
-	"cX\x7f`\xab\xdd\xf7\xc8\xfd\xeeT~~\xb6\xe53" +
-	"\xe9\x84w\xd8\x8b-\x9ba\xaek;\xba\xce5\xb3\xc4" +
-	"\xf2\xf3\xf2JI/u\xf4nQ-[\xd5G\x06\xbc" +
-	"\x8d\xac\x91\xd4\xd4\xfcX\x16Qn@\x01@l\xed\x00" +
-	"@\x14\x9b\xd7\x00\xa0 \x8a\x8b\x01:\xd5\x11\xdd0\xb9" +
-	"[P\xad\xbc\xa1\xeb\x1cX\xde\xde6\xa4h\x8a\x9e\xe7" +
-	"\x93\x8f\xef\xe3\x9af\xdcl\x98Za\x95\xa9\x8e\xa8z" +
-	"\xe7\x12C\x1fVG\xb2\x88\x93y\x07uuK\xce\xc8" +
-	"o\xe0v5\xaf\x1cc1\x80\x18\x02\x88\x8d\xb3\x01\xe4" +
-	"Z\x86rZ\xc0dI\xb1G\xb1\x01\x04l\x80)\xce" +
-	"[\xa2\x19NaXSL^\xf0NB\xef\xa8+\xc3" +
-	"\xa3N\xf6\x03\xc8o3\x94O\x0b(\"\xa6)C\x8a" +
-	"\xa7\xc6\x01\xe4\xd3\x0c\xe5\x8f\x04\x14\x05!\xedY\xe1\xcc" +
-	"K\x00\xf2G\x0c\xe5/\x04\x14\x19K#\x03\x10?\xdd" +
-	"\x0f \x7f\xc1\xb0\x1f\x05\x14c\xb14\xe51\xf1\xfc8" +
-	"@?2\xcc5\x105\x1eOc\x1c@\xaa\xc3!\x80" +
-	"\\-\xd1\xd3( \xd6\xa4\xb1\x06@\x12q;@." +
-	"E\xe49\xc4\x9e\xc0\xb4\x87\xc4kp\x1c 7\x87\xe8" +
-	"}(\xa0k\xabEn\xd9J\x11\xb0\x84q\x100\x0e" +
-	"\xe8*\x8em\x0c\x96\x0a\x0a\xda|\xa9\xc97:<\xa1" +
-	"\xe7\xc7\xc2\xdd\"\xb7M5o\x0db\xa9\xa0x\x0c\x9d" +
-	"\x1b\x1d^\xc90\xca\x15\xd3\x1e\xe2\x0a\xda\x19\xdd\xe6\xe6" +
-	"&\x05\xb5\xe8ce\xcbRE\xd58\x16\xfa|\xae\x84" +
-	"b[X\x07\x02\xd6\x01\xba#\xa6\x92\xe7YnBB" +
-	"5\x0a\xe17\x05c4k\x1a[\xc6\xd0\xf7\x99\x058" +
-	"\x1d0\xcb\x10SQ\xfe\x05$\xa2k\xf2M\xdc\xb4x" +
-	"\x16\x89\x9f\xd8\x13\xea\x88\x15\xb1\x879\xb1\xcc\x1e\xb85" +
-	"\x1e\xb8\xd5Gj\x8e\x9b\x9b\xb89\xcf\xd1M>\xa2Z" +
-	"67}\xf2\xac\xac\x924\x95\xa2U\x89\x98C\x00r" +
-	"\x8a\xa1|\x85\x10i\x8f\xaaQX\xa9\xe8F\x8e\xf1|" +
-	"x\x89o)\xaa\x9f\xb7Y\x8ef[\xe1w\xb1)\xbf" +
-	"\xf3\xa2$o\xcf\xca*f\xa2J\xb35\x00r\x03C" +
-	"y\x86\x80nI1\x95\"\xb790\xd3\xc2TT]" +
-	"\x0115%\xba\xe9w\x89\x7fvV1\x95N\xfa\xd8" +
-	"\xb4\x08\xe2\xa9P\x82B\x12\xd61\x94\xb5\x0a\x88\xab&" +
-	"\x80<\xcaP\xb6\x05\xc42\xc27\x12\xecm\x86\xf2\xdd" +
-	"\x84p\xc1G\xf8\x9d\x14k[\x18\xca\x0f\x0b\xe8\x1a^" +
-	"L.!\xfdll\x04\x01\x1b\x01\xdd|9\xc4\xa0\xcd" +
-	"\xe4\x85LOH\xd7\x9db\xd6\xe4\x9bT4\x1c\xab\xdb" +
-	"\xb6y1Q\xb2-\xac\x01\x01k\x00\x93\xb6R\xe9\xf0" +
-	"\xb0LU9<\xb4f\x7f\x190\x01^\xd4\x91y\x9e" +
-	"2\xa8\xd3M\xafp\xdd\xf2\xbd\x14Rw-CyT" +
-	"\xc0V\xfc\x86\xc8t5\xde\x11\xd9\xa0U8Od\xba" +
-	"\x9c\xda\x1fY\xa1\x95}Md\x0a\xe0\x8dd\xb1\x12C" +
-	"y\xab\x80\xc9Q\xdb.a*\xaaY\xbe/:-/" +
-	"Ia*j\xdd\xcaN\xda\xcc\x87\xbc=@\xda\x0d\xb3" +
-	"|yw\xb4\x9c\x0b\x81i\x05LE\xdda\x95\x87k" +
-	"\xa6\xc8_\x01\x04-\xee\x1b\xc01\x15[5\xf4Y\xfd" +
-	"\xdcr4fO\x00UG\x94 ;M\xda']\xc2" +
-	"\xfa^%L\x08\x85\xf9H\xeaM\x9a\xa6az\xf9?" +
-	"<\xb1\xf7:\x00\xb9\x8b\xa1\xbc\\\xc0\x00C\x192S" +
-	"\x1fCy\x80\xd2d\x97oiy\x08@\xce2\x94\xd7" +
-	"\x0a\xd8\x96W\x1c\x8b\x87\xc9\xd9\xe4\xb69\xd6=l\x03" +
-	"\xe3f\x18o\xd6\xa8\xe1h\x85~\x0e\x09\xdb\x1cC\x04" +
-	"\x01q*\xd5z\x8c>\xcf\xf7\x15\xf5\xa0B9R\xa4" +
-	"\x87\xa1\x9c\x8d\x94[A\xb4\xe5\x0c\xe5[H\xb92\x0c" +
-	"\x06\xc9\xdf\x03\x0c\xe5\x92\x80\xaeFq\xac\xf7\x19\xc0," +
-	";\xd4\xd1'f\x0d\x0f\xe1\x09\x100\x01\xe8:%\xcb" +
-	"69\xe5\xde\x10\xb2\xc4\x7f\xf1\xcc4)/\x99\x0a+" +
-	"Z\x17\xd0<\x8c\xcd\x15\xcb*U/\x07\xe7\xe0\xe2\xc8" +
-	"\xaeS\xc7\xe1\xa8a\xd9\xbaR\xe4\x00\x10\\g\x9bQ" +
-	"\"\x88P.\x09\xfb\xc6\x7f\x03i\xa4\x7f\x11'\x00m" +
-	"\x7fE^\x0d\x12\x01F\xc5\x16S\xd1k\xe5B\xa8\xeb" +
-	"v\xecQ\xae\xdbjg\xde\x93R\xe5\xda\xf6\x08w\xa1" +
-	"\x812\xd7UX-0\xd0\x8a\xa1\xc8j\x89\x0d|," +
-	"\xb0A\x1b/*\xaa\x16:\xb8l\xbanH\xdc\x14\xf1" +
-	"L\xce\xac\xd5\xf9\x86\xf9\x98\x9b\x11*v\x90\x9c\xf4\x08" +
-	"C\xf9\x09\xc2\x1cV<n\xc4\xc3\x1d x\x90\x8b\x03" +
-	"\x88\xbb\xc9o;\x18\xca{\xcbI\xb5\x06@\xbc\x9f\xcc" +
-	"\xb6\x97\xa1\xfc(\xb5\x0d)\xaf\xe2\x8b\x07\xb7G'\x8a" +
-	"q\x96\xc6Z\x00\xf10\x15\xae'\x18\xca\xc7\x84@\xcb" +
-	"LO\x85\x87;\xfd\xfbl\xa3\xd8RyT\xa1\xcb\x05" +
-	"GEC\x1fP\x8b\xdcp\xd0\x0eC.?\xea\xe8\x1b" +
-	"x\xa1\x17\xf5\xbcQP\xf5\x11\x08\xc3.o\x14K&" +
-	"\xb7,T\x0d]v\x14Me\xf6Xx\xe4\x146\"" +
-	"t\xfb\xd8XU\xb2\xd5\x84\xa1{\xa5g~`$\xa9" +
-	"\x1b\x97\x01\xe4\xba\xa8\x89Y\x8e\x91\x03\xa5\x0c.\x06\xc8" +
-	"\xf5\x10=\x8b\x91\x0f\xa5\x158\x13 \xd7G\xf4\x01\xea" +
-	"\x91\xfc.K\x92\xf1i\x80\xdc\x00\x91\xd7y\x8d\x16\xf3" +
-	"\xf2\xb4t\xbbw\xfcZ\xa2\x8fz\xadV\xcco\xb58" +
-	"\xce\x06\xc8\xad#\xfaV\xa2\xd7\xf8f\x97\xc6p=@" +
-	"n\x0b\xd1wx\xbdV\xdc\xef\xb5\xeeA\x13 w7" +
-	"\xd1\xef#z\xed\x0c\xcf\xf8\xd2n\x8f\xbe\x8b\xe8\x0f\x13" +
-	"\xbd\xee\xf24\xd6\x01H\xfb\xbc\x9em/\xd1\x1f%z" +
-	"=\xa6\xb1\x1e@:\x88\x87\x00r\x8f\x12\xfdI\xa2O" +
-	"\xabI\xe34\x00\xe9\x87\x9e>\x8f\x13\xfd(z\x81\xa2" +
-	"r\xdd\xce\x14*#\x95\xe0\xa6\x1az\xf0\x9f\x19V\x08" +
-	"N^n\xcfqB\x7f\x8e\xc9h\x0a\x01\x88I@\xb7" +
-	"d\x18\xda\xca\x89\x19\xe0\"u6\x80\x09$\x0d=S" +
-	"\x08\x8as9H\x96\x1b\xd0\x96W\xb4L)\xd4D\xb5" +
-	"\xba\x1d\xdbpJ\xd0F-e!\xc4\x8d\xe9\xe8KM" +
-	"\xa38\x80\xdc,\xaa\xba\xa2]\x1a\xa2\x92\x8e\xa3\x16&" +
-	"\x85 \x06\xf0J\x0c(^\xcc\xd5\x861w\x0d\x15\xf7" +
-	"Y\x0c\xe5\xf9\x15\xc9`.%\x83\xffd(\xff\xb7\x80" +
-	"I\xca\x7fa\xe0oR4\x87_8\xc4\x07\xab\xd2[" +
-	"\xa7WH\xed*\x91\x8b#\x91\xa1\xc4\xf5\x00\xf2\x1c\x86" +
-	"\xf2\"\x01\xb7YN>O\xf7\x0b.\xcc\xa9v\xae\xe0" +
-	"\x16$-ed\xb2\xf4\xa9\xeb\xc4\x08\xb7\xfdUF\x1f" +
-	"6\x824\xfb\xad\xbe\xb9\xe4& |\xfd^\xa8\xa7\xec" +
-	"\x1b\x18\xc8\xfao/\xdf:\x00d\x91Y\xe1\xb1g\xdb" +
-	"\xa3wP`\x91O\xc9\"\x7fg(\x7f]\xd1\x09\x9c" +
-	"\xa3\x16\xf3\x1f\x0cs1\x8c\xfaI\x09\xbdwM\x8cb" +
-	"!\xe5\xc5r\xb7\x1f\xcb\x8d\xd8\x0f\x90k \xfa\x0c/" +
-	"\x96\xfd\xfc)5{1\x9b&\xfa\x95\x95\xb1\xdc\x8a{" +
-	"\x00rWF\xef&\x16\xbc\x9b\x0e\x05\xef\xa6E^," +
-	"\xc7\xfcX^\x88\xcf\x01\xe4\x16\x11\xbd\x07\x05L8f" +
-	"T\x13\xec|\xe9&\xceK\xdd\x90\xd4\xd4M<z\xcf" +
-	"\xa8\x8a\xd6\xe3(\x1a\xb4\xe5l%\xbf!jN4\xab" +
-	"O\xd1\x0b\x16\x8e*\x1b8e\xd7\x84\xe1D\xd9\xd5\xd6" +
-	"\xac\xd5\xdcT\x87\x01\xa3v&,:\xc9\xacaT\xd7" +
-	"\xa2\x1cGr\xa3\x1f\xb8\xe1^Q\xd9\x92)h|\x09" +
-	"\x96#\xd4`z\x94\xddU\xda1t\x1d\xbd\x1d}@" +
-	"m\xa3\x14oOz\xc4\x08\xd5\xc8I\x92$\xffy\x10" +
-	"\x07\x08']\x18\x0cM\xc4\x8dw\x80 \xaa\x09\x8c\xe6" +
-	";\x18\x8cs\xc4\xdbM\x10\xc4\xc1\x04\x0a\xe1H\x11\x83" +
-	"\xd1\xa1\x98\xd9\x03\x82\xd8\x9b@\x16\xce\x0c1\x98Y\x88" +
-	"\xd7/\x06A\x9c\x9bp\x83n\x08:}u\xba\xd0\x0d" +
-	"@\x0cm\x1e\x8c\xbb\xd0\x0d^X\x18tM\x00]\xb8" +
-	"\xad\x9c\xa7\xba\xb0rhpI=\x17\x05FB\xbbx" +
-	"`\x04\xa3\x9e\x0bu)A\xac\xb1a\xa3j\x18\xb1\xbe" +
-	"\xe2\x01\xa7\x19~\x13\x03\xc9\x95\x15\x99hr\x90\xf9\xca" +
-	"E\x05\x94\xf9}O:<\xf5\xce\xf6\xf2\xb3kGE" +
-	"\xaa\xbb\x87\x88[\x19\xca\xbb*\xfa\x9e\x9d\xcb\xca\x0d\xc6" +
-	"\xe3a\xc1\x14\x1f\xdb\x03 ?\xceP>\x1aUK\xf1" +
-	")b|\x92\xa1\xfc\xbc\x80\x09n\x9a\x81v\x13BA" +
-	"3F\x96\xab:\xb7\xa8\x84T\xb5\xba%n\x16\x15\x9d" +
-	"\xebh/UT\xcd1\x09\xad\x13\xfb\xf5\x09\x9d\xc9\xbf" +
-	"\x9c\xc5x\xd6D\xd3\xb7$!1\x18\xa9b0\xf7\x15" +
-	"EBTc\xc2\x0d\xbaP\x0c\xf24\x01b\xca\xd9\xd1" +
-	"\xcd|\xa8rt\xb4\xa4m\xaa\xd1Q{\xe4\xfb\x899" +
-	"\xe0\x92\xde\xef\xfd\xdcJ:\x97\x80\xa6h\x1ew\x91\xb7" +
-	"V\x7f\xdbTE\xa7}\xaa:\xb7&\xaa:\x9e\xfbR" +
-	"\xd1\x08\xbc,\xc4*c\x14\xd8\xb019\xd5\xff3\x00" +
-	"\x00\xff\xff\xcb\xf9g*"
+const schema_db8274f9144abc7e = "x\xda\xacY\x7f\x8c\x14\xf5\x15\x7fof\xf7\xe6\x0e\xee" +
+	"\xd8\x1df\xa1\xe7\xc5\xcb)\xc1X)P\x90\xd2\xc2\xb5" +
+	"\xf5~p\xe0\xed\xc9\x8f\x9d\xdb;4\x88\x09s\xbb\xdf" +
+	"\xdb\x1b\x98\x9dYff\x813 B\xa0\xc2E\xe5\x87" +
+	"\x92\x08\xd5F\xa8-j\xa9\x05kc\xb4h4m\xaa" +
+	"\xc6X5\xadMii\x93VI\xd5\x94XQ\x93\xd2" +
+	"\xa8\xd3\xbc\x99\x9d\x1f\xb7w\x1e\xd8\xf4\x9f\xcb\xe6\xcd\xfb" +
+	"~\xdf\xfb\xbe\xef\xe7}\xde\xfb\xbe\x9b\xb7Oh\xe7\xe6" +
+	"\xc7\x9f\x9e\x0c \xef\x89\xd78\xdf)\xbe~\xec\x9b\x87" +
+	"^\xdd\x05b\x13\xe7\xdcq\xba'u\xd1\xde\xf9g\x00" +
+	"\\\xf0b\xfcv\x94\xde\x8a\x0b\x00\xd2\x9b\xf1U\x80\xce" +
+	"\xef\xe6m}g\xddG\x07\xf6\x80\xd8\x84\xa1fL\x00" +
+	"X\xf0^|\x04%\xac\x11\x80w~x\xef\xd5\xeb\xce" +
+	"\xef\x96\xef\x1b\xad\x15GR\xfb\x0b\xa9}\xe2n\xf9a" +
+	"\xbc\x0d\xd0ys\xce\xd4D\xcd\xad=\x0f\x80\xdc\x845" +
+	"\x11m\x8e\xb4\xc5\x9a\x01\x94\xae\xa9\xa1\x9fW\xd7\xbc\x84" +
+	"\x80\xce\xeb\xb3O?\xbb\xff\xe7w}\x1f\xe4k\x11\xc1" +
+	"3\xbd\xb8\xf6?\x08(\xad\xa8\xa5\xfd\xee\xff\xe3s+" +
+	"\x8b\x07\x8e\x1c\x03\xf1Z\xff{\xb9\x96\xe3 \xe6,\xfc" +
+	"\xd3\xb9U+\x9e\x1c<\xee}\xf1\xdcQk\x9f\xa4\xa5" +
+	"\xc3\xee\xd2\x977'\xef\xee\xf8\xd6\xbe\xe3\xe4J\xd4q" +
+	"w\x93\x87jGP\xfaE-\xfd<U\xdbB\xae\x8c" +
+	",~n\xf5G\xdf\xb3\x1e\x07y\x0e\xc6\x9c_\xef}" +
+	"{\xd3u\x8f\x0d\xbe\x04\xfd\x9c\x801\x0aH\xdd1\xda" +
+	"\xfab\xdd?\x00\x9d3s\x8f7\x9f\xec\xff\xdbO@" +
+	"\x9c\x1d\xd8~k\xd2,\x0eP:?\x89l7\xfcr" +
+	"\xd6\xca}\xef,?E\xb6\xb9\xea\xa05LnE\xa9" +
+	"y2\x05\xed\x8a\xc9?\x03t\xde\x98\xbd\xfa\xf9\xe7O" +
+	"\x16NU{\xea\x06\xed\x99\xc9=(\xbd\xe6j\xbf\xe2" +
+	"jOK\xe3\xd9\x17\xe6\xc7\x9e\xae\x1c\x9c'\xa5m\xf5" +
+	"\xef\x93w\x07\xeaI\xe1\x96_=seO\xfa\x89\xd3" +
+	"Q\xef\xe67\xcc \xef\xd2\x0d\xe4]\xf3\xf9\xce\x06\xfd" +
+	"\x83\x9d/T\xdd\xa8\xbb\xd3\xc6\x86\x1e\x94v7\x90\xb9" +
+	"\x1d\x0d\xb4[\x10\x09\xb9\x09c\xd5\xce5OY\x8f\xd2" +
+	"\xfc)\xf4s\xce\x94\x9b)\x8c=\xb7\xdew0~\xee" +
+	"\xbe\x97\xaaO.\xb8W\x970Q\xda\x9b\xa0\x9f\xbb\x13" +
+	"\xc79@\xa7\xe9\xe4\xb7\x9f\xe8\xcc\x9fy\xb5\xca\x15\xda" +
+	"\\\xda8\xf5\x82\xb4m*\xfd\x1a\x9e\xba\x19\xd0\xb9\xeb" +
+	"k\xc3\xb7\xaf\xbcf\xe4\xad\xea0y\xe1\x9f:\x82\xd2" +
+	"yW\xfb=W\x9b;\xa7\\q\xe7\x1fn8\x1bA" +
+	"NZ\xfa;B\xccY\xb9\xfa\xd6\xf5u\xdb\xde~;" +
+	"\x8a\x9c\xefJn\x00e\x89\xe2\xf3\x94xP:}\xf4" +
+	"\xc7\xef\x90\xa1\xf8\x98\x00IkP\xda-\xd1\xcf\x1d\x92" +
+	"CG^\xb8\xae\x83\xad]t\xcb\xfb 6\xf1\xa3\x12" +
+	"\xee\xd4\xb4V\x94^\x9cF\xaa\xcfM\x13P*N\x17" +
+	"\x00\x9c{\xef\xe8Z\xb5x\xc6\x8b\x17\xa2\xe6\xfb\xa7_" +
+	" \xf3\xeat2?\xb8\xe8\x9f7^s\xefo.\x8c" +
+	"\x97p{\xa7\xcfB\xe90\xed#\x1d\"\xe5\x0f\x96\xfd" +
+	"\xe0\xf7M\x89\xa6\x8f\xc7\xc3\xf83\xd3\xd7\xa3\xf4\x1a\xe9" +
+	".xe\xba\x8b\xf1\xa3\x8f\x1c\xfb\xeb\xc5\xdfv\x7f2" +
+	"\xc6\xd3\x8b_\x19@\xa9\xa1\x91\xb6\xadk\xbcQZL" +
+	"\xbf\x9c\xe5'\xce\xdc0t\xe8\xe5\x8b\xe3\xf9qu\xe3" +
+	"N\x94\x16\xba\x0b\xe67\x92\xd3[?8\xdc\xbdo\xed" +
+	"\x89\xcf\xa3\xa7\x92\x1b\x9f\xa5S)\xae\xc2\xfaC[\xed" +
+	"\xee\x07\xeeq\xc6\xb9\xe9\x05;\x1a;Q:\xe0\xeev" +
+	"O\xe3f\x98\xe3\xd8e]g\x9aY\x8a\xe5\xbe\xee\xff" +
+	"\xcc\xcd\xcd)%\xbd\xd4\xbat\x8bj\xd9\xaa^\xe8s" +
+	"\xe5m\x19CSs\xc3\x19D\xb9\x1e9\x00\xb1\xb9\x15" +
+	"\x00Q\x9c\xb6\x06\x009Q\xec\x04hS\x0b\xbaa2" +
+	"'\xafZ9C\xd7\x19\xf09{\xfb\x80\xa2)z\x8e" +
+	"\x05\x86\xe2c\x0du3M3n6L-\xbf\xcaT" +
+	"\x0b\xaa\xbe\xc4\xd0\x07\xd5\x02@\x06q\xa2e\xfd\xba\xba" +
+	"%k\xe460{\xcc29\xc6\xc7\x00b\x08 6" +
+	"\xcc\x02\x90ky\x94S\x1c&J\x8a=\x84\xf5\xc0a" +
+	"=\xe0DG_\xa2\x19\xe5\xfc\xa0\xa6\x98,\xbf\xc4\xd0" +
+	"\x85A\xb5@\x9b^\x15l\xfaf/\x80\xfc\x06\x8f\xf2" +
+	"Y\x0eE\xc4\x14Q\xaax\xe6\x18\x80|\x96G\xf9]" +
+	"\x0eE\x8eK\xb9Q:\xf7,\x80\xfc.\x8f\xf2\xc7\x1c" +
+	"\x8a<\x9fB\x1e@\xfc\xf0 \x80\xfc1\x8f\xbd\xc8\xa1" +
+	"\x18\x8b\xa5\x88\xf7\xc4\xcf\x8e\x01\xf4\"\x8f\xd9z\x92\xc6" +
+	"\xe3)\x8c\x13Hp\x00 [K\xf2\x14r\x885)" +
+	"\xac\x01\x90D\xdc\x09\x90M\x92x6\xa9\x0b\x98\" " +
+	"H\xd7\xe11\x80\xecl\x92w#\x87\x8e\xad\x16\x99e" +
+	"+E\xc0\x12\xc6\x81\xc38\xa0\xa3\x94m\xa3\xbf\x94W" +
+	"\xd0f\xcbL\xb6\xb1\xcc\x04=7\x1c|-2\xdbT" +
+	"sV?\x96\xf2\x8a\xab\xd0\xb6\xb1\xcc\xa2\x0aCL1" +
+	"\xed\x01\xa6\xa0\x9d\xd6mfnRP\x0b\x17+[\x96" +
+	")\xaa\xc60\xdf\xedi\x09\x8ama\x1dpX\x07\xe8" +
+	"\x14L%\xc72\xcc\x04A5\xf2\xc1\x9a\xbc1\x941" +
+	"\x8d-\xc3\xe8\xdd\x9f\x058\x050\xc3#&C\xba\x06" +
+	"$\xa1c\xb2M\xcc\xb4X\x06I\x9f\xd4\x05\xb5`\x85" +
+	"\xea\x01\x81V\xd4\xfd[\xad\x19{\xc1\x1e\xa6\xb3\xcc\xdc" +
+	"\xc4\xcc\xb9e\xddd\x05\xd5\xb2\x99\xe9\x89g\xb6e\x14" +
+	"S)ZQ\x14\x1d\x01\x90\x93<\xcaWr\xe19P" +
+	"5\xf2+\x15\xdd\xc8\xf2,\x17\x1c\xc7\xb7\xd4\xf0e\x8d" +
+	"\xf62\xab\xac\xd9\x16\x04\xab&^\xeffX\xce\x9e\x99" +
+	"i\x19\xe3\xeb\x1a\x00\xb9\x9eG\xb9\x91C\xa7D_\x99" +
+	"\xcd\x807-L\x86\xa5\x1a\x10\x930az-\xa1\xbf" +
+	"K<+\x99\xca.\xa6\xe5\xa5W*0\xb6\x8d\x8cm" +
+	"\xe5Q\xde\x13\xc9\x84\xdd&\x80\xbc\x8bGy?\x87X" +
+	"I\x84{(;\xf6\xf3(?H\x89\xc0y\x89p\x98" +
+	"\x92\xf3~\x1e\xe5\x93\x94\x08\xbc\x97\x08?\xa5X\x9f\xe4" +
+	"Q>\xcd\xa1cx\xa9M\xfe\xdb\xd8\x00\x1c6\x00:" +
+	"\xb9JzB\x8b\xc9\xf2\xe9\xae@\xae\x97\x8b\x19\x93m" +
+	"R\xd1([\x1d\xb6\xcd\x8aB\xc9\xb6\xb0\x068\xac\x01" +
+	"L\xd8J\x14,A=\xac\x80\xc5\xdf\x13M\x96_\xcd" +
+	"LK\xe5\x0d}\x0cU\x8c\x13\xa6\xde\x0a&}H\xaa" +
+	"\x85\xb9\x86\xa9\x0a\x05U\x97\x93|\xecJ\xc7\xa9\xc4D" +
+	"\xa1\xa3\xae\xe5Q\x1e\xe2\xb0\x19?'1\x85\x85\xb5\x02" +
+	"\xc8\xebx\x945\x0e\x9b\xb9\xcfHL\x81Q\x89`\x86" +
+	"x\x94m\x0e\x9b\xf9OIL\xa1\xd9H\xd1.\xf1(" +
+	"o\xe501d\xdb%L\x865\xd4\xbb\xd26\xcb\xa5" +
+	"DL\x86\xedd\xe5\xae7\xb3\x01\xf7\x1b }\x0dj" +
+	"N\xe5\xebP\x85\x84\x81\xd7\xf2\x98\x0c;\xd6*\xa0\x08" +
+	"\x13\x92\xa5\x8fm\x8by\xa1(\x9b\x8a\xad\x1a:a;" +
+	"A\xe0\x8e\xa2\xb45\xe4\xe56\xd3\xc5>&\xc3\xce\xa3" +
+	"\xca,?\x8eY\x17\x9am\xf6R\xd34L\xb7,\x05" +
+	"{/\xbd\x1e@n\xe7Q^\xce\xa1\x8f\xc94\x85\xae" +
+	"\x9bG\xb9\x8f\xd8\xb9\xdd\x8b\xbe<\x00 gx\x94\xd7" +
+	"r\xd8\x92S\xca\x16\x0b\xae\xdcd\xb69\xdc1h\x03" +
+	"\xcf\xcc \xb9\xad!\xa3\xac\xe5{\x19\x08\xb69\x8c\x08" +
+	"\x1c\xe2\xc4\x85\xa4\xcb\xe8\x8e \xc3K\x9e\x88\x9f\xe4S" +
+	"\x17\x8fr&\xf4s\x05\xc9\x96\xf3(\xdfB~VP" +
+	"\xd2Op\xe8\xe3Q.q\xe8h\xc4\x1az\xb7\x01\xbc" +
+	"e\x07\xeez\xc2\x8c\xe1\xe6\x89\x00\x1c\x0a\x80N\xb9d" +
+	"\xd9&#\xf6\x0f\x80O\xfa_\x86\x1b\xabH*\xa3$" +
+	"\\\xb6\x19\xff\x0c\x01\x01\xac\xe8\x89\x1e\xa2\xc2\x00\xfd\x9d" +
+	"a\xb0\xc7\xcf\xeb!\xc3\xb2u\xa5\xc8\x00\xc0?\xd8v" +
+	"\xa3D\x08\"\xee\x0a\x1a\xde\xff\x0b$3\x8a)T\xf1" +
+	"\xe6\xc1\x08\xc7G\xe9\xc0]\x88\x05L\x86\x8f\xae*\x17" +
+	"\xc6\xb9\xf9\x8e\xb2=\xc4t[\xcd\xb9\xe6\xc6\xdc\xfc\x8c" +
+	"\x10\xa1A\xd4\xd2\xd7GB\xe9Gm\xc5@\x18Ja" +
+	"\x03\x1b\xf6\x03\xd3\xc2\x8a\x8a\xaa\x05\xf7_\x89g\x07\x08" +
+	"7\x85:\x13\xf97\x9a\xb7\x12z\xa5\xc7i\x0c\\<" +
+	"Lw\xf8\x00\x8f\xf2#\x04N\x8c\xbc\xdb\xc4\xa3\xad\xc0" +
+	"\xb9\xd8\x8c\x03\x88{;C\xb2w\x89\xbd\x86\xd8\xfe`" +
+	"\x84\xedcI\xb79\x11\x0f\xef\x0cw\x14\xe3|\x0ak" +
+	"\x01\xc4\xa3\xc4\xf6\x8fx%\xa0\xe2o\xba+\x02\x806" +
+	"\xefd\xdb)\x1fU\x166\x13\x95\xfa\xa7\xa2\xa1\xf7\xa9" +
+	"Ef\x94\xd1\x0e\xd247T\xd67\xb0\xfcR\xd4s" +
+	"F^\xd5\x0b\x10\xa4j\xce(\x96LfY\xa8\x1a\xba" +
+	"\\V4\x95\xb7\x87\x83-'\x8c\x16\xa5\x81\x07\x9dU" +
+	"\xa5\x16\x17\x92\x14\xaey~\xb8\xa4\x0e\xec\x01\xc8\xb6S" +
+	"\xe7\xb5\x1c\xc3K\x95\xd2\xd8\x09\x90\xed\"y\x06\xc3{" +
+	"\x95V`\x13@\xb6\x9b\xe4}\xd4\xd8y\xad\xa1$\xe3" +
+	"\xe3\x00\xd9>\x12\xaf\xc3\xb0(J\xb7\xb9\xdb\xaf%\xf9" +
+	"\x90\xdb\x1f\xc6\xbc\xfe\x90\xe1,\x80\xec:\x92o%y" +
+	"\x8dw\x01\xd20\xae\x07\xc8n!\xf9.\xb7A\x8c{" +
+	"\x0d\xe2\x0e4\x01\xb2w\x92\xfcn\x92\xd76\xba\xd7 " +
+	"\xedu\xe5{H~?\xc9\xeb\xaeHa\x1d\x80t\xc0" +
+	"m4\xf7\x93\xfcA\x92O\xc2\x14N\x02\x90\x0e\xe3\x11" +
+	"\x80\xec\x83$\x7f\x94\xe4\x93kR8\x19@\xfa\x91\xeb" +
+	"\xcf\xc3$?\x81n\x1e\xa9L\xb7\xd3\xf9hJ\x13\xf0" +
+	"\xd4\xb0\xba\xf2\x86\x15\x00\x96U\xde\x1c\xe8\xf1M\xc6H" +
+	"\xd0\xa3\x03\x13\xe1\xac\x05\x10\x13\x80N\xc90\xb4\x95\xa3" +
+	"\xa9\xe2R\x05\xbe\x02\x18H\x18z:\xefw\x05\x95\xc4" +
+	"Yn@KN\xd1\xd2\xa5\xc0\x13\xd5\xea(\xdbF\xb9" +
+	"\x04-\xd4\x07\xe7\x03\x04\x99e}\x99i\x14\xfb\x90\x99" +
+	"EUW\xb4\xcb\xc3V\xa2\\V\xf3c\xd2\x92\xab\x06" +
+	"ZK\xa9\xb5Oq\xf3\xb06\xc8\xc3\xeb\xa8q\x98\xc9" +
+	"\xa3</B\x15s\x88*\xbe\xca\xa3\xfc\x0d\x0e\x13D" +
+	"\x99\x01-lR\xb42\xbb\x9c\xc6\xa5\xbf\x8a\x11\xbd\xfe" +
+	"\xd3#\xaa\x88\xf5\xce\xd0z`|=\x80<\x9bGy" +
+	"\x11\x87\xdb\xadr.G\x87\xf6\xa3\xc0\xa8\x1c\xaf`\x16" +
+	"$,\xa50\xd6\x91K\xd5\x9b\x02\xb3\xbd_i}\xd0" +
+	"\xf0I\xfa\x7f\\}\xd9]G0\x07\xb84\xadw\xf7" +
+	"\xf5e\xc2\xe7&\xef\x91\xe6\xcc`\xff\xf33\xc2\xe7\x9e" +
+	"\x1f\xae\x0f)\\\xff\xe2Q\xfe4\xd2y\\\xa4\x16\xf9" +
+	"\xdf<fc\x18\xf6\xc3\x12\xba\xcf\xb7\x18eO\xd2\xcd" +
+	"\xfe\x0e/\xfb\x1b\xb0\x17 [O\xf2F7\xfb=\xee" +
+	"\x95\xa6\xb9Y\x9e\"\xf9U\xd1\xeco\xc6\x11\x80\xecU" +
+	"\xe1\xf3\x90\xf7\x9f\x87G\xfc\xe7\xe1\"7\xfbc^\xf6" +
+	"/\xc4'\x01\xb2\x8bH\xde\x85\x1c\x0ae3\xac,v" +
+	"\xaet\x13c\xa5\x0eHh\xea&\x16>\xdbTE\xeb" +
+	"*+\x1a\xb4dm%\xb7!l\x864\xab[\xd1\xf3" +
+	"\x16\x0e)\x1b\x181\xb3`\x94Cf\xb65k53" +
+	"\xd5A\xc0\xb0}\x0aJW\"c\x18\xd5\x15-\xcb\x90" +
+	"\xee\xd3K\xf5\xe0[Q\xd9\x92\xcekl\x09Vr\xda" +
+	"\xe0\xf5\xb02\xa8\xf4\xc5\xd0ut\xbf\xe8}j\x0b\x95" +
+	"\x07{\xcc\x0b\x8d\xff\"0\xb5y\x18\xa2\x9bM\xf2q" +
+	"\x80`\x10\x88\xfeDI\xdcx;p\xa2*`8\xfd" +
+	"B\x7f\xd8%\xdef\x02'\xf6\x0b\xc8\x05CW\xf4\x87" +
+	"\xabbz\x048q\xa9\x80|0UE\x7f\x9e#." +
+	"\xee\x04N\x9c#8~\xcb\x05m\x9e;\xed\xe8\xf8\xb8" +
+	"\x86\x16\x17\xd9\xed\xe8\xf8\xcfG\xf4[3\x80v\xdc^" +
+	"\xe1\xb8v\x8c\x8eN\xbed\x8b\xd7\xcbZ\xac\xcb\xc9\x1a" +
+	"\x7f v\xe9N\xdd\xb3\x93 \xcf\xabf3\xeb#/" +
+	"U\xcd\xa8\xb4J\x89\x95\x11>\x9b(\x17=\x87\xfd\xd2" +
+	"\x9c\xa0\xc5U\x8fS\xca\xc6-<\xca\xbb\"\xd4\xb9c" +
+	"F\xe4\xc5\xeawY\xbb{*M\xcc\xc3A)\x16\x1f" +
+	"\x1a\x01\x90\x1f\xe6Q>\x11y\x9c>F\x8a\x8f\xf2(" +
+	"?\xc5\xa1\xc0L\xd3\xf7sT\xcahFa\xb9\xaa3" +
+	"\x8b\x8aSU\xdf]bfQ\xd1\x99\x8e\xf62E\xd5" +
+	"\xca&\xa1z\xf4;bT\xf7s\x99C\xaa,3\x85" +
+	"\x0abc.b\xfd\xc94\xfa\x03tQ$\xe45\x08" +
+	"\x8e\xdf\x08\xa3\xcf\xfb\x04\x9cKL\xdanf\x03\xe3\x0c" +
+	"\xda\xaa\xeerF\x88\x91\xd1\xfc\xf1\xc5\xfb\x8e;\xd0\xe8" +
+	"mc\x97\x85\xbfp\xceyi\xd6\xae\x8c1*%\xae" +
+	"\xaa\xc2\xcd\x18\xaf\xbe\xae\x09K\x9c{\xcd\xc9\xf0?\x0d" +
+	"\x15sV\xa5\xd0\x00?h\x8c\xad!\xff\x0d\x00\x00\xff" +
+	"\xff\xf8\xb3\xea\x07"
 
 func init() {
 	schemas.Register(schema_db8274f9144abc7e,
