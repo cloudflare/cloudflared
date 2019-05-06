@@ -1,0 +1,5 @@
+*.test
+*.out
+example/example
+/xunit.xml
+/coverage.xml
