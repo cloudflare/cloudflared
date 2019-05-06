@@ -29,11 +29,11 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	go build -v $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	go build -mod=vendor -v $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: test
 test: vet
-	go test -v -race $(VERSION_FLAGS) ./...
+	go test -mod=vendor -v -race $(VERSION_FLAGS) ./...
 
 .PHONY: cloudflared-deb
 cloudflared-deb: cloudflared
