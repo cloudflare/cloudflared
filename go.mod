@@ -40,3 +40,5 @@ require (
 	gopkg.in/urfave/cli.v2 v2.0.0-20180128182452-d3ae77c26ac8
 	zombiezen.com/go/capnproto2 v2.17.0+incompatible
 )
+
+replace github.com/miekg/dns => github.com/miekg/dns v0.0.0-20171128074819-6da3249dfb57
