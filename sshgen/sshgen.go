@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -39,6 +41,14 @@ type signResponse struct {
 	Certificate string    `json:"certificate"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
+
+// ErrorResponse struct stores error information after any error-prone function
+type errorResponse struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+}
+
+var mockRequest func(url, contentType string, body io.Reader) (*http.Response, error) = nil
 
 // GenerateShortLivedCertificate generates and stores a keypair for short lived certs
 func GenerateShortLivedCertificate(appURL *url.URL, token string) error {
@@ -96,13 +106,28 @@ func handleCertificateGeneration(token, fullName string) (string, error) {
 		return "", err
 	}
 
-	res, err := http.Post(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
+	var res *http.Response
+	if mockRequest != nil {
+		res, err = mockRequest(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
+	} else {
+		res, err = http.Post(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
+	}
+
 	if err != nil {
 		return "", err
 	}
 	defer res.Body.Close()
 
 	decoder := json.NewDecoder(res.Body)
+
+	if res.StatusCode != 200 {
+		var errResponse errorResponse
+		if err := decoder.Decode(&errResponse); err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%d: %s", errResponse.Status, errResponse.Message)
+	}
+
 	var signRes signResponse
 	if err := decoder.Decode(&signRes); err != nil {
 		return "", err
