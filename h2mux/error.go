@@ -20,10 +20,11 @@ var (
 	ErrUnknownStream       = MuxerProtocolError{"2002 unknown stream", http2.ErrCodeProtocol}
 	ErrInvalidStream       = MuxerProtocolError{"2003 invalid stream", http2.ErrCodeProtocol}
 
-	ErrStreamHeadersSent = MuxerApplicationError{"3000 headers already sent"}
-	ErrConnectionClosed  = MuxerApplicationError{"3001 connection closed"}
-	ErrConnectionDropped = MuxerApplicationError{"3002 connection dropped"}
-	ErrOpenStreamTimeout = MuxerApplicationError{"3003 open stream timeout"}
+	ErrStreamHeadersSent      = MuxerApplicationError{"3000 headers already sent"}
+	ErrConnectionClosed       = MuxerApplicationError{"3001 connection closed"}
+	ErrConnectionDropped      = MuxerApplicationError{"3002 connection dropped"}
+	ErrOpenStreamTimeout      = MuxerApplicationError{"3003 open stream timeout"}
+	ErrResponseHeadersTimeout = MuxerApplicationError{"3004 timeout waiting for initial response headers"}
 
 	ErrClosedStream = MuxerStreamError{"4000 stream closed", http2.ErrCodeStreamClosed}
 )

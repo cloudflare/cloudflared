@@ -201,9 +201,9 @@ func Handshake(
 		initialStreamWindow:     m.config.DefaultWindowSize,
 		streamWindowMax:         m.config.MaxWindowSize,
 		streamWriteBufferMaxLen: m.config.StreamWriteBufferMaxLen,
-		r:              m.r,
-		metricsUpdater: m.muxMetricsUpdater,
-		bytesRead:      inBoundCounter,
+		r:                       m.r,
+		metricsUpdater:          m.muxMetricsUpdater,
+		bytesRead:               inBoundCounter,
 	}
 	m.muxWriter = &MuxWriter{
 		f:               m.f,
@@ -406,7 +406,7 @@ func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader
 
 	select {
 	case <-ctx.Done():
-		return nil, ErrOpenStreamTimeout
+		return nil, ErrResponseHeadersTimeout
 	case <-m.abortChan:
 		return nil, ErrConnectionClosed
 	case <-stream.responseHeadersReceived:
