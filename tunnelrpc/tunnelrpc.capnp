@@ -72,10 +72,11 @@ struct ConnectError {
     shouldRetry @2 :Bool;
 }
 
-struct CloudflaredConfig {
-    # Timestamp (in ns) of this configuration. Any configuration supplied to
-    # useConfiguration() with an older timestamp should be ignored.
-    timestamp @0 :Int64;
+struct ClientConfig {
+    # Version of this configuration. This value is opaque, but is guaranteed
+    # to monotonically increase in value. Any configuration supplied to
+    # useConfiguration() with a smaller `version` should be ignored.
+    version @0 :UInt64;
     # Frequency (in ns) to check Equinox for updates.
     # Zero means auto-update is disabled.
     # cloudflared CLI option: `autoupdate-freq`
@@ -101,10 +102,14 @@ struct CloudflaredConfig {
     dohProxyConfigs @6 :List(DoHProxyConfig);
     # Configuration for cloudflared to run as an HTTP reverse proxy.
     reverseProxyConfigs @7 :List(ReverseProxyConfig);
+    # Number of persistent connections to keep open between cloudflared and
+    # the edge.
+    # cloudflared CLI option: `ha-connections`
+    numHAConnections @8 :UInt8;
 }
 
 struct ReverseProxyConfig {
-    tunnelID @0 :Text;
+    tunnelHostname @0 :Text;
     origin :union {
         http @1 :HTTPOriginConfig;
         socket @2 :UnixSocketOriginConfig;
@@ -230,6 +235,6 @@ interface TunnelServer {
     connect @3 (parameters :CapnpConnectParameters) -> (result :ConnectResult);
 }
 
-interface CloudflaredServer {
-    useConfiguration @0 (cloudflaredConfig :CloudflaredConfig) -> (result :UseConfigurationResult);
+interface ClientService {
+    useConfiguration @0 (clientServiceConfig :ClientConfig) -> (result :UseConfigurationResult);
 }

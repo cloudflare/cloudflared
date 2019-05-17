@@ -70,7 +70,7 @@ tunnel-deps: tunnelrpc/tunnelrpc.capnp.go
 tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
 	which capnp  # https://capnproto.org/install.html
 	which capnpc-go  # go get zombiezen.com/go/capnproto2/capnpc-go
-	capnp compile -ogo -I ./tunnelrpc tunnelrpc/tunnelrpc.capnp
+	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
 
 .PHONY: vet
 vet:
