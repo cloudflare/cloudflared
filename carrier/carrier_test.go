@@ -49,9 +49,8 @@ func TestStartClient(t *testing.T) {
 
 	buf := newTestStream()
 	options := &StartOptions{
-		OriginURL:     "http://" + ts.Listener.Addr().String(),
-		Headers:       nil,
-		ShouldGenCert: false,
+		OriginURL: "http://" + ts.Listener.Addr().String(),
+		Headers:   nil,
 	}
 	err := StartClient(logger, buf, options)
 	assert.NoError(t, err)
@@ -73,9 +72,8 @@ func TestStartServer(t *testing.T) {
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 	options := &StartOptions{
-		OriginURL:     "http://" + ts.Listener.Addr().String(),
-		Headers:       nil,
-		ShouldGenCert: false,
+		OriginURL: "http://" + ts.Listener.Addr().String(),
+		Headers:   nil,
 	}
 
 	go func() {

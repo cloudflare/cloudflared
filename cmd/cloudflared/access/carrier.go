@@ -34,12 +34,9 @@ func ssh(c *cli.Context) error {
 		headers.Add("CF-Access-Client-Secret", c.String(sshTokenSecretFlag))
 	}
 
-	genCertBool := c.Bool(sshGenCertFlag)
-
 	options := &carrier.StartOptions{
-		OriginURL:     originURL,
-		Headers:       headers,
-		ShouldGenCert: genCertBool,
+		OriginURL: originURL,
+		Headers:   headers,
 	}
 
 	if c.NArg() > 0 || c.IsSet(sshURLFlag) {

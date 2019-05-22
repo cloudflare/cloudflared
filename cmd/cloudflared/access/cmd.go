@@ -3,12 +3,15 @@ package access
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"net/url"
 	"os"
 	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
+	"github.com/cloudflare/cloudflared/sshgen"
+	"github.com/cloudflare/cloudflared/validation"
 	"golang.org/x/net/idna"
 
 	"github.com/cloudflare/cloudflared/log"
@@ -22,7 +25,23 @@ const (
 	sshHeaderFlag      = "header"
 	sshTokenIDFlag     = "service-token-id"
 	sshTokenSecretFlag = "service-token-secret"
-	sshGenCertFlag     = "gen-cert"
+	sshGenCertFlag     = "short-lived-cert"
+	sshConfigTemplate  = `
+Add this configuration block to your {{.Home}}/.ssh/config:
+
+Host {{.Hostname}}
+{{- if .ShortLivedCerts}}
+	ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt cfpipe >&2 <&1' 
+
+Host cfpipe-{{.Hostname}}
+	HostName {{.Hostname}}
+	ProxyCommand {{.Cloudflared}} access ssh --hostname %h
+	IdentityFile ~/.cloudflared/{{.Hostname}}.me-cf_key
+	CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
+{{- else}}
+	ProxyCommand {{.Cloudflared}} access ssh --hostname %h
+{{end}}
+`
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
@@ -124,6 +143,18 @@ func Commands() []*cli.Command {
 							Aliases: []string{"secret"},
 							Usage:   "specify an Access service token secret you wish to use.",
 						},
+					},
+				},
+				{
+					Name:        "ssh-config",
+					Action:      sshConfig,
+					Usage:       "",
+					Description: `Prints an example configuration ~/.ssh/config`,
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  sshHostnameFlag,
+							Usage: "specify the hostname of your application.",
+						},
 						&cli.BoolFlag{
 							Name:  sshGenCertFlag,
 							Usage: "specify if you wish to generate short lived certs.",
@@ -131,10 +162,16 @@ func Commands() []*cli.Command {
 					},
 				},
 				{
-					Name:        "ssh-config",
-					Action:      sshConfig,
-					Usage:       "ssh-config",
-					Description: `Prints an example configuration ~/.ssh/config`,
+					Name:        "ssh-gen",
+					Action:      sshGen,
+					Usage:       "",
+					Description: `Generates a short lived certificate for given hostname`,
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  sshHostnameFlag,
+							Usage: "specify the hostname of your application.",
+						},
+					},
 				},
 			},
 		},
@@ -218,8 +255,49 @@ func generateToken(c *cli.Context) error {
 
 // sshConfig prints an example SSH config to stdout
 func sshConfig(c *cli.Context) error {
-	outputMessage := "Add this configuration block to your %s/.ssh/config:\n\nHost [your hostname]\n\tProxyCommand %s access ssh --hostname %%h\n"
-	logger.Printf(outputMessage, os.Getenv("HOME"), cloudflaredPath())
+	genCertBool := c.Bool(sshGenCertFlag)
+	hostname := c.String(sshHostnameFlag)
+	if hostname == "" {
+		hostname = "[your hostname]"
+	}
+
+	type config struct {
+		Home            string
+		ShortLivedCerts bool
+		Hostname        string
+		Cloudflared     string
+	}
+
+	t := template.Must(template.New("sshConfig").Parse(sshConfigTemplate))
+	return t.Execute(os.Stdout, config{Home: os.Getenv("HOME"), ShortLivedCerts: genCertBool, Hostname: hostname, Cloudflared: cloudflaredPath()})
+}
+
+// sshGen generates a short lived certificate for provided hostname
+func sshGen(c *cli.Context) error {
+	// get the hostname from the cmdline and error out if its not provided
+	rawHostName := c.String(sshHostnameFlag)
+	hostname, err := validation.ValidateHostname(rawHostName)
+	if err != nil || rawHostName == "" {
+		return cli.ShowCommandHelp(c, "ssh-gen")
+	}
+
+	originURL, err := url.Parse("https://" + hostname)
+	if err != nil {
+		return err
+	}
+
+	// this fetchToken function mutates the appURL param. We should refactor that
+	fetchTokenURL := &url.URL{}
+	*fetchTokenURL = *originURL
+	token, err := token.FetchToken(fetchTokenURL)
+	if err != nil {
+		return err
+	}
+
+	if err := sshgen.GenerateShortLivedCertificate(originURL, token); err != nil {
+		return err
+	}
+
 	return nil
 }
 

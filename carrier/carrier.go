@@ -12,15 +12,13 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
-	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/sirupsen/logrus"
 )
 
 type StartOptions struct {
-	OriginURL     string
-	Headers       http.Header
-	ShouldGenCert bool
+	OriginURL string
+	Headers   http.Header
 }
 
 // StdinoutStream is empty struct for wrapping stdin/stdout
@@ -116,15 +114,9 @@ func createWebsocketStream(options *StartOptions) (*websocket.Conn, error) {
 		if !strings.Contains(location.String(), "cdn-cgi/access/login") {
 			return nil, errors.New("not an Access redirect")
 		}
-		req, token, err := buildAccessRequest(options.OriginURL)
+		req, err := buildAccessRequest(options.OriginURL)
 		if err != nil {
 			return nil, err
-		}
-
-		if options.ShouldGenCert {
-			if err := sshgen.GenerateShortLivedCertificate(req.URL, token); err != nil {
-				return nil, err
-			}
 		}
 
 		wsConn, _, err = websocket.ClientConnect(req, nil)
@@ -139,24 +131,24 @@ func createWebsocketStream(options *StartOptions) (*websocket.Conn, error) {
 }
 
 // buildAccessRequest builds an HTTP request with the Access token set
-func buildAccessRequest(originURL string) (*http.Request, string, error) {
+func buildAccessRequest(originURL string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, originURL, nil)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	token, err := token.FetchToken(req.URL)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	// We need to create a new request as FetchToken will modify req (boo mutable)
 	// as it has to follow redirect on the API and such, so here we init a new one
 	originRequest, err := http.NewRequest(http.MethodGet, originURL, nil)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	originRequest.Header.Set("cf-access-token", token)
 
-	return originRequest, token, nil
+	return originRequest, nil
 }
