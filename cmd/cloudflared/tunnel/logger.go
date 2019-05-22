@@ -59,6 +59,8 @@ func initLogFile(c *cli.Context, loggers ...*logrus.Logger) error {
 	}
 	defer f.Close()
 	pathMap := lfshook.PathMap{
+		logrus.DebugLevel: filePath,
+		logrus.WarnLevel:  filePath,
 		logrus.InfoLevel:  filePath,
 		logrus.ErrorLevel: filePath,
 		logrus.FatalLevel: filePath,
