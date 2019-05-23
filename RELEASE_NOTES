@@ -1,3 +1,13 @@
+2019.5.0
+- 2019-04-25 TUN-1781: ServeStream should return early on error
+- 2019-04-30 TUN-1786: Remove low-level Windows service logging
+- 2019-05-03 TUN-1807: Send cloudflared version in Connect RPC
+- 2019-01-23 AUTH-1557: Short Lived Certs
+- 2019-05-13 TUN-1847: Log a distinct message when OpenStream fails while waiting for response headers
+- 2019-05-13 AUTH-1706: fixes and testing
+- 2019-05-22 TUN-1880: Save debug and warn level log to logfile
+- 2019-05-22 AUTH-1781: fixed race condition for short lived certs, doc required config
+
 2019.4.1
 - 2019-03-18 TUN-1626: Create new supervisor to establish connection with origintunneld
 - 2019-04-04 TUN-1619: Add flag to test declarative tunnels.
