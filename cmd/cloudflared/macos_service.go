@@ -47,6 +47,7 @@ func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemp
 		<key>ProgramArguments</key>
 		<array>
 			<string>{{ .Path }}</string>
+			<string>proxy-dns</string>
 		</array>
 		<key>RunAtLoad</key>
 		<true/>
