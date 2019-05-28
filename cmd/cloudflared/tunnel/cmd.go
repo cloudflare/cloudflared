@@ -21,6 +21,7 @@ import (
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/coreos/go-systemd/daemon"
@@ -444,7 +445,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "cacert",
+			Name:    tlsconfig.CaCertFlag,
 			Usage:   "Certificate Authority authenticating connections with Cloudflare's edge network.",
 			EnvVars: []string{"TUNNEL_CACERT"},
 			Hidden:  true,
@@ -463,7 +464,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "origin-ca-pool",
+			Name:    tlsconfig.OriginCAPoolFlag,
 			Usage:   "Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CA_POOL"},
 			Hidden:  shouldHide,

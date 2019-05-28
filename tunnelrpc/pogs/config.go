@@ -2,11 +2,18 @@ package pogs
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/cloudflare/cloudflared/originservice"
+	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/pkg/errors"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
@@ -68,6 +75,9 @@ func NewReverseProxyConfig(
 
 //go-sumtype:decl OriginConfig
 type OriginConfig interface {
+	// Service returns a OriginService used to proxy to the origin
+	Service() (originservice.OriginService, error)
+	// go-sumtype requires at least one unexported method, otherwise it will complain that interface is not sealed
 	isOriginConfig()
 }
 
@@ -85,8 +95,6 @@ type HTTPOriginConfig struct {
 	ExpectContinueTimeout time.Duration
 	ChunkedEncoding       bool
 }
-
-func (_ *HTTPOriginConfig) isOriginConfig() {}
 
 type OriginAddr interface {
 	Addr() string
@@ -119,6 +127,39 @@ func (up *UnixPath) Addr() string {
 	return up.Path
 }
 
+func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
+	rootCAs, err := tlsconfig.LoadCustomCertPool(hc.OriginCAPool)
+	if err != nil {
+		return nil, err
+	}
+	dialContext := (&net.Dialer{
+		Timeout:   hc.ProxyConnectTimeout,
+		KeepAlive: hc.TCPKeepAlive,
+		DualStack: hc.DialDualStack,
+	}).DialContext
+	transport := &http.Transport{
+		Proxy:       http.ProxyFromEnvironment,
+		DialContext: dialContext,
+		TLSClientConfig: &tls.Config{
+			RootCAs:            rootCAs,
+			ServerName:         hc.OriginServerName,
+			InsecureSkipVerify: hc.TLSVerify,
+		},
+		TLSHandshakeTimeout:   hc.TLSHandshakeTimeout,
+		MaxIdleConns:          int(hc.MaxIdleConnections),
+		IdleConnTimeout:       hc.IdleConnectionTimeout,
+		ExpectContinueTimeout: hc.ExpectContinueTimeout,
+	}
+	if unixPath, ok := hc.URL.(*UnixPath); ok {
+		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return dialContext(ctx, "unix", unixPath.Addr())
+		}
+	}
+	return originservice.NewHTTPService(transport, hc.URL.Addr(), hc.ChunkedEncoding), nil
+}
+
+func (_ *HTTPOriginConfig) isOriginConfig() {}
+
 type WebSocketOriginConfig struct {
 	URL              string `capnp:"url"`
 	TLSVerify        bool   `capnp:"tlsVerify"`
@@ -126,9 +167,47 @@ type WebSocketOriginConfig struct {
 	OriginServerName string
 }
 
+func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error) {
+	rootCAs, err := tlsconfig.LoadCustomCertPool(wsc.OriginCAPool)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig := &tls.Config{
+		RootCAs:            rootCAs,
+		ServerName:         wsc.OriginServerName,
+		InsecureSkipVerify: wsc.TLSVerify,
+	}
+	return originservice.NewWebSocketService(tlsConfig, wsc.URL)
+}
+
 func (_ *WebSocketOriginConfig) isOriginConfig() {}
 
 type HelloWorldOriginConfig struct{}
+
+func (_ *HelloWorldOriginConfig) Service() (originservice.OriginService, error) {
+	helloCert, err := tlsconfig.GetHelloCertificateX509()
+	if err != nil {
+		return nil, errors.Wrap(err, "Cannot get Hello World server certificate")
+	}
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(helloCert)
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		TLSClientConfig: &tls.Config{
+			RootCAs: rootCAs,
+		},
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+	return originservice.NewHelloWorldService(transport)
+}
 
 func (_ *HelloWorldOriginConfig) isOriginConfig() {}
 
