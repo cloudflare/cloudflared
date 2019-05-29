@@ -127,10 +127,14 @@ func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionF
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
 		raven.CapturePanic(func() { err = tunnel.StartServer(c, version, shutdownC, graceShutdownC) }, nil)
+		exitCode := 0
 		if err != nil {
 			handleError(err)
+			exitCode = 1
 		}
-		return err
+		// we already handle error printing, so we pass an empty string so we
+		// don't have to print again.
+		return cli.Exit("", exitCode)
 	}
 }
 
