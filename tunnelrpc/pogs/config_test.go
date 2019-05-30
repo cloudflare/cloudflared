@@ -2,6 +2,7 @@ package pogs
 
 import (
 	"fmt"
+	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -22,13 +23,12 @@ func TestClientConfig(t *testing.T) {
 		c.ReverseProxyConfigs = []*ReverseProxyConfig{
 			sampleReverseProxyConfig(),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.ChunkedEncoding = false
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 				c.Origin = sampleHTTPOriginConfig()
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.Origin = sampleUnixSocketOriginConfig()
+				c.Origin = sampleHTTPOriginUnixPathConfig()
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 				c.Origin = sampleWebSocketOriginConfig()
@@ -120,7 +120,7 @@ func TestReverseProxyConfig(t *testing.T) {
 			c.Origin = sampleHTTPOriginConfig()
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.Origin = sampleUnixSocketOriginConfig()
+			c.Origin = sampleHTTPOriginUnixPathConfig()
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 			c.Origin = sampleWebSocketOriginConfig()
@@ -159,28 +159,6 @@ func TestHTTPOriginConfig(t *testing.T) {
 			continue
 		}
 		result, err := UnmarshalHTTPOriginConfig(capnpEntity)
-		if !assert.NoError(t, err, "testCase index %v failed to unmarshal", i) {
-			continue
-		}
-		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
-	}
-}
-
-func TestUnixSocketOriginConfig(t *testing.T) {
-	testCases := []*UnixSocketOriginConfig{
-		sampleUnixSocketOriginConfig(),
-	}
-	for i, testCase := range testCases {
-		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
-		capnpEntity, err := tunnelrpc.NewUnixSocketOriginConfig(seg)
-		if !assert.NoError(t, err) {
-			t.Fatal("Couldn't initialize a new message")
-		}
-		err = MarshalUnixSocketOriginConfig(capnpEntity, testCase)
-		if !assert.NoError(t, err, "testCase index %v failed to marshal", i) {
-			continue
-		}
-		result, err := UnmarshalUnixSocketOriginConfig(capnpEntity)
 		if !assert.NoError(t, err, "testCase index %v failed to unmarshal", i) {
 			continue
 		}
@@ -249,7 +227,6 @@ func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReversePr
 		Origin:             &HelloWorldOriginConfig{},
 		Retries:            18,
 		ConnectionTimeout:  5 * time.Second,
-		ChunkedEncoding:    true,
 		CompressionQuality: 4,
 	}
 	sample.ensureNoZeroFields()
@@ -261,7 +238,12 @@ func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReversePr
 
 func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
 	sample := &HTTPOriginConfig{
-		URL:                   "https://example.com",
+		URL: &HTTPURL{
+			URL: &url.URL{
+				Scheme: "https",
+				Host:   "example.com",
+			},
+		},
 		TCPKeepAlive:          7 * time.Second,
 		DialDualStack:         true,
 		TLSHandshakeTimeout:   11 * time.Second,
@@ -270,6 +252,9 @@ func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginCon
 		OriginServerName:      "secure.example.com",
 		MaxIdleConnections:    19,
 		IdleConnectionTimeout: 17 * time.Second,
+		ProxyConnectTimeout:   15 * time.Second,
+		ExpectContinueTimeout: 21 * time.Second,
+		ChunkedEncoding:       true,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -278,9 +263,22 @@ func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginCon
 	return sample
 }
 
-func sampleUnixSocketOriginConfig(overrides ...func(*UnixSocketOriginConfig)) *UnixSocketOriginConfig {
-	sample := &UnixSocketOriginConfig{
-		Path: "/var/lib/file.sock",
+func sampleHTTPOriginUnixPathConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
+	sample := &HTTPOriginConfig{
+		URL: &UnixPath{
+			Path: "/var/lib/file.sock",
+		},
+		TCPKeepAlive:          7 * time.Second,
+		DialDualStack:         true,
+		TLSHandshakeTimeout:   11 * time.Second,
+		TLSVerify:             true,
+		OriginCAPool:          "/etc/cert.pem",
+		OriginServerName:      "secure.example.com",
+		MaxIdleConnections:    19,
+		IdleConnectionTimeout: 17 * time.Second,
+		ProxyConnectTimeout:   15 * time.Second,
+		ExpectContinueTimeout: 21 * time.Second,
+		ChunkedEncoding:       true,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -291,7 +289,10 @@ func sampleUnixSocketOriginConfig(overrides ...func(*UnixSocketOriginConfig)) *U
 
 func sampleWebSocketOriginConfig(overrides ...func(*WebSocketOriginConfig)) *WebSocketOriginConfig {
 	sample := &WebSocketOriginConfig{
-		URL: "ssh://example.com",
+		URL:              "ssh://example.com",
+		TLSVerify:        true,
+		OriginCAPool:     "/etc/cert.pem",
+		OriginServerName: "secure.example.com",
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -313,10 +314,6 @@ func (c *ReverseProxyConfig) ensureNoZeroFields() {
 }
 
 func (c *HTTPOriginConfig) ensureNoZeroFields() {
-	ensureNoZeroFieldsInSample(reflect.ValueOf(c), []string{})
-}
-
-func (c *UnixSocketOriginConfig) ensureNoZeroFields() {
 	ensureNoZeroFieldsInSample(reflect.ValueOf(c), []string{})
 }
 

@@ -3,6 +3,7 @@ package pogs
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -43,7 +44,6 @@ type ReverseProxyConfig struct {
 	Origin             OriginConfig
 	Retries            uint64
 	ConnectionTimeout  time.Duration
-	ChunkedEncoding    bool
 	CompressionQuality uint64
 }
 
@@ -52,7 +52,6 @@ func NewReverseProxyConfig(
 	originConfig OriginConfig,
 	retries uint64,
 	connectionTimeout time.Duration,
-	chunkedEncoding bool,
 	compressionQuality uint64,
 ) (*ReverseProxyConfig, error) {
 	if originConfig == nil {
@@ -63,7 +62,6 @@ func NewReverseProxyConfig(
 		Origin:             originConfig,
 		Retries:            retries,
 		ConnectionTimeout:  connectionTimeout,
-		ChunkedEncoding:    chunkedEncoding,
 		CompressionQuality: compressionQuality,
 	}, nil
 }
@@ -74,7 +72,7 @@ type OriginConfig interface {
 }
 
 type HTTPOriginConfig struct {
-	URL                   string        `capnp:"url"`
+	URL                   OriginAddr    `capnp:"url"`
 	TCPKeepAlive          time.Duration `capnp:"tcpKeepAlive"`
 	DialDualStack         bool
 	TLSHandshakeTimeout   time.Duration `capnp:"tlsHandshakeTimeout"`
@@ -83,18 +81,49 @@ type HTTPOriginConfig struct {
 	OriginServerName      string
 	MaxIdleConnections    uint64
 	IdleConnectionTimeout time.Duration
+	ProxyConnectTimeout   time.Duration
+	ExpectContinueTimeout time.Duration
+	ChunkedEncoding       bool
 }
 
 func (_ *HTTPOriginConfig) isOriginConfig() {}
 
-type UnixSocketOriginConfig struct {
+type OriginAddr interface {
+	Addr() string
+}
+
+type HTTPURL struct {
+	URL *url.URL
+}
+
+func (ha *HTTPURL) Addr() string {
+	return ha.URL.String()
+}
+
+func (ha *HTTPURL) capnpHTTPURL() *CapnpHTTPURL {
+	return &CapnpHTTPURL{
+		URL: ha.URL.String(),
+	}
+}
+
+// URL for a HTTP origin, capnp doesn't have native support for URL, so represent it as string
+type CapnpHTTPURL struct {
+	URL string `capnp:"url"`
+}
+
+type UnixPath struct {
 	Path string
 }
 
-func (_ *UnixSocketOriginConfig) isOriginConfig() {}
+func (up *UnixPath) Addr() string {
+	return up.Path
+}
 
 type WebSocketOriginConfig struct {
-	URL string `capnp:"url"`
+	URL              string `capnp:"url"`
+	TLSVerify        bool   `capnp:"tlsVerify"`
+	OriginCAPool     string
+	OriginServerName string
 }
 
 func (_ *WebSocketOriginConfig) isOriginConfig() {}
@@ -239,31 +268,30 @@ func MarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig, p *ReverseProxyCo
 		if err != nil {
 			return err
 		}
-		MarshalHTTPOriginConfig(ss, config)
-	case *UnixSocketOriginConfig:
-		ss, err := s.Origin().NewSocket()
-		if err != nil {
+		if err := MarshalHTTPOriginConfig(ss, config); err != nil {
 			return err
 		}
-		MarshalUnixSocketOriginConfig(ss, config)
 	case *WebSocketOriginConfig:
 		ss, err := s.Origin().NewWebsocket()
 		if err != nil {
 			return err
 		}
-		MarshalWebSocketOriginConfig(ss, config)
+		if err := MarshalWebSocketOriginConfig(ss, config); err != nil {
+			return err
+		}
 	case *HelloWorldOriginConfig:
 		ss, err := s.Origin().NewHelloWorld()
 		if err != nil {
 			return err
 		}
-		MarshalHelloWorldOriginConfig(ss, config)
+		if err := MarshalHelloWorldOriginConfig(ss, config); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("Unknown type for config: %T", config)
 	}
 	s.SetRetries(p.Retries)
 	s.SetConnectionTimeout(p.ConnectionTimeout.Nanoseconds())
-	s.SetChunkedEncoding(p.ChunkedEncoding)
 	s.SetCompressionQuality(p.CompressionQuality)
 	return nil
 }
@@ -282,16 +310,6 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 			return nil, err
 		}
 		config, err := UnmarshalHTTPOriginConfig(ss)
-		if err != nil {
-			return nil, err
-		}
-		p.Origin = config
-	case tunnelrpc.ReverseProxyConfig_origin_Which_socket:
-		ss, err := s.Origin().Socket()
-		if err != nil {
-			return nil, err
-		}
-		config, err := UnmarshalUnixSocketOriginConfig(ss)
 		if err != nil {
 			return nil, err
 		}
@@ -319,28 +337,120 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 	}
 	p.Retries = s.Retries()
 	p.ConnectionTimeout = time.Duration(s.ConnectionTimeout())
-	p.ChunkedEncoding = s.ChunkedEncoding()
 	p.CompressionQuality = s.CompressionQuality()
 	return p, nil
 }
 
 func MarshalHTTPOriginConfig(s tunnelrpc.HTTPOriginConfig, p *HTTPOriginConfig) error {
-	return pogs.Insert(tunnelrpc.HTTPOriginConfig_TypeID, s.Struct, p)
+	switch originAddr := p.URL.(type) {
+	case *HTTPURL:
+		ss, err := s.OriginAddr().NewHttp()
+		if err != nil {
+			return err
+		}
+		if err := MarshalHTTPURL(ss, originAddr); err != nil {
+			return err
+		}
+	case *UnixPath:
+		ss, err := s.OriginAddr().NewUnix()
+		if err != nil {
+			return err
+		}
+		if err := MarshalUnixPath(ss, originAddr); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("Unknown type for OriginAddr: %T", originAddr)
+	}
+	s.SetTcpKeepAlive(p.TCPKeepAlive.Nanoseconds())
+	s.SetDialDualStack(p.DialDualStack)
+	s.SetTlsHandshakeTimeout(p.TLSHandshakeTimeout.Nanoseconds())
+	s.SetTlsVerify(p.TLSVerify)
+	s.SetOriginCAPool(p.OriginCAPool)
+	s.SetOriginServerName(p.OriginServerName)
+	s.SetMaxIdleConnections(p.MaxIdleConnections)
+	s.SetIdleConnectionTimeout(p.IdleConnectionTimeout.Nanoseconds())
+	s.SetProxyConnectionTimeout(p.ProxyConnectTimeout.Nanoseconds())
+	s.SetExpectContinueTimeout(p.ExpectContinueTimeout.Nanoseconds())
+	s.SetChunkedEncoding(p.ChunkedEncoding)
+	return nil
 }
 
 func UnmarshalHTTPOriginConfig(s tunnelrpc.HTTPOriginConfig) (*HTTPOriginConfig, error) {
 	p := new(HTTPOriginConfig)
-	err := pogs.Extract(p, tunnelrpc.HTTPOriginConfig_TypeID, s.Struct)
-	return p, err
+	switch s.OriginAddr().Which() {
+	case tunnelrpc.HTTPOriginConfig_originAddr_Which_http:
+		ss, err := s.OriginAddr().Http()
+		if err != nil {
+			return nil, err
+		}
+		originAddr, err := UnmarshalCapnpHTTPURL(ss)
+		if err != nil {
+			return nil, err
+		}
+		p.URL = originAddr
+	case tunnelrpc.HTTPOriginConfig_originAddr_Which_unix:
+		ss, err := s.OriginAddr().Unix()
+		if err != nil {
+			return nil, err
+		}
+		originAddr, err := UnmarshalUnixPath(ss)
+		if err != nil {
+			return nil, err
+		}
+		p.URL = originAddr
+	default:
+		return nil, fmt.Errorf("Unknown type for OriginAddr: %T", s.OriginAddr().Which())
+	}
+	p.TCPKeepAlive = time.Duration(s.TcpKeepAlive())
+	p.DialDualStack = s.DialDualStack()
+	p.TLSHandshakeTimeout = time.Duration(s.TlsHandshakeTimeout())
+	p.TLSVerify = s.TlsVerify()
+	originCAPool, err := s.OriginCAPool()
+	if err != nil {
+		return nil, err
+	}
+	p.OriginCAPool = originCAPool
+	originServerName, err := s.OriginServerName()
+	if err != nil {
+		return nil, err
+	}
+	p.OriginServerName = originServerName
+	p.MaxIdleConnections = s.MaxIdleConnections()
+	p.IdleConnectionTimeout = time.Duration(s.IdleConnectionTimeout())
+	p.ProxyConnectTimeout = time.Duration(s.ProxyConnectionTimeout())
+	p.ExpectContinueTimeout = time.Duration(s.ExpectContinueTimeout())
+	p.ChunkedEncoding = s.ChunkedEncoding()
+	return p, nil
 }
 
-func MarshalUnixSocketOriginConfig(s tunnelrpc.UnixSocketOriginConfig, p *UnixSocketOriginConfig) error {
-	return pogs.Insert(tunnelrpc.UnixSocketOriginConfig_TypeID, s.Struct, p)
+func MarshalHTTPURL(s tunnelrpc.CapnpHTTPURL, p *HTTPURL) error {
+	return pogs.Insert(tunnelrpc.CapnpHTTPURL_TypeID, s.Struct, p.capnpHTTPURL())
 }
 
-func UnmarshalUnixSocketOriginConfig(s tunnelrpc.UnixSocketOriginConfig) (*UnixSocketOriginConfig, error) {
-	p := new(UnixSocketOriginConfig)
-	err := pogs.Extract(p, tunnelrpc.UnixSocketOriginConfig_TypeID, s.Struct)
+func UnmarshalCapnpHTTPURL(s tunnelrpc.CapnpHTTPURL) (*HTTPURL, error) {
+	p := new(CapnpHTTPURL)
+	err := pogs.Extract(p, tunnelrpc.CapnpHTTPURL_TypeID, s.Struct)
+	if err != nil {
+		return nil, err
+	}
+	url, err := url.Parse(p.URL)
+	if err != nil {
+		return nil, err
+	}
+	return &HTTPURL{
+		URL: url,
+	}, nil
+}
+
+func MarshalUnixPath(s tunnelrpc.UnixPath, p *UnixPath) error {
+	err := pogs.Insert(tunnelrpc.UnixPath_TypeID, s.Struct, p)
+	return err
+}
+
+func UnmarshalUnixPath(s tunnelrpc.UnixPath) (*UnixPath, error) {
+	p := new(UnixPath)
+	err := pogs.Extract(p, tunnelrpc.UnixPath_TypeID, s.Struct)
 	return p, err
 }
 
@@ -365,7 +475,7 @@ func UnmarshalHelloWorldOriginConfig(s tunnelrpc.HelloWorldOriginConfig) (*Hello
 }
 
 type ClientService interface {
-	UseConfiguration(ctx context.Context, config *ClientConfig) (*ClientConfig, error)
+	UseConfiguration(ctx context.Context, config *ClientConfig) (*UseConfigurationResult, error)
 }
 
 type ClientService_PogsClient struct {
@@ -383,7 +493,7 @@ func (c *ClientService_PogsClient) UseConfiguration(
 ) (*UseConfigurationResult, error) {
 	client := tunnelrpc.ClientService{Client: c.Client}
 	promise := client.UseConfiguration(ctx, func(p tunnelrpc.ClientService_useConfiguration_Params) error {
-		clientServiceConfig, err := p.NewClientConfig()
+		clientServiceConfig, err := p.NewClientServiceConfig()
 		if err != nil {
 			return err
 		}

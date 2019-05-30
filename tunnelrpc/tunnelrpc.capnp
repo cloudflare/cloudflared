@@ -112,63 +112,32 @@ struct ReverseProxyConfig {
     tunnelHostname @0 :Text;
     origin :union {
         http @1 :HTTPOriginConfig;
-        socket @2 :UnixSocketOriginConfig;
-        websocket @3 :WebSocketOriginConfig;
-        helloWorld @4 :HelloWorldOriginConfig;
+        websocket @2 :WebSocketOriginConfig;
+        helloWorld @3 :HelloWorldOriginConfig;
     }
     # Maximum number of retries for connection/protocol errors.
     # cloudflared CLI option: `retries`
-    retries @5 :UInt64;
+    retries @4 :UInt64;
     # maximum time (in ns) for cloudflared to wait to establish a connection
     # to the origin. Zero means no timeout.
     # cloudflared CLI option: `proxy-connect-timeout`
-    connectionTimeout @6 :Int64;
-    # Whether cloudflared should allow chunked transfer encoding to the
-    # origin. (This should be disabled for WSGI origins, for example.)
-    # negation of cloudflared CLI option: `no-chunked-encoding`
-    chunkedEncoding @7 :Bool;
+    connectionTimeout @5 :Int64;
     # (beta) Use cross-stream compression instead of HTTP compression.
     # 0=off, 1=low, 2=medium, 3=high.
     # For more context see the mapping here: https://github.com/cloudflare/cloudflared/blob/2019.3.2/h2mux/h2_dictionaries.go#L62
     # cloudflared CLI option: `compression-quality`
-    compressionQuality @8 :UInt64;
+    compressionQuality @6 :UInt64;
 }
 
-struct UnixSocketOriginConfig {
-    # path to the socket file.
-    # cloudflared will send data to this socket via a Unix socket connection.
-    # cloudflared CLI option: `unix-socket`
-    path @0 :Text;
-}
-
-#
 struct WebSocketOriginConfig {
     # URI of the origin service.
     # cloudflared will start a websocket server that forwards data to this URI
     # cloudflared CLI option: `url`
     # cloudflared logic: https://github.com/cloudflare/cloudflared/blob/2019.3.2/cmd/cloudflared/tunnel/cmd.go#L304
     url @0 :Text;
-}
-
-struct HTTPOriginConfig {
-    # HTTP(S) URL of the origin service.
-    # cloudflared CLI option: `url`
-    url @0 :Text;
-    # the TCP keep-alive period (in ns) for an active network connection.
-    # Zero means keep-alives are not enabled.
-    # cloudflared CLI option: `proxy-tcp-keepalive`
-    tcpKeepAlive @1 :Int64;
-    # whether cloudflared should use a "happy eyeballs"-compliant procedure
-    # to connect to origins that resolve to both IPv4 and IPv6 addresses
-    # negation of cloudflared CLI option: `proxy-no-happy-eyeballs`
-    dialDualStack @2 :Bool;
-    # maximum time (in ns) for cloudflared to wait for a TLS handshake
-    # with the origin. Zero means no timeout.
-    # cloudflared CLI option: `proxy-tls-timeout`
-    tlsHandshakeTimeout @3 :Int64;
     # Whether cloudflared should verify TLS connections to the origin.
     # negation of cloudflared CLI option: `no-tls-verify`
-    tlsVerify @4 :Bool;
+    tlsVerify @1 :Bool;
     # originCAPool specifies the root CA that cloudflared should use when
     # verifying TLS connections to the origin.
     #   - if tlsVerify is false, originCAPool will be ignored.
@@ -177,18 +146,75 @@ struct HTTPOriginConfig {
     #   - if tlsVerify is true and originCAPool is non-empty, cloudflared will
     #     treat it as the filepath to the root CA.
     # cloudflared CLI option: `origin-ca-pool`
-    originCAPool @5 :Text;
+    originCAPool @2 :Text;
     # Hostname to use when verifying TLS connections to the origin.
     # cloudflared CLI option: `origin-server-name`
-    originServerName @6 :Text;
+    originServerName @3 :Text;
+}
+
+struct HTTPOriginConfig {
+    # HTTP(S) URL of the origin service.
+    # cloudflared CLI option: `url`
+    originAddr :union {
+        http @0 :CapnpHTTPURL;
+        unix @1 :UnixPath;
+    }
+    # the TCP keep-alive period (in ns) for an active network connection.
+    # Zero means keep-alives are not enabled.
+    # cloudflared CLI option: `proxy-tcp-keepalive`
+    tcpKeepAlive @2 :Int64;
+    # whether cloudflared should use a "happy eyeballs"-compliant procedure
+    # to connect to origins that resolve to both IPv4 and IPv6 addresses
+    # negation of cloudflared CLI option: `proxy-no-happy-eyeballs`
+    dialDualStack @3 :Bool;
+    # maximum time (in ns) for cloudflared to wait for a TLS handshake
+    # with the origin. Zero means no timeout.
+    # cloudflared CLI option: `proxy-tls-timeout`
+    tlsHandshakeTimeout @4 :Int64;
+    # Whether cloudflared should verify TLS connections to the origin.
+    # negation of cloudflared CLI option: `no-tls-verify`
+    tlsVerify @5 :Bool;
+    # originCAPool specifies the root CA that cloudflared should use when
+    # verifying TLS connections to the origin.
+    #   - if tlsVerify is false, originCAPool will be ignored.
+    #   - if tlsVerify is true and originCAPool is empty, the system CA pool
+    #     will be loaded if possible.
+    #   - if tlsVerify is true and originCAPool is non-empty, cloudflared will
+    #     treat it as the filepath to the root CA.
+    # cloudflared CLI option: `origin-ca-pool`
+    originCAPool @6 :Text;
+    # Hostname to use when verifying TLS connections to the origin.
+    # cloudflared CLI option: `origin-server-name`
+    originServerName @7 :Text;
     # maximum number of idle (keep-alive) connections for cloudflared to
     # keep open with the origin. Zero means no limit.
     # cloudflared CLI option: `proxy-keepalive-connections`
-    maxIdleConnections @7 :UInt64;
+    maxIdleConnections @8 :UInt64;
     # maximum time (in ns) for an idle (keep-alive) connection to remain
     # idle before closing itself. Zero means no timeout.
     # cloudflared CLI option: `proxy-keepalive-timeout`
-    idleConnectionTimeout @8 :Int64;
+    idleConnectionTimeout @9 :Int64;
+    # maximum amount of time a dial will wait for a connect to complete.
+    proxyConnectionTimeout @10 :Int64;
+    # The amount of time to wait for origin's first response headers after fully
+    # writing the request headers if the request has an "Expect: 100-continue" header.
+    # Zero means no timeout and causes the body to be sent immediately, without
+    # waiting for the server to approve.
+    expectContinueTimeout @11 :Int64;
+    # Whether cloudflared should allow chunked transfer encoding to the
+    # origin. (This should be disabled for WSGI origins, for example.)
+    # negation of cloudflared CLI option: `no-chunked-encoding`
+	chunkedEncoding @12 :Bool;
+}
+
+# URL for a HTTP origin, capnp doesn't have native support for URL, so represent it as Text
+struct CapnpHTTPURL {
+    url @0: Text;
+}
+
+# Path to a unix socket
+struct UnixPath {
+    path @0: Text;
 }
 
 # configuration for cloudflared to provide a DNS over HTTPS proxy server
