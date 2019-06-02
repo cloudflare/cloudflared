@@ -1,6 +1,6 @@
 VERSION       := $(shell git describe --tags --always --dirty="-dev" --match "[0-9][0-9][0-9][0-9].*.*")
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
-VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
+LD_FLAGS      := -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"
 MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
@@ -62,6 +62,10 @@ else
 	TARGET_PUBLIC_REPO ?= $(FLAVOR)
 endif
 
+ifneq ($(DEBUG), true)
+	LD_FLAGS += -w -s
+endif
+
 .PHONY: all
 all: cloudflared test
 
@@ -71,7 +75,7 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor -ldflags='$(LD_FLAGS)' $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: container
 container:
@@ -79,7 +83,7 @@ container:
 
 .PHONY: test
 test: vet
-	go test -v -mod=vendor -race $(VERSION_FLAGS) ./...
+	go test -v -mod=vendor -race -ldflags='$(LD_FLAGS)' ./...
 
 .PHONY: test-ssh-server
 test-ssh-server:
@@ -190,7 +194,7 @@ homebrew-release: homebrew-upload
 
 .PHONY: release
 release: bin/equinox
-	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	bin/equinox release $(EQUINOX_FLAGS) -- -ldflags='$(LD_FLAGS)' $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: github-release
 github-release: cloudflared
