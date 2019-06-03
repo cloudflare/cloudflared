@@ -27,19 +27,19 @@ const (
 	sshTokenSecretFlag = "service-token-secret"
 	sshGenCertFlag     = "short-lived-cert"
 	sshConfigTemplate  = `
-Add this configuration block to your {{.Home}}/.ssh/config:
+Add to your {{.Home}}/.ssh/config:
 
 Host {{.Hostname}}
 {{- if .ShortLivedCerts}}
-	ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt cfpipe-{{.Hostname}} >&2 <&1' 
+  ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1' 
 
 Host cfpipe-{{.Hostname}}
-	HostName {{.Hostname}}
-	ProxyCommand {{.Cloudflared}} access ssh --hostname %h
-	IdentityFile ~/.cloudflared/{{.Hostname}}.me-cf_key
-	CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
+  HostName {{.Hostname}}
+  ProxyCommand {{.Cloudflared}} access ssh --hostname %h
+  IdentityFile ~/.cloudflared/{{.Hostname}}-cf_key
+  CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
 {{- else}}
-	ProxyCommand {{.Cloudflared}} access ssh --hostname %h
+  ProxyCommand {{.Cloudflared}} access ssh --hostname %h
 {{end}}
 `
 )
