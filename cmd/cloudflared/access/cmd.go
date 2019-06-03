@@ -3,10 +3,10 @@ package access
 import (
 	"errors"
 	"fmt"
-	"html/template"
 	"net/url"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
@@ -31,12 +31,12 @@ Add this configuration block to your {{.Home}}/.ssh/config:
 
 Host {{.Hostname}}
 {{- if .ShortLivedCerts}}
-	ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt cfpipe >&2 <&1' 
+	ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt cfpipe-{{.Hostname}} >&2 <&1'
 
 Host cfpipe-{{.Hostname}}
 	HostName {{.Hostname}}
 	ProxyCommand {{.Cloudflared}} access ssh --hostname %h
-	IdentityFile ~/.cloudflared/{{.Hostname}}.me-cf_key
+	IdentityFile ~/.cloudflared/{{.Hostname}}-cf_key
 	CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
 {{- else}}
 	ProxyCommand {{.Cloudflared}} access ssh --hostname %h
