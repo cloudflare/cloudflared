@@ -1,3 +1,10 @@
+2019.6.0
+- 2019-05-17 TUN-1828: Update declarative tunnel config struct
+- 2019-05-29 Handle exit code on err
+- 2019-05-29 AUTH-1802: Fixed ssh-config templating
+- 2019-05-30 TUN-1914: Conflate HTTP and Unix OriginConfig, and add TLS config to WebSocketOriginConfig
+- 2019-06-03 AUTH-1811: ssh-gen config fixes
+
 2019.5.0
 - 2019-04-25 TUN-1781: ServeStream should return early on error
 - 2019-04-30 TUN-1786: Remove low-level Windows service logging
