@@ -5,6 +5,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/cloudflare/cloudflared/streamhandler"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -32,9 +35,12 @@ type CloudflaredConfig struct {
 
 // Supervisor is a stateful object that manages connections with the edge
 type Supervisor struct {
-	config     *CloudflaredConfig
-	state      *supervisorState
-	connErrors chan error
+	streamHandler       *streamhandler.StreamHandler
+	newConfigChan       chan<- *pogs.ClientConfig
+	useConfigResultChan <-chan *pogs.UseConfigurationResult
+	config              *CloudflaredConfig
+	state               *supervisorState
+	connErrors          chan error
 }
 
 type supervisorState struct {
@@ -57,8 +63,13 @@ func (s *supervisorState) getNextEdgeIP() *net.TCPAddr {
 }
 
 func NewSupervisor(config *CloudflaredConfig) *Supervisor {
+	newConfigChan := make(chan *pogs.ClientConfig)
+	useConfigResultChan := make(chan *pogs.UseConfigurationResult)
 	return &Supervisor{
-		config: config,
+		streamHandler:       streamhandler.NewStreamHandler(newConfigChan, useConfigResultChan, config.Logger),
+		newConfigChan:       newConfigChan,
+		useConfigResultChan: useConfigResultChan,
+		config:              config,
 		state: &supervisorState{
 			connectionPool: &connectionPool{},
 		},
@@ -91,7 +102,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			time.Sleep(5 * time.Second)
 		}
 		if currentConnectionCount < expectedConnectionCount {
-			h, err := newH2MuxHandler(ctx, s.config.ConnectionConfig, s.state.getNextEdgeIP())
+			h, err := newH2MuxHandler(ctx, s.streamHandler, s.config.ConnectionConfig, s.state.getNextEdgeIP())
 			if err != nil {
 				logger.WithError(err).Error("Failed to create new connection handler")
 				continue

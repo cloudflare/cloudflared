@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/pkg/errors"
@@ -53,14 +54,6 @@ type h2muxHandler struct {
 	logger *logrus.Entry
 }
 
-type muxedStreamHandler struct {
-}
-
-// Implements MuxedStreamHandler interface
-func (h *muxedStreamHandler) ServeStream(stream *h2mux.MuxedStream) error {
-	return nil
-}
-
 func (h *h2muxHandler) serve(ctx context.Context) error {
 	// Serve doesn't return until h2mux is shutdown
 	if err := h.muxer.Serve(ctx); err != nil {
@@ -87,11 +80,7 @@ func (h *h2muxHandler) shutdown() {
 }
 
 func (h *h2muxHandler) newRPConn(ctx context.Context) (*rpc.Conn, error) {
-	stream, err := h.muxer.OpenStream(ctx, []h2mux.Header{
-		{Name: ":method", Value: "RPC"},
-		{Name: ":scheme", Value: "capnp"},
-		{Name: ":path", Value: "*"},
-	}, nil)
+	stream, err := h.muxer.OpenRPCStream(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +92,7 @@ func (h *h2muxHandler) newRPConn(ctx context.Context) (*rpc.Conn, error) {
 
 // NewConnectionHandler returns a connectionHandler, wrapping h2mux to make RPC calls
 func newH2MuxHandler(ctx context.Context,
+	streamHandler *streamhandler.StreamHandler,
 	config *ConnectionConfig,
 	edgeIP *net.TCPAddr,
 ) (connectionHandler, error) {
@@ -126,7 +116,7 @@ func newH2MuxHandler(ctx context.Context,
 	// Client mux handshake with agent server
 	muxer, err := h2mux.Handshake(edgeConn, edgeConn, h2mux.MuxerConfig{
 		Timeout:           dialTimeout,
-		Handler:           &muxedStreamHandler{},
+		Handler:           streamHandler,
 		IsClient:          true,
 		HeartbeatInterval: config.HeartbeatInterval,
 		MaxHeartbeats:     config.MaxHeartbeats,

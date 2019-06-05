@@ -98,3 +98,30 @@ func TestMuxedStreamEOF(t *testing.T) {
 		assert.Equal(t, 0, n)
 	}
 }
+
+func TestIsRPCStream(t *testing.T) {
+	tests := []struct {
+		stream      *MuxedStream
+		isRPCStream bool
+	}{
+		{
+			stream:      &MuxedStream{},
+			isRPCStream: false,
+		},
+		{
+			stream:      &MuxedStream{Headers: RPCHeaders()},
+			isRPCStream: true,
+		},
+		{
+			stream: &MuxedStream{Headers: []Header{
+				{Name: ":method", Value: "rpc"},
+				{Name: ":scheme", Value: "Capnp"},
+				{Name: ":path", Value: "/"},
+			}},
+			isRPCStream: false,
+		},
+	}
+	for _, test := range tests {
+		assert.Equal(t, test.isRPCStream, test.stream.IsRPCStream())
+	}
+}

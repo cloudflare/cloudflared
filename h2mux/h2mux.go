@@ -94,6 +94,14 @@ type Header struct {
 	Name, Value string
 }
 
+func RPCHeaders() []Header {
+	return []Header{
+		{Name: ":method", Value: "RPC"},
+		{Name: ":scheme", Value: "capnp"},
+		{Name: ":path", Value: "*"},
+	}
+}
+
 // Handshake establishes a muxed connection with the peer.
 // After the handshake completes, it is possible to open and accept streams.
 func Handshake(
@@ -402,6 +410,41 @@ func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader
 	case <-m.abortChan:
 		return nil, ErrConnectionClosed
 	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: body}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ErrResponseHeadersTimeout
+	case <-m.abortChan:
+		return nil, ErrConnectionClosed
+	case <-stream.responseHeadersReceived:
+		return stream, nil
+	}
+}
+
+func (m *Muxer) OpenRPCStream(ctx context.Context) (*MuxedStream, error) {
+	stream := &MuxedStream{
+		responseHeadersReceived: make(chan struct{}),
+		readBuffer:              NewSharedBuffer(),
+		writeBuffer:             &bytes.Buffer{},
+		writeBufferMaxLen:       m.config.StreamWriteBufferMaxLen,
+		writeBufferHasSpace:     make(chan struct{}, 1),
+		receiveWindow:           m.config.DefaultWindowSize,
+		receiveWindowCurrentMax: m.config.DefaultWindowSize,
+		receiveWindowMax:        m.config.MaxWindowSize,
+		sendWindow:              m.config.DefaultWindowSize,
+		readyList:               m.readyList,
+		writeHeaders:            RPCHeaders(),
+		dictionaries:            m.muxReader.dictionaries,
+	}
+
+	select {
+	// Will be received by mux writer
+	case <-ctx.Done():
+		return nil, ErrOpenStreamTimeout
+	case <-m.abortChan:
+		return nil, ErrConnectionClosed
+	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: nil}:
 	}
 
 	select {
