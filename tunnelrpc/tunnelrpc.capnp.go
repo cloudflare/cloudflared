@@ -3,8 +3,9 @@
 package tunnelrpc
 
 import (
-	context "golang.org/x/net/context"
 	strconv "strconv"
+
+	context "golang.org/x/net/context"
 	capnp "zombiezen.com/go/capnproto2"
 	text "zombiezen.com/go/capnproto2/encoding/text"
 	schemas "zombiezen.com/go/capnproto2/schemas"
