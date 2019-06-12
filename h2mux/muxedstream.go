@@ -77,6 +77,16 @@ type MuxedStream struct {
 	dictionaries    h2Dictionaries
 }
 
+type TunnelHostname string
+
+func (th TunnelHostname) String() string {
+	return string(th)
+}
+
+func (th TunnelHostname) IsSet() bool {
+	return th != ""
+}
+
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
 	var readBuffer ReadWriteClosedCloser
 	if s.dictionaries.read != nil {

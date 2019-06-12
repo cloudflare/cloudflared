@@ -77,35 +77,46 @@ struct ClientConfig {
     # to monotonically increase in value. Any configuration supplied to
     # useConfiguration() with a smaller `version` should be ignored.
     version @0 :UInt64;
+    # supervisorConfig  is configuration for supervisor, the component that manages connection manager,
+    # autoupdater and metrics server
+    supervisorConfig @1 :SupervisorConfig;
+    # edgeConnectionConfig is configuration for connection manager, the componenet that manages connections with the edge
+    edgeConnectionConfig @2 :EdgeConnectionConfig;
+    # Configuration for cloudflared to run as a DNS-over-HTTPS proxy.
+    # cloudflared CLI option: `proxy-dns`
+    dohProxyConfigs @3 :List(DoHProxyConfig);
+    # Configuration for cloudflared to run as an HTTP reverse proxy.
+    reverseProxyConfigs @4 :List(ReverseProxyConfig);
+}
+
+struct SupervisorConfig {
     # Frequency (in ns) to check Equinox for updates.
     # Zero means auto-update is disabled.
     # cloudflared CLI option: `autoupdate-freq`
-    autoUpdateFrequency @1 :Int64;
+    autoUpdateFrequency @0 :Int64;
     # Frequency (in ns) to update connection-based metrics.
     # cloudflared CLI option: `metrics-update-freq`
-    metricsUpdateFrequency @2 :Int64;
-    # interval (in ns) between heartbeats with the Cloudflare edge
-    # cloudflared CLI option: `heartbeat-interval`
-    heartbeatInterval @3 :Int64;
-    # Minimum number of unacked heartbeats for cloudflared to send before
-    # closing the connection to the edge.
-    # cloudflared CLI option: `heartbeat-count`
-    maxFailedHeartbeats @4 :UInt64;
+    metricsUpdateFrequency @1 :Int64;
     # Time (in ns) to continue serving requests after cloudflared receives its
     # first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to
     # shutdown immediately. For example, this field can be used to gracefully
     # transition traffic to another cloudflared instance.
     # cloudflared CLI option: `grace-period`
-    gracePeriod @5 :Int64;
-    # Configuration for cloudflared to run as a DNS-over-HTTPS proxy.
-    # cloudflared CLI option: `proxy-dns`
-    dohProxyConfigs @6 :List(DoHProxyConfig);
-    # Configuration for cloudflared to run as an HTTP reverse proxy.
-    reverseProxyConfigs @7 :List(ReverseProxyConfig);
-    # Number of persistent connections to keep open between cloudflared and
-    # the edge.
+    gracePeriod @2 :Int64;
+}
+
+struct EdgeConnectionConfig {
     # cloudflared CLI option: `ha-connections`
-    numHAConnections @8 :UInt8;
+    numHAConnections @0 :UInt8;
+    # Interval (in ns) between heartbeats with the Cloudflare edge
+    # cloudflared CLI option: `heartbeat-interval`
+    heartbeatInterval @1 :Int64;
+    # Maximum wait time to connect with the edge.
+    timeout  @2 :Int64;
+    # Number of unacked heartbeats for cloudflared to send before
+    # closing the connection to the edge.
+    # cloudflared CLI option: `heartbeat-count`
+    maxFailedHeartbeats @3 :UInt64;
 }
 
 struct ReverseProxyConfig {
@@ -251,7 +262,17 @@ struct ServerInfo {
 
 struct UseConfigurationResult {
     success @0 :Bool;
-    errorMessage @1 :Text;
+    failedConfigs @1 :List(FailedConfig);
+}
+
+struct FailedConfig {
+    config :union {
+        supervisor @0 :SupervisorConfig;
+        edgeConnection @1 :EdgeConnectionConfig;
+        doh @2 :DoHProxyConfig;
+        reverseProxy @3 :ReverseProxyConfig;
+    }
+	reason @4 :Text;
 }
 
 interface TunnelServer {

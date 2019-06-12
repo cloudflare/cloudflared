@@ -13,6 +13,14 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
+func TestVersion(t *testing.T) {
+	firstVersion := InitVersion()
+	secondVersion := Version(1)
+	assert.False(t, firstVersion.IsNewerOrEqual(secondVersion))
+	assert.True(t, secondVersion.IsNewerOrEqual(firstVersion))
+	assert.True(t, secondVersion.IsNewerOrEqual(secondVersion))
+}
+
 func TestClientConfig(t *testing.T) {
 	addDoHProxyConfigs := func(c *ClientConfig) {
 		c.DoHProxyConfigs = []*DoHProxyConfig{
@@ -66,8 +74,17 @@ func TestUseConfigurationResult(t *testing.T) {
 			Success: true,
 		},
 		&UseConfigurationResult{
-			Success:      false,
-			ErrorMessage: "the quick brown fox jumped over the lazy dogs",
+			Success: false,
+			FailedConfigs: []*FailedConfig{
+				{
+					Config: sampleReverseProxyConfig(),
+					Reason: "Invalid certificate",
+				},
+				{
+					Config: sampleDoHProxyConfig(),
+					Reason: "Cannot listen on port 53",
+				},
+			},
 		},
 	}
 	for i, testCase := range testCases {
@@ -193,13 +210,18 @@ func TestWebSocketOriginConfig(t *testing.T) {
 
 func sampleClientConfig(overrides ...func(*ClientConfig)) *ClientConfig {
 	sample := &ClientConfig{
-		Version:                uint64(1337),
-		AutoUpdateFrequency:    21 * time.Hour,
-		MetricsUpdateFrequency: 11 * time.Minute,
-		HeartbeatInterval:      5 * time.Second,
-		MaxFailedHeartbeats:    9001,
-		GracePeriod:            31 * time.Second,
-		NumHAConnections:       49,
+		Version: Version(1337),
+		SupervisorConfig: &SupervisorConfig{
+			AutoUpdateFrequency:    21 * time.Hour,
+			MetricsUpdateFrequency: 11 * time.Minute,
+			GracePeriod:            31 * time.Second,
+		},
+		EdgeConnectionConfig: &EdgeConnectionConfig{
+			NumHAConnections:    49,
+			Timeout:             9 * time.Second,
+			HeartbeatInterval:   5 * time.Second,
+			MaxFailedHeartbeats: 9001,
+		},
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
