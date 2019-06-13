@@ -82,7 +82,7 @@ func (u *UpstreamHTTPS) exchangeWireformat(msg []byte) ([]byte, error) {
 		return nil, errors.Wrap(err, "failed to create an HTTPS request")
 	}
 
-	req.Header.Add("Content-Type", "application/dns-udpwireformat")
+	req.Header.Add("Content-Type", "application/dns-message")
 	req.Host = u.endpoint.Hostname()
 
 	resp, err := u.client.Do(req)
