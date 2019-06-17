@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/streamhandler"
@@ -42,7 +42,7 @@ const (
 )
 
 type TunnelConfig struct {
-	BuildInfo            *BuildInfo
+	BuildInfo            *buildinfo.BuildInfo
 	ClientID             string
 	ClientTlsConfig      *tls.Config
 	CloseConnOnce        *sync.Once // Used to close connectedSignal no more than once
@@ -140,44 +140,8 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal *signal.Signal) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-shutdownC
-		cancel()
-	}()
-
-	u, err := uuid.NewRandom()
-	if err != nil {
-		return err
-	}
-
-	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
-	if config.HAConnections > 1 {
-		if config.UseDeclarativeTunnel {
-			return connection.NewSupervisor(&connection.CloudflaredConfig{
-				ConnectionConfig: &connection.ConnectionConfig{
-					TLSConfig:         config.TlsConfig,
-					HeartbeatInterval: config.HeartbeatInterval,
-					MaxHeartbeats:     config.MaxHeartbeats,
-					Logger:            config.Logger.WithField("subsystem", "connection_supervisor"),
-				},
-				OriginCert:         config.OriginCert,
-				Tags:               config.Tags,
-				EdgeAddrs:          config.EdgeAddrs,
-				HAConnections:      uint(config.HAConnections),
-				Logger:             config.Logger,
-				CloudflaredVersion: config.ReportedVersion,
-			}).Run(ctx)
-		}
-		return NewSupervisor(config).Run(ctx, connectedSignal, u)
-	} else {
-		addrs, err := connection.ResolveEdgeIPs(config.Logger, config.EdgeAddrs)
-		if err != nil {
-			return err
-		}
-		return ServeTunnelLoop(ctx, config, addrs[0], 0, connectedSignal, u)
-	}
+func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID) error {
+	return NewSupervisor(config).Run(ctx, connectedSignal, cloudflaredID)
 }
 
 func ServeTunnelLoop(ctx context.Context,

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -145,7 +146,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
 func prepareTunnelConfig(
 	c *cli.Context,
-	buildInfo *origin.BuildInfo,
+	buildInfo *buildinfo.BuildInfo,
 	version string, logger,
 	transportLogger *logrus.Logger,
 ) (*origin.TunnelConfig, error) {

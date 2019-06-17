@@ -72,6 +72,7 @@ type EdgeConnectionConfig struct {
 	HeartbeatInterval   time.Duration
 	Timeout             time.Duration
 	MaxFailedHeartbeats uint64
+	UserCredentialPath  string
 }
 
 // FailReason impelents FallibleConfig interface for EdgeConnectionConfig

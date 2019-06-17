@@ -117,6 +117,8 @@ struct EdgeConnectionConfig {
     # closing the connection to the edge.
     # cloudflared CLI option: `heartbeat-count`
     maxFailedHeartbeats @3 :UInt64;
+    # Absolute path of the file containing certificate and token to connect with the edge
+    userCredentialPath @4 :Text;
 }
 
 struct ReverseProxyConfig {

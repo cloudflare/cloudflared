@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -12,8 +13,10 @@ import (
 	"time"
 
 	"github.com/getsentry/raven-go"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/ssh/terminal"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/cmd/sqlgateway"
@@ -235,7 +238,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return err
 	}
 
-	buildInfo := origin.GetBuildInfo()
+	buildInfo := buildinfo.GetBuildInfo(version)
 	logger.Infof("Build info: %+v", *buildInfo)
 	logger.Infof("Version %s", version)
 	logClientOptions(c)
@@ -279,6 +282,18 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	if c.IsSet("pidfile") {
 		go writePidFile(connectedSignal, c.String("pidfile"))
 	}
+
+	cloudflaredID, err := uuid.NewRandom()
+	if err != nil {
+		logger.WithError(err).Error("cannot generate cloudflared ID")
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-shutdownC
+		cancel()
+	}()
 
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
 	if dnsProxyStandAlone(c) {
@@ -324,7 +339,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(tunnelConfig, graceShutdownC, connectedSignal)
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID)
 	}()
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))

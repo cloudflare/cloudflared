@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/signal"
 
@@ -34,6 +36,8 @@ type Supervisor struct {
 	// currently-connecting tunnels to finish connecting so we can reset backoff timer
 	nextConnectedIndex  int
 	nextConnectedSignal chan struct{}
+
+	logger *logrus.Entry
 }
 
 type resolveResult struct {
@@ -51,6 +55,7 @@ func NewSupervisor(config *TunnelConfig) *Supervisor {
 		config:            config,
 		tunnelErrors:      make(chan tunnelError),
 		tunnelsConnecting: map[int]chan struct{}{},
+		logger:            config.Logger.WithField("subsystem", "supervisor"),
 	}
 }
 
@@ -124,8 +129,10 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, u 
 }
 
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal, u uuid.UUID) error {
-	logger := s.config.Logger
-	edgeIPs, err := connection.ResolveEdgeIPs(logger, s.config.EdgeAddrs)
+	logger := s.logger
+
+	edgeIPs, err := s.resolveEdgeIPs()
+
 	if err != nil {
 		logger.Infof("ResolveEdgeIPs err")
 		return err
@@ -215,6 +222,15 @@ func (s *Supervisor) getEdgeIP(index int) *net.TCPAddr {
 	return s.edgeIPs[index%len(s.edgeIPs)]
 }
 
+func (s *Supervisor) resolveEdgeIPs() ([]*net.TCPAddr, error) {
+	// If --edge is specfied, resolve edge server addresses
+	if len(s.config.EdgeAddrs) > 0 {
+		return connection.ResolveAddrs(s.config.EdgeAddrs)
+	}
+	// Otherwise lookup edge server addresses through service discovery
+	return connection.EdgeDiscovery(s.logger)
+}
+
 func (s *Supervisor) refreshEdgeIPs() {
 	if s.resolverC != nil {
 		return
@@ -224,7 +240,7 @@ func (s *Supervisor) refreshEdgeIPs() {
 	}
 	s.resolverC = make(chan resolveResult)
 	go func() {
-		edgeIPs, err := connection.ResolveEdgeIPs(s.config.Logger, s.config.EdgeAddrs)
+		edgeIPs, err := s.resolveEdgeIPs()
 		s.resolverC <- resolveResult{edgeIPs: edgeIPs, err: err}
 	}()
 }
