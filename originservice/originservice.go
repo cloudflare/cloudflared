@@ -23,6 +23,7 @@ import (
 type OriginService interface {
 	Proxy(stream *h2mux.MuxedStream, req *http.Request) (resp *http.Response, err error)
 	OriginAddr() string
+	Summary() string
 	Shutdown()
 }
 
@@ -78,6 +79,10 @@ func (hc *HTTPService) OriginAddr() string {
 	return hc.originAddr
 }
 
+func (hc *HTTPService) Summary() string {
+	return fmt.Sprintf("HTTP service listening on %s", hc.originAddr)
+}
+
 func (hc *HTTPService) Shutdown() {}
 
 // WebsocketService talks to origin using WS/WSS
@@ -124,6 +129,10 @@ func (wsc *WebsocketService) Proxy(stream *h2mux.MuxedStream, req *http.Request)
 
 func (wsc *WebsocketService) OriginAddr() string {
 	return wsc.originAddr
+}
+
+func (wsc *WebsocketService) Summary() string {
+	return fmt.Sprintf("Websocket listening on %ss", wsc.originAddr)
 }
 
 func (wsc *WebsocketService) Shutdown() {
@@ -179,6 +188,10 @@ func (hwc *HelloWorldService) Proxy(stream *h2mux.MuxedStream, req *http.Request
 
 func (hwc *HelloWorldService) OriginAddr() string {
 	return hwc.originAddr
+}
+
+func (hwc *HelloWorldService) Summary() string {
+	return fmt.Sprintf("Hello World service listening on %s", hwc.originAddr)
 }
 
 func (hwc *HelloWorldService) Shutdown() {

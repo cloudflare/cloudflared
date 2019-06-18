@@ -12,8 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getsentry/raven-go"
+	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/google/uuid"
+
+	"github.com/getsentry/raven-go"
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
@@ -239,8 +245,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}
 
 	buildInfo := buildinfo.GetBuildInfo(version)
-	logger.Infof("Build info: %+v", *buildInfo)
-	logger.Infof("Version %s", version)
+	buildInfo.Log(logger)
 	logClientOptions(c)
 
 	if c.IsSet("proxy-dns") {
@@ -255,16 +260,6 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	// Wait for proxy-dns to come up (if used)
 	<-dnsReadySignal
-
-	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c) {
-		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			errC <- updater.Autoupdate(c.Duration("autoupdate-freq"), &listeners, shutdownC)
-		}()
-	}
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
@@ -285,7 +280,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		logger.WithError(err).Error("cannot generate cloudflared ID")
+		logger.WithError(err).Error("Cannot generate cloudflared ID")
 		return err
 	}
 
@@ -295,6 +290,21 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		cancel()
 	}()
 
+	if c.IsSet("use-declarative-tunnels") {
+		return startDeclarativeTunnel(ctx, c, cloudflaredID, buildInfo, &listeners)
+	}
+
+	// update needs to be after DNS proxy is up to resolve equinox server address
+	if updater.IsAutoupdateEnabled(c) {
+		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners)
+			errC <- autoupdater.Run(ctx)
+		}()
+	}
+
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
@@ -303,6 +313,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}
 
 	if c.IsSet("hello-world") {
+		logger.Infof("hello-world set")
 		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
 		if err != nil {
 			logger.WithError(err).Error("Cannot start Hello World Server")
@@ -362,6 +373,114 @@ func Before(c *cli.Context) error {
 		logger.Debugf("Applied configuration from %s", c.String("config"))
 	}
 	return nil
+}
+
+func startDeclarativeTunnel(ctx context.Context,
+	c *cli.Context,
+	cloudflaredID uuid.UUID,
+	buildInfo *buildinfo.BuildInfo,
+	listeners *gracenet.Net,
+) error {
+	reverseProxyOrigin, err := defaultOriginConfig(c)
+	if err != nil {
+		logger.WithError(err)
+		return err
+	}
+	defaultClientConfig := &pogs.ClientConfig{
+		Version: pogs.InitVersion(),
+		SupervisorConfig: &pogs.SupervisorConfig{
+			AutoUpdateFrequency:    c.Duration("autoupdate-freq"),
+			MetricsUpdateFrequency: c.Duration("metrics-update-freq"),
+			GracePeriod:            c.Duration("grace-period"),
+		},
+		EdgeConnectionConfig: &pogs.EdgeConnectionConfig{
+			NumHAConnections:    uint8(c.Int("ha-connections")),
+			HeartbeatInterval:   c.Duration("heartbeat-interval"),
+			Timeout:             c.Duration("dial-edge-timeout"),
+			MaxFailedHeartbeats: c.Uint64("heartbeat-count"),
+		},
+		DoHProxyConfigs: []*pogs.DoHProxyConfig{},
+		ReverseProxyConfigs: []*pogs.ReverseProxyConfig{
+			{
+				TunnelHostname: h2mux.TunnelHostname(c.String("hostname")),
+				Origin:         reverseProxyOrigin,
+			},
+		},
+	}
+
+	autoupdater := updater.NewAutoUpdater(defaultClientConfig.SupervisorConfig.AutoUpdateFrequency, listeners)
+
+	originCert, err := getOriginCert(c)
+	if err != nil {
+		logger.WithError(err).Error("error getting origin cert")
+		return err
+	}
+	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
+	if err != nil {
+		logger.WithError(err).Error("unable to create TLS config to connect with edge")
+		return err
+	}
+
+	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
+	if err != nil {
+		logger.WithError(err).Error("unable to parse tag")
+		return err
+	}
+
+	cloudflaredConfig := &connection.CloudflaredConfig{
+		CloudflaredID: cloudflaredID,
+		Tags:          tags,
+		BuildInfo:     buildInfo,
+	}
+
+	serviceDiscoverer, err := serviceDiscoverer(c, logger)
+	if err != nil {
+		logger.WithError(err).Error("unable to create service discoverer")
+		return err
+	}
+	supervisor, err := supervisor.NewSupervisor(defaultClientConfig, originCert, toEdgeTLSConfig,
+		serviceDiscoverer, cloudflaredConfig, autoupdater, updater.SupportAutoUpdate(), logger)
+	if err != nil {
+		logger.WithError(err).Error("unable to create Supervisor")
+		return err
+	}
+	return supervisor.Run(ctx)
+}
+
+func defaultOriginConfig(c *cli.Context) (pogs.OriginConfig, error) {
+	if c.IsSet("hello-world") {
+		return &pogs.HelloWorldOriginConfig{}, nil
+	}
+	originConfig := &pogs.HTTPOriginConfig{
+		TCPKeepAlive:          c.Duration("proxy-tcp-keepalive"),
+		DialDualStack:         !c.Bool("proxy-no-happy-eyeballs"),
+		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
+		TLSVerify:             !c.Bool("no-tls-verify"),
+		OriginCAPool:          c.String("origin-ca-pool"),
+		OriginServerName:      c.String("origin-server-name"),
+		MaxIdleConnections:    c.Uint64("proxy-keepalive-connections"),
+		IdleConnectionTimeout: c.Duration("proxy-keepalive-timeout"),
+		ProxyConnectTimeout:   c.Duration("proxy-connection-timeout"),
+		ExpectContinueTimeout: c.Duration("proxy-expect-continue-timeout"),
+		ChunkedEncoding:       c.Bool("no-chunked-encoding"),
+	}
+	if c.IsSet("unix-socket") {
+		unixSocket, err := config.ValidateUnixSocket(c)
+		if err != nil {
+			return nil, errors.Wrap(err, "error validating --unix-socket")
+		}
+		originConfig.URL = &pogs.UnixPath{Path: unixSocket}
+	}
+	originAddr, err := config.ValidateUrl(c)
+	if err != nil {
+		return nil, errors.Wrap(err, "error validating origin URL")
+	}
+	originURL, err := url.Parse(originAddr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "%s is not a valid URL", originAddr)
+	}
+	originConfig.URL = &pogs.HTTPURL{URL: originURL}
+	return originConfig, nil
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
@@ -437,8 +556,8 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		},
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   "autoupdate-freq",
-			Usage:  "Autoupdate frequency. Default is 24h.",
-			Value:  time.Hour * 24,
+			Usage:  fmt.Sprintf("Autoupdate frequency. Default is %v.", updater.DefaultCheckUpdateFreq),
+			Value:  updater.DefaultCheckUpdateFreq,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
@@ -652,6 +771,18 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  time.Second * 90,
 			Hidden: shouldHide,
 		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:   "proxy-connection-timeout",
+			Usage:  "HTTP proxy timeout for closing an idle connection",
+			Value:  time.Second * 90,
+			Hidden: shouldHide,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:   "proxy-expect-continue-timeout",
+			Usage:  "HTTP proxy timeout for closing an idle connection",
+			Value:  time.Second * 90,
+			Hidden: shouldHide,
+		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "proxy-dns",
 			Usage:   "Run a DNS over HTTPS proxy server.",
@@ -709,6 +840,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "use-declarative-tunnels",
 			Usage:   "Test establishing connections with declarative tunnel methods.",
 			EnvVars: []string{"TUNNEL_USE_DECLARATIVE"},
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    "dial-edge-timeout",
+			Usage:   "Maximum wait time to set up a connection with the edge",
+			Value:   time.Second * 15,
+			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
 			Hidden:  true,
 		}),
 	}
