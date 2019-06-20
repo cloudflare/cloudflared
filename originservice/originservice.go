@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -22,7 +23,7 @@ import (
 // OriginService is an interface to proxy requests to different type of origins
 type OriginService interface {
 	Proxy(stream *h2mux.MuxedStream, req *http.Request) (resp *http.Response, err error)
-	OriginAddr() string
+	URL() *url.URL
 	Summary() string
 	Shutdown()
 }
@@ -30,14 +31,14 @@ type OriginService interface {
 // HTTPService talks to origin using HTTP/HTTPS
 type HTTPService struct {
 	client          http.RoundTripper
-	originAddr      string
+	originURL       *url.URL
 	chunkedEncoding bool
 }
 
-func NewHTTPService(transport http.RoundTripper, originAddr string, chunkedEncoding bool) OriginService {
+func NewHTTPService(transport http.RoundTripper, url *url.URL, chunkedEncoding bool) OriginService {
 	return &HTTPService{
 		client:          transport,
-		originAddr:      originAddr,
+		originURL:       url,
 		chunkedEncoding: chunkedEncoding,
 	}
 }
@@ -75,36 +76,36 @@ func (hc *HTTPService) Proxy(stream *h2mux.MuxedStream, req *http.Request) (*htt
 	return resp, nil
 }
 
-func (hc *HTTPService) OriginAddr() string {
-	return hc.originAddr
+func (hc *HTTPService) URL() *url.URL {
+	return hc.originURL
 }
 
 func (hc *HTTPService) Summary() string {
-	return fmt.Sprintf("HTTP service listening on %s", hc.originAddr)
+	return fmt.Sprintf("HTTP service listening on %s", hc.originURL)
 }
 
 func (hc *HTTPService) Shutdown() {}
 
 // WebsocketService talks to origin using WS/WSS
 type WebsocketService struct {
-	tlsConfig  *tls.Config
-	originAddr string
-	shutdownC  chan struct{}
+	tlsConfig *tls.Config
+	originURL *url.URL
+	shutdownC chan struct{}
 }
 
-func NewWebSocketService(tlsConfig *tls.Config, url string) (OriginService, error) {
+func NewWebSocketService(tlsConfig *tls.Config, url *url.URL) (OriginService, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:")
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot start Websocket Proxy Server")
 	}
 	shutdownC := make(chan struct{})
 	go func() {
-		websocket.StartProxyServer(log.CreateLogger(), listener, url, shutdownC)
+		websocket.StartProxyServer(log.CreateLogger(), listener, url.String(), shutdownC)
 	}()
 	return &WebsocketService{
-		tlsConfig:  tlsConfig,
-		originAddr: url,
-		shutdownC:  shutdownC,
+		tlsConfig: tlsConfig,
+		originURL: url,
+		shutdownC: shutdownC,
 	}, nil
 }
 
@@ -127,12 +128,12 @@ func (wsc *WebsocketService) Proxy(stream *h2mux.MuxedStream, req *http.Request)
 	return response, nil
 }
 
-func (wsc *WebsocketService) OriginAddr() string {
-	return wsc.originAddr
+func (wsc *WebsocketService) URL() *url.URL {
+	return wsc.originURL
 }
 
 func (wsc *WebsocketService) Summary() string {
-	return fmt.Sprintf("Websocket listening on %ss", wsc.originAddr)
+	return fmt.Sprintf("Websocket listening on %s", wsc.originURL)
 }
 
 func (wsc *WebsocketService) Shutdown() {
@@ -141,10 +142,10 @@ func (wsc *WebsocketService) Shutdown() {
 
 // HelloWorldService talks to the hello world example origin
 type HelloWorldService struct {
-	client     http.RoundTripper
-	listener   net.Listener
-	originAddr string
-	shutdownC  chan struct{}
+	client    http.RoundTripper
+	listener  net.Listener
+	originURL *url.URL
+	shutdownC chan struct{}
 }
 
 func NewHelloWorldService(transport http.RoundTripper) (OriginService, error) {
@@ -157,17 +158,19 @@ func NewHelloWorldService(transport http.RoundTripper) (OriginService, error) {
 		hello.StartHelloWorldServer(log.CreateLogger(), listener, shutdownC)
 	}()
 	return &HelloWorldService{
-		client:     transport,
-		listener:   listener,
-		originAddr: listener.Addr().String(),
-		shutdownC:  shutdownC,
+		client:   transport,
+		listener: listener,
+		originURL: &url.URL{
+			Scheme: "https",
+			Host:   listener.Addr().String(),
+		},
+		shutdownC: shutdownC,
 	}, nil
 }
 
 func (hwc *HelloWorldService) Proxy(stream *h2mux.MuxedStream, req *http.Request) (*http.Response, error) {
 	// Request origin to keep connection alive to improve performance
 	req.Header.Set("Connection", "keep-alive")
-
 	resp, err := hwc.client.RoundTrip(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "error proxying request to Hello World origin")
@@ -186,12 +189,12 @@ func (hwc *HelloWorldService) Proxy(stream *h2mux.MuxedStream, req *http.Request
 	return resp, nil
 }
 
-func (hwc *HelloWorldService) OriginAddr() string {
-	return hwc.originAddr
+func (hwc *HelloWorldService) URL() *url.URL {
+	return hwc.originURL
 }
 
 func (hwc *HelloWorldService) Summary() string {
-	return fmt.Sprintf("Hello World service listening on %s", hwc.originAddr)
+	return fmt.Sprintf("Hello World service listening on %s", hwc.originURL)
 }
 
 func (hwc *HelloWorldService) Shutdown() {

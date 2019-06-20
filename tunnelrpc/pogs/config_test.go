@@ -2,7 +2,6 @@ package pogs
 
 import (
 	"fmt"
-	"net/url"
 	"reflect"
 	"testing"
 	"time"
@@ -205,6 +204,24 @@ func TestWebSocketOriginConfig(t *testing.T) {
 	}
 }
 
+func TestOriginConfigInvalidURL(t *testing.T) {
+	invalidConfigs := []OriginConfig{
+		&HTTPOriginConfig{
+			// this url doesn't have a scheme
+			URLString: "127.0.0.1:36192",
+		},
+		&WebSocketOriginConfig{
+			URLString: "127.0.0.1:36192",
+		},
+	}
+
+	for _, config := range invalidConfigs {
+		service, err := config.Service()
+		assert.Error(t, err)
+		assert.Nil(t, service)
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Functions to generate sample data for ease of testing
 
@@ -260,23 +277,18 @@ func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReversePr
 
 func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
 	sample := &HTTPOriginConfig{
-		URL: &HTTPURL{
-			URL: &url.URL{
-				Scheme: "https",
-				Host:   "example.com",
-			},
-		},
-		TCPKeepAlive:          7 * time.Second,
-		DialDualStack:         true,
-		TLSHandshakeTimeout:   11 * time.Second,
-		TLSVerify:             true,
-		OriginCAPool:          "/etc/cert.pem",
-		OriginServerName:      "secure.example.com",
-		MaxIdleConnections:    19,
-		IdleConnectionTimeout: 17 * time.Second,
-		ProxyConnectTimeout:   15 * time.Second,
-		ExpectContinueTimeout: 21 * time.Second,
-		ChunkedEncoding:       true,
+		URLString:              "https.example.com",
+		TCPKeepAlive:           7 * time.Second,
+		DialDualStack:          true,
+		TLSHandshakeTimeout:    11 * time.Second,
+		TLSVerify:              true,
+		OriginCAPool:           "/etc/cert.pem",
+		OriginServerName:       "secure.example.com",
+		MaxIdleConnections:     19,
+		IdleConnectionTimeout:  17 * time.Second,
+		ProxyConnectionTimeout: 15 * time.Second,
+		ExpectContinueTimeout:  21 * time.Second,
+		ChunkedEncoding:        true,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -287,20 +299,18 @@ func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginCon
 
 func sampleHTTPOriginUnixPathConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
 	sample := &HTTPOriginConfig{
-		URL: &UnixPath{
-			Path: "/var/lib/file.sock",
-		},
-		TCPKeepAlive:          7 * time.Second,
-		DialDualStack:         true,
-		TLSHandshakeTimeout:   11 * time.Second,
-		TLSVerify:             true,
-		OriginCAPool:          "/etc/cert.pem",
-		OriginServerName:      "secure.example.com",
-		MaxIdleConnections:    19,
-		IdleConnectionTimeout: 17 * time.Second,
-		ProxyConnectTimeout:   15 * time.Second,
-		ExpectContinueTimeout: 21 * time.Second,
-		ChunkedEncoding:       true,
+		URLString:              "unix:/var/lib/file.sock",
+		TCPKeepAlive:           7 * time.Second,
+		DialDualStack:          true,
+		TLSHandshakeTimeout:    11 * time.Second,
+		TLSVerify:              true,
+		OriginCAPool:           "/etc/cert.pem",
+		OriginServerName:       "secure.example.com",
+		MaxIdleConnections:     19,
+		IdleConnectionTimeout:  17 * time.Second,
+		ProxyConnectionTimeout: 15 * time.Second,
+		ExpectContinueTimeout:  21 * time.Second,
+		ChunkedEncoding:        true,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -311,7 +321,7 @@ func sampleHTTPOriginUnixPathConfig(overrides ...func(*HTTPOriginConfig)) *HTTPO
 
 func sampleWebSocketOriginConfig(overrides ...func(*WebSocketOriginConfig)) *WebSocketOriginConfig {
 	sample := &WebSocketOriginConfig{
-		URL:              "ssh://example.com",
+		URLString:        "ssh://example.com",
 		TLSVerify:        true,
 		OriginCAPool:     "/etc/cert.pem",
 		OriginServerName: "secure.example.com",

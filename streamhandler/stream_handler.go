@@ -138,7 +138,7 @@ func (s *StreamHandler) serveRequest(stream *h2mux.MuxedStream) error {
 		return fmt.Errorf("cannot map tunnel hostname %s to origin", tunnelHostname)
 	}
 
-	req, err := createRequest(stream, originService.OriginAddr())
+	req, err := createRequest(stream, originService.URL())
 	if err != nil {
 		s.writeErrorStatus(stream, statusBadRequest)
 		return errors.Wrap(err, "cannot create request")

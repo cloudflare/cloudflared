@@ -23,8 +23,8 @@ func IsLBProbeRequest(req *http.Request) bool {
 	return strings.HasPrefix(req.UserAgent(), lbProbeUserAgentPrefix)
 }
 
-func createRequest(stream *h2mux.MuxedStream, url string) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodGet, url, h2mux.MuxedStreamReader{MuxedStream: stream})
+func createRequest(stream *h2mux.MuxedStream, url *url.URL) (*http.Request, error) {
+	req, err := http.NewRequest(http.MethodGet, url.String(), h2mux.MuxedStreamReader{MuxedStream: stream})
 	if err != nil {
 		return nil, errors.Wrap(err, "unexpected error from http.NewRequest")
 	}

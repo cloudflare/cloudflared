@@ -452,34 +452,30 @@ func defaultOriginConfig(c *cli.Context) (pogs.OriginConfig, error) {
 		return &pogs.HelloWorldOriginConfig{}, nil
 	}
 	originConfig := &pogs.HTTPOriginConfig{
-		TCPKeepAlive:          c.Duration("proxy-tcp-keepalive"),
-		DialDualStack:         !c.Bool("proxy-no-happy-eyeballs"),
-		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
-		TLSVerify:             !c.Bool("no-tls-verify"),
-		OriginCAPool:          c.String("origin-ca-pool"),
-		OriginServerName:      c.String("origin-server-name"),
-		MaxIdleConnections:    c.Uint64("proxy-keepalive-connections"),
-		IdleConnectionTimeout: c.Duration("proxy-keepalive-timeout"),
-		ProxyConnectTimeout:   c.Duration("proxy-connection-timeout"),
-		ExpectContinueTimeout: c.Duration("proxy-expect-continue-timeout"),
-		ChunkedEncoding:       c.Bool("no-chunked-encoding"),
+		TCPKeepAlive:           c.Duration("proxy-tcp-keepalive"),
+		DialDualStack:          !c.Bool("proxy-no-happy-eyeballs"),
+		TLSHandshakeTimeout:    c.Duration("proxy-tls-timeout"),
+		TLSVerify:              !c.Bool("no-tls-verify"),
+		OriginCAPool:           c.String("origin-ca-pool"),
+		OriginServerName:       c.String("origin-server-name"),
+		MaxIdleConnections:     c.Uint64("proxy-keepalive-connections"),
+		IdleConnectionTimeout:  c.Duration("proxy-keepalive-timeout"),
+		ProxyConnectionTimeout: c.Duration("proxy-connection-timeout"),
+		ExpectContinueTimeout:  c.Duration("proxy-expect-continue-timeout"),
+		ChunkedEncoding:        c.Bool("no-chunked-encoding"),
 	}
 	if c.IsSet("unix-socket") {
 		unixSocket, err := config.ValidateUnixSocket(c)
 		if err != nil {
 			return nil, errors.Wrap(err, "error validating --unix-socket")
 		}
-		originConfig.URL = &pogs.UnixPath{Path: unixSocket}
+		originConfig.URLString = unixSocket
 	}
 	originAddr, err := config.ValidateUrl(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "error validating origin URL")
 	}
-	originURL, err := url.Parse(originAddr)
-	if err != nil {
-		return nil, errors.Wrapf(err, "%s is not a valid URL", originAddr)
-	}
-	originConfig.URL = &pogs.HTTPURL{URL: originURL}
+	originConfig.URLString = originAddr
 	return originConfig, nil
 }
 

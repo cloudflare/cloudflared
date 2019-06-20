@@ -3,6 +3,7 @@ package tunnelhostnamemapper
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 	"testing"
 
@@ -25,7 +26,9 @@ func TestTunnelHostnameMapperConcurrentAccess(t *testing.T) {
 		assert.Nil(t, os)
 	})
 
-	httpOS := originservice.NewHTTPService(http.DefaultTransport, "127.0.0.1:8080", false)
+	firstURL, err := url.Parse("https://127.0.0.1:8080")
+	assert.NoError(t, err)
+	httpOS := originservice.NewHTTPService(http.DefaultTransport, firstURL, false)
 	concurrentOps(t, func(i int) {
 		thm.Add(tunnelHostname(i), httpOS)
 	})
@@ -36,7 +39,9 @@ func TestTunnelHostnameMapperConcurrentAccess(t *testing.T) {
 		assert.Equal(t, httpOS, os)
 	})
 
-	secondHTTPOS := originservice.NewHTTPService(http.DefaultTransport, "127.0.0.1:8090", true)
+	secondURL, err := url.Parse("https://127.0.0.1:8080")
+	assert.NoError(t, err)
+	secondHTTPOS := originservice.NewHTTPService(http.DefaultTransport, secondURL, true)
 	concurrentOps(t, func(i int) {
 		// Add should httpOS with secondHTTPOS
 		thm.Add(tunnelHostname(i), secondHTTPOS)

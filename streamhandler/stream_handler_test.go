@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strconv"
 	"sync"
 	"testing"
@@ -46,16 +45,12 @@ func TestServeRequest(t *testing.T) {
 
 	message := []byte("Hello cloudflared")
 	httpServer := httptest.NewServer(&mockHTTPHandler{message})
-	url, err := url.Parse(httpServer.URL)
-	assert.NoError(t, err)
 
 	reverseProxyConfigs := []*pogs.ReverseProxyConfig{
 		{
 			TunnelHostname: testTunnelHostname,
 			Origin: &pogs.HTTPOriginConfig{
-				URL: &pogs.HTTPURL{
-					URL: url,
-				},
+				URLString: httpServer.URL,
 			},
 		},
 	}
@@ -103,9 +98,7 @@ func TestServeBadRequest(t *testing.T) {
 		{
 			TunnelHostname: testTunnelHostname,
 			Origin: &pogs.HTTPOriginConfig{
-				URL: &pogs.HTTPURL{
-					URL: &url.URL{},
-				},
+				URLString: "",
 			},
 		},
 	}
