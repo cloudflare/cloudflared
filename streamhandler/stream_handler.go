@@ -4,14 +4,38 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/tunnelhostnamemapper"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )
+
+const (
+	statusPseudoHeader = ":status"
+)
+
+type httpErrorStatus struct {
+	status string
+	text   []byte
+}
+
+var (
+	statusBadRequest = newHTTPErrorStatus(http.StatusBadRequest)
+	statusNotFound   = newHTTPErrorStatus(http.StatusNotFound)
+	statusBadGateway = newHTTPErrorStatus(http.StatusBadGateway)
+)
+
+func newHTTPErrorStatus(status int) *httpErrorStatus {
+	return &httpErrorStatus{
+		status: strconv.Itoa(status),
+		text:   []byte(http.StatusText(status)),
+	}
+}
 
 // StreamHandler handles new stream opened by the edge. The streams can be used to proxy requests or make RPC.
 type StreamHandler struct {
@@ -82,7 +106,11 @@ func (s *StreamHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	if stream.IsRPCStream() {
 		return s.serveRPC(stream)
 	}
-	return s.serveRequest(stream)
+	if err := s.serveRequest(stream); err != nil {
+		s.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (s *StreamHandler) serveRPC(stream *h2mux.MuxedStream) error {
@@ -100,21 +128,20 @@ func (s *StreamHandler) serveRPC(stream *h2mux.MuxedStream) error {
 func (s *StreamHandler) serveRequest(stream *h2mux.MuxedStream) error {
 	tunnelHostname := stream.TunnelHostname()
 	if !tunnelHostname.IsSet() {
-		err := fmt.Errorf("stream doesn't have tunnelHostname")
-		s.logger.Error(err)
-		return err
+		s.writeErrorStatus(stream, statusBadRequest)
+		return fmt.Errorf("stream doesn't have tunnelHostname")
 	}
 
 	originService, ok := s.tunnelHostnameMapper.Get(tunnelHostname)
 	if !ok {
-		err := fmt.Errorf("cannot map tunnel hostname %s to origin", tunnelHostname)
-		s.logger.Error(err)
-		return err
+		s.writeErrorStatus(stream, statusNotFound)
+		return fmt.Errorf("cannot map tunnel hostname %s to origin", tunnelHostname)
 	}
 
-	req, err := CreateRequest(stream, originService.OriginAddr())
+	req, err := createRequest(stream, originService.OriginAddr())
 	if err != nil {
-		return err
+		s.writeErrorStatus(stream, statusBadRequest)
+		return errors.Wrap(err, "cannot create request")
 	}
 
 	logger := s.requestLogger(req, tunnelHostname)
@@ -122,8 +149,8 @@ func (s *StreamHandler) serveRequest(stream *h2mux.MuxedStream) error {
 
 	resp, err := originService.Proxy(stream, req)
 	if err != nil {
-		logger.WithError(err).Error("Request error")
-		return err
+		s.writeErrorStatus(stream, statusBadGateway)
+		return errors.Wrap(err, "cannot proxy request")
 	}
 
 	logger.WithField("status", resp.Status).Debugf("Response Headers %+v", resp.Header)
@@ -143,4 +170,14 @@ func (s *StreamHandler) requestLogger(req *http.Request, tunnelHostname h2mux.Tu
 		logger.Warnf("Requests %v does not have CF-RAY header. Please open a support ticket with Cloudflare.", req)
 	}
 	return logger
+}
+
+func (s *StreamHandler) writeErrorStatus(stream *h2mux.MuxedStream, status *httpErrorStatus) {
+	stream.WriteHeaders([]h2mux.Header{
+		{
+			Name:  statusPseudoHeader,
+			Value: status.status,
+		},
+	})
+	stream.Write(status.text)
 }
