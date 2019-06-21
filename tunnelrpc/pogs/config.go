@@ -180,7 +180,7 @@ func (up *UnixPath) Addr() string {
 }
 
 func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
-	rootCAs, err := tlsconfig.LoadCustomCertPool(hc.OriginCAPool)
+	rootCAs, err := tlsconfig.LoadCustomOriginCA(hc.OriginCAPool)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ type WebSocketOriginConfig struct {
 }
 
 func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error) {
-	rootCAs, err := tlsconfig.LoadCustomCertPool(wsc.OriginCAPool)
+	rootCAs, err := tlsconfig.LoadCustomOriginCA(wsc.OriginCAPool)
 	if err != nil {
 		return nil, err
 	}
