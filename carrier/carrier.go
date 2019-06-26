@@ -4,7 +4,6 @@
 package carrier
 
 import (
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -12,7 +11,8 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
-	"github.com/cloudflare/cloudflared/websocket"
+	cloudflaredWebsocket "github.com/cloudflare/cloudflared/websocket"
+	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,6 +35,13 @@ func (c *StdinoutStream) Read(p []byte) (int, error) {
 // Write will write to Stdout
 func (c *StdinoutStream) Write(p []byte) (int, error) {
 	return os.Stdout.Write(p)
+}
+
+// Helper to allow defering the response close with a check that the resp is not nil
+func closeRespBody(resp *http.Response) {
+	if resp != nil {
+		resp.Body.Close()
+	}
 }
 
 // StartClient will copy the data from stdin/stdout over a WebSocket connection
@@ -90,7 +97,7 @@ func serveStream(logger *logrus.Logger, conn io.ReadWriter, options *StartOption
 	}
 	defer wsConn.Close()
 
-	websocket.Stream(wsConn, conn)
+	cloudflaredWebsocket.Stream(wsConn, conn)
 
 	return nil
 }
@@ -98,28 +105,17 @@ func serveStream(logger *logrus.Logger, conn io.ReadWriter, options *StartOption
 // createWebsocketStream will create a WebSocket connection to stream data over
 // It also handles redirects from Access and will present that flow if
 // the token is not present on the request
-func createWebsocketStream(options *StartOptions) (*websocket.Conn, error) {
+func createWebsocketStream(options *StartOptions) (*cloudflaredWebsocket.Conn, error) {
 	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header = options.Headers
 
-	wsConn, resp, err := websocket.ClientConnect(req, nil)
-	if err != nil && resp != nil && resp.StatusCode > 300 {
-		location, err := resp.Location()
-		if err != nil {
-			return nil, err
-		}
-		if !strings.Contains(location.String(), "cdn-cgi/access/login") {
-			return nil, errors.New("not an Access redirect")
-		}
-		req, err := buildAccessRequest(options.OriginURL)
-		if err != nil {
-			return nil, err
-		}
-
-		wsConn, _, err = websocket.ClientConnect(req, nil)
+	wsConn, resp, err := cloudflaredWebsocket.ClientConnect(req, nil)
+	defer closeRespBody(resp)
+	if err != nil && isAccessResponse(resp) {
+		wsConn, err = createAccessAuthenticatedStream(options)
 		if err != nil {
 			return nil, err
 		}
@@ -127,12 +123,72 @@ func createWebsocketStream(options *StartOptions) (*websocket.Conn, error) {
 		return nil, err
 	}
 
-	return &websocket.Conn{Conn: wsConn}, nil
+	return &cloudflaredWebsocket.Conn{Conn: wsConn}, nil
+}
+
+// isAccessResponse checks the http Response to see if the url location
+// contains the Access structure.
+func isAccessResponse(resp *http.Response) bool {
+	if resp == nil || resp.StatusCode <= 300 {
+		return false
+	}
+
+	location, err := resp.Location()
+	if err != nil || location == nil {
+		return false
+	}
+	if strings.HasPrefix(location.Path, "/cdn-cgi/access/login") {
+		return true
+	}
+
+	return false
+}
+
+// createAccessAuthenticatedStream will try load a token from storage and make
+// a connection with the token set on the request. If it still get redirect,
+// this probably means the token in storage is invalid (expired/revoked). If that
+// happens it deletes the token and runs the connection again, so the user can
+// login again and generate a new one.
+func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, error) {
+	wsConn, resp, err := createAccessWebSocketStream(options)
+	defer closeRespBody(resp)
+	if err == nil {
+		return wsConn, nil
+	}
+
+	if !isAccessResponse(resp) {
+		return nil, err
+	}
+
+	// Access Token is invalid for some reason. Go through regen flow
+	originReq, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := token.RemoveTokenIfExists(originReq.URL); err != nil {
+		return nil, err
+	}
+	wsConn, resp, err = createAccessWebSocketStream(options)
+	defer closeRespBody(resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return wsConn, nil
+}
+
+// createAccessWebSocketStream builds an Access request and makes a connection
+func createAccessWebSocketStream(options *StartOptions) (*websocket.Conn, *http.Response, error) {
+	req, err := buildAccessRequest(options)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cloudflaredWebsocket.ClientConnect(req, nil)
 }
 
 // buildAccessRequest builds an HTTP request with the Access token set
-func buildAccessRequest(originURL string) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodGet, originURL, nil)
+func buildAccessRequest(options *StartOptions) (*http.Request, error) {
+	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +200,17 @@ func buildAccessRequest(originURL string) (*http.Request, error) {
 
 	// We need to create a new request as FetchToken will modify req (boo mutable)
 	// as it has to follow redirect on the API and such, so here we init a new one
-	originRequest, err := http.NewRequest(http.MethodGet, originURL, nil)
+	originRequest, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	originRequest.Header.Set("cf-access-token", token)
+
+	for k, v := range options.Headers {
+		if len(v) >= 1 {
+			originRequest.Header.Set(k, v[0])
+		}
+	}
 
 	return originRequest, nil
 }

@@ -91,6 +91,31 @@ func TestStartServer(t *testing.T) {
 	assert.Equal(t, string(readBuffer), message)
 }
 
+func TestIsAccessResponse(t *testing.T) {
+	validLocationHeader := http.Header{}
+	validLocationHeader.Add("location", "https://test.cloudflareaccess.com/cdn-cgi/access/login/blahblah")
+	invalidLocationHeader := http.Header{}
+	invalidLocationHeader.Add("location", "https://google.com")
+	testCases := []struct {
+		Description string
+		In          *http.Response
+		ExpectedOut bool
+	}{
+		{"nil response", nil, false},
+		{"redirect with no location", &http.Response{StatusCode: http.StatusPermanentRedirect}, false},
+		{"200 ok", &http.Response{StatusCode: http.StatusOK}, false},
+		{"redirect with location", &http.Response{StatusCode: http.StatusPermanentRedirect, Header: validLocationHeader}, true},
+		{"redirect with invalid location", &http.Response{StatusCode: http.StatusPermanentRedirect, Header: invalidLocationHeader}, false},
+	}
+
+	for i, tc := range testCases {
+		if isAccessResponse(tc.In) != tc.ExpectedOut {
+			t.Fatalf("Failed case %d -- %s", i, tc.Description)
+		}
+	}
+
+}
+
 func newTestWebSocketServer() *httptest.Server {
 	upgrader := ws.Upgrader{
 		ReadBufferSize:  1024,
