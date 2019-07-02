@@ -52,6 +52,7 @@ type TunnelConfig struct {
 	HTTPTransport        http.RoundTripper
 	HeartbeatInterval    time.Duration
 	Hostname             string
+	HTTPHost             string
 	IncidentLookup       IncidentLookup
 	IsAutoupdated        bool
 	IsFreeTunnel         bool
@@ -520,6 +521,7 @@ func FindCfRayHeader(h1 *http.Request) string {
 
 type TunnelHandler struct {
 	originUrl  string
+	httpHost   string
 	muxer      *h2mux.Muxer
 	httpClient http.RoundTripper
 	tlsConfig  *tls.Config
@@ -545,6 +547,7 @@ func NewTunnelHandler(ctx context.Context,
 	}
 	h := &TunnelHandler{
 		originUrl:         originURL,
+		httpHost:          config.HTTPHost,
 		httpClient:        config.HTTPTransport,
 		tlsConfig:         config.ClientTlsConfig,
 		tags:              config.Tags,
@@ -629,6 +632,7 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 	if err != nil {
 		return nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
 	}
+
 	err = H2RequestHeadersToH1Request(stream.Headers, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid request received")
@@ -665,6 +669,11 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request) 
 
 	// Request origin to keep connection alive to improve performance
 	req.Header.Set("Connection", "keep-alive")
+
+	if h.httpHost != "" {
+		req.Header.Set("Host", h.httpHost)
+		req.Host = h.httpHost
+	}
 
 	response, err := h.httpClient.RoundTrip(req)
 	if err != nil {
