@@ -489,9 +489,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "httphost",
+			Name:    "http-host-header",
 			Usage:   "Sets the HTTP Host header for the local webserver.",
-			EnvVars: []string{"TUNNEL_HTTPHOST"},
+			EnvVars: []string{"TUNNEL_HTTP_HOST_HEADER"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
