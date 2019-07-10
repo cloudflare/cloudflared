@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -145,7 +147,7 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
 func prepareTunnelConfig(
 	c *cli.Context,
-	buildInfo *origin.BuildInfo,
+	buildInfo *buildinfo.BuildInfo,
 	version string, logger,
 	transportLogger *logrus.Logger,
 ) (*origin.TunnelConfig, error) {
@@ -270,6 +272,15 @@ func prepareTunnelConfig(
 		TransportLogger:      transportLogger,
 		UseDeclarativeTunnel: c.Bool("use-declarative-tunnels"),
 	}, nil
+}
+
+func serviceDiscoverer(c *cli.Context, logger *logrus.Logger) (connection.EdgeServiceDiscoverer, error) {
+	// If --edge is specfied, resolve edge server addresses
+	if len(c.StringSlice("edge")) > 0 {
+		return connection.NewEdgeHostnameResolver(c.StringSlice("edge"))
+	}
+	// Otherwise lookup edge server addresses through service discovery
+	return connection.NewEdgeAddrResolver(logger)
 }
 
 func isRunningFromTerminal() bool {
