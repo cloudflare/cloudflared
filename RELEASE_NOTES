@@ -1,3 +1,18 @@
+2019.7.0
+- 2019-05-28 TUN-1913: Define OriginService for each type of origin
+- 2019-04-29 Build a docker container
+- 2019-06-12 TUN-1952: Group ClientConfig fields by the component that uses the config, and return the part of the config that failed to be applied
+- 2019-06-05 TUN-1893: Proxy requests to the origin based on tunnel hostname
+- 2019-06-17 TUN-1961: Create EdgeConnectionManager to maintain outbound connections to the edge
+- 2019-06-18 TUN-1885: Reconfigure cloudflared on receiving new ClientConfig
+- 2019-06-19 TUN-1976: Pass tunnel hostname through header
+- 2019-06-20 TUN-1982: Load custom origin CA when OriginCAPool is specified
+- 2019-06-26 TUN-2005: Upgrade logrus
+- 2019-06-20 TUN-1981: Write response header & body on proxy error to notify eyeballs of failure category
+- 2019-06-20 TUN-1977: Validate OriginConfig has valid URL, and use scheme to determine if a HTTPOriginService is expecting HTTP or Unix
+- 2019-06-13 DoH: change the media type to application/dns-message
+- 2019-06-26 AUTH-1736: Better handling of token revocation
+
 2019.6.0
 - 2019-05-17 TUN-1828: Update declarative tunnel config struct
 - 2019-05-29 Handle exit code on err
