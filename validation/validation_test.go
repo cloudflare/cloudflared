@@ -180,33 +180,6 @@ func TestValidateHTTPService_HTTP2HTTP(t *testing.T) {
 		}
 		panic("Shouldn't reach here")
 	})))
-
-	// Integration-style test with a mock server
-	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, hostname, r.Host)
-		w.WriteHeader(200)
-	}))
-	assert.NoError(t, err)
-	defer server.Close()
-	assert.Nil(t, ValidateHTTPService(originURL, hostname, client.Transport))
-
-	// this will fail if the client follows the 302
-	redirectServer, redirectClient, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/followedRedirect" {
-			t.Fatal("shouldn't have followed the 302")
-		}
-		if r.Method == "CONNECT" {
-			assert.Equal(t, "127.0.0.1:443", r.Host)
-		} else {
-			assert.Equal(t, hostname, r.Host)
-		}
-		w.Header().Set("Location", "/followedRedirect")
-		w.WriteHeader(302)
-	}))
-	assert.NoError(t, err)
-	defer redirectServer.Close()
-	assert.Nil(t, ValidateHTTPService(originURL, hostname, redirectClient.Transport))
-
 }
 
 // Happy path 2: originURL is HTTPS, and HTTPS connections work
@@ -235,36 +208,6 @@ func TestValidateHTTPService_HTTPS2HTTPS(t *testing.T) {
 		}
 		panic("Shouldn't reach here")
 	})))
-
-	// Integration-style test with a mock server
-	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "CONNECT" {
-			assert.Equal(t, "127.0.0.1:443", r.Host)
-		} else {
-			assert.Equal(t, hostname, r.Host)
-		}
-		w.WriteHeader(200)
-	}))
-	assert.NoError(t, err)
-	defer server.Close()
-	assert.Nil(t, ValidateHTTPService(originURL, hostname, client.Transport))
-
-	// this will fail if the client follows the 302
-	redirectServer, redirectClient, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/followedRedirect" {
-			t.Fatal("shouldn't have followed the 302")
-		}
-		if r.Method == "CONNECT" {
-			assert.Equal(t, "127.0.0.1:443", r.Host)
-		} else {
-			assert.Equal(t, hostname, r.Host)
-		}
-		w.Header().Set("Location", "/followedRedirect")
-		w.WriteHeader(302)
-	}))
-	assert.NoError(t, err)
-	defer redirectServer.Close()
-	assert.Nil(t, ValidateHTTPService(originURL, hostname, redirectClient.Transport))
 }
 
 // Error path 1: originURL is HTTPS, but HTTP connections work
@@ -293,37 +236,6 @@ func TestValidateHTTPService_HTTPS2HTTP(t *testing.T) {
 		}
 		panic("Shouldn't reach here")
 	})))
-
-	// Integration-style test with a mock server
-	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "CONNECT" {
-			assert.Equal(t, "127.0.0.1:1234", r.Host)
-		} else {
-			assert.Equal(t, hostname, r.Host)
-		}
-		w.WriteHeader(200)
-	}))
-	assert.NoError(t, err)
-	defer server.Close()
-	assert.Error(t, ValidateHTTPService(originURL, hostname, client.Transport))
-
-	// this will fail if the client follows the 302
-	redirectServer, redirectClient, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/followedRedirect" {
-			t.Fatal("shouldn't have followed the 302")
-		}
-		if r.Method == "CONNECT" {
-			assert.Equal(t, "127.0.0.1:1234", r.Host)
-		} else {
-			assert.Equal(t, hostname, r.Host)
-		}
-		w.Header().Set("Location", "/followedRedirect")
-		w.WriteHeader(302)
-	}))
-	assert.NoError(t, err)
-	defer redirectServer.Close()
-	assert.Error(t, ValidateHTTPService(originURL, hostname, redirectClient.Transport))
-
 }
 
 // Error path 2: originURL is HTTP, but HTTPS connections work
@@ -352,21 +264,11 @@ func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
 		}
 		panic("Shouldn't reach here")
 	})))
+}
 
-	// Integration-style test with a mock server
-	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "CONNECT" {
-			assert.Equal(t, "127.0.0.1:1234", r.Host)
-		} else {
-			assert.Equal(t, hostname, r.Host)
-		}
-		w.WriteHeader(200)
-	}))
-	assert.NoError(t, err)
-	defer server.Close()
-	assert.Error(t, ValidateHTTPService(originURL, hostname, client.Transport))
-
-	// this will fail if the client follows the 302
+// Ensure the client does not follow 302 responses
+func TestValidateHTTPService_NoFollowRedirects(t *testing.T) {
+	hostname := "example.com"
 	redirectServer, redirectClient, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/followedRedirect" {
 			t.Fatal("shouldn't have followed the 302")
@@ -381,12 +283,12 @@ func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
 	}))
 	assert.NoError(t, err)
 	defer redirectServer.Close()
-	assert.Error(t, ValidateHTTPService(originURL, hostname, redirectClient.Transport))
+	assert.NoError(t, ValidateHTTPService(redirectServer.URL, hostname, redirectClient.Transport))
 }
 
-// error path 3: origin URL is nonresponsive
+// Ensure validation times out when origin URL is nonresponsive
 func TestValidateHTTPService_NonResponsiveOrigin(t *testing.T) {
-	originURL := "https://127.0.0.1/"
+	originURL := "http://127.0.0.1/"
 	hostname := "example.com"
 	oldValidationTimeout := validationTimeout
 	defer func() {
@@ -394,7 +296,10 @@ func TestValidateHTTPService_NonResponsiveOrigin(t *testing.T) {
 	}()
 	validationTimeout = 500 * time.Millisecond
 
-	server, client, err := createSecureMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Use createMockServerAndClient, not createSecureMockServerAndClient.
+	// The latter will bail with HTTP 400 immediately on an http:// request,
+	// which defeats the purpose of a 'nonresponsive origin' test.
+	server, client, err := createMockServerAndClient(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "CONNECT" {
 			assert.Equal(t, "127.0.0.1:443", r.Host)
 		} else {
@@ -409,6 +314,7 @@ func TestValidateHTTPService_NonResponsiveOrigin(t *testing.T) {
 	defer server.Close()
 
 	err = ValidateHTTPService(originURL, hostname, client.Transport)
+	fmt.Println(err)
 	if err, ok := err.(net.Error); assert.True(t, ok) {
 		assert.True(t, err.Timeout())
 	}
