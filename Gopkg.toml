@@ -115,3 +115,11 @@
 [[constraint]]
   branch = "v2"
   name = "github.com/coreos/go-oidc"
+
+[[constraint]]
+  name = "github.com/gliderlabs/ssh"
+  version = "0.2.2"
+
+[[constraint]]
+  name = "github.com/creack/pty"
+  version = "1.1.7"

@@ -8,31 +8,32 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"runtime"
 	"runtime/trace"
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/dbconnect"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/supervisor"
-	"github.com/google/uuid"
-
-	"github.com/getsentry/raven-go"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/sshserver"
+	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
+
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
+	"github.com/getsentry/raven-go"
+	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
@@ -290,6 +291,31 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
+	if c.IsSet("ssh-server") {
+		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+			logger.Errorf("--ssh-server is not supported on %s", runtime.GOOS)
+			return errors.New(fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS))
+
+		}
+
+		logger.Infof("ssh-server set")
+
+		sshServerAddress := "127.0.0.1:" + c.String("local-ssh-port")
+		server, err := sshserver.New(logger, sshServerAddress, shutdownC)
+		if err != nil {
+			logger.WithError(err).Error("Cannot create new SSH Server")
+			return errors.Wrap(err, "Cannot create new SSH Server")
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
+				logger.WithError(err).Error("SSH server error")
+			}
+		}()
+		c.Set("url", "ssh://"+sshServerAddress)
+	}
+
 	if host := hostnameFromURI(c.String("url")); host != "" {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
@@ -312,6 +338,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID)
 		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID)
 	}()
 
@@ -749,6 +776,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_HELLO_WORLD"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "ssh-server",
+			Value:   false,
+			Usage:   "Run an SSH Server",
+			EnvVars: []string{"TUNNEL_SSH_SERVER"},
+			Hidden:  true, // TODO: remove when feature is complete
+		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "pidfile",
 			Usage:   "Write the application's PID to this file after first successful connection.",
@@ -889,6 +923,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Maximum wait time to set up a connection with the edge",
 			Value:   time.Second * 15,
 			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "local-ssh-port",
+			Usage:   "Localhost port that cloudflared SSH server will run on",
+			Value:   "22",
+			EnvVars: []string{"LOCAL_SSH_PORT"},
 			Hidden:  true,
 		}),
 	}
