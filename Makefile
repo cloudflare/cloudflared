@@ -78,6 +78,6 @@ tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
 
 .PHONY: vet
 vet:
-	go vet ./...
+	go vet -composites=false ./...
 	which go-sumtype  # go get github.com/BurntSushi/go-sumtype
 	go-sumtype $$(go list ./...)

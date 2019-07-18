@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/originservice"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -17,37 +18,83 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
+	"zombiezen.com/go/capnproto2/server"
 )
 
 ///
 /// Structs
 ///
 
+// ClientConfig is a collection of FallibleConfig that determines how cloudflared should function
 type ClientConfig struct {
-	Version                uint64
+	Version              Version
+	SupervisorConfig     *SupervisorConfig
+	EdgeConnectionConfig *EdgeConnectionConfig
+	DoHProxyConfigs      []*DoHProxyConfig
+	ReverseProxyConfigs  []*ReverseProxyConfig
+}
+
+// Version type models the version of a ClientConfig
+type Version uint64
+
+func InitVersion() Version {
+	return Version(0)
+}
+
+func (v Version) IsNewerOrEqual(comparedVersion Version) bool {
+	return v >= comparedVersion
+}
+
+func (v Version) String() string {
+	return fmt.Sprintf("Version: %d", v)
+}
+
+// FallibleConfig is an interface implemented by configs that cloudflared might not be able to apply
+type FallibleConfig interface {
+	FailReason(err error) string
+}
+
+// SupervisorConfig specifies config of components managed by Supervisor other than ConnectionManager
+type SupervisorConfig struct {
 	AutoUpdateFrequency    time.Duration
 	MetricsUpdateFrequency time.Duration
-	HeartbeatInterval      time.Duration
-	MaxFailedHeartbeats    uint64
 	GracePeriod            time.Duration
-	DoHProxyConfigs        []*DoHProxyConfig
-	ReverseProxyConfigs    []*ReverseProxyConfig
-	NumHAConnections       uint8
 }
 
-type UseConfigurationResult struct {
-	Success      bool
-	ErrorMessage string
+// FailReason impelents FallibleConfig interface for SupervisorConfig
+func (sc *SupervisorConfig) FailReason(err error) string {
+	return fmt.Sprintf("Cannot apply SupervisorConfig, err: %v", err)
 }
 
+// EdgeConnectionConfig specifies what parameters and how may connections should ConnectionManager establish with edge
+type EdgeConnectionConfig struct {
+	NumHAConnections    uint8
+	HeartbeatInterval   time.Duration
+	Timeout             time.Duration
+	MaxFailedHeartbeats uint64
+	UserCredentialPath  string
+}
+
+// FailReason impelents FallibleConfig interface for EdgeConnectionConfig
+func (cmc *EdgeConnectionConfig) FailReason(err error) string {
+	return fmt.Sprintf("Cannot apply EdgeConnectionConfig, err: %v", err)
+}
+
+// DoHProxyConfig is configuration for DNS over HTTPS service
 type DoHProxyConfig struct {
 	ListenHost string
 	ListenPort uint16
 	Upstreams  []string
 }
 
+// FailReason impelents FallibleConfig interface for DoHProxyConfig
+func (dpc *DoHProxyConfig) FailReason(err error) string {
+	return fmt.Sprintf("Cannot apply DoHProxyConfig, err: %v", err)
+}
+
+// ReverseProxyConfig how and for what hostnames can this cloudflared proxy
 type ReverseProxyConfig struct {
-	TunnelHostname     string
+	TunnelHostname     h2mux.TunnelHostname
 	Origin             OriginConfig
 	Retries            uint64
 	ConnectionTimeout  time.Duration
@@ -65,12 +112,17 @@ func NewReverseProxyConfig(
 		return nil, fmt.Errorf("NewReverseProxyConfig: originConfig was null")
 	}
 	return &ReverseProxyConfig{
-		TunnelHostname:     tunnelHostname,
+		TunnelHostname:     h2mux.TunnelHostname(tunnelHostname),
 		Origin:             originConfig,
 		Retries:            retries,
 		ConnectionTimeout:  connectionTimeout,
 		CompressionQuality: compressionQuality,
 	}, nil
+}
+
+// FailReason impelents FallibleConfig interface for ReverseProxyConfig
+func (rpc *ReverseProxyConfig) FailReason(err error) string {
+	return fmt.Sprintf("Cannot apply ReverseProxyConfig, err: %v", err)
 }
 
 //go-sumtype:decl OriginConfig
@@ -82,58 +134,28 @@ type OriginConfig interface {
 }
 
 type HTTPOriginConfig struct {
-	URL                   OriginAddr    `capnp:"url"`
-	TCPKeepAlive          time.Duration `capnp:"tcpKeepAlive"`
-	DialDualStack         bool
-	TLSHandshakeTimeout   time.Duration `capnp:"tlsHandshakeTimeout"`
-	TLSVerify             bool          `capnp:"tlsVerify"`
-	OriginCAPool          string
-	OriginServerName      string
-	MaxIdleConnections    uint64
-	IdleConnectionTimeout time.Duration
-	ProxyConnectTimeout   time.Duration
-	ExpectContinueTimeout time.Duration
-	ChunkedEncoding       bool
-}
-
-type OriginAddr interface {
-	Addr() string
-}
-
-type HTTPURL struct {
-	URL *url.URL
-}
-
-func (ha *HTTPURL) Addr() string {
-	return ha.URL.String()
-}
-
-func (ha *HTTPURL) capnpHTTPURL() *CapnpHTTPURL {
-	return &CapnpHTTPURL{
-		URL: ha.URL.String(),
-	}
-}
-
-// URL for a HTTP origin, capnp doesn't have native support for URL, so represent it as string
-type CapnpHTTPURL struct {
-	URL string `capnp:"url"`
-}
-
-type UnixPath struct {
-	Path string
-}
-
-func (up *UnixPath) Addr() string {
-	return up.Path
+	URLString              string        `capnp:"urlString"`
+	TCPKeepAlive           time.Duration `capnp:"tcpKeepAlive"`
+	DialDualStack          bool
+	TLSHandshakeTimeout    time.Duration `capnp:"tlsHandshakeTimeout"`
+	TLSVerify              bool          `capnp:"tlsVerify"`
+	OriginCAPool           string
+	OriginServerName       string
+	MaxIdleConnections     uint64
+	IdleConnectionTimeout  time.Duration
+	ProxyConnectionTimeout time.Duration
+	ExpectContinueTimeout  time.Duration
+	ChunkedEncoding        bool
 }
 
 func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
-	rootCAs, err := tlsconfig.LoadCustomCertPool(hc.OriginCAPool)
+	rootCAs, err := tlsconfig.LoadCustomOriginCA(hc.OriginCAPool)
 	if err != nil {
 		return nil, err
 	}
+
 	dialContext := (&net.Dialer{
-		Timeout:   hc.ProxyConnectTimeout,
+		Timeout:   hc.ProxyConnectionTimeout,
 		KeepAlive: hc.TCPKeepAlive,
 		DualStack: hc.DialDualStack,
 	}).DialContext
@@ -150,25 +172,29 @@ func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
 		IdleConnTimeout:       hc.IdleConnectionTimeout,
 		ExpectContinueTimeout: hc.ExpectContinueTimeout,
 	}
-	if unixPath, ok := hc.URL.(*UnixPath); ok {
+	url, err := url.Parse(hc.URLString)
+	if err != nil {
+		return nil, errors.Wrapf(err, "%s is not a valid URL", hc.URLString)
+	}
+	if url.Scheme == "unix" {
 		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dialContext(ctx, "unix", unixPath.Addr())
+			return dialContext(ctx, "unix", url.Host)
 		}
 	}
-	return originservice.NewHTTPService(transport, hc.URL.Addr(), hc.ChunkedEncoding), nil
+	return originservice.NewHTTPService(transport, url, hc.ChunkedEncoding), nil
 }
 
 func (_ *HTTPOriginConfig) isOriginConfig() {}
 
 type WebSocketOriginConfig struct {
-	URL              string `capnp:"url"`
+	URLString        string `capnp:"urlString"`
 	TLSVerify        bool   `capnp:"tlsVerify"`
 	OriginCAPool     string
 	OriginServerName string
 }
 
 func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error) {
-	rootCAs, err := tlsconfig.LoadCustomCertPool(wsc.OriginCAPool)
+	rootCAs, err := tlsconfig.LoadCustomOriginCA(wsc.OriginCAPool)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +203,12 @@ func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error)
 		ServerName:         wsc.OriginServerName,
 		InsecureSkipVerify: wsc.TLSVerify,
 	}
-	return originservice.NewWebSocketService(tlsConfig, wsc.URL)
+
+	url, err := url.Parse(wsc.URLString)
+	if err != nil {
+		return nil, errors.Wrapf(err, "%s is not a valid URL", wsc.URLString)
+	}
+	return originservice.NewWebSocketService(tlsConfig, url)
 }
 
 func (_ *WebSocketOriginConfig) isOriginConfig() {}
@@ -221,18 +252,45 @@ func (_ *HelloWorldOriginConfig) isOriginConfig() {}
  */
 
 func MarshalClientConfig(s tunnelrpc.ClientConfig, p *ClientConfig) error {
-	s.SetVersion(p.Version)
-	s.SetAutoUpdateFrequency(p.AutoUpdateFrequency.Nanoseconds())
-	s.SetMetricsUpdateFrequency(p.MetricsUpdateFrequency.Nanoseconds())
-	s.SetHeartbeatInterval(p.HeartbeatInterval.Nanoseconds())
-	s.SetMaxFailedHeartbeats(p.MaxFailedHeartbeats)
-	s.SetGracePeriod(p.GracePeriod.Nanoseconds())
-	s.SetNumHAConnections(p.NumHAConnections)
-	err := marshalDoHProxyConfigs(s, p.DoHProxyConfigs)
+	s.SetVersion(uint64(p.Version))
+
+	supervisorConfig, err := s.NewSupervisorConfig()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get SupervisorConfig")
 	}
-	return marshalReverseProxyConfigs(s, p.ReverseProxyConfigs)
+	if err = MarshalSupervisorConfig(supervisorConfig, p.SupervisorConfig); err != nil {
+		return errors.Wrap(err, "MarshalSupervisorConfig error")
+	}
+
+	edgeConnectionConfig, err := s.NewEdgeConnectionConfig()
+	if err != nil {
+		return errors.Wrap(err, "failed to get EdgeConnectionConfig")
+	}
+	if err := MarshalEdgeConnectionConfig(edgeConnectionConfig, p.EdgeConnectionConfig); err != nil {
+		return errors.Wrap(err, "MarshalEdgeConnectionConfig error")
+	}
+
+	if err := marshalDoHProxyConfigs(s, p.DoHProxyConfigs); err != nil {
+		return errors.Wrap(err, "marshalDoHProxyConfigs error")
+	}
+	if err := marshalReverseProxyConfigs(s, p.ReverseProxyConfigs); err != nil {
+		return errors.Wrap(err, "marshalReverseProxyConfigs error")
+	}
+	return nil
+}
+
+func MarshalSupervisorConfig(s tunnelrpc.SupervisorConfig, p *SupervisorConfig) error {
+	if err := pogs.Insert(tunnelrpc.SupervisorConfig_TypeID, s.Struct, p); err != nil {
+		return errors.Wrap(err, "failed to insert SupervisorConfig")
+	}
+	return nil
+}
+
+func MarshalEdgeConnectionConfig(s tunnelrpc.EdgeConnectionConfig, p *EdgeConnectionConfig) error {
+	if err := pogs.Insert(tunnelrpc.EdgeConnectionConfig_TypeID, s.Struct, p); err != nil {
+		return errors.Wrap(err, "failed to insert EdgeConnectionConfig")
+	}
+	return nil
 }
 
 func marshalDoHProxyConfigs(s tunnelrpc.ClientConfig, dohProxyConfigs []*DoHProxyConfig) error {
@@ -265,23 +323,48 @@ func marshalReverseProxyConfigs(s tunnelrpc.ClientConfig, reverseProxyConfigs []
 
 func UnmarshalClientConfig(s tunnelrpc.ClientConfig) (*ClientConfig, error) {
 	p := new(ClientConfig)
-	p.Version = s.Version()
-	p.AutoUpdateFrequency = time.Duration(s.AutoUpdateFrequency())
-	p.MetricsUpdateFrequency = time.Duration(s.MetricsUpdateFrequency())
-	p.HeartbeatInterval = time.Duration(s.HeartbeatInterval())
-	p.MaxFailedHeartbeats = s.MaxFailedHeartbeats()
-	p.GracePeriod = time.Duration(s.GracePeriod())
-	p.NumHAConnections = s.NumHAConnections()
-	dohProxyConfigs, err := unmarshalDoHProxyConfigs(s)
+	p.Version = Version(s.Version())
+
+	supervisorConfig, err := s.SupervisorConfig()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to get SupervisorConfig")
 	}
-	p.DoHProxyConfigs = dohProxyConfigs
-	reverseProxyConfigs, err := unmarshalReverseProxyConfigs(s)
+	p.SupervisorConfig, err = UnmarshalSupervisorConfig(supervisorConfig)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "UnmarshalSupervisorConfig error")
 	}
-	p.ReverseProxyConfigs = reverseProxyConfigs
+
+	edgeConnectionConfig, err := s.EdgeConnectionConfig()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get ConnectionManagerConfig")
+	}
+	p.EdgeConnectionConfig, err = UnmarshalEdgeConnectionConfig(edgeConnectionConfig)
+	if err != nil {
+		return nil, errors.Wrap(err, "UnmarshalConnectionManagerConfig error")
+	}
+
+	p.DoHProxyConfigs, err = unmarshalDoHProxyConfigs(s)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalDoHProxyConfigs error")
+	}
+
+	p.ReverseProxyConfigs, err = unmarshalReverseProxyConfigs(s)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalReverseProxyConfigs error")
+	}
+
+	return p, nil
+}
+
+func UnmarshalSupervisorConfig(s tunnelrpc.SupervisorConfig) (*SupervisorConfig, error) {
+	p := new(SupervisorConfig)
+	err := pogs.Extract(p, tunnelrpc.SupervisorConfig_TypeID, s.Struct)
+	return p, err
+}
+
+func UnmarshalEdgeConnectionConfig(s tunnelrpc.EdgeConnectionConfig) (*EdgeConnectionConfig, error) {
+	p := new(EdgeConnectionConfig)
+	err := pogs.Extract(p, tunnelrpc.EdgeConnectionConfig_TypeID, s.Struct)
 	return p, err
 }
 
@@ -320,13 +403,38 @@ func unmarshalReverseProxyConfigs(s tunnelrpc.ClientConfig) ([]*ReverseProxyConf
 }
 
 func MarshalUseConfigurationResult(s tunnelrpc.UseConfigurationResult, p *UseConfigurationResult) error {
-	return pogs.Insert(tunnelrpc.UseConfigurationResult_TypeID, s.Struct, p)
+	capnpList, err := s.NewFailedConfigs(int32(len(p.FailedConfigs)))
+	if err != nil {
+		return errors.Wrap(err, "Cannot create new FailedConfigs")
+	}
+	for i, unmarshalledFailedConfig := range p.FailedConfigs {
+		err := MarshalFailedConfig(capnpList.At(i), unmarshalledFailedConfig)
+		if err != nil {
+			return errors.Wrapf(err, "Cannot MarshalFailedConfig at index %d", i)
+		}
+	}
+	s.SetSuccess(p.Success)
+	return nil
 }
 
 func UnmarshalUseConfigurationResult(s tunnelrpc.UseConfigurationResult) (*UseConfigurationResult, error) {
 	p := new(UseConfigurationResult)
-	err := pogs.Extract(p, tunnelrpc.UseConfigurationResult_TypeID, s.Struct)
-	return p, err
+	var failedConfigs []*FailedConfig
+	marshalledFailedConfigs, err := s.FailedConfigs()
+	if err != nil {
+		return nil, errors.Wrap(err, "Cannot get FailedConfigs")
+	}
+	for i := 0; i < marshalledFailedConfigs.Len(); i++ {
+		ss := marshalledFailedConfigs.At(i)
+		failedConfig, err := UnmarshalFailedConfig(ss)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Cannot UnmarshalFailedConfig at index %d", i)
+		}
+		failedConfigs = append(failedConfigs, failedConfig)
+	}
+	p.FailedConfigs = failedConfigs
+	p.Success = s.Success()
+	return p, nil
 }
 
 func MarshalDoHProxyConfig(s tunnelrpc.DoHProxyConfig, p *DoHProxyConfig) error {
@@ -340,7 +448,7 @@ func UnmarshalDoHProxyConfig(s tunnelrpc.DoHProxyConfig) (*DoHProxyConfig, error
 }
 
 func MarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig, p *ReverseProxyConfig) error {
-	s.SetTunnelHostname(p.TunnelHostname)
+	s.SetTunnelHostname(p.TunnelHostname.String())
 	switch config := p.Origin.(type) {
 	case *HTTPOriginConfig:
 		ss, err := s.Origin().NewHttp()
@@ -381,7 +489,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 	if err != nil {
 		return nil, err
 	}
-	p.TunnelHostname = tunnelHostname
+	p.TunnelHostname = h2mux.TunnelHostname(tunnelHostname)
 	switch s.Origin().Which() {
 	case tunnelrpc.ReverseProxyConfig_origin_Which_http:
 		ss, err := s.Origin().Http()
@@ -421,115 +529,12 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 }
 
 func MarshalHTTPOriginConfig(s tunnelrpc.HTTPOriginConfig, p *HTTPOriginConfig) error {
-	switch originAddr := p.URL.(type) {
-	case *HTTPURL:
-		ss, err := s.OriginAddr().NewHttp()
-		if err != nil {
-			return err
-		}
-		if err := MarshalHTTPURL(ss, originAddr); err != nil {
-			return err
-		}
-	case *UnixPath:
-		ss, err := s.OriginAddr().NewUnix()
-		if err != nil {
-			return err
-		}
-		if err := MarshalUnixPath(ss, originAddr); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("Unknown type for OriginAddr: %T", originAddr)
-	}
-	s.SetTcpKeepAlive(p.TCPKeepAlive.Nanoseconds())
-	s.SetDialDualStack(p.DialDualStack)
-	s.SetTlsHandshakeTimeout(p.TLSHandshakeTimeout.Nanoseconds())
-	s.SetTlsVerify(p.TLSVerify)
-	s.SetOriginCAPool(p.OriginCAPool)
-	s.SetOriginServerName(p.OriginServerName)
-	s.SetMaxIdleConnections(p.MaxIdleConnections)
-	s.SetIdleConnectionTimeout(p.IdleConnectionTimeout.Nanoseconds())
-	s.SetProxyConnectionTimeout(p.ProxyConnectTimeout.Nanoseconds())
-	s.SetExpectContinueTimeout(p.ExpectContinueTimeout.Nanoseconds())
-	s.SetChunkedEncoding(p.ChunkedEncoding)
-	return nil
+	return pogs.Insert(tunnelrpc.HTTPOriginConfig_TypeID, s.Struct, p)
 }
 
 func UnmarshalHTTPOriginConfig(s tunnelrpc.HTTPOriginConfig) (*HTTPOriginConfig, error) {
 	p := new(HTTPOriginConfig)
-	switch s.OriginAddr().Which() {
-	case tunnelrpc.HTTPOriginConfig_originAddr_Which_http:
-		ss, err := s.OriginAddr().Http()
-		if err != nil {
-			return nil, err
-		}
-		originAddr, err := UnmarshalCapnpHTTPURL(ss)
-		if err != nil {
-			return nil, err
-		}
-		p.URL = originAddr
-	case tunnelrpc.HTTPOriginConfig_originAddr_Which_unix:
-		ss, err := s.OriginAddr().Unix()
-		if err != nil {
-			return nil, err
-		}
-		originAddr, err := UnmarshalUnixPath(ss)
-		if err != nil {
-			return nil, err
-		}
-		p.URL = originAddr
-	default:
-		return nil, fmt.Errorf("Unknown type for OriginAddr: %T", s.OriginAddr().Which())
-	}
-	p.TCPKeepAlive = time.Duration(s.TcpKeepAlive())
-	p.DialDualStack = s.DialDualStack()
-	p.TLSHandshakeTimeout = time.Duration(s.TlsHandshakeTimeout())
-	p.TLSVerify = s.TlsVerify()
-	originCAPool, err := s.OriginCAPool()
-	if err != nil {
-		return nil, err
-	}
-	p.OriginCAPool = originCAPool
-	originServerName, err := s.OriginServerName()
-	if err != nil {
-		return nil, err
-	}
-	p.OriginServerName = originServerName
-	p.MaxIdleConnections = s.MaxIdleConnections()
-	p.IdleConnectionTimeout = time.Duration(s.IdleConnectionTimeout())
-	p.ProxyConnectTimeout = time.Duration(s.ProxyConnectionTimeout())
-	p.ExpectContinueTimeout = time.Duration(s.ExpectContinueTimeout())
-	p.ChunkedEncoding = s.ChunkedEncoding()
-	return p, nil
-}
-
-func MarshalHTTPURL(s tunnelrpc.CapnpHTTPURL, p *HTTPURL) error {
-	return pogs.Insert(tunnelrpc.CapnpHTTPURL_TypeID, s.Struct, p.capnpHTTPURL())
-}
-
-func UnmarshalCapnpHTTPURL(s tunnelrpc.CapnpHTTPURL) (*HTTPURL, error) {
-	p := new(CapnpHTTPURL)
-	err := pogs.Extract(p, tunnelrpc.CapnpHTTPURL_TypeID, s.Struct)
-	if err != nil {
-		return nil, err
-	}
-	url, err := url.Parse(p.URL)
-	if err != nil {
-		return nil, err
-	}
-	return &HTTPURL{
-		URL: url,
-	}, nil
-}
-
-func MarshalUnixPath(s tunnelrpc.UnixPath, p *UnixPath) error {
-	err := pogs.Insert(tunnelrpc.UnixPath_TypeID, s.Struct, p)
-	return err
-}
-
-func UnmarshalUnixPath(s tunnelrpc.UnixPath) (*UnixPath, error) {
-	p := new(UnixPath)
-	err := pogs.Extract(p, tunnelrpc.UnixPath_TypeID, s.Struct)
+	err := pogs.Extract(p, tunnelrpc.HTTPOriginConfig_TypeID, s.Struct)
 	return p, err
 }
 
@@ -583,4 +588,142 @@ func (c *ClientService_PogsClient) UseConfiguration(
 		return nil, err
 	}
 	return UnmarshalUseConfigurationResult(retval)
+}
+
+func ClientService_ServerToClient(s ClientService) tunnelrpc.ClientService {
+	return tunnelrpc.ClientService_ServerToClient(ClientService_PogsImpl{s})
+}
+
+type ClientService_PogsImpl struct {
+	impl ClientService
+}
+
+func (i ClientService_PogsImpl) UseConfiguration(p tunnelrpc.ClientService_useConfiguration) error {
+	config, err := p.Params.ClientServiceConfig()
+	if err != nil {
+		return errors.Wrap(err, "Cannot get CloudflaredConfig parameter")
+	}
+	pogsConfig, err := UnmarshalClientConfig(config)
+	if err != nil {
+		return errors.Wrap(err, "Cannot unmarshal tunnelrpc.CloudflaredConfig to *CloudflaredConfig")
+	}
+	server.Ack(p.Options)
+	userConfigResult, err := i.impl.UseConfiguration(p.Ctx, pogsConfig)
+	if err != nil {
+		return err
+	}
+	result, err := p.Results.NewResult()
+	if err != nil {
+		return err
+	}
+	return MarshalUseConfigurationResult(result, userConfigResult)
+}
+
+type UseConfigurationResult struct {
+	Success       bool
+	FailedConfigs []*FailedConfig
+}
+
+type FailedConfig struct {
+	Config FallibleConfig
+	Reason string
+}
+
+func MarshalFailedConfig(s tunnelrpc.FailedConfig, p *FailedConfig) error {
+	switch config := p.Config.(type) {
+	case *SupervisorConfig:
+		ss, err := s.Config().NewSupervisor()
+		if err != nil {
+			return err
+		}
+		err = MarshalSupervisorConfig(ss, config)
+		if err != nil {
+			return err
+		}
+	case *EdgeConnectionConfig:
+		ss, err := s.Config().EdgeConnection()
+		if err != nil {
+			return err
+		}
+		err = MarshalEdgeConnectionConfig(ss, config)
+		if err != nil {
+			return err
+		}
+	case *DoHProxyConfig:
+		ss, err := s.Config().NewDoh()
+		if err != nil {
+			return err
+		}
+		err = MarshalDoHProxyConfig(ss, config)
+		if err != nil {
+			return err
+		}
+	case *ReverseProxyConfig:
+		ss, err := s.Config().NewReverseProxy()
+		if err != nil {
+			return err
+		}
+		err = MarshalReverseProxyConfig(ss, config)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("Unknown type for Config: %T", config)
+	}
+	s.SetReason(p.Reason)
+	return nil
+}
+
+func UnmarshalFailedConfig(s tunnelrpc.FailedConfig) (*FailedConfig, error) {
+	p := new(FailedConfig)
+	switch s.Config().Which() {
+	case tunnelrpc.FailedConfig_config_Which_supervisor:
+		ss, err := s.Config().Supervisor()
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot get SupervisorConfig from Config")
+		}
+		config, err := UnmarshalSupervisorConfig(ss)
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot UnmarshalSupervisorConfig")
+		}
+		p.Config = config
+	case tunnelrpc.FailedConfig_config_Which_edgeConnection:
+		ss, err := s.Config().EdgeConnection()
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot get ConnectionManager from Config")
+		}
+		config, err := UnmarshalEdgeConnectionConfig(ss)
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot UnmarshalConnectionManagerConfig")
+		}
+		p.Config = config
+	case tunnelrpc.FailedConfig_config_Which_doh:
+		ss, err := s.Config().Doh()
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot get Doh from Config")
+		}
+		config, err := UnmarshalDoHProxyConfig(ss)
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot UnmarshalDoHProxyConfig")
+		}
+		p.Config = config
+	case tunnelrpc.FailedConfig_config_Which_reverseProxy:
+		ss, err := s.Config().ReverseProxy()
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot get ReverseProxy from Config")
+		}
+		config, err := UnmarshalReverseProxyConfig(ss)
+		if err != nil {
+			return nil, errors.Wrap(err, "Cannot UnmarshalReverseProxyConfig")
+		}
+		p.Config = config
+	default:
+		return nil, fmt.Errorf("Unknown type for FailedConfig: %v", s.Config().Which())
+	}
+	reason, err := s.Reason()
+	if err != nil {
+		return nil, errors.Wrap(err, "Cannot get Reason")
+	}
+	p.Reason = reason
+	return p, nil
 }

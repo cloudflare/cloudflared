@@ -68,13 +68,24 @@ type MuxedStream struct {
 	sentEOF bool
 	// true if the peer sent us an EOF
 	receivedEOF bool
-
+	// If valid, tunnelHostname is used to identify which origin service is the intended recipient of the request
+	tunnelHostname TunnelHostname
 	// Compression-related fields
 	receivedUseDict bool
 	method          string
 	contentType     string
 	path            string
 	dictionaries    h2Dictionaries
+}
+
+type TunnelHostname string
+
+func (th TunnelHostname) String() string {
+	return string(th)
+}
+
+func (th TunnelHostname) IsSet() bool {
+	return th != ""
 }
 
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
@@ -183,6 +194,25 @@ func (s *MuxedStream) WriteHeaders(headers []Header) error {
 	s.headersSent = false
 	s.writeNotify()
 	return nil
+}
+
+// IsRPCStream returns if the stream is used to transport RPC.
+func (s *MuxedStream) IsRPCStream() bool {
+	rpcHeaders := RPCHeaders()
+	if len(s.Headers) != len(rpcHeaders) {
+		return false
+	}
+	// The headers order matters, so RPC stream should be opened with OpenRPCStream method and let MuxWriter serializes the headers.
+	for i, rpcHeader := range rpcHeaders {
+		if s.Headers[i] != rpcHeader {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *MuxedStream) TunnelHostname() TunnelHostname {
+	return s.tunnelHostname
 }
 
 func (s *MuxedStream) getReceiveWindow() uint32 {

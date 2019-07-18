@@ -5,10 +5,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -22,6 +23,9 @@ const (
 	dotServerName = "cloudflare-dns.com"
 	dotServerAddr = "1.1.1.1:853"
 	dotTimeout    = time.Duration(15 * time.Second)
+
+	// SRV record resolution TTL
+	resolveEdgeAddrTTL = 1 * time.Hour
 )
 
 var friendlyDNSErrorLines = []string{
@@ -34,20 +38,65 @@ var friendlyDNSErrorLines = []string{
 	`     https://developers.cloudflare.com/1.1.1.1/setting-up-1.1.1.1/`,
 }
 
-func ResolveEdgeIPs(logger *log.Logger, addresses []string) ([]*net.TCPAddr, error) {
-	if len(addresses) > 0 {
-		var tcpAddrs []*net.TCPAddr
-		for _, address := range addresses {
-			// Addresses specified (for testing, usually)
-			tcpAddr, err := net.ResolveTCPAddr("tcp", address)
-			if err != nil {
-				return nil, err
-			}
-			tcpAddrs = append(tcpAddrs, tcpAddr)
-		}
-		return tcpAddrs, nil
+// EdgeServiceDiscoverer is an interface for looking up Cloudflare's edge network addresses
+type EdgeServiceDiscoverer interface {
+	// Addr returns an address to connect to cloudflare's edge network
+	Addr() *net.TCPAddr
+	// AvailableAddrs returns the number of unique addresses
+	AvailableAddrs() uint8
+	// Refresh rediscover Cloudflare's edge network addresses
+	Refresh() error
+}
+
+// EdgeAddrResolver discovers the addresses of Cloudflare's edge network through SRV record.
+// It implements EdgeServiceDiscoverer interface
+type EdgeAddrResolver struct {
+	sync.Mutex
+	// Addrs to connect to cloudflare's edge network
+	addrs []*net.TCPAddr
+	// index of the next element to use in addrs
+	nextAddrIndex int
+	logger        *logrus.Entry
+}
+
+func NewEdgeAddrResolver(logger *logrus.Logger) (EdgeServiceDiscoverer, error) {
+	r := &EdgeAddrResolver{
+		logger: logger.WithField("subsystem", " edgeAddrResolver"),
 	}
-	// HA service discovery lookup
+	if err := r.Refresh(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *EdgeAddrResolver) Addr() *net.TCPAddr {
+	r.Lock()
+	defer r.Unlock()
+	addr := r.addrs[r.nextAddrIndex]
+	r.nextAddrIndex = (r.nextAddrIndex + 1) % len(r.addrs)
+	return addr
+}
+
+func (r *EdgeAddrResolver) AvailableAddrs() uint8 {
+	r.Lock()
+	defer r.Unlock()
+	return uint8(len(r.addrs))
+}
+
+func (r *EdgeAddrResolver) Refresh() error {
+	newAddrs, err := EdgeDiscovery(r.logger)
+	if err != nil {
+		return err
+	}
+	r.Lock()
+	defer r.Unlock()
+	r.addrs = newAddrs
+	r.nextAddrIndex = 0
+	return nil
+}
+
+// HA service discovery lookup
+func EdgeDiscovery(logger *logrus.Entry) ([]*net.TCPAddr, error) {
 	_, addrs, err := net.LookupSRV(srvService, srvProto, srvName)
 	if err != nil {
 		// Try to fall back to DoT from Cloudflare directly.
@@ -78,7 +127,7 @@ func ResolveEdgeIPs(logger *log.Logger, addresses []string) ([]*net.TCPAddr, err
 	var resolvedIPsPerCNAME [][]*net.TCPAddr
 	var lookupErr error
 	for _, addr := range addrs {
-		ips, err := ResolveSRVToTCP(addr)
+		ips, err := resolveSRVToTCP(addr)
 		if err != nil || len(ips) == 0 {
 			// don't return early, we might be able to resolve other addresses
 			lookupErr = err
@@ -86,14 +135,14 @@ func ResolveEdgeIPs(logger *log.Logger, addresses []string) ([]*net.TCPAddr, err
 		}
 		resolvedIPsPerCNAME = append(resolvedIPsPerCNAME, ips)
 	}
-	ips := FlattenServiceIPs(resolvedIPsPerCNAME)
+	ips := flattenServiceIPs(resolvedIPsPerCNAME)
 	if lookupErr == nil && len(ips) == 0 {
 		return nil, fmt.Errorf("Unknown service discovery error")
 	}
 	return ips, lookupErr
 }
 
-func ResolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
+func resolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
 	ips, err := net.LookupIP(srv.Target)
 	if err != nil {
 		return nil, err
@@ -107,7 +156,7 @@ func ResolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
 
 // FlattenServiceIPs transposes and flattens the input slices such that the
 // first element of the n inner slices are the first n elements of the result.
-func FlattenServiceIPs(ipsByService [][]*net.TCPAddr) []*net.TCPAddr {
+func flattenServiceIPs(ipsByService [][]*net.TCPAddr) []*net.TCPAddr {
 	var result []*net.TCPAddr
 	for len(ipsByService) > 0 {
 		filtered := ipsByService[:0]
@@ -140,4 +189,66 @@ func fallbackResolver(serverName, serverAddress string) *net.Resolver {
 			return tls.Client(conn, tlsConfig), nil
 		},
 	}
+}
+
+// EdgeHostnameResolver discovers the addresses of Cloudflare's edge network via a list of server hostnames.
+// It implements EdgeServiceDiscoverer interface, and is used mainly for testing connectivity.
+type EdgeHostnameResolver struct {
+	sync.Mutex
+	// hostnames of edge servers
+	hostnames []string
+	// Addrs to connect to cloudflare's edge network
+	addrs []*net.TCPAddr
+	// index of the next element to use in addrs
+	nextAddrIndex int
+}
+
+func NewEdgeHostnameResolver(edgeHostnames []string) (EdgeServiceDiscoverer, error) {
+	r := &EdgeHostnameResolver{
+		hostnames: edgeHostnames,
+	}
+	if err := r.Refresh(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *EdgeHostnameResolver) Addr() *net.TCPAddr {
+	r.Lock()
+	defer r.Unlock()
+	addr := r.addrs[r.nextAddrIndex]
+	r.nextAddrIndex = (r.nextAddrIndex + 1) % len(r.addrs)
+	return addr
+}
+
+func (r *EdgeHostnameResolver) AvailableAddrs() uint8 {
+	r.Lock()
+	defer r.Unlock()
+	return uint8(len(r.addrs))
+}
+
+func (r *EdgeHostnameResolver) Refresh() error {
+	newAddrs, err := ResolveAddrs(r.hostnames)
+	if err != nil {
+		return err
+	}
+	r.Lock()
+	defer r.Unlock()
+	r.addrs = newAddrs
+	r.nextAddrIndex = 0
+	return nil
+}
+
+// Resolve TCP address given a list of addresses. Address can be a hostname, however, it will return at most one
+// of the hostname's IP addresses
+func ResolveAddrs(addrs []string) ([]*net.TCPAddr, error) {
+	var tcpAddrs []*net.TCPAddr
+	for _, addr := range addrs {
+		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+		if err != nil {
+			return nil, err
+		}
+		tcpAddrs = append(tcpAddrs, tcpAddr)
+	}
+	return tcpAddrs, nil
 }

@@ -14,9 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
@@ -41,7 +42,7 @@ const (
 )
 
 type TunnelConfig struct {
-	BuildInfo            *BuildInfo
+	BuildInfo            *buildinfo.BuildInfo
 	ClientID             string
 	ClientTlsConfig      *tls.Config
 	CloseConnOnce        *sync.Once // Used to close connectedSignal no more than once
@@ -140,44 +141,8 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(config *TunnelConfig, shutdownC <-chan struct{}, connectedSignal *signal.Signal) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-shutdownC
-		cancel()
-	}()
-
-	u, err := uuid.NewRandom()
-	if err != nil {
-		return err
-	}
-
-	// If a user specified negative HAConnections, we will treat it as requesting 1 connection
-	if config.HAConnections > 1 {
-		if config.UseDeclarativeTunnel {
-			return connection.NewSupervisor(&connection.CloudflaredConfig{
-				ConnectionConfig: &connection.ConnectionConfig{
-					TLSConfig:         config.TlsConfig,
-					HeartbeatInterval: config.HeartbeatInterval,
-					MaxHeartbeats:     config.MaxHeartbeats,
-					Logger:            config.Logger.WithField("subsystem", "connection_supervisor"),
-				},
-				OriginCert:         config.OriginCert,
-				Tags:               config.Tags,
-				EdgeAddrs:          config.EdgeAddrs,
-				HAConnections:      uint(config.HAConnections),
-				Logger:             config.Logger,
-				CloudflaredVersion: config.ReportedVersion,
-			}).Run(ctx)
-		}
-		return NewSupervisor(config).Run(ctx, connectedSignal, u)
-	} else {
-		addrs, err := connection.ResolveEdgeIPs(config.Logger, config.EdgeAddrs)
-		if err != nil {
-			return err
-		}
-		return ServeTunnelLoop(ctx, config, addrs[0], 0, connectedSignal, u)
-	}
+func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID) error {
+	return NewSupervisor(config).Run(ctx, connectedSignal, cloudflaredID)
 }
 
 func ServeTunnelLoop(ctx context.Context,
@@ -472,39 +437,6 @@ func LogServerInfo(
 	metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
 }
 
-func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
-	for _, header := range h2 {
-		switch header.Name {
-		case ":method":
-			h1.Method = header.Value
-		case ":scheme":
-		case ":authority":
-			// Otherwise the host header will be based on the origin URL
-			h1.Host = header.Value
-		case ":path":
-			u, err := url.Parse(header.Value)
-			if err != nil {
-				return fmt.Errorf("unparseable path")
-			}
-			resolved := h1.URL.ResolveReference(u)
-			// prevent escaping base URL
-			if !strings.HasPrefix(resolved.String(), h1.URL.String()) {
-				return fmt.Errorf("invalid path")
-			}
-			h1.URL = resolved
-		case "content-length":
-			contentLength, err := strconv.ParseInt(header.Value, 10, 64)
-			if err != nil {
-				return fmt.Errorf("unparseable content length")
-			}
-			h1.ContentLength = contentLength
-		default:
-			h1.Header.Add(http.CanonicalHeaderKey(header.Name), header.Value)
-		}
-	}
-	return nil
-}
-
 func H1ResponseToH2Response(h1 *http.Response) (h2 []h2mux.Header) {
 	h2 = []h2mux.Header{{Name: ":status", Value: fmt.Sprintf("%d", h1.StatusCode)}}
 	for headerName, headerValues := range h1.Header {
@@ -513,10 +445,6 @@ func H1ResponseToH2Response(h1 *http.Response) (h2 []h2mux.Header) {
 		}
 	}
 	return
-}
-
-func FindCfRayHeader(h1 *http.Request) string {
-	return h1.Header.Get("Cf-Ray")
 }
 
 type TunnelHandler struct {
@@ -608,8 +536,8 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		return reqErr
 	}
 
-	cfRay := FindCfRayHeader(req)
-	lbProbe := isLBProbeRequest(req)
+	cfRay := streamhandler.FindCfRayHeader(req)
+	lbProbe := streamhandler.IsLBProbeRequest(req)
 	h.logRequest(req, cfRay, lbProbe)
 
 	var resp *http.Response
@@ -632,8 +560,7 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 	if err != nil {
 		return nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
 	}
-
-	err = H2RequestHeadersToH1Request(stream.Headers, req)
+	err = streamhandler.H2RequestHeadersToH1Request(stream.Headers, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid request received")
 	}
@@ -771,10 +698,6 @@ func (h *TunnelHandler) UpdateMetrics(connectionID string) {
 
 func uint8ToString(input uint8) string {
 	return strconv.FormatUint(uint64(input), 10)
-}
-
-func isLBProbeRequest(req *http.Request) bool {
-	return strings.HasPrefix(req.UserAgent(), lbProbeUserAgentPrefix)
 }
 
 // Print out the given lines in a nice ASCII box.

@@ -7,8 +7,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type mockEdgeServiceDiscoverer struct {
+}
+
+func (mr *mockEdgeServiceDiscoverer) Addr() *net.TCPAddr {
+	return &net.TCPAddr{
+		IP:   net.ParseIP("127.0.0.1"),
+		Port: 63102,
+	}
+}
+
+func (mr *mockEdgeServiceDiscoverer) AvailableAddrs() uint8 {
+	return 1
+}
+
+func (mr *mockEdgeServiceDiscoverer) Refresh() error {
+	return nil
+}
+
 func TestFlattenServiceIPs(t *testing.T) {
-	result := FlattenServiceIPs([][]*net.TCPAddr{
+	result := flattenServiceIPs([][]*net.TCPAddr{
 		[]*net.TCPAddr{
 			&net.TCPAddr{Port: 1},
 			&net.TCPAddr{Port: 2},
