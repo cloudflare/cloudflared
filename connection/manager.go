@@ -47,6 +47,7 @@ type CloudflaredConfig struct {
 	CloudflaredID uuid.UUID
 	Tags          []pogs.Tag
 	BuildInfo     *buildinfo.BuildInfo
+	Scope         pogs.Scope
 }
 
 func NewEdgeManager(
@@ -120,32 +121,34 @@ func (em *EdgeManager) newConnection(ctx context.Context) error {
 		Logger:            em.logger.WithField("subsystem", "muxer"),
 	})
 	if err != nil {
-		return errors.Wrap(err, "handshake with edge error")
+		return errors.Wrap(err, "couldn't perform handshake with edge")
 	}
 
 	h2muxConn, err := newConnection(muxer, edgeIP)
 	if err != nil {
-		return errors.Wrap(err, "create h2mux connection error")
+		return errors.Wrap(err, "couldn't create h2mux connection")
 	}
 
 	go em.serveConn(ctx, h2muxConn)
 
 	connResult, err := h2muxConn.Connect(ctx, &pogs.ConnectParameters{
-		OriginCert:          em.state.getUserCredential(),
 		CloudflaredID:       em.cloudflaredConfig.CloudflaredID,
-		NumPreviousAttempts: 0,
 		CloudflaredVersion:  em.cloudflaredConfig.BuildInfo.CloudflaredVersion,
+		NumPreviousAttempts: 0,
+		OriginCert:          em.state.getUserCredential(),
+		Scope:               em.cloudflaredConfig.Scope,
+		Tags:                em.cloudflaredConfig.Tags,
 	}, em.logger)
 	if err != nil {
 		h2muxConn.Shutdown()
-		return errors.Wrap(err, "connect with edge error")
+		return errors.Wrap(err, "couldn't connect to edge")
 	}
 
 	if connErr := connResult.Err; connErr != nil {
 		if !connErr.ShouldRetry {
 			return errors.Wrap(connErr, em.noRetryMessage())
 		}
-		return errors.Wrapf(connErr, "server respond with retry at %v", connErr.RetryAfter)
+		return errors.Wrapf(connErr, "edge responded with RetryAfter=%v", connErr.RetryAfter)
 	}
 
 	em.state.newConnection(h2muxConn)

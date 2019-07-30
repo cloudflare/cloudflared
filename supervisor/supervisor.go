@@ -57,8 +57,8 @@ func NewSupervisor(
 		tunnelHostnames[i] = reverseProxyConfig.TunnelHostname
 	}
 	defaultEdgeMgrConfigurable := &connection.EdgeManagerConfigurable{
-		tunnelHostnames,
-		defaultClientConfig.EdgeConnectionConfig,
+		TunnelHostnames:      tunnelHostnames,
+		EdgeConnectionConfig: defaultClientConfig.EdgeConnectionConfig,
 	}
 	return &Supervisor{
 		connManager: connection.NewEdgeManager(streamHandler, defaultEdgeMgrConfigurable, userCredential, tlsConfig,
@@ -139,8 +139,8 @@ func (s *Supervisor) notifySubsystemsNewConfig(newConfig *pogs.ClientConfig) *po
 	}
 	// Update connManager configurable
 	s.connManager.UpdateConfigurable(&connection.EdgeManagerConfigurable{
-		tunnelHostnames,
-		newConfig.EdgeConnectionConfig,
+		TunnelHostnames:      tunnelHostnames,
+		EdgeConnectionConfig: newConfig.EdgeConnectionConfig,
 	})
 	// Update streamHandler tunnelHostnameMapper mapping
 	failedConfigs := s.streamHandler.UpdateConfig(newConfig.ReverseProxyConfigs)

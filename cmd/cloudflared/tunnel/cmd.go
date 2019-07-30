@@ -427,10 +427,22 @@ func startDeclarativeTunnel(ctx context.Context,
 		return err
 	}
 
+	var scope pogs.Scope
+	if c.IsSet("group") == c.IsSet("system-name") {
+		err = fmt.Errorf("exactly one of --group or --system-name must be specified")
+		logger.WithError(err).Error("unable to determine scope")
+		return err
+	} else if c.IsSet("group") {
+		scope = pogs.NewGroup(c.String("group"))
+	} else {
+		scope = pogs.NewSystemName(c.String("system-name"))
+	}
+
 	cloudflaredConfig := &connection.CloudflaredConfig{
-		CloudflaredID: cloudflaredID,
-		Tags:          tags,
 		BuildInfo:     buildInfo,
+		CloudflaredID: cloudflaredID,
+		Scope:         scope,
+		Tags:          tags,
 	}
 
 	serviceDiscoverer, err := serviceDiscoverer(c, logger)
@@ -836,6 +848,18 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "use-declarative-tunnels",
 			Usage:   "Test establishing connections with declarative tunnel methods.",
 			EnvVars: []string{"TUNNEL_USE_DECLARATIVE"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "system-name",
+			Usage:   "Unique identifier for this cloudflared instance. It can be configured individually in the Declarative Tunnel UI. Mutually exclusive with `--group`.",
+			EnvVars: []string{"TUNNEL_SYSTEM_NAME"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "group",
+			Usage:   "Name of a group of cloudflared instances, of which this instance should be an identical copy. They can be configured collectively in the Declarative Tunnel UI. Mutually exclusive with `--system-name`.",
+			EnvVars: []string{"TUNNEL_GROUP"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{

@@ -2,6 +2,7 @@ package pogs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -127,52 +128,169 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 	return p, err
 }
 
+//go-sumtype:decl Scope
+type Scope interface {
+	Value() string
+	isScope()
+}
+
+type SystemName struct {
+	systemName string
+}
+
+func NewSystemName(systemName string) *SystemName {
+	return &SystemName{systemName: systemName}
+}
+
+func (s *SystemName) Value() string { return s.systemName }
+
+func (_ *SystemName) isScope() {}
+
+type Group struct {
+	group string
+}
+
+func NewGroup(group string) *Group {
+	return &Group{group: group}
+}
+
+func (g *Group) Value() string { return g.group }
+
+func (_ *Group) isScope() {}
+
+func MarshalScope(s tunnelrpc.Scope, p Scope) error {
+	ss := s.Value()
+	switch scope := p.(type) {
+	case *SystemName:
+		ss.SetSystemName(scope.systemName)
+	case *Group:
+		ss.SetGroup(scope.group)
+	default:
+		return fmt.Errorf("unexpected Scope value: %v", p)
+	}
+	return nil
+}
+
+func UnmarshalScope(s tunnelrpc.Scope) (Scope, error) {
+	ss := s.Value()
+	switch ss.Which() {
+	case tunnelrpc.Scope_value_Which_systemName:
+		systemName, err := ss.SystemName()
+		if err != nil {
+			return nil, err
+		}
+		return NewSystemName(systemName), nil
+	case tunnelrpc.Scope_value_Which_group:
+		group, err := ss.Group()
+		if err != nil {
+			return nil, err
+		}
+		return NewGroup(group), nil
+	default:
+		return nil, fmt.Errorf("unexpected Scope tag: %v", ss.Which())
+	}
+}
+
 type ConnectParameters struct {
 	OriginCert          []byte
 	CloudflaredID       uuid.UUID
 	NumPreviousAttempts uint8
 	Tags                []Tag
 	CloudflaredVersion  string
-}
-
-// CapnpConnectParameters is ConnectParameters represented in Cap'n Proto build-in types
-type CapnpConnectParameters struct {
-	OriginCert          []byte
-	CloudflaredID       []byte
-	NumPreviousAttempts uint8
-	Tags                []Tag
-	CloudflaredVersion  string
+	Scope               Scope
 }
 
 func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectParameters) error {
+	if err := s.SetOriginCert(p.OriginCert); err != nil {
+		return err
+	}
 	cloudflaredIDBytes, err := p.CloudflaredID.MarshalBinary()
 	if err != nil {
 		return err
 	}
-	capnpConnectParameters := &CapnpConnectParameters{
-		OriginCert:          p.OriginCert,
-		CloudflaredID:       cloudflaredIDBytes,
-		NumPreviousAttempts: p.NumPreviousAttempts,
-		CloudflaredVersion:  p.CloudflaredVersion,
+	if err := s.SetCloudflaredID(cloudflaredIDBytes); err != nil {
+		return err
 	}
-	return pogs.Insert(tunnelrpc.CapnpConnectParameters_TypeID, s.Struct, capnpConnectParameters)
+	s.SetNumPreviousAttempts(p.NumPreviousAttempts)
+	if len(p.Tags) > 0 {
+		tagsCapnpList, err := s.NewTags(int32(len(p.Tags)))
+		if err != nil {
+			return err
+		}
+		for i, tag := range p.Tags {
+			tagCapnp := tagsCapnpList.At(i)
+			if err := tagCapnp.SetName(tag.Name); err != nil {
+				return err
+			}
+			if err := tagCapnp.SetValue(tag.Value); err != nil {
+				return err
+			}
+		}
+	}
+	if err := s.SetCloudflaredVersion(p.CloudflaredVersion); err != nil {
+		return err
+	}
+	scope, err := s.NewScope()
+	if err != nil {
+		return err
+	}
+	return MarshalScope(scope, p.Scope)
 }
 
 func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectParameters, error) {
-	p := new(CapnpConnectParameters)
-	err := pogs.Extract(p, tunnelrpc.CapnpConnectParameters_TypeID, s.Struct)
+	originCert, err := s.OriginCert()
 	if err != nil {
 		return nil, err
 	}
-	cloudflaredID, err := uuid.FromBytes(p.CloudflaredID)
+
+	cloudflaredIDBytes, err := s.CloudflaredID()
 	if err != nil {
 		return nil, err
 	}
+	cloudflaredID, err := uuid.FromBytes(cloudflaredIDBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	tagsCapnpList, err := s.Tags()
+	if err != nil {
+		return nil, err
+	}
+	var tags []Tag
+	for i := 0; i < tagsCapnpList.Len(); i++ {
+		tagCapnp := tagsCapnpList.At(i)
+		name, err := tagCapnp.Name()
+		if err != nil {
+			return nil, err
+		}
+		value, err := tagCapnp.Value()
+		if err != nil {
+			return nil, err
+		}
+		tags = append(tags, Tag{Name: name, Value: value})
+	}
+
+	cloudflaredVersion, err := s.CloudflaredVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	scopeCapnp, err := s.Scope()
+	if err != nil {
+		return nil, err
+	}
+	scope, err := UnmarshalScope(scopeCapnp)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ConnectParameters{
-		OriginCert:          p.OriginCert,
+		OriginCert:          originCert,
 		CloudflaredID:       cloudflaredID,
-		NumPreviousAttempts: p.NumPreviousAttempts,
-		CloudflaredVersion:  p.CloudflaredVersion,
+		NumPreviousAttempts: s.NumPreviousAttempts(),
+		Tags:                tags,
+		CloudflaredVersion:  cloudflaredVersion,
+		Scope:               scope,
 	}, nil
 }
 

@@ -12,6 +12,15 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
+// Assert *HTTPOriginConfig implements OriginConfig
+var _ OriginConfig = (*HTTPOriginConfig)(nil)
+
+// Assert *WebSocketOriginConfig implements OriginConfig
+var _ OriginConfig = (*WebSocketOriginConfig)(nil)
+
+// Assert *HelloWorldOriginConfig implements OriginConfig
+var _ OriginConfig = (*HelloWorldOriginConfig)(nil)
+
 func TestVersion(t *testing.T) {
 	firstVersion := InitVersion()
 	secondVersion := Version(1)
@@ -35,7 +44,7 @@ func TestClientConfig(t *testing.T) {
 				c.Origin = sampleHTTPOriginConfig()
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.Origin = sampleHTTPOriginUnixPathConfig()
+				c.Origin = sampleHTTPOriginConfig(unixPathOverride)
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 				c.Origin = sampleWebSocketOriginConfig()
@@ -136,7 +145,7 @@ func TestReverseProxyConfig(t *testing.T) {
 			c.Origin = sampleHTTPOriginConfig()
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.Origin = sampleHTTPOriginUnixPathConfig()
+			c.Origin = sampleHTTPOriginConfig(unixPathOverride)
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 			c.Origin = sampleWebSocketOriginConfig()
@@ -224,7 +233,17 @@ func TestOriginConfigInvalidURL(t *testing.T) {
 
 //////////////////////////////////////////////////////////////////////////////
 // Functions to generate sample data for ease of testing
+//
+// There's one "sample" function per struct type. Each goes like this:
+//   1. Initialize an instance of the relevant struct.
+//   2. Ensure the instance has no zero-valued fields. (This catches the
+//      error-case where a field was added, but we forgot to add code to
+//      marshal/unmarshal this field in CapnProto.)
+//   3. Apply one or more "override" functions (which accept a
+//      pointer-to-struct, so they can mutate the instance).
 
+// sampleClientConfig initializes a new ClientConfig literal,
+// applies any number of overrides to it, and returns it.
 func sampleClientConfig(overrides ...func(*ClientConfig)) *ClientConfig {
 	sample := &ClientConfig{
 		Version: Version(1337),
@@ -247,6 +266,8 @@ func sampleClientConfig(overrides ...func(*ClientConfig)) *ClientConfig {
 	return sample
 }
 
+// sampleDoHProxyConfig initializes a new DoHProxyConfig struct,
+// applies any number of overrides to it, and returns it.
 func sampleDoHProxyConfig(overrides ...func(*DoHProxyConfig)) *DoHProxyConfig {
 	sample := &DoHProxyConfig{
 		ListenHost: "127.0.0.1",
@@ -260,6 +281,8 @@ func sampleDoHProxyConfig(overrides ...func(*DoHProxyConfig)) *DoHProxyConfig {
 	return sample
 }
 
+// sampleReverseProxyConfig initializes a new ReverseProxyConfig struct,
+// applies any number of overrides to it, and returns it.
 func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReverseProxyConfig {
 	sample := &ReverseProxyConfig{
 		TunnelHostname:     "hijk.example.com",
@@ -275,9 +298,11 @@ func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReversePr
 	return sample
 }
 
+// sampleHTTPOriginConfig initializes a new HTTPOriginConfig literal,
+// applies any number of overrides to it, and returns it.
 func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
 	sample := &HTTPOriginConfig{
-		URLString:              "https.example.com",
+		URLString:              "https://example.com",
 		TCPKeepAlive:           7 * time.Second,
 		DialDualStack:          true,
 		TLSHandshakeTimeout:    11 * time.Second,
@@ -297,28 +322,14 @@ func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginCon
 	return sample
 }
 
-func sampleHTTPOriginUnixPathConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
-	sample := &HTTPOriginConfig{
-		URLString:              "unix:/var/lib/file.sock",
-		TCPKeepAlive:           7 * time.Second,
-		DialDualStack:          true,
-		TLSHandshakeTimeout:    11 * time.Second,
-		TLSVerify:              true,
-		OriginCAPool:           "/etc/cert.pem",
-		OriginServerName:       "secure.example.com",
-		MaxIdleConnections:     19,
-		IdleConnectionTimeout:  17 * time.Second,
-		ProxyConnectionTimeout: 15 * time.Second,
-		ExpectContinueTimeout:  21 * time.Second,
-		ChunkedEncoding:        true,
-	}
-	sample.ensureNoZeroFields()
-	for _, f := range overrides {
-		f(sample)
-	}
-	return sample
+// unixPathOverride sets the URLString of the given HTTPOriginConfig to be a
+// Unix socket (i.e. `unix:` scheme plus a file path)
+func unixPathOverride(sample *HTTPOriginConfig) {
+	sample.URLString = "unix:/var/lib/file.sock"
 }
 
+// sampleWebSocketOriginConfig initializes a new WebSocketOriginConfig
+// struct, applies any number of overrides to it, and returns it.
 func sampleWebSocketOriginConfig(overrides ...func(*WebSocketOriginConfig)) *WebSocketOriginConfig {
 	sample := &WebSocketOriginConfig{
 		URLString:        "ssh://example.com",
@@ -366,7 +377,6 @@ func (c *WebSocketOriginConfig) ensureNoZeroFields() {
 // include a field in the sample value, it won't be covered under tests.
 // This check reduces that risk by requiring fields to be either initialized
 // or explicitly uninitialized.
-// https://bitbucket.cfdata.org/projects/TUN/repos/cloudflared/pull-requests/151/overview?commentId=348012
 func ensureNoZeroFieldsInSample(ptrToSampleValue reflect.Value, allowedZeroFieldNames []string) {
 	sampleValue := ptrToSampleValue.Elem()
 	structType := ptrToSampleValue.Type().Elem()
