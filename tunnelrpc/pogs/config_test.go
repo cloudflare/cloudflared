@@ -41,13 +41,13 @@ func TestClientConfig(t *testing.T) {
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.Origin = sampleHTTPOriginConfig()
+				c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfig()}
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.Origin = sampleHTTPOriginConfig(unixPathOverride)
+				c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfigUnixPath()}
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.Origin = sampleWebSocketOriginConfig()
+				c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleWebSocketOriginConfig()}
 			}),
 		}
 	}
@@ -142,13 +142,13 @@ func TestReverseProxyConfig(t *testing.T) {
 	testCases := []*ReverseProxyConfig{
 		sampleReverseProxyConfig(),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.Origin = sampleHTTPOriginConfig()
+			c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfig()}
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.Origin = sampleHTTPOriginConfig(unixPathOverride)
+			c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfigUnixPath()}
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.Origin = sampleWebSocketOriginConfig()
+			c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleWebSocketOriginConfig()}
 		}),
 	}
 	for i, testCase := range testCases {
@@ -285,11 +285,11 @@ func sampleDoHProxyConfig(overrides ...func(*DoHProxyConfig)) *DoHProxyConfig {
 // applies any number of overrides to it, and returns it.
 func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReverseProxyConfig {
 	sample := &ReverseProxyConfig{
-		TunnelHostname:     "hijk.example.com",
-		Origin:             &HelloWorldOriginConfig{},
-		Retries:            18,
-		ConnectionTimeout:  5 * time.Second,
-		CompressionQuality: 4,
+		TunnelHostname:          "hijk.example.com",
+		OriginConfigUnmarshaler: &OriginConfigUnmarshaler{&HelloWorldOriginConfig{}},
+		Retries:                 18,
+		ConnectionTimeout:       5 * time.Second,
+		CompressionQuality:      4,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -298,11 +298,9 @@ func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReversePr
 	return sample
 }
 
-// sampleHTTPOriginConfig initializes a new HTTPOriginConfig literal,
-// applies any number of overrides to it, and returns it.
 func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
 	sample := &HTTPOriginConfig{
-		URLString:              "https://example.com",
+		URLString:              "https.example.com",
 		TCPKeepAlive:           7 * time.Second,
 		DialDualStack:          true,
 		TLSHandshakeTimeout:    11 * time.Second,
@@ -322,14 +320,28 @@ func sampleHTTPOriginConfig(overrides ...func(*HTTPOriginConfig)) *HTTPOriginCon
 	return sample
 }
 
-// unixPathOverride sets the URLString of the given HTTPOriginConfig to be a
-// Unix socket (i.e. `unix:` scheme plus a file path)
-func unixPathOverride(sample *HTTPOriginConfig) {
-	sample.URLString = "unix:/var/lib/file.sock"
+func sampleHTTPOriginConfigUnixPath(overrides ...func(*HTTPOriginConfig)) *HTTPOriginConfig {
+	sample := &HTTPOriginConfig{
+		URLString:              "unix:/var/lib/file.sock",
+		TCPKeepAlive:           7 * time.Second,
+		DialDualStack:          true,
+		TLSHandshakeTimeout:    11 * time.Second,
+		TLSVerify:              true,
+		OriginCAPool:           "/etc/cert.pem",
+		OriginServerName:       "secure.example.com",
+		MaxIdleConnections:     19,
+		IdleConnectionTimeout:  17 * time.Second,
+		ProxyConnectionTimeout: 15 * time.Second,
+		ExpectContinueTimeout:  21 * time.Second,
+		ChunkedEncoding:        true,
+	}
+	sample.ensureNoZeroFields()
+	for _, f := range overrides {
+		f(sample)
+	}
+	return sample
 }
 
-// sampleWebSocketOriginConfig initializes a new WebSocketOriginConfig
-// struct, applies any number of overrides to it, and returns it.
 func sampleWebSocketOriginConfig(overrides ...func(*WebSocketOriginConfig)) *WebSocketOriginConfig {
 	sample := &WebSocketOriginConfig{
 		URLString:        "ssh://example.com",

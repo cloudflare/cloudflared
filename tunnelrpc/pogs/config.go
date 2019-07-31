@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/cloudflared/originservice"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+
 	"github.com/pkg/errors"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
@@ -27,11 +28,11 @@ import (
 
 // ClientConfig is a collection of FallibleConfig that determines how cloudflared should function
 type ClientConfig struct {
-	Version              Version
-	SupervisorConfig     *SupervisorConfig
-	EdgeConnectionConfig *EdgeConnectionConfig
-	DoHProxyConfigs      []*DoHProxyConfig
-	ReverseProxyConfigs  []*ReverseProxyConfig
+	Version              Version               `json:"version"`
+	SupervisorConfig     *SupervisorConfig     `json:"supervisor_config"`
+	EdgeConnectionConfig *EdgeConnectionConfig `json:"edge_connection_config"`
+	DoHProxyConfigs      []*DoHProxyConfig     `json:"doh_proxy_configs"`
+	ReverseProxyConfigs  []*ReverseProxyConfig `json:"reverse_proxy_configs"`
 }
 
 // Version type models the version of a ClientConfig
@@ -56,9 +57,9 @@ type FallibleConfig interface {
 
 // SupervisorConfig specifies config of components managed by Supervisor other than ConnectionManager
 type SupervisorConfig struct {
-	AutoUpdateFrequency    time.Duration
-	MetricsUpdateFrequency time.Duration
-	GracePeriod            time.Duration
+	AutoUpdateFrequency    time.Duration `json:"auto_update_frequency"`
+	MetricsUpdateFrequency time.Duration `json:"metrics_update_frequency"`
+	GracePeriod            time.Duration `json:"grace_period"`
 }
 
 // FailReason impelents FallibleConfig interface for SupervisorConfig
@@ -68,11 +69,11 @@ func (sc *SupervisorConfig) FailReason(err error) string {
 
 // EdgeConnectionConfig specifies what parameters and how may connections should ConnectionManager establish with edge
 type EdgeConnectionConfig struct {
-	NumHAConnections    uint8
-	HeartbeatInterval   time.Duration
-	Timeout             time.Duration
-	MaxFailedHeartbeats uint64
-	UserCredentialPath  string
+	NumHAConnections    uint8         `json:"num_ha_connections"`
+	HeartbeatInterval   time.Duration `json:"heartbeat_interval"`
+	Timeout             time.Duration `json:"timeout"`
+	MaxFailedHeartbeats uint64        `json:"max_failed_heartbeats"`
+	UserCredentialPath  string        `json:"user_credential_path"`
 }
 
 // FailReason impelents FallibleConfig interface for EdgeConnectionConfig
@@ -82,9 +83,9 @@ func (cmc *EdgeConnectionConfig) FailReason(err error) string {
 
 // DoHProxyConfig is configuration for DNS over HTTPS service
 type DoHProxyConfig struct {
-	ListenHost string
-	ListenPort uint16
-	Upstreams  []string
+	ListenHost string   `json:"listen_host"`
+	ListenPort uint16   `json:"listen_port"`
+	Upstreams  []string `json:"upstreams"`
 }
 
 // FailReason impelents FallibleConfig interface for DoHProxyConfig
@@ -94,11 +95,11 @@ func (dpc *DoHProxyConfig) FailReason(err error) string {
 
 // ReverseProxyConfig how and for what hostnames can this cloudflared proxy
 type ReverseProxyConfig struct {
-	TunnelHostname     h2mux.TunnelHostname
-	Origin             OriginConfig
-	Retries            uint64
-	ConnectionTimeout  time.Duration
-	CompressionQuality uint64
+	TunnelHostname          h2mux.TunnelHostname     `json:"tunnel_hostname"`
+	OriginConfigUnmarshaler *OriginConfigUnmarshaler `json:"origin_config"`
+	Retries                 uint64                   `json:"retries"`
+	ConnectionTimeout       time.Duration            `json:"connection_timeout"`
+	CompressionQuality      uint64                   `json:"compression_quality"`
 }
 
 func NewReverseProxyConfig(
@@ -109,14 +110,14 @@ func NewReverseProxyConfig(
 	compressionQuality uint64,
 ) (*ReverseProxyConfig, error) {
 	if originConfig == nil {
-		return nil, fmt.Errorf("NewReverseProxyConfig: originConfig was null")
+		return nil, fmt.Errorf("NewReverseProxyConfig: originConfigUnmarshaler was null")
 	}
 	return &ReverseProxyConfig{
-		TunnelHostname:     h2mux.TunnelHostname(tunnelHostname),
-		Origin:             originConfig,
-		Retries:            retries,
-		ConnectionTimeout:  connectionTimeout,
-		CompressionQuality: compressionQuality,
+		TunnelHostname:          h2mux.TunnelHostname(tunnelHostname),
+		OriginConfigUnmarshaler: &OriginConfigUnmarshaler{originConfig},
+		Retries:                 retries,
+		ConnectionTimeout:       connectionTimeout,
+		CompressionQuality:      compressionQuality,
 	}, nil
 }
 
@@ -133,19 +134,40 @@ type OriginConfig interface {
 	isOriginConfig()
 }
 
+type originType int
+
+const (
+	httpType originType = iota
+	wsType
+	helloWorldType
+)
+
+func (ot originType) String() string {
+	switch ot {
+	case httpType:
+		return "Http"
+	case wsType:
+		return "WebSocket"
+	case helloWorldType:
+		return "HelloWorld"
+	default:
+		return "unknown"
+	}
+}
+
 type HTTPOriginConfig struct {
-	URLString              string        `capnp:"urlString"`
-	TCPKeepAlive           time.Duration `capnp:"tcpKeepAlive"`
-	DialDualStack          bool
-	TLSHandshakeTimeout    time.Duration `capnp:"tlsHandshakeTimeout"`
-	TLSVerify              bool          `capnp:"tlsVerify"`
-	OriginCAPool           string
-	OriginServerName       string
-	MaxIdleConnections     uint64
-	IdleConnectionTimeout  time.Duration
-	ProxyConnectionTimeout time.Duration
-	ExpectContinueTimeout  time.Duration
-	ChunkedEncoding        bool
+	URLString              string        `capnp:"urlString" mapstructure:"url_string"`
+	TCPKeepAlive           time.Duration `capnp:"tcpKeepAlive" mapstructure:"tcp_keep_alive"`
+	DialDualStack          bool          `mapstructure:"dial_dual_stack"`
+	TLSHandshakeTimeout    time.Duration `capnp:"tlsHandshakeTimeout" mapstructure:"tls_handshake_timeout"`
+	TLSVerify              bool          `capnp:"tlsVerify" mapstructure:"tls_verify"`
+	OriginCAPool           string        `mapstructure:"origin_ca_pool"`
+	OriginServerName       string        `mapstructure:"origin_server_name"`
+	MaxIdleConnections     uint64        `mapstructure:"max_idle_connections"`
+	IdleConnectionTimeout  time.Duration `mapstructure:"idle_connection_timeout"`
+	ProxyConnectionTimeout time.Duration `mapstructure:"proxy_connection_timeout"`
+	ExpectContinueTimeout  time.Duration `mapstructure:"expect_continue_timeout"`
+	ChunkedEncoding        bool          `mapstructure:"chunked_encoding"`
 }
 
 func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
@@ -187,10 +209,10 @@ func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
 func (_ *HTTPOriginConfig) isOriginConfig() {}
 
 type WebSocketOriginConfig struct {
-	URLString        string `capnp:"urlString"`
-	TLSVerify        bool   `capnp:"tlsVerify"`
-	OriginCAPool     string
-	OriginServerName string
+	URLString        string `capnp:"urlString" mapstructure:"url_string"`
+	TLSVerify        bool   `capnp:"tlsVerify" mapstructure:"tls_verify"`
+	OriginCAPool     string `mapstructure:"origin_ca_pool"`
+	OriginServerName string `mapstructure:"origin_server_name"`
 }
 
 func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error) {
@@ -449,7 +471,7 @@ func UnmarshalDoHProxyConfig(s tunnelrpc.DoHProxyConfig) (*DoHProxyConfig, error
 
 func MarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig, p *ReverseProxyConfig) error {
 	s.SetTunnelHostname(p.TunnelHostname.String())
-	switch config := p.Origin.(type) {
+	switch config := p.OriginConfigUnmarshaler.OriginConfig.(type) {
 	case *HTTPOriginConfig:
 		ss, err := s.Origin().NewHttp()
 		if err != nil {
@@ -500,7 +522,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 		if err != nil {
 			return nil, err
 		}
-		p.Origin = config
+		p.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{config}
 	case tunnelrpc.ReverseProxyConfig_origin_Which_websocket:
 		ss, err := s.Origin().Websocket()
 		if err != nil {
@@ -510,7 +532,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 		if err != nil {
 			return nil, err
 		}
-		p.Origin = config
+		p.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{config}
 	case tunnelrpc.ReverseProxyConfig_origin_Which_helloWorld:
 		ss, err := s.Origin().HelloWorld()
 		if err != nil {
@@ -520,7 +542,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 		if err != nil {
 			return nil, err
 		}
-		p.Origin = config
+		p.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{config}
 	}
 	p.Retries = s.Retries()
 	p.ConnectionTimeout = time.Duration(s.ConnectionTimeout())

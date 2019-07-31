@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 
 	"github.com/cloudflare/cloudflared/connection"
@@ -386,6 +385,17 @@ func startDeclarativeTunnel(ctx context.Context,
 		logger.WithError(err)
 		return err
 	}
+	reverseProxyConfig, err := pogs.NewReverseProxyConfig(
+		c.String("hostname"),
+		reverseProxyOrigin,
+		c.Uint64("retries"),
+		c.Duration("proxy-connection-timeout"),
+		c.Uint64("compression-quality"),
+	)
+	if err != nil {
+		logger.WithError(err).Error("Cannot initialize default client config because reverse proxy config is invalid")
+		return err
+	}
 	defaultClientConfig := &pogs.ClientConfig{
 		Version: pogs.InitVersion(),
 		SupervisorConfig: &pogs.SupervisorConfig{
@@ -399,13 +409,8 @@ func startDeclarativeTunnel(ctx context.Context,
 			Timeout:             c.Duration("dial-edge-timeout"),
 			MaxFailedHeartbeats: c.Uint64("heartbeat-count"),
 		},
-		DoHProxyConfigs: []*pogs.DoHProxyConfig{},
-		ReverseProxyConfigs: []*pogs.ReverseProxyConfig{
-			{
-				TunnelHostname: h2mux.TunnelHostname(c.String("hostname")),
-				Origin:         reverseProxyOrigin,
-			},
-		},
+		DoHProxyConfigs:     []*pogs.DoHProxyConfig{},
+		ReverseProxyConfigs: []*pogs.ReverseProxyConfig{reverseProxyConfig},
 	}
 
 	autoupdater := updater.NewAutoUpdater(defaultClientConfig.SupervisorConfig.AutoUpdateFrequency, listeners)

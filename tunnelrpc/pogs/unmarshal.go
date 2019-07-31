@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 )
 
@@ -38,4 +39,44 @@ func (su *ScopeUnmarshaler) UnmarshalJSON(b []byte) error {
 	}
 
 	return fmt.Errorf("JSON should have been an object with one root key, either 'system_name' or 'group'")
+}
+
+type OriginConfigUnmarshaler struct {
+	OriginConfig OriginConfig
+}
+
+func (ocu *OriginConfigUnmarshaler) UnmarshalJSON(b []byte) error {
+	var originJSON map[string]interface{}
+	if err := json.Unmarshal(b, &originJSON); err != nil {
+		return errors.Wrapf(err, "cannot unmarshal %s into originJSON", string(b))
+	}
+
+	if originConfig, ok := originJSON[httpType.String()]; ok {
+		httpOriginConfig := &HTTPOriginConfig{}
+		if err := mapstructure.Decode(originConfig, httpOriginConfig); err != nil {
+			return errors.Wrapf(err, "cannot decode %+v into HTTPOriginConfig", originConfig)
+		}
+		ocu.OriginConfig = httpOriginConfig
+		return nil
+	}
+
+	if originConfig, ok := originJSON[wsType.String()]; ok {
+		wsOriginConfig := &WebSocketOriginConfig{}
+		if err := mapstructure.Decode(originConfig, wsOriginConfig); err != nil {
+			return errors.Wrapf(err, "cannot decode %+v into WebSocketOriginConfig", originConfig)
+		}
+		ocu.OriginConfig = wsOriginConfig
+		return nil
+	}
+
+	if originConfig, ok := originJSON[helloWorldType.String()]; ok {
+		helloWorldOriginConfig := &HelloWorldOriginConfig{}
+		if err := mapstructure.Decode(originConfig, helloWorldOriginConfig); err != nil {
+			return errors.Wrapf(err, "cannot decode %+v into HelloWorldOriginConfig", originConfig)
+		}
+		ocu.OriginConfig = helloWorldOriginConfig
+		return nil
+	}
+
+	return fmt.Errorf("cannot unmarshal %s into OriginConfig", string(b))
 }

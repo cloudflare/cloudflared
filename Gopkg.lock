@@ -73,15 +73,9 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:6a503e232df389d94ebb97dfb22d4ae463b6e2f351660613e11d9e42f57ab6df"
+  digest = "1:6f70106e7bc1c803e8a0a4519e09c12d154771acfa2559206e97b033bbd1dd38"
   name = "github.com/coreos/go-oidc"
-  packages = [
-    "http",
-    "jose",
-    "key",
-    "oauth2",
-    "oidc",
-  ]
+  packages = ["jose"]
   pruneopts = "UT"
   revision = "a93f71fdfe73d2c0f5413c0565eea0af6523a6df"
 
@@ -92,18 +86,6 @@
   pruneopts = "UT"
   revision = "95778dfbb74eb7e4dbaf43bf7d71809650ef8076"
   version = "v19"
-
-[[projects]]
-  digest = "1:6fda0d7f5e52b081e075775b1ecebf1ea0c923e7be33604ed0225ae078e701b5"
-  name = "github.com/coreos/pkg"
-  packages = [
-    "health",
-    "httputil",
-    "timeutil",
-  ]
-  pruneopts = "UT"
-  revision = "97fdf19511ea361ae1c100dd393cc47f8dcfa1e1"
-  version = "v4"
 
 [[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
@@ -213,14 +195,6 @@
   revision = "8e809c8a86450a29b90dcc9efbf062d0fe6d9746"
 
 [[projects]]
-  digest = "1:75ab90ae3f5d876167e60f493beadfe66f0ed861a710f283fb06c86437a09538"
-  name = "github.com/jonboulle/clockwork"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "2eee05ed794112d45db504eb05aa693efd2b8b09"
-  version = "v0.1.0"
-
-[[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
@@ -290,6 +264,14 @@
   pruneopts = "UT"
   revision = "af06845cf3004701891bf4fdb884bfe4920b3727"
   version = "v1.1.0"
+
+[[projects]]
+  digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
+  name = "github.com/mitchellh/mapstructure"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
+  version = "v1.1.2"
 
 [[projects]]
   digest = "1:11e62d6050198055e6cd87ed57e5d8c669e84f839c16e16f192374d913d1a70d"
@@ -577,7 +559,6 @@
     "github.com/coredns/coredns/plugin/pkg/rcode",
     "github.com/coredns/coredns/request",
     "github.com/coreos/go-oidc/jose",
-    "github.com/coreos/go-oidc/oidc",
     "github.com/coreos/go-systemd/daemon",
     "github.com/elgs/gosqljson",
     "github.com/equinox-io/equinox",
@@ -591,6 +572,7 @@
     "github.com/mattn/go-colorable",
     "github.com/miekg/dns",
     "github.com/mitchellh/go-homedir",
+    "github.com/mitchellh/mapstructure",
     "github.com/pkg/errors",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",

@@ -85,3 +85,7 @@
 [[constraint]]
   name = "github.com/google/uuid"
   version = "=1.1.1"
+
+[[constraint]]
+  name = "github.com/mitchellh/mapstructure"
+  version = "1.1.2"
