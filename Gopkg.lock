@@ -73,15 +73,9 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:6a503e232df389d94ebb97dfb22d4ae463b6e2f351660613e11d9e42f57ab6df"
+  digest = "1:6f70106e7bc1c803e8a0a4519e09c12d154771acfa2559206e97b033bbd1dd38"
   name = "github.com/coreos/go-oidc"
-  packages = [
-    "http",
-    "jose",
-    "key",
-    "oauth2",
-    "oidc",
-  ]
+  packages = ["jose"]
   pruneopts = "UT"
   revision = "a93f71fdfe73d2c0f5413c0565eea0af6523a6df"
 
@@ -92,18 +86,6 @@
   pruneopts = "UT"
   revision = "95778dfbb74eb7e4dbaf43bf7d71809650ef8076"
   version = "v19"
-
-[[projects]]
-  digest = "1:6fda0d7f5e52b081e075775b1ecebf1ea0c923e7be33604ed0225ae078e701b5"
-  name = "github.com/coreos/pkg"
-  packages = [
-    "health",
-    "httputil",
-    "timeutil",
-  ]
-  pruneopts = "UT"
-  revision = "97fdf19511ea361ae1c100dd393cc47f8dcfa1e1"
-  version = "v4"
 
 [[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
@@ -211,14 +193,6 @@
   packages = ["go/otgrpc"]
   pruneopts = "UT"
   revision = "8e809c8a86450a29b90dcc9efbf062d0fe6d9746"
-
-[[projects]]
-  digest = "1:75ab90ae3f5d876167e60f493beadfe66f0ed861a710f283fb06c86437a09538"
-  name = "github.com/jonboulle/clockwork"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "2eee05ed794112d45db504eb05aa693efd2b8b09"
-  version = "v0.1.0"
 
 [[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
@@ -375,9 +349,12 @@
   version = "v1.4.2"
 
 [[projects]]
-  digest = "1:f85e109eda8f6080877185d1c39e98dd8795e1780c08beca28304b87fd855a1c"
+  digest = "1:7e8d267900c7fa7f35129a2a37596e38ed0f11ca746d6d9ba727980ee138f9f6"
   name = "github.com/stretchr/testify"
-  packages = ["assert"]
+  packages = [
+    "assert",
+    "require",
+  ]
   pruneopts = "UT"
   revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
   version = "v1.2.1"
@@ -577,7 +554,6 @@
     "github.com/coredns/coredns/plugin/pkg/rcode",
     "github.com/coredns/coredns/request",
     "github.com/coreos/go-oidc/jose",
-    "github.com/coreos/go-oidc/oidc",
     "github.com/coreos/go-systemd/daemon",
     "github.com/elgs/gosqljson",
     "github.com/equinox-io/equinox",
@@ -597,6 +573,7 @@
     "github.com/rifflock/lfshook",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/require",
     "golang.org/x/crypto/nacl/box",
     "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/terminal",
