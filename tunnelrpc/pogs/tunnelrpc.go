@@ -131,6 +131,7 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 //go-sumtype:decl Scope
 type Scope interface {
 	Value() string
+	PostgresType() string
 	isScope()
 }
 
@@ -142,7 +143,8 @@ func NewSystemName(systemName string) *SystemName {
 	return &SystemName{systemName: systemName}
 }
 
-func (s *SystemName) Value() string { return s.systemName }
+func (s *SystemName) Value() string        { return s.systemName }
+func (s *SystemName) PostgresType() string { return "system_name" }
 
 func (_ *SystemName) isScope() {}
 
@@ -154,7 +156,8 @@ func NewGroup(group string) *Group {
 	return &Group{group: group}
 }
 
-func (g *Group) Value() string { return g.group }
+func (g *Group) Value() string        { return g.group }
+func (g *Group) PostgresType() string { return "group" }
 
 func (_ *Group) isScope() {}
 
