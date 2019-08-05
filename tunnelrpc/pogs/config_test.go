@@ -41,13 +41,13 @@ func TestClientConfig(t *testing.T) {
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfig()}
+				c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfig()}
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfigUnixPath()}
+				c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfigUnixPath()}
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleWebSocketOriginConfig()}
+				c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleWebSocketOriginConfig()}
 			}),
 		}
 	}
@@ -142,13 +142,13 @@ func TestReverseProxyConfig(t *testing.T) {
 	testCases := []*ReverseProxyConfig{
 		sampleReverseProxyConfig(),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfig()}
+			c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfig()}
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleHTTPOriginConfigUnixPath()}
+			c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfigUnixPath()}
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{sampleWebSocketOriginConfig()}
+			c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleWebSocketOriginConfig()}
 		}),
 	}
 	for i, testCase := range testCases {
@@ -246,23 +246,36 @@ func TestOriginConfigInvalidURL(t *testing.T) {
 // applies any number of overrides to it, and returns it.
 func sampleClientConfig(overrides ...func(*ClientConfig)) *ClientConfig {
 	sample := &ClientConfig{
-		Version: Version(1337),
-		SupervisorConfig: &SupervisorConfig{
-			AutoUpdateFrequency:    21 * time.Hour,
-			MetricsUpdateFrequency: 11 * time.Minute,
-			GracePeriod:            31 * time.Second,
-		},
-		EdgeConnectionConfig: &EdgeConnectionConfig{
-			NumHAConnections:    49,
-			Timeout:             9 * time.Second,
-			HeartbeatInterval:   5 * time.Second,
-			MaxFailedHeartbeats: 9001,
-		},
+		Version:              Version(1337),
+		SupervisorConfig:     sampleSupervisorConfig(),
+		EdgeConnectionConfig: sampleEdgeConnectionConfig(),
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
 		f(sample)
 	}
+	return sample
+}
+
+func sampleSupervisorConfig() *SupervisorConfig {
+	sample := &SupervisorConfig{
+		AutoUpdateFrequency:    21 * time.Hour,
+		MetricsUpdateFrequency: 11 * time.Minute,
+		GracePeriod:            31 * time.Second,
+	}
+	sample.ensureNoZeroFields()
+	return sample
+}
+
+func sampleEdgeConnectionConfig() *EdgeConnectionConfig {
+	sample := &EdgeConnectionConfig{
+		NumHAConnections:    49,
+		HeartbeatInterval:   5 * time.Second,
+		Timeout:             9 * time.Second,
+		MaxFailedHeartbeats: 9001,
+		UserCredentialPath:  "/Users/example/.cloudflared/cert.pem",
+	}
+	sample.ensureNoZeroFields()
 	return sample
 }
 
@@ -272,7 +285,7 @@ func sampleDoHProxyConfig(overrides ...func(*DoHProxyConfig)) *DoHProxyConfig {
 	sample := &DoHProxyConfig{
 		ListenHost: "127.0.0.1",
 		ListenPort: 53,
-		Upstreams:  []string{"https://1.example.com", "https://2.example.com"},
+		Upstreams:  []string{"1.1.1.1", "1.0.0.1"},
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -285,11 +298,11 @@ func sampleDoHProxyConfig(overrides ...func(*DoHProxyConfig)) *DoHProxyConfig {
 // applies any number of overrides to it, and returns it.
 func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReverseProxyConfig {
 	sample := &ReverseProxyConfig{
-		TunnelHostname:          "hijk.example.com",
-		OriginConfigUnmarshaler: &OriginConfigUnmarshaler{&HelloWorldOriginConfig{}},
+		TunnelHostname:          "mock-non-lb-tunnel.example.com",
+		OriginConfigJSONHandler: &OriginConfigJSONHandler{&HelloWorldOriginConfig{}},
 		Retries:                 18,
 		ConnectionTimeout:       5 * time.Second,
-		CompressionQuality:      4,
+		CompressionQuality:      3,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {
@@ -358,6 +371,14 @@ func sampleWebSocketOriginConfig(overrides ...func(*WebSocketOriginConfig)) *Web
 
 func (c *ClientConfig) ensureNoZeroFields() {
 	ensureNoZeroFieldsInSample(reflect.ValueOf(c), []string{"DoHProxyConfigs", "ReverseProxyConfigs"})
+}
+
+func (c *SupervisorConfig) ensureNoZeroFields() {
+	ensureNoZeroFieldsInSample(reflect.ValueOf(c), []string{})
+}
+
+func (c *EdgeConnectionConfig) ensureNoZeroFields() {
+	ensureNoZeroFieldsInSample(reflect.ValueOf(c), []string{})
 }
 
 func (c *DoHProxyConfig) ensureNoZeroFields() {

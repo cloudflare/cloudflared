@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -53,6 +54,7 @@ func (v Version) String() string {
 // FallibleConfig is an interface implemented by configs that cloudflared might not be able to apply
 type FallibleConfig interface {
 	FailReason(err error) string
+	jsonType() string
 }
 
 // SupervisorConfig specifies config of components managed by Supervisor other than ConnectionManager
@@ -65,6 +67,16 @@ type SupervisorConfig struct {
 // FailReason impelents FallibleConfig interface for SupervisorConfig
 func (sc *SupervisorConfig) FailReason(err error) string {
 	return fmt.Sprintf("Cannot apply SupervisorConfig, err: %v", err)
+}
+
+func (sc *SupervisorConfig) MarshalJSON() ([]byte, error) {
+	marshaler := make(map[string]SupervisorConfig, 1)
+	marshaler[sc.jsonType()] = *sc
+	return json.Marshal(marshaler)
+}
+
+func (sc *SupervisorConfig) jsonType() string {
+	return "supervisor_config"
 }
 
 // EdgeConnectionConfig specifies what parameters and how may connections should ConnectionManager establish with edge
@@ -81,6 +93,16 @@ func (cmc *EdgeConnectionConfig) FailReason(err error) string {
 	return fmt.Sprintf("Cannot apply EdgeConnectionConfig, err: %v", err)
 }
 
+func (cmc *EdgeConnectionConfig) MarshalJSON() ([]byte, error) {
+	marshaler := make(map[string]EdgeConnectionConfig, 1)
+	marshaler[cmc.jsonType()] = *cmc
+	return json.Marshal(marshaler)
+}
+
+func (cmc *EdgeConnectionConfig) jsonType() string {
+	return "edge_connection_config"
+}
+
 // DoHProxyConfig is configuration for DNS over HTTPS service
 type DoHProxyConfig struct {
 	ListenHost string   `json:"listen_host"`
@@ -93,10 +115,20 @@ func (dpc *DoHProxyConfig) FailReason(err error) string {
 	return fmt.Sprintf("Cannot apply DoHProxyConfig, err: %v", err)
 }
 
+func (dpc *DoHProxyConfig) MarshalJSON() ([]byte, error) {
+	marshaler := make(map[string]DoHProxyConfig, 1)
+	marshaler[dpc.jsonType()] = *dpc
+	return json.Marshal(marshaler)
+}
+
+func (dpc *DoHProxyConfig) jsonType() string {
+	return "doh_proxy_config"
+}
+
 // ReverseProxyConfig how and for what hostnames can this cloudflared proxy
 type ReverseProxyConfig struct {
 	TunnelHostname          h2mux.TunnelHostname     `json:"tunnel_hostname"`
-	OriginConfigUnmarshaler *OriginConfigUnmarshaler `json:"origin_config"`
+	OriginConfigJSONHandler *OriginConfigJSONHandler `json:"origin_config"`
 	Retries                 uint64                   `json:"retries"`
 	ConnectionTimeout       time.Duration            `json:"connection_timeout"`
 	CompressionQuality      uint64                   `json:"compression_quality"`
@@ -114,7 +146,7 @@ func NewReverseProxyConfig(
 	}
 	return &ReverseProxyConfig{
 		TunnelHostname:          h2mux.TunnelHostname(tunnelHostname),
-		OriginConfigUnmarshaler: &OriginConfigUnmarshaler{originConfig},
+		OriginConfigJSONHandler: &OriginConfigJSONHandler{originConfig},
 		Retries:                 retries,
 		ConnectionTimeout:       connectionTimeout,
 		CompressionQuality:      compressionQuality,
@@ -126,12 +158,22 @@ func (rpc *ReverseProxyConfig) FailReason(err error) string {
 	return fmt.Sprintf("Cannot apply ReverseProxyConfig, err: %v", err)
 }
 
+func (rpc *ReverseProxyConfig) MarshalJSON() ([]byte, error) {
+	marshaler := make(map[string]ReverseProxyConfig, 1)
+	marshaler[rpc.jsonType()] = *rpc
+	return json.Marshal(marshaler)
+}
+
+func (rpc *ReverseProxyConfig) jsonType() string {
+	return "reverse_proxy_config"
+}
+
 //go-sumtype:decl OriginConfig
 type OriginConfig interface {
 	// Service returns a OriginService used to proxy to the origin
 	Service() (originservice.OriginService, error)
 	// go-sumtype requires at least one unexported method, otherwise it will complain that interface is not sealed
-	isOriginConfig()
+	jsonType() string
 }
 
 type originType int
@@ -156,18 +198,18 @@ func (ot originType) String() string {
 }
 
 type HTTPOriginConfig struct {
-	URLString              string        `capnp:"urlString" mapstructure:"url_string"`
-	TCPKeepAlive           time.Duration `capnp:"tcpKeepAlive" mapstructure:"tcp_keep_alive"`
-	DialDualStack          bool          `mapstructure:"dial_dual_stack"`
-	TLSHandshakeTimeout    time.Duration `capnp:"tlsHandshakeTimeout" mapstructure:"tls_handshake_timeout"`
-	TLSVerify              bool          `capnp:"tlsVerify" mapstructure:"tls_verify"`
-	OriginCAPool           string        `mapstructure:"origin_ca_pool"`
-	OriginServerName       string        `mapstructure:"origin_server_name"`
-	MaxIdleConnections     uint64        `mapstructure:"max_idle_connections"`
-	IdleConnectionTimeout  time.Duration `mapstructure:"idle_connection_timeout"`
-	ProxyConnectionTimeout time.Duration `mapstructure:"proxy_connection_timeout"`
-	ExpectContinueTimeout  time.Duration `mapstructure:"expect_continue_timeout"`
-	ChunkedEncoding        bool          `mapstructure:"chunked_encoding"`
+	URLString              string        `capnp:"urlString" json:"url_string" mapstructure:"url_string"`
+	TCPKeepAlive           time.Duration `capnp:"tcpKeepAlive" json:"tcp_keep_alive" mapstructure:"tcp_keep_alive"`
+	DialDualStack          bool          `json:"dial_dual_stack" mapstructure:"dial_dual_stack"`
+	TLSHandshakeTimeout    time.Duration `capnp:"tlsHandshakeTimeout" json:"tls_handshake_timeout" mapstructure:"tls_handshake_timeout"`
+	TLSVerify              bool          `capnp:"tlsVerify" json:"tls_verify" mapstructure:"tls_verify"`
+	OriginCAPool           string        `json:"origin_ca_pool" mapstructure:"origin_ca_pool"`
+	OriginServerName       string        `json:"origin_server_name" mapstructure:"origin_server_name"`
+	MaxIdleConnections     uint64        `json:"max_idle_connections" mapstructure:"max_idle_connections"`
+	IdleConnectionTimeout  time.Duration `json:"idle_connection_timeout" mapstructure:"idle_connection_timeout"`
+	ProxyConnectionTimeout time.Duration `json:"proxy_connection_timeout" mapstructure:"proxy_connection_timeout"`
+	ExpectContinueTimeout  time.Duration `json:"expect_continue_timeout" mapstructure:"expect_continue_timeout"`
+	ChunkedEncoding        bool          `json:"chunked_encoding" mapstructure:"chunked_encoding"`
 }
 
 func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
@@ -206,13 +248,15 @@ func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
 	return originservice.NewHTTPService(transport, url, hc.ChunkedEncoding), nil
 }
 
-func (_ *HTTPOriginConfig) isOriginConfig() {}
+func (_ *HTTPOriginConfig) jsonType() string {
+	return httpType.String()
+}
 
 type WebSocketOriginConfig struct {
-	URLString        string `capnp:"urlString" mapstructure:"url_string"`
-	TLSVerify        bool   `capnp:"tlsVerify" mapstructure:"tls_verify"`
-	OriginCAPool     string `mapstructure:"origin_ca_pool"`
-	OriginServerName string `mapstructure:"origin_server_name"`
+	URLString        string `capnp:"urlString" json:"url_string" mapstructure:"url_string"`
+	TLSVerify        bool   `capnp:"tlsVerify" json:"tls_verify" mapstructure:"tls_verify"`
+	OriginCAPool     string `json:"origin_ca_pool" mapstructure:"origin_ca_pool"`
+	OriginServerName string `json:"origin_server_name" mapstructure:"origin_server_name"`
 }
 
 func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error) {
@@ -233,7 +277,9 @@ func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error)
 	return originservice.NewWebSocketService(tlsConfig, url)
 }
 
-func (_ *WebSocketOriginConfig) isOriginConfig() {}
+func (_ *WebSocketOriginConfig) jsonType() string {
+	return wsType.String()
+}
 
 type HelloWorldOriginConfig struct{}
 
@@ -262,7 +308,9 @@ func (_ *HelloWorldOriginConfig) Service() (originservice.OriginService, error) 
 	return originservice.NewHelloWorldService(transport)
 }
 
-func (_ *HelloWorldOriginConfig) isOriginConfig() {}
+func (_ *HelloWorldOriginConfig) jsonType() string {
+	return helloWorldType.String()
+}
 
 /*
  * Boilerplate to convert between these structs and the primitive structs
@@ -471,7 +519,7 @@ func UnmarshalDoHProxyConfig(s tunnelrpc.DoHProxyConfig) (*DoHProxyConfig, error
 
 func MarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig, p *ReverseProxyConfig) error {
 	s.SetTunnelHostname(p.TunnelHostname.String())
-	switch config := p.OriginConfigUnmarshaler.OriginConfig.(type) {
+	switch config := p.OriginConfigJSONHandler.OriginConfig.(type) {
 	case *HTTPOriginConfig:
 		ss, err := s.Origin().NewHttp()
 		if err != nil {
@@ -522,7 +570,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 		if err != nil {
 			return nil, err
 		}
-		p.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{config}
+		p.OriginConfigJSONHandler = &OriginConfigJSONHandler{config}
 	case tunnelrpc.ReverseProxyConfig_origin_Which_websocket:
 		ss, err := s.Origin().Websocket()
 		if err != nil {
@@ -532,7 +580,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 		if err != nil {
 			return nil, err
 		}
-		p.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{config}
+		p.OriginConfigJSONHandler = &OriginConfigJSONHandler{config}
 	case tunnelrpc.ReverseProxyConfig_origin_Which_helloWorld:
 		ss, err := s.Origin().HelloWorld()
 		if err != nil {
@@ -542,7 +590,7 @@ func UnmarshalReverseProxyConfig(s tunnelrpc.ReverseProxyConfig) (*ReverseProxyC
 		if err != nil {
 			return nil, err
 		}
-		p.OriginConfigUnmarshaler = &OriginConfigUnmarshaler{config}
+		p.OriginConfigJSONHandler = &OriginConfigJSONHandler{config}
 	}
 	p.Retries = s.Retries()
 	p.ConnectionTimeout = time.Duration(s.ConnectionTimeout())
@@ -642,13 +690,13 @@ func (i ClientService_PogsImpl) UseConfiguration(p tunnelrpc.ClientService_useCo
 }
 
 type UseConfigurationResult struct {
-	Success       bool
-	FailedConfigs []*FailedConfig
+	Success       bool            `json:"success"`
+	FailedConfigs []*FailedConfig `json:"failed_configs"`
 }
 
 type FailedConfig struct {
-	Config FallibleConfig
-	Reason string
+	Config FallibleConfig `json:"config"`
+	Reason string         `json:"reason"`
 }
 
 func MarshalFailedConfig(s tunnelrpc.FailedConfig, p *FailedConfig) error {
@@ -663,7 +711,7 @@ func MarshalFailedConfig(s tunnelrpc.FailedConfig, p *FailedConfig) error {
 			return err
 		}
 	case *EdgeConnectionConfig:
-		ss, err := s.Config().EdgeConnection()
+		ss, err := s.Config().NewEdgeConnection()
 		if err != nil {
 			return err
 		}

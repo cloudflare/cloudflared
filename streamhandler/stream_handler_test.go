@@ -49,7 +49,7 @@ func TestServeRequest(t *testing.T) {
 	reverseProxyConfigs := []*pogs.ReverseProxyConfig{
 		{
 			TunnelHostname: testTunnelHostname,
-			OriginConfigUnmarshaler: &pogs.OriginConfigUnmarshaler{
+			OriginConfigJSONHandler: &pogs.OriginConfigJSONHandler{
 				OriginConfig: &pogs.HTTPOriginConfig{
 					URLString: httpServer.URL,
 				},
@@ -99,7 +99,7 @@ func TestServeBadRequest(t *testing.T) {
 	reverseProxyConfigs := []*pogs.ReverseProxyConfig{
 		{
 			TunnelHostname: testTunnelHostname,
-			OriginConfigUnmarshaler: &pogs.OriginConfigUnmarshaler{
+			OriginConfigJSONHandler: &pogs.OriginConfigJSONHandler{
 				OriginConfig: &pogs.HTTPOriginConfig{
 					URLString: "",
 				},
