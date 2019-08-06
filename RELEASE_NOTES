@@ -1,3 +1,7 @@
+2019.8.1
+- 2019-08-05 TUN-2111: Implement custom serialization logic for FallibleConfig and OriginConfig
+- 2019-08-06 Revert "TUN-1736: Missing headers when passing an invalid path"
+
 2019.8.0
 - 2019-07-11 TUN-1956: Go 1.12 update
 - 2019-07-24 TUN-1736: Missing headers when passing an invalid path
