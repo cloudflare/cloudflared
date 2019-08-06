@@ -357,9 +357,12 @@
   version = "v1.4.2"
 
 [[projects]]
-  digest = "1:f85e109eda8f6080877185d1c39e98dd8795e1780c08beca28304b87fd855a1c"
+  digest = "1:7e8d267900c7fa7f35129a2a37596e38ed0f11ca746d6d9ba727980ee138f9f6"
   name = "github.com/stretchr/testify"
-  packages = ["assert"]
+  packages = [
+    "assert",
+    "require",
+  ]
   pruneopts = "UT"
   revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
   version = "v1.2.1"
@@ -579,6 +582,7 @@
     "github.com/rifflock/lfshook",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/require",
     "golang.org/x/crypto/nacl/box",
     "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/terminal",

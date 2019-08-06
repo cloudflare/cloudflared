@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/path"
@@ -24,6 +26,27 @@ var logger = log.CreateLogger()
 type lock struct {
 	lockFilePath string
 	backoff      *origin.BackoffHandler
+	sigHandler 	 *signalHandler
+}
+
+type signalHandler struct {
+	sigChannel 		 chan os.Signal
+	signals		     []os.Signal
+}
+
+func (s *signalHandler) register(handler func()){
+	s.sigChannel = make(chan os.Signal, 1)
+	signal.Notify(s.sigChannel, s.signals...)
+	go func(s *signalHandler) {
+		for range s.sigChannel {
+			handler()
+		}
+	}(s)
+}
+
+func (s *signalHandler) deregister() {
+	signal.Stop(s.sigChannel)
+	close(s.sigChannel)
 }
 
 func errDeleteTokenFailed(lockFilePath string) error {
@@ -36,10 +59,19 @@ func newLock(path string) *lock {
 	return &lock{
 		lockFilePath: lockPath,
 		backoff:      &origin.BackoffHandler{MaxRetries: 7},
+		sigHandler:   &signalHandler{
+			signals: 	[]os.Signal{syscall.SIGINT, syscall.SIGTERM},
+		},
 	}
 }
 
 func (l *lock) Acquire() error {
+	// Intercept SIGINT and SIGTERM to release lock before exiting
+	l.sigHandler.register(func() {
+        l.deleteLockFile()
+        os.Exit(0)
+	})
+
 	// Check for a path.lock file
 	// if the lock file exists; start polling
 	// if not, create the lock file and go through the normal flow.
@@ -47,8 +79,10 @@ func (l *lock) Acquire() error {
 	for isTokenLocked(l.lockFilePath) {
 		if l.backoff.Backoff(context.Background()) {
 			continue
-		} else {
-			return errDeleteTokenFailed(l.lockFilePath)
+		}
+
+		if err := l.deleteLockFile(); err != nil {
+			return err
 		}
 	}
 
@@ -60,11 +94,16 @@ func (l *lock) Acquire() error {
 	return nil
 }
 
-func (l *lock) Release() error {
+func (l *lock) deleteLockFile() error {
 	if err := os.Remove(l.lockFilePath); err != nil && !os.IsNotExist(err) {
 		return errDeleteTokenFailed(l.lockFilePath)
 	}
 	return nil
+}
+
+func (l *lock) Release() error {
+	defer l.sigHandler.deregister()
+	return l.deleteLockFile()
 }
 
 // isTokenLocked checks to see if there is another process attempting to get the token already
@@ -84,12 +123,13 @@ func FetchToken(appURL *url.URL) (string, error) {
 		return "", err
 	}
 
-	lock := newLock(path)
-	err = lock.Acquire()
+	fileLock := newLock(path)
+
+	err = fileLock.Acquire()
 	if err != nil {
 		return "", err
 	}
-	defer lock.Release()
+	defer fileLock.Release()
 
 	// check to see if another process has gotten a token while we waited for the lock
 	if token, err := GetTokenIfExists(appURL); token != "" && err == nil {
