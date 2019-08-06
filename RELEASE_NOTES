@@ -1,3 +1,12 @@
+2019.8.0
+- 2019-07-11 TUN-1956: Go 1.12 update
+- 2019-07-24 TUN-1736: Missing headers when passing an invalid path
+- 2019-07-30 TUN-2117: read group/system-name from CLI, send it to edge
+- 2019-08-02 TUN-2125: Add PostgresType() to Scope
+- 2019-08-05 TUN-2147: Implemented ScopeUnmarshaler
+- 2019-07-31 TUN-2110: Implement custom deserialization logic for OriginConfig
+- 2019-07-31 AUTH-1972: Deletes token lock file if backoff retry attempts exceeded and intercepts signals until lock is released
+
 2019.7.0
 - 2019-05-28 TUN-1913: Define OriginService for each type of origin
 - 2019-04-29 Build a docker container
