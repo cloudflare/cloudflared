@@ -132,6 +132,7 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 type Scope interface {
 	Value() string
 	PostgresType() string
+	GraphQLType() string
 	isScope()
 }
 
@@ -144,7 +145,8 @@ func NewSystemName(systemName string) *SystemName {
 }
 
 func (s *SystemName) Value() string        { return s.systemName }
-func (s *SystemName) PostgresType() string { return "system_name" }
+func (_ *SystemName) PostgresType() string { return "system_name" }
+func (_ *SystemName) GraphQLType() string { return "SYSTEM_NAME" }
 
 func (_ *SystemName) isScope() {}
 
@@ -157,7 +159,8 @@ func NewGroup(group string) *Group {
 }
 
 func (g *Group) Value() string        { return g.group }
-func (g *Group) PostgresType() string { return "group" }
+func (_ *Group) PostgresType() string { return "group" }
+func (_ *Group) GraphQLType() string { return "GROUP" }
 
 func (_ *Group) isScope() {}
 
