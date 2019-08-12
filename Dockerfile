@@ -1,12 +1,26 @@
+# use a builder image for building cloudflare
 FROM golang:1.12 as builder
-WORKDIR /go/src/github.com/cloudflare/cloudflared/
-RUN apt-get update && apt-get install -y --no-install-recommends upx
-# Run after `apt-get update` to improve rebuild scenarios
-COPY . .
-RUN make cloudflared
-RUN upx --no-progress cloudflared
 
+# switch to the right gopath directory
+WORKDIR /go/src/github.com/cloudflare/cloudflared/
+
+# copy our sources into the builder image
+COPY . .
+
+# compile cloudflared
+RUN make cloudflared
+
+# ---
+
+# use a distroless base image with glibc
 FROM gcr.io/distroless/base
-COPY --from=builder /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
+
+# copy our compiled binary
+COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
+
+# run as non-privileged user
+USER nonroot
+
+# command / entrypoint of container
 ENTRYPOINT ["cloudflared", "--no-autoupdate"]
 CMD ["version"]
