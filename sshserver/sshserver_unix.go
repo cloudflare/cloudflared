@@ -19,13 +19,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	defaultShellPrompt = `\e[0;31m[\u@\h \W]\$ \e[m `
+	configDir          = "/etc/cloudflared/"
+)
+
 type SSHServer struct {
 	ssh.Server
 	logger    *logrus.Logger
 	shutdownC chan struct{}
 }
-
-const DefaultShellPrompt = `\e[0;31m[\u@\h \W]\$ \e[m `
 
 func New(logger *logrus.Logger, address string, shutdownC chan struct{}) (*SSHServer, error) {
 	currentUser, err := user.Current()
@@ -33,10 +36,14 @@ func New(logger *logrus.Logger, address string, shutdownC chan struct{}) (*SSHSe
 		return nil, err
 	}
 	if currentUser.Uid != "0" {
-		return nil, errors.New("cloudflared ssh server needs to run as root")
+		return nil, errors.New("cloudflared SSH server needs to run as root")
 	}
 
 	sshServer := SSHServer{ssh.Server{Addr: address}, logger, shutdownC}
+	if err := sshServer.configureHostKeys(); err != nil {
+		return nil, err
+	}
+
 	return &sshServer, nil
 }
 
@@ -85,7 +92,7 @@ func (s *SSHServer) connectionHandler(session ssh.Session) {
 	}
 
 	cmd.Env = append(cmd.Env, fmt.Sprintf("TERM=%s", ptyReq.Term))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("PS1=%s", DefaultShellPrompt))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("PS1=%s", defaultShellPrompt))
 	psuedoTTY, err := pty.Start(cmd)
 	if err != nil {
 		s.logger.WithError(err).Error("Failed to start pty session")
