@@ -26,14 +26,6 @@
   version = "v1.3.3"
 
 [[projects]]
-  branch = "master"
-  digest = "1:1a200e7e73293b75eb8e5c93d023b5472663432da0b663e1532624fcfede9ca8"
-  name = "github.com/anmitsu/go-shlex"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "648efa622239a2f6ff949fed78ee37b48d499ba4"
-
-[[projects]]
   digest = "1:d6afaeed1502aa28e80a4ed0981d570ad91b2579193404256ce672ed0a609e0d"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
@@ -121,14 +113,6 @@
   version = "v19"
 
 [[projects]]
-  digest = "1:385dff5bf83bf1c9d40ef2b0f2e697f0d1973fc9e24ae9401cf41698612bbebc"
-  name = "github.com/creack/pty"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "2769f65a3a94eb8f876f44a0459d24ae7ad2e488"
-  version = "v1.1.7"
-
-[[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -192,14 +176,6 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "ed7bcb39ff10f39ab08e317ce16df282845852fa"
-
-[[projects]]
-  digest = "1:0a01355005024757ae2a1f62e8fe68a30b4f5fde7a08ac88b3685e7999ac354b"
-  name = "github.com/gliderlabs/ssh"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "5b6cc7030f17095c0cf23bb063b0bfe824fe5f8b"
-  version = "v0.2.2"
 
 [[projects]]
   digest = "1:ec6f9bf5e274c833c911923c9193867f3f18788c461f76f05f62bb1510e0ae65"
@@ -757,12 +733,10 @@
     "github.com/coredns/coredns/request",
     "github.com/coreos/go-oidc",
     "github.com/coreos/go-systemd/daemon",
-    "github.com/creack/pty",
     "github.com/denisenkom/go-mssqldb",
     "github.com/equinox-io/equinox",
     "github.com/facebookgo/grace/gracenet",
     "github.com/getsentry/raven-go",
-    "github.com/gliderlabs/ssh",
     "github.com/go-sql-driver/mysql",
     "github.com/golang-collections/collections/queue",
     "github.com/google/uuid",
