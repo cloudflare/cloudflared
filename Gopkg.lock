@@ -2,12 +2,28 @@
 
 
 [[projects]]
+  digest = "1:3d3a509c5ba327e8573bb57f9da8430c63a46a06886eb1d2ffc8af4e76f31c72"
+  name = "cloud.google.com/go"
+  packages = ["civil"]
+  pruneopts = "UT"
+  revision = "cdaaf98f9226c39dc162b8e55083b2fbc67b4674"
+  version = "v0.43.0"
+
+[[projects]]
   digest = "1:9f3b30d9f8e0d7040f729b82dcbc8f0dead820a133b3147ce355fc451f32d761"
   name = "github.com/BurntSushi/toml"
   packages = ["."]
   pruneopts = "UT"
   revision = "3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005"
   version = "v0.3.1"
+
+[[projects]]
+  digest = "1:c84a587136cb69cecc11f3dbe9f9001444044c0dba74997b07f7e4c150b07cda"
+  name = "github.com/DATA-DOG/go-sqlmock"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "3f9954f6f6697845b082ca57995849ddf614f450"
+  version = "v1.3.3"
 
 [[projects]]
   digest = "1:d6afaeed1502aa28e80a4ed0981d570ad91b2579193404256ce672ed0a609e0d"
@@ -38,6 +54,14 @@
   packages = ["lrucache"]
   pruneopts = "UT"
   revision = "333127dbecfcc23a8db7d9a4f52785d23aff44a1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:05756b73bf7eae03d6f6c5f0ae83de42ce296e7d83336563dd9ce2072106d5e6"
+  name = "github.com/cloudflare/golz4"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ef862a3cdc58a6f1fee4e3af3d44fbe279194cde"
 
 [[projects]]
   digest = "1:3f9506ee991cdee1f05bf0cd3e34b5cd922dc00d6a950fb4beb4e07ab1c4d3d1"
@@ -73,11 +97,12 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:6f70106e7bc1c803e8a0a4519e09c12d154771acfa2559206e97b033bbd1dd38"
+  branch = "v2"
+  digest = "1:ca6ce07b0d28c6044411b9c966cd845233e27c2ff91d08a3a869631f329c9918"
   name = "github.com/coreos/go-oidc"
-  packages = ["jose"]
+  packages = ["."]
   pruneopts = "UT"
-  revision = "a93f71fdfe73d2c0f5413c0565eea0af6523a6df"
+  revision = "274971e2c94cd6fb17614979e2899edbc81af146"
 
 [[projects]]
   digest = "1:1da3a221f0bc090792d3a2a080ff09008427c0e0f0533a4ed6abd8994421da73"
@@ -97,11 +122,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c013ffc6e15f9f898078f9d38441c68b228aa7b899659452170250ccb27f5f1e"
-  name = "github.com/elgs/gosqljson"
-  packages = ["."]
+  digest = "1:27cbe99893a40975358d20736d80adc95ef395d3bf5923f802f3de259533c94a"
+  name = "github.com/denisenkom/go-mssqldb"
+  packages = [
+    ".",
+    "internal/cp",
+    "internal/querytext",
+  ]
   pruneopts = "UT"
-  revision = "027aa4915315a0b2825c0f025cea347829b974fa"
+  revision = "11b2859924c1e3c3da056fd4e0976b93883f3545"
 
 [[projects]]
   digest = "1:d4268b2a09b1f736633577c4ac93f2a5356c73742fff5344e2451aeec60a7ad0"
@@ -126,6 +155,14 @@
   revision = "75cf19382434e82df4dd84953f566b8ad23d6e9e"
 
 [[projects]]
+  digest = "1:296cda2c4a6a7a54964d7b3b0815e2aed215da75217b72033060ffb1c4e4b6ae"
+  name = "github.com/felixge/httpsnoop"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "eadd4fad6aac69ae62379194fe0219f3dbc80fd3"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   digest = "1:50a46ab1d5edbbdd55125b4d37f1bf503d0807c26461f9ad7b358d6006641d09"
   name = "github.com/flynn/go-shlex"
@@ -141,12 +178,28 @@
   revision = "ed7bcb39ff10f39ab08e317ce16df282845852fa"
 
 [[projects]]
+  digest = "1:ec6f9bf5e274c833c911923c9193867f3f18788c461f76f05f62bb1510e0ae65"
+  name = "github.com/go-sql-driver/mysql"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "72cd26f257d44c1114970e19afddcd812016007e"
+  version = "v1.4.1"
+
+[[projects]]
   branch = "master"
   digest = "1:3e6afc3ed8a72949aa735c00fddc23427dc9384ccfd51cf0d91a412e668da632"
   name = "github.com/golang-collections/collections"
   packages = ["queue"]
   pruneopts = "UT"
   revision = "604e922904d35e97f98a774db7881f049cd8d970"
+
+[[projects]]
+  branch = "master"
+  digest = "1:01745416ed734d0dbd8f2a25344536e399ee60319654873da12b107e9e3cb309"
+  name = "github.com/golang/gddo"
+  packages = ["httputil/header"]
+  pruneopts = "UT"
+  revision = "af0f2af80721261f4d211b2c9563f7b46b2aab06"
 
 [[projects]]
   digest = "1:239c4c7fd2159585454003d9be7207167970194216193a8a210b8d29576f19c9"
@@ -195,6 +248,17 @@
   revision = "8e809c8a86450a29b90dcc9efbf062d0fe6d9746"
 
 [[projects]]
+  digest = "1:6c41d4f998a03b6604227ccad36edaed6126c397e5d78709ef4814a1145a6757"
+  name = "github.com/jmoiron/sqlx"
+  packages = [
+    ".",
+    "reflectx",
+  ]
+  pruneopts = "UT"
+  revision = "d161d7a76b5661016ad0b085869f77fd410f3e6a"
+  version = "v1.2.0"
+
+[[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
@@ -203,7 +267,26 @@
   version = "v1.0.2"
 
 [[projects]]
-  digest = "1:bc1c0be40c67b6b4aee09d7508d5a2a52c1c116b1fa43806dad2b0d6b4d4003b"
+  digest = "1:177a18252d40bf39a867876456854717780b0b1212fdae231d31e93b6f885d80"
+  name = "github.com/kshvakov/clickhouse"
+  packages = [
+    ".",
+    "lib/binary",
+    "lib/cityhash102",
+    "lib/column",
+    "lib/data",
+    "lib/leakypool",
+    "lib/lz4",
+    "lib/protocol",
+    "lib/types",
+    "lib/writebuffer",
+  ]
+  pruneopts = "UT"
+  revision = "43e176a8d165376662f4d67203c71cc8a027c86b"
+  version = "v1.3.9"
+
+[[projects]]
+  digest = "1:12cb143f2148bf54bcd9fe622abac17325e85eeb1d84b8ec6caf1c80232108fd"
   name = "github.com/lib/pq"
   packages = [
     ".",
@@ -211,8 +294,8 @@
     "scram",
   ]
   pruneopts = "UT"
-  revision = "51e2106eed1cea199c802d2a49e91e2491b02056"
-  version = "v1.1.0"
+  revision = "3427c32cb71afc948325f299f040e53c1dd78979"
+  version = "v1.2.0"
 
 [[projects]]
   digest = "1:2fa7b0155cd54479a755c629de26f888a918e13f8857a2c442205d825368e084"
@@ -229,6 +312,14 @@
   pruneopts = "UT"
   revision = "c2a7a6ca930a4cd0bc33a3f298eb71960732a3a7"
   version = "v0.0.7"
+
+[[projects]]
+  digest = "1:79e87abf06b873987dee86598950f5b51732ac454d5a5cab6445a14330e6c9e3"
+  name = "github.com/mattn/go-sqlite3"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "b612a2feea6aa87c6d052d9086572551df06497e"
+  version = "v1.11.0"
 
 [[projects]]
   digest = "1:ff5ebae34cfbf047d505ee150de27e60570e8c394b3b8fdbb720ff6ac71985fc"
@@ -266,6 +357,14 @@
   version = "v1.1.0"
 
 [[projects]]
+  digest = "1:dd3d50b46f8d3c88a8d3986f2e5344db582c457469a7cb3a0dda953c669cdf9a"
+  name = "github.com/mitchellh/go-server-timing"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "1ca01db910d57d64ec1c68f27105614b77558e28"
+  version = "v1.0.0"
+
+[[projects]]
   digest = "1:53bc4cd4914cd7cd52139990d5170d6dc99067ae31c56530621b18b35fc30318"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
@@ -300,6 +399,17 @@
   pruneopts = "UT"
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:bd9efe4e0b0f768302a1e2f0c22458149278de533e521206e5ddc71848c269a0"
+  name = "github.com/pquerna/cachecontrol"
+  packages = [
+    ".",
+    "cacheobject",
+  ]
+  pruneopts = "UT"
+  revision = "1555304b9b35fdd2b425bccf1a5613677705e7d0"
 
 [[projects]]
   digest = "1:c968b29db5d68ec97de404b6d058d5937fa015a141b3b4f7a0d87d5f8226f04c"
@@ -369,7 +479,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a84d5ec8b40a827962ea250f2cf03434138ccae9d83fcac12fb49b70c70b80cc"
+  digest = "1:cac263b8eb2e9ad2327b70e03be1de1227040bfb3be26b49c4b56cbed568afc7"
+  name = "github.com/xo/dburl"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "98997a05b24fc069c79fa13b05ccf376c22a326c"
+
+[[projects]]
+  branch = "master"
+  digest = "1:1a9391a80fe548ffcf90aee8ae35bfb0b188198b57a3fe2ef5bb099ba4b4f610"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -377,8 +495,10 @@
     "ed25519/internal/edwards25519",
     "internal/chacha20",
     "internal/subtle",
+    "md4",
     "nacl/box",
     "nacl/secretbox",
+    "pbkdf2",
     "poly1305",
     "salsa20/salsa",
     "ssh",
@@ -389,11 +509,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:52d140f7ab52e491cc1cbc93e6637aa5e9a7f3beae7545d675b02e52ca9d7290"
+  digest = "1:6b3dbfffba73ea0d8131ecb5738fe87f6addc4c7b73154b9d58e2693ad6a6256"
   name = "golang.org/x/net"
   packages = [
     "bpf",
     "context",
+    "context/ctxhttp",
     "http/httpguts",
     "http2",
     "http2/hpack",
@@ -408,6 +529,17 @@
   ]
   pruneopts = "UT"
   revision = "1da14a5a36f220ea3f03470682b737b1dfd5de22"
+
+[[projects]]
+  branch = "master"
+  digest = "1:8d1c112fb1679fa097e9a9255a786ee47383fa2549a3da71bcb1334a693ebcfe"
+  name = "golang.org/x/oauth2"
+  packages = [
+    ".",
+    "internal",
+  ]
+  pruneopts = "UT"
+  revision = "0f29369cfe4552d0e4bcddc57cc75f4d7e672a33"
 
 [[projects]]
   digest = "1:39ebcc2b11457b703ae9ee2e8cca0f68df21969c6102cb3b705f76cca0ea0239"
@@ -454,6 +586,23 @@
   pruneopts = "UT"
   revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
   version = "v0.3.0"
+
+[[projects]]
+  digest = "1:7e8b9c5ae49011b12ae8473834ac1a7bb8ac029ba201270c723e4c280c9e4855"
+  name = "google.golang.org/appengine"
+  packages = [
+    "cloudsql",
+    "internal",
+    "internal/base",
+    "internal/datastore",
+    "internal/log",
+    "internal/remote_api",
+    "internal/urlfetch",
+    "urlfetch",
+  ]
+  pruneopts = "UT"
+  revision = "b2f4a3cf3c67576a2ee09e1fe62656a5086ce880"
+  version = "v1.6.1"
 
 [[projects]]
   branch = "master"
@@ -505,6 +654,26 @@
   version = "v1.20.0"
 
 [[projects]]
+  branch = "v1"
+  digest = "1:6f70106e7bc1c803e8a0a4519e09c12d154771acfa2559206e97b033bbd1dd38"
+  name = "gopkg.in/coreos/go-oidc.v1"
+  packages = ["jose"]
+  pruneopts = "UT"
+  revision = "e860bd55bfa7d7cb35d30d26a167982584f616b0"
+
+[[projects]]
+  digest = "1:8c05919580be8a5be668709d7e5a69d5cd19b8ee9f23d62ce5b10d3457bf6a13"
+  name = "gopkg.in/square/go-jose.v2"
+  packages = [
+    ".",
+    "cipher",
+    "json",
+  ]
+  pruneopts = "UT"
+  revision = "730df5f748271903322feb182be83b43ebbbe27d"
+  version = "v2.3.1"
+
+[[projects]]
   branch = "altsrc-parse-durations"
   digest = "1:0370b1bceda03dbfade3abbde639a43f1113bab711ec760452e5c0dcc0c14787"
   name = "gopkg.in/urfave/cli.v2"
@@ -552,6 +721,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/DATA-DOG/go-sqlmock",
     "github.com/cloudflare/brotli-go",
     "github.com/cloudflare/golibs/lrucache",
     "github.com/coredns/coredns/core/dnsserver",
@@ -561,20 +731,25 @@
     "github.com/coredns/coredns/plugin/pkg/dnstest",
     "github.com/coredns/coredns/plugin/pkg/rcode",
     "github.com/coredns/coredns/request",
-    "github.com/coreos/go-oidc/jose",
+    "github.com/coreos/go-oidc",
     "github.com/coreos/go-systemd/daemon",
-    "github.com/elgs/gosqljson",
+    "github.com/denisenkom/go-mssqldb",
     "github.com/equinox-io/equinox",
     "github.com/facebookgo/grace/gracenet",
     "github.com/getsentry/raven-go",
+    "github.com/go-sql-driver/mysql",
     "github.com/golang-collections/collections/queue",
     "github.com/google/uuid",
     "github.com/gorilla/mux",
     "github.com/gorilla/websocket",
+    "github.com/jmoiron/sqlx",
+    "github.com/kshvakov/clickhouse",
     "github.com/lib/pq",
     "github.com/mattn/go-colorable",
+    "github.com/mattn/go-sqlite3",
     "github.com/miekg/dns",
     "github.com/mitchellh/go-homedir",
+    "github.com/mitchellh/go-server-timing",
     "github.com/mitchellh/mapstructure",
     "github.com/pkg/errors",
     "github.com/prometheus/client_golang/prometheus",
@@ -583,6 +758,7 @@
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
+    "github.com/xo/dburl",
     "golang.org/x/crypto/nacl/box",
     "golang.org/x/crypto/ssh",
     "golang.org/x/crypto/ssh/terminal",
@@ -597,6 +773,7 @@
     "golang.org/x/sys/windows/svc",
     "golang.org/x/sys/windows/svc/eventlog",
     "golang.org/x/sys/windows/svc/mgr",
+    "gopkg.in/coreos/go-oidc.v1/jose",
     "gopkg.in/urfave/cli.v2",
     "gopkg.in/urfave/cli.v2/altsrc",
     "zombiezen.com/go/capnproto2",

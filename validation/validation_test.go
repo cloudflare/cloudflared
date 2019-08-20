@@ -320,6 +320,39 @@ func TestValidateHTTPService_NonResponsiveOrigin(t *testing.T) {
 	}
 }
 
+func TestNewAccessValidatorOk(t *testing.T) {
+	ctx := context.Background()
+	url := "test.cloudflareaccess.com"
+	access, err := NewAccessValidator(ctx, url, url, "")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, access)
+
+	assert.Error(t, access.Validate(ctx, ""))
+	assert.Error(t, access.Validate(ctx, "invalid"))
+
+	req := httptest.NewRequest("GET", "https://test.cloudflareaccess.com", nil)
+	req.Header.Set(accessJwtHeader, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
+	assert.Error(t, access.ValidateRequest(ctx, req))
+}
+
+func TestNewAccessValidatorErr(t *testing.T) {
+	ctx := context.Background()
+
+	urls := []string{
+		"",
+		"tcp://test.cloudflareaccess.com",
+		"wss://cloudflarenone.com",
+	}
+
+	for _, url := range urls {
+		access, err := NewAccessValidator(ctx, url, url, "")
+
+		assert.Error(t, err, url)
+		assert.Nil(t, access)
+	}
+}
+
 type testRoundTripper func(req *http.Request) (*http.Response, error)
 
 func (f testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {

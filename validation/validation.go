@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -9,15 +10,21 @@ import (
 
 	"net/http"
 
+	"github.com/coreos/go-oidc"
 	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
 )
 
-const defaultScheme = "http"
+const (
+	defaultScheme   = "http"
+	accessDomain    = "cloudflareaccess.com"
+	accessCertPath  = "/cdn-cgi/access/certs"
+	accessJwtHeader = "Cf-access-jwt-assertion"
+)
 
 var (
 	supportedProtocols = []string{"http", "https", "rdp"}
-	validationTimeout = time.Duration(30 * time.Second)
+	validationTimeout  = time.Duration(30 * time.Second)
 )
 
 func ValidateHostname(hostname string) (string, error) {
@@ -196,4 +203,51 @@ func toggleProtocol(httpProtocol string) string {
 	default:
 		return httpProtocol
 	}
+}
+
+// Access checks if a JWT from Cloudflare Access is valid.
+type Access struct {
+	verifier *oidc.IDTokenVerifier
+}
+
+func NewAccessValidator(ctx context.Context, domain, issuer, applicationAUD string) (*Access, error) {
+	domainURL, err := ValidateUrl(domain)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerURL, err := ValidateUrl(issuer)
+	if err != nil {
+		return nil, err
+	}
+
+	// An issuerURL from Cloudflare Access will always use HTTPS.
+	issuerURL = strings.Replace(issuerURL, "http:", "https:", 1)
+
+	keySet := oidc.NewRemoteKeySet(ctx, domainURL+accessCertPath)
+	return &Access{oidc.NewVerifier(issuerURL, keySet, &oidc.Config{ClientID: applicationAUD})}, nil
+}
+
+func (a *Access) Validate(ctx context.Context, jwt string) error {
+	token, err := a.verifier.Verify(ctx, jwt)
+
+	if err != nil {
+		return errors.Wrapf(err, "token is invalid: %s", jwt)
+	}
+
+	// Perform extra sanity checks, just to be safe.
+
+	if token == nil {
+		return fmt.Errorf("token is nil: %s", jwt)
+	}
+
+	if !strings.HasSuffix(token.Issuer, accessDomain) {
+		return fmt.Errorf("token has non-cloudflare issuer of %s: %s", token.Issuer, jwt)
+	}
+
+	return nil
+}
+
+func (a *Access) ValidateRequest(ctx context.Context, r *http.Request) error {
+	return a.Validate(ctx, r.Header.Get(accessJwtHeader))
 }
