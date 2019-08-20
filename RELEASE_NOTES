@@ -1,3 +1,9 @@
+2019.8.2
+- 2019-08-20 STOR-519: Add db-connect, a SQL over HTTPS server
+- 2019-08-11 TUN-2163: Add GrapQLType method to Scope interface
+- 2019-08-06 TUN-2152: Requests with a query in the URL are erroneously escaped
+- 2019-07-18 AUTH-1941: Adds initial SSH server implementation
+
 2019.8.1
 - 2019-08-05 TUN-2111: Implement custom serialization logic for FallibleConfig and OriginConfig
 - 2019-08-06 Revert "TUN-1736: Missing headers when passing an invalid path"
