@@ -75,8 +75,9 @@ func UnmarshalRegistrationOptions(s tunnelrpc.RegistrationOptions) (*Registratio
 }
 
 type ConnectResult struct {
-	Err        *ConnectError
-	ServerInfo ServerInfo
+	Err          *ConnectError
+	ServerInfo   ServerInfo
+	ClientConfig ClientConfig
 }
 
 func MarshalConnectResult(s tunnelrpc.ConnectResult, p *ConnectResult) error {
@@ -146,7 +147,7 @@ func NewSystemName(systemName string) *SystemName {
 
 func (s *SystemName) Value() string        { return s.systemName }
 func (_ *SystemName) PostgresType() string { return "system_name" }
-func (_ *SystemName) GraphQLType() string { return "SYSTEM_NAME" }
+func (_ *SystemName) GraphQLType() string  { return "SYSTEM_NAME" }
 
 func (_ *SystemName) isScope() {}
 
@@ -160,7 +161,7 @@ func NewGroup(group string) *Group {
 
 func (g *Group) Value() string        { return g.group }
 func (_ *Group) PostgresType() string { return "group" }
-func (_ *Group) GraphQLType() string { return "GROUP" }
+func (_ *Group) GraphQLType() string  { return "GROUP" }
 
 func (_ *Group) isScope() {}
 

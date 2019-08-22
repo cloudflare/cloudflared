@@ -74,6 +74,8 @@ struct ConnectResult {
     err @0 :ConnectError;
     # Information about the server this connection is established with
     serverInfo @1 :ServerInfo;
+    # How this cloudflared instance should be configured
+    clientConfig @2 :ClientConfig;
 }
 
 struct ConnectError {

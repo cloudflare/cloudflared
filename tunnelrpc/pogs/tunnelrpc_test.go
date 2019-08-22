@@ -3,6 +3,7 @@ package pogs
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/google/uuid"
@@ -33,6 +34,40 @@ func TestScope(t *testing.T) {
 		}
 		result, err := UnmarshalScope(capnpEntity)
 		if !assert.NoError(t, err, "testCase index %v failed to unmarshal", i) {
+			continue
+		}
+		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
+	}
+}
+
+func sampleTestConnectResult() *ConnectResult {
+	return &ConnectResult{
+		Err: &ConnectError{
+			Cause:       "it broke",
+			ShouldRetry: false,
+			RetryAfter:  2 * time.Second,
+		},
+		ServerInfo:   ServerInfo{LocationName: "computer"},
+		ClientConfig: *sampleClientConfig(),
+	}
+}
+
+func TestConnectResult(t *testing.T) {
+	testCases := []*ConnectResult{
+		sampleTestConnectResult(),
+	}
+	for i, testCase := range testCases {
+		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+		capnpEntity, err := tunnelrpc.NewConnectResult(seg)
+		if !assert.NoError(t, err) {
+			t.Fatal("Couldn't initialize a new message")
+		}
+		err = MarshalConnectResult(capnpEntity, testCase)
+		if !assert.NoError(t, err, "testCase #%v failed to marshal", i) {
+			continue
+		}
+		result, err := UnmarshalConnectResult(capnpEntity)
+		if !assert.NoError(t, err, "testCase #%v failed to unmarshal", i) {
 			continue
 		}
 		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)

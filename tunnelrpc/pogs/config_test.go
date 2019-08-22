@@ -29,7 +29,27 @@ func TestVersion(t *testing.T) {
 	assert.True(t, secondVersion.IsNewerOrEqual(secondVersion))
 }
 
-func TestClientConfig(t *testing.T) {
+func TestClientConfigCapnp(t *testing.T) {
+	for i, testCase := range ClientConfigTestCases() {
+		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+		capnpEntity, err := tunnelrpc.NewClientConfig(seg)
+		if !assert.NoError(t, err) {
+			t.Fatal("Couldn't initialize a new message")
+		}
+		err = MarshalClientConfig(capnpEntity, testCase)
+		if !assert.NoError(t, err, "testCase index %v failed to marshal", i) {
+			continue
+		}
+		result, err := UnmarshalClientConfig(capnpEntity)
+		if !assert.NoError(t, err, "testCase index %v failed to unmarshal", i) {
+			continue
+		}
+		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
+	}
+}
+
+func ClientConfigTestCases() []*ClientConfig {
+
 	addDoHProxyConfigs := func(c *ClientConfig) {
 		c.DoHProxyConfigs = []*DoHProxyConfig{
 			sampleDoHProxyConfig(),
@@ -58,7 +78,12 @@ func TestClientConfig(t *testing.T) {
 		sampleClientConfig(addReverseProxyConfigs),
 		sampleClientConfig(addDoHProxyConfigs, addReverseProxyConfigs),
 	}
-	for i, testCase := range testCases {
+
+	return testCases
+}
+
+func TestClientConfig(t *testing.T) {
+	for i, testCase := range ClientConfigTestCases() {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
 		capnpEntity, err := tunnelrpc.NewClientConfig(seg)
 		if !assert.NoError(t, err) {

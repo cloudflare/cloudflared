@@ -32,7 +32,7 @@ type ClientConfig struct {
 	Version              Version               `json:"version"`
 	SupervisorConfig     *SupervisorConfig     `json:"supervisor_config"`
 	EdgeConnectionConfig *EdgeConnectionConfig `json:"edge_connection_config"`
-	DoHProxyConfigs      []*DoHProxyConfig     `json:"doh_proxy_configs"`
+	DoHProxyConfigs      []*DoHProxyConfig     `json:"doh_proxy_configs" capnp:"dohProxyConfigs"`
 	ReverseProxyConfigs  []*ReverseProxyConfig `json:"reverse_proxy_configs"`
 }
 
