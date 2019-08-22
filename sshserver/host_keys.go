@@ -19,14 +19,14 @@ import (
 )
 
 const (
-	rsaFilename = "ssh_host_rsa_key"
+	rsaFilename   = "ssh_host_rsa_key"
 	ecdsaFilename = "ssh_host_ecdsa_key"
 )
 
 func (s *SSHServer) configureHostKeys() error {
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(configDir, 0755); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Error creating %s directory", configDir))
+	if _, err := os.Stat(systemConfigPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(systemConfigPath, 0755); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("Error creating %s directory", systemConfigPath))
 		}
 	}
 
@@ -54,7 +54,7 @@ func (s *SSHServer) configureHostKey(keyFunc func() (string, error)) error {
 }
 
 func (s *SSHServer) ensureRSAKeyExists() (string, error) {
-	keyPath := filepath.Join(configDir, rsaFilename)
+	keyPath := filepath.Join(systemConfigPath, rsaFilename)
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
@@ -76,7 +76,7 @@ func (s *SSHServer) ensureRSAKeyExists() (string, error) {
 }
 
 func (s *SSHServer) ensureECDSAKeyExists() (string, error) {
-	keyPath := filepath.Join(configDir, ecdsaFilename)
+	keyPath := filepath.Join(systemConfigPath, ecdsaFilename)
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {

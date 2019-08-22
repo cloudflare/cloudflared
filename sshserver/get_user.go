@@ -1,7 +1,6 @@
 // Taken from https://github.com/golang/go/blob/ad644d2e86bab85787879d41c2d2aebbd7c57db8/src/os/user/user.go
 // and modified to return login shell in User struct. cloudflared requires cgo for compilation because of this addition.
 
-
 // Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -145,7 +144,7 @@ func buildUser(pwd *C.struct_passwd) *User {
 		Name:     C.GoString(pwd.pw_gecos),
 		HomeDir:  C.GoString(pwd.pw_dir),
 		/****************** Begin added code ******************/
-		Shell:    C.GoString(pwd.pw_shell),
+		Shell: C.GoString(pwd.pw_shell),
 		/****************** End added code ******************/
 	}
 	// The pw_gecos field isn't quite standardized. Some docs

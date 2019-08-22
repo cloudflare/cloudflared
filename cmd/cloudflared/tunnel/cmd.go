@@ -338,7 +338,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		logger.Infof("ssh-server set")
 
 		sshServerAddress := "127.0.0.1:" + c.String("local-ssh-port")
-		server, err := sshserver.New(logger, sshServerAddress, shutdownC)
+		server, err := sshserver.New(logger, sshServerAddress, shutdownC, c.Bool("short-lived-certs"))
 		if err != nil {
 			logger.WithError(err).Error("Cannot create new SSH Server")
 			return errors.Wrap(err, "Cannot create new SSH Server")
@@ -913,6 +913,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Localhost port that cloudflared SSH server will run on",
 			Value:   "22",
 			EnvVars: []string{"LOCAL_SSH_PORT"},
+			Hidden:  true,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "short-lived-certs",
+			Usage:   "Enable short lived cert authentication for SSH server",
+			EnvVars: []string{"SHORT_LIVED_CERTS"},
 			Hidden:  true,
 		}),
 	}
