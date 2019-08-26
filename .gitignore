@@ -10,3 +10,4 @@ guide/public
 cscope.*
 cloudflared
 !cmd/cloudflared/
+.DS_Store

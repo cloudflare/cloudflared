@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudflare/cloudflared/awsuploader"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
@@ -41,10 +42,12 @@ import (
 )
 
 const (
-	sentryDSN          = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+
+	sshLogFileDirectory = "/var/log/cloudflared/"
 
 	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
-	sshPortFlag        = "local-ssh-port"
+	sshPortFlag = "local-ssh-port"
 
 	// shortLivedCertFlag enables short lived cert authentication
 	shortLivedCertFlag = "short-lived-certs"
@@ -53,7 +56,25 @@ const (
 	sshIdleTimeoutFlag = "ssh-idle-timeout"
 
 	// sshMaxTimeoutFlag defines the max duration a SSH session can remain open for
-	sshMaxTimeoutFlag  = "ssh-max-timeout"
+	sshMaxTimeoutFlag = "ssh-max-timeout"
+
+	// bucketNameFlag is the bucket name to use for the SSH log uploader
+	bucketNameFlag = "bucket-name"
+
+	// regionNameFlag is the AWS region name to use for the SSH log uploader
+	regionNameFlag = "region-name"
+
+	// secretIDFlag is the Secret id of SSH log uploader
+	secretIDFlag = "secret-id"
+
+	// accessKeyIDFlag is the Access key id of SSH log uploader
+	accessKeyIDFlag = "access-key-id"
+
+	// sessionTokenIDFlag is the Session token of SSH log uploader
+	sessionTokenIDFlag = "session-token"
+
+	// s3URLFlag is the S3 URL of SSH log uploader (e.g. don't use AWS s3 and use google storage bucket instead)
+	s3URLFlag = "s3-url-host"
 )
 
 var (
@@ -351,8 +372,23 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 		logger.Infof("ssh-server set")
 
+		if c.IsSet(bucketNameFlag) && c.IsSet(regionNameFlag) && c.IsSet(accessKeyIDFlag) && c.IsSet(secretIDFlag) {
+			uploader, err := awsuploader.NewFileUploader(c.String(bucketNameFlag), c.String(regionNameFlag),
+				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
+			if err != nil {
+				logger.WithError(err).Error("Cannot create uploader for SSH Server")
+				return errors.Wrap(err, "Cannot create uploader for SSH Server")
+			}
+
+			os.Mkdir(sshLogFileDirectory, 0600)
+
+			uploadManager := awsuploader.NewDirectoryUploadManager(logger, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
+			uploadManager.Start()
+		}
+
 		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
 		server, err := sshserver.New(logger, sshServerAddress, shutdownC, c.Bool(shortLivedCertFlag), c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+
 		if err != nil {
 			logger.WithError(err).Error("Cannot create new SSH Server")
 			return errors.Wrap(err, "Cannot create new SSH Server")
@@ -945,6 +981,42 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    sshMaxTimeoutFlag,
 			Usage:   "Absolute connection timeout",
 			EnvVars: []string{"SSH_MAX_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    bucketNameFlag,
+			Usage:   "Bucket name of where to upload SSH logs",
+			EnvVars: []string{"BUCKET_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    regionNameFlag,
+			Usage:   "Region name of where to upload SSH logs",
+			EnvVars: []string{"REGION_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    accessKeyIDFlag,
+			Usage:   "Access Key ID of where to upload SSH logs",
+			EnvVars: []string{"ACCESS_CLIENT_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    secretIDFlag,
+			Usage:   "Secret ID of where to upload SSH logs",
+			EnvVars: []string{"SECRET_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    sessionTokenIDFlag,
+			Usage:   "Session Token to use in the configuration of SSH logs uploading",
+			EnvVars: []string{"SESSION_TOKEN_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    s3URLFlag,
+			Usage:   "S3 url of where to upload SSH logs",
+			EnvVars: []string{"S3_URL"},
 			Hidden:  true,
 		}),
 	}
