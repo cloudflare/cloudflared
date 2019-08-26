@@ -14,7 +14,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/transfer"
 	"github.com/cloudflare/cloudflared/log"
 	"github.com/cloudflare/cloudflared/origin"
-	"gopkg.in/coreos/go-oidc.v1/jose"
+	"github.com/coreos/go-oidc/jose"
 )
 
 const (
@@ -26,15 +26,15 @@ var logger = log.CreateLogger()
 type lock struct {
 	lockFilePath string
 	backoff      *origin.BackoffHandler
-	sigHandler   *signalHandler
+	sigHandler 	 *signalHandler
 }
 
 type signalHandler struct {
-	sigChannel chan os.Signal
-	signals    []os.Signal
+	sigChannel 		 chan os.Signal
+	signals		     []os.Signal
 }
 
-func (s *signalHandler) register(handler func()) {
+func (s *signalHandler) register(handler func()){
 	s.sigChannel = make(chan os.Signal, 1)
 	signal.Notify(s.sigChannel, s.signals...)
 	go func(s *signalHandler) {
@@ -59,8 +59,8 @@ func newLock(path string) *lock {
 	return &lock{
 		lockFilePath: lockPath,
 		backoff:      &origin.BackoffHandler{MaxRetries: 7},
-		sigHandler: &signalHandler{
-			signals: []os.Signal{syscall.SIGINT, syscall.SIGTERM},
+		sigHandler:   &signalHandler{
+			signals: 	[]os.Signal{syscall.SIGINT, syscall.SIGTERM},
 		},
 	}
 }
@@ -68,8 +68,8 @@ func newLock(path string) *lock {
 func (l *lock) Acquire() error {
 	// Intercept SIGINT and SIGTERM to release lock before exiting
 	l.sigHandler.register(func() {
-		l.deleteLockFile()
-		os.Exit(0)
+        l.deleteLockFile()
+        os.Exit(0)
 	})
 
 	// Check for a path.lock file

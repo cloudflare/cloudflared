@@ -18,9 +18,9 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/cmd/cloudflared/path"
+	"github.com/coreos/go-oidc/jose"
 	homedir "github.com/mitchellh/go-homedir"
 	gossh "golang.org/x/crypto/ssh"
-	"gopkg.in/coreos/go-oidc.v1/jose"
 )
 
 const (

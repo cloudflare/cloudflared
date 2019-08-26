@@ -1,4 +1,0 @@
-# ClickHouse Native protocol
-
-# Handshake 
-

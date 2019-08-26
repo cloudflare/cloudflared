@@ -7,17 +7,17 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"reflect"
 	"runtime"
 	"runtime/trace"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
+	"github.com/cloudflare/cloudflared/cmd/sqlgateway"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
@@ -35,6 +35,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
 )
@@ -99,7 +100,43 @@ func Commands() []*cli.Command {
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 			Hidden:    false,
 		},
-		dbConnectCmd(),
+		{
+			Name: "db",
+			Action: func(c *cli.Context) error {
+				tags := make(map[string]string)
+				tags["hostname"] = c.String("hostname")
+				raven.SetTagsContext(tags)
+
+				fmt.Printf("\nSQL Database Password: ")
+				pass, err := terminal.ReadPassword(int(syscall.Stdin))
+				if err != nil {
+					logger.Error(err)
+				}
+
+				go sqlgateway.StartProxy(c, logger, string(pass))
+
+				raven.CapturePanic(func() { err = tunnel(c) }, nil)
+				if err != nil {
+					raven.CaptureError(err, nil)
+				}
+				return err
+			},
+			Before: Before,
+			Usage:  "SQL Gateway is an SQL over HTTP reverse proxy",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "db",
+					Value: true,
+					Usage: "Enable the SQL Gateway Proxy",
+				},
+				&cli.StringFlag{
+					Name:  "address",
+					Value: "",
+					Usage: "Database connection string: db://user:pass",
+				},
+			},
+			Hidden: true,
+		},
 	}
 
 	var subcommands []*cli.Command
@@ -546,60 +583,6 @@ func addPortIfMissing(uri *url.URL, port int) string {
 		return uri.Host
 	}
 	return fmt.Sprintf("%s:%d", uri.Hostname(), port)
-}
-
-func dbConnectCmd() *cli.Command {
-	cmd := dbconnect.Cmd()
-
-	// Append the tunnel commands so users can customize the daemon settings.
-	cmd.Flags = appendFlags(Flags(), cmd.Flags...)
-
-	// Override before to run tunnel validation before dbconnect validation.
-	cmd.Before = func(c *cli.Context) error {
-		err := Before(c)
-		if err == nil {
-			err = dbconnect.CmdBefore(c)
-		}
-		return err
-	}
-
-	// Override action to setup the Proxy, then if successful, start the tunnel daemon.
-	cmd.Action = func(c *cli.Context) error {
-		err := dbconnect.CmdAction(c)
-		if err == nil {
-			err = tunnel(c)
-		}
-		return err
-	}
-
-	return cmd
-}
-
-// appendFlags will append extra flags to a slice of flags.
-//
-// The cli package will panic if two flags exist with the same name,
-// so if extraFlags contains a flag that was already defined, modify the
-// original flags to use the extra version.
-func appendFlags(flags []cli.Flag, extraFlags ...cli.Flag) []cli.Flag {
-	for _, extra := range extraFlags {
-		var found bool
-
-		// Check if an extra flag overrides an existing flag.
-		for i, flag := range flags {
-			if reflect.DeepEqual(extra.Names(), flag.Names()) {
-				flags[i] = extra
-				found = true
-				break
-			}
-		}
-
-		// Append the extra flag if it has nothing to override.
-		if !found {
-			flags = append(flags, extra)
-		}
-	}
-
-	return flags
 }
 
 func tunnelFlags(shouldHide bool) []cli.Flag {

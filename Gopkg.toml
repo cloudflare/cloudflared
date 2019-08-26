@@ -6,6 +6,8 @@
     name = "github.com/cloudflare/brotli-go"
     unused-packages = false
 
+
+
 [[constraint]]
   name = "github.com/facebookgo/grace"
   revision = "75cf19382434e82df4dd84953f566b8ad23d6e9e"
@@ -69,6 +71,10 @@
   revision = "d3b731e9255b72d4571a5aac125634cf1b6031dc"
 
 [[constraint]]
+  name = "github.com/coreos/go-oidc"
+  revision = "a93f71fdfe73d2c0f5413c0565eea0af6523a6df"
+
+[[constraint]]
   name = "golang.org/x/crypto"
   branch = "master"  # master required by github.com/miekg/dns
 
@@ -83,38 +89,6 @@
 [[constraint]]
   name = "github.com/mitchellh/mapstructure"
   version = "1.1.2"
-
-[[constraint]]
-  name = "github.com/jmoiron/sqlx"
-  version = "1.2.0"
-
-[[constraint]]
-  name = "github.com/go-sql-driver/mysql"
-  version = "1.4.1"
-
-[[constraint]]
-  name = "github.com/mattn/go-sqlite3"
-  version = "1.11.0"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/denisenkom/go-mssqldb"
-
-[[constraint]]
-  name = "github.com/kshvakov/clickhouse"
-  version = "1.3.9"
-
-[[constraint]]
-  name = "github.com/DATA-DOG/go-sqlmock"
-  version = "1.3.3"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/xo/dburl"
-
-[[constraint]]
-  branch = "v2"
-  name = "github.com/coreos/go-oidc"
 
 [[constraint]]
   name = "github.com/gliderlabs/ssh"
