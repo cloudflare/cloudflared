@@ -3,7 +3,6 @@
 package sshserver
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -15,8 +14,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cloudflare/cloudflared/sshlog"
+
 	"github.com/creack/pty"
 	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,9 +28,10 @@ type SSHServer struct {
 	shutdownC   chan struct{}
 	caCert      ssh.PublicKey
 	getUserFunc func(string) (*User, error)
+	logManager  sshlog.Manager
 }
 
-func New(logger *logrus.Logger, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
+func New(logManager sshlog.Manager, logger *logrus.Logger, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -42,6 +45,7 @@ func New(logger *logrus.Logger, address string, shutdownC chan struct{}, idleTim
 		logger:      logger,
 		shutdownC:   shutdownC,
 		getUserFunc: lookupUser,
+		logManager:  logManager,
 	}
 
 	if err := sshServer.configureHostKeys(); err != nil {
@@ -67,6 +71,14 @@ func (s *SSHServer) Start() error {
 }
 
 func (s *SSHServer) connectionHandler(session ssh.Session) {
+	sessionID, err := uuid.NewRandom()
+	if err != nil {
+		if _, err := io.WriteString(session, "Failed to generate session ID\n"); err != nil {
+			s.logger.WithError(err).Error("Failed to generate session ID: Failed to write to SSH session")
+		}
+		s.CloseSession(session)
+	}
+
 	// Get uid and gid of user attempting to login
 	sshUser, ok := session.Context().Value("sshUser").(*User)
 	if !ok || sshUser == nil {
@@ -134,11 +146,16 @@ func (s *SSHServer) connectionHandler(session ssh.Session) {
 	defer pr.Close()
 	defer pw.Close()
 
-	scanner := bufio.NewScanner(pr)
-	go func() {
-		for scanner.Scan() {
-			s.logger.Info(scanner.Text())
+	logger, err := s.logManager.NewLogger(fmt.Sprintf("%s-session.log", sessionID), s.logger)
+	if err != nil {
+		if _, err := io.WriteString(session, "Failed to create log\n"); err != nil {
+			s.logger.WithError(err).Error("Failed to create log: Failed to write to SSH session")
 		}
+		s.CloseSession(session)
+	}
+	defer logger.Close()
+	go func() {
+		io.Copy(logger, pr)
 	}()
 
 	// Write outgoing command output to both the command recorder, and remote user
