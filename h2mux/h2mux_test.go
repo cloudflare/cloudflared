@@ -584,8 +584,8 @@ func TestOpenAfterDisconnect(t *testing.T) {
 			[]Header{{Name: "test-header", Value: "headerValue"}},
 			nil,
 		)
-		if err != ErrConnectionClosed {
-			t.Fatalf("unexpected error in OpenStream: %s", err)
+		if err != ErrStreamRequestConnectionClosed && err != ErrResponseHeadersConnectionClosed {
+			t.Fatalf("case %v: unexpected error in OpenStream: %v", i, err)
 		}
 	}
 }

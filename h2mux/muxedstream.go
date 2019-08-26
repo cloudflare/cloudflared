@@ -88,6 +88,23 @@ func (th TunnelHostname) IsSet() bool {
 	return th != ""
 }
 
+func NewStream(config MuxerConfig, writeHeaders []Header, readyList *ReadyList, dictionaries h2Dictionaries) *MuxedStream {
+	return &MuxedStream{
+		responseHeadersReceived: make(chan struct{}),
+		readBuffer:              NewSharedBuffer(),
+		writeBuffer:             &bytes.Buffer{},
+		writeBufferMaxLen:       config.StreamWriteBufferMaxLen,
+		writeBufferHasSpace:     make(chan struct{}, 1),
+		receiveWindow:           config.DefaultWindowSize,
+		receiveWindowCurrentMax: config.DefaultWindowSize,
+		receiveWindowMax:        config.MaxWindowSize,
+		sendWindow:              config.DefaultWindowSize,
+		readyList:               readyList,
+		writeHeaders:            writeHeaders,
+		dictionaries:            dictionaries,
+	}
+}
+
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
 	var readBuffer ReadWriteClosedCloser
 	if s.dictionaries.read != nil {
