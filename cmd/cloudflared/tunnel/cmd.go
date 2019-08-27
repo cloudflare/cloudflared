@@ -600,10 +600,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   "no-autoupdate",
-			Usage:  "Disable periodic check for updates, restarting the server with the new version.",
-			Value:  false,
-			Hidden: shouldHide,
+			Name:    "no-autoupdate",
+			Usage:   "Disable periodic check for updates, restarting the server with the new version.",
+			EnvVars: []string{"NO_AUTOUPDATE"},
+			Value:   false,
+			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "is-autoupdated",
