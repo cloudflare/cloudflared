@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"strconv"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/creack/pty"
@@ -27,7 +28,7 @@ type SSHServer struct {
 	getUserFunc func(string) (*User, error)
 }
 
-func New(logger *logrus.Logger, address string, shutdownC chan struct{}, shortLivedCertAuth bool) (*SSHServer, error) {
+func New(logger *logrus.Logger, address string, shutdownC chan struct{}, shortLivedCertAuth bool, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -37,7 +38,7 @@ func New(logger *logrus.Logger, address string, shutdownC chan struct{}, shortLi
 	}
 
 	sshServer := SSHServer{
-		Server:      ssh.Server{Addr: address},
+		Server:      ssh.Server{Addr: address, MaxTimeout: maxTimeout, IdleTimeout: idleTimeout},
 		logger:      logger,
 		shutdownC:   shutdownC,
 		getUserFunc: lookupUser,
@@ -76,7 +77,6 @@ func (s *SSHServer) Start() error {
 }
 
 func (s *SSHServer) connectionHandler(session ssh.Session) {
-
 	// Get uid and gid of user attempting to login
 	sshUser, ok := session.Context().Value("sshUser").(*User)
 	if !ok || sshUser == nil {

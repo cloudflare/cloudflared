@@ -40,7 +40,21 @@ import (
 	"gopkg.in/urfave/cli.v2/altsrc"
 )
 
-const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+const (
+	sentryDSN          = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+
+	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
+	sshPortFlag        = "local-ssh-port"
+
+	// shortLivedCertFlag enables short lived cert authentication
+	shortLivedCertFlag = "short-lived-certs"
+
+	// sshIdleTimeoutFlag defines the duration a SSH session can remain idle before being closed
+	sshIdleTimeoutFlag = "ssh-idle-timeout"
+
+	// sshMaxTimeoutFlag defines the max duration a SSH session can remain open for
+	sshMaxTimeoutFlag  = "ssh-max-timeout"
+)
 
 var (
 	shutdownC      chan struct{}
@@ -337,8 +351,8 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 		logger.Infof("ssh-server set")
 
-		sshServerAddress := "127.0.0.1:" + c.String("local-ssh-port")
-		server, err := sshserver.New(logger, sshServerAddress, shutdownC, c.Bool("short-lived-certs"))
+		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
+		server, err := sshserver.New(logger, sshServerAddress, shutdownC, c.Bool(shortLivedCertFlag), c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			logger.WithError(err).Error("Cannot create new SSH Server")
 			return errors.Wrap(err, "Cannot create new SSH Server")
@@ -909,16 +923,28 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "local-ssh-port",
+			Name:    sshPortFlag,
 			Usage:   "Localhost port that cloudflared SSH server will run on",
 			Value:   "22",
 			EnvVars: []string{"LOCAL_SSH_PORT"},
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "short-lived-certs",
+			Name:    shortLivedCertFlag,
 			Usage:   "Enable short lived cert authentication for SSH server",
 			EnvVars: []string{"SHORT_LIVED_CERTS"},
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    sshIdleTimeoutFlag,
+			Usage:   "Connection timeout after no activity",
+			EnvVars: []string{"SSH_IDLE_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    sshMaxTimeoutFlag,
+			Usage:   "Absolute connection timeout",
+			EnvVars: []string{"SSH_MAX_TIMEOUT"},
 			Hidden:  true,
 		}),
 	}

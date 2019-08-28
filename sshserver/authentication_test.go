@@ -32,7 +32,7 @@ const (
 var logger, hook = test.NewNullLogger()
 
 func TestMain(m *testing.M) {
-	authorizeKeysPath = testUserKeyFilename
+	authorizedKeysDir = testUserKeyFilename
 	logger.SetLevel(logrus.DebugLevel)
 	code := m.Run()
 	os.Exit(code)

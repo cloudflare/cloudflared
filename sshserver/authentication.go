@@ -15,7 +15,7 @@ import (
 
 var (
 	systemConfigPath  = "/etc/cloudflared/"
-	authorizeKeysPath = ".cloudflared/authorized_keys"
+	authorizedKeysDir = ".cloudflared/authorized_keys"
 )
 
 func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
@@ -25,9 +25,9 @@ func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) boo
 		return false
 	}
 
-	authorizedKeysPath := path.Join(sshUser.HomeDir, authorizeKeysPath)
+	authorizedKeysPath := path.Join(sshUser.HomeDir, authorizedKeysDir)
 	if _, err := os.Stat(authorizedKeysPath); os.IsNotExist(err) {
-		s.logger.Debugf("authorized_keys file %s not found", authorizeKeysPath)
+		s.logger.Debugf("authorized_keys file %s not found", authorizedKeysPath)
 		return false
 	}
 
@@ -38,11 +38,12 @@ func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) boo
 	}
 
 	for len(authorizedKeysBytes) > 0 {
+
 		// Skips invalid keys. Returns error if no valid keys remain.
 		pubKey, _, _, rest, err := ssh.ParseAuthorizedKey(authorizedKeysBytes)
 		authorizedKeysBytes = rest
 		if err != nil {
-			s.logger.WithError(err).Errorf("No valid keys found in %s", authorizeKeysPath)
+			s.logger.Errorf("Invalid key(s) found in %s", authorizedKeysPath)
 			return false
 		}
 
@@ -51,7 +52,7 @@ func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) boo
 			return true
 		}
 	}
-	s.logger.Debugf("Matching public key not found in %s", authorizeKeysPath)
+	s.logger.Debugf("Matching public key not found in %s", authorizedKeysPath)
 	return false
 }
 
