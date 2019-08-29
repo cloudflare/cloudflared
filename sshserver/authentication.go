@@ -18,6 +18,23 @@ var (
 	authorizedKeysDir = ".cloudflared/authorized_keys"
 )
 
+func (s *SSHServer) configureAuthentication() {
+	caCert, err := getCACert()
+	if err != nil {
+		s.logger.Info(err)
+	}
+	s.caCert = caCert
+	s.PublicKeyHandler = s.authenticationHandler
+}
+
+func (s *SSHServer) authenticationHandler(ctx ssh.Context, key ssh.PublicKey) bool {
+	cert, ok := key.(*gossh.Certificate)
+	if !ok {
+		return s.authorizedKeyHandler(ctx, key)
+	}
+	return s.shortLivedCertHandler(ctx, cert)
+}
+
 func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
 	sshUser, err := s.getUserFunc(ctx.User())
 	if err != nil {
@@ -56,20 +73,14 @@ func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) boo
 	return false
 }
 
-func (s *SSHServer) shortLivedCertHandler(ctx ssh.Context, key ssh.PublicKey) bool {
-	userCert, ok := key.(*gossh.Certificate)
-	if !ok {
-		s.logger.Debug("Received key is not an SSH certificate")
-		return false
-	}
-
-	if !ssh.KeysEqual(s.caCert, userCert.SignatureKey) {
+func (s *SSHServer) shortLivedCertHandler(ctx ssh.Context, cert *gossh.Certificate) bool {
+	if !ssh.KeysEqual(s.caCert, cert.SignatureKey) {
 		s.logger.Debug("CA certificate does not match user certificate signer")
 		return false
 	}
 
 	checker := gossh.CertChecker{}
-	if err := checker.CheckCert(ctx.User(), userCert); err != nil {
+	if err := checker.CheckCert(ctx.User(), cert); err != nil {
 		s.logger.Debug(err)
 		return false
 	} else {

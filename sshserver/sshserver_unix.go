@@ -28,7 +28,7 @@ type SSHServer struct {
 	getUserFunc func(string) (*User, error)
 }
 
-func New(logger *logrus.Logger, address string, shutdownC chan struct{}, shortLivedCertAuth bool, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
+func New(logger *logrus.Logger, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -48,17 +48,7 @@ func New(logger *logrus.Logger, address string, shutdownC chan struct{}, shortLi
 		return nil, err
 	}
 
-	if shortLivedCertAuth {
-		caCert, err := getCACert()
-		if err != nil {
-			return nil, err
-		}
-		sshServer.caCert = caCert
-		sshServer.PublicKeyHandler = sshServer.shortLivedCertHandler
-	} else {
-		sshServer.PublicKeyHandler = sshServer.authorizedKeyHandler
-	}
-
+	sshServer.configureAuthentication()
 	return &sshServer, nil
 }
 
@@ -111,6 +101,7 @@ func (s *SSHServer) connectionHandler(session ssh.Session) {
 		return
 	}
 
+	// Supplementary groups are not explicitly specified. They seem to be inherited by default.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uidInt, Gid: gidInt}}
 	cmd.Env = append(cmd.Env, fmt.Sprintf("TERM=%s", ptyReq.Term))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("USER=%s", sshUser.Username))

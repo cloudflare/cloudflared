@@ -49,9 +49,6 @@ const (
 	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
 	sshPortFlag = "local-ssh-port"
 
-	// shortLivedCertFlag enables short lived cert authentication
-	shortLivedCertFlag = "short-lived-certs"
-
 	// sshIdleTimeoutFlag defines the duration a SSH session can remain idle before being closed
 	sshIdleTimeoutFlag = "ssh-idle-timeout"
 
@@ -387,8 +384,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		}
 
 		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logger, sshServerAddress, shutdownC, c.Bool(shortLivedCertFlag), c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
-
+		server, err := sshserver.New(logger, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			logger.WithError(err).Error("Cannot create new SSH Server")
 			return errors.Wrap(err, "Cannot create new SSH Server")
@@ -969,12 +965,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Localhost port that cloudflared SSH server will run on",
 			Value:   "22",
 			EnvVars: []string{"LOCAL_SSH_PORT"},
-			Hidden:  true,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    shortLivedCertFlag,
-			Usage:   "Enable short lived cert authentication for SSH server",
-			EnvVars: []string{"SHORT_LIVED_CERTS"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{

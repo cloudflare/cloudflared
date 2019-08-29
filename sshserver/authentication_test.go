@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 const (
@@ -90,7 +91,8 @@ func TestShortLivedCerts_Success(t *testing.T) {
 	caCert := getKey(t, testCAFilename)
 	sshServer := SSHServer{logger: log.CreateLogger(), caCert: caCert, getUserFunc: getMockUser}
 
-	userCert := getKey(t, testUserCertFilename)
+	userCert, ok := getKey(t, testUserCertFilename).(*gossh.Certificate)
+	require.True(t, ok)
 	assert.True(t, sshServer.shortLivedCertHandler(context, userCert))
 }
 
@@ -101,7 +103,8 @@ func TestShortLivedCerts_CAsDontMatch(t *testing.T) {
 	caCert := getKey(t, testOtherCAFilename)
 	sshServer := SSHServer{logger: logger, caCert: caCert, getUserFunc: getMockUser}
 
-	userCert := getKey(t, testUserCertFilename)
+	userCert, ok := getKey(t, testUserCertFilename).(*gossh.Certificate)
+	require.True(t, ok)
 	assert.False(t, sshServer.shortLivedCertHandler(context, userCert))
 	assert.Equal(t, "CA certificate does not match user certificate signer", hook.LastEntry().Message)
 }
@@ -113,7 +116,8 @@ func TestShortLivedCerts_UserDoesNotExist(t *testing.T) {
 	caCert := getKey(t, testCAFilename)
 	sshServer := SSHServer{logger: logger, caCert: caCert, getUserFunc: lookupUser}
 
-	userCert := getKey(t, testUserCertFilename)
+	userCert, ok := getKey(t, testUserCertFilename).(*gossh.Certificate)
+	require.True(t, ok)
 	assert.False(t, sshServer.shortLivedCertHandler(context, userCert))
 	assert.Contains(t, hook.LastEntry().Message, "Invalid user")
 }
@@ -125,7 +129,8 @@ func TestShortLivedCerts_InvalidPrincipal(t *testing.T) {
 	caCert := getKey(t, testCAFilename)
 	sshServer := SSHServer{logger: logger, caCert: caCert, getUserFunc: lookupUser}
 
-	userCert := getKey(t, testUserCertFilename)
+	userCert, ok := getKey(t, testUserCertFilename).(*gossh.Certificate)
+	require.True(t, ok)
 	assert.False(t, sshServer.shortLivedCertHandler(context, userCert))
 	assert.Contains(t, hook.LastEntry().Message, "not in the set of valid principals for given certificate")
 }
