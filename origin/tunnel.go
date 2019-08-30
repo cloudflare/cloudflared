@@ -53,6 +53,7 @@ type TunnelConfig struct {
 	HTTPTransport        http.RoundTripper
 	HeartbeatInterval    time.Duration
 	Hostname             string
+	HTTPHostHeader       string
 	IncidentLookup       IncidentLookup
 	IsAutoupdated        bool
 	IsFreeTunnel         bool
@@ -447,12 +448,13 @@ func H1ResponseToH2Response(h1 *http.Response) (h2 []h2mux.Header) {
 }
 
 type TunnelHandler struct {
-	originUrl  string
-	muxer      *h2mux.Muxer
-	httpClient http.RoundTripper
-	tlsConfig  *tls.Config
-	tags       []tunnelpogs.Tag
-	metrics    *TunnelMetrics
+	originUrl      string
+	httpHostHeader string
+	muxer          *h2mux.Muxer
+	httpClient     http.RoundTripper
+	tlsConfig      *tls.Config
+	tags           []tunnelpogs.Tag
+	metrics        *TunnelMetrics
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connectionID      string
 	logger            *log.Logger
@@ -473,6 +475,7 @@ func NewTunnelHandler(ctx context.Context,
 	}
 	h := &TunnelHandler{
 		originUrl:         originURL,
+		httpHostHeader:    config.HTTPHostHeader,
 		httpClient:        config.HTTPTransport,
 		tlsConfig:         config.ClientTlsConfig,
 		tags:              config.Tags,
@@ -566,6 +569,11 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 }
 
 func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Request) (*http.Response, error) {
+	if h.httpHostHeader != "" {
+		req.Header.Set("Host", h.httpHostHeader)
+		req.Host = h.httpHostHeader
+	}
+
 	conn, response, err := websocket.ClientConnect(req, h.tlsConfig)
 	if err != nil {
 		return nil, err
@@ -593,6 +601,11 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request) 
 
 	// Request origin to keep connection alive to improve performance
 	req.Header.Set("Connection", "keep-alive")
+
+	if h.httpHostHeader != "" {
+		req.Header.Set("Host", h.httpHostHeader)
+		req.Host = h.httpHostHeader
+	}
 
 	response, err := h.httpClient.RoundTrip(req)
 	if err != nil {
