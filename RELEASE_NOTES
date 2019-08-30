@@ -1,3 +1,16 @@
+2019.8.4
+- 2019-08-30 Fix #111: Add support for specifying a specific HTTP Host: header on the origin. (#114)
+- 2019-08-22 TUN-2165: Add ClientConfig to tunnelrpc.ConnectResult
+- 2019-08-20 AUTH-2014: Checks users login shell
+- 2019-08-26 TUN-2243: Revert "STOR-519: Add db-connect, a SQL over HTTPS server"
+- 2019-08-27 TUN-2244: Add NO_AUTOUPDATE env var
+- 2019-08-22 AUTH-2018: Adds support for authorized keys and short lived certs
+- 2019-08-28 AUTH-2022: Adds ssh timeout configuration
+- 2019-08-28 TUN-1968: Gracefully diff StreamHandler.UpdateConfig
+- 2019-08-26 AUTH-2021 - s3 bucket uploading for SSH logs
+- 2019-08-19 AUTH-2004: Adds static host key support
+- 2019-07-18 AUTH-1941: Adds initial SSH server implementation
+
 2019.8.3
 - 2019-08-20 STOR-519: Add db-connect, a SQL over HTTPS server
 - 2019-08-20 Release 2019.8.2
