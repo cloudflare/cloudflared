@@ -69,7 +69,7 @@ func (m *DirectoryUploadManager) run() {
 // sweep the directory and kick off uploads
 func (m *DirectoryUploadManager) sweep() {
 	filepath.Walk(m.rootDirectory, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
+		if err != nil || info.IsDir() {
 			return nil
 		}
 		//30 days ago
