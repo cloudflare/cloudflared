@@ -47,7 +47,8 @@ type CloudflaredConfig struct {
 	CloudflaredID uuid.UUID
 	Tags          []pogs.Tag
 	BuildInfo     *buildinfo.BuildInfo
-	Scope         pogs.Scope
+	Name          string
+	Group         string
 }
 
 func NewEdgeManager(
@@ -136,7 +137,8 @@ func (em *EdgeManager) newConnection(ctx context.Context) error {
 		CloudflaredVersion:  em.cloudflaredConfig.BuildInfo.CloudflaredVersion,
 		NumPreviousAttempts: 0,
 		OriginCert:          em.state.getUserCredential(),
-		Scope:               em.cloudflaredConfig.Scope,
+		Name:                em.cloudflaredConfig.Name,
+		Group:               em.cloudflaredConfig.Group,
 		Tags:                em.cloudflaredConfig.Tags,
 	}, em.logger)
 	if err != nil {
