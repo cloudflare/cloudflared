@@ -370,6 +370,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 		logger.Infof("ssh-server set")
 
+		logManager := sshlog.NewEmptyManager()
 		if c.IsSet(bucketNameFlag) && c.IsSet(regionNameFlag) && c.IsSet(accessKeyIDFlag) && c.IsSet(secretIDFlag) {
 			uploader, err := awsuploader.NewFileUploader(c.String(bucketNameFlag), c.String(regionNameFlag),
 				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
@@ -379,12 +380,12 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			}
 
 			os.Mkdir(sshLogFileDirectory, 0600)
+			logManager = sshlog.New(sshLogFileDirectory)
 
 			uploadManager := awsuploader.NewDirectoryUploadManager(logger, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
 			uploadManager.Start()
 		}
 
-		logManager := sshlog.New()
 		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
 		server, err := sshserver.New(logManager, logger, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {

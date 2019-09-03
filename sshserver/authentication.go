@@ -98,7 +98,7 @@ func getCACert() (ssh.PublicKey, error) {
 	caCertPath := path.Join(systemConfigPath, "ca.pub")
 	caCertBytes, err := ioutil.ReadFile(caCertPath)
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("Failed to load CA certertificate %s", caCertPath))
+		return nil, errors.Wrap(err, fmt.Sprintf("Failed to load CA certificate %s", caCertPath))
 	}
 	caCert, _, _, _, err := ssh.ParseAuthorizedKey(caCertBytes)
 	if err != nil {

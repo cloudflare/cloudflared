@@ -146,16 +146,16 @@ func (s *SSHServer) connectionHandler(session ssh.Session) {
 	defer pr.Close()
 	defer pw.Close()
 
-	logger, err := s.logManager.NewLogger(fmt.Sprintf("%s-session.log", sessionID), s.logger)
+	sessionLogger, err := s.logManager.NewSessionLogger(fmt.Sprintf("%s-session.log", sessionID), s.logger)
 	if err != nil {
 		if _, err := io.WriteString(session, "Failed to create log\n"); err != nil {
 			s.logger.WithError(err).Error("Failed to create log: Failed to write to SSH session")
 		}
 		s.CloseSession(session)
 	}
-	defer logger.Close()
+	defer sessionLogger.Close()
 	go func() {
-		io.Copy(logger, pr)
+		io.Copy(sessionLogger, pr)
 	}()
 
 	// Write outgoing command output to both the command recorder, and remote user

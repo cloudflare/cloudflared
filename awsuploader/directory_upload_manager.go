@@ -77,7 +77,7 @@ func (m *DirectoryUploadManager) sweep() {
 		checkTime := time.Now().Add(-time.Duration(retentionTime))
 
 		//delete the file it is stale
-		if info.ModTime().After(checkTime) {
+		if info.ModTime().Before(checkTime) {
 			os.Remove(path)
 			return nil
 		}

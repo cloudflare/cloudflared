@@ -2,6 +2,7 @@ package sshlog
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,19 +13,22 @@ import (
 )
 
 const (
-	logTimeFormat = "2006-01-02T15-04-05.000"
-	megabyte      = 1024 * 1024
+	logTimeFormat        = "2006-01-02T15-04-05.000"
+	megabyte             = 1024 * 1024
+	defaultFileSizeLimit = 100 * megabyte
 )
 
 // Logger will buffer and write events to disk
 type Logger struct {
 	sync.Mutex
-	filename    string
-	file        *os.File
-	writeBuffer *bufio.Writer
-	logger      *logrus.Logger
-	done        chan struct{}
-	once        sync.Once
+	filename      string
+	file          *os.File
+	writeBuffer   *bufio.Writer
+	logger        *logrus.Logger
+	flushInterval time.Duration
+	maxFileSize   int64
+	done          chan struct{}
+	once          sync.Once
 }
 
 // NewLogger creates a Logger instance. A buffer is created that needs to be
@@ -34,16 +38,23 @@ type Logger struct {
 // logger variable is a logrus that will log all i/o, filesystem error etc, that
 // that shouldn't end execution of the logger, but are useful to report to the
 // caller.
-func NewLogger(filename string, logger *logrus.Logger) (*Logger, error) {
+func NewLogger(filename string, logger *logrus.Logger, flushInterval time.Duration, maxFileSize int64) (*Logger, error) {
+	if logger == nil {
+		return nil, errors.New("logger can't be nil")
+	}
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(0600))
 	if err != nil {
 		return nil, err
 	}
 	l := &Logger{filename: filename,
-		file:        f,
-		writeBuffer: bufio.NewWriter(f),
-		logger:      logger,
-		done:        make(chan struct{})}
+		file:          f,
+		writeBuffer:   bufio.NewWriter(f),
+		logger:        logger,
+		flushInterval: flushInterval,
+		maxFileSize:   maxFileSize,
+		done:          make(chan struct{}),
+	}
+
 	go l.writer()
 	return l, nil
 }
@@ -70,7 +81,7 @@ func (l *Logger) Close() error {
 // writer is the run loop that handles draining the write buffer and syncing
 // data to disk.
 func (l *Logger) writer() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(l.flushInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -118,7 +129,7 @@ func (l *Logger) shouldRotate() bool {
 		return false
 	}
 
-	return info.Size() >= 100*megabyte
+	return info.Size() >= l.maxFileSize
 }
 
 // rotate creates a new logfile with the existing filename and renames the
