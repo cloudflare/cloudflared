@@ -73,6 +73,9 @@ const (
 
 	// s3URLFlag is the S3 URL of SSH log uploader (e.g. don't use AWS s3 and use google storage bucket instead)
 	s3URLFlag = "s3-url-host"
+
+	// disablePortForwarding disables both remote and local ssh port forwarding
+	enablePortForwardingFlag = "enable-port-forwarding"
 )
 
 var (
@@ -387,7 +390,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		}
 
 		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logManager, logger, version, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+		server, err := sshserver.New(logManager, logger, version, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag), c.Bool(enablePortForwardingFlag))
 		if err != nil {
 			logger.WithError(err).Error("Cannot create new SSH Server")
 			return errors.Wrap(err, "Cannot create new SSH Server")
@@ -1018,6 +1021,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    s3URLFlag,
 			Usage:   "S3 url of where to upload SSH logs",
 			EnvVars: []string{"S3_URL"},
+			Hidden:  true,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    enablePortForwardingFlag,
+			Usage:   "Enables remote and local SSH port forwarding",
+			EnvVars: []string{"ENABLE_PORT_FORWARDING"},
 			Hidden:  true,
 		}),
 	}

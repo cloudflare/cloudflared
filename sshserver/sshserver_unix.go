@@ -55,7 +55,7 @@ type SSHServer struct {
 }
 
 // New creates a new SSHServer and configures its host keys and authenication by the data provided
-func New(logManager sshlog.Manager, logger *logrus.Logger, version, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
+func New(logManager sshlog.Manager, logger *logrus.Logger, version, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration, enablePortForwarding bool) (*SSHServer, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -64,16 +64,32 @@ func New(logManager sshlog.Manager, logger *logrus.Logger, version, address stri
 		return nil, errors.New("cloudflared SSH server needs to run as root")
 	}
 
+	forwardHandler := &ssh.ForwardedTCPHandler{}
 	sshServer := SSHServer{
 		Server: ssh.Server{
 			Addr:        address,
 			MaxTimeout:  maxTimeout,
 			IdleTimeout: idleTimeout,
 			Version:     fmt.Sprintf("SSH-2.0-Cloudflare-Access_%s_%s", version, runtime.GOOS),
+			// Register SSH global Request handlers to respond to tcpip forwarding
+			RequestHandlers: map[string]ssh.RequestHandler{
+				"tcpip-forward":        forwardHandler.HandleSSHRequest,
+				"cancel-tcpip-forward": forwardHandler.HandleSSHRequest,
+			},
+			// Register SSH channel types
+			ChannelHandlers: map[string]ssh.ChannelHandler{
+				"session":      ssh.DefaultSessionHandler,
+				"direct-tcpip": ssh.DirectTCPIPHandler,
+			},
 		},
 		logger:     logger,
 		shutdownC:  shutdownC,
 		logManager: logManager,
+	}
+
+	if enablePortForwarding {
+		sshServer.LocalPortForwardingCallback = allowForward
+		sshServer.ReversePortForwardingCallback = allowForward
 	}
 
 	if err := sshServer.configureHostKeys(); err != nil {
@@ -81,6 +97,7 @@ func New(logManager sshlog.Manager, logger *logrus.Logger, version, address stri
 	}
 
 	sshServer.configureAuthentication()
+
 	return &sshServer, nil
 }
 
@@ -285,19 +302,6 @@ func (s *SSHServer) startPtySession(cmd *exec.Cmd, winCh <-chan ssh.Window, logC
 	return tty, tty, nil
 }
 
-// Sets PTY window size for terminal
-func setWinsize(f *os.File, w, h int) syscall.Errno {
-	_, _, errNo := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(syscall.TIOCSWINSZ),
-		uintptr(unsafe.Pointer(&struct{ h, w, x, y uint16 }{uint16(h), uint16(w), 0, 0})))
-	return errNo
-}
-
-func stringToUint32(str string) (uint32, error) {
-	uid, err := strconv.ParseUint(str, 10, 32)
-	return uint32(uid), err
-
-}
-
 func (s *SSHServer) logAuditEvent(writer io.WriteCloser, session ssh.Session, sessionID string, eventType string) {
 	username := "unknown"
 	sshUser, ok := session.Context().Value("sshUser").(*User)
@@ -321,4 +325,20 @@ func (s *SSHServer) logAuditEvent(writer io.WriteCloser, session ssh.Session, se
 	}
 	line := string(data) + "\n"
 	writer.Write([]byte(line))
+}
+
+// Sets PTY window size for terminal
+func setWinsize(f *os.File, w, h int) syscall.Errno {
+	_, _, errNo := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(syscall.TIOCSWINSZ),
+		uintptr(unsafe.Pointer(&struct{ h, w, x, y uint16 }{uint16(h), uint16(w), 0, 0})))
+	return errNo
+}
+
+func stringToUint32(str string) (uint32, error) {
+	uid, err := strconv.ParseUint(str, 10, 32)
+	return uint32(uid), err
+}
+
+func allowForward(_ ssh.Context, _ string, _ uint32) bool {
+	return true
 }

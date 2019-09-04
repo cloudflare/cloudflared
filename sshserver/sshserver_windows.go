@@ -13,7 +13,7 @@ import (
 
 type SSHServer struct{}
 
-func New(_ sshlog.Manager, _ *logrus.Logger, _, _ string, _ chan struct{}, _, _ time.Duration) (*SSHServer, error) {
+func New(_ sshlog.Manager, _ *logrus.Logger, _, _ string, _ chan struct{}, _, _ time.Duration, _ bool) (*SSHServer, error) {
 	return nil, errors.New("cloudflared ssh server is not supported on windows")
 }
 
