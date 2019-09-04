@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	baseStoreURL  = "https://login.cloudflarewarp.com/"
+	baseStoreURL  = "https://login.argotunnel.com/"
 	clientTimeout = time.Second * 60
 )
 
