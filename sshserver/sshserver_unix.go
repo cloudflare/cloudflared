@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -24,14 +25,13 @@ import (
 
 type SSHServer struct {
 	ssh.Server
-	logger      *logrus.Logger
-	shutdownC   chan struct{}
-	caCert      ssh.PublicKey
-	getUserFunc func(string) (*User, error)
-	logManager  sshlog.Manager
+	logger     *logrus.Logger
+	shutdownC  chan struct{}
+	caCert     ssh.PublicKey
+	logManager sshlog.Manager
 }
 
-func New(logManager sshlog.Manager, logger *logrus.Logger, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
+func New(logManager sshlog.Manager, logger *logrus.Logger, version, address string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHServer, error) {
 	currentUser, err := user.Current()
 	if err != nil {
 		return nil, err
@@ -41,11 +41,15 @@ func New(logManager sshlog.Manager, logger *logrus.Logger, address string, shutd
 	}
 
 	sshServer := SSHServer{
-		Server:      ssh.Server{Addr: address, MaxTimeout: maxTimeout, IdleTimeout: idleTimeout},
-		logger:      logger,
-		shutdownC:   shutdownC,
-		getUserFunc: lookupUser,
-		logManager:  logManager,
+		Server: ssh.Server{
+			Addr:        address,
+			MaxTimeout:  maxTimeout,
+			IdleTimeout: idleTimeout,
+			Version:     fmt.Sprintf("SSH-2.0-Cloudflare-Access_%s_%s", version, runtime.GOOS),
+		},
+		logger:     logger,
+		shutdownC:  shutdownC,
+		logManager: logManager,
 	}
 
 	if err := sshServer.configureHostKeys(); err != nil {

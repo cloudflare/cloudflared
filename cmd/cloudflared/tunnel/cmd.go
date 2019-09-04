@@ -387,7 +387,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		}
 
 		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logManager, logger, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+		server, err := sshserver.New(logManager, logger, version, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			logger.WithError(err).Error("Cannot create new SSH Server")
 			return errors.Wrap(err, "Cannot create new SSH Server")
@@ -398,6 +398,8 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
 				logger.WithError(err).Error("SSH server error")
 			}
+			// TODO: remove when declarative tunnels are implemented.
+			close(shutdownC)
 		}()
 		c.Set("url", "ssh://"+sshServerAddress)
 	}
@@ -966,7 +968,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    sshPortFlag,
 			Usage:   "Localhost port that cloudflared SSH server will run on",
-			Value:   "22",
+			Value:   "2222",
 			EnvVars: []string{"LOCAL_SSH_PORT"},
 			Hidden:  true,
 		}),

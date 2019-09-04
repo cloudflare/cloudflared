@@ -27,7 +27,15 @@ func (s *SSHServer) configureAuthentication() {
 	s.PublicKeyHandler = s.authenticationHandler
 }
 
+// authenticationHandler is a callback that returns true if the user attempting to connect is authenticated.
 func (s *SSHServer) authenticationHandler(ctx ssh.Context, key ssh.PublicKey) bool {
+	sshUser, err := lookupUser(ctx.User())
+	if err != nil {
+		s.logger.Debugf("Invalid user: %s", ctx.User())
+		return false
+	}
+	ctx.SetValue("sshUser", sshUser)
+
 	cert, ok := key.(*gossh.Certificate)
 	if !ok {
 		return s.authorizedKeyHandler(ctx, key)
@@ -36,9 +44,9 @@ func (s *SSHServer) authenticationHandler(ctx ssh.Context, key ssh.PublicKey) bo
 }
 
 func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) bool {
-	sshUser, err := s.getUserFunc(ctx.User())
-	if err != nil {
-		s.logger.Debugf("Invalid user: %s", ctx.User())
+	sshUser, ok := ctx.Value("sshUser").(*User)
+	if !ok {
+		s.logger.Error("Failed to retrieve user from context")
 		return false
 	}
 
@@ -55,7 +63,6 @@ func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) boo
 	}
 
 	for len(authorizedKeysBytes) > 0 {
-
 		// Skips invalid keys. Returns error if no valid keys remain.
 		pubKey, _, _, rest, err := ssh.ParseAuthorizedKey(authorizedKeysBytes)
 		authorizedKeysBytes = rest
@@ -65,7 +72,6 @@ func (s *SSHServer) authorizedKeyHandler(ctx ssh.Context, key ssh.PublicKey) boo
 		}
 
 		if ssh.KeysEqual(pubKey, key) {
-			ctx.SetValue("sshUser", sshUser)
 			return true
 		}
 	}
@@ -83,13 +89,6 @@ func (s *SSHServer) shortLivedCertHandler(ctx ssh.Context, cert *gossh.Certifica
 	if err := checker.CheckCert(ctx.User(), cert); err != nil {
 		s.logger.Debug(err)
 		return false
-	} else {
-		sshUser, err := s.getUserFunc(ctx.User())
-		if err != nil {
-			s.logger.Debugf("Invalid user: %s", ctx.User())
-			return false
-		}
-		ctx.SetValue("sshUser", sshUser)
 	}
 	return true
 }
