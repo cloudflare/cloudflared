@@ -45,16 +45,11 @@ func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
 			// Otherwise the host header will be based on the origin URL
 			h1.Host = header.Value
 		case ":path":
-			u, err := url.Parse(header.Value)
-			if err != nil {
-				return fmt.Errorf("unparseable path")
-			}
-			resolved := h1.URL.ResolveReference(u)
-			// prevent escaping base URL
-			if !strings.HasPrefix(resolved.String(), h1.URL.String()) {
-				return fmt.Errorf("invalid path")
-			}
-			h1.URL = resolved
+			// We can't just set `URL.Path`, because there's no way to ask the library to *not* escape it,
+			// causing https://github.com/cloudflare/cloudflared/issues/124.
+			// The only way to bypass the URL escape seems to currently be `URL.Opaque`.
+			// See https://github.com/golang/go/issues/5777
+			h1.URL.Opaque = fmt.Sprintf("//%v%v", h1.URL.Host, header.Value)
 		case "content-length":
 			contentLength, err := strconv.ParseInt(header.Value, 10, 64)
 			if err != nil {
