@@ -57,10 +57,17 @@ struct CapnpConnectParameters {
     tags @3 :List(Tag);
     # release version of cloudflared
     cloudflaredVersion @4 :Text;
-    # friendly name for this cloudflared instance
-    name @5 :Text;
-    # group whose behavior this cloudflared instance will adopt
-    group @6 :Text;
+    # identifier for this cloudflared instance
+    scope @5 :Scope;
+}
+
+struct Scope {
+    value :union {
+        # Standalone instance
+        systemName @0 :Text;
+        # Associated with a group of identical cloudflared instances
+        group @1 :Text;
+    }
 }
 
 struct ConnectResult {

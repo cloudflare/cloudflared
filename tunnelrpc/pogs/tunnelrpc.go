@@ -2,6 +2,7 @@ package pogs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -128,14 +129,82 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 	return p, err
 }
 
+//go-sumtype:decl Scope
+type Scope interface {
+	Value() string
+	PostgresType() string
+	GraphQLType() string
+	isScope()
+}
+
+type SystemName struct {
+	systemName string
+}
+
+func NewSystemName(systemName string) *SystemName {
+	return &SystemName{systemName: systemName}
+}
+
+func (s *SystemName) Value() string        { return s.systemName }
+func (_ *SystemName) PostgresType() string { return "system_name" }
+func (_ *SystemName) GraphQLType() string  { return "SYSTEM_NAME" }
+
+func (_ *SystemName) isScope() {}
+
+type Group struct {
+	group string
+}
+
+func NewGroup(group string) *Group {
+	return &Group{group: group}
+}
+
+func (g *Group) Value() string        { return g.group }
+func (_ *Group) PostgresType() string { return "group" }
+func (_ *Group) GraphQLType() string  { return "GROUP" }
+
+func (_ *Group) isScope() {}
+
+func MarshalScope(s tunnelrpc.Scope, p Scope) error {
+	ss := s.Value()
+	switch scope := p.(type) {
+	case *SystemName:
+		ss.SetSystemName(scope.systemName)
+	case *Group:
+		ss.SetGroup(scope.group)
+	default:
+		return fmt.Errorf("unexpected Scope value: %v", p)
+	}
+	return nil
+}
+
+func UnmarshalScope(s tunnelrpc.Scope) (Scope, error) {
+	ss := s.Value()
+	switch ss.Which() {
+	case tunnelrpc.Scope_value_Which_systemName:
+		systemName, err := ss.SystemName()
+		if err != nil {
+			return nil, err
+		}
+		return NewSystemName(systemName), nil
+	case tunnelrpc.Scope_value_Which_group:
+		group, err := ss.Group()
+		if err != nil {
+			return nil, err
+		}
+		return NewGroup(group), nil
+	default:
+		return nil, fmt.Errorf("unexpected Scope tag: %v", ss.Which())
+	}
+}
+
 type ConnectParameters struct {
 	OriginCert          []byte
 	CloudflaredID       uuid.UUID
 	NumPreviousAttempts uint8
 	Tags                []Tag
 	CloudflaredVersion  string
-	Name                string
-	Group               string
+	Scope               Scope
 }
 
 func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectParameters) error {
@@ -168,13 +237,11 @@ func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectPara
 	if err := s.SetCloudflaredVersion(p.CloudflaredVersion); err != nil {
 		return err
 	}
-	if err := s.SetName(p.Name); err != nil {
+	scope, err := s.NewScope()
+	if err != nil {
 		return err
 	}
-	if err := s.SetGroup(p.Group); err != nil {
-		return err
-	}
-	return nil
+	return MarshalScope(scope, p.Scope)
 }
 
 func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectParameters, error) {
@@ -215,12 +282,11 @@ func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectPar
 		return nil, err
 	}
 
-	name, err := s.Name()
+	scopeCapnp, err := s.Scope()
 	if err != nil {
 		return nil, err
 	}
-
-	group, err := s.Group()
+	scope, err := UnmarshalScope(scopeCapnp)
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +297,7 @@ func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectPar
 		NumPreviousAttempts: s.NumPreviousAttempts(),
 		Tags:                tags,
 		CloudflaredVersion:  cloudflaredVersion,
-		Name:                name,
-		Group:               group,
+		Scope:               scope,
 	}, nil
 }
 

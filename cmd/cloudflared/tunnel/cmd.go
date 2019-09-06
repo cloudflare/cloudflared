@@ -506,19 +506,21 @@ func startDeclarativeTunnel(ctx context.Context,
 		return err
 	}
 
-	name := c.String("name")
-	group := c.String("group")
-	if group == "" {
-		err := fmt.Errorf("--group must be specified")
-		logger.WithError(err).Error("unable to parse group name")
+	var scope pogs.Scope
+	if c.IsSet("group") == c.IsSet("system-name") {
+		err = fmt.Errorf("exactly one of --group or --system-name must be specified")
+		logger.WithError(err).Error("unable to determine scope")
 		return err
+	} else if c.IsSet("group") {
+		scope = pogs.NewGroup(c.String("group"))
+	} else {
+		scope = pogs.NewSystemName(c.String("system-name"))
 	}
 
 	cloudflaredConfig := &connection.CloudflaredConfig{
 		BuildInfo:     buildInfo,
 		CloudflaredID: cloudflaredID,
-		Name:          name,
-		Group:         group,
+		Scope:         scope,
 		Tags:          tags,
 	}
 
@@ -942,15 +944,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "name",
-			Usage:   "Friendly name for this cloudflared instance.",
-			EnvVars: []string{"TUNNEL_DECLARATIVE_NAME"},
+			Name:    "system-name",
+			Usage:   "Unique identifier for this cloudflared instance. It can be configured individually in the Declarative Tunnel UI. Mutually exclusive with `--group`.",
+			EnvVars: []string{"TUNNEL_SYSTEM_NAME"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "group",
-			Usage:   "The group whose behavior this cloudflared instance will adopt. This behavior can be configured by editing the group's 'intent' in the Declarative Tunnel UI.",
-			EnvVars: []string{"TUNNEL_DECLARATIVE_GROUP"},
+			Usage:   "Name of a group of cloudflared instances, of which this instance should be an identical copy. They can be configured collectively in the Declarative Tunnel UI. Mutually exclusive with `--system-name`.",
+			EnvVars: []string{"TUNNEL_GROUP"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
