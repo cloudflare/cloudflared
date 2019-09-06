@@ -1,3 +1,12 @@
+2019.9.0
+- 2019-09-05 TUN-2279: Revert path encoding fix
+- 2019-08-30 AUTH-2021 - check error for failing tests
+- 2019-08-29 AUTH-2030: Support both authorized_key and short lived cert authentication simultaniously without specifiying at start time
+- 2019-08-29 AUTH-2026: Adds support for non-pty sessions and inline command exec
+- 2019-08-26 AUTH-1943: Adds session logging
+- 2019-08-26 TUN-2162: Decomplect OpenStream to allow finer-grained timeouts
+- 2019-08-29 TUN-2260: add name/group to CapnpConnectParameters, remove Scope
+
 2019.8.4
 - 2019-08-30 Fix #111: Add support for specifying a specific HTTP Host: header on the origin. (#114)
 - 2019-08-22 TUN-2165: Add ClientConfig to tunnelrpc.ConnectResult
