@@ -16,7 +16,7 @@ import (
 const defaultScheme = "http"
 
 var (
-	supportedProtocols = []string{"http", "https", "rdp"}
+	supportedProtocols = []string{"http", "https", "rdp", "tcp"}
 	validationTimeout = time.Duration(30 * time.Second)
 )
 

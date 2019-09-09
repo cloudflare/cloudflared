@@ -622,8 +622,17 @@ func hostnameFromURI(uri string) string {
 		return addPortIfMissing(u, 22)
 	case "rdp":
 		return addPortIfMissing(u, 3389)
+	case "tcp":
+		return errorIfPortMissing(u)
 	}
 	return ""
+}
+
+func errorIfPortMissing(uri *url.URL) string {
+	if uri.Port() == "" {
+		return "Port must be speficied for"
+	}
+	return uri.Host
 }
 
 func addPortIfMissing(uri *url.URL, port int) string {

@@ -115,7 +115,7 @@ func Commands() []*cli.Command {
 				{
 					Name:        "ssh",
 					Action:      ssh,
-					Aliases:     []string{"rdp"},
+					Aliases:     []string{"rdp", "tcp"},
 					Usage:       "",
 					ArgsUsage:   "",
 					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
