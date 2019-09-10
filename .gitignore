@@ -9,5 +9,7 @@ guide/public
 \#*\#
 cscope.*
 cloudflared
+cloudflared.exe
 !cmd/cloudflared/
 .DS_Store
+*-session.log

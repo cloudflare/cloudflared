@@ -29,7 +29,7 @@ func (m *emptyManager) NewSessionLogger(name string, logger *logrus.Logger) (io.
 // emptyWriteCloser
 
 func (w *emptyWriteCloser) Write(p []byte) (n int, err error) {
-	return 0, nil
+	return len(p), nil
 }
 
 func (w *emptyWriteCloser) Close() error {

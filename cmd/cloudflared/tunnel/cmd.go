@@ -366,8 +366,9 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	if c.IsSet("ssh-server") {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-			logger.Errorf("--ssh-server is not supported on %s", runtime.GOOS)
-			return errors.New(fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS))
+			msg := fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS)
+			logger.Error(msg)
+			return errors.New(msg)
 
 		}
 
@@ -378,11 +379,17 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			uploader, err := awsuploader.NewFileUploader(c.String(bucketNameFlag), c.String(regionNameFlag),
 				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
 			if err != nil {
-				logger.WithError(err).Error("Cannot create uploader for SSH Server")
-				return errors.Wrap(err, "Cannot create uploader for SSH Server")
+				msg := "Cannot create uploader for SSH Server"
+				logger.WithError(err).Error(msg)
+				return errors.Wrap(err, msg)
 			}
 
-			os.Mkdir(sshLogFileDirectory, 0600)
+			if err := os.Mkdir(sshLogFileDirectory, 0600); err != nil {
+				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
+				logger.WithError(err).Errorf(msg)
+				return errors.Wrap(err, msg)
+			}
+
 			logManager = sshlog.New(sshLogFileDirectory)
 
 			uploadManager := awsuploader.NewDirectoryUploadManager(logger, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
@@ -392,8 +399,9 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
 		server, err := sshserver.New(logManager, logger, version, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag), c.Bool(enablePortForwardingFlag))
 		if err != nil {
-			logger.WithError(err).Error("Cannot create new SSH Server")
-			return errors.Wrap(err, "Cannot create new SSH Server")
+			msg := "Cannot create new SSH Server"
+			logger.WithError(err).Error(msg)
+			return errors.Wrap(err, msg)
 		}
 		wg.Add(1)
 		go func() {
