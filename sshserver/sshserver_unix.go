@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -85,6 +86,13 @@ func New(logManager sshlog.Manager, logger *logrus.Logger, version, address stri
 		logger:     logger,
 		shutdownC:  shutdownC,
 		logManager: logManager,
+	}
+
+	// AUTH-2050: This is a temporary workaround of a timing issue in the tunnel muxer to allow further testing.
+	// TODO: Remove this 
+	sshServer.ConnCallback = func(conn net.Conn) net.Conn {
+		time.Sleep(10 * time.Millisecond)
+		return conn
 	}
 
 	if enablePortForwarding {
