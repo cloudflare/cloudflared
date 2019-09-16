@@ -136,7 +136,7 @@ struct EdgeConnectionConfig {
 
 struct ReverseProxyConfig {
     tunnelHostname @0 :Text;
-    origin :union {
+    originConfig :union {
         http @1 :HTTPOriginConfig;
         websocket @2 :WebSocketOriginConfig;
         helloWorld @3 :HelloWorldOriginConfig;

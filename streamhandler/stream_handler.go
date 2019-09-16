@@ -93,7 +93,7 @@ func (s *StreamHandler) UpdateConfig(newConfig []*pogs.ReverseProxyConfig) (fail
 	toAdd := s.tunnelHostnameMapper.ToAdd(newConfig)
 	for _, tunnelConfig := range toAdd {
 		tunnelHostname := tunnelConfig.TunnelHostname
-		originSerice, err := tunnelConfig.OriginConfigJSONHandler.OriginConfig.Service()
+		originSerice, err := tunnelConfig.OriginConfig.Service()
 		if err != nil {
 			s.logger.WithField("tunnelHostname", tunnelHostname).WithError(err).Error("Invalid origin service config")
 			failedConfigs = append(failedConfigs, &pogs.FailedConfig{

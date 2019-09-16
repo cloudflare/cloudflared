@@ -61,13 +61,13 @@ func ClientConfigTestCases() []*ClientConfig {
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfig()}
+				c.OriginConfig = sampleHTTPOriginConfig()
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfigUnixPath()}
+				c.OriginConfig = sampleHTTPOriginConfigUnixPath()
 			}),
 			sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-				c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleWebSocketOriginConfig()}
+				c.OriginConfig = sampleWebSocketOriginConfig()
 			}),
 		}
 	}
@@ -83,21 +83,14 @@ func ClientConfigTestCases() []*ClientConfig {
 }
 
 func TestClientConfig(t *testing.T) {
-	for i, testCase := range ClientConfigTestCases() {
-		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
-		capnpEntity, err := tunnelrpc.NewClientConfig(seg)
-		if !assert.NoError(t, err) {
-			t.Fatal("Couldn't initialize a new message")
-		}
-		err = MarshalClientConfig(capnpEntity, testCase)
-		if !assert.NoError(t, err, "testCase index %v failed to marshal", i) {
-			continue
-		}
-		result, err := UnmarshalClientConfig(capnpEntity)
-		if !assert.NoError(t, err, "testCase index %v failed to unmarshal", i) {
-			continue
-		}
-		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
+	for _, testCase := range ClientConfigTestCases() {
+		b, err := testCase.MarshalBytes()
+		assert.NoError(t, err)
+
+		clientConfig, err := UnmarshalClientConfigFromBytes(b)
+		assert.NoError(t, err)
+
+		assert.Equal(t, testCase, clientConfig)
 	}
 }
 
@@ -167,13 +160,13 @@ func TestReverseProxyConfig(t *testing.T) {
 	testCases := []*ReverseProxyConfig{
 		sampleReverseProxyConfig(),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfig()}
+			c.OriginConfig = sampleHTTPOriginConfig()
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleHTTPOriginConfigUnixPath()}
+			c.OriginConfig = sampleHTTPOriginConfigUnixPath()
 		}),
 		sampleReverseProxyConfig(func(c *ReverseProxyConfig) {
-			c.OriginConfigJSONHandler = &OriginConfigJSONHandler{sampleWebSocketOriginConfig()}
+			c.OriginConfig = sampleWebSocketOriginConfig()
 		}),
 	}
 	for i, testCase := range testCases {
@@ -323,11 +316,11 @@ func sampleDoHProxyConfig(overrides ...func(*DoHProxyConfig)) *DoHProxyConfig {
 // applies any number of overrides to it, and returns it.
 func sampleReverseProxyConfig(overrides ...func(*ReverseProxyConfig)) *ReverseProxyConfig {
 	sample := &ReverseProxyConfig{
-		TunnelHostname:          "mock-non-lb-tunnel.example.com",
-		OriginConfigJSONHandler: &OriginConfigJSONHandler{&HelloWorldOriginConfig{}},
-		Retries:                 18,
-		ConnectionTimeout:       5 * time.Second,
-		CompressionQuality:      3,
+		TunnelHostname:     "mock-non-lb-tunnel.example.com",
+		OriginConfig:       &HelloWorldOriginConfig{},
+		Retries:            18,
+		ConnectionTimeout:  5 * time.Second,
+		CompressionQuality: 3,
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {

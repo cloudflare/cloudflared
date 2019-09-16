@@ -193,20 +193,20 @@ func TestTunnelHostnameMapper_ToRemove(t *testing.T) {
 
 func sampleConfig1() *pogs.ReverseProxyConfig {
 	return &pogs.ReverseProxyConfig{
-		TunnelHostname:          "mock.example.com",
-		OriginConfigJSONHandler: &pogs.OriginConfigJSONHandler{OriginConfig: &pogs.HelloWorldOriginConfig{}},
-		Retries:                 18,
-		ConnectionTimeout:       5 * time.Second,
-		CompressionQuality:      3,
+		TunnelHostname:     "mock.example.com",
+		OriginConfig:       &pogs.HelloWorldOriginConfig{},
+		Retries:            18,
+		ConnectionTimeout:  5 * time.Second,
+		CompressionQuality: 3,
 	}
 }
 
 func sampleConfig2() *pogs.ReverseProxyConfig {
 	return &pogs.ReverseProxyConfig{
-		TunnelHostname:          "mock2.example.com",
-		OriginConfigJSONHandler: &pogs.OriginConfigJSONHandler{OriginConfig: &pogs.HelloWorldOriginConfig{}},
-		Retries:                 18,
-		ConnectionTimeout:       5 * time.Second,
-		CompressionQuality:      3,
+		TunnelHostname:     "mock2.example.com",
+		OriginConfig:       &pogs.HelloWorldOriginConfig{},
+		Retries:            18,
+		ConnectionTimeout:  5 * time.Second,
+		CompressionQuality: 3,
 	}
 }
