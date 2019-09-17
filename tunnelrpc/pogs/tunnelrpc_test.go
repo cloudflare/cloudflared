@@ -11,21 +11,21 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
-func sampleTestConnectResult() *ConnectResult {
-	return &ConnectResult{
-		Err: &ConnectError{
+func TestConnectResult(t *testing.T) {
+	testCases := []ConnectResult{
+		&ConnectError{
 			Cause:       "it broke",
 			ShouldRetry: false,
 			RetryAfter:  2 * time.Second,
 		},
-		ServerInfo:   ServerInfo{LocationName: "computer"},
-		ClientConfig: *sampleClientConfig(),
-	}
-}
-
-func TestConnectResult(t *testing.T) {
-	testCases := []*ConnectResult{
-		sampleTestConnectResult(),
+		&ConnectSuccess{
+			ServerLocationName: "SFO",
+			Config:             sampleClientConfig(),
+		},
+		&ConnectSuccess{
+			ServerLocationName: "",
+			Config:             nil,
+		},
 	}
 	for i, testCase := range testCases {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))

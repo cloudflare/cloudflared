@@ -50,7 +50,7 @@ func (c *Connection) Serve(ctx context.Context) error {
 }
 
 // Connect is used to establish connections with cloudflare's edge network
-func (c *Connection) Connect(ctx context.Context, parameters *tunnelpogs.ConnectParameters, logger *logrus.Entry) (*pogs.ConnectResult, error) {
+func (c *Connection) Connect(ctx context.Context, parameters *tunnelpogs.ConnectParameters, logger *logrus.Entry) (pogs.ConnectResult, error) {
 	openStreamCtx, cancel := context.WithTimeout(ctx, openStreamTimeout)
 	defer cancel()
 

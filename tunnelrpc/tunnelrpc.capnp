@@ -62,11 +62,10 @@ struct CapnpConnectParameters {
 }
 
 struct ConnectResult {
-    err @0 :ConnectError;
-    # Information about the server this connection is established with
-    serverInfo @1 :ServerInfo;
-    # How this cloudflared instance should be configured
-    clientConfig @2 :ClientConfig;
+    result :union {
+        err @0 :ConnectError;
+        success @1 :ConnectSuccess;
+    }
 }
 
 struct ConnectError {
@@ -74,6 +73,13 @@ struct ConnectError {
     # How long should this connection wait to retry in ns
     retryAfter @1 :Int64;
     shouldRetry @2 :Bool;
+}
+
+struct ConnectSuccess {
+    # Information about the server this connection is established with
+    serverLocationName @0 :Text;
+    # How this cloudflared instance should be configured. This can be null if there isn't an intent for this origin yet
+    clientConfig @1 :ClientConfig;
 }
 
 struct ClientConfig {
