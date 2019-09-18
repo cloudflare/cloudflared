@@ -76,6 +76,8 @@ const (
 
 	// disablePortForwarding disables both remote and local ssh port forwarding
 	enablePortForwardingFlag = "enable-port-forwarding"
+
+	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
 )
 
 var (
@@ -520,21 +522,16 @@ func startDeclarativeTunnel(ctx context.Context,
 		return err
 	}
 
-	var scope pogs.Scope
-	if c.IsSet("group") == c.IsSet("system-name") {
-		err = fmt.Errorf("exactly one of --group or --system-name must be specified")
-		logger.WithError(err).Error("unable to determine scope")
-		return err
-	} else if c.IsSet("group") {
-		scope = pogs.NewGroup(c.String("group"))
-	} else {
-		scope = pogs.NewSystemName(c.String("system-name"))
+	intentLabel := c.String("intent")
+	if intentLabel == "" {
+		logger.Error("--intent was empty")
+		return fmt.Errorf(noIntentMsg)
 	}
 
 	cloudflaredConfig := &connection.CloudflaredConfig{
 		BuildInfo:     buildInfo,
 		CloudflaredID: cloudflaredID,
-		Scope:         scope,
+		IntentLabel:   intentLabel,
 		Tags:          tags,
 	}
 
@@ -958,15 +955,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "system-name",
-			Usage:   "Unique identifier for this cloudflared instance. It can be configured individually in the Declarative Tunnel UI. Mutually exclusive with `--group`.",
-			EnvVars: []string{"TUNNEL_SYSTEM_NAME"},
-			Hidden:  true,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "group",
-			Usage:   "Name of a group of cloudflared instances, of which this instance should be an identical copy. They can be configured collectively in the Declarative Tunnel UI. Mutually exclusive with `--system-name`.",
-			EnvVars: []string{"TUNNEL_GROUP"},
+			Name:    "intent",
+			Usage:   "The label of an Intent from which `cloudflared` should gets its tunnels from. Intents can be created in the Origin Registry UI.",
+			EnvVars: []string{"TUNNEL_INTENT"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
