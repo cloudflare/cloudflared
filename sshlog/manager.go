@@ -30,5 +30,5 @@ func (m *manager) NewLogger(name string, logger *logrus.Logger) (io.WriteCloser,
 }
 
 func (m *manager) NewSessionLogger(name string, logger *logrus.Logger) (io.WriteCloser, error) {
-	return NewSessionLogger(name, logger, time.Second, defaultFileSizeLimit)
+	return NewSessionLogger(filepath.Join(m.baseDirectory, name), logger, time.Second, defaultFileSizeLimit)
 }

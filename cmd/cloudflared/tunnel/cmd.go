@@ -386,7 +386,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 				return errors.Wrap(err, msg)
 			}
 
-			if err := os.Mkdir(sshLogFileDirectory, 0600); err != nil {
+			if err := os.MkdirAll(sshLogFileDirectory, 0600); err != nil {
 				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
 				logger.WithError(err).Errorf(msg)
 				return errors.Wrap(err, msg)
