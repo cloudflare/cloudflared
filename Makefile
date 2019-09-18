@@ -39,6 +39,10 @@ container:
 test: vet
 	go test -v -race $(VERSION_FLAGS) ./...
 
+.PHONY: test-ssh-server
+test-ssh-server:
+	docker-compose -f ssh_server_tests/docker-compose.yml up
+
 .PHONY: cloudflared-deb
 cloudflared-deb: cloudflared
 	mkdir -p $(PACKAGE_DIR)

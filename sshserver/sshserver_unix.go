@@ -88,7 +88,7 @@ func New(logManager sshlog.Manager, logger *logrus.Logger, version, address stri
 	}
 
 	// AUTH-2050: This is a temporary workaround of a timing issue in the tunnel muxer to allow further testing.
-	// TODO: Remove this 
+	// TODO: Remove this
 	sshServer.ConnCallback = func(conn net.Conn) net.Conn {
 		time.Sleep(10 * time.Millisecond)
 		return conn
@@ -216,7 +216,16 @@ func (s *SSHServer) connectionHandler(session ssh.Session) {
 
 	// Write stdin to shell
 	go func() {
-		defer shellInput.Close()
+
+		/*
+			Only close shell stdin for non-pty sessions because they have distinct stdin, stdout, and stderr.
+			This is done to prevent commands like SCP from hanging after all data has been sent.
+			PTY sessions share one file for all three streams and the shell process closes it.
+			Closing it here also closes shellOutput and causes an error on copy().
+		*/
+		if !isPty {
+			defer shellInput.Close()
+		}
 		if _, err := io.Copy(shellInput, session); err != nil {
 			s.logger.WithError(err).Error("Failed to write incoming command to pty")
 		}
