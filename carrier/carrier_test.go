@@ -102,14 +102,14 @@ func TestIsAccessResponse(t *testing.T) {
 		ExpectedOut bool
 	}{
 		{"nil response", nil, false},
-		{"redirect with no location", &http.Response{StatusCode: http.StatusPermanentRedirect}, false},
+		{"redirect with no location", &http.Response{StatusCode: http.StatusFound}, false},
 		{"200 ok", &http.Response{StatusCode: http.StatusOK}, false},
-		{"redirect with location", &http.Response{StatusCode: http.StatusPermanentRedirect, Header: validLocationHeader}, true},
-		{"redirect with invalid location", &http.Response{StatusCode: http.StatusPermanentRedirect, Header: invalidLocationHeader}, false},
+		{"redirect with location", &http.Response{StatusCode: http.StatusFound, Header: validLocationHeader}, true},
+		{"redirect with invalid location", &http.Response{StatusCode: http.StatusFound, Header: invalidLocationHeader}, false},
 	}
 
 	for i, tc := range testCases {
-		if isAccessResponse(tc.In) != tc.ExpectedOut {
+		if IsAccessResponse(tc.In) != tc.ExpectedOut {
 			t.Fatalf("Failed case %d -- %s", i, tc.Description)
 		}
 	}

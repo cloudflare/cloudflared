@@ -1,17 +1,20 @@
 package access
 
 import (
-	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"text/template"
+	"time"
 
+	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/validation"
+	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
 
 	"github.com/cloudflare/cloudflared/log"
@@ -188,9 +191,14 @@ func login(c *cli.Context) error {
 		logger.Errorf("Please provide the url of the Access application\n")
 		return err
 	}
-	token, err := token.FetchToken(appURL)
-	if err != nil {
-		logger.Errorf("Failed to fetch token: %s\n", err)
+	if err := verifyTokenAtEdge(appURL, c); err != nil {
+		logger.WithError(err).Error("Could not verify token")
+		return err
+	}
+
+	token, err := token.GetTokenIfExists(appURL)
+	if err != nil || token == "" {
+		fmt.Fprintln(os.Stderr, "Unable to find token for provided application.")
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", string(token))
@@ -371,4 +379,60 @@ func isFileThere(candidate string) bool {
 		return false
 	}
 	return true
+}
+
+// verifyTokenAtEdge checks for a token on disk, or generates a new one.
+// Then makes a request to to the origin with the token to ensure it is valid.
+// Returns nil if token is valid.
+func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context) error {
+	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
+	if c.IsSet(sshTokenIDFlag) {
+		headers.Add("CF-Access-Client-Id", c.String(sshTokenIDFlag))
+	}
+	if c.IsSet(sshTokenSecretFlag) {
+		headers.Add("CF-Access-Client-Secret", c.String(sshTokenSecretFlag))
+	}
+	options := &carrier.StartOptions{OriginURL: appUrl.String(), Headers: headers}
+
+	if valid, err := isTokenValid(options); err != nil {
+		return err
+	} else if valid {
+		return nil
+	}
+
+	if err := token.RemoveTokenIfExists(appUrl); err != nil {
+		return err
+	}
+
+	if valid, err := isTokenValid(options); err != nil {
+		return err
+	} else if !valid {
+		return errors.New("failed to verify token")
+	}
+
+	return nil
+}
+
+// isTokenValid makes a request to the origin and returns true if the response was not a 302.
+func isTokenValid(options *carrier.StartOptions) (bool, error) {
+	req, err := carrier.BuildAccessRequest(options)
+	if err != nil {
+		return false, errors.Wrap(err, "Could not create access request")
+	}
+
+	// Do not follow redirects
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Timeout: time.Second * 5,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	// A redirect to login means the token was invalid.
+	return !carrier.IsAccessResponse(resp), nil
 }
