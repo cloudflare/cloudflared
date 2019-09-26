@@ -1,3 +1,6 @@
+2019.9.2
+- 2019-09-26 TUN-2355: Roll back TUN-2276
+
 2019.9.1
 - 2019-09-23 TUN-2334: remove tlsConfig.ServerName special case
 - 2019-09-23 AUTH-2077: Quotes open browser command in windows
