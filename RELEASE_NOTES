@@ -1,3 +1,22 @@
+2019.9.1
+- 2019-09-23 TUN-2334: remove tlsConfig.ServerName special case
+- 2019-09-23 AUTH-2077: Quotes open browser command in windows
+- 2019-09-11 AUTH-2050: Adds time.sleep to temporarily avoid hitting tunnel muxer dealock issue
+- 2019-09-10 AUTH-2056: Writes stderr to its own stream for non-pty connections
+- 2019-09-16 TUN-2307: Capnp is the only serialization format used in tunnelpogs
+- 2019-09-18 TUN-2315: Replace Scope with IntentLabel
+- 2019-09-17 TUN-2309: Split ConnectResult into ConnectError and ConnectSuccess, each implementing its own capnp serialization logic
+- 2019-09-18 AUTH-2052: Adds tests for SSH server
+- 2019-09-18 AUTH-2067: Log commands correctly
+- 2019-09-19 AUTH-2055: Verifies token at edge on access login
+- 2019-09-04 TUN-2201: change SRV records used by cloudflared
+- 2019-09-06 TUN-2280: Revert "TUN-2260: add name/group to CapnpConnectParameters, remove Scope"
+- 2019-09-03 AUTH-1943 hooked up uploader to logger, added timestamp to session logs, add tests
+- 2019-09-04 AUTH-2036: Refactor user retrieval, shutdown after ssh server stops, add custom version string
+- 2019-09-06 AUTH-1942 added event log to ssh server
+- 2019-09-04 AUTH-2037: Adds support for ssh port forwarding
+- 2019-09-05 TUN-2276: Path encoding broken
+
 2019.9.0
 - 2019-09-05 TUN-2279: Revert path encoding fix
 - 2019-08-30 AUTH-2021 - check error for failing tests
