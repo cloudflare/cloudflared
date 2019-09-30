@@ -95,9 +95,5 @@
   version = "0.2.2"
 
 [[constraint]]
-  name = "github.com/creack/pty"
-  version = "1.1.7"
-
-[[constraint]]
   name = "github.com/aws/aws-sdk-go"
   version = "1.23.9"

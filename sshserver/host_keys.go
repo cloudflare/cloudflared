@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	rsaFilename   = "ssh_host_rsa_key"
-	ecdsaFilename = "ssh_host_ecdsa_key"
+	systemConfigPath = "/usr/local/etc/cloudflared/"
+	rsaFilename      = "ssh_host_rsa_key"
+	ecdsaFilename    = "ssh_host_ecdsa_key"
 )
 
-func (s *SSHServer) configureHostKeys() error {
+func (s *SSHProxy) configureHostKeys() error {
 	if _, err := os.Stat(systemConfigPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(systemConfigPath, 0755); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("Error creating %s directory", systemConfigPath))
@@ -41,7 +42,7 @@ func (s *SSHServer) configureHostKeys() error {
 	return nil
 }
 
-func (s *SSHServer) configureHostKey(keyFunc func() (string, error)) error {
+func (s *SSHProxy) configureHostKey(keyFunc func() (string, error)) error {
 	path, err := keyFunc()
 	if err != nil {
 		return err
@@ -53,7 +54,7 @@ func (s *SSHServer) configureHostKey(keyFunc func() (string, error)) error {
 	return nil
 }
 
-func (s *SSHServer) ensureRSAKeyExists() (string, error) {
+func (s *SSHProxy) ensureRSAKeyExists() (string, error) {
 	keyPath := filepath.Join(systemConfigPath, rsaFilename)
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -75,7 +76,7 @@ func (s *SSHServer) ensureRSAKeyExists() (string, error) {
 	return keyPath, nil
 }
 
-func (s *SSHServer) ensureECDSAKeyExists() (string, error) {
+func (s *SSHProxy) ensureECDSAKeyExists() (string, error) {
 	keyPath := filepath.Join(systemConfigPath, ecdsaFilename)
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
