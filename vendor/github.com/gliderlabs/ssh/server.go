@@ -130,6 +130,7 @@ func (srv *Server) config(ctx Context) *gossh.ServerConfig {
 	}
 	if srv.KeyboardInteractiveHandler != nil {
 		config.KeyboardInteractiveCallback = func(conn gossh.ConnMetadata, challenger gossh.KeyboardInteractiveChallenge) (*gossh.Permissions, error) {
+			applyConnMetadata(ctx, conn)
 			if ok := srv.KeyboardInteractiveHandler(ctx, challenger); !ok {
 				return ctx.Permissions().Permissions, fmt.Errorf("permission denied")
 			}
@@ -227,20 +228,20 @@ func (srv *Server) Serve(l net.Listener) error {
 			}
 			return e
 		}
-		go srv.handleConn(conn)
+		go srv.HandleConn(conn)
 	}
 }
 
-func (srv *Server) handleConn(newConn net.Conn) {
+func (srv *Server) HandleConn(newConn net.Conn) {
+	ctx, cancel := newContext(srv)
 	if srv.ConnCallback != nil {
-		cbConn := srv.ConnCallback(newConn)
+		cbConn := srv.ConnCallback(ctx, newConn)
 		if cbConn == nil {
 			newConn.Close()
 			return
 		}
 		newConn = cbConn
 	}
-	ctx, cancel := newContext(srv)
 	conn := &serverConn{
 		Conn:          newConn,
 		idleTimeout:   srv.IdleTimeout,

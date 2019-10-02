@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -153,10 +154,32 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote strin
 			done <- struct{}{}
 			conn.Close()
 		}()
+
+		if destination := r.Header.Get("CF-Access-SSH-Destination"); destination != "" {
+			if err := sendSSHDestination(stream, destination); err != nil {
+				logger.WithError(err).Error("Failed to send SSH destination")
+			}
+		}
+
 		Stream(&Conn{conn}, stream)
 	})
 
 	return httpServer.Serve(listener)
+}
+
+// sendSSHDestination sends the final SSH destination address to the cloudflared SSH proxy
+// The destination is preceded by its length
+func sendSSHDestination(stream net.Conn, destination string) error {
+	sizeBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(sizeBytes, uint32(len(destination)))
+	if _, err := stream.Write(sizeBytes); err != nil {
+		return err
+	}
+
+	if _, err := stream.Write([]byte(destination)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // the gorilla websocket library sets its own Upgrade, Connection, Sec-WebSocket-Key,

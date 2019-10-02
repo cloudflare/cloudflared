@@ -24,6 +24,7 @@ import (
 
 const (
 	sshHostnameFlag    = "hostname"
+	sshDestinationFlag = "destination"
 	sshURLFlag         = "url"
 	sshHeaderFlag      = "header"
 	sshTokenIDFlag     = "service-token-id"
@@ -126,6 +127,10 @@ func Commands() []*cli.Command {
 						&cli.StringFlag{
 							Name:  sshHostnameFlag,
 							Usage: "specify the hostname of your application.",
+						},
+						&cli.StringFlag{
+							Name:  sshDestinationFlag,
+							Usage: "specify the destination address of your SSH server.",
 						},
 						&cli.StringFlag{
 							Name:  sshURLFlag,

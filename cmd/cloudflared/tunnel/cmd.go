@@ -45,7 +45,7 @@ import (
 const (
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
 
-	sshLogFileDirectory = "/var/log/cloudflared/"
+	sshLogFileDirectory = "/usr/local/var/log/cloudflared/"
 
 	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
 	sshPortFlag = "local-ssh-port"
@@ -383,7 +383,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 				return errors.Wrap(err, msg)
 			}
 
-			if err := os.MkdirAll(sshLogFileDirectory, 0600); err != nil {
+			if err := os.MkdirAll(sshLogFileDirectory, 0700); err != nil {
 				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
 				logger.WithError(err).Errorf(msg)
 				return errors.Wrap(err, msg)

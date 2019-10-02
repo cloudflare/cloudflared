@@ -87,12 +87,8 @@
   version = "=1.1.1"
 
 [[constraint]]
-  name = "github.com/mitchellh/mapstructure"
-  version = "1.1.2"
-
-[[constraint]]
   name = "github.com/gliderlabs/ssh"
-  version = "0.2.2"
+  revision = "63518b5243e0fe306cc35cb382f459de123e550e"
 
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
