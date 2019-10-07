@@ -34,7 +34,7 @@ func NewUpstreamHTTPS(endpoint string) (Upstream, error) {
 	}
 
 	// Update TLS and HTTP client configuration
-	tls := &tls.Config{ServerName: u.Hostname()}
+	tls := &tls.Config{ServerName: u.Hostname() MinVersion: tls.VersionTLS12}
 	transport := &http.Transport{
 		TLSClientConfig:    tls,
 		DisableCompression: true,
