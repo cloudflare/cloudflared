@@ -395,8 +395,8 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			uploadManager.Start()
 		}
 
-		sshServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logManager, logger, version, sshServerAddress, shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+		localServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
+		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			msg := "Cannot create new SSH Server"
 			logger.WithError(err).Error(msg)
@@ -411,7 +411,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			// TODO: remove when declarative tunnels are implemented.
 			close(shutdownC)
 		}()
-		c.Set("url", "ssh://"+sshServerAddress)
+		c.Set("url", "ssh://"+localServerAddress)
 	}
 
 	if host := hostnameFromURI(c.String("url")); host != "" {

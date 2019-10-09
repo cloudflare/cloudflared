@@ -6,12 +6,14 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/cloudflare/cloudflared/sshserver"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 )
@@ -155,9 +157,11 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote strin
 			conn.Close()
 		}()
 
+		token := r.Header.Get("cf-access-token")
 		if destination := r.Header.Get("CF-Access-SSH-Destination"); destination != "" {
-			if err := sendSSHDestination(stream, destination); err != nil {
-				logger.WithError(err).Error("Failed to send SSH destination")
+			if err := sendSSHPreamble(stream, destination, token); err != nil {
+				logger.WithError(err).Error("Failed to send SSH preamble")
+				return
 			}
 		}
 
@@ -167,16 +171,22 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote strin
 	return httpServer.Serve(listener)
 }
 
-// sendSSHDestination sends the final SSH destination address to the cloudflared SSH proxy
+// sendSSHPreamble sends the final SSH destination address to the cloudflared SSH proxy
 // The destination is preceded by its length
-func sendSSHDestination(stream net.Conn, destination string) error {
-	sizeBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(sizeBytes, uint32(len(destination)))
+func sendSSHPreamble(stream net.Conn, destination, token string) error {
+	preamble := &sshserver.SSHPreamble{Destination: destination, JWT: token}
+	payload, err := json.Marshal(preamble)
+	if err != nil {
+		return err
+	}
+
+	sizeBytes := make([]byte, sshserver.SSHPreambleLength)
+	binary.BigEndian.PutUint32(sizeBytes, uint32(len(payload)))
 	if _, err := stream.Write(sizeBytes); err != nil {
 		return err
 	}
 
-	if _, err := stream.Write([]byte(destination)); err != nil {
+	if _, err := stream.Write(payload); err != nil {
 		return err
 	}
 	return nil
