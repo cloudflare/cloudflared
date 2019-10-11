@@ -35,10 +35,9 @@ func ssh(c *cli.Context) error {
 	}
 
 	destination := c.String(sshDestinationFlag)
-	if destination == "" {
-		return cli.ShowCommandHelp(c, "ssh")
+	if destination != "" {
+		headers.Add("CF-Access-SSH-Destination", destination)
 	}
-	headers.Add("CF-Access-SSH-Destination", destination)
 
 	options := &carrier.StartOptions{
 		OriginURL: originURL,
