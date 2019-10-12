@@ -19,7 +19,7 @@ const (
 	maxWindowSize            uint32        = (1 << 31) - 1 // 2^31-1 = 2147483647, max window size in http2 spec
 	defaultTimeout           time.Duration = 5 * time.Second
 	defaultRetries           uint64        = 5
-	defaultWriteBufferMaxLen int           = 1024 * 1024 * 512 // 500mb
+	defaultWriteBufferMaxLen int           = 1024 * 1024 // 1mb
 
 	SettingMuxerMagic http2.SettingID = 0x42db
 	MuxerMagicOrigin  uint32          = 0xa2e43c8b
