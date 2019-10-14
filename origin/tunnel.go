@@ -152,7 +152,7 @@ func ServeTunnelLoop(ctx context.Context,
 	connectedSignal *signal.Signal,
 	u uuid.UUID,
 ) error {
-	logger := config.Logger
+	connectionLogger := config.Logger.WithField("connectionID", connectionID)
 	config.Metrics.incrementHaConnections()
 	defer config.Metrics.decrementHaConnections()
 	backoff := BackoffHandler{MaxRetries: config.Retries}
@@ -165,10 +165,10 @@ func ServeTunnelLoop(ctx context.Context,
 	// Ensure the above goroutine will terminate if we return without connecting
 	defer connectedFuse.Fuse(false)
 	for {
-		err, recoverable := ServeTunnel(ctx, config, addr, connectionID, connectedFuse, &backoff, u)
+		err, recoverable := ServeTunnel(ctx, config, connectionLogger, addr, connectionID, connectedFuse, &backoff, u)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
-				logger.Infof("Retrying in %s seconds", duration)
+				connectionLogger.Infof("Retrying in %s seconds", duration)
 				backoff.Backoff(ctx)
 				continue
 			}
@@ -180,6 +180,7 @@ func ServeTunnelLoop(ctx context.Context,
 func ServeTunnel(
 	ctx context.Context,
 	config *TunnelConfig,
+	logger *log.Entry,
 	addr *net.TCPAddr,
 	connectionID uint8,
 	connectedFuse *h2mux.BooleanFuse,
@@ -199,7 +200,6 @@ func ServeTunnel(
 	}()
 
 	connectionTag := uint8ToString(connectionID)
-	logger := config.Logger.WithField("connectionID", connectionTag)
 
 	// additional tags to send other than hostname which is set in cloudflared main package
 	tags := make(map[string]string)
@@ -208,7 +208,7 @@ func ServeTunnel(
 	// Returns error from parsing the origin URL or handshake errors
 	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID)
 	if err != nil {
-		errLog := config.Logger.WithError(err)
+		errLog := logger.WithError(err)
 		switch err.(type) {
 		case dialError:
 			errLog.Error("Unable to dial edge")
@@ -224,7 +224,7 @@ func ServeTunnel(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		err := RegisterTunnel(serveCtx, handler.muxer, config, connectionID, originLocalIP, u)
+		err := RegisterTunnel(serveCtx, handler.muxer, config, logger, connectionID, originLocalIP, u)
 		if err == nil {
 			connectedFuse.Fuse(true)
 			backoff.SetGracePeriod()
@@ -302,6 +302,7 @@ func RegisterTunnel(
 	ctx context.Context,
 	muxer *h2mux.Muxer,
 	config *TunnelConfig,
+	logger *log.Entry,
 	connectionID uint8,
 	originLocalIP string,
 	uuid uuid.UUID,
@@ -333,13 +334,13 @@ func RegisterTunnel(
 		config.Hostname,
 		config.RegistrationOptions(connectionID, originLocalIP, uuid),
 	)
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, config.Logger)
+	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
 	if err != nil {
 		// RegisterTunnel RPC failure
 		return newClientRegisterTunnelError(err, config.Metrics.regFail)
 	}
 	for _, logLine := range registration.LogLines {
-		config.Logger.Info(logLine)
+		logger.Info(logLine)
 	}
 
 	if regErr := processRegisterTunnelError(registration.Err, registration.PermanentFailure, config.Metrics); regErr != nil {
@@ -348,24 +349,24 @@ func RegisterTunnel(
 
 	if registration.TunnelID != "" {
 		config.Metrics.tunnelsHA.AddTunnelID(connectionID, registration.TunnelID)
-		config.Logger.Infof("Each HA connection's tunnel IDs: %v", config.Metrics.tunnelsHA.String())
+		logger.Infof("Each HA connection's tunnel IDs: %v", config.Metrics.tunnelsHA.String())
 	}
 
 	// Print out the user's trial zone URL in a nice box (if they requested and got one)
 	if isTrialTunnel := config.Hostname == ""; isTrialTunnel {
 		if url, err := url.Parse(registration.Url); err == nil {
 			for _, line := range asciiBox(trialZoneMsg(url.String()), 2) {
-				config.Logger.Infoln(line)
+				logger.Infoln(line)
 			}
 		} else {
-			config.Logger.Errorln("Failed to connect tunnel, please try again.")
+			logger.Errorln("Failed to connect tunnel, please try again.")
 			return fmt.Errorf("empty URL in response from Cloudflare edge")
 		}
 	}
 
 	config.Metrics.userHostnamesCounts.WithLabelValues(registration.Url).Inc()
 
-	config.Logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
+	logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
 	return nil
 }
 
@@ -421,7 +422,7 @@ func LogServerInfo(
 	promise tunnelrpc.ServerInfo_Promise,
 	connectionID uint8,
 	metrics *TunnelMetrics,
-	logger *log.Logger,
+	logger *log.Entry,
 ) {
 	serverInfoMessage, err := promise.Struct()
 	if err != nil {
