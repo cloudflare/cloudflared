@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -37,6 +36,7 @@ const (
 	sshContextPreamble    = "sshPreamble"
 	sshContextSSHClient   = "sshClient"
 	SSHPreambleLength     = 2
+	defaultSSHPort        = "22"
 )
 
 type auditEvent struct {
@@ -283,16 +283,36 @@ func (s *SSHProxy) readPreamble(conn net.Conn) (*SSHPreamble, error) {
 		return nil, err
 	}
 
-	ok, err := regexp.Match(`^[^:]*:\d+$`, []byte(preamble.Destination))
+	preamble.Destination, err = canonicalizeDest(preamble.Destination)
 	if err != nil {
 		return nil, err
 	}
+	return &preamble, nil
+}
 
-	if !ok {
-		preamble.Destination += ":22"
+// canonicalizeDest adds a default port if one doesnt exist
+func canonicalizeDest(dest string) (string, error) {
+	_, _, err := net.SplitHostPort(dest)
+	// if host and port are split without error, a port exists.
+	if err != nil {
+		addrErr, ok := err.(*net.AddrError)
+		if !ok {
+			return "", err
+		}
+		// If the port is missing, append it.
+		if addrErr.Err == "missing port in address" {
+			return fmt.Sprintf("%s:%s", dest, defaultSSHPort), nil
+		}
+
+		// If there are too many colons and address is IPv6, wrap in brackets and append port. Otherwise invalid address
+		ip := net.ParseIP(dest)
+		if addrErr.Err == "too many colons in address" && ip != nil && ip.To4() == nil {
+			return fmt.Sprintf("[%s]:%s", dest, defaultSSHPort), nil
+		}
+		return "", addrErr
 	}
 
-	return &preamble, nil
+	return dest, nil
 }
 
 // dialDestination creates a new SSH client and dials the destination server
