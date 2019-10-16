@@ -407,9 +407,9 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			defer wg.Done()
 			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
 				logger.WithError(err).Error("SSH server error")
+				// TODO: remove when declarative tunnels are implemented.
+				close(shutdownC)
 			}
-			// TODO: remove when declarative tunnels are implemented.
-			close(shutdownC)
 		}()
 		c.Set("url", "ssh://"+localServerAddress)
 	}

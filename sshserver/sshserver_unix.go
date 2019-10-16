@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -36,7 +36,7 @@ const (
 	sshContextEventLogger = "eventLogger"
 	sshContextPreamble    = "sshPreamble"
 	sshContextSSHClient   = "sshClient"
-	SSHPreambleLength     = 4
+	SSHPreambleLength     = 2
 )
 
 type auditEvent struct {
@@ -271,7 +271,7 @@ func (s *SSHProxy) readPreamble(conn net.Conn) (*SSHPreamble, error) {
 	if _, err := io.ReadFull(conn, size); err != nil {
 		return nil, err
 	}
-	payloadLength := binary.BigEndian.Uint32(size)
+	payloadLength := binary.BigEndian.Uint16(size)
 	payload := make([]byte, payloadLength)
 	if _, err := io.ReadFull(conn, payload); err != nil {
 		return nil, err
@@ -283,13 +283,15 @@ func (s *SSHProxy) readPreamble(conn net.Conn) (*SSHPreamble, error) {
 		return nil, err
 	}
 
-	destUrl, err := url.Parse(preamble.Destination)
+	ok, err := regexp.Match(`^[^:]*:\d+$`, []byte(preamble.Destination))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse URL")
+		return nil, err
 	}
-	if destUrl.Port() == "" {
+
+	if !ok {
 		preamble.Destination += ":22"
 	}
+
 	return &preamble, nil
 }
 

@@ -180,8 +180,12 @@ func sendSSHPreamble(stream net.Conn, destination, token string) error {
 		return err
 	}
 
+	if uint16(len(payload)) > ^uint16(0) {
+		return errors.New("ssh preamble payload too large")
+	}
+
 	sizeBytes := make([]byte, sshserver.SSHPreambleLength)
-	binary.BigEndian.PutUint32(sizeBytes, uint32(len(payload)))
+	binary.BigEndian.PutUint16(sizeBytes, uint16(len(payload)))
 	if _, err := stream.Write(sizeBytes); err != nil {
 		return err
 	}
