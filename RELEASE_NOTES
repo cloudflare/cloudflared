@@ -1,3 +1,6 @@
+2019.10.1
+- 2019-10-17 Adds variable to fix windows build
+
 2019.10.0
 - 2019-10-11 AUTH-2105: Dont require --destination arg
 - 2019-10-14 TUN-2344: log more details: http2.Framer.ErrorDetail() if available, connectionID
