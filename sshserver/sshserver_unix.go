@@ -78,7 +78,7 @@ type SSHPreamble struct {
 }
 
 // New creates a new SSHProxy and configures its host keys and authentication by the data provided
-func New(logManager sshlog.Manager, logger *logrus.Logger, version, localAddress, hostname string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHProxy, error) {
+func New(logManager sshlog.Manager, logger *logrus.Logger, version, localAddress, hostname, hostKeyDir string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHProxy, error) {
 	sshProxy := SSHProxy{
 		hostname:   hostname,
 		logger:     logger,
@@ -98,7 +98,7 @@ func New(logManager sshlog.Manager, logger *logrus.Logger, version, localAddress
 		},
 	}
 
-	if err := sshProxy.configureHostKeys(); err != nil {
+	if err := sshProxy.configureHostKeys(hostKeyDir); err != nil {
 		return nil, err
 	}
 

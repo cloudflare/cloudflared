@@ -20,7 +20,7 @@ type SSHPreamble struct {
 	JWT         string
 }
 
-func New(_ sshlog.Manager, _ *logrus.Logger, _, _, _ string, _ chan struct{}, _, _ time.Duration) (*SSHServer, error) {
+func New(_ sshlog.Manager, _ *logrus.Logger, _, _, _, _ string, _ chan struct{}, _, _ time.Duration) (*SSHServer, error) {
 	return nil, errors.New("cloudflared ssh server is not supported on windows")
 }
 

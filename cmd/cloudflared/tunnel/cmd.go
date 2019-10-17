@@ -74,6 +74,9 @@ const (
 	// s3URLFlag is the S3 URL of SSH log uploader (e.g. don't use AWS s3 and use google storage bucket instead)
 	s3URLFlag = "s3-url-host"
 
+	// hostKeyPath is the path of the dir to save SSH host keys too
+	hostKeyPath = "host-key-path"
+
 	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
 )
 
@@ -396,7 +399,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		}
 
 		localServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			msg := "Cannot create new SSH Server"
 			logger.WithError(err).Error(msg)
@@ -1018,6 +1021,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "S3 url of where to upload SSH logs",
 			EnvVars: []string{"S3_URL"},
 			Hidden:  true,
+		}),
+		altsrc.NewPathFlag(&cli.PathFlag{
+			Name:    hostKeyPath,
+			Usage:   "Absolute path of directory to save SSH host keys in",
+			EnvVars: []string{"HOST_KEY_PATH"},
+			Hidden:  true,
+
 		}),
 	}
 }

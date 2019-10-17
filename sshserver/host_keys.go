@@ -19,47 +19,44 @@ import (
 )
 
 const (
-	systemConfigPath = "/usr/local/etc/cloudflared/"
-	rsaFilename      = "ssh_host_rsa_key"
-	ecdsaFilename    = "ssh_host_ecdsa_key"
+	rsaFilename       = "ssh_host_rsa_key"
+	ecdsaFilename     = "ssh_host_ecdsa_key"
 )
 
-func (s *SSHProxy) configureHostKeys() error {
-	if _, err := os.Stat(systemConfigPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(systemConfigPath, 0755); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("Error creating %s directory", systemConfigPath))
+var defaultHostKeyDir = filepath.Join(".cloudflared", "host_keys")
+
+func (s *SSHProxy) configureHostKeys(hostKeyDir string) error {
+	if hostKeyDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		hostKeyDir = filepath.Join(homeDir, defaultHostKeyDir)
+	}
+
+	if _, err := os.Stat(hostKeyDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(hostKeyDir, 0755); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("Error creating %s directory", hostKeyDir))
 		}
 	}
 
-	if err := s.configureHostKey(s.ensureECDSAKeyExists); err != nil {
+	if err := s.configureECDSAKey(hostKeyDir); err != nil {
 		return err
 	}
 
-	if err := s.configureHostKey(s.ensureRSAKeyExists); err != nil {
+	if err := s.configureRSAKey(hostKeyDir); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *SSHProxy) configureHostKey(keyFunc func() (string, error)) error {
-	path, err := keyFunc()
-	if err != nil {
-		return err
-	}
-
-	if err := s.SetOption(ssh.HostKeyFile(path)); err != nil {
-		return errors.Wrap(err, "Could not set SSH host key")
-	}
-	return nil
-}
-
-func (s *SSHProxy) ensureRSAKeyExists() (string, error) {
-	keyPath := filepath.Join(systemConfigPath, rsaFilename)
+func (s *SSHProxy) configureRSAKey(basePath string) error {
+	keyPath := filepath.Join(basePath, rsaFilename)
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
-			return "", errors.Wrap(err, "Error generating RSA host key")
+			return errors.Wrap(err, "Error generating RSA host key")
 		}
 
 		privateKey := &pem.Block{
@@ -68,25 +65,28 @@ func (s *SSHProxy) ensureRSAKeyExists() (string, error) {
 		}
 
 		if err = writePrivateKey(keyPath, privateKey); err != nil {
-			return "", err
+			return err
 		}
 
 		s.logger.Debug("Created new RSA SSH host key: ", keyPath)
 	}
-	return keyPath, nil
+	if err := s.SetOption(ssh.HostKeyFile(keyPath)); err != nil {
+		return errors.Wrap(err, "Could not set SSH RSA host key")
+	}
+	return nil
 }
 
-func (s *SSHProxy) ensureECDSAKeyExists() (string, error) {
-	keyPath := filepath.Join(systemConfigPath, ecdsaFilename)
+func (s *SSHProxy) configureECDSAKey(basePath string) error {
+	keyPath := filepath.Join(basePath, ecdsaFilename)
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			return "", errors.Wrap(err, "Error generating ECDSA host key")
+			return errors.Wrap(err, "Error generating ECDSA host key")
 		}
 
 		keyBytes, err := x509.MarshalECPrivateKey(key)
 		if err != nil {
-			return "", errors.Wrap(err, "Error marshalling ECDSA key")
+			return errors.Wrap(err, "Error marshalling ECDSA key")
 		}
 
 		privateKey := &pem.Block{
@@ -95,12 +95,15 @@ func (s *SSHProxy) ensureECDSAKeyExists() (string, error) {
 		}
 
 		if err = writePrivateKey(keyPath, privateKey); err != nil {
-			return "", err
+			return err
 		}
 
 		s.logger.Debug("Created new ECDSA SSH host key: ", keyPath)
 	}
-	return keyPath, nil
+	if err := s.SetOption(ssh.HostKeyFile(keyPath)); err != nil {
+		return errors.Wrap(err, "Could not set SSH ECDSA host key")
+	}
+	return nil
 }
 
 func writePrivateKey(keyPath string, privateKey *pem.Block) error {
