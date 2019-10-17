@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const SSHPreambleLength = 2
+
 type SSHServer struct{}
 
 type SSHPreamble struct {
