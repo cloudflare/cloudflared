@@ -1,3 +1,12 @@
+2019.10.0
+- 2019-10-11 AUTH-2105: Dont require --destination arg
+- 2019-10-14 TUN-2344: log more details: http2.Framer.ErrorDetail() if available, connectionID
+- 2019-10-16 AUTH-2159: Moves shutdownC close into error handling AUTH-2161: Lowers size of preamble length AUTH-2160: Fixes url parsing logic
+- 2019-10-16 AUTH-2135: Adds support for IPv6 and tests
+- 2019-10-02 AUTH-2105: Adds support for local forwarding. Refactor auditlogger creation. AUTH-2088: Adds dynamic destination routing
+- 2019-10-09 AUTH-2114: Uses short lived cert auth for outgoing client connection
+- 2019-09-30 AUTH-2089: Revise ssh server to function as a proxy
+
 2019.9.2
 - 2019-09-26 TUN-2355: Roll back TUN-2276
 
