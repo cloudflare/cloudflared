@@ -1,3 +1,6 @@
+2019.10.2
+- 2019-10-17 AUTH-2167: Adds CLI option for host key directory
+
 2019.10.1
 - 2019-10-17 Adds variable to fix windows build
 
