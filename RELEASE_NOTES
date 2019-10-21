@@ -1,3 +1,6 @@
+2019.10.3
+- 2019-10-18 Fix #129: Excessive memory usage streaming large files (#142)
+
 2019.10.2
 - 2019-10-17 AUTH-2167: Adds CLI option for host key directory
 
