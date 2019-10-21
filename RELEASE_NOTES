@@ -1,3 +1,6 @@
+2019.10.4
+- 2019-10-21 TUN-2450: Remove Brew publishing formula
+
 2019.10.3
 - 2019-10-18 Fix #129: Excessive memory usage streaming large files (#142)
 
