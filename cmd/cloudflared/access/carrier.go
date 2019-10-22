@@ -23,7 +23,7 @@ func ssh(c *cli.Context) error {
 	if err != nil || rawHostName == "" {
 		return cli.ShowCommandHelp(c, "ssh")
 	}
-	originURL := "https://" + hostname
+	originURL := ensureURLScheme(hostname)
 
 	// get the headers from the cmdline and add them
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))

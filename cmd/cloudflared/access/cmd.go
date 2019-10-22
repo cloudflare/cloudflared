@@ -191,7 +191,8 @@ func login(c *cli.Context) error {
 	raven.SetDSN(sentryDSN)
 	logger := log.CreateLogger()
 	args := c.Args()
-	appURL, err := url.Parse(args.First())
+	rawURL := ensureURLScheme(args.First())
+	appURL, err := url.Parse(rawURL)
 	if args.Len() < 1 || err != nil {
 		logger.Errorf("Please provide the url of the Access application\n")
 		return err
@@ -209,6 +210,16 @@ func login(c *cli.Context) error {
 	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", string(token))
 
 	return nil
+}
+
+// ensureURLScheme prepends a URL with https:// if it doesnt have a scheme. http:// URLs will not be converted.
+func ensureURLScheme(url string) string {
+	url = strings.Replace(strings.ToLower(url), "http://", "https://", 1)
+	if !strings.HasPrefix(url, "https://") {
+		url = fmt.Sprintf("https://%s", url)
+
+	}
+	return url
 }
 
 // curl provides a wrapper around curl, passing Access JWT along in request
@@ -294,7 +305,7 @@ func sshGen(c *cli.Context) error {
 		return cli.ShowCommandHelp(c, "ssh-gen")
 	}
 
-	originURL, err := url.Parse("https://" + hostname)
+	originURL, err := url.Parse(ensureURLScheme(hostname))
 	if err != nil {
 		return err
 	}
