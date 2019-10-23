@@ -221,6 +221,21 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 		}
 		done <- struct{}{}
 	}()
+
+	// stderr streams are used non-pty sessions since they have distinct IO streams.
+	remoteStderr := remoteChan.Stderr()
+	localStderr := localChan.Stderr()
+	go func() {
+		if _, err := io.Copy(remoteStderr, localStderr); err != nil {
+			s.logger.WithError(err).Error("stderr local to remote copy error")
+		}
+	}()
+	go func() {
+		if _, err := io.Copy(localStderr, remoteStderr); err != nil {
+			s.logger.WithError(err).Error("stderr remote to local copy error")
+		}
+	}()
+
 	s.logAuditEvent(conn, "", auditEventStart, ctx)
 	defer s.logAuditEvent(conn, "", auditEventStop, ctx)
 
@@ -231,7 +246,6 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 			if req == nil {
 				return
 			}
-
 			if err := s.forwardChannelRequest(remoteChan, req); err != nil {
 				s.logger.WithError(err).Error("Failed to forward request")
 				return
@@ -329,6 +343,7 @@ func (s *SSHProxy) dialDestination(ctx ssh.Context) (*gossh.Client, error) {
 		s.logger.WithError(err).Error("Failed to generate signed short lived cert")
 		return nil, err
 	}
+	s.logger.Debugf("Short lived certificate for %s connecting to %s:\n\n%s", ctx.User(), preamble.Destination, gossh.MarshalAuthorizedKey(signer.PublicKey()))
 
 	clientConfig := &gossh.ClientConfig{
 		User: ctx.User(),
