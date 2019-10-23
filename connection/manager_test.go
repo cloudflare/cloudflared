@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
@@ -42,16 +44,12 @@ var (
 	}
 )
 
-type mockStreamHandler struct {
-}
-
-func (msh *mockStreamHandler) ServeStream(*h2mux.MuxedStream) error {
-	return nil
-}
-
 func mockEdgeManager() *EdgeManager {
+	newConfigChan := make(chan<- *pogs.ClientConfig)
+	useConfigResultChan := make(<-chan *pogs.UseConfigurationResult)
+	logger := logrus.New()
 	return NewEdgeManager(
-		&mockStreamHandler{},
+		streamhandler.NewStreamHandler(newConfigChan, useConfigResultChan, logger),
 		configurable,
 		[]byte{},
 		nil,

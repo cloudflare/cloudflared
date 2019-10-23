@@ -10,7 +10,9 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -25,7 +27,7 @@ const (
 // EdgeManager manages connections with the edge
 type EdgeManager struct {
 	// streamHandler handles stream opened by the edge
-	streamHandler h2mux.MuxedStreamHandler
+	streamHandler *streamhandler.StreamHandler
 	// TLSConfig is the TLS configuration to connect with edge
 	tlsConfig *tls.Config
 	// cloudflaredConfig is the cloudflared configuration that is determined when the process first starts
@@ -52,7 +54,7 @@ type CloudflaredConfig struct {
 }
 
 func NewEdgeManager(
-	streamHandler h2mux.MuxedStreamHandler,
+	streamHandler *streamhandler.StreamHandler,
 	edgeConnMgrConfigurable *EdgeManagerConfigurable,
 	userCredential []byte,
 	tlsConfig *tls.Config,
@@ -155,6 +157,8 @@ func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
 
 	em.state.newConnection(h2muxConn)
 	em.logger.Infof("connected to %s", connResult.ConnectedTo())
+
+	em.streamHandler.UseConfiguration(ctx, connResult.ClientConfig())
 	return nil
 }
 
