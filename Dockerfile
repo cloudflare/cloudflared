@@ -1,5 +1,5 @@
 # use a builder image for building cloudflare
-FROM golang:1.12 as builder
+FROM golang:1.13.3 as builder
 
 # switch to the right gopath directory
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
