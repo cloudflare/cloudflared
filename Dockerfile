@@ -13,7 +13,7 @@ RUN make cloudflared
 # ---
 
 # use a distroless base image with glibc
-FROM gcr.io/distroless/base
+FROM gcr.io/distroless/base-debian10:nonroot
 
 # copy our compiled binary
 COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
