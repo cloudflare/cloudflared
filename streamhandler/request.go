@@ -52,7 +52,7 @@ func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
 			resolved := h1.URL.ResolveReference(u)
 			// prevent escaping base URL
 			if !strings.HasPrefix(resolved.String(), h1.URL.String()) {
-				return fmt.Errorf("invalid path")
+				return fmt.Errorf("invalid path %s", header.Value)
 			}
 			h1.URL = resolved
 		case "content-length":
