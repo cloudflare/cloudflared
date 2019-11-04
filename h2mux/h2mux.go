@@ -397,7 +397,6 @@ func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader
 	return stream, nil
 }
 
-
 func (m *Muxer) OpenRPCStream(ctx context.Context) (*MuxedStream, error) {
 	stream := m.NewStream(RPCHeaders())
 	if err := m.MakeMuxedStreamRequest(ctx, MuxedStreamRequest{stream: stream, body: nil}); err != nil {
@@ -422,6 +421,13 @@ func (m *Muxer) MakeMuxedStreamRequest(ctx context.Context, request MuxedStreamR
 	// Will be received by mux writer
 	case m.newStreamChan <- request:
 		return nil
+	}
+}
+
+func (m *Muxer) CloseStreamRead(stream *MuxedStream) {
+	stream.CloseRead()
+	if stream.WriteClosed() {
+		m.streams.Delete(stream.streamID)
 	}
 }
 

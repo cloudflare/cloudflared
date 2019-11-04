@@ -192,6 +192,12 @@ func (s *MuxedStream) CloseWrite() error {
 	return nil
 }
 
+func (s *MuxedStream) WriteClosed() bool {
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
+	return s.writeEOF
+}
+
 func (s *MuxedStream) WriteHeaders(headers []Header) error {
 	s.writeLock.Lock()
 	defer s.writeLock.Unlock()
@@ -351,7 +357,6 @@ func (s *MuxedStream) getChunk() *streamChunk {
 		sendData:     !s.sentEOF,
 		eof:          s.writeEOF && uint32(s.writeBuffer.Len()) <= s.sendWindow,
 	}
-
 	// Copy at most s.sendWindow bytes, adjust the sendWindow accordingly
 	writeLen, _ := io.CopyN(&chunk.buffer, s.writeBuffer, int64(s.sendWindow))
 	s.sendWindow -= uint32(writeLen)
