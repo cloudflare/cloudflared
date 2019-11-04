@@ -1,0 +1,5 @@
+package common
+
+import (
+	"C"
+)

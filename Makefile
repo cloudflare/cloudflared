@@ -29,7 +29,7 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	go build -v $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: container
 container:
@@ -37,7 +37,7 @@ container:
 
 .PHONY: test
 test: vet
-	go test -v -race $(VERSION_FLAGS) ./...
+	go test -v -mod=vendor -race $(VERSION_FLAGS) ./...
 
 .PHONY: test-ssh-server
 test-ssh-server:
@@ -82,6 +82,6 @@ tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
 
 .PHONY: vet
 vet:
-	go vet ./...
+	go vet -mod=vendor ./...
 	which go-sumtype  # go get github.com/BurntSushi/go-sumtype
-	go-sumtype $$(go list ./...)
+	go-sumtype $$(go list -mod=vendor ./...)

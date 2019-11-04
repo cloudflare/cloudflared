@@ -1,5 +1,5 @@
 pinned_go: &pinned_go go=1.12.7-1
-build_dir: &build_dir /cfsetup_build/src/github.com/cloudflare/cloudflared/
+build_dir: &build_dir /cfsetup_build
 default-flavor: stretch
 stretch: &stretch
   build:
@@ -8,7 +8,6 @@ stretch: &stretch
       - *pinned_go
       - build-essential
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=linux
       - export GOARCH=amd64
       - make cloudflared
@@ -20,7 +19,6 @@ stretch: &stretch
       - fakeroot
       - rubygem-fpm
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=linux
       - export GOARCH=amd64
       - make cloudflared-deb
@@ -30,7 +28,6 @@ stretch: &stretch
       - *pinned_go
       - build-essential
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=linux
       - export GOARCH=amd64
       - make release
@@ -41,7 +38,6 @@ stretch: &stretch
       - crossbuild-essential-armhf
       - gcc-arm-linux-gnueabihf
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=linux
       - export GOARCH=arm
       - export CC=arm-linux-gnueabihf-gcc
@@ -52,7 +48,6 @@ stretch: &stretch
       - *pinned_go
       - gcc-multilib
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=linux
       - export GOARCH=386
       - make release
@@ -62,7 +57,6 @@ stretch: &stretch
       - *pinned_go
       - gcc-mingw-w64
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=windows
       - export GOARCH=amd64
       - export CC=x86_64-w64-mingw32-gcc
@@ -73,7 +67,6 @@ stretch: &stretch
       - *pinned_go
       - gcc-mingw-w64
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=windows
       - export GOARCH=386
       - export CC=i686-w64-mingw32-gcc-win32
@@ -84,12 +77,11 @@ stretch: &stretch
       - *pinned_go
       - build-essential
     post-cache:
-      - export GOPATH=/cfsetup_build/
       - export GOOS=linux
       - export GOARCH=amd64
-      - sudo chown -R $(whoami) /cfsetup_build/
-      - go get github.com/BurntSushi/go-sumtype
-      - export PATH="$GOPATH/bin:$PATH"
+      # cd to a non-module directory: https://github.com/golang/go/issues/24250
+      - (cd / && go get github.com/BurntSushi/go-sumtype)
+      - export PATH="$HOME/go/bin:$PATH"
       - make test
 
 jessie: *stretch
