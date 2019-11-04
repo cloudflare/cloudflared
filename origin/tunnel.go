@@ -23,7 +23,6 @@ import (
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/cloudflare/cloudflared/websocket"
 
-	raven "github.com/getsentry/raven-go"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -165,7 +164,15 @@ func ServeTunnelLoop(ctx context.Context,
 	// Ensure the above goroutine will terminate if we return without connecting
 	defer connectedFuse.Fuse(false)
 	for {
-		err, recoverable := ServeTunnel(ctx, config, connectionLogger, addr, connectionID, connectedFuse, &backoff, u)
+		err, recoverable := ServeTunnel(
+			ctx,
+			config,
+			connectionLogger,
+			addr, connectionID,
+			connectedFuse,
+			&backoff,
+			u,
+		)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
 				connectionLogger.Infof("Retrying in %s seconds", duration)
@@ -260,6 +267,8 @@ func ServeTunnel(
 
 	err = errGroup.Wait()
 	if err != nil {
+		_ = newClientRegisterTunnelError(err, config.Metrics.regFail)
+
 		switch castedErr := err.(type) {
 		case dupConnRegisterTunnelError:
 			logger.Info("Already connected to this server, selecting a different one")
@@ -274,14 +283,12 @@ func ServeTunnel(
 			return castedErr.cause, !castedErr.permanent
 		case clientRegisterTunnelError:
 			logger.WithError(castedErr.cause).Error("Register tunnel error on client side")
-			raven.CaptureError(castedErr.cause, tags)
 			return err, true
 		case muxerShutdownError:
 			logger.Infof("Muxer shutdown")
 			return err, true
 		default:
 			logger.WithError(err).Error("Serve tunnel error")
-			raven.CaptureError(err, tags)
 			return err, true
 		}
 	}
