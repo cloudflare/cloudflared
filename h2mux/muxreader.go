@@ -125,6 +125,9 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 			if streamID == 0 {
 				return ErrInvalidStream
 			}
+			if stream, ok := r.streams.Get(streamID); ok {
+				stream.Close()
+			}
 			r.streams.Delete(streamID)
 		case *http2.PingFrame:
 			r.receivePingData(f)

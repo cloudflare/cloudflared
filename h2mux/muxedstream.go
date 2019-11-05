@@ -137,9 +137,10 @@ func (s *MuxedStream) Write(p []byte) (int, error) {
 		// If the buffer is full, block till there is more room.
 		// Use a loop to recheck the buffer size after the lock is reacquired.
 		for s.writeBufferMaxLen <= s.writeBuffer.Len() {
-			s.writeLock.Unlock()
-			<-s.writeBufferHasSpace
-			s.writeLock.Lock()
+			s.awaitWriteBufferHasSpace()
+			if s.writeEOF {
+				return totalWritten, io.EOF
+			}
 		}
 		amountToWrite := len(p) - totalWritten
 		spaceAvailable := s.writeBufferMaxLen - s.writeBuffer.Len()
@@ -188,6 +189,9 @@ func (s *MuxedStream) CloseWrite() error {
 	if c, ok := s.writeBuffer.(io.Closer); ok {
 		c.Close()
 	}
+	// Allow MuxedStream::Write() to terminate its loop with err=io.EOF, if needed
+	s.notifyWriteBufferHasSpace()
+	// We need to send something over the wire, even if it's an END_STREAM with no data
 	s.writeNotify()
 	return nil
 }
@@ -236,6 +240,23 @@ func (s *MuxedStream) IsRPCStream() bool {
 
 func (s *MuxedStream) TunnelHostname() TunnelHostname {
 	return s.tunnelHostname
+}
+
+// Block until a value is sent on writeBufferHasSpace.
+// Must be called while holding writeLock
+func (s *MuxedStream) awaitWriteBufferHasSpace() {
+	s.writeLock.Unlock()
+	<-s.writeBufferHasSpace
+	s.writeLock.Lock()
+}
+
+// Send a value on writeBufferHasSpace without blocking.
+// Must be called while holding writeLock
+func (s *MuxedStream) notifyWriteBufferHasSpace() {
+	select {
+	case s.writeBufferHasSpace <- struct{}{}:
+	default:
+	}
 }
 
 func (s *MuxedStream) getReceiveWindow() uint32 {
@@ -361,12 +382,9 @@ func (s *MuxedStream) getChunk() *streamChunk {
 	writeLen, _ := io.CopyN(&chunk.buffer, s.writeBuffer, int64(s.sendWindow))
 	s.sendWindow -= uint32(writeLen)
 
-	// Non-blocking channel send. This will allow MuxedStream::Write() to continue, if needed
+	// Allow MuxedStream::Write() to continue, if needed
 	if s.writeBuffer.Len() < s.writeBufferMaxLen {
-		select {
-		case s.writeBufferHasSpace <- struct{}{}:
-		default:
-		}
+		s.notifyWriteBufferHasSpace()
 	}
 
 	// When we write the chunk, we'll write the WINDOW_UPDATE frame if needed
