@@ -12,6 +12,7 @@ import (
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -19,9 +20,11 @@ import (
 )
 
 const (
-	quickStartLink    = "https://developers.cloudflare.com/argo-tunnel/quickstart/"
-	faqLink           = "https://developers.cloudflare.com/argo-tunnel/faq/"
-	defaultRetryAfter = time.Second * 5
+	quickStartLink       = "https://developers.cloudflare.com/argo-tunnel/quickstart/"
+	faqLink              = "https://developers.cloudflare.com/argo-tunnel/faq/"
+	defaultRetryAfter    = time.Second * 5
+	packageNamespace     = "connection"
+	edgeManagerSubsystem = "edgemanager"
 )
 
 // EdgeManager manages connections with the edge
@@ -38,9 +41,22 @@ type EdgeManager struct {
 	state *edgeManagerState
 
 	logger *logrus.Entry
+
+	metrics *metrics
 }
 
-// EdgeConnectionManagerConfigurable is the configurable attributes of a EdgeConnectionManager
+type metrics struct {
+	// activeStreams is a gauge shared by all muxers of this process to expose the total number of active streams
+	activeStreams prometheus.Gauge
+}
+
+func newMetrics(namespace, subsystem string) *metrics {
+	return &metrics{
+		activeStreams: h2mux.NewActiveStreamsMetrics(namespace, subsystem),
+	}
+}
+
+// EdgeManagerConfigurable is the configurable attributes of a EdgeConnectionManager
 type EdgeManagerConfigurable struct {
 	TunnelHostnames []h2mux.TunnelHostname
 	*pogs.EdgeConnectionConfig
@@ -69,6 +85,7 @@ func NewEdgeManager(
 		serviceDiscoverer: serviceDiscoverer,
 		state:             newEdgeConnectionManagerState(edgeConnMgrConfigurable, userCredential),
 		logger:            logger.WithField("subsystem", "connectionManager"),
+		metrics:           newMetrics(packageNamespace, edgeManagerSubsystem),
 	}
 }
 
@@ -126,7 +143,7 @@ func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
 		HeartbeatInterval: configurable.HeartbeatInterval,
 		MaxHeartbeats:     configurable.MaxFailedHeartbeats,
 		Logger:            em.logger.WithField("subsystem", "muxer"),
-	})
+	}, em.metrics.activeStreams)
 	if err != nil {
 		retryConnection(fmt.Sprintf("couldn't perform handshake with edge: %v", err))
 	}
@@ -158,7 +175,9 @@ func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
 	em.state.newConnection(h2muxConn)
 	em.logger.Infof("connected to %s", connResult.ConnectedTo())
 
-	em.streamHandler.UseConfiguration(ctx, connResult.ClientConfig())
+	if connResult.ClientConfig() != nil {
+		em.streamHandler.UseConfiguration(ctx, connResult.ClientConfig())
+	}
 	return nil
 }
 

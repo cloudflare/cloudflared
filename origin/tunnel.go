@@ -521,7 +521,7 @@ func NewTunnelHandler(ctx context.Context,
 		MaxHeartbeats:      config.MaxHeartbeats,
 		Logger:             config.TransportLogger.WithFields(log.Fields{}),
 		CompressionQuality: h2mux.CompressionSetting(config.CompressionQuality),
-	})
+	}, h.metrics.activeStreams)
 	if err != nil {
 		return h, "", errors.New("TLS handshake error")
 	}

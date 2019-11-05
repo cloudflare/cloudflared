@@ -43,7 +43,7 @@ type DefaultMuxerPair struct {
 	doneC           chan struct{}
 }
 
-func NewDefaultMuxerPair(t assert.TestingT, f MuxedStreamFunc) *DefaultMuxerPair {
+func NewDefaultMuxerPair(t assert.TestingT, testName string, f MuxedStreamFunc) *DefaultMuxerPair {
 	origin, edge := net.Pipe()
 	p := &DefaultMuxerPair{
 		OriginMuxConfig: MuxerConfig{
@@ -69,11 +69,11 @@ func NewDefaultMuxerPair(t assert.TestingT, f MuxedStreamFunc) *DefaultMuxerPair
 		EdgeConn: edge,
 		doneC:    make(chan struct{}),
 	}
-	assert.NoError(t, p.Handshake())
+	assert.NoError(t, p.Handshake(testName))
 	return p
 }
 
-func NewCompressedMuxerPair(t assert.TestingT, quality CompressionSetting, f MuxedStreamFunc) *DefaultMuxerPair {
+func NewCompressedMuxerPair(t assert.TestingT, testName string, quality CompressionSetting, f MuxedStreamFunc) *DefaultMuxerPair {
 	origin, edge := net.Pipe()
 	p := &DefaultMuxerPair{
 		OriginMuxConfig: MuxerConfig{
@@ -95,20 +95,20 @@ func NewCompressedMuxerPair(t assert.TestingT, quality CompressionSetting, f Mux
 		EdgeConn: edge,
 		doneC:    make(chan struct{}),
 	}
-	assert.NoError(t, p.Handshake())
+	assert.NoError(t, p.Handshake(testName))
 	return p
 }
 
-func (p *DefaultMuxerPair) Handshake() error {
+func (p *DefaultMuxerPair) Handshake(testName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), testHandshakeTimeout)
 	defer cancel()
 	errGroup, _ := errgroup.WithContext(ctx)
 	errGroup.Go(func() (err error) {
-		p.EdgeMux, err = Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig)
+		p.EdgeMux, err = Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig, NewActiveStreamsMetrics(testName, "edge"))
 		return errors.Wrap(err, "edge handshake failure")
 	})
 	errGroup.Go(func() (err error) {
-		p.OriginMux, err = Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig)
+		p.OriginMux, err = Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig, NewActiveStreamsMetrics(testName, "origin"))
 		return errors.Wrap(err, "origin handshake failure")
 	})
 
@@ -161,7 +161,7 @@ func TestHandshake(t *testing.T) {
 	f := func(stream *MuxedStream) error {
 		return nil
 	}
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	AssertIfPipeReadable(t, muxPair.OriginConn)
 	AssertIfPipeReadable(t, muxPair.EdgeConn)
 }
@@ -191,7 +191,7 @@ func TestSingleStream(t *testing.T) {
 		}
 		return nil
 	})
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	muxPair.Serve(t)
 
 	stream, err := muxPair.OpenEdgeMuxStream(
@@ -262,7 +262,7 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 
 		return nil
 	})
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	muxPair.Serve(t)
 
 	stream, err := muxPair.OpenEdgeMuxStream(
@@ -309,7 +309,7 @@ func TestMultipleStreams(t *testing.T) {
 		log.Debugf("Wrote body for stream %s", stream.Headers[0].Value)
 		return nil
 	})
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	muxPair.Serve(t)
 
 	maxStreams := 64
@@ -402,7 +402,7 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 		}
 		return nil
 	})
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	muxPair.Serve(t)
 
 	errGroup, _ := errgroup.WithContext(context.Background())
@@ -461,7 +461,7 @@ func TestGracefulShutdown(t *testing.T) {
 		log.Debugf("Handler ends")
 		return nil
 	})
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	muxPair.Serve(t)
 
 	stream, err := muxPair.OpenEdgeMuxStream(
@@ -516,7 +516,7 @@ func TestUnexpectedShutdown(t *testing.T) {
 		}
 		return nil
 	})
-	muxPair := NewDefaultMuxerPair(t, f)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
 	muxPair.Serve(t)
 
 	stream, err := muxPair.OpenEdgeMuxStream(
@@ -564,7 +564,7 @@ func EchoHandler(stream *MuxedStream) error {
 
 func TestOpenAfterDisconnect(t *testing.T) {
 	for i := 0; i < 3; i++ {
-		muxPair := NewDefaultMuxerPair(t, EchoHandler)
+		muxPair := NewDefaultMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), i), EchoHandler)
 		muxPair.Serve(t)
 
 		switch i {
@@ -591,7 +591,7 @@ func TestOpenAfterDisconnect(t *testing.T) {
 }
 
 func TestHPACK(t *testing.T) {
-	muxPair := NewDefaultMuxerPair(t, EchoHandler)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), EchoHandler)
 	muxPair.Serve(t)
 
 	stream, err := muxPair.OpenEdgeMuxStream(
@@ -724,7 +724,7 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 
 			return nil
 		})
-		muxPair := NewCompressedMuxerPair(t, q, f)
+		muxPair := NewCompressedMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), q), q, f)
 		muxPair.Serve(t)
 
 		var wg sync.WaitGroup
@@ -918,7 +918,7 @@ func TestSampleSiteWithDictionaries(t *testing.T) {
 	assert.NoError(t, err)
 
 	for q := CompressionNone; q <= CompressionMax; q++ {
-		muxPair := NewCompressedMuxerPair(t, q, sampleSiteHandler(files))
+		muxPair := NewCompressedMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), q), q, sampleSiteHandler(files))
 		muxPair.Serve(t)
 
 		var wg sync.WaitGroup
@@ -957,7 +957,7 @@ func TestLongSiteWithDictionaries(t *testing.T) {
 	files, err := loadSampleFiles(paths)
 	assert.NoError(t, err)
 	for q := CompressionNone; q <= CompressionMedium; q++ {
-		muxPair := NewCompressedMuxerPair(t, q, sampleSiteHandler(files))
+		muxPair := NewCompressedMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), q), q, sampleSiteHandler(files))
 		muxPair.Serve(t)
 
 		rand.Seed(time.Now().Unix())
@@ -998,7 +998,7 @@ func BenchmarkOpenStream(b *testing.B) {
 			})
 			return nil
 		})
-		muxPair := NewDefaultMuxerPair(b, f)
+		muxPair := NewDefaultMuxerPair(b, fmt.Sprintf("%s_%d", b.Name(), i), f)
 		muxPair.Serve(b)
 		b.StartTimer()
 		openStreams(b, muxPair, streams)

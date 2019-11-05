@@ -4,42 +4,42 @@ github.com/BurntSushi/toml
 github.com/anmitsu/go-shlex
 # github.com/aws/aws-sdk-go v1.25.8
 github.com/aws/aws-sdk-go/aws
-github.com/aws/aws-sdk-go/aws/credentials
-github.com/aws/aws-sdk-go/aws/session
-github.com/aws/aws-sdk-go/service/s3
 github.com/aws/aws-sdk-go/aws/awserr
-github.com/aws/aws-sdk-go/aws/endpoints
-github.com/aws/aws-sdk-go/internal/sdkio
-github.com/aws/aws-sdk-go/internal/ini
-github.com/aws/aws-sdk-go/internal/shareddefaults
+github.com/aws/aws-sdk-go/aws/awsutil
 github.com/aws/aws-sdk-go/aws/client
+github.com/aws/aws-sdk-go/aws/client/metadata
 github.com/aws/aws-sdk-go/aws/corehandlers
+github.com/aws/aws-sdk-go/aws/credentials
+github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds
+github.com/aws/aws-sdk-go/aws/credentials/endpointcreds
 github.com/aws/aws-sdk-go/aws/credentials/processcreds
 github.com/aws/aws-sdk-go/aws/credentials/stscreds
 github.com/aws/aws-sdk-go/aws/csm
 github.com/aws/aws-sdk-go/aws/defaults
+github.com/aws/aws-sdk-go/aws/ec2metadata
+github.com/aws/aws-sdk-go/aws/endpoints
 github.com/aws/aws-sdk-go/aws/request
-github.com/aws/aws-sdk-go/aws/awsutil
-github.com/aws/aws-sdk-go/aws/client/metadata
+github.com/aws/aws-sdk-go/aws/session
 github.com/aws/aws-sdk-go/aws/signer/v4
+github.com/aws/aws-sdk-go/internal/ini
 github.com/aws/aws-sdk-go/internal/s3err
+github.com/aws/aws-sdk-go/internal/sdkio
+github.com/aws/aws-sdk-go/internal/sdkmath
+github.com/aws/aws-sdk-go/internal/sdkrand
+github.com/aws/aws-sdk-go/internal/sdkuri
+github.com/aws/aws-sdk-go/internal/shareddefaults
 github.com/aws/aws-sdk-go/private/protocol
 github.com/aws/aws-sdk-go/private/protocol/eventstream
 github.com/aws/aws-sdk-go/private/protocol/eventstream/eventstreamapi
+github.com/aws/aws-sdk-go/private/protocol/json/jsonutil
+github.com/aws/aws-sdk-go/private/protocol/query
+github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 github.com/aws/aws-sdk-go/private/protocol/rest
 github.com/aws/aws-sdk-go/private/protocol/restxml
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
-github.com/aws/aws-sdk-go/internal/sdkrand
+github.com/aws/aws-sdk-go/service/s3
 github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
-github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds
-github.com/aws/aws-sdk-go/aws/credentials/endpointcreds
-github.com/aws/aws-sdk-go/aws/ec2metadata
-github.com/aws/aws-sdk-go/internal/sdkmath
-github.com/aws/aws-sdk-go/private/protocol/query
-github.com/aws/aws-sdk-go/internal/sdkuri
-github.com/aws/aws-sdk-go/private/protocol/json/jsonutil
-github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
 # github.com/certifi/gocertifi v0.0.0-20180118203423-deb3ae2ef261
@@ -54,29 +54,29 @@ github.com/cloudflare/brotli-go/enc
 github.com/cloudflare/golibs/lrucache
 # github.com/coredns/coredns v1.2.0
 github.com/coredns/coredns/core/dnsserver
+github.com/coredns/coredns/coremain
+github.com/coredns/coredns/pb
 github.com/coredns/coredns/plugin
 github.com/coredns/coredns/plugin/cache
+github.com/coredns/coredns/plugin/cache/freq
+github.com/coredns/coredns/plugin/etcd/msg
+github.com/coredns/coredns/plugin/metrics
 github.com/coredns/coredns/plugin/metrics/vars
+github.com/coredns/coredns/plugin/pkg/cache
 github.com/coredns/coredns/plugin/pkg/dnstest
-github.com/coredns/coredns/plugin/pkg/rcode
-github.com/coredns/coredns/request
-github.com/coredns/coredns/pb
 github.com/coredns/coredns/plugin/pkg/dnsutil
 github.com/coredns/coredns/plugin/pkg/doh
 github.com/coredns/coredns/plugin/pkg/edns
+github.com/coredns/coredns/plugin/pkg/fuzz
 github.com/coredns/coredns/plugin/pkg/log
 github.com/coredns/coredns/plugin/pkg/nonwriter
+github.com/coredns/coredns/plugin/pkg/rcode
 github.com/coredns/coredns/plugin/pkg/response
 github.com/coredns/coredns/plugin/pkg/trace
-github.com/coredns/coredns/plugin/pkg/watch
-github.com/coredns/coredns/plugin/etcd/msg
-github.com/coredns/coredns/plugin/cache/freq
-github.com/coredns/coredns/plugin/metrics
-github.com/coredns/coredns/plugin/pkg/cache
-github.com/coredns/coredns/plugin/pkg/fuzz
-github.com/coredns/coredns/coremain
 github.com/coredns/coredns/plugin/pkg/uniq
+github.com/coredns/coredns/plugin/pkg/watch
 github.com/coredns/coredns/plugin/test
+github.com/coredns/coredns/request
 # github.com/coreos/go-oidc v0.0.0-20171002155002-a93f71fdfe73
 github.com/coreos/go-oidc/jose
 # github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
@@ -88,10 +88,10 @@ github.com/elgs/gosqljson
 # github.com/equinox-io/equinox v1.2.0
 github.com/equinox-io/equinox
 github.com/equinox-io/equinox/internal/go-update
-github.com/equinox-io/equinox/internal/osext
-github.com/equinox-io/equinox/proto
 github.com/equinox-io/equinox/internal/go-update/internal/binarydist
 github.com/equinox-io/equinox/internal/go-update/internal/osext
+github.com/equinox-io/equinox/internal/osext
+github.com/equinox-io/equinox/proto
 # github.com/facebookgo/grace v0.0.0-20180706040059-75cf19382434
 github.com/facebookgo/grace/gracenet
 # github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568
@@ -153,8 +153,8 @@ github.com/prometheus/client_golang/prometheus/promhttp
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.7.0
 github.com/prometheus/common/expfmt
-github.com/prometheus/common/model
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+github.com/prometheus/common/model
 # github.com/prometheus/procfs v0.0.5
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
@@ -167,58 +167,58 @@ github.com/sirupsen/logrus
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc
-golang.org/x/crypto/nacl/box
-golang.org/x/crypto/ssh/terminal
-golang.org/x/crypto/ssh
 golang.org/x/crypto/curve25519
-golang.org/x/crypto/nacl/secretbox
-golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/ed25519
-golang.org/x/crypto/internal/chacha20
-golang.org/x/crypto/poly1305
-golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/ed25519/internal/edwards25519
+golang.org/x/crypto/internal/chacha20
+golang.org/x/crypto/internal/subtle
+golang.org/x/crypto/nacl/box
+golang.org/x/crypto/nacl/secretbox
+golang.org/x/crypto/poly1305
+golang.org/x/crypto/salsa20/salsa
+golang.org/x/crypto/ssh
+golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.0.0-20191007182048-72f939374954
-golang.org/x/net/idna
-golang.org/x/net/http2
-golang.org/x/net/http2/hpack
-golang.org/x/net/trace
+golang.org/x/net/bpf
 golang.org/x/net/context
 golang.org/x/net/http/httpguts
+golang.org/x/net/http2
+golang.org/x/net/http2/hpack
+golang.org/x/net/idna
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
 golang.org/x/net/internal/timeseries
 golang.org/x/net/ipv4
 golang.org/x/net/ipv6
+golang.org/x/net/trace
 golang.org/x/net/websocket
-golang.org/x/net/bpf
-golang.org/x/net/internal/iana
-golang.org/x/net/internal/socket
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 # golang.org/x/sys v0.0.0-20191008105621-543471e840be
+golang.org/x/sys/cpu
+golang.org/x/sys/unix
 golang.org/x/sys/windows
+golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
-golang.org/x/sys/unix
-golang.org/x/sys/windows/registry
-golang.org/x/sys/cpu
 # golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-golang.org/x/text/transform
 # google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.24.0
 google.golang.org/grpc
-google.golang.org/grpc/peer
-google.golang.org/grpc/codes
-google.golang.org/grpc/metadata
-google.golang.org/grpc/status
 google.golang.org/grpc/balancer
+google.golang.org/grpc/balancer/base
 google.golang.org/grpc/balancer/roundrobin
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
+google.golang.org/grpc/codes
 google.golang.org/grpc/connectivity
 google.golang.org/grpc/credentials
+google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/grpclog
@@ -230,36 +230,36 @@ google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
+google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
+google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
 google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
+google.golang.org/grpc/status
 google.golang.org/grpc/tap
-google.golang.org/grpc/balancer/base
-google.golang.org/grpc/credentials/internal
-google.golang.org/grpc/binarylog/grpc_binarylog_v1
-google.golang.org/grpc/internal/syscall
 # gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8
 gopkg.in/urfave/cli.v2
 gopkg.in/urfave/cli.v2/altsrc
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
 # zombiezen.com/go/capnproto2 v0.0.0-20180616160808-7cfd211c19c7
-zombiezen.com/go/capnproto2/rpc
 zombiezen.com/go/capnproto2
 zombiezen.com/go/capnproto2/encoding/text
+zombiezen.com/go/capnproto2/internal/fulfiller
+zombiezen.com/go/capnproto2/internal/nodemap
+zombiezen.com/go/capnproto2/internal/packed
+zombiezen.com/go/capnproto2/internal/queue
+zombiezen.com/go/capnproto2/internal/schema
+zombiezen.com/go/capnproto2/internal/strquote
 zombiezen.com/go/capnproto2/pogs
+zombiezen.com/go/capnproto2/rpc
+zombiezen.com/go/capnproto2/rpc/internal/refcount
 zombiezen.com/go/capnproto2/schemas
 zombiezen.com/go/capnproto2/server
 zombiezen.com/go/capnproto2/std/capnp/rpc
-zombiezen.com/go/capnproto2/internal/fulfiller
-zombiezen.com/go/capnproto2/internal/queue
-zombiezen.com/go/capnproto2/rpc/internal/refcount
-zombiezen.com/go/capnproto2/internal/packed
-zombiezen.com/go/capnproto2/internal/strquote
-zombiezen.com/go/capnproto2/internal/nodemap
-zombiezen.com/go/capnproto2/internal/schema

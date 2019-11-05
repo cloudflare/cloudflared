@@ -9,6 +9,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	metricsNamespace = "cloudflared"
+	tunnelSubsystem  = "tunnel"
+	muxerSubsystem   = "muxer"
+)
+
 type muxerMetrics struct {
 	rtt              *prometheus.GaugeVec
 	rttMin           *prometheus.GaugeVec
@@ -32,6 +38,7 @@ type muxerMetrics struct {
 
 type TunnelMetrics struct {
 	haConnections     prometheus.Gauge
+	activeStreams     prometheus.Gauge
 	totalRequests     prometheus.Counter
 	requestsPerTunnel *prometheus.CounterVec
 	// concurrentRequestsLock is a mutex for concurrentRequests and maxConcurrentRequests
@@ -63,8 +70,10 @@ type TunnelMetrics struct {
 func newMuxerMetrics() *muxerMetrics {
 	rtt := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rtt",
-			Help: "Round-trip time in millisecond",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "rtt",
+			Help:      "Round-trip time in millisecond",
 		},
 		[]string{"connection_id"},
 	)
@@ -72,8 +81,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	rttMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rtt_min",
-			Help: "Shortest round-trip time in millisecond",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "rtt_min",
+			Help:      "Shortest round-trip time in millisecond",
 		},
 		[]string{"connection_id"},
 	)
@@ -81,8 +92,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	rttMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rtt_max",
-			Help: "Longest round-trip time in millisecond",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "rtt_max",
+			Help:      "Longest round-trip time in millisecond",
 		},
 		[]string{"connection_id"},
 	)
@@ -90,8 +103,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	receiveWindowAve := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "receive_window_ave",
-			Help: "Average receive window size in bytes",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "receive_window_ave",
+			Help:      "Average receive window size in bytes",
 		},
 		[]string{"connection_id"},
 	)
@@ -99,8 +114,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	sendWindowAve := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "send_window_ave",
-			Help: "Average send window size in bytes",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "send_window_ave",
+			Help:      "Average send window size in bytes",
 		},
 		[]string{"connection_id"},
 	)
@@ -108,8 +125,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	receiveWindowMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "receive_window_min",
-			Help: "Smallest receive window size in bytes",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "receive_window_min",
+			Help:      "Smallest receive window size in bytes",
 		},
 		[]string{"connection_id"},
 	)
@@ -117,8 +136,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	receiveWindowMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "receive_window_max",
-			Help: "Largest receive window size in bytes",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "receive_window_max",
+			Help:      "Largest receive window size in bytes",
 		},
 		[]string{"connection_id"},
 	)
@@ -126,8 +147,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	sendWindowMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "send_window_min",
-			Help: "Smallest send window size in bytes",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "send_window_min",
+			Help:      "Smallest send window size in bytes",
 		},
 		[]string{"connection_id"},
 	)
@@ -135,8 +158,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	sendWindowMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "send_window_max",
-			Help: "Largest send window size in bytes",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "send_window_max",
+			Help:      "Largest send window size in bytes",
 		},
 		[]string{"connection_id"},
 	)
@@ -144,8 +169,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	inBoundRateCurr := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "inbound_bytes_per_sec_curr",
-			Help: "Current inbounding bytes per second, 0 if there is no incoming connection",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "inbound_bytes_per_sec_curr",
+			Help:      "Current inbounding bytes per second, 0 if there is no incoming connection",
 		},
 		[]string{"connection_id"},
 	)
@@ -153,8 +180,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	inBoundRateMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "inbound_bytes_per_sec_min",
-			Help: "Minimum non-zero inbounding bytes per second",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "inbound_bytes_per_sec_min",
+			Help:      "Minimum non-zero inbounding bytes per second",
 		},
 		[]string{"connection_id"},
 	)
@@ -162,8 +191,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	inBoundRateMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "inbound_bytes_per_sec_max",
-			Help: "Maximum inbounding bytes per second",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "inbound_bytes_per_sec_max",
+			Help:      "Maximum inbounding bytes per second",
 		},
 		[]string{"connection_id"},
 	)
@@ -171,8 +202,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	outBoundRateCurr := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "outbound_bytes_per_sec_curr",
-			Help: "Current outbounding bytes per second, 0 if there is no outgoing traffic",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "outbound_bytes_per_sec_curr",
+			Help:      "Current outbounding bytes per second, 0 if there is no outgoing traffic",
 		},
 		[]string{"connection_id"},
 	)
@@ -180,8 +213,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	outBoundRateMin := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "outbound_bytes_per_sec_min",
-			Help: "Minimum non-zero outbounding bytes per second",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "outbound_bytes_per_sec_min",
+			Help:      "Minimum non-zero outbounding bytes per second",
 		},
 		[]string{"connection_id"},
 	)
@@ -189,8 +224,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	outBoundRateMax := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "outbound_bytes_per_sec_max",
-			Help: "Maximum outbounding bytes per second",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "outbound_bytes_per_sec_max",
+			Help:      "Maximum outbounding bytes per second",
 		},
 		[]string{"connection_id"},
 	)
@@ -198,8 +235,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	compBytesBefore := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "comp_bytes_before",
-			Help: "Bytes sent via cross-stream compression, pre compression",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "comp_bytes_before",
+			Help:      "Bytes sent via cross-stream compression, pre compression",
 		},
 		[]string{"connection_id"},
 	)
@@ -207,8 +246,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	compBytesAfter := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "comp_bytes_after",
-			Help: "Bytes sent via cross-stream compression, post compression",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "comp_bytes_after",
+			Help:      "Bytes sent via cross-stream compression, post compression",
 		},
 		[]string{"connection_id"},
 	)
@@ -216,8 +257,10 @@ func newMuxerMetrics() *muxerMetrics {
 
 	compRateAve := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "comp_rate_ave",
-			Help: "Average outbound cross-stream compression ratio",
+			Namespace: metricsNamespace,
+			Subsystem: muxerSubsystem,
+			Name:      "comp_rate_ave",
+			Help:      "Average outbound cross-stream compression ratio",
 		},
 		[]string{"connection_id"},
 	)
@@ -274,22 +317,30 @@ func convertRTTMilliSec(t time.Duration) float64 {
 func NewTunnelMetrics() *TunnelMetrics {
 	haConnections := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "ha_connections",
-			Help: "Number of active ha connections",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "ha_connections",
+			Help:      "Number of active ha connections",
 		})
 	prometheus.MustRegister(haConnections)
 
+	activeStreams := h2mux.NewActiveStreamsMetrics(metricsNamespace, tunnelSubsystem)
+
 	totalRequests := prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "total_requests",
-			Help: "Amount of requests proxied through all the tunnels",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "total_requests",
+			Help:      "Amount of requests proxied through all the tunnels",
 		})
 	prometheus.MustRegister(totalRequests)
 
 	requestsPerTunnel := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "requests_per_tunnel",
-			Help: "Amount of requests proxied through each tunnel",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "requests_per_tunnel",
+			Help:      "Amount of requests proxied through each tunnel",
 		},
 		[]string{"connection_id"},
 	)
@@ -297,8 +348,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	concurrentRequestsPerTunnel := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "concurrent_requests_per_tunnel",
-			Help: "Concurrent requests proxied through each tunnel",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "concurrent_requests_per_tunnel",
+			Help:      "Concurrent requests proxied through each tunnel",
 		},
 		[]string{"connection_id"},
 	)
@@ -306,8 +359,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	maxConcurrentRequestsPerTunnel := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "max_concurrent_requests_per_tunnel",
-			Help: "Largest number of concurrent requests proxied through each tunnel so far",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "max_concurrent_requests_per_tunnel",
+			Help:      "Largest number of concurrent requests proxied through each tunnel so far",
 		},
 		[]string{"connection_id"},
 	)
@@ -315,15 +370,19 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	timerRetries := prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "timer_retries",
-			Help: "Unacknowledged heart beats count",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "timer_retries",
+			Help:      "Unacknowledged heart beats count",
 		})
 	prometheus.MustRegister(timerRetries)
 
 	responseByCode := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "response_by_code",
-			Help: "Count of responses by HTTP status code",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "response_by_code",
+			Help:      "Count of responses by HTTP status code",
 		},
 		[]string{"status_code"},
 	)
@@ -331,8 +390,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	responseCodePerTunnel := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "response_code_per_tunnel",
-			Help: "Count of responses by HTTP status code fore each tunnel",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "response_code_per_tunnel",
+			Help:      "Count of responses by HTTP status code fore each tunnel",
 		},
 		[]string{"connection_id", "status_code"},
 	)
@@ -340,8 +401,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	serverLocations := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "server_locations",
-			Help: "Where each tunnel is connected to. 1 means current location, 0 means previous locations.",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "server_locations",
+			Help:      "Where each tunnel is connected to. 1 means current location, 0 means previous locations.",
 		},
 		[]string{"connection_id", "location"},
 	)
@@ -349,8 +412,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	rpcFail := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "tunnel_rpc_fail",
-			Help: "Count of RPC connection errors by type",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "tunnel_rpc_fail",
+			Help:      "Count of RPC connection errors by type",
 		},
 		[]string{"error"},
 	)
@@ -358,8 +423,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	registerFail := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "tunnel_register_fail",
-			Help: "Count of tunnel registration errors by type",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "tunnel_register_fail",
+			Help:      "Count of tunnel registration errors by type",
 		},
 		[]string{"error"},
 	)
@@ -367,8 +434,10 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	userHostnamesCounts := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "user_hostnames_counts",
-			Help: "Which user hostnames cloudflared is serving",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "user_hostnames_counts",
+			Help:      "Which user hostnames cloudflared is serving",
 		},
 		[]string{"userHostname"},
 	)
@@ -376,13 +445,16 @@ func NewTunnelMetrics() *TunnelMetrics {
 
 	registerSuccess := prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "tunnel_register_success",
-			Help: "Count of successful tunnel registrations",
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "tunnel_register_success",
+			Help:      "Count of successful tunnel registrations",
 		})
 	prometheus.MustRegister(registerSuccess)
 
 	return &TunnelMetrics{
 		haConnections:                  haConnections,
+		activeStreams:                  activeStreams,
 		totalRequests:                  totalRequests,
 		requestsPerTunnel:              requestsPerTunnel,
 		concurrentRequestsPerTunnel:    concurrentRequestsPerTunnel,

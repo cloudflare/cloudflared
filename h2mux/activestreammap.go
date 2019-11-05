@@ -3,6 +3,7 @@ package h2mux
 import (
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 )
 
@@ -22,13 +23,16 @@ type activeStreamMap struct {
 	// ignoreNewStreams is true when the connection is being shut down. New streams
 	// cannot be registered.
 	ignoreNewStreams bool
+	// activeStreams is a gauge shared by all muxers of this process to expose the total number of active streams
+	activeStreams prometheus.Gauge
 }
 
-func newActiveStreamMap(useClientStreamNumbers bool) *activeStreamMap {
+func newActiveStreamMap(useClientStreamNumbers bool, activeStreams prometheus.Gauge) *activeStreamMap {
 	m := &activeStreamMap{
-		streams:      make(map[uint32]*MuxedStream),
-		streamsEmpty: make(chan struct{}),
-		nextStreamID: 1,
+		streams:       make(map[uint32]*MuxedStream),
+		streamsEmpty:  make(chan struct{}),
+		nextStreamID:  1,
+		activeStreams: activeStreams,
 	}
 	// Client initiated stream uses odd stream ID, server initiated stream uses even stream ID
 	if !useClientStreamNumbers {
@@ -63,6 +67,7 @@ func (m *activeStreamMap) Set(newStream *MuxedStream) bool {
 		return false
 	}
 	m.streams[newStream.streamID] = newStream
+	m.activeStreams.Inc()
 	return true
 }
 
@@ -70,7 +75,10 @@ func (m *activeStreamMap) Set(newStream *MuxedStream) bool {
 func (m *activeStreamMap) Delete(streamID uint32) {
 	m.Lock()
 	defer m.Unlock()
-	delete(m.streams, streamID)
+	if _, ok := m.streams[streamID]; ok {
+		delete(m.streams, streamID)
+		m.activeStreams.Dec()
+	}
 	if len(m.streams) == 0 && m.streamsEmpty != nil {
 		close(m.streamsEmpty)
 		m.streamsEmpty = nil

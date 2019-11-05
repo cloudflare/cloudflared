@@ -141,7 +141,7 @@ type DefaultMuxerPair struct {
 	doneC           chan struct{}
 }
 
-func NewDefaultMuxerPair(t assert.TestingT, h h2mux.MuxedStreamHandler) *DefaultMuxerPair {
+func NewDefaultMuxerPair(t *testing.T, h h2mux.MuxedStreamHandler) *DefaultMuxerPair {
 	origin, edge := net.Pipe()
 	p := &DefaultMuxerPair{
 		OriginMuxConfig: h2mux.MuxerConfig{
@@ -167,20 +167,20 @@ func NewDefaultMuxerPair(t assert.TestingT, h h2mux.MuxedStreamHandler) *Default
 		EdgeConn: edge,
 		doneC:    make(chan struct{}),
 	}
-	assert.NoError(t, p.Handshake())
+	assert.NoError(t, p.Handshake(t.Name()))
 	return p
 }
 
-func (p *DefaultMuxerPair) Handshake() error {
+func (p *DefaultMuxerPair) Handshake(testName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), testHandshakeTimeout)
 	defer cancel()
 	errGroup, _ := errgroup.WithContext(ctx)
 	errGroup.Go(func() (err error) {
-		p.EdgeMux, err = h2mux.Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig)
+		p.EdgeMux, err = h2mux.Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig, h2mux.NewActiveStreamsMetrics(testName, "edge"))
 		return errors.Wrap(err, "edge handshake failure")
 	})
 	errGroup.Go(func() (err error) {
-		p.OriginMux, err = h2mux.Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig)
+		p.OriginMux, err = h2mux.Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig, h2mux.NewActiveStreamsMetrics(testName, "origin"))
 		return errors.Wrap(err, "origin handshake failure")
 	})
 

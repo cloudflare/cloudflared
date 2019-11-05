@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -107,6 +108,7 @@ func Handshake(
 	w io.WriteCloser,
 	r io.ReadCloser,
 	config MuxerConfig,
+	activeStreamsMetrics prometheus.Gauge,
 ) (*Muxer, error) {
 	// Set default config values
 	if config.Timeout == 0 {
@@ -130,7 +132,7 @@ func Handshake(
 		newStreamChan: make(chan MuxedStreamRequest),
 		abortChan:     make(chan struct{}),
 		readyList:     NewReadyList(),
-		streams:       newActiveStreamMap(config.IsClient),
+		streams:       newActiveStreamMap(config.IsClient, activeStreamsMetrics),
 	}
 
 	m.f.ReadMetaHeaders = hpack.NewDecoder(4096, func(hpack.HeaderField) {})
