@@ -1,3 +1,14 @@
+2019.11.0
+- 2019-11-04 TUN-2502: Switch to go modules
+- 2019-11-04 TUN-2500: Don't send client registration errors to Sentry
+- 2019-11-04 TUN-2489: Delete stream from activestreammap when read and write are both closed
+- 2019-11-05 TUN-2505: Terminate stream on receipt of RST_STREAM; MuxedStream.CloseWrite() should terminate the MuxedStream.Write() loop
+- 2019-10-30 TUN-2451: Log inavlid path
+- 2019-10-22 TUN-2425: Enable cloudflared to serve multiple Hello World servers by having each of them create its own ServeMux
+- 2019-10-22 AUTH-2173: Prepends access login url with scheme if one doesnt exist
+- 2019-10-23 TUN-2460: Configure according to the ClientConfig recevied from a successful Connect
+- 2019-10-23 AUTH-2177: Reads and writes error streams
+
 2019.10.4
 - 2019-10-21 TUN-2450: Remove Brew publishing formula
 
