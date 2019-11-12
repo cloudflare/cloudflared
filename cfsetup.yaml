@@ -85,3 +85,14 @@ stretch: &stretch
       - make test
 
 jessie: *stretch
+
+# cfsetup compose
+default-stack: test_dbconnect
+test_dbconnect:
+  compose:
+    up-args:
+      - --renew-anon-volumes
+      - --abort-on-container-exit
+      - --exit-code-from=cloudflared
+    files:
+      - dbconnect_tests/dbconnect.yaml

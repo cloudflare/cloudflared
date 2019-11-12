@@ -1,0 +1,4 @@
+github.com/felixge/httpsnoop v1.0.0 h1:gh8fMGz0rlOv/1WmRZm7OgncIOTsAj21iNJot48omJQ=
+github.com/felixge/httpsnoop v1.0.0/go.mod h1:3+D9sFq0ahK/JeJPhCBUV1xlf4/eIYrUQaxulT0VzX8=
+github.com/golang/gddo v0.0.0-20180823221919-9d8ff1c67be5 h1:yrv1uUvgXH/tEat+wdvJMRJ4g51GlIydtDpU9pFjaaI=
+github.com/golang/gddo v0.0.0-20180823221919-9d8ff1c67be5/go.mod h1:xEhNfoBDX1hzLm2Nf80qUvZ2sVwoMZ8d6IE2SrsQfh4=
