@@ -60,6 +60,12 @@ func ValidateHostname(hostname string) (string, error) {
 
 }
 
+// ValidateUrl returns a validated version of `originUrl` with a scheme prepended (by default http://).
+// Note: when originUrl contains a scheme, the path is removed:
+//   ValidateUrl("https://localhost:8080/api/") => "https://localhost:8080"
+// but when it does not, the path is preserved:
+//   ValidateUrl("localhost:8080/api/") => "http://localhost:8080/api/"
+// This is arguably a bug, but changing it might break some cloudflared users.
 func ValidateUrl(originUrl string) (string, error) {
 	if originUrl == "" {
 		return "", fmt.Errorf("URL should not be empty")
@@ -121,6 +127,8 @@ func ValidateUrl(originUrl string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("URL %s has invalid format", originUrl)
 			}
+			// This is why the path is preserved when `originUrl` doesn't have a schema.
+			// Using `parsedUrl.Port()` here, instead of `port`, would remove the path
 			return fmt.Sprintf("%s://%s", defaultScheme, net.JoinHostPort(hostname, port)), nil
 		}
 	}
