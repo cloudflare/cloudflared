@@ -1,12 +1,22 @@
-FROM golang:1.12 as builder
-WORKDIR /go/src/github.com/cloudflare/cloudflared/
-RUN apt-get update && apt-get install -y --no-install-recommends upx
-# Run after `apt-get update` to improve rebuild scenarios
-COPY . .
-RUN make cloudflared
-RUN upx --no-progress cloudflared
+FROM golang:1.12-alpine as builder
 
-FROM gcr.io/distroless/base
+WORKDIR /go/src/github.com/cloudflare/cloudflared/
+
+COPY . .
+
+ENV GO111MODULE on
+ENV CGO_ENABLED 0
+
+RUN apk add --no-cache build-base=0.5-r1 git=2.22.0-r0 upx=3.95-r2 \
+    && make cloudflared \
+    && upx --no-progress cloudflared
+
+FROM scratch
+
 COPY --from=builder /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
+
 ENTRYPOINT ["cloudflared", "--no-autoupdate"]
+
 CMD ["version"]
+
+RUN ["cloudflared", "--version"]

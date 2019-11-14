@@ -6,6 +6,8 @@ IMPORT_PATH   := github.com/cloudflare/cloudflared
 PACKAGE_DIR   := $(CURDIR)/packaging
 INSTALL_BINDIR := usr/local/bin
 
+DOCKER_CLI_EXPERIMENTAL := enabled
+
 EQUINOX_FLAGS = --version="$(VERSION)" \
 				 --platforms="$(EQUINOX_BUILD_PLATFORMS)" \
 				 --app="$(EQUINOX_APP_ID)" \
@@ -34,6 +36,17 @@ cloudflared: tunnel-deps
 .PHONY: container
 container:
 	docker build -t cloudflare/cloudflared:"$(VERSION)" .
+
+.PHONY: manifest
+manifest:
+	docker run --rm --privileged aptman/qus -s -- -r
+	docker run --rm --privileged aptman/qus -s -- -p
+	-docker buildx create --use --name cloudflared
+	docker buildx inspect --bootstrap
+	docker buildx build . \
+		-t cloudflare/cloudflared:"$(VERSION)" \
+		--platform=linux/amd64,linux/arm64,linux/386,linux/arm/v7,linux/arm/v6 \
+		--pull --push
 
 .PHONY: test
 test: vet
