@@ -43,6 +43,8 @@ func (ar AuthenticateResponse) Outcome() AuthOutcome {
 //go-sumtype:decl AuthOutcome
 type AuthOutcome interface {
 	isAuthOutcome()
+	// Serialize into an AuthenticateResponse which can be sent via Capnp
+	Serialize() AuthenticateResponse
 }
 
 // AuthSuccess means the backend successfully authenticated this cloudflared.
@@ -56,11 +58,26 @@ func (ao *AuthSuccess) RefreshAfter() time.Duration {
 	return hoursToTime(ao.HoursUntilRefresh)
 }
 
+// Serialize into an AuthenticateResponse which can be sent via Capnp
+func (ao *AuthSuccess) Serialize() AuthenticateResponse {
+	return AuthenticateResponse{
+		Jwt:               ao.Jwt,
+		HoursUntilRefresh: ao.HoursUntilRefresh,
+	}
+}
+
 func (ao *AuthSuccess) isAuthOutcome() {}
 
 // AuthFail means this cloudflared has the wrong auth and should exit.
 type AuthFail struct {
 	Err error
+}
+
+// Serialize into an AuthenticateResponse which can be sent via Capnp
+func (ao *AuthFail) Serialize() AuthenticateResponse {
+	return AuthenticateResponse{
+		PermanentErr: ao.Err.Error(),
+	}
 }
 
 func (ao *AuthFail) isAuthOutcome() {}
@@ -74,6 +91,14 @@ type AuthUnknown struct {
 // RefreshAfter is how long cloudflared should wait before rerunning Authenticate.
 func (ao *AuthUnknown) RefreshAfter() time.Duration {
 	return hoursToTime(ao.HoursUntilRefresh)
+}
+
+// Serialize into an AuthenticateResponse which can be sent via Capnp
+func (ao *AuthUnknown) Serialize() AuthenticateResponse {
+	return AuthenticateResponse{
+		RetryableErr:      ao.Err.Error(),
+		HoursUntilRefresh: ao.HoursUntilRefresh,
+	}
 }
 
 func (ao *AuthUnknown) isAuthOutcome() {}

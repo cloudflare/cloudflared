@@ -58,8 +58,12 @@ func TestAuthenticateResponseOutcome(t *testing.T) {
 				Jwt:               tt.fields.Jwt,
 				HoursUntilRefresh: tt.fields.HoursUntilRefresh,
 			}
-			if got := ar.Outcome(); !reflect.DeepEqual(got, tt.want) {
+			got := ar.Outcome()
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("AuthenticateResponse.Outcome() = %T, want %v", got, tt.want)
+			}
+			if got != nil && !reflect.DeepEqual(got.Serialize(), ar) {
+				t.Errorf(".Outcome() and .Serialize() should be inverses but weren't. Expected %v, got %v", ar, got.Serialize())
 			}
 		})
 	}
