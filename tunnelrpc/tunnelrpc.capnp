@@ -274,11 +274,19 @@ struct FailedConfig {
 	reason @4 :Text;
 }
 
+struct AuthenticateResponse {
+    permanentErr @0 :Text;
+    retryableErr @1 :Text;
+    jwt @2 :Data;
+    hoursUntilRefresh @3 :UInt8;
+}
+
 interface TunnelServer {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
     connect @3 (parameters :CapnpConnectParameters) -> (result :ConnectResult);
+    authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
 }
 
 interface ClientService {
