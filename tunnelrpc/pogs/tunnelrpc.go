@@ -33,11 +33,12 @@ func UnmarshalAuthentication(s tunnelrpc.Authentication) (*Authentication, error
 }
 
 type TunnelRegistration struct {
-	Err              string
-	Url              string
-	LogLines         []string
-	PermanentFailure bool
-	TunnelID         string `capnp:"tunnelID"`
+	Err               string
+	Url               string
+	LogLines          []string
+	PermanentFailure  bool
+	TunnelID          string `capnp:"tunnelID"`
+	RetryAfterSeconds uint16
 }
 
 func MarshalTunnelRegistration(s tunnelrpc.TunnelRegistration, p *TunnelRegistration) error {
@@ -63,6 +64,7 @@ type RegistrationOptions struct {
 	RunFromTerminal      bool   `capnp:"runFromTerminal"`
 	CompressionQuality   uint64 `capnp:"compressionQuality"`
 	UUID                 string `capnp:"uuid"`
+	NumPreviousAttempts  uint8
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {
@@ -328,6 +330,7 @@ type TunnelServer interface {
 	UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error
 	Connect(ctx context.Context, parameters *ConnectParameters) (ConnectResult, error)
 	Authenticate(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*AuthenticateResponse, error)
+	ReconnectTunnel(ctx context.Context, jwt []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 }
 
 func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {

@@ -11,6 +11,36 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
+func TestTunnelRegistration(t *testing.T) {
+	testCases := []*TunnelRegistration{
+		&TunnelRegistration{
+			Err:               "it broke",
+			Url:               "asdf.cftunnel.com",
+			LogLines:          []string{"it", "was", "broken"},
+			PermanentFailure:  true,
+			TunnelID:          "asdfghjkl;",
+			RetryAfterSeconds: 19,
+		},
+	}
+	for i, testCase := range testCases {
+		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+		capnpEntity, err := tunnelrpc.NewTunnelRegistration(seg)
+		if !assert.NoError(t, err) {
+			t.Fatal("Couldn't initialize a new message")
+		}
+		err = MarshalTunnelRegistration(capnpEntity, testCase)
+		if !assert.NoError(t, err, "testCase #%v failed to marshal", i) {
+			continue
+		}
+		result, err := UnmarshalTunnelRegistration(capnpEntity)
+		if !assert.NoError(t, err, "testCase #%v failed to unmarshal", i) {
+			continue
+		}
+		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
+	}
+
+}
+
 func TestConnectResult(t *testing.T) {
 	testCases := []ConnectResult{
 		&ConnectError{
