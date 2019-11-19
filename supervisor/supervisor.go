@@ -16,6 +16,7 @@ import (
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,6 +29,27 @@ type Supervisor struct {
 	useConfigResultChan chan<- *pogs.UseConfigurationResult
 	state               *state
 	logger              *logrus.Entry
+	metrics             metrics
+}
+
+type metrics struct {
+	configVersion prometheus.Gauge
+}
+
+func newMetrics() metrics {
+	configVersion := prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "supervisor",
+		Subsystem: "supervisor",
+		Name:      "config_version",
+		Help:      "Latest configuration version received from Cloudflare",
+	},
+	)
+	prometheus.MustRegister(
+		configVersion,
+	)
+	return metrics{
+		configVersion: configVersion,
+	}
 }
 
 func NewSupervisor(
@@ -70,6 +92,7 @@ func NewSupervisor(
 		useConfigResultChan: useConfigResultChan,
 		state:               newState(defaultClientConfig),
 		logger:              logger.WithField("subsystem", "supervisor"),
+		metrics:             newMetrics(),
 	}, nil
 }
 
@@ -131,6 +154,7 @@ func (s *Supervisor) notifySubsystemsNewConfig(newConfig *pogs.ClientConfig) *po
 			Success: true,
 		}
 	}
+	s.metrics.configVersion.Set(float64(newConfig.Version))
 
 	s.state.updateConfig(newConfig)
 	var tunnelHostnames []h2mux.TunnelHostname
