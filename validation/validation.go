@@ -190,10 +190,11 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 		_, secondErr := client.Do(secondRequest)
 		if secondErr == nil { // Worked this time--advise the user to switch protocols
 			return errors.Errorf(
-				"%s doesn't seem to work over %s, but does seem to work over %s. Consider changing the origin URL to %s",
+				"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %s",
 				parsedURL.Host,
 				oldScheme,
 				parsedURL.Scheme,
+				initialErr,
 				parsedURL,
 			)
 		}
