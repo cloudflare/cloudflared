@@ -31,15 +31,15 @@ func TestAuthenticateResponseOutcome(t *testing.T) {
 	}{
 		{"success",
 			fields{Jwt: []byte("asdf"), HoursUntilRefresh: 6},
-			&AuthSuccess{Jwt: []byte("asdf"), HoursUntilRefresh: 6},
+			AuthSuccess{jwt: []byte("asdf"), hoursUntilRefresh: 6},
 		},
 		{"fail",
 			fields{PermanentErr: "bad creds"},
-			&AuthFail{Err: fmt.Errorf("bad creds")},
+			AuthFail{err: fmt.Errorf("bad creds")},
 		},
 		{"error",
 			fields{RetryableErr: "bad conn", HoursUntilRefresh: 6},
-			&AuthUnknown{Err: fmt.Errorf("bad conn"), HoursUntilRefresh: 6},
+			AuthUnknown{err: fmt.Errorf("bad conn"), hoursUntilRefresh: 6},
 		},
 		{"nil (no fields are set)",
 			fields{},
@@ -67,6 +67,27 @@ func TestAuthenticateResponseOutcome(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthSuccess(t *testing.T) {
+	input := NewAuthSuccess([]byte("asdf"), 6)
+	output, ok := input.Serialize().Outcome().(AuthSuccess)
+	assert.True(t, ok)
+	assert.Equal(t, input, output)
+}
+
+func TestAuthUnknown(t *testing.T) {
+	input := NewAuthUnknown(fmt.Errorf("pdx unreachable"), 6)
+	output, ok := input.Serialize().Outcome().(AuthUnknown)
+	assert.True(t, ok)
+	assert.Equal(t, input, output)
+}
+
+func TestAuthFail(t *testing.T) {
+	input := NewAuthFail(fmt.Errorf("wrong creds"))
+	output, ok := input.Serialize().Outcome().(AuthFail)
+	assert.True(t, ok)
+	assert.Equal(t, input, output)
 }
 
 func TestWhenToRefresh(t *testing.T) {
