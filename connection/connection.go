@@ -2,7 +2,6 @@ package connection
 
 import (
 	"context"
-	"net"
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -20,20 +19,12 @@ const (
 	openStreamTimeout = 30 * time.Second
 )
 
-type dialError struct {
-	cause error
-}
-
-func (e dialError) Error() string {
-	return e.cause.Error()
-}
-
 type Connection struct {
 	id    uuid.UUID
 	muxer *h2mux.Muxer
 }
 
-func newConnection(muxer *h2mux.Muxer, edgeIP *net.TCPAddr) (*Connection, error) {
+func newConnection(muxer *h2mux.Muxer) (*Connection, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return nil, err

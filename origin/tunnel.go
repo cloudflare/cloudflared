@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/streamhandler"
@@ -27,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	_ "github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	rpc "zombiezen.com/go/capnproto2/rpc"
@@ -74,14 +74,6 @@ type TunnelConfig struct {
 	WSGI                 bool
 	// OriginUrl may not be used if a user specifies a unix socket.
 	OriginUrl string
-}
-
-type dialError struct {
-	cause error
-}
-
-func (e dialError) Error() string {
-	return e.cause.Error()
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -214,11 +206,11 @@ func ServeTunnel(
 	tags["ha"] = connectionTag
 
 	// Returns error from parsing the origin URL or handshake errors
-	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr.String(), connectionID)
+	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr, connectionID)
 	if err != nil {
 		errLog := logger.WithError(err)
 		switch err.(type) {
-		case dialError:
+		case connection.DialError:
 			errLog.Error("Unable to dial edge")
 		case h2mux.MuxerHandshakeError:
 			errLog.Error("Handshake failed with edge server")
@@ -470,7 +462,7 @@ var dialer = net.Dialer{}
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
 func NewTunnelHandler(ctx context.Context,
 	config *TunnelConfig,
-	addr string,
+	addr *net.TCPAddr,
 	connectionID uint8,
 ) (*TunnelHandler, string, error) {
 	originURL, err := validation.ValidateUrl(config.OriginUrl)
@@ -491,22 +483,11 @@ func NewTunnelHandler(ctx context.Context,
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
 	}
-	// Inherit from parent context so we can cancel (Ctrl-C) while dialing
-	dialCtx, dialCancel := context.WithTimeout(ctx, dialTimeout)
-	// TUN-92: enforce a timeout on dial and handshake (as tls.Dial does not support one)
-	plaintextEdgeConn, err := dialer.DialContext(dialCtx, "tcp", addr)
-	dialCancel()
+
+	edgeConn, err := connection.DialEdge(ctx, dialTimeout, config.TlsConfig, addr)
 	if err != nil {
-		return nil, "", dialError{cause: errors.Wrap(err, "DialContext error")}
+		return nil, "", err
 	}
-	edgeConn := tls.Client(plaintextEdgeConn, config.TlsConfig)
-	edgeConn.SetDeadline(time.Now().Add(dialTimeout))
-	err = edgeConn.Handshake()
-	if err != nil {
-		return nil, "", dialError{cause: errors.Wrap(err, "Handshake with edge error")}
-	}
-	// clear the deadline on the conn; h2mux has its own timeouts
-	edgeConn.SetDeadline(time.Time{})
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
 	h.muxer, err = h2mux.Handshake(edgeConn, edgeConn, h2mux.MuxerConfig{
@@ -519,9 +500,9 @@ func NewTunnelHandler(ctx context.Context,
 		CompressionQuality: h2mux.CompressionSetting(config.CompressionQuality),
 	}, h.metrics.activeStreams)
 	if err != nil {
-		return h, "", errors.New("TLS handshake error")
+		return nil, "", errors.Wrap(err, "Handshake with edge error")
 	}
-	return h, edgeConn.LocalAddr().String(), err
+	return h, edgeConn.LocalAddr().String(), nil
 }
 
 func (h *TunnelHandler) AppendTagHeaders(r *http.Request) {

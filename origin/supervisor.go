@@ -183,7 +183,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 			return
 		// try the next address if it was a dialError(network problem) or
 		// dupConnRegisterTunnelError
-		case dialError, dupConnRegisterTunnelError:
+		case connection.DialError, dupConnRegisterTunnelError:
 			s.replaceEdgeIP(0)
 		default:
 			return
