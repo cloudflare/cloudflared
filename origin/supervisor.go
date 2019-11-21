@@ -6,12 +6,11 @@ import (
 	"net"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/signal"
-
-	"github.com/google/uuid"
 )
 
 const (

@@ -14,23 +14,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/cloudflare/cloudflared/websocket"
-
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/sync/errgroup"
-	rpc "zombiezen.com/go/capnproto2/rpc"
 )
 
 const (
@@ -288,16 +286,6 @@ func ServeTunnel(
 	return nil, true
 }
 
-func IsRPCStreamResponse(headers []h2mux.Header) bool {
-	if len(headers) != 1 {
-		return false
-	}
-	if headers[0].Name != ":status" || headers[0].Value != "200" {
-		return false
-	}
-	return true
-}
-
 func RegisterTunnel(
 	ctx context.Context,
 	muxer *h2mux.Muxer,
@@ -308,28 +296,18 @@ func RegisterTunnel(
 	uuid uuid.UUID,
 ) error {
 	config.TransportLogger.Debug("initiating RPC stream to register")
-	stream, err := openStream(ctx, muxer)
+	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger.WithField("subsystem", "rpc-register"), openStreamTimeout)
 	if err != nil {
 		// RPC stream open error
 		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
 	}
-	if !IsRPCStreamResponse(stream.Headers) {
-		// stream response error
-		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
-	}
-	conn := rpc.NewConn(
-		tunnelrpc.NewTransportLogger(config.TransportLogger.WithField("subsystem", "rpc-register"), rpc.StreamTransport(stream)),
-		tunnelrpc.ConnLog(config.TransportLogger.WithField("subsystem", "rpc-transport")),
-	)
-	defer conn.Close()
-	ts := tunnelpogs.TunnelServer_PogsClient{Client: conn.Bootstrap(ctx)}
+	defer tunnelServer.Close()
 	// Request server info without blocking tunnel registration; must use capnp library directly.
-	tsClient := tunnelrpc.TunnelServer{Client: ts.Client}
-	serverInfoPromise := tsClient.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
+	serverInfoPromise := tunnelrpc.TunnelServer{Client: tunnelServer.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
 	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
-	registration := ts.RegisterTunnel(
+	registration := tunnelServer.RegisterTunnel(
 		ctx,
 		config.OriginCert,
 		config.Hostname,
@@ -369,7 +347,7 @@ func RegisterTunnel(
 	return nil
 }
 
-func processRegisterTunnelError(err pogs.TunnelRegistrationError, metrics *TunnelMetrics) error {
+func processRegisterTunnelError(err tunnelpogs.TunnelRegistrationError, metrics *TunnelMetrics) error {
 	if err.Error() == DuplicateConnectionError {
 		metrics.regFail.WithLabelValues("dup_edge_conn").Inc()
 		return dupConnRegisterTunnelError{}
@@ -384,33 +362,13 @@ func processRegisterTunnelError(err pogs.TunnelRegistrationError, metrics *Tunne
 func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log.Logger) error {
 	logger.Debug("initiating RPC stream to unregister")
 	ctx := context.Background()
-	stream, err := openStream(ctx, muxer)
+	ts, err := connection.NewRPCClient(ctx, muxer, logger.WithField("subsystem", "rpc-unregister"), openStreamTimeout)
 	if err != nil {
 		// RPC stream open error
 		return err
 	}
-	if !IsRPCStreamResponse(stream.Headers) {
-		// stream response error
-		return err
-	}
-	conn := rpc.NewConn(
-		tunnelrpc.NewTransportLogger(logger.WithField("subsystem", "rpc-unregister"), rpc.StreamTransport(stream)),
-		tunnelrpc.ConnLog(logger.WithField("subsystem", "rpc-transport")),
-	)
-	defer conn.Close()
-	ts := tunnelpogs.TunnelServer_PogsClient{Client: conn.Bootstrap(ctx)}
 	// gracePeriod is encoded in int64 using capnproto
 	return ts.UnregisterTunnel(ctx, gracePeriod.Nanoseconds())
-}
-
-func openStream(ctx context.Context, muxer *h2mux.Muxer) (*h2mux.MuxedStream, error) {
-	openStreamCtx, cancel := context.WithTimeout(ctx, openStreamTimeout)
-	defer cancel()
-	return muxer.OpenStream(openStreamCtx, []h2mux.Header{
-		{Name: ":method", Value: "RPC"},
-		{Name: ":scheme", Value: "capnp"},
-		{Name: ":path", Value: "*"},
-	}, nil)
 }
 
 func LogServerInfo(

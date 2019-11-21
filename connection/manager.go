@@ -7,15 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
+
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
@@ -58,12 +58,12 @@ func newMetrics(namespace, subsystem string) *metrics {
 // EdgeManagerConfigurable is the configurable attributes of a EdgeConnectionManager
 type EdgeManagerConfigurable struct {
 	TunnelHostnames []h2mux.TunnelHostname
-	*pogs.EdgeConnectionConfig
+	*tunnelpogs.EdgeConnectionConfig
 }
 
 type CloudflaredConfig struct {
 	CloudflaredID uuid.UUID
-	Tags          []pogs.Tag
+	Tags          []tunnelpogs.Tag
 	BuildInfo     *buildinfo.BuildInfo
 	IntentLabel   string
 }
@@ -126,7 +126,7 @@ func (em *EdgeManager) UpdateConfigurable(newConfigurable *EdgeManagerConfigurab
 	em.state.updateConfigurable(newConfigurable)
 }
 
-func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
+func (em *EdgeManager) newConnection(ctx context.Context) *tunnelpogs.ConnectError {
 	edgeTCPAddr := em.serviceDiscoverer.Addr()
 	configurable := em.state.getConfigurable()
 	edgeConn, err := DialEdge(ctx, configurable.Timeout, em.tlsConfig, edgeTCPAddr)
@@ -154,7 +154,7 @@ func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
 
 	go em.serveConn(ctx, h2muxConn)
 
-	connResult, err := h2muxConn.Connect(ctx, &pogs.ConnectParameters{
+	connResult, err := h2muxConn.Connect(ctx, &tunnelpogs.ConnectParameters{
 		CloudflaredID:       em.cloudflaredConfig.CloudflaredID,
 		CloudflaredVersion:  em.cloudflaredConfig.BuildInfo.CloudflaredVersion,
 		NumPreviousAttempts: 0,
@@ -285,8 +285,8 @@ func (ems *edgeManagerState) getUserCredential() []byte {
 	return ems.userCredential
 }
 
-func retryConnection(cause string) *pogs.ConnectError {
-	return &pogs.ConnectError{
+func retryConnection(cause string) *tunnelpogs.ConnectError {
+	return &tunnelpogs.ConnectError{
 		Cause:       cause,
 		RetryAfter:  defaultRetryAfter,
 		ShouldRetry: true,
