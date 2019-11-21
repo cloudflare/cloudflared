@@ -9,11 +9,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	log "github.com/sirupsen/logrus"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
+)
+
+const (
+	defaultRetryAfterSeconds = 15
 )
 
 type Authentication struct {
@@ -33,12 +36,109 @@ func UnmarshalAuthentication(s tunnelrpc.Authentication) (*Authentication, error
 }
 
 type TunnelRegistration struct {
+	SuccessfulTunnelRegistration
 	Err               string
-	Url               string
-	LogLines          []string
 	PermanentFailure  bool
-	TunnelID          string `capnp:"tunnelID"`
 	RetryAfterSeconds uint16
+}
+
+type SuccessfulTunnelRegistration struct {
+	Url      string
+	LogLines []string
+	TunnelID string `capnp:"tunnelID"`
+}
+
+func NewSuccessfulTunnelRegistration(
+	url string,
+	logLines []string,
+	tunnelID string,
+) *TunnelRegistration {
+	// Marshal nil will result in an error
+	if logLines == nil {
+		logLines = []string{}
+	}
+	return &TunnelRegistration{
+		SuccessfulTunnelRegistration: SuccessfulTunnelRegistration{
+			Url:      url,
+			LogLines: logLines,
+			TunnelID: tunnelID,
+		},
+	}
+}
+
+// Not calling this function Error() to avoid confusion with implementing error interface
+func (tr TunnelRegistration) DeserializeError() TunnelRegistrationError {
+	if tr.Err != "" {
+		err := fmt.Errorf(tr.Err)
+		if tr.PermanentFailure {
+			return NewPermanentRegistrationError(err)
+		}
+		retryAfterSeconds := tr.RetryAfterSeconds
+		if retryAfterSeconds < defaultRetryAfterSeconds {
+			retryAfterSeconds = defaultRetryAfterSeconds
+		}
+		return NewRetryableRegistrationError(err, retryAfterSeconds)
+	}
+	return nil
+}
+
+type TunnelRegistrationError interface {
+	error
+	Serialize() *TunnelRegistration
+	IsPermanent() bool
+}
+
+type PermanentRegistrationError struct {
+	err string
+}
+
+func NewPermanentRegistrationError(err error) TunnelRegistrationError {
+	return &PermanentRegistrationError{
+		err: err.Error(),
+	}
+}
+
+func (pre *PermanentRegistrationError) Error() string {
+	return pre.err
+}
+
+func (pre *PermanentRegistrationError) Serialize() *TunnelRegistration {
+	return &TunnelRegistration{
+		Err:              pre.err,
+		PermanentFailure: true,
+	}
+}
+
+func (*PermanentRegistrationError) IsPermanent() bool {
+	return true
+}
+
+type RetryableRegistrationError struct {
+	err               string
+	retryAfterSeconds uint16
+}
+
+func NewRetryableRegistrationError(err error, retryAfterSeconds uint16) TunnelRegistrationError {
+	return &RetryableRegistrationError{
+		err:               err.Error(),
+		retryAfterSeconds: retryAfterSeconds,
+	}
+}
+
+func (rre *RetryableRegistrationError) Error() string {
+	return rre.err
+}
+
+func (rre *RetryableRegistrationError) Serialize() *TunnelRegistration {
+	return &TunnelRegistration{
+		Err:               rre.err,
+		PermanentFailure:  false,
+		RetryAfterSeconds: rre.retryAfterSeconds,
+	}
+}
+
+func (*RetryableRegistrationError) IsPermanent() bool {
+	return false
 }
 
 func MarshalTunnelRegistration(s tunnelrpc.TunnelRegistration, p *TunnelRegistration) error {
@@ -325,7 +425,7 @@ func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectPar
 }
 
 type TunnelServer interface {
-	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
+	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) *TunnelRegistration
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
 	UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error
 	Connect(ctx context.Context, parameters *ConnectParameters) (ConnectResult, error)
@@ -359,15 +459,12 @@ func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerT
 		return err
 	}
 	server.Ack(p.Options)
-	registration, err := i.impl.RegisterTunnel(p.Ctx, originCert, hostname, pogsOptions)
-	if err != nil {
-		return err
-	}
+	registration := i.impl.RegisterTunnel(p.Ctx, originCert, hostname, pogsOptions)
+
 	result, err := p.Results.NewResult()
 	if err != nil {
 		return err
 	}
-	log.Info(registration.TunnelID)
 	return MarshalTunnelRegistration(result, registration)
 }
 
@@ -420,7 +517,7 @@ func (c TunnelServer_PogsClient) Close() error {
 	return c.Conn.Close()
 }
 
-func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error) {
+func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) *TunnelRegistration {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.RegisterTunnel(ctx, func(p tunnelrpc.TunnelServer_registerTunnel_Params) error {
 		err := p.SetOriginCert(originCert)
@@ -443,9 +540,13 @@ func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert 
 	})
 	retval, err := promise.Result().Struct()
 	if err != nil {
-		return nil, err
+		return NewRetryableRegistrationError(err, defaultRetryAfterSeconds).Serialize()
 	}
-	return UnmarshalTunnelRegistration(retval)
+	registration, err := UnmarshalTunnelRegistration(retval)
+	if err != nil {
+		return NewRetryableRegistrationError(err, defaultRetryAfterSeconds).Serialize()
+	}
+	return registration
 }
 
 func (c TunnelServer_PogsClient) GetServerInfo(ctx context.Context) (*ServerInfo, error) {

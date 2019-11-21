@@ -1,6 +1,7 @@
 package pogs
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -11,16 +12,29 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
+const (
+	testURL               = "tunnel.example.com"
+	testTunnelID          = "asdfghjkl;"
+	testRetryAfterSeconds = 19
+)
+
+var (
+	testErr      = fmt.Errorf("Invalid credential")
+	testLogLines = []string{"all", "working"}
+)
+
+// *PermanentRegistrationError implements TunnelRegistrationError
+var _ TunnelRegistrationError = (*PermanentRegistrationError)(nil)
+
+// *RetryableRegistrationError implements TunnelRegistrationError
+var _ TunnelRegistrationError = (*RetryableRegistrationError)(nil)
+
 func TestTunnelRegistration(t *testing.T) {
 	testCases := []*TunnelRegistration{
-		&TunnelRegistration{
-			Err:               "it broke",
-			Url:               "asdf.cftunnel.com",
-			LogLines:          []string{"it", "was", "broken"},
-			PermanentFailure:  true,
-			TunnelID:          "asdfghjkl;",
-			RetryAfterSeconds: 19,
-		},
+		NewSuccessfulTunnelRegistration(testURL, testLogLines, testTunnelID),
+		NewSuccessfulTunnelRegistration(testURL, nil, testTunnelID),
+		NewPermanentRegistrationError(testErr).Serialize(),
+		NewRetryableRegistrationError(testErr, testRetryAfterSeconds).Serialize(),
 	}
 	for i, testCase := range testCases {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))

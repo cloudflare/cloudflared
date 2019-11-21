@@ -19,6 +19,7 @@ import (
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -335,23 +336,21 @@ func RegisterTunnel(
 	serverInfoPromise := tsClient.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
-	registration, err := ts.RegisterTunnel(
+	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
+	registration := ts.RegisterTunnel(
 		ctx,
 		config.OriginCert,
 		config.Hostname,
 		config.RegistrationOptions(connectionID, originLocalIP, uuid),
 	)
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
-	if err != nil {
+
+	if registrationErr := registration.DeserializeError(); registrationErr != nil {
 		// RegisterTunnel RPC failure
-		return newClientRegisterTunnelError(err, config.Metrics.regFail)
-	}
-	for _, logLine := range registration.LogLines {
-		logger.Info(logLine)
+		return processRegisterTunnelError(registrationErr, config.Metrics)
 	}
 
-	if regErr := processRegisterTunnelError(registration.Err, registration.PermanentFailure, config.Metrics); regErr != nil {
-		return regErr
+	for _, logLine := range registration.LogLines {
+		logger.Info(logLine)
 	}
 
 	if registration.TunnelID != "" {
@@ -374,22 +373,19 @@ func RegisterTunnel(
 	config.Metrics.userHostnamesCounts.WithLabelValues(registration.Url).Inc()
 
 	logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
+	config.Metrics.regSuccess.Inc()
 	return nil
 }
 
-func processRegisterTunnelError(err string, permanentFailure bool, metrics *TunnelMetrics) error {
-	if err == "" {
-		metrics.regSuccess.Inc()
-		return nil
-	}
-
-	metrics.regFail.WithLabelValues(err).Inc()
-	if err == DuplicateConnectionError {
+func processRegisterTunnelError(err pogs.TunnelRegistrationError, metrics *TunnelMetrics) error {
+	if err.Error() == DuplicateConnectionError {
+		metrics.regFail.WithLabelValues("dup_edge_conn").Inc()
 		return dupConnRegisterTunnelError{}
 	}
+	metrics.regFail.WithLabelValues("server_error").Inc()
 	return serverRegisterTunnelError{
-		cause:     fmt.Errorf("Server error: %s", err),
-		permanent: permanentFailure,
+		cause:     fmt.Errorf("Server error: %s", err.Error()),
+		permanent: err.IsPermanent(),
 	}
 }
 
