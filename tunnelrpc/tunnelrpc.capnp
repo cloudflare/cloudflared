@@ -21,6 +21,8 @@ struct TunnelRegistration {
     tunnelID @4 :Text;
     # How long should this connection wait to retry in seconds, if the error wasn't permanent
     retryAfterSeconds @5 :UInt16;
+    # A unique ID used to reconnect this tunnel.
+    eventDigest @6 :Data;
 }
 
 struct RegistrationOptions {

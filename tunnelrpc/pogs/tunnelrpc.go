@@ -43,15 +43,17 @@ type TunnelRegistration struct {
 }
 
 type SuccessfulTunnelRegistration struct {
-	Url      string
-	LogLines []string
-	TunnelID string `capnp:"tunnelID"`
+	Url         string
+	LogLines    []string
+	TunnelID    string `capnp:"tunnelID"`
+	EventDigest []byte
 }
 
 func NewSuccessfulTunnelRegistration(
 	url string,
 	logLines []string,
 	tunnelID string,
+	eventDigest []byte,
 ) *TunnelRegistration {
 	// Marshal nil will result in an error
 	if logLines == nil {
@@ -59,9 +61,10 @@ func NewSuccessfulTunnelRegistration(
 	}
 	return &TunnelRegistration{
 		SuccessfulTunnelRegistration: SuccessfulTunnelRegistration{
-			Url:      url,
-			LogLines: logLines,
-			TunnelID: tunnelID,
+			Url:         url,
+			LogLines:    logLines,
+			TunnelID:    tunnelID,
+			EventDigest: eventDigest,
 		},
 	}
 }
