@@ -465,7 +465,7 @@ type TunnelHandler struct {
 	noChunkedEncoding bool
 }
 
-var dialer = net.Dialer{DualStack: true}
+var dialer = net.Dialer{}
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
 func NewTunnelHandler(ctx context.Context,

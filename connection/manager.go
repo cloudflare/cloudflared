@@ -202,7 +202,7 @@ func (em *EdgeManager) dialEdge(ctx context.Context, edgeIP *net.TCPAddr) (*tls.
 	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
 	defer dialCancel()
 
-	dialer := net.Dialer{DualStack: true}
+	dialer := net.Dialer{}
 	edgeConn, err := dialer.DialContext(dialCtx, "tcp", edgeIP.String())
 	if err != nil {
 		return nil, dialError{cause: errors.Wrap(err, "DialContext error")}
