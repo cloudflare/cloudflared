@@ -12,6 +12,10 @@ func (i TunnelServer_PogsImpl) ReconnectTunnel(p tunnelrpc.TunnelServer_reconnec
 	if err != nil {
 		return err
 	}
+	eventDigest, err := p.Params.EventDigest()
+	if err != nil {
+		return err
+	}
 	hostname, err := p.Params.Hostname()
 	if err != nil {
 		return err
@@ -25,7 +29,7 @@ func (i TunnelServer_PogsImpl) ReconnectTunnel(p tunnelrpc.TunnelServer_reconnec
 		return err
 	}
 	server.Ack(p.Options)
-	registration, err := i.impl.ReconnectTunnel(p.Ctx, jwt, hostname, pogsOptions)
+	registration, err := i.impl.ReconnectTunnel(p.Ctx, jwt, eventDigest, hostname, pogsOptions)
 	if err != nil {
 		return err
 	}
@@ -38,13 +42,18 @@ func (i TunnelServer_PogsImpl) ReconnectTunnel(p tunnelrpc.TunnelServer_reconnec
 
 func (c TunnelServer_PogsClient) ReconnectTunnel(
 	ctx context.Context,
-	jwt []byte,
+	jwt,
+	eventDigest []byte,
 	hostname string,
 	options *RegistrationOptions,
 ) (*TunnelRegistration, error) {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.ReconnectTunnel(ctx, func(p tunnelrpc.TunnelServer_reconnectTunnel_Params) error {
 		err := p.SetJwt(jwt)
+		if err != nil {
+			return err
+		}
+		err = p.SetEventDigest(eventDigest)
 		if err != nil {
 			return err
 		}
