@@ -542,7 +542,10 @@ func (w *h2DictWriter) Write(p []byte) (n int, err error) {
 }
 
 func (w *h2DictWriter) Close() error {
-	return w.comp.Close()
+	if w.comp != nil {
+		return w.comp.Close()
+	}
+	return nil
 }
 
 // From http2/hpack
