@@ -17,6 +17,12 @@ type ReadWriteClosedCloser interface {
 	Closed() bool
 }
 
+// MuxedStreamDataSignaller is a write-only *ReadyList
+type MuxedStreamDataSignaller interface {
+	// Non-blocking: call this when data is ready to be sent for the given stream ID.
+	Signal(ID uint32)
+}
+
 // MuxedStream is logically an HTTP/2 stream, with an additional buffer for outgoing data.
 type MuxedStream struct {
 	streamID uint32
@@ -55,8 +61,8 @@ type MuxedStream struct {
 	// This is the amount of bytes that are in the peer's receive window
 	// (how much data we can send from this stream).
 	sendWindow uint32
-	// Reference to the muxer's readyList; signal this for stream data to be sent.
-	readyList *ReadyList
+	// The muxer's readyList
+	readyList MuxedStreamDataSignaller
 	// The headers that should be sent, and a flag so we only send them once.
 	headersSent  bool
 	writeHeaders []Header
@@ -88,7 +94,7 @@ func (th TunnelHostname) IsSet() bool {
 	return th != ""
 }
 
-func NewStream(config MuxerConfig, writeHeaders []Header, readyList *ReadyList, dictionaries h2Dictionaries) *MuxedStream {
+func NewStream(config MuxerConfig, writeHeaders []Header, readyList MuxedStreamDataSignaller, dictionaries h2Dictionaries) *MuxedStream {
 	return &MuxedStream{
 		responseHeadersReceived: make(chan struct{}),
 		readBuffer:              NewSharedBuffer(),

@@ -353,9 +353,11 @@ func (m *Muxer) Serve(ctx context.Context) error {
 }
 
 // Shutdown is called to initiate the "happy path" of muxer termination.
-func (m *Muxer) Shutdown() {
+// It blocks new streams from being created.
+// It returns a channel that is closed when the last stream has been closed.
+func (m *Muxer) Shutdown() <-chan struct{} {
 	m.explicitShutdown.Fuse(true)
-	m.muxReader.Shutdown()
+	return m.muxReader.Shutdown()
 }
 
 // IsUnexpectedTunnelError identifies errors that are expected when shutting down the h2mux tunnel.
