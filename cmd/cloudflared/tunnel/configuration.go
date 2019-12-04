@@ -197,6 +197,7 @@ func prepareTunnelConfig(
 	httpTransport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		MaxIdleConns:          c.Int("proxy-keepalive-connections"),
+		MaxIdleConnsPerHost:   c.Int("proxy-keepalive-connections"),
 		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
 		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
 		ExpectContinueTimeout: 1 * time.Second,
