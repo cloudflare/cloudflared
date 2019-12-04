@@ -977,6 +977,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_INTENT"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "use-reconnect-token",
+			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
+			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
+			Hidden:  true,
+		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "dial-edge-timeout",
 			Usage:   "Maximum wait time to set up a connection with the edge",
@@ -1044,7 +1050,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Absolute path of directory to save SSH host keys in",
 			EnvVars: []string{"HOST_KEY_PATH"},
 			Hidden:  true,
-
 		}),
 	}
 }

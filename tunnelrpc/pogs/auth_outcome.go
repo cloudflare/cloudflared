@@ -1,7 +1,7 @@
 package pogs
 
 import (
-	"fmt"
+	"errors"
 	"time"
 )
 
@@ -18,20 +18,20 @@ type AuthenticateResponse struct {
 
 // Outcome turns the deserialized response of Authenticate into a programmer-friendly sum type.
 func (ar AuthenticateResponse) Outcome() AuthOutcome {
-	// If there was a network error, then cloudflared should retry later,
-	// because origintunneld couldn't prove whether auth was correct or not.
-	if ar.RetryableErr != "" {
-		return NewAuthUnknown(fmt.Errorf(ar.RetryableErr), ar.HoursUntilRefresh)
-	}
-
 	// If the user's authentication was unsuccessful, the server will return an error explaining why.
 	// cloudflared should fatal with this error.
 	if ar.PermanentErr != "" {
-		return NewAuthFail(fmt.Errorf(ar.PermanentErr))
+		return NewAuthFail(errors.New(ar.PermanentErr))
+	}
+
+	// If there was a network error, then cloudflared should retry later,
+	// because origintunneld couldn't prove whether auth was correct or not.
+	if ar.RetryableErr != "" {
+		return NewAuthUnknown(errors.New(ar.RetryableErr), ar.HoursUntilRefresh)
 	}
 
 	// If auth succeeded, return the token and refresh it when instructed.
-	if ar.PermanentErr == "" && len(ar.Jwt) > 0 {
+	if len(ar.Jwt) > 0 {
 		return NewAuthSuccess(ar.Jwt, ar.HoursUntilRefresh)
 	}
 
@@ -55,6 +55,10 @@ type AuthSuccess struct {
 
 func NewAuthSuccess(jwt []byte, hoursUntilRefresh uint8) AuthSuccess {
 	return AuthSuccess{jwt: jwt, hoursUntilRefresh: hoursUntilRefresh}
+}
+
+func (ao AuthSuccess) JWT() []byte {
+	return ao.jwt
 }
 
 // RefreshAfter is how long cloudflared should wait before rerunning Authenticate.
@@ -81,6 +85,10 @@ func NewAuthFail(err error) AuthFail {
 	return AuthFail{err: err}
 }
 
+func (ao AuthFail) Error() string {
+	return ao.err.Error()
+}
+
 // Serialize into an AuthenticateResponse which can be sent via Capnp
 func (ao AuthFail) Serialize() AuthenticateResponse {
 	return AuthenticateResponse{
@@ -98,6 +106,10 @@ type AuthUnknown struct {
 
 func NewAuthUnknown(err error, hoursUntilRefresh uint8) AuthUnknown {
 	return AuthUnknown{err: err, hoursUntilRefresh: hoursUntilRefresh}
+}
+
+func (ao AuthUnknown) Error() string {
+	return ao.err.Error()
 }
 
 // RefreshAfter is how long cloudflared should wait before rerunning Authenticate.

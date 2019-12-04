@@ -275,6 +275,7 @@ func prepareTunnelConfig(
 		TlsConfig:            toEdgeTLSConfig,
 		TransportLogger:      transportLogger,
 		UseDeclarativeTunnel: c.Bool("use-declarative-tunnels"),
+		UseReconnectToken:    c.Bool("use-reconnect-token"),
 	}, nil
 }
 

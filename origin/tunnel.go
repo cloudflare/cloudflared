@@ -34,6 +34,7 @@ import (
 const (
 	dialTimeout              = 15 * time.Second
 	openStreamTimeout        = 30 * time.Second
+	muxerTimeout             = 5 * time.Second
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
@@ -72,6 +73,9 @@ type TunnelConfig struct {
 	WSGI                 bool
 	// OriginUrl may not be used if a user specifies a unix socket.
 	OriginUrl string
+
+	// feature-flag to use new edge reconnect tokens
+	UseReconnectToken bool
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -110,6 +114,18 @@ func (e clientRegisterTunnelError) Error() string {
 	return e.cause.Error()
 }
 
+func (c *TunnelConfig) muxerConfig(handler h2mux.MuxedStreamHandler) h2mux.MuxerConfig {
+	return h2mux.MuxerConfig{
+		Timeout:            muxerTimeout,
+		Handler:            handler,
+		IsClient:           true,
+		HeartbeatInterval:  c.HeartbeatInterval,
+		MaxHeartbeats:      c.MaxHeartbeats,
+		Logger:             c.TransportLogger.WithFields(log.Fields{}),
+		CompressionQuality: h2mux.CompressionSetting(c.CompressionQuality),
+	}
+}
+
 func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
 	policy := tunnelrpc.ExistingTunnelPolicy_balance
 	if c.HAConnections <= 1 && c.LBPool == "" {
@@ -132,7 +148,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 }
 
 func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID) error {
-	return NewSupervisor(config).Run(ctx, connectedSignal, cloudflaredID)
+	return NewSupervisor(config, cloudflaredID).Run(ctx, connectedSignal)
 }
 
 func ServeTunnelLoop(ctx context.Context,
@@ -448,15 +464,7 @@ func NewTunnelHandler(ctx context.Context,
 	}
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
-	h.muxer, err = h2mux.Handshake(edgeConn, edgeConn, h2mux.MuxerConfig{
-		Timeout:            5 * time.Second,
-		Handler:            h,
-		IsClient:           true,
-		HeartbeatInterval:  config.HeartbeatInterval,
-		MaxHeartbeats:      config.MaxHeartbeats,
-		Logger:             config.TransportLogger.WithFields(log.Fields{}),
-		CompressionQuality: h2mux.CompressionSetting(config.CompressionQuality),
-	}, h.metrics.activeStreams)
+	h.muxer, err = h2mux.Handshake(edgeConn, edgeConn, config.muxerConfig(h), h.metrics.activeStreams)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "Handshake with edge error")
 	}

@@ -92,3 +92,8 @@ func (b BackoffHandler) GetBaseTime() time.Duration {
 	}
 	return b.BaseTime
 }
+
+// Retries returns the number of retries consumed so far.
+func (b *BackoffHandler) Retries() int {
+	return int(b.retries)
+}
