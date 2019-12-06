@@ -46,7 +46,7 @@ func (c TunnelServer_PogsClient) ReconnectTunnel(
 	eventDigest []byte,
 	hostname string,
 	options *RegistrationOptions,
-) (*TunnelRegistration, error) {
+) *TunnelRegistration {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.ReconnectTunnel(ctx, func(p tunnelrpc.TunnelServer_reconnectTunnel_Params) error {
 		err := p.SetJwt(jwt)
@@ -73,7 +73,11 @@ func (c TunnelServer_PogsClient) ReconnectTunnel(
 	})
 	retval, err := promise.Result().Struct()
 	if err != nil {
-		return nil, err
+		return NewRetryableRegistrationError(err, defaultRetryAfterSeconds).Serialize()
 	}
-	return UnmarshalTunnelRegistration(retval)
+	registration, err := UnmarshalTunnelRegistration(retval)
+	if err != nil {
+		return NewRetryableRegistrationError(err, defaultRetryAfterSeconds).Serialize()
+	}
+	return registration
 }

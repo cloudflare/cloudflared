@@ -31,6 +31,8 @@ const (
 	refreshAuthMaxBackoff = 10
 	// Waiting time before retrying a failed 'Authenticate' connection
 	refreshAuthRetryDuration = time.Second * 10
+	// Maximum time to make an Authenticate RPC
+	authTokenTimeout = time.Second * 30
 )
 
 var (
@@ -90,14 +92,21 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 		return err
 	}
 	var tunnelsWaiting []int
+	tunnelsActive := s.config.HAConnections
+
 	backoff := BackoffHandler{MaxRetries: s.config.Retries, BaseTime: tunnelRetryDuration, RetryForever: true}
 	var backoffTimer <-chan time.Time
-	tunnelsActive := s.config.HAConnections
 
 	refreshAuthBackoff := &BackoffHandler{MaxRetries: refreshAuthMaxBackoff, BaseTime: refreshAuthRetryDuration, RetryForever: true}
 	var refreshAuthBackoffTimer <-chan time.Time
+
 	if s.config.UseReconnectToken {
-		refreshAuthBackoffTimer = time.After(refreshAuthRetryDuration)
+		if timer, err := s.refreshAuth(ctx, refreshAuthBackoff, s.authenticate); err == nil {
+			refreshAuthBackoffTimer = timer
+		} else {
+			logger.WithError(err).Errorf("initial refreshAuth failed, retrying in %v", refreshAuthRetryDuration)
+			refreshAuthBackoffTimer = time.After(refreshAuthRetryDuration)
+		}
 	}
 
 	for {
@@ -169,11 +178,11 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 	}
 }
 
+// Returns nil if initialization succeeded, else the initialization error.
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal) error {
 	logger := s.logger
 
 	edgeIPs, err := s.resolveEdgeIPs()
-
 	if err != nil {
 		logger.Infof("ResolveEdgeIPs err")
 		return err
@@ -190,7 +199,6 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Sig
 	select {
 	case <-ctx.Done():
 		<-s.tunnelErrors
-		// Error can't be nil. A nil error signals that initialization succeed
 		return ctx.Err()
 	case tunnelError := <-s.tunnelErrors:
 		return tunnelError.err
@@ -208,7 +216,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Sig
 // startTunnel starts the first tunnel connection. The resulting error will be sent on
 // s.tunnelErrors. It will send a signal via connectedSignal if registration succeed
 func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *signal.Signal) {
-	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal, s.cloudflaredUUID)
+	err := ServeTunnelLoop(ctx, s, s.config, s.getEdgeIP(0), 0, connectedSignal, s.cloudflaredUUID)
 	defer func() {
 		s.tunnelErrors <- tunnelError{index: 0, err: err}
 	}()
@@ -229,14 +237,14 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		default:
 			return
 		}
-		err = ServeTunnelLoop(ctx, s.config, s.getEdgeIP(0), 0, connectedSignal, s.cloudflaredUUID)
+		err = ServeTunnelLoop(ctx, s, s.config, s.getEdgeIP(0), 0, connectedSignal, s.cloudflaredUUID)
 	}
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
 // s.tunnelErrors.
 func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal *signal.Signal) {
-	err := ServeTunnelLoop(ctx, s.config, s.getEdgeIP(index), uint8(index), connectedSignal, s.cloudflaredUUID)
+	err := ServeTunnelLoop(ctx, s, s.config, s.getEdgeIP(index), uint8(index), connectedSignal, s.cloudflaredUUID)
 	s.tunnelErrors <- tunnelError{index: index, err: err}
 }
 
@@ -347,7 +355,9 @@ func (s *Supervisor) refreshAuth(
 		s.SetReconnectToken(outcome.JWT())
 		return timeAfter(outcome.RefreshAfter()), nil
 	case tunnelpogs.AuthUnknown:
-		return timeAfter(outcome.RefreshAfter()), nil
+		duration := outcome.RefreshAfter()
+		logger.WithError(outcome).Warnf("Retrying in %v", duration)
+		return timeAfter(duration), nil
 	case tunnelpogs.AuthFail:
 		return nil, outcome
 	default:
