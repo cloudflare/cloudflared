@@ -37,13 +37,6 @@ func (c *StdinoutStream) Write(p []byte) (int, error) {
 	return os.Stdout.Write(p)
 }
 
-// Helper to allow defering the response close with a check that the resp is not nil
-func closeRespBody(resp *http.Response) {
-	if resp != nil {
-		resp.Body.Close()
-	}
-}
-
 // StartClient will copy the data from stdin/stdout over a WebSocket connection
 // to the edge (originURL)
 func StartClient(logger *logrus.Logger, stream io.ReadWriter, options *StartOptions) error {
@@ -92,7 +85,7 @@ func serveConnection(logger *logrus.Logger, c net.Conn, options *StartOptions) {
 func serveStream(logger *logrus.Logger, conn io.ReadWriter, options *StartOptions) error {
 	wsConn, err := createWebsocketStream(options)
 	if err != nil {
-		logger.WithError(err).Errorf("failed to connect to %s\n", options.OriginURL)
+		logger.WithError(err).Errorf("failed to connect to %s. Are WebSockets allowed to your origin server?", options.OriginURL)
 		return err
 	}
 	defer wsConn.Close()
@@ -113,7 +106,6 @@ func createWebsocketStream(options *StartOptions) (*cloudflaredWebsocket.Conn, e
 	req.Header = options.Headers
 
 	wsConn, resp, err := cloudflaredWebsocket.ClientConnect(req, nil)
-	defer closeRespBody(resp)
 	if err != nil && IsAccessResponse(resp) {
 		wsConn, err = createAccessAuthenticatedStream(options)
 		if err != nil {
@@ -151,7 +143,6 @@ func IsAccessResponse(resp *http.Response) bool {
 // login again and generate a new one.
 func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, error) {
 	wsConn, resp, err := createAccessWebSocketStream(options)
-	defer closeRespBody(resp)
 	if err == nil {
 		return wsConn, nil
 	}
@@ -169,7 +160,6 @@ func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, er
 		return nil, err
 	}
 	wsConn, resp, err = createAccessWebSocketStream(options)
-	defer closeRespBody(resp)
 	if err != nil {
 		return nil, err
 	}
