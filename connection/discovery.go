@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	// Used to discover HA Warp servers
-	srvService = "warp"
+	// Used to discover HA origintunneld servers
+	srvService = "origintunneld"
 	srvProto   = "tcp"
-	srvName    = "cloudflarewarp.com"
+	srvName    = "argotunnel.com"
 
 	// Used to fallback to DoT when we can't use the default resolver to
-	// discover HA Warp servers (GitHub issue #75).
+	// discover HA origintunneld servers (GitHub issue #75).
 	dotServerName = "cloudflare-dns.com"
 	dotServerAddr = "1.1.1.1:853"
 	dotTimeout    = time.Duration(15 * time.Second)
@@ -30,8 +30,8 @@ const (
 
 var friendlyDNSErrorLines = []string{
 	`Please try the following things to diagnose this issue:`,
-	`  1. ensure that cloudflarewarp.com is returning "warp" service records.`,
-	`     Run your system's equivalent of: dig srv _warp._tcp.cloudflarewarp.com`,
+	`  1. ensure that argotunnel.com is returning "origintunneld" service records.`,
+	`     Run your system's equivalent of: dig srv _origintunneld._tcp.argotunnel.com`,
 	`  2. ensure that your DNS resolver is not returning compressed SRV records.`,
 	`     See GitHub issue https://github.com/golang/go/issues/27546`,
 	`     For example, you could use Cloudflare's 1.1.1.1 as your resolver:`,
@@ -102,7 +102,7 @@ func EdgeDiscovery(logger *logrus.Entry) ([]*net.TCPAddr, error) {
 		// Try to fall back to DoT from Cloudflare directly.
 		//
 		// Note: Instead of DoT, we could also have used DoH. Either of these:
-		//     - directly via the JSON API (https://1.1.1.1/dns-query?ct=application/dns-json&name=_warp._tcp.cloudflarewarp.com&type=srv)
+		//     - directly via the JSON API (https://1.1.1.1/dns-query?ct=application/dns-json&name=_origintunneld._tcp.argotunnel.com&type=srv)
 		//     - indirectly via `tunneldns.NewUpstreamHTTPS()`
 		// But both of these cases miss out on a key feature from the stdlib:
 		//     "The returned records are sorted by priority and randomized by weight within a priority."
@@ -119,7 +119,7 @@ func EdgeDiscovery(logger *logrus.Entry) ([]*net.TCPAddr, error) {
 			for _, s := range friendlyDNSErrorLines {
 				logger.Errorln(s)
 			}
-			return nil, errors.Wrap(err, "Could not lookup srv records on _warp._tcp.cloudflarewarp.com")
+			return nil, errors.Wrap(err, "Could not lookup srv records on _origintunneld._tcp.argotunnel.com")
 		}
 		// Accept the fallback results and keep going
 		addrs = fallbackAddrs

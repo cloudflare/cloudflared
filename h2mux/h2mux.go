@@ -1,13 +1,13 @@
 package h2mux
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
@@ -20,7 +20,7 @@ const (
 	maxWindowSize            uint32        = (1 << 31) - 1 // 2^31-1 = 2147483647, max window size in http2 spec
 	defaultTimeout           time.Duration = 5 * time.Second
 	defaultRetries           uint64        = 5
-	defaultWriteBufferMaxLen int           = 1024 * 1024 * 512 // 500mb
+	defaultWriteBufferMaxLen int           = 1024 * 1024 // 1mb
 
 	SettingMuxerMagic http2.SettingID = 0x42db
 	MuxerMagicOrigin  uint32          = 0xa2e43c8b
@@ -108,6 +108,7 @@ func Handshake(
 	w io.WriteCloser,
 	r io.ReadCloser,
 	config MuxerConfig,
+	activeStreamsMetrics prometheus.Gauge,
 ) (*Muxer, error) {
 	// Set default config values
 	if config.Timeout == 0 {
@@ -131,7 +132,7 @@ func Handshake(
 		newStreamChan: make(chan MuxedStreamRequest),
 		abortChan:     make(chan struct{}),
 		readyList:     NewReadyList(),
-		streams:       newActiveStreamMap(config.IsClient),
+		streams:       newActiveStreamMap(config.IsClient, activeStreamsMetrics),
 	}
 
 	m.f.ReadMetaHeaders = hpack.NewDecoder(4096, func(hpack.HeaderField) {})
@@ -352,9 +353,11 @@ func (m *Muxer) Serve(ctx context.Context) error {
 }
 
 // Shutdown is called to initiate the "happy path" of muxer termination.
-func (m *Muxer) Shutdown() {
+// It blocks new streams from being created.
+// It returns a channel that is closed when the last stream has been closed.
+func (m *Muxer) Shutdown() <-chan struct{} {
 	m.explicitShutdown.Fuse(true)
-	m.muxReader.Shutdown()
+	return m.muxReader.Shutdown()
 }
 
 // IsUnexpectedTunnelError identifies errors that are expected when shutting down the h2mux tunnel.
@@ -388,72 +391,58 @@ func isConnectionClosedError(err error) bool {
 // OpenStream opens a new data stream with the given headers.
 // Called by proxy server and tunnel
 func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader) (*MuxedStream, error) {
-	stream := &MuxedStream{
-		responseHeadersReceived: make(chan struct{}),
-		readBuffer:              NewSharedBuffer(),
-		writeBuffer:             &bytes.Buffer{},
-		writeBufferMaxLen:       m.config.StreamWriteBufferMaxLen,
-		writeBufferHasSpace:     make(chan struct{}, 1),
-		receiveWindow:           m.config.DefaultWindowSize,
-		receiveWindowCurrentMax: m.config.DefaultWindowSize,
-		receiveWindowMax:        m.config.MaxWindowSize,
-		sendWindow:              m.config.DefaultWindowSize,
-		readyList:               m.readyList,
-		writeHeaders:            headers,
-		dictionaries:            m.muxReader.dictionaries,
+	stream := m.NewStream(headers)
+	if err := m.MakeMuxedStreamRequest(ctx, NewMuxedStreamRequest(stream, body)); err != nil {
+		return nil, err
 	}
-
-	select {
-	// Will be received by mux writer
-	case <-ctx.Done():
-		return nil, ErrOpenStreamTimeout
-	case <-m.abortChan:
-		return nil, ErrConnectionClosed
-	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: body}:
+	if err := m.AwaitResponseHeaders(ctx, stream); err != nil {
+		return nil, err
 	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ErrResponseHeadersTimeout
-	case <-m.abortChan:
-		return nil, ErrConnectionClosed
-	case <-stream.responseHeadersReceived:
-		return stream, nil
-	}
+	return stream, nil
 }
 
 func (m *Muxer) OpenRPCStream(ctx context.Context) (*MuxedStream, error) {
-	stream := &MuxedStream{
-		responseHeadersReceived: make(chan struct{}),
-		readBuffer:              NewSharedBuffer(),
-		writeBuffer:             &bytes.Buffer{},
-		writeBufferMaxLen:       m.config.StreamWriteBufferMaxLen,
-		writeBufferHasSpace:     make(chan struct{}, 1),
-		receiveWindow:           m.config.DefaultWindowSize,
-		receiveWindowCurrentMax: m.config.DefaultWindowSize,
-		receiveWindowMax:        m.config.MaxWindowSize,
-		sendWindow:              m.config.DefaultWindowSize,
-		readyList:               m.readyList,
-		writeHeaders:            RPCHeaders(),
-		dictionaries:            m.muxReader.dictionaries,
+	stream := m.NewStream(RPCHeaders())
+	if err := m.MakeMuxedStreamRequest(ctx, NewMuxedStreamRequest(stream, nil)); err != nil {
+		return nil, err
 	}
+	if err := m.AwaitResponseHeaders(ctx, stream); err != nil {
+		return nil, err
+	}
+	return stream, nil
+}
 
+func (m *Muxer) NewStream(headers []Header) *MuxedStream {
+	return NewStream(m.config, headers, m.readyList, m.muxReader.dictionaries)
+}
+
+func (m *Muxer) MakeMuxedStreamRequest(ctx context.Context, request MuxedStreamRequest) error {
 	select {
+	case <-ctx.Done():
+		return ErrStreamRequestTimeout
+	case <-m.abortChan:
+		return ErrStreamRequestConnectionClosed
 	// Will be received by mux writer
-	case <-ctx.Done():
-		return nil, ErrOpenStreamTimeout
-	case <-m.abortChan:
-		return nil, ErrConnectionClosed
-	case m.newStreamChan <- MuxedStreamRequest{stream: stream, body: nil}:
+	case m.newStreamChan <- request:
+		return nil
 	}
+}
 
+func (m *Muxer) CloseStreamRead(stream *MuxedStream) {
+	stream.CloseRead()
+	if stream.WriteClosed() {
+		m.streams.Delete(stream.streamID)
+	}
+}
+
+func (m *Muxer) AwaitResponseHeaders(ctx context.Context, stream *MuxedStream) error {
 	select {
 	case <-ctx.Done():
-		return nil, ErrResponseHeadersTimeout
+		return ErrResponseHeadersTimeout
 	case <-m.abortChan:
-		return nil, ErrConnectionClosed
+		return ErrResponseHeadersConnectionClosed
 	case <-stream.responseHeadersReceived:
-		return stream, nil
+		return nil
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"runtime"
 	"sync"
 
@@ -18,6 +17,8 @@ import (
 const (
 	OriginCAPoolFlag = "origin-ca-pool"
 	CaCertFlag       = "cacert"
+
+	edgeTLSServerName = "cftunnel.com"
 )
 
 // CertReloader can load and reload a TLS certificate from a particular filepath.
@@ -126,7 +127,7 @@ func CreateTunnelConfig(c *cli.Context) (*tls.Config, error) {
 		rootCAs = append(rootCAs, c.String(CaCertFlag))
 	}
 
-	userConfig := &TLSParameters{RootCAs: rootCAs}
+	userConfig := &TLSParameters{RootCAs: rootCAs, ServerName: edgeTLSServerName}
 	tlsConfig, err := GetConfig(userConfig)
 	if err != nil {
 		return nil, err
@@ -142,10 +143,6 @@ func CreateTunnelConfig(c *cli.Context) (*tls.Config, error) {
 			rootCAPool.AddCert(cert)
 		}
 		tlsConfig.RootCAs = rootCAPool
-		tlsConfig.ServerName = "cftunnel.com"
-	} else if edgeAddrs := c.StringSlice("edge"); len(edgeAddrs) > 0 {
-		// Set for development environments and for testing specific origintunneld instances
-		tlsConfig.ServerName, _, _ = net.SplitHostPort(edgeAddrs[0])
 	}
 
 	if tlsConfig.ServerName == "" && !tlsConfig.InsecureSkipVerify {

@@ -7,39 +7,77 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"reflect"
+	"runtime"
 	"runtime/trace"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/supervisor"
-	"github.com/google/uuid"
-
-	"github.com/getsentry/raven-go"
-	"golang.org/x/crypto/ssh/terminal"
-
+	"github.com/cloudflare/cloudflared/awsuploader"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/cmd/sqlgateway"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/sshlog"
+	"github.com/cloudflare/cloudflared/sshserver"
+	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
+
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
+	"github.com/getsentry/raven-go"
+	"github.com/gliderlabs/ssh"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
 )
 
-const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+const (
+	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+
+	sshLogFileDirectory = "/usr/local/var/log/cloudflared/"
+
+	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
+	sshPortFlag = "local-ssh-port"
+
+	// sshIdleTimeoutFlag defines the duration a SSH session can remain idle before being closed
+	sshIdleTimeoutFlag = "ssh-idle-timeout"
+
+	// sshMaxTimeoutFlag defines the max duration a SSH session can remain open for
+	sshMaxTimeoutFlag = "ssh-max-timeout"
+
+	// bucketNameFlag is the bucket name to use for the SSH log uploader
+	bucketNameFlag = "bucket-name"
+
+	// regionNameFlag is the AWS region name to use for the SSH log uploader
+	regionNameFlag = "region-name"
+
+	// secretIDFlag is the Secret id of SSH log uploader
+	secretIDFlag = "secret-id"
+
+	// accessKeyIDFlag is the Access key id of SSH log uploader
+	accessKeyIDFlag = "access-key-id"
+
+	// sessionTokenIDFlag is the Session token of SSH log uploader
+	sessionTokenIDFlag = "session-token"
+
+	// s3URLFlag is the S3 URL of SSH log uploader (e.g. don't use AWS s3 and use google storage bucket instead)
+	s3URLFlag = "s3-url-host"
+
+	// hostKeyPath is the path of the dir to save SSH host keys too
+	hostKeyPath = "host-key-path"
+
+	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
+)
 
 var (
 	shutdownC      chan struct{}
@@ -99,43 +137,7 @@ func Commands() []*cli.Command {
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 			Hidden:    false,
 		},
-		{
-			Name: "db",
-			Action: func(c *cli.Context) error {
-				tags := make(map[string]string)
-				tags["hostname"] = c.String("hostname")
-				raven.SetTagsContext(tags)
-
-				fmt.Printf("\nSQL Database Password: ")
-				pass, err := terminal.ReadPassword(int(syscall.Stdin))
-				if err != nil {
-					logger.Error(err)
-				}
-
-				go sqlgateway.StartProxy(c, logger, string(pass))
-
-				raven.CapturePanic(func() { err = tunnel(c) }, nil)
-				if err != nil {
-					raven.CaptureError(err, nil)
-				}
-				return err
-			},
-			Before: Before,
-			Usage:  "SQL Gateway is an SQL over HTTP reverse proxy",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:  "db",
-					Value: true,
-					Usage: "Enable the SQL Gateway Proxy",
-				},
-				&cli.StringFlag{
-					Name:  "address",
-					Value: "",
-					Usage: "Database connection string: db://user:pass",
-				},
-			},
-			Hidden: true,
-		},
+		dbConnectCmd(),
 	}
 
 	var subcommands []*cli.Command
@@ -327,6 +329,57 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
+	if c.IsSet("ssh-server") {
+		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+			msg := fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS)
+			logger.Error(msg)
+			return errors.New(msg)
+
+		}
+
+		logger.Infof("ssh-server set")
+
+		logManager := sshlog.NewEmptyManager()
+		if c.IsSet(bucketNameFlag) && c.IsSet(regionNameFlag) && c.IsSet(accessKeyIDFlag) && c.IsSet(secretIDFlag) {
+			uploader, err := awsuploader.NewFileUploader(c.String(bucketNameFlag), c.String(regionNameFlag),
+				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
+			if err != nil {
+				msg := "Cannot create uploader for SSH Server"
+				logger.WithError(err).Error(msg)
+				return errors.Wrap(err, msg)
+			}
+
+			if err := os.MkdirAll(sshLogFileDirectory, 0700); err != nil {
+				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
+				logger.WithError(err).Errorf(msg)
+				return errors.Wrap(err, msg)
+			}
+
+			logManager = sshlog.New(sshLogFileDirectory)
+
+			uploadManager := awsuploader.NewDirectoryUploadManager(logger, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
+			uploadManager.Start()
+		}
+
+		localServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
+		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+		if err != nil {
+			msg := "Cannot create new SSH Server"
+			logger.WithError(err).Error(msg)
+			return errors.Wrap(err, msg)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
+				logger.WithError(err).Error("SSH server error")
+				// TODO: remove when declarative tunnels are implemented.
+				close(shutdownC)
+			}
+		}()
+		c.Set("url", "ssh://"+localServerAddress)
+	}
+
 	if host := hostnameFromURI(c.String("url")); host != "" {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
@@ -432,21 +485,16 @@ func startDeclarativeTunnel(ctx context.Context,
 		return err
 	}
 
-	var scope pogs.Scope
-	if c.IsSet("group") == c.IsSet("system-name") {
-		err = fmt.Errorf("exactly one of --group or --system-name must be specified")
-		logger.WithError(err).Error("unable to determine scope")
-		return err
-	} else if c.IsSet("group") {
-		scope = pogs.NewGroup(c.String("group"))
-	} else {
-		scope = pogs.NewSystemName(c.String("system-name"))
+	intentLabel := c.String("intent")
+	if intentLabel == "" {
+		logger.Error("--intent was empty")
+		return fmt.Errorf(noIntentMsg)
 	}
 
 	cloudflaredConfig := &connection.CloudflaredConfig{
 		BuildInfo:     buildInfo,
 		CloudflaredID: cloudflaredID,
-		Scope:         scope,
+		IntentLabel:   intentLabel,
 		Tags:          tags,
 	}
 
@@ -559,6 +607,60 @@ func addPortIfMissing(uri *url.URL, port int) string {
 	return fmt.Sprintf("%s:%d", uri.Hostname(), port)
 }
 
+func dbConnectCmd() *cli.Command {
+	cmd := dbconnect.Cmd()
+
+	// Append the tunnel commands so users can customize the daemon settings.
+	cmd.Flags = appendFlags(Flags(), cmd.Flags...)
+
+	// Override before to run tunnel validation before dbconnect validation.
+	cmd.Before = func(c *cli.Context) error {
+		err := Before(c)
+		if err == nil {
+			err = dbconnect.CmdBefore(c)
+		}
+		return err
+	}
+
+	// Override action to setup the Proxy, then if successful, start the tunnel daemon.
+	cmd.Action = func(c *cli.Context) error {
+		err := dbconnect.CmdAction(c)
+		if err == nil {
+			err = tunnel(c)
+		}
+		return err
+	}
+
+	return cmd
+}
+
+// appendFlags will append extra flags to a slice of flags.
+//
+// The cli package will panic if two flags exist with the same name,
+// so if extraFlags contains a flag that was already defined, modify the
+// original flags to use the extra version.
+func appendFlags(flags []cli.Flag, extraFlags ...cli.Flag) []cli.Flag {
+	for _, extra := range extraFlags {
+		var found bool
+
+		// Check if an extra flag overrides an existing flag.
+		for i, flag := range flags {
+			if reflect.DeepEqual(extra.Names(), flag.Names()) {
+				flags[i] = extra
+				found = true
+				break
+			}
+		}
+
+		// Append the extra flag if it has nothing to override.
+		if !found {
+			flags = append(flags, extra)
+		}
+	}
+
+	return flags
+}
+
 func tunnelFlags(shouldHide bool) []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
@@ -574,10 +676,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   "no-autoupdate",
-			Usage:  "Disable periodic check for updates, restarting the server with the new version.",
-			Value:  false,
-			Hidden: shouldHide,
+			Name:    "no-autoupdate",
+			Usage:   "Disable periodic check for updates, restarting the server with the new version.",
+			EnvVars: []string{"NO_AUTOUPDATE"},
+			Value:   false,
+			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "is-autoupdated",
@@ -633,6 +736,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "hostname",
 			Usage:   "Set a hostname on a Cloudflare zone to route traffic through this tunnel.",
 			EnvVars: []string{"TUNNEL_HOSTNAME"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "http-host-header",
+			Usage:   "Sets the HTTP Host header for the local webserver.",
+			EnvVars: []string{"TUNNEL_HTTP_HOST_HEADER"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
@@ -731,6 +840,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Run Hello World Server",
 			EnvVars: []string{"TUNNEL_HELLO_WORLD"},
 			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "ssh-server",
+			Value:   false,
+			Usage:   "Run an SSH Server",
+			EnvVars: []string{"TUNNEL_SSH_SERVER"},
+			Hidden:  true, // TODO: remove when feature is complete
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "pidfile",
@@ -856,15 +972,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "system-name",
-			Usage:   "Unique identifier for this cloudflared instance. It can be configured individually in the Declarative Tunnel UI. Mutually exclusive with `--group`.",
-			EnvVars: []string{"TUNNEL_SYSTEM_NAME"},
+			Name:    "intent",
+			Usage:   "The label of an Intent from which `cloudflared` should gets its tunnels from. Intents can be created in the Origin Registry UI.",
+			EnvVars: []string{"TUNNEL_INTENT"},
 			Hidden:  true,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "group",
-			Usage:   "Name of a group of cloudflared instances, of which this instance should be an identical copy. They can be configured collectively in the Declarative Tunnel UI. Mutually exclusive with `--system-name`.",
-			EnvVars: []string{"TUNNEL_GROUP"},
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "use-reconnect-token",
+			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
+			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
@@ -872,6 +988,67 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Maximum wait time to set up a connection with the edge",
 			Value:   time.Second * 15,
 			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    sshPortFlag,
+			Usage:   "Localhost port that cloudflared SSH server will run on",
+			Value:   "2222",
+			EnvVars: []string{"LOCAL_SSH_PORT"},
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    sshIdleTimeoutFlag,
+			Usage:   "Connection timeout after no activity",
+			EnvVars: []string{"SSH_IDLE_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    sshMaxTimeoutFlag,
+			Usage:   "Absolute connection timeout",
+			EnvVars: []string{"SSH_MAX_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    bucketNameFlag,
+			Usage:   "Bucket name of where to upload SSH logs",
+			EnvVars: []string{"BUCKET_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    regionNameFlag,
+			Usage:   "Region name of where to upload SSH logs",
+			EnvVars: []string{"REGION_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    accessKeyIDFlag,
+			Usage:   "Access Key ID of where to upload SSH logs",
+			EnvVars: []string{"ACCESS_CLIENT_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    secretIDFlag,
+			Usage:   "Secret ID of where to upload SSH logs",
+			EnvVars: []string{"SECRET_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    sessionTokenIDFlag,
+			Usage:   "Session Token to use in the configuration of SSH logs uploading",
+			EnvVars: []string{"SESSION_TOKEN_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    s3URLFlag,
+			Usage:   "S3 url of where to upload SSH logs",
+			EnvVars: []string{"S3_URL"},
+			Hidden:  true,
+		}),
+		altsrc.NewPathFlag(&cli.PathFlag{
+			Name:    hostKeyPath,
+			Usage:   "Absolute path of directory to save SSH host keys in",
+			EnvVars: []string{"HOST_KEY_PATH"},
 			Hidden:  true,
 		}),
 	}

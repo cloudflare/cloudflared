@@ -17,6 +17,12 @@ type ReadWriteClosedCloser interface {
 	Closed() bool
 }
 
+// MuxedStreamDataSignaller is a write-only *ReadyList
+type MuxedStreamDataSignaller interface {
+	// Non-blocking: call this when data is ready to be sent for the given stream ID.
+	Signal(ID uint32)
+}
+
 // MuxedStream is logically an HTTP/2 stream, with an additional buffer for outgoing data.
 type MuxedStream struct {
 	streamID uint32
@@ -55,8 +61,8 @@ type MuxedStream struct {
 	// This is the amount of bytes that are in the peer's receive window
 	// (how much data we can send from this stream).
 	sendWindow uint32
-	// Reference to the muxer's readyList; signal this for stream data to be sent.
-	readyList *ReadyList
+	// The muxer's readyList
+	readyList MuxedStreamDataSignaller
 	// The headers that should be sent, and a flag so we only send them once.
 	headersSent  bool
 	writeHeaders []Header
@@ -86,6 +92,23 @@ func (th TunnelHostname) String() string {
 
 func (th TunnelHostname) IsSet() bool {
 	return th != ""
+}
+
+func NewStream(config MuxerConfig, writeHeaders []Header, readyList MuxedStreamDataSignaller, dictionaries h2Dictionaries) *MuxedStream {
+	return &MuxedStream{
+		responseHeadersReceived: make(chan struct{}),
+		readBuffer:              NewSharedBuffer(),
+		writeBuffer:             &bytes.Buffer{},
+		writeBufferMaxLen:       config.StreamWriteBufferMaxLen,
+		writeBufferHasSpace:     make(chan struct{}, 1),
+		receiveWindow:           config.DefaultWindowSize,
+		receiveWindowCurrentMax: config.DefaultWindowSize,
+		receiveWindowMax:        config.MaxWindowSize,
+		sendWindow:              config.DefaultWindowSize,
+		readyList:               readyList,
+		writeHeaders:            writeHeaders,
+		dictionaries:            dictionaries,
+	}
 }
 
 func (s *MuxedStream) Read(p []byte) (n int, err error) {
@@ -120,9 +143,10 @@ func (s *MuxedStream) Write(p []byte) (int, error) {
 		// If the buffer is full, block till there is more room.
 		// Use a loop to recheck the buffer size after the lock is reacquired.
 		for s.writeBufferMaxLen <= s.writeBuffer.Len() {
-			s.writeLock.Unlock()
-			<-s.writeBufferHasSpace
-			s.writeLock.Lock()
+			s.awaitWriteBufferHasSpace()
+			if s.writeEOF {
+				return totalWritten, io.EOF
+			}
 		}
 		amountToWrite := len(p) - totalWritten
 		spaceAvailable := s.writeBufferMaxLen - s.writeBuffer.Len()
@@ -171,8 +195,17 @@ func (s *MuxedStream) CloseWrite() error {
 	if c, ok := s.writeBuffer.(io.Closer); ok {
 		c.Close()
 	}
+	// Allow MuxedStream::Write() to terminate its loop with err=io.EOF, if needed
+	s.notifyWriteBufferHasSpace()
+	// We need to send something over the wire, even if it's an END_STREAM with no data
 	s.writeNotify()
 	return nil
+}
+
+func (s *MuxedStream) WriteClosed() bool {
+	s.writeLock.Lock()
+	defer s.writeLock.Unlock()
+	return s.writeEOF
 }
 
 func (s *MuxedStream) WriteHeaders(headers []Header) error {
@@ -213,6 +246,23 @@ func (s *MuxedStream) IsRPCStream() bool {
 
 func (s *MuxedStream) TunnelHostname() TunnelHostname {
 	return s.tunnelHostname
+}
+
+// Block until a value is sent on writeBufferHasSpace.
+// Must be called while holding writeLock
+func (s *MuxedStream) awaitWriteBufferHasSpace() {
+	s.writeLock.Unlock()
+	<-s.writeBufferHasSpace
+	s.writeLock.Lock()
+}
+
+// Send a value on writeBufferHasSpace without blocking.
+// Must be called while holding writeLock
+func (s *MuxedStream) notifyWriteBufferHasSpace() {
+	select {
+	case s.writeBufferHasSpace <- struct{}{}:
+	default:
+	}
 }
 
 func (s *MuxedStream) getReceiveWindow() uint32 {
@@ -334,17 +384,13 @@ func (s *MuxedStream) getChunk() *streamChunk {
 		sendData:     !s.sentEOF,
 		eof:          s.writeEOF && uint32(s.writeBuffer.Len()) <= s.sendWindow,
 	}
-
 	// Copy at most s.sendWindow bytes, adjust the sendWindow accordingly
 	writeLen, _ := io.CopyN(&chunk.buffer, s.writeBuffer, int64(s.sendWindow))
 	s.sendWindow -= uint32(writeLen)
 
-	// Non-blocking channel send. This will allow MuxedStream::Write() to continue, if needed
+	// Allow MuxedStream::Write() to continue, if needed
 	if s.writeBuffer.Len() < s.writeBufferMaxLen {
-		select {
-		case s.writeBufferHasSpace <- struct{}{}:
-		default:
-		}
+		s.notifyWriteBufferHasSpace()
 	}
 
 	// When we write the chunk, we'll write the WINDOW_UPDATE frame if needed

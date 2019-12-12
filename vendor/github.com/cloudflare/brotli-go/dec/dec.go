@@ -1,0 +1,5 @@
+package dec
+
+import (
+	"C"
+)

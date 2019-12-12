@@ -103,15 +103,16 @@ func StartHelloWorldServer(logger *logrus.Logger, listener net.Listener, shutdow
 		WriteBufferSize: 1024,
 	}
 
-	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: nil}
+	muxer := http.NewServeMux()
+	muxer.HandleFunc("/uptime", uptimeHandler(time.Now()))
+	muxer.HandleFunc("/ws", websocketHandler(logger, upgrader))
+	muxer.HandleFunc("/", rootHandler(serverName))
+	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: muxer}
 	go func() {
 		<-shutdownC
 		httpServer.Close()
 	}()
 
-	http.HandleFunc("/uptime", uptimeHandler(time.Now()))
-	http.HandleFunc("/ws", websocketHandler(logger, upgrader))
-	http.HandleFunc("/", rootHandler(serverName))
 	err := httpServer.Serve(listener)
 	return err
 }

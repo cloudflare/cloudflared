@@ -7,12 +7,16 @@ import (
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 
-	log "github.com/sirupsen/logrus"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
+)
+
+const (
+	defaultRetryAfterSeconds = 15
 )
 
 type Authentication struct {
@@ -32,11 +36,112 @@ func UnmarshalAuthentication(s tunnelrpc.Authentication) (*Authentication, error
 }
 
 type TunnelRegistration struct {
-	Err              string
-	Url              string
-	LogLines         []string
-	PermanentFailure bool
-	TunnelID         string `capnp:"tunnelID"`
+	SuccessfulTunnelRegistration
+	Err               string
+	PermanentFailure  bool
+	RetryAfterSeconds uint16
+}
+
+type SuccessfulTunnelRegistration struct {
+	Url         string
+	LogLines    []string
+	TunnelID    string `capnp:"tunnelID"`
+	EventDigest []byte
+}
+
+func NewSuccessfulTunnelRegistration(
+	url string,
+	logLines []string,
+	tunnelID string,
+	eventDigest []byte,
+) *TunnelRegistration {
+	// Marshal nil will result in an error
+	if logLines == nil {
+		logLines = []string{}
+	}
+	return &TunnelRegistration{
+		SuccessfulTunnelRegistration: SuccessfulTunnelRegistration{
+			Url:         url,
+			LogLines:    logLines,
+			TunnelID:    tunnelID,
+			EventDigest: eventDigest,
+		},
+	}
+}
+
+// Not calling this function Error() to avoid confusion with implementing error interface
+func (tr TunnelRegistration) DeserializeError() TunnelRegistrationError {
+	if tr.Err != "" {
+		err := fmt.Errorf(tr.Err)
+		if tr.PermanentFailure {
+			return NewPermanentRegistrationError(err)
+		}
+		retryAfterSeconds := tr.RetryAfterSeconds
+		if retryAfterSeconds < defaultRetryAfterSeconds {
+			retryAfterSeconds = defaultRetryAfterSeconds
+		}
+		return NewRetryableRegistrationError(err, retryAfterSeconds)
+	}
+	return nil
+}
+
+type TunnelRegistrationError interface {
+	error
+	Serialize() *TunnelRegistration
+	IsPermanent() bool
+}
+
+type PermanentRegistrationError struct {
+	err string
+}
+
+func NewPermanentRegistrationError(err error) TunnelRegistrationError {
+	return &PermanentRegistrationError{
+		err: err.Error(),
+	}
+}
+
+func (pre *PermanentRegistrationError) Error() string {
+	return pre.err
+}
+
+func (pre *PermanentRegistrationError) Serialize() *TunnelRegistration {
+	return &TunnelRegistration{
+		Err:              pre.err,
+		PermanentFailure: true,
+	}
+}
+
+func (*PermanentRegistrationError) IsPermanent() bool {
+	return true
+}
+
+type RetryableRegistrationError struct {
+	err               string
+	retryAfterSeconds uint16
+}
+
+func NewRetryableRegistrationError(err error, retryAfterSeconds uint16) TunnelRegistrationError {
+	return &RetryableRegistrationError{
+		err:               err.Error(),
+		retryAfterSeconds: retryAfterSeconds,
+	}
+}
+
+func (rre *RetryableRegistrationError) Error() string {
+	return rre.err
+}
+
+func (rre *RetryableRegistrationError) Serialize() *TunnelRegistration {
+	return &TunnelRegistration{
+		Err:               rre.err,
+		PermanentFailure:  false,
+		RetryAfterSeconds: rre.retryAfterSeconds,
+	}
+}
+
+func (*RetryableRegistrationError) IsPermanent() bool {
+	return false
 }
 
 func MarshalTunnelRegistration(s tunnelrpc.TunnelRegistration, p *TunnelRegistration) error {
@@ -62,6 +167,7 @@ type RegistrationOptions struct {
 	RunFromTerminal      bool   `capnp:"runFromTerminal"`
 	CompressionQuality   uint64 `capnp:"compressionQuality"`
 	UUID                 string `capnp:"uuid"`
+	NumPreviousAttempts  uint8
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {
@@ -74,25 +180,127 @@ func UnmarshalRegistrationOptions(s tunnelrpc.RegistrationOptions) (*Registratio
 	return p, err
 }
 
-type ConnectResult struct {
-	Err        *ConnectError
-	ServerInfo ServerInfo
+// ConnectResult models the result of Connect RPC, implemented by ConnectError and ConnectSuccess.
+type ConnectResult interface {
+	ConnectError() *ConnectError
+	ConnectedTo() string
+	ClientConfig() *ClientConfig
+	Marshal(s tunnelrpc.ConnectResult) error
 }
 
-func MarshalConnectResult(s tunnelrpc.ConnectResult, p *ConnectResult) error {
-	return pogs.Insert(tunnelrpc.ConnectResult_TypeID, s.Struct, p)
+func MarshalConnectResult(s tunnelrpc.ConnectResult, p ConnectResult) error {
+	return p.Marshal(s)
 }
 
-func UnmarshalConnectResult(s tunnelrpc.ConnectResult) (*ConnectResult, error) {
-	p := new(ConnectResult)
-	err := pogs.Extract(p, tunnelrpc.ConnectResult_TypeID, s.Struct)
-	return p, err
+func UnmarshalConnectResult(s tunnelrpc.ConnectResult) (ConnectResult, error) {
+	switch s.Result().Which() {
+	case tunnelrpc.ConnectResult_result_Which_err:
+		capnpConnectError, err := s.Result().Err()
+		if err != nil {
+			return nil, err
+		}
+		return UnmarshalConnectError(capnpConnectError)
+	case tunnelrpc.ConnectResult_result_Which_success:
+		capnpConnectSuccess, err := s.Result().Success()
+		if err != nil {
+			return nil, err
+		}
+		return UnmarshalConnectSuccess(capnpConnectSuccess)
+	default:
+		return nil, fmt.Errorf("Unmarshal %v not implemented yet", s.Result().Which().String())
+	}
 }
 
+// ConnectSuccess is the concrete returned type when Connect RPC succeed
+type ConnectSuccess struct {
+	ServerLocationName string
+	Config             *ClientConfig
+}
+
+func (*ConnectSuccess) ConnectError() *ConnectError {
+	return nil
+}
+
+func (cs *ConnectSuccess) ConnectedTo() string {
+	return cs.ServerLocationName
+}
+
+func (cs *ConnectSuccess) ClientConfig() *ClientConfig {
+	return cs.Config
+}
+
+func (cs *ConnectSuccess) Marshal(s tunnelrpc.ConnectResult) error {
+	capnpConnectSuccess, err := s.Result().NewSuccess()
+	if err != nil {
+		return err
+	}
+
+	err = capnpConnectSuccess.SetServerLocationName(cs.ServerLocationName)
+	if err != nil {
+		return errors.Wrap(err, "failed to set ConnectSuccess.ServerLocationName")
+	}
+
+	if cs.Config != nil {
+		capnpClientConfig, err := capnpConnectSuccess.NewClientConfig()
+		if err != nil {
+			return errors.Wrap(err, "failed to initialize ConnectSuccess.ClientConfig")
+		}
+		if err := MarshalClientConfig(capnpClientConfig, cs.Config); err != nil {
+			return errors.Wrap(err, "failed to marshal ClientConfig")
+		}
+	}
+
+	return nil
+}
+
+func UnmarshalConnectSuccess(s tunnelrpc.ConnectSuccess) (*ConnectSuccess, error) {
+	p := new(ConnectSuccess)
+
+	serverLocationName, err := s.ServerLocationName()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get tunnelrpc.ConnectSuccess.ServerLocationName")
+	}
+	p.ServerLocationName = serverLocationName
+
+	if s.HasClientConfig() {
+		capnpClientConfig, err := s.ClientConfig()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get tunnelrpc.ConnectSuccess.ClientConfig")
+		}
+		p.Config, err = UnmarshalClientConfig(capnpClientConfig)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get unmarshal ClientConfig")
+		}
+	}
+
+	return p, nil
+}
+
+// ConnectError is the concrete returned type when Connect RPC encounters some error
 type ConnectError struct {
 	Cause       string
 	RetryAfter  time.Duration
 	ShouldRetry bool
+}
+
+func (ce *ConnectError) ConnectError() *ConnectError {
+	return ce
+}
+
+func (*ConnectError) ConnectedTo() string {
+	return ""
+}
+
+func (*ConnectError) ClientConfig() *ClientConfig {
+	return nil
+}
+
+func (ce *ConnectError) Marshal(s tunnelrpc.ConnectResult) error {
+	capnpConnectError, err := s.Result().NewErr()
+	if err != nil {
+		return err
+	}
+	return MarshalConnectError(capnpConnectError, ce)
 }
 
 func MarshalConnectError(s tunnelrpc.ConnectError, p *ConnectError) error {
@@ -128,79 +336,13 @@ func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
 	return p, err
 }
 
-//go-sumtype:decl Scope
-type Scope interface {
-	Value() string
-	PostgresType() string
-	isScope()
-}
-
-type SystemName struct {
-	systemName string
-}
-
-func NewSystemName(systemName string) *SystemName {
-	return &SystemName{systemName: systemName}
-}
-
-func (s *SystemName) Value() string        { return s.systemName }
-func (s *SystemName) PostgresType() string { return "system_name" }
-
-func (_ *SystemName) isScope() {}
-
-type Group struct {
-	group string
-}
-
-func NewGroup(group string) *Group {
-	return &Group{group: group}
-}
-
-func (g *Group) Value() string        { return g.group }
-func (g *Group) PostgresType() string { return "group" }
-
-func (_ *Group) isScope() {}
-
-func MarshalScope(s tunnelrpc.Scope, p Scope) error {
-	ss := s.Value()
-	switch scope := p.(type) {
-	case *SystemName:
-		ss.SetSystemName(scope.systemName)
-	case *Group:
-		ss.SetGroup(scope.group)
-	default:
-		return fmt.Errorf("unexpected Scope value: %v", p)
-	}
-	return nil
-}
-
-func UnmarshalScope(s tunnelrpc.Scope) (Scope, error) {
-	ss := s.Value()
-	switch ss.Which() {
-	case tunnelrpc.Scope_value_Which_systemName:
-		systemName, err := ss.SystemName()
-		if err != nil {
-			return nil, err
-		}
-		return NewSystemName(systemName), nil
-	case tunnelrpc.Scope_value_Which_group:
-		group, err := ss.Group()
-		if err != nil {
-			return nil, err
-		}
-		return NewGroup(group), nil
-	default:
-		return nil, fmt.Errorf("unexpected Scope tag: %v", ss.Which())
-	}
-}
-
 type ConnectParameters struct {
 	OriginCert          []byte
 	CloudflaredID       uuid.UUID
 	NumPreviousAttempts uint8
 	Tags                []Tag
 	CloudflaredVersion  string
-	Scope               Scope
+	IntentLabel         string
 }
 
 func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectParameters) error {
@@ -233,11 +375,7 @@ func MarshalConnectParameters(s tunnelrpc.CapnpConnectParameters, p *ConnectPara
 	if err := s.SetCloudflaredVersion(p.CloudflaredVersion); err != nil {
 		return err
 	}
-	scope, err := s.NewScope()
-	if err != nil {
-		return err
-	}
-	return MarshalScope(scope, p.Scope)
+	return s.SetIntentLabel(p.IntentLabel)
 }
 
 func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectParameters, error) {
@@ -278,30 +416,24 @@ func UnmarshalConnectParameters(s tunnelrpc.CapnpConnectParameters) (*ConnectPar
 		return nil, err
 	}
 
-	scopeCapnp, err := s.Scope()
-	if err != nil {
-		return nil, err
-	}
-	scope, err := UnmarshalScope(scopeCapnp)
-	if err != nil {
-		return nil, err
-	}
-
+	intentLabel, err := s.IntentLabel()
 	return &ConnectParameters{
 		OriginCert:          originCert,
 		CloudflaredID:       cloudflaredID,
 		NumPreviousAttempts: s.NumPreviousAttempts(),
 		Tags:                tags,
 		CloudflaredVersion:  cloudflaredVersion,
-		Scope:               scope,
+		IntentLabel:         intentLabel,
 	}, nil
 }
 
 type TunnelServer interface {
-	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
+	RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) *TunnelRegistration
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
 	UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error
-	Connect(ctx context.Context, paramaters *ConnectParameters) (*ConnectResult, error)
+	Connect(ctx context.Context, parameters *ConnectParameters) (ConnectResult, error)
+	Authenticate(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*AuthenticateResponse, error)
+	ReconnectTunnel(ctx context.Context, jwt, eventDigest []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 }
 
 func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {
@@ -330,15 +462,12 @@ func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerT
 		return err
 	}
 	server.Ack(p.Options)
-	registration, err := i.impl.RegisterTunnel(p.Ctx, originCert, hostname, pogsOptions)
-	if err != nil {
-		return err
-	}
+	registration := i.impl.RegisterTunnel(p.Ctx, originCert, hostname, pogsOptions)
+
 	result, err := p.Results.NewResult()
 	if err != nil {
 		return err
 	}
-	log.Info(registration.TunnelID)
 	return MarshalTunnelRegistration(result, registration)
 }
 
@@ -362,11 +491,11 @@ func (i TunnelServer_PogsImpl) UnregisterTunnel(p tunnelrpc.TunnelServer_unregis
 }
 
 func (i TunnelServer_PogsImpl) Connect(p tunnelrpc.TunnelServer_connect) error {
-	paramaters, err := p.Params.Parameters()
+	parameters, err := p.Params.Parameters()
 	if err != nil {
 		return err
 	}
-	pogsParameters, err := UnmarshalConnectParameters(paramaters)
+	pogsParameters, err := UnmarshalConnectParameters(parameters)
 	if err != nil {
 		return err
 	}
@@ -379,7 +508,7 @@ func (i TunnelServer_PogsImpl) Connect(p tunnelrpc.TunnelServer_connect) error {
 	if err != nil {
 		return err
 	}
-	return MarshalConnectResult(result, connectResult)
+	return connectResult.Marshal(result)
 }
 
 type TunnelServer_PogsClient struct {
@@ -391,7 +520,7 @@ func (c TunnelServer_PogsClient) Close() error {
 	return c.Conn.Close()
 }
 
-func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error) {
+func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) *TunnelRegistration {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.RegisterTunnel(ctx, func(p tunnelrpc.TunnelServer_registerTunnel_Params) error {
 		err := p.SetOriginCert(originCert)
@@ -414,9 +543,13 @@ func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert 
 	})
 	retval, err := promise.Result().Struct()
 	if err != nil {
-		return nil, err
+		return NewRetryableRegistrationError(err, defaultRetryAfterSeconds).Serialize()
 	}
-	return UnmarshalTunnelRegistration(retval)
+	registration, err := UnmarshalTunnelRegistration(retval)
+	if err != nil {
+		return NewRetryableRegistrationError(err, defaultRetryAfterSeconds).Serialize()
+	}
+	return registration
 }
 
 func (c TunnelServer_PogsClient) GetServerInfo(ctx context.Context) (*ServerInfo, error) {
@@ -443,7 +576,7 @@ func (c TunnelServer_PogsClient) UnregisterTunnel(ctx context.Context, gracePeri
 
 func (c TunnelServer_PogsClient) Connect(ctx context.Context,
 	parameters *ConnectParameters,
-) (*ConnectResult, error) {
+) (ConnectResult, error) {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.Connect(ctx, func(p tunnelrpc.TunnelServer_connect_Params) error {
 		connectParameters, err := p.NewParameters()

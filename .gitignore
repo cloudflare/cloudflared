@@ -9,4 +9,8 @@ guide/public
 \#*\#
 cscope.*
 cloudflared
+cloudflared.exe
 !cmd/cloudflared/
+.DS_Store
+*-session.log
+ssh_server_tests/.env

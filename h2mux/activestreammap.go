@@ -3,6 +3,7 @@ package h2mux
 import (
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 )
 
@@ -12,29 +13,40 @@ type activeStreamMap struct {
 	sync.RWMutex
 	// streams tracks open streams.
 	streams map[uint32]*MuxedStream
-	// streamsEmpty is a chan that should be closed when no more streams are open.
-	streamsEmpty chan struct{}
 	// nextStreamID is the next ID to use on our side of the connection.
 	// This is odd for clients, even for servers.
 	nextStreamID uint32
 	// maxPeerStreamID is the ID of the most recent stream opened by the peer.
 	maxPeerStreamID uint32
+	// activeStreams is a gauge shared by all muxers of this process to expose the total number of active streams
+	activeStreams prometheus.Gauge
+
 	// ignoreNewStreams is true when the connection is being shut down. New streams
 	// cannot be registered.
 	ignoreNewStreams bool
+	// streamsEmpty is a chan that will be closed when no more streams are open.
+	streamsEmptyChan chan struct{}
+	closeOnce        sync.Once
 }
 
-func newActiveStreamMap(useClientStreamNumbers bool) *activeStreamMap {
+func newActiveStreamMap(useClientStreamNumbers bool, activeStreams prometheus.Gauge) *activeStreamMap {
 	m := &activeStreamMap{
-		streams:      make(map[uint32]*MuxedStream),
-		streamsEmpty: make(chan struct{}),
-		nextStreamID: 1,
+		streams:          make(map[uint32]*MuxedStream),
+		streamsEmptyChan: make(chan struct{}),
+		nextStreamID:     1,
+		activeStreams:    activeStreams,
 	}
 	// Client initiated stream uses odd stream ID, server initiated stream uses even stream ID
 	if !useClientStreamNumbers {
 		m.nextStreamID = 2
 	}
 	return m
+}
+
+func (m *activeStreamMap) notifyStreamsEmpty() {
+	m.closeOnce.Do(func() {
+		close(m.streamsEmptyChan)
+	})
 }
 
 // Len returns the number of active streams.
@@ -63,6 +75,7 @@ func (m *activeStreamMap) Set(newStream *MuxedStream) bool {
 		return false
 	}
 	m.streams[newStream.streamID] = newStream
+	m.activeStreams.Inc()
 	return true
 }
 
@@ -70,31 +83,31 @@ func (m *activeStreamMap) Set(newStream *MuxedStream) bool {
 func (m *activeStreamMap) Delete(streamID uint32) {
 	m.Lock()
 	defer m.Unlock()
-	delete(m.streams, streamID)
-	if len(m.streams) == 0 && m.streamsEmpty != nil {
-		close(m.streamsEmpty)
-		m.streamsEmpty = nil
+	if _, ok := m.streams[streamID]; ok {
+		delete(m.streams, streamID)
+		m.activeStreams.Dec()
+	}
+	if len(m.streams) == 0 {
+		m.notifyStreamsEmpty()
 	}
 }
 
-// Shutdown blocks new streams from being created. It returns a channel that receives an event
-// once the last stream has closed, or nil if a shutdown is in progress.
-func (m *activeStreamMap) Shutdown() <-chan struct{} {
+// Shutdown blocks new streams from being created.
+// It returns `done`, a channel that is closed once the last stream has closed
+// and `progress`, whether a shutdown was already in progress
+func (m *activeStreamMap) Shutdown() (done <-chan struct{}, alreadyInProgress bool) {
 	m.Lock()
 	defer m.Unlock()
 	if m.ignoreNewStreams {
 		// already shutting down
-		return nil
+		return m.streamsEmptyChan, true
 	}
 	m.ignoreNewStreams = true
-	done := make(chan struct{})
 	if len(m.streams) == 0 {
 		// nothing to shut down
-		close(done)
-		return done
+		m.notifyStreamsEmpty()
 	}
-	m.streamsEmpty = done
-	return done
+	return m.streamsEmptyChan, false
 }
 
 // AcquireLocalID acquires a new stream ID for a stream you're opening.
@@ -162,4 +175,5 @@ func (m *activeStreamMap) Abort() {
 		stream.Close()
 	}
 	m.ignoreNewStreams = true
+	m.notifyStreamsEmpty()
 }

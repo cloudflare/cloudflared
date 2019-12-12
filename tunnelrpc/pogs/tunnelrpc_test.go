@@ -1,8 +1,10 @@
 package pogs
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/google/uuid"
@@ -10,29 +12,78 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 )
 
-// Assert *SystemName implements Scope
-var _ Scope = (*SystemName)(nil)
+const (
+	testURL               = "tunnel.example.com"
+	testTunnelID          = "asdfghjkl;"
+	testRetryAfterSeconds = 19
+)
 
-// Assert *Group implements Scope
-var _ Scope = (*Group)(nil)
+var (
+	testErr         = fmt.Errorf("Invalid credential")
+	testLogLines    = []string{"all", "working"}
+	testEventDigest = []byte("asdf")
+)
 
-func TestScope(t *testing.T) {
-	testCases := []Scope{
-		&SystemName{systemName: "my_system"},
-		&Group{group: "my_group"},
+// *PermanentRegistrationError implements TunnelRegistrationError
+var _ TunnelRegistrationError = (*PermanentRegistrationError)(nil)
+
+// *RetryableRegistrationError implements TunnelRegistrationError
+var _ TunnelRegistrationError = (*RetryableRegistrationError)(nil)
+
+func TestTunnelRegistration(t *testing.T) {
+	testCases := []*TunnelRegistration{
+		NewSuccessfulTunnelRegistration(testURL, testLogLines, testTunnelID, testEventDigest),
+		NewSuccessfulTunnelRegistration(testURL, nil, testTunnelID, testEventDigest),
+		NewPermanentRegistrationError(testErr).Serialize(),
+		NewRetryableRegistrationError(testErr, testRetryAfterSeconds).Serialize(),
 	}
 	for i, testCase := range testCases {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
-		capnpEntity, err := tunnelrpc.NewScope(seg)
+		capnpEntity, err := tunnelrpc.NewTunnelRegistration(seg)
 		if !assert.NoError(t, err) {
 			t.Fatal("Couldn't initialize a new message")
 		}
-		err = MarshalScope(capnpEntity, testCase)
-		if !assert.NoError(t, err, "testCase index %v failed to marshal", i) {
+		err = MarshalTunnelRegistration(capnpEntity, testCase)
+		if !assert.NoError(t, err, "testCase #%v failed to marshal", i) {
 			continue
 		}
-		result, err := UnmarshalScope(capnpEntity)
-		if !assert.NoError(t, err, "testCase index %v failed to unmarshal", i) {
+		result, err := UnmarshalTunnelRegistration(capnpEntity)
+		if !assert.NoError(t, err, "testCase #%v failed to unmarshal", i) {
+			continue
+		}
+		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
+	}
+
+}
+
+func TestConnectResult(t *testing.T) {
+	testCases := []ConnectResult{
+		&ConnectError{
+			Cause:       "it broke",
+			ShouldRetry: false,
+			RetryAfter:  2 * time.Second,
+		},
+		&ConnectSuccess{
+			ServerLocationName: "SFO",
+			Config:             sampleClientConfig(),
+		},
+		&ConnectSuccess{
+			ServerLocationName: "",
+			Config:             nil,
+		},
+	}
+	for i, testCase := range testCases {
+		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+		capnpEntity, err := tunnelrpc.NewConnectResult(seg)
+		if !assert.NoError(t, err) {
+			t.Fatal("Couldn't initialize a new message")
+		}
+		err = MarshalConnectResult(capnpEntity, testCase)
+		if !assert.NoError(t, err, "testCase #%v failed to marshal", i) {
+			continue
+		}
+		result, err := UnmarshalConnectResult(capnpEntity)
+		if !assert.NoError(t, err, "testCase #%v failed to unmarshal", i) {
 			continue
 		}
 		assert.Equal(t, testCase, result, "testCase index %v didn't preserve struct through marshalling and unmarshalling", i)
@@ -43,7 +94,7 @@ func TestConnectParameters(t *testing.T) {
 	testCases := []*ConnectParameters{
 		sampleConnectParameters(),
 		sampleConnectParameters(func(c *ConnectParameters) {
-			c.Scope = &SystemName{systemName: "my_system"}
+			c.IntentLabel = "my_intent"
 		}),
 		sampleConnectParameters(func(c *ConnectParameters) {
 			c.Tags = nil
@@ -83,7 +134,7 @@ func sampleConnectParameters(overrides ...func(*ConnectParameters)) *ConnectPara
 			},
 		},
 		CloudflaredVersion: "7.0",
-		Scope:              &Group{group: "my_group"},
+		IntentLabel:        "my_intent",
 	}
 	sample.ensureNoZeroFields()
 	for _, f := range overrides {

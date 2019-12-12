@@ -15,7 +15,7 @@ import (
 
 const (
 	baseLoginURL     = "https://dash.cloudflare.com/argotunnel"
-	callbackStoreURL = "https://login.cloudflarewarp.com/"
+	callbackStoreURL = "https://login.argotunnel.com/"
 )
 
 func login(c *cli.Context) error {

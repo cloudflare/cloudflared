@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -33,6 +34,9 @@ func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger *logrus.Logg
 	}
 
 	http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/healthcheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK\n")
+	}))
 
 	wg.Add(1)
 	go func() {

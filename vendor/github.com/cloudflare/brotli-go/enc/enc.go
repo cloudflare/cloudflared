@@ -1,0 +1,5 @@
+package enc
+
+import (
+	"C"
+)

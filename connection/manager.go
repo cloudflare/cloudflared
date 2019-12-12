@@ -4,27 +4,32 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
-	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/streamhandler"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
-	quickStartLink = "https://developers.cloudflare.com/argo-tunnel/quickstart/"
-	faqLink        = "https://developers.cloudflare.com/argo-tunnel/faq/"
+	quickStartLink       = "https://developers.cloudflare.com/argo-tunnel/quickstart/"
+	faqLink              = "https://developers.cloudflare.com/argo-tunnel/faq/"
+	defaultRetryAfter    = time.Second * 5
+	packageNamespace     = "connection"
+	edgeManagerSubsystem = "edgemanager"
 )
 
 // EdgeManager manages connections with the edge
 type EdgeManager struct {
 	// streamHandler handles stream opened by the edge
-	streamHandler h2mux.MuxedStreamHandler
+	streamHandler *streamhandler.StreamHandler
 	// TLSConfig is the TLS configuration to connect with edge
 	tlsConfig *tls.Config
 	// cloudflaredConfig is the cloudflared configuration that is determined when the process first starts
@@ -35,23 +40,36 @@ type EdgeManager struct {
 	state *edgeManagerState
 
 	logger *logrus.Entry
+
+	metrics *metrics
 }
 
-// EdgeConnectionManagerConfigurable is the configurable attributes of a EdgeConnectionManager
+type metrics struct {
+	// activeStreams is a gauge shared by all muxers of this process to expose the total number of active streams
+	activeStreams prometheus.Gauge
+}
+
+func newMetrics(namespace, subsystem string) *metrics {
+	return &metrics{
+		activeStreams: h2mux.NewActiveStreamsMetrics(namespace, subsystem),
+	}
+}
+
+// EdgeManagerConfigurable is the configurable attributes of a EdgeConnectionManager
 type EdgeManagerConfigurable struct {
 	TunnelHostnames []h2mux.TunnelHostname
-	*pogs.EdgeConnectionConfig
+	*tunnelpogs.EdgeConnectionConfig
 }
 
 type CloudflaredConfig struct {
 	CloudflaredID uuid.UUID
-	Tags          []pogs.Tag
+	Tags          []tunnelpogs.Tag
 	BuildInfo     *buildinfo.BuildInfo
-	Scope         pogs.Scope
+	IntentLabel   string
 }
 
 func NewEdgeManager(
-	streamHandler h2mux.MuxedStreamHandler,
+	streamHandler *streamhandler.StreamHandler,
 	edgeConnMgrConfigurable *EdgeManagerConfigurable,
 	userCredential []byte,
 	tlsConfig *tls.Config,
@@ -66,6 +84,7 @@ func NewEdgeManager(
 		serviceDiscoverer: serviceDiscoverer,
 		state:             newEdgeConnectionManagerState(edgeConnMgrConfigurable, userCredential),
 		logger:            logger.WithField("subsystem", "connectionManager"),
+		metrics:           newMetrics(packageNamespace, edgeManagerSubsystem),
 	}
 }
 
@@ -87,8 +106,12 @@ func (em *EdgeManager) Run(ctx context.Context) error {
 		// Create/delete connection one at a time, so we don't need to adjust for connections that are being created/deleted
 		// in shouldCreateConnection or shouldReduceConnection calculation
 		if em.state.shouldCreateConnection(em.serviceDiscoverer.AvailableAddrs()) {
-			if err := em.newConnection(ctx); err != nil {
-				em.logger.WithError(err).Error("cannot create new connection")
+			if connErr := em.newConnection(ctx); connErr != nil {
+				if !connErr.ShouldRetry {
+					em.logger.WithError(connErr).Error(em.noRetryMessage())
+					return connErr
+				}
+				em.logger.WithError(connErr).Error("cannot create new connection")
 			}
 		} else if em.state.shouldReduceConnection() {
 			if err := em.closeConnection(ctx); err != nil {
@@ -103,13 +126,13 @@ func (em *EdgeManager) UpdateConfigurable(newConfigurable *EdgeManagerConfigurab
 	em.state.updateConfigurable(newConfigurable)
 }
 
-func (em *EdgeManager) newConnection(ctx context.Context) error {
-	edgeIP := em.serviceDiscoverer.Addr()
-	edgeConn, err := em.dialEdge(ctx, edgeIP)
-	if err != nil {
-		return errors.Wrap(err, "dial edge error")
-	}
+func (em *EdgeManager) newConnection(ctx context.Context) *tunnelpogs.ConnectError {
+	edgeTCPAddr := em.serviceDiscoverer.Addr()
 	configurable := em.state.getConfigurable()
+	edgeConn, err := DialEdge(ctx, configurable.Timeout, em.tlsConfig, edgeTCPAddr)
+	if err != nil {
+		return retryConnection(fmt.Sprintf("dial edge error: %v", err))
+	}
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
 	muxer, err := h2mux.Handshake(edgeConn, edgeConn, h2mux.MuxerConfig{
@@ -119,40 +142,41 @@ func (em *EdgeManager) newConnection(ctx context.Context) error {
 		HeartbeatInterval: configurable.HeartbeatInterval,
 		MaxHeartbeats:     configurable.MaxFailedHeartbeats,
 		Logger:            em.logger.WithField("subsystem", "muxer"),
-	})
+	}, em.metrics.activeStreams)
 	if err != nil {
-		return errors.Wrap(err, "couldn't perform handshake with edge")
+		retryConnection(fmt.Sprintf("couldn't perform handshake with edge: %v", err))
 	}
 
-	h2muxConn, err := newConnection(muxer, edgeIP)
+	h2muxConn, err := newConnection(muxer)
 	if err != nil {
-		return errors.Wrap(err, "couldn't create h2mux connection")
+		return retryConnection(fmt.Sprintf("couldn't create h2mux connection: %v", err))
 	}
 
 	go em.serveConn(ctx, h2muxConn)
 
-	connResult, err := h2muxConn.Connect(ctx, &pogs.ConnectParameters{
+	connResult, err := h2muxConn.Connect(ctx, &tunnelpogs.ConnectParameters{
 		CloudflaredID:       em.cloudflaredConfig.CloudflaredID,
 		CloudflaredVersion:  em.cloudflaredConfig.BuildInfo.CloudflaredVersion,
 		NumPreviousAttempts: 0,
 		OriginCert:          em.state.getUserCredential(),
-		Scope:               em.cloudflaredConfig.Scope,
+		IntentLabel:         em.cloudflaredConfig.IntentLabel,
 		Tags:                em.cloudflaredConfig.Tags,
 	}, em.logger)
 	if err != nil {
 		h2muxConn.Shutdown()
-		return errors.Wrap(err, "couldn't connect to edge")
+		return retryConnection(fmt.Sprintf("couldn't connect to edge: %v", err))
 	}
 
-	if connErr := connResult.Err; connErr != nil {
-		if !connErr.ShouldRetry {
-			return errors.Wrap(connErr, em.noRetryMessage())
-		}
-		return errors.Wrapf(connErr, "edge responded with RetryAfter=%v", connErr.RetryAfter)
+	if connErr := connResult.ConnectError(); connErr != nil {
+		return connErr
 	}
 
 	em.state.newConnection(h2muxConn)
-	em.logger.Infof("connected to %s", connResult.ServerInfo.LocationName)
+	em.logger.Infof("connected to %s", connResult.ConnectedTo())
+
+	if connResult.ClientConfig() != nil {
+		em.streamHandler.UseConfiguration(ctx, connResult.ClientConfig())
+	}
 	return nil
 }
 
@@ -169,28 +193,6 @@ func (em *EdgeManager) serveConn(ctx context.Context, conn *Connection) {
 	err := conn.Serve(ctx)
 	em.logger.WithError(err).Warn("Connection closed")
 	em.state.closeConnection(conn)
-}
-
-func (em *EdgeManager) dialEdge(ctx context.Context, edgeIP *net.TCPAddr) (*tls.Conn, error) {
-	timeout := em.state.getConfigurable().Timeout
-	// Inherit from parent context so we can cancel (Ctrl-C) while dialing
-	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
-	defer dialCancel()
-
-	dialer := net.Dialer{DualStack: true}
-	edgeConn, err := dialer.DialContext(dialCtx, "tcp", edgeIP.String())
-	if err != nil {
-		return nil, dialError{cause: errors.Wrap(err, "DialContext error")}
-	}
-	tlsEdgeConn := tls.Client(edgeConn, em.tlsConfig)
-	tlsEdgeConn.SetDeadline(time.Now().Add(timeout))
-
-	if err = tlsEdgeConn.Handshake(); err != nil {
-		return nil, dialError{cause: errors.Wrap(err, "Handshake with edge error")}
-	}
-	// clear the deadline on the conn; h2mux has its own timeouts
-	tlsEdgeConn.SetDeadline(time.Time{})
-	return tlsEdgeConn, nil
 }
 
 func (em *EdgeManager) noRetryMessage() string {
@@ -281,4 +283,12 @@ func (ems *edgeManagerState) getUserCredential() []byte {
 	ems.RLock()
 	defer ems.RUnlock()
 	return ems.userCredential
+}
+
+func retryConnection(cause string) *tunnelpogs.ConnectError {
+	return &tunnelpogs.ConnectError{
+		Cause:       cause,
+		RetryAfter:  defaultRetryAfter,
+		ShouldRetry: true,
+	}
 }

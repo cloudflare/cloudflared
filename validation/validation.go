@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -11,13 +12,19 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
+	"gopkg.in/coreos/go-oidc.v2"
 )
 
-const defaultScheme = "http"
+const (
+	defaultScheme   = "http"
+	accessDomain    = "cloudflareaccess.com"
+	accessCertPath  = "/cdn-cgi/access/certs"
+	accessJwtHeader = "Cf-access-jwt-assertion"
+)
 
 var (
 	supportedProtocols = []string{"http", "https", "rdp"}
-	validationTimeout = time.Duration(30 * time.Second)
+	validationTimeout  = time.Duration(30 * time.Second)
 )
 
 func ValidateHostname(hostname string) (string, error) {
@@ -53,6 +60,12 @@ func ValidateHostname(hostname string) (string, error) {
 
 }
 
+// ValidateUrl returns a validated version of `originUrl` with a scheme prepended (by default http://).
+// Note: when originUrl contains a scheme, the path is removed:
+//   ValidateUrl("https://localhost:8080/api/") => "https://localhost:8080"
+// but when it does not, the path is preserved:
+//   ValidateUrl("localhost:8080/api/") => "http://localhost:8080/api/"
+// This is arguably a bug, but changing it might break some cloudflared users.
 func ValidateUrl(originUrl string) (string, error) {
 	if originUrl == "" {
 		return "", fmt.Errorf("URL should not be empty")
@@ -114,6 +127,8 @@ func ValidateUrl(originUrl string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("URL %s has invalid format", originUrl)
 			}
+			// This is why the path is preserved when `originUrl` doesn't have a schema.
+			// Using `parsedUrl.Port()` here, instead of `port`, would remove the path
 			return fmt.Sprintf("%s://%s", defaultScheme, net.JoinHostPort(hostname, port)), nil
 		}
 	}
@@ -175,10 +190,11 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 		_, secondErr := client.Do(secondRequest)
 		if secondErr == nil { // Worked this time--advise the user to switch protocols
 			return errors.Errorf(
-				"%s doesn't seem to work over %s, but does seem to work over %s. Consider changing the origin URL to %s",
+				"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %s",
 				parsedURL.Host,
 				oldScheme,
 				parsedURL.Scheme,
+				initialErr,
 				parsedURL,
 			)
 		}
@@ -196,4 +212,51 @@ func toggleProtocol(httpProtocol string) string {
 	default:
 		return httpProtocol
 	}
+}
+
+// Access checks if a JWT from Cloudflare Access is valid.
+type Access struct {
+	verifier *oidc.IDTokenVerifier
+}
+
+func NewAccessValidator(ctx context.Context, domain, issuer, applicationAUD string) (*Access, error) {
+	domainURL, err := ValidateUrl(domain)
+	if err != nil {
+		return nil, err
+	}
+
+	issuerURL, err := ValidateUrl(issuer)
+	if err != nil {
+		return nil, err
+	}
+
+	// An issuerURL from Cloudflare Access will always use HTTPS.
+	issuerURL = strings.Replace(issuerURL, "http:", "https:", 1)
+
+	keySet := oidc.NewRemoteKeySet(ctx, domainURL+accessCertPath)
+	return &Access{oidc.NewVerifier(issuerURL, keySet, &oidc.Config{ClientID: applicationAUD})}, nil
+}
+
+func (a *Access) Validate(ctx context.Context, jwt string) error {
+	token, err := a.verifier.Verify(ctx, jwt)
+
+	if err != nil {
+		return errors.Wrapf(err, "token is invalid: %s", jwt)
+	}
+
+	// Perform extra sanity checks, just to be safe.
+
+	if token == nil {
+		return fmt.Errorf("token is nil: %s", jwt)
+	}
+
+	if !strings.HasSuffix(token.Issuer, accessDomain) {
+		return fmt.Errorf("token has non-cloudflare issuer of %s: %s", token.Issuer, jwt)
+	}
+
+	return nil
+}
+
+func (a *Access) ValidateRequest(ctx context.Context, r *http.Request) error {
+	return a.Validate(ctx, r.Header.Get(accessJwtHeader))
 }

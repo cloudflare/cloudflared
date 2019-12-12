@@ -82,11 +82,18 @@ func (s *StreamHandler) UseConfiguration(ctx context.Context, config *pogs.Clien
 
 // UpdateConfig replaces current originmapper mapping with mappings from newConfig
 func (s *StreamHandler) UpdateConfig(newConfig []*pogs.ReverseProxyConfig) (failedConfigs []*pogs.FailedConfig) {
-	// TODO: TUN-1968: Gracefully apply new config
-	s.tunnelHostnameMapper.DeleteAll()
-	for _, tunnelConfig := range newConfig {
+
+	// Delete old configs that aren't in the `newConfig`
+	toRemove := s.tunnelHostnameMapper.ToRemove(newConfig)
+	for _, hostnameToRemove := range toRemove {
+		s.tunnelHostnameMapper.Delete(hostnameToRemove)
+	}
+
+	// Add new configs that weren't in the old mapper
+	toAdd := s.tunnelHostnameMapper.ToAdd(newConfig)
+	for _, tunnelConfig := range toAdd {
 		tunnelHostname := tunnelConfig.TunnelHostname
-		originSerice, err := tunnelConfig.OriginConfigJSONHandler.OriginConfig.Service()
+		originSerice, err := tunnelConfig.OriginConfig.Service()
 		if err != nil {
 			s.logger.WithField("tunnelHostname", tunnelHostname).WithError(err).Error("Invalid origin service config")
 			failedConfigs = append(failedConfigs, &pogs.FailedConfig{

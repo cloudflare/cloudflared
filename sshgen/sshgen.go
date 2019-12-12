@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -20,6 +19,7 @@ import (
 	cfpath "github.com/cloudflare/cloudflared/cmd/cloudflared/path"
 	"github.com/coreos/go-oidc/jose"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -73,48 +73,54 @@ func GenerateShortLivedCertificate(appURL *url.URL, token string) error {
 // handleCertificateGeneration takes a JWT and uses it build a signPayload
 // to send to the Sign endpoint with the public key from the keypair it generated
 func handleCertificateGeneration(token, fullName string) (string, error) {
+	pub, err := generateKeyPair(fullName)
+	if err != nil {
+		return "", err
+	}
+
+	return SignCert(token, string(pub))
+}
+
+func SignCert(token, pubKey string) (string, error) {
 	if token == "" {
 		return "", errors.New("invalid token")
 	}
 
 	jwt, err := jose.ParseJWT(token)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to parse JWT")
 	}
 
 	claims, err := jwt.Claims()
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to retrieve JWT claims")
 	}
 
 	issuer, _, err := claims.StringClaim("iss")
 	if err != nil {
-		return "", err
-	}
-
-	pub, err := generateKeyPair(fullName)
-	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to retrieve JWT iss")
 	}
 
 	buf, err := json.Marshal(&signPayload{
-		PublicKey: string(pub),
+		PublicKey: pubKey,
 		JWT:       token,
 		Issuer:    issuer,
 	})
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to marshal signPayload")
 	}
-
 	var res *http.Response
 	if mockRequest != nil {
 		res, err = mockRequest(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
 	} else {
-		res, err = http.Post(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
+		client := http.Client{
+			Timeout: 10 * time.Second,
+		}
+		res, err = client.Post(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
 	}
 
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to send request")
 	}
 	defer res.Body.Close()
 
@@ -130,9 +136,9 @@ func handleCertificateGeneration(token, fullName string) (string, error) {
 
 	var signRes signResponse
 	if err := decoder.Decode(&signRes); err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to decode HTTP response")
 	}
-	return signRes.Certificate, err
+	return signRes.Certificate, nil
 }
 
 // generateKeyPair creates a EC keypair (P256) and stores them in the homedir.

@@ -59,7 +59,7 @@ func assertOpenStreamSucceed(t *testing.T, stream *MuxedStream, err error) {
 
 func TestMissingHeaders(t *testing.T) {
 	originHandler := &mockOriginStreamHandler{}
-	muxPair := NewDefaultMuxerPair(t, originHandler.ServeStream)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), originHandler.ServeStream)
 	muxPair.Serve(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -83,7 +83,7 @@ func TestMissingHeaders(t *testing.T) {
 
 func TestReceiveHeaderData(t *testing.T) {
 	originHandler := &mockOriginStreamHandler{}
-	muxPair := NewDefaultMuxerPair(t, originHandler.ServeStream)
+	muxPair := NewDefaultMuxerPair(t, t.Name(), originHandler.ServeStream)
 	muxPair.Serve(t)
 
 	reqHeaders := []Header{

@@ -19,6 +19,10 @@ struct TunnelRegistration {
     permanentFailure @3 :Bool;
     # Displayed to user
     tunnelID @4 :Text;
+    # How long should this connection wait to retry in seconds, if the error wasn't permanent
+    retryAfterSeconds @5 :UInt16;
+    # A unique ID used to reconnect this tunnel.
+    eventDigest @6 :Data;
 }
 
 struct RegistrationOptions {
@@ -44,6 +48,8 @@ struct RegistrationOptions {
     # cross stream compression setting, 0 - off, 3 - high
     compressionQuality @10 :UInt64;
     uuid @11 :Text;
+    # number of previous attempts to send RegisterTunnel/ReconnectTunnel
+    numPreviousAttempts @12 :UInt8;
 }
 
 struct CapnpConnectParameters {
@@ -57,23 +63,15 @@ struct CapnpConnectParameters {
     tags @3 :List(Tag);
     # release version of cloudflared
     cloudflaredVersion @4 :Text;
-    # identifier for this cloudflared instance
-    scope @5 :Scope;
-}
-
-struct Scope {
-    value :union {
-        # Standalone instance
-        systemName @0 :Text;
-        # Associated with a group of identical cloudflared instances
-        group @1 :Text;
-    }
+    # which intent this cloudflared instance should get its behaviour from
+    intentLabel @5 :Text;
 }
 
 struct ConnectResult {
-    err @0 :ConnectError;
-    # Information about the server this connection is established with
-    serverInfo @1 :ServerInfo;
+    result :union {
+        err @0 :ConnectError;
+        success @1 :ConnectSuccess;
+    }
 }
 
 struct ConnectError {
@@ -81,6 +79,13 @@ struct ConnectError {
     # How long should this connection wait to retry in ns
     retryAfter @1 :Int64;
     shouldRetry @2 :Bool;
+}
+
+struct ConnectSuccess {
+    # Information about the server this connection is established with
+    serverLocationName @0 :Text;
+    # How this cloudflared instance should be configured. This can be null if there isn't an intent for this origin yet
+    clientConfig @1 :ClientConfig;
 }
 
 struct ClientConfig {
@@ -134,7 +139,7 @@ struct EdgeConnectionConfig {
 
 struct ReverseProxyConfig {
     tunnelHostname @0 :Text;
-    origin :union {
+    originConfig :union {
         http @1 :HTTPOriginConfig;
         websocket @2 :WebSocketOriginConfig;
         helloWorld @3 :HelloWorldOriginConfig;
@@ -275,11 +280,20 @@ struct FailedConfig {
 	reason @4 :Text;
 }
 
+struct AuthenticateResponse {
+    permanentErr @0 :Text;
+    retryableErr @1 :Text;
+    jwt @2 :Data;
+    hoursUntilRefresh @3 :UInt8;
+}
+
 interface TunnelServer {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
     connect @3 (parameters :CapnpConnectParameters) -> (result :ConnectResult);
+    authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
+    reconnectTunnel @5 (jwt :Data, eventDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }
 
 interface ClientService {

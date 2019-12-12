@@ -51,10 +51,12 @@ type MuxReader struct {
 	dictionaries h2Dictionaries
 }
 
-func (r *MuxReader) Shutdown() {
-	done := r.streams.Shutdown()
-	if done == nil {
-		return
+// Shutdown blocks new streams from being created.
+// It returns a channel that is closed once the last stream has closed.
+func (r *MuxReader) Shutdown() <-chan struct{} {
+	done, alreadyInProgress := r.streams.Shutdown()
+	if alreadyInProgress {
+		return done
 	}
 	r.sendGoAway(http2.ErrCodeNo)
 	go func() {
@@ -62,6 +64,7 @@ func (r *MuxReader) Shutdown() {
 		<-done
 		r.r.Close()
 	}()
+	return done
 }
 
 func (r *MuxReader) run(parentLogger *log.Entry) error {
@@ -87,23 +90,28 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 	for {
 		frame, err := r.f.ReadFrame()
 		if err != nil {
+			errLogger := logger.WithError(err)
+			if errorDetail := r.f.ErrorDetail(); errorDetail != nil {
+				errLogger = errLogger.WithField("errorDetail", errorDetail)
+			}
 			switch e := err.(type) {
 			case http2.StreamError:
-				logger.WithError(err).Warn("stream error")
+				errLogger.Warn("stream error")
 				r.streamError(e.StreamID, e.Code)
 			case http2.ConnectionError:
-				logger.WithError(err).Warn("connection error")
+				errLogger.Warn("connection error")
 				return r.connectionError(err)
 			default:
 				if isConnectionClosedError(err) {
 					if r.streams.Len() == 0 {
+						// don't log the error here -- that would just be extra noise
 						logger.Debug("shutting down")
 						return nil
 					}
-					logger.Warn("connection closed unexpectedly")
+					errLogger.Warn("connection closed unexpectedly")
 					return err
 				} else {
-					logger.WithError(err).Warn("frame read error")
+					errLogger.Warn("frame read error")
 					return r.connectionError(err)
 				}
 			}
@@ -119,6 +127,9 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 			streamID := f.Header().StreamID
 			if streamID == 0 {
 				return ErrInvalidStream
+			}
+			if stream, ok := r.streams.Get(streamID); ok {
+				stream.Close()
 			}
 			r.streams.Delete(streamID)
 		case *http2.PingFrame:

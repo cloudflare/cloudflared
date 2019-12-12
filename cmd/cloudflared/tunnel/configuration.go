@@ -203,11 +203,14 @@ func prepareTunnelConfig(
 		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: c.IsSet("no-tls-verify")},
 	}
 
-	dialContext := (&net.Dialer{
+	dialer := &net.Dialer{
 		Timeout:   c.Duration("proxy-connect-timeout"),
 		KeepAlive: c.Duration("proxy-tcp-keepalive"),
-		DualStack: !c.Bool("proxy-no-happy-eyeballs"),
-	}).DialContext
+	}
+	if c.Bool("proxy-no-happy-eyeballs") {
+		dialer.FallbackDelay = -1 // As of Golang 1.12, a negative delay disables "happy eyeballs"
+	}
+	dialContext := dialer.DialContext
 
 	if c.IsSet("unix-socket") {
 		unixSocket, err := config.ValidateUnixSocket(c)
@@ -253,6 +256,7 @@ func prepareTunnelConfig(
 		HTTPTransport:        httpTransport,
 		HeartbeatInterval:    c.Duration("heartbeat-interval"),
 		Hostname:             hostname,
+		HTTPHostHeader:       c.String("http-host-header"),
 		IncidentLookup:       origin.NewIncidentLookup(),
 		IsAutoupdated:        c.Bool("is-autoupdated"),
 		IsFreeTunnel:         isFreeTunnel,
@@ -271,6 +275,7 @@ func prepareTunnelConfig(
 		TlsConfig:            toEdgeTLSConfig,
 		TransportLogger:      transportLogger,
 		UseDeclarativeTunnel: c.Bool("use-declarative-tunnels"),
+		UseReconnectToken:    c.Bool("use-reconnect-token"),
 	}, nil
 }
 

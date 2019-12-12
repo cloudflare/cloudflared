@@ -1,7 +1,9 @@
 # use a builder image for building cloudflare
 FROM golang:1.13.3 as builder
+ENV GO111MODULE=on
+ENV CGO_ENABLED=0
+ENV GOOS=linux
 
-# switch to the right gopath directory
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
 # copy our sources into the builder image
