@@ -51,10 +51,12 @@ type MuxReader struct {
 	dictionaries h2Dictionaries
 }
 
-func (r *MuxReader) Shutdown() {
-	done := r.streams.Shutdown()
-	if done == nil {
-		return
+// Shutdown blocks new streams from being created.
+// It returns a channel that is closed once the last stream has closed.
+func (r *MuxReader) Shutdown() <-chan struct{} {
+	done, alreadyInProgress := r.streams.Shutdown()
+	if alreadyInProgress {
+		return done
 	}
 	r.sendGoAway(http2.ErrCodeNo)
 	go func() {
@@ -62,6 +64,7 @@ func (r *MuxReader) Shutdown() {
 		<-done
 		r.r.Close()
 	}()
+	return done
 }
 
 func (r *MuxReader) run(parentLogger *log.Entry) error {

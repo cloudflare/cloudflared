@@ -53,97 +53,64 @@ func TestValidateHostname(t *testing.T) {
 }
 
 func TestValidateUrl(t *testing.T) {
+	type testCase struct {
+		input          string
+		expectedOutput string
+	}
+	testCases := []testCase{
+		{"http://localhost", "http://localhost"},
+		{"http://localhost/", "http://localhost"},
+		{"http://localhost/api", "http://localhost"},
+		{"http://localhost/api/", "http://localhost"},
+		{"https://localhost", "https://localhost"},
+		{"https://localhost/", "https://localhost"},
+		{"https://localhost/api", "https://localhost"},
+		{"https://localhost/api/", "https://localhost"},
+		{"https://localhost:8080", "https://localhost:8080"},
+		{"https://localhost:8080/", "https://localhost:8080"},
+		{"https://localhost:8080/api", "https://localhost:8080"},
+		{"https://localhost:8080/api/", "https://localhost:8080"},
+		{"localhost", "http://localhost"},
+		{"localhost/", "http://localhost/"},
+		{"localhost/api", "http://localhost/api"},
+		{"localhost/api/", "http://localhost/api/"},
+		{"localhost:8080", "http://localhost:8080"},
+		{"localhost:8080/", "http://localhost:8080/"},
+		{"localhost:8080/api", "http://localhost:8080/api"},
+		{"localhost:8080/api/", "http://localhost:8080/api/"},
+		{"localhost:8080/api/?asdf", "http://localhost:8080/api/?asdf"},
+		{"http://127.0.0.1:8080", "http://127.0.0.1:8080"},
+		{"127.0.0.1:8080", "http://127.0.0.1:8080"},
+		{"127.0.0.1", "http://127.0.0.1"},
+		{"https://127.0.0.1:8080", "https://127.0.0.1:8080"},
+		{"[::1]:8080", "http://[::1]:8080"},
+		{"http://[::1]", "http://[::1]"},
+		{"http://[::1]:8080", "http://[::1]:8080"},
+		{"[::1]", "http://[::1]"},
+		{"https://example.com", "https://example.com"},
+		{"example.com", "http://example.com"},
+		{"http://hello.example.com", "http://hello.example.com"},
+		{"hello.example.com", "http://hello.example.com"},
+		{"hello.example.com:8080", "http://hello.example.com:8080"},
+		{"https://hello.example.com:8080", "https://hello.example.com:8080"},
+		{"https://bücher.example.com", "https://xn--bcher-kva.example.com"},
+		{"bücher.example.com", "http://xn--bcher-kva.example.com"},
+		{"https%3A%2F%2Fhello.example.com", "https://hello.example.com"},
+		{"https://alex:12345@hello.example.com:8080", "https://hello.example.com:8080"},
+	}
+	for i, testCase := range testCases {
+		validUrl, err := ValidateUrl(testCase.input)
+		assert.NoError(t, err, "test case %v", i)
+		assert.Equal(t, testCase.expectedOutput, validUrl, "test case %v", i)
+	}
+
 	validUrl, err := ValidateUrl("")
 	assert.Equal(t, fmt.Errorf("URL should not be empty"), err)
 	assert.Empty(t, validUrl)
 
-	validUrl, err = ValidateUrl("https://localhost:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://localhost:8080", validUrl)
-
-	validUrl, err = ValidateUrl("localhost:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://localhost:8080", validUrl)
-
-	validUrl, err = ValidateUrl("http://localhost")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://localhost", validUrl)
-
-	validUrl, err = ValidateUrl("http://127.0.0.1:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://127.0.0.1:8080", validUrl)
-
-	validUrl, err = ValidateUrl("127.0.0.1:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://127.0.0.1:8080", validUrl)
-
-	validUrl, err = ValidateUrl("127.0.0.1")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://127.0.0.1", validUrl)
-
-	validUrl, err = ValidateUrl("https://127.0.0.1:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://127.0.0.1:8080", validUrl)
-
-	validUrl, err = ValidateUrl("[::1]:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://[::1]:8080", validUrl)
-
-	validUrl, err = ValidateUrl("http://[::1]")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://[::1]", validUrl)
-
-	validUrl, err = ValidateUrl("http://[::1]:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://[::1]:8080", validUrl)
-
-	validUrl, err = ValidateUrl("[::1]")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://[::1]", validUrl)
-
-	validUrl, err = ValidateUrl("https://example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://example.com", validUrl)
-
-	validUrl, err = ValidateUrl("example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://example.com", validUrl)
-
-	validUrl, err = ValidateUrl("http://hello.example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://hello.example.com", validUrl)
-
-	validUrl, err = ValidateUrl("hello.example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://hello.example.com", validUrl)
-
-	validUrl, err = ValidateUrl("hello.example.com:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://hello.example.com:8080", validUrl)
-
-	validUrl, err = ValidateUrl("https://hello.example.com:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://hello.example.com:8080", validUrl)
-
-	validUrl, err = ValidateUrl("https://bücher.example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://xn--bcher-kva.example.com", validUrl)
-
-	validUrl, err = ValidateUrl("bücher.example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "http://xn--bcher-kva.example.com", validUrl)
-
-	validUrl, err = ValidateUrl("https%3A%2F%2Fhello.example.com")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://hello.example.com", validUrl)
-
 	validUrl, err = ValidateUrl("ftp://alex:12345@hello.example.com:8080/robot.txt")
 	assert.Equal(t, "Currently Argo Tunnel does not support ftp protocol.", err.Error())
 	assert.Empty(t, validUrl)
-
-	validUrl, err = ValidateUrl("https://alex:12345@hello.example.com:8080")
-	assert.Nil(t, err)
-	assert.Equal(t, "https://hello.example.com:8080", validUrl)
 
 }
 

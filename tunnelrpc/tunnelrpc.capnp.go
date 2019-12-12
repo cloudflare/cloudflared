@@ -125,12 +125,12 @@ type TunnelRegistration struct{ capnp.Struct }
 const TunnelRegistration_TypeID = 0xf41a0f001ad49e46
 
 func NewTunnelRegistration(s *capnp.Segment) (TunnelRegistration, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 4})
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 5})
 	return TunnelRegistration{st}, err
 }
 
 func NewRootTunnelRegistration(s *capnp.Segment) (TunnelRegistration, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 4})
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 5})
 	return TunnelRegistration{st}, err
 }
 
@@ -234,12 +234,34 @@ func (s TunnelRegistration) SetTunnelID(v string) error {
 	return s.Struct.SetText(3, v)
 }
 
+func (s TunnelRegistration) RetryAfterSeconds() uint16 {
+	return s.Struct.Uint16(2)
+}
+
+func (s TunnelRegistration) SetRetryAfterSeconds(v uint16) {
+	s.Struct.SetUint16(2, v)
+}
+
+func (s TunnelRegistration) EventDigest() ([]byte, error) {
+	p, err := s.Struct.Ptr(4)
+	return []byte(p.Data()), err
+}
+
+func (s TunnelRegistration) HasEventDigest() bool {
+	p, err := s.Struct.Ptr(4)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelRegistration) SetEventDigest(v []byte) error {
+	return s.Struct.SetData(4, v)
+}
+
 // TunnelRegistration_List is a list of TunnelRegistration.
 type TunnelRegistration_List struct{ capnp.List }
 
 // NewTunnelRegistration creates a new list of TunnelRegistration.
 func NewTunnelRegistration_List(s *capnp.Segment, sz int32) (TunnelRegistration_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 4}, sz)
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 5}, sz)
 	return TunnelRegistration_List{l}, err
 }
 
@@ -466,6 +488,14 @@ func (s RegistrationOptions) UuidBytes() ([]byte, error) {
 
 func (s RegistrationOptions) SetUuid(v string) error {
 	return s.Struct.SetText(6, v)
+}
+
+func (s RegistrationOptions) NumPreviousAttempts() uint8 {
+	return s.Struct.Uint8(4)
+}
+
+func (s RegistrationOptions) SetNumPreviousAttempts(v uint8) {
+	s.Struct.SetUint8(4, v)
 }
 
 // RegistrationOptions_List is a list of RegistrationOptions.
@@ -2625,6 +2655,121 @@ func (p FailedConfig_config_Promise) ReverseProxy() ReverseProxyConfig_Promise {
 	return ReverseProxyConfig_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
+type AuthenticateResponse struct{ capnp.Struct }
+
+// AuthenticateResponse_TypeID is the unique identifier for the type AuthenticateResponse.
+const AuthenticateResponse_TypeID = 0x82c325a07ad22a65
+
+func NewAuthenticateResponse(s *capnp.Segment) (AuthenticateResponse, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
+	return AuthenticateResponse{st}, err
+}
+
+func NewRootAuthenticateResponse(s *capnp.Segment) (AuthenticateResponse, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
+	return AuthenticateResponse{st}, err
+}
+
+func ReadRootAuthenticateResponse(msg *capnp.Message) (AuthenticateResponse, error) {
+	root, err := msg.RootPtr()
+	return AuthenticateResponse{root.Struct()}, err
+}
+
+func (s AuthenticateResponse) String() string {
+	str, _ := text.Marshal(0x82c325a07ad22a65, s.Struct)
+	return str
+}
+
+func (s AuthenticateResponse) PermanentErr() (string, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.Text(), err
+}
+
+func (s AuthenticateResponse) HasPermanentErr() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s AuthenticateResponse) PermanentErrBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.TextBytes(), err
+}
+
+func (s AuthenticateResponse) SetPermanentErr(v string) error {
+	return s.Struct.SetText(0, v)
+}
+
+func (s AuthenticateResponse) RetryableErr() (string, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.Text(), err
+}
+
+func (s AuthenticateResponse) HasRetryableErr() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s AuthenticateResponse) RetryableErrBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.TextBytes(), err
+}
+
+func (s AuthenticateResponse) SetRetryableErr(v string) error {
+	return s.Struct.SetText(1, v)
+}
+
+func (s AuthenticateResponse) Jwt() ([]byte, error) {
+	p, err := s.Struct.Ptr(2)
+	return []byte(p.Data()), err
+}
+
+func (s AuthenticateResponse) HasJwt() bool {
+	p, err := s.Struct.Ptr(2)
+	return p.IsValid() || err != nil
+}
+
+func (s AuthenticateResponse) SetJwt(v []byte) error {
+	return s.Struct.SetData(2, v)
+}
+
+func (s AuthenticateResponse) HoursUntilRefresh() uint8 {
+	return s.Struct.Uint8(0)
+}
+
+func (s AuthenticateResponse) SetHoursUntilRefresh(v uint8) {
+	s.Struct.SetUint8(0, v)
+}
+
+// AuthenticateResponse_List is a list of AuthenticateResponse.
+type AuthenticateResponse_List struct{ capnp.List }
+
+// NewAuthenticateResponse creates a new list of AuthenticateResponse.
+func NewAuthenticateResponse_List(s *capnp.Segment, sz int32) (AuthenticateResponse_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3}, sz)
+	return AuthenticateResponse_List{l}, err
+}
+
+func (s AuthenticateResponse_List) At(i int) AuthenticateResponse {
+	return AuthenticateResponse{s.List.Struct(i)}
+}
+
+func (s AuthenticateResponse_List) Set(i int, v AuthenticateResponse) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s AuthenticateResponse_List) String() string {
+	str, _ := text.MarshalList(0x82c325a07ad22a65, s.List)
+	return str
+}
+
+// AuthenticateResponse_Promise is a wrapper for a AuthenticateResponse promised by a client call.
+type AuthenticateResponse_Promise struct{ *capnp.Pipeline }
+
+func (p AuthenticateResponse_Promise) Struct() (AuthenticateResponse, error) {
+	s, err := p.Pipeline.Struct()
+	return AuthenticateResponse{s}, err
+}
+
 type TunnelServer struct{ Client capnp.Client }
 
 // TunnelServer_TypeID is the unique identifier for the type TunnelServer.
@@ -2710,6 +2855,46 @@ func (c TunnelServer) Connect(ctx context.Context, params func(TunnelServer_conn
 	}
 	return TunnelServer_connect_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
 }
+func (c TunnelServer) Authenticate(ctx context.Context, params func(TunnelServer_authenticate_Params) error, opts ...capnp.CallOption) TunnelServer_authenticate_Results_Promise {
+	if c.Client == nil {
+		return TunnelServer_authenticate_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0xea58385c65416035,
+			MethodID:      4,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
+			MethodName:    "authenticate",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 3}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(TunnelServer_authenticate_Params{Struct: s}) }
+	}
+	return TunnelServer_authenticate_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
+func (c TunnelServer) ReconnectTunnel(ctx context.Context, params func(TunnelServer_reconnectTunnel_Params) error, opts ...capnp.CallOption) TunnelServer_reconnectTunnel_Results_Promise {
+	if c.Client == nil {
+		return TunnelServer_reconnectTunnel_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0xea58385c65416035,
+			MethodID:      5,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
+			MethodName:    "reconnectTunnel",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 4}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(TunnelServer_reconnectTunnel_Params{Struct: s}) }
+	}
+	return TunnelServer_reconnectTunnel_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
 
 type TunnelServer_Server interface {
 	RegisterTunnel(TunnelServer_registerTunnel) error
@@ -2719,6 +2904,10 @@ type TunnelServer_Server interface {
 	UnregisterTunnel(TunnelServer_unregisterTunnel) error
 
 	Connect(TunnelServer_connect) error
+
+	Authenticate(TunnelServer_authenticate) error
+
+	ReconnectTunnel(TunnelServer_reconnectTunnel) error
 }
 
 func TunnelServer_ServerToClient(s TunnelServer_Server) TunnelServer {
@@ -2728,7 +2917,7 @@ func TunnelServer_ServerToClient(s TunnelServer_Server) TunnelServer {
 
 func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []server.Method {
 	if cap(methods) == 0 {
-		methods = make([]server.Method, 0, 4)
+		methods = make([]server.Method, 0, 6)
 	}
 
 	methods = append(methods, server.Method{
@@ -2787,6 +2976,34 @@ func TunnelServer_Methods(methods []server.Method, s TunnelServer_Server) []serv
 		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
 	})
 
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0xea58385c65416035,
+			MethodID:      4,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
+			MethodName:    "authenticate",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := TunnelServer_authenticate{c, opts, TunnelServer_authenticate_Params{Struct: p}, TunnelServer_authenticate_Results{Struct: r}}
+			return s.Authenticate(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
+	})
+
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0xea58385c65416035,
+			MethodID:      5,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:TunnelServer",
+			MethodName:    "reconnectTunnel",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := TunnelServer_reconnectTunnel{c, opts, TunnelServer_reconnectTunnel_Params{Struct: p}, TunnelServer_reconnectTunnel_Results{Struct: r}}
+			return s.ReconnectTunnel(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
+	})
+
 	return methods
 }
 
@@ -2820,6 +3037,22 @@ type TunnelServer_connect struct {
 	Options capnp.CallOptions
 	Params  TunnelServer_connect_Params
 	Results TunnelServer_connect_Results
+}
+
+// TunnelServer_authenticate holds the arguments for a server call to TunnelServer.authenticate.
+type TunnelServer_authenticate struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  TunnelServer_authenticate_Params
+	Results TunnelServer_authenticate_Results
+}
+
+// TunnelServer_reconnectTunnel holds the arguments for a server call to TunnelServer.reconnectTunnel.
+type TunnelServer_reconnectTunnel struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  TunnelServer_reconnectTunnel_Params
+	Results TunnelServer_reconnectTunnel_Results
 }
 
 type TunnelServer_registerTunnel_Params struct{ capnp.Struct }
@@ -3448,6 +3681,422 @@ func (p TunnelServer_connect_Results_Promise) Result() ConnectResult_Promise {
 	return ConnectResult_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
+type TunnelServer_authenticate_Params struct{ capnp.Struct }
+
+// TunnelServer_authenticate_Params_TypeID is the unique identifier for the type TunnelServer_authenticate_Params.
+const TunnelServer_authenticate_Params_TypeID = 0x85c8cea1ab1894f3
+
+func NewTunnelServer_authenticate_Params(s *capnp.Segment) (TunnelServer_authenticate_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 3})
+	return TunnelServer_authenticate_Params{st}, err
+}
+
+func NewRootTunnelServer_authenticate_Params(s *capnp.Segment) (TunnelServer_authenticate_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 3})
+	return TunnelServer_authenticate_Params{st}, err
+}
+
+func ReadRootTunnelServer_authenticate_Params(msg *capnp.Message) (TunnelServer_authenticate_Params, error) {
+	root, err := msg.RootPtr()
+	return TunnelServer_authenticate_Params{root.Struct()}, err
+}
+
+func (s TunnelServer_authenticate_Params) String() string {
+	str, _ := text.Marshal(0x85c8cea1ab1894f3, s.Struct)
+	return str
+}
+
+func (s TunnelServer_authenticate_Params) OriginCert() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s TunnelServer_authenticate_Params) HasOriginCert() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_authenticate_Params) SetOriginCert(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+func (s TunnelServer_authenticate_Params) Hostname() (string, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.Text(), err
+}
+
+func (s TunnelServer_authenticate_Params) HasHostname() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_authenticate_Params) HostnameBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.TextBytes(), err
+}
+
+func (s TunnelServer_authenticate_Params) SetHostname(v string) error {
+	return s.Struct.SetText(1, v)
+}
+
+func (s TunnelServer_authenticate_Params) Options() (RegistrationOptions, error) {
+	p, err := s.Struct.Ptr(2)
+	return RegistrationOptions{Struct: p.Struct()}, err
+}
+
+func (s TunnelServer_authenticate_Params) HasOptions() bool {
+	p, err := s.Struct.Ptr(2)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_authenticate_Params) SetOptions(v RegistrationOptions) error {
+	return s.Struct.SetPtr(2, v.Struct.ToPtr())
+}
+
+// NewOptions sets the options field to a newly
+// allocated RegistrationOptions struct, preferring placement in s's segment.
+func (s TunnelServer_authenticate_Params) NewOptions() (RegistrationOptions, error) {
+	ss, err := NewRegistrationOptions(s.Struct.Segment())
+	if err != nil {
+		return RegistrationOptions{}, err
+	}
+	err = s.Struct.SetPtr(2, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// TunnelServer_authenticate_Params_List is a list of TunnelServer_authenticate_Params.
+type TunnelServer_authenticate_Params_List struct{ capnp.List }
+
+// NewTunnelServer_authenticate_Params creates a new list of TunnelServer_authenticate_Params.
+func NewTunnelServer_authenticate_Params_List(s *capnp.Segment, sz int32) (TunnelServer_authenticate_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 3}, sz)
+	return TunnelServer_authenticate_Params_List{l}, err
+}
+
+func (s TunnelServer_authenticate_Params_List) At(i int) TunnelServer_authenticate_Params {
+	return TunnelServer_authenticate_Params{s.List.Struct(i)}
+}
+
+func (s TunnelServer_authenticate_Params_List) Set(i int, v TunnelServer_authenticate_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s TunnelServer_authenticate_Params_List) String() string {
+	str, _ := text.MarshalList(0x85c8cea1ab1894f3, s.List)
+	return str
+}
+
+// TunnelServer_authenticate_Params_Promise is a wrapper for a TunnelServer_authenticate_Params promised by a client call.
+type TunnelServer_authenticate_Params_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelServer_authenticate_Params_Promise) Struct() (TunnelServer_authenticate_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelServer_authenticate_Params{s}, err
+}
+
+func (p TunnelServer_authenticate_Params_Promise) Options() RegistrationOptions_Promise {
+	return RegistrationOptions_Promise{Pipeline: p.Pipeline.GetPipeline(2)}
+}
+
+type TunnelServer_authenticate_Results struct{ capnp.Struct }
+
+// TunnelServer_authenticate_Results_TypeID is the unique identifier for the type TunnelServer_authenticate_Results.
+const TunnelServer_authenticate_Results_TypeID = 0xfc5edf80e39c0796
+
+func NewTunnelServer_authenticate_Results(s *capnp.Segment) (TunnelServer_authenticate_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return TunnelServer_authenticate_Results{st}, err
+}
+
+func NewRootTunnelServer_authenticate_Results(s *capnp.Segment) (TunnelServer_authenticate_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return TunnelServer_authenticate_Results{st}, err
+}
+
+func ReadRootTunnelServer_authenticate_Results(msg *capnp.Message) (TunnelServer_authenticate_Results, error) {
+	root, err := msg.RootPtr()
+	return TunnelServer_authenticate_Results{root.Struct()}, err
+}
+
+func (s TunnelServer_authenticate_Results) String() string {
+	str, _ := text.Marshal(0xfc5edf80e39c0796, s.Struct)
+	return str
+}
+
+func (s TunnelServer_authenticate_Results) Result() (AuthenticateResponse, error) {
+	p, err := s.Struct.Ptr(0)
+	return AuthenticateResponse{Struct: p.Struct()}, err
+}
+
+func (s TunnelServer_authenticate_Results) HasResult() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_authenticate_Results) SetResult(v AuthenticateResponse) error {
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewResult sets the result field to a newly
+// allocated AuthenticateResponse struct, preferring placement in s's segment.
+func (s TunnelServer_authenticate_Results) NewResult() (AuthenticateResponse, error) {
+	ss, err := NewAuthenticateResponse(s.Struct.Segment())
+	if err != nil {
+		return AuthenticateResponse{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// TunnelServer_authenticate_Results_List is a list of TunnelServer_authenticate_Results.
+type TunnelServer_authenticate_Results_List struct{ capnp.List }
+
+// NewTunnelServer_authenticate_Results creates a new list of TunnelServer_authenticate_Results.
+func NewTunnelServer_authenticate_Results_List(s *capnp.Segment, sz int32) (TunnelServer_authenticate_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
+	return TunnelServer_authenticate_Results_List{l}, err
+}
+
+func (s TunnelServer_authenticate_Results_List) At(i int) TunnelServer_authenticate_Results {
+	return TunnelServer_authenticate_Results{s.List.Struct(i)}
+}
+
+func (s TunnelServer_authenticate_Results_List) Set(i int, v TunnelServer_authenticate_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s TunnelServer_authenticate_Results_List) String() string {
+	str, _ := text.MarshalList(0xfc5edf80e39c0796, s.List)
+	return str
+}
+
+// TunnelServer_authenticate_Results_Promise is a wrapper for a TunnelServer_authenticate_Results promised by a client call.
+type TunnelServer_authenticate_Results_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelServer_authenticate_Results_Promise) Struct() (TunnelServer_authenticate_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelServer_authenticate_Results{s}, err
+}
+
+func (p TunnelServer_authenticate_Results_Promise) Result() AuthenticateResponse_Promise {
+	return AuthenticateResponse_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+type TunnelServer_reconnectTunnel_Params struct{ capnp.Struct }
+
+// TunnelServer_reconnectTunnel_Params_TypeID is the unique identifier for the type TunnelServer_reconnectTunnel_Params.
+const TunnelServer_reconnectTunnel_Params_TypeID = 0xa353a3556df74984
+
+func NewTunnelServer_reconnectTunnel_Params(s *capnp.Segment) (TunnelServer_reconnectTunnel_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4})
+	return TunnelServer_reconnectTunnel_Params{st}, err
+}
+
+func NewRootTunnelServer_reconnectTunnel_Params(s *capnp.Segment) (TunnelServer_reconnectTunnel_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4})
+	return TunnelServer_reconnectTunnel_Params{st}, err
+}
+
+func ReadRootTunnelServer_reconnectTunnel_Params(msg *capnp.Message) (TunnelServer_reconnectTunnel_Params, error) {
+	root, err := msg.RootPtr()
+	return TunnelServer_reconnectTunnel_Params{root.Struct()}, err
+}
+
+func (s TunnelServer_reconnectTunnel_Params) String() string {
+	str, _ := text.Marshal(0xa353a3556df74984, s.Struct)
+	return str
+}
+
+func (s TunnelServer_reconnectTunnel_Params) Jwt() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s TunnelServer_reconnectTunnel_Params) HasJwt() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_reconnectTunnel_Params) SetJwt(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+func (s TunnelServer_reconnectTunnel_Params) EventDigest() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return []byte(p.Data()), err
+}
+
+func (s TunnelServer_reconnectTunnel_Params) HasEventDigest() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_reconnectTunnel_Params) SetEventDigest(v []byte) error {
+	return s.Struct.SetData(1, v)
+}
+
+func (s TunnelServer_reconnectTunnel_Params) Hostname() (string, error) {
+	p, err := s.Struct.Ptr(2)
+	return p.Text(), err
+}
+
+func (s TunnelServer_reconnectTunnel_Params) HasHostname() bool {
+	p, err := s.Struct.Ptr(2)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_reconnectTunnel_Params) HostnameBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(2)
+	return p.TextBytes(), err
+}
+
+func (s TunnelServer_reconnectTunnel_Params) SetHostname(v string) error {
+	return s.Struct.SetText(2, v)
+}
+
+func (s TunnelServer_reconnectTunnel_Params) Options() (RegistrationOptions, error) {
+	p, err := s.Struct.Ptr(3)
+	return RegistrationOptions{Struct: p.Struct()}, err
+}
+
+func (s TunnelServer_reconnectTunnel_Params) HasOptions() bool {
+	p, err := s.Struct.Ptr(3)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_reconnectTunnel_Params) SetOptions(v RegistrationOptions) error {
+	return s.Struct.SetPtr(3, v.Struct.ToPtr())
+}
+
+// NewOptions sets the options field to a newly
+// allocated RegistrationOptions struct, preferring placement in s's segment.
+func (s TunnelServer_reconnectTunnel_Params) NewOptions() (RegistrationOptions, error) {
+	ss, err := NewRegistrationOptions(s.Struct.Segment())
+	if err != nil {
+		return RegistrationOptions{}, err
+	}
+	err = s.Struct.SetPtr(3, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// TunnelServer_reconnectTunnel_Params_List is a list of TunnelServer_reconnectTunnel_Params.
+type TunnelServer_reconnectTunnel_Params_List struct{ capnp.List }
+
+// NewTunnelServer_reconnectTunnel_Params creates a new list of TunnelServer_reconnectTunnel_Params.
+func NewTunnelServer_reconnectTunnel_Params_List(s *capnp.Segment, sz int32) (TunnelServer_reconnectTunnel_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4}, sz)
+	return TunnelServer_reconnectTunnel_Params_List{l}, err
+}
+
+func (s TunnelServer_reconnectTunnel_Params_List) At(i int) TunnelServer_reconnectTunnel_Params {
+	return TunnelServer_reconnectTunnel_Params{s.List.Struct(i)}
+}
+
+func (s TunnelServer_reconnectTunnel_Params_List) Set(i int, v TunnelServer_reconnectTunnel_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s TunnelServer_reconnectTunnel_Params_List) String() string {
+	str, _ := text.MarshalList(0xa353a3556df74984, s.List)
+	return str
+}
+
+// TunnelServer_reconnectTunnel_Params_Promise is a wrapper for a TunnelServer_reconnectTunnel_Params promised by a client call.
+type TunnelServer_reconnectTunnel_Params_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelServer_reconnectTunnel_Params_Promise) Struct() (TunnelServer_reconnectTunnel_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelServer_reconnectTunnel_Params{s}, err
+}
+
+func (p TunnelServer_reconnectTunnel_Params_Promise) Options() RegistrationOptions_Promise {
+	return RegistrationOptions_Promise{Pipeline: p.Pipeline.GetPipeline(3)}
+}
+
+type TunnelServer_reconnectTunnel_Results struct{ capnp.Struct }
+
+// TunnelServer_reconnectTunnel_Results_TypeID is the unique identifier for the type TunnelServer_reconnectTunnel_Results.
+const TunnelServer_reconnectTunnel_Results_TypeID = 0xd4d18de97bb12de3
+
+func NewTunnelServer_reconnectTunnel_Results(s *capnp.Segment) (TunnelServer_reconnectTunnel_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return TunnelServer_reconnectTunnel_Results{st}, err
+}
+
+func NewRootTunnelServer_reconnectTunnel_Results(s *capnp.Segment) (TunnelServer_reconnectTunnel_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return TunnelServer_reconnectTunnel_Results{st}, err
+}
+
+func ReadRootTunnelServer_reconnectTunnel_Results(msg *capnp.Message) (TunnelServer_reconnectTunnel_Results, error) {
+	root, err := msg.RootPtr()
+	return TunnelServer_reconnectTunnel_Results{root.Struct()}, err
+}
+
+func (s TunnelServer_reconnectTunnel_Results) String() string {
+	str, _ := text.Marshal(0xd4d18de97bb12de3, s.Struct)
+	return str
+}
+
+func (s TunnelServer_reconnectTunnel_Results) Result() (TunnelRegistration, error) {
+	p, err := s.Struct.Ptr(0)
+	return TunnelRegistration{Struct: p.Struct()}, err
+}
+
+func (s TunnelServer_reconnectTunnel_Results) HasResult() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelServer_reconnectTunnel_Results) SetResult(v TunnelRegistration) error {
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewResult sets the result field to a newly
+// allocated TunnelRegistration struct, preferring placement in s's segment.
+func (s TunnelServer_reconnectTunnel_Results) NewResult() (TunnelRegistration, error) {
+	ss, err := NewTunnelRegistration(s.Struct.Segment())
+	if err != nil {
+		return TunnelRegistration{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// TunnelServer_reconnectTunnel_Results_List is a list of TunnelServer_reconnectTunnel_Results.
+type TunnelServer_reconnectTunnel_Results_List struct{ capnp.List }
+
+// NewTunnelServer_reconnectTunnel_Results creates a new list of TunnelServer_reconnectTunnel_Results.
+func NewTunnelServer_reconnectTunnel_Results_List(s *capnp.Segment, sz int32) (TunnelServer_reconnectTunnel_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
+	return TunnelServer_reconnectTunnel_Results_List{l}, err
+}
+
+func (s TunnelServer_reconnectTunnel_Results_List) At(i int) TunnelServer_reconnectTunnel_Results {
+	return TunnelServer_reconnectTunnel_Results{s.List.Struct(i)}
+}
+
+func (s TunnelServer_reconnectTunnel_Results_List) Set(i int, v TunnelServer_reconnectTunnel_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s TunnelServer_reconnectTunnel_Results_List) String() string {
+	str, _ := text.MarshalList(0xd4d18de97bb12de3, s.List)
+	return str
+}
+
+// TunnelServer_reconnectTunnel_Results_Promise is a wrapper for a TunnelServer_reconnectTunnel_Results promised by a client call.
+type TunnelServer_reconnectTunnel_Results_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelServer_reconnectTunnel_Results_Promise) Struct() (TunnelServer_reconnectTunnel_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelServer_reconnectTunnel_Results{s}, err
+}
+
+func (p TunnelServer_reconnectTunnel_Results_Promise) Result() TunnelRegistration_Promise {
+	return TunnelRegistration_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
 type ClientService struct{ Client capnp.Client }
 
 // ClientService_TypeID is the unique identifier for the type ClientService.
@@ -3681,238 +4330,266 @@ func (p ClientService_useConfiguration_Results_Promise) Result() UseConfiguratio
 	return UseConfigurationResult_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
-const schema_db8274f9144abc7e = "x\xda\xacY{\x8c\\\xe5u?\xe7~\xb3{\xd7\x8f" +
-	"\xf1\xcc\xed\x1d\x843\xf5j+\x0b\x1a\xec`\x17\xe3\xd0" +
-	"\xe2m\xc9\xec\xc3vv7k{\xee\xce\xae\x01c$" +
-	"_\xcf|\xbb{\xd7w\xee\x1d\xdf\x87\xd9\xb5L\x8c-" +
-	"S`\x0b\xc1&\xb1\x84\x89\x89\xc0\x8d\xcbCv\x83\x89" +
-	"Q\x0b\x05\x14\xaa\xa6\x84&\x11q\x8b\xab\xd0\x12\x09\x02" +
-	"V\x15TDM\"!\xaa\x84[\x9d\xfb\xde\xd9e\x8d" +
-	"\xab\xfc\xb3;:s\xbe\xef;\xcf\xdfy\xccu\x99\x05" +
-	"]\xc2\x9a\x163\x0b\xa0\x1coi\xf5Z\xfe\xf8\xfc\xdb" +
-	"\x8d\xb7\xc5C \x15\xd1\xfb\xfa\x8b\x03\x85O\x9c\x83\xff" +
-	"\x09-\x82\x08\xb0\xf6\xd1\xd6\x01\x94\xcf\xb4\x8a\x00\xf2\xe9" +
-	"\xd6;\x00\xbd\xbf\xa8\xbf~\xe2O\x8f\xfe\x98\x98\x85\x84" +
-	"\x19p\xed\x15\xe2^\x94W\x88\xc4y\xb5\xb8\x05\xd0\xfb" +
-	"\xb7\xeb\xf6\xbd\xb7\xe3\xd7G\xee\x9dym\x86n\xbdI" +
-	"\x9cFyD\x14\x81y\x8f\xdeV\xf8\x17|\xec\xe3#" +
-	" ]\x83\x00-H_\xaf\x11\x17\x0a\x80r\xbfX\x02" +
-	"\xf4^\xbf\xf6\xc5\x17\x0e\x7f\xff\x9eo\x83\xf2ED\x08" +
-	"\xcek\xe2\xff\"\xa0|\xa7\xcfp\xf1\xbb_\xca\x9c~" +
-	"\xfd\x0f\xbe\xe33x'\xcf\xdd\xfc\xec\xe1\xef\xff\xd1\xfb" +
-	"0\"\x88\x98\x01X{R\xb4\x88\xf7\x8c\xf8_\x80\xde" +
-	"\xb7~\xfe\xd2\xe6\xfa\x91GN\x80\xf4\xc5\xe8\xae#m" +
-	"\x82\x00\x19\xef\x86\xff\xb8\xb0e\xd3\xb3\xa3O\x04\xdf\x04" +
-	"r\xdc\xdd\xf6,\x1d=\xdaF\xcf\xfc\xe8\x8e\xfc\xfd\xdd" +
-	"\x7f\xf6\xe0\x13\xa0\x141m\xa6\x16\xe2|\xbem\x1a\xe5" +
-	"sm\xf4\xf1\xa7m7#\xa07\xbd\xee\xa5\xad\xbf\xfe" +
-	"K\xfbiPVa\xc6\xfb\xa7\xfb\xde\xdd\xb3\xe2\xa9\xd1" +
-	"W}\xa9\x18\xc0\xda\x0d\x0b\xff\x95\xae\xbeu\xe1\xf7\x00" +
-	"\xbd\xec?\xac\xdc\xfc\xe0{\x83g\xe8\xea\x94Q\x03!" +
-	">Y\xd8\x89\xf2\x82Ed\xd7\x96E\xc4\xfd\xb3k\xb7" +
-	"\xbe\xfc\xf23cg\x9a\x05\xf1\xfdur\xd1\x00\xca\xcf" +
-	"\xfb\xdc\xcf\xf9\xdcW\xf4\xe3[?X\x93\xf9\xbbP/" +
-	"\xe6\x9bo\xf1\xfb\xbe\xf9\x16\x13\xc3m\xbf}\xee\x1f7" +
-	"|\xf8\xc6\xf3i\x07\xb4g\x05r\xc0\x9a,)\xbem" +
-	"\x1a\xebouv\xbd\x0c\xca5\x88\xde\xc4\xd1}N\xdf" +
-	"\xc3\x0fx0\x82\"\x0a\x00ko\xcd\xee\xa5\xcbx\x96" +
-	"\xa2\xa3\xfd\x83\x9e\xac\xf1\xe1\xc1\x1f4\x85\x92\xff\xea+" +
-	"\xd9\x01\x94\xcfgI\xb4s\xd9\xef\x01~\xfc\xf4=\x87" +
-	"\xfb\xdf]\xff\xaaR\xc4L\xb3\xd2\xf5%{Q>\xb0" +
-	"\x84>\xde\xb9\xa4\x83\xec\x19[\xb0\x89\xdd\xd7\xfatn" +
-	"\x02\xe5Wr\xf4\xf1\xa5\x9c\xcf>p\xdb7\x1fj\xb9" +
-	"\xf0\xcdW\x9bMJ\xf1\xb9\xf6\xb5\xbc\x85\xf2/\xf2\xf4" +
-	"\xf1\xcd\xfc\x13\x02\xa0W|\xe6\xcf\xff\xb6\xa7\xf6\xe6\x8f" +
-	"\xe7H\x01\xf9\x87\xf2G\xf29\x99>\xfdT&\x1d\xef" +
-	"\xf9\xd2\xd4\xde\xcdWO\x9fo\xb6\xbf/\xf8\x8a\xc24" +
-	"\xca\xdd\x05\xe2\xbe\xa9@\xdc\xc2\x05\xf5\x0bw\xfd\xfbW" +
-	"\xdeJE\xdc\xe9\xc2/\x112\xde\xe6\xad\xb7M,\xb8" +
-	"\xf3\xddw\xd3\x11\xf7x\xc1\xf7\xccs\x052\xfcY\xe9" +
-	"!\xf9\xc5\xc7\xff\xe6=zHl\xb6\xe6\xf9\xc26\x94" +
-	"\x7fE\x0f\xad\xbdP\xf0u\x88#\x7f\xae\xb8x\xe7\xca" +
-	"N\x94/^Ir}p%\xc9u\xc3\x8en\xbe\xfd" +
-	"\xc6[\xde\x07\xa9\xc8f\xe4\xf1\xaa\xa5\x9d(\xdf\xb4\x94" +
-	"\x0e\xad[*\xa2\xfc+\xfa\xe8}cl\xdbk\x17{" +
-	"\x1f\xff\x9f\xe6\xcb}\x85\xce\xd1\x91w\xfc#\xbfX\xea" +
-	"\x9b\x7f\xed\x9a\xbf\xfa\xe0\xe8_\xf7^\x9cu\xfb\x8ab" +
-	"\x0f\xca\xeb\x8a$\xc7\x0d\xc5\xaf\xca\xbc\xe8_\xfe\xf5\xf5" +
-	"[\xd6-\x7f\xe5\xa3\xb4%6\x15?\"K\xa8E\xb2" +
-	"\xc4\xe8\x8d\xff\xfd\xd5\xab\xbf\xf1\xcf\x1f5\xb9\xc7g<" +
-	"P\\\x89\xf2\x11\xff\xc6\x07\x88\xf9\xc3\x8d\xdfy\xa3\x98" +
-	"+\xfef.A\xcf\x14'P\xfea\xd1\x8f\xc6\xa2/" +
-	"\xe8-\xbf|\xe4\x8e\xd2\xb7\x7f\xf31\xe9\xc5\x9aP\xea" +
-	"\xe2\x1fnC\xb9e\x19\xdd\x8c\xcb(U\x06O\xbd\xf9" +
-	"\x95\xf1\xa3?\xfa\xa4\xd9\x08\xbeCN/;\x88\xf2+" +
-	">\xf7K\xcb\x08k\xf6}x\xac\xef\xc1\xed\xa7>M" +
-	"ku\xb2\xfd\x05\xdf\xbf\xed\xa4U\x9cJs\x05\xd2\xf9" +
-	"\xf6\x1e\x94/\xb4\xd3u\xef\xb4\x97`\x95\xe7\xb8\x86\xc1" +
-	"u\xab\x91\xa9\xfeI\xf4\xb1\xba\xba\xaa6\x8cFg\xaf" +
-	"i\x18\xbc\xeaT\xdcj\x95\xdb6@\x19Qic\x19" +
-	"\x80\x0c\x02H+\x1e\x01P\xaee\xa8\xdc(\xa0\x84X" +
-	" \x14\x95n\x98\x00P\xbe\xccP\xe9\x12\xd0\xb3\xb9\xb5" +
-	"\x87[\x83&VUG3\x8d\xcd*\xabs\\\x0c\x02" +
-	".\x06\xf4\xaa\xba\xc6\x0d\xa7\xd7\x84\x9c1\xaa\x8da>" +
-	"\x09\x05@\xcc\x03\xce'\xd8\x86I\xcdv4cl\xd8" +
-	"\xa7\x97\xca\xa6\xaeU\xa7H\xba\xc5\x04\x1dR{'\xdd" +
-	"!]\xb1\x0d\x00\x05I\xea\x01(ic\x86iq\xaf" +
-	"\xa6\xd9UR\x0aX\xd5\xd9\xbfS\xd5U\xa3\xca\xe3\x87" +
-	"Zf?\xd4\xc7u\xdd\xbc\xd9\xb4\xf4\xda\x16K\x1b\xd3" +
-	"\x8c^\x93\x84\xf5-\x11\x1f\x13\xe70\x9c\xaf[\x85[" +
-	"{\xb4*_\xed\xda<8\xe7Z\xbe\x1d\xae\x1a\xe2\xb6" +
-	"\xab;6\x80\x92\x89\xad\x99\xed\x04P\xda\x18*\x05\x01" +
-	"K\x96\xcf\x80\xf9\x04\x13\x9al\xd2:\xfb\xcd\xc0\x16\x15" +
-	"\xdf\xe4\xab]\xc3\xe2c\x9a\xedp+ _U*\xab" +
-	"\x96Z\xb7\xd3\x0f\x92\xfb\xf2\x0c\x95e\x02zc\x96Z" +
-	"\xe5en\xa1f\xd66\xab\x86Ya\xbc\x8a- `" +
-	"\xcb\xfc\x8e\xd8\xa8j:\xaf\x05\xda\xad\xaev\xf8\xff\x95" +
-	"<\xcb,\xf6<\xff\x11u\x1b\x80\xb2\x83\xa1\xa2\x0b\x98" +
-	"\xc5O\xbd H\xb4\xbd\x00\xca8C\xc5\x110+\xfc" +
-	"\xce+\xf8^\xdb\xbd\x1c@\xd1\x19*\x93\x02f\xd9o" +
-	"\xbd\x02\x154\xc9\xa5\x80r\x18*wQ@\xb9\x0d\xb2" +
-	"\xa9\x0d\xcc\xb40\x9f$Yh\x1d^\x1b#K\x1bP" +
-	"\xe2U24\xe6\xa3Z\x100\x885s\x1c\xf3I\xa1" +
-	"\x0b\x8fY|\x0f\xb7l^\x86\x9ceNNa>\xa9" +
-	"\x09MV\xcf^\xae\xd5#G\xc7\xa7\xe6?_\x0d\xf2" +
-	"\xed\xaar\xc7,g\x91\x1d\x173T\x96\x0a\xe85\xe8" +
-	"[\xeep`\x96\x8d\xf9\xa4\x81h\x92v\x8ep\xee\xa5" +
-	"\xbfaV\x97\xc3[\xac0\xb1\x97\xc6\x8f\x1d\xa3\xc7\x1e" +
-	"f\xa8|7\x95\xd8\x8f[\x00\xcac\x0c\x95S\x02\xa2" +
-	"\x10x\xec\xa9\x13\x00\xca)\x86\xca\xdf\x0b(1!p" +
-	"\xd8s+\x01\x94g\x18*?\x11P\xca\xb0\x025K" +
-	"\xd2k\x14l?a\xa8\xfc\\@\xa9%S\xc0\x16\x00" +
-	"\xe9\xfcN\x00\xe5\x0d\x86\xca\xdb\x02zf\x90_\xa4\x94" +
-	"\x83Y\x100\xebc\x84\xe9\xd6Fu\x15:,^\xeb" +
-	"_\x1f\xd3\x0d\xb7^\xb6\xf8\x1e\x0dM\xd7\xeev\x1c^" +
-	"\x17\x1b\x8e\x8d\xad `+`\xceQ\xc7l\\\x02X" +
-	"f\x88\xf9\xa4\x04\x03\x121\xbe\x13-^\xdb\xca-[" +
-	"c\xa6\x11\x83\x92f8\xdcp\x06U\x10wr=\xa6" +
-	"\xce\x93uCa\xecP\xe4\x84i`&H\x81c\xca" +
-	"b\x96Y\xe6y\xa1\x117\x90m\xba\x18*\x83\x02\xb6" +
-	"\xe3\xa7D&;\xf6\x0f\x01(}\x0c\x95a\x01\xdb\x85" +
-	"\xdf\x11\x99,\xa9\x90\x1f\xca\x0c\x95\xed\x02\xe6\xc6\x1d\xa7" +
-	"\x81\xf9\xa4v\x87\xce\xbe\x83\xef\xb4\xcd\xea.\x0eHp" +
-	"\x11\x17\x92\xf0\xdb\xf1\x10\xbe\x80\xe95\xcc'\x9dsS" +
-	"\xa4\xb0\xcf\x82\xfe\x92\xb3\xc1\xb2L\xcbG\xd68<6" +
-	"\\\x9f(\x11EG\xff\xb6D\x03I\xe8\x0a\xd4Rv" +
-	"&\xf2wTU\xd7N\xc0\xdf\xe2\x8e5\xd5=\xea\x00" +
-	"\xe3V\x8c3\xf6\xb8\xe9\xea\xb5!\x0e\xa2cM!\x82" +
-	"\x808?\xfa\xac7\xfbR\x86\x0f\xc28%'\xc9\xb4" +
-	"\x9e\xa1RN\xe4\xdcD\xb4A\x86\xca-$gh\xfe" +
-	"\x112\xff0C\xa5!\xa0\xa7S\xfe\x1a}&0\xdb" +
-	"\x89\xc5\x0d\x88e\xd3\x0fN\x11\x04\x14\x01=\xb7a;" +
-	"\x16W\xeb\x80q\xb4\x11\xff\x92\xcb\x80\xe9&\xb8(\xab" +
-	"9?\xef\xe7\xd6!N\xc5M\x03i%\xc2\\\x1c\xe9" +
-	"I\x8c=w2\x8d\x9b\xb6c\xa8u\x0e\x00\x91b\xfb" +
-	"\xcd\x06\xe1$\xa1H\xdc\xd86\xc5\xc6\xe5W\xb7\xa0\xd2" +
-	"\xcc\xa8m'R\xa5\xa6\x1a\x9eF\xffx\xafi\x88\x97" +
-	"]\xfeC\x04\x0b\xd0uuX-\xa93\x89\xca\xce\x0a" +
-	"*%W1T\xaeK\x97\x9dUd\xa2k\x18*_" +
-	"\x16P\xe4\x16U\x90xB\x0a\x1e\xddo\x07\xad\x0e\xe6" +
-	"\x93\xe1\xf5\xd2\xe2t\xbb\xce87\x1c-\xe8rf\x85" +
-	"\xe1\xf2$]b\x17\xf6_\x9f\xf2k\xe4\xc2M;\x13" +
-	"\xbf\x8a\xbb\xf8T\xe4\xa5\x0e^W\xb5\x04\x8dB\xe7v" +
-	"\x83\xf8\xb5\x84g\xden),\x8bAQ,\x05\xde\"" +
-	"!\x0b\xb1\x90wN\x03(w1T\xeeO\x09y\xdf" +
-	"C\x00\xca\xfd\x0c\x95\x87SB\x1e%#\x1ef\xa8\x1c" +
-	"'\xccg\x01R\x1d#\x07\x1fg\xa8<) f\x02" +
-	"\xc8?I\x90\xff$C\xe5\xac\xe0\x03v_w\xafi" +
-	"`(\x84\x0d\x10\xc1\xb57\xceU\xcb\xd9\xc9Ut\xfa" +
-	"\x0d\x87[{T\xd4#H\xd8\xefhun\xbaN\x0c" +
-	"\x11uu\xd2o9\xb0\xd6\x17\x9c\x12U\xc7\xc6\x05 " +
-	"\xe0\x02\xcaH\x9b[\xbd\x16\xaf!yC\xd5\xcb*s" +
-	"\xc6?\x8f\x81f\x82xn\x0e\xf3P\xc3\xb2\x8f\xa1r" +
-	"/A\x09\xa6\xa6p\xe9\xee\x09\x10|$!\x9dw\xf7" +
-	"$-\x8c_\x10\xa9\xcc\xb9d\xc6I\x86\xca\xa1\xb0 " +
-	"\xb6\x02H\x07\xc8:\x87\x18*\x87\x85H\xb4>\x13J" +
-	"A\x866\xbb:\xec\x91\xf7\x13jj<\xd17\xec\x17" +
-	"44\x8da\xdfP\x98X\xaaj\xd6\x1b\x16\x85\xb2f" +
-	"\x1a\x8a\xab\xea\x1as\xa6\xe2\x83\xf3\xda\x82 )H\xe5" +
-	"-\x8d\x0e\xdfYd\x8c\xeb\"c\xc8\xdd8\x00P\xe9" +
-	"B\x86\x95AL\xc2E\xee\xc7\x1e\x80\xcaz\xa2\x971" +
-	"\x89\x18y\x13\x16\x01*}D\x1fF\x011\x88\x19Y" +
-	"\xc1\xa7\x01*\xc3D\xde\x81I\xab \xdf\xee_\xbf\x9d" +
-	"\xe8\xe3\x98t\x0b2\xc7\x95\x00\x95\x1dD\xdfG\xf4V" +
-	"\xc1\xb7\xa4<\x85\x13\x00\x95I\xa2\x1f\"\xba\xd8R\xa0" +
-	"AG>\x80\x16@\xe5.\xa2\xdfO\xf4\xb6\xa5\x05l" +
-	"\x03\x90\xef\xf3\xe9\xf7\x12\xfd[D_\xf0\x85\x02.\x00" +
-	"\x90\x8f\xe0A\x80\xcaa\xa2\x1f'\xfaB,\xe0B\x00" +
-	"\xf9\x18>\x02P9N\xf4'\x89\xbe\xa8\xb5\x80\x8b\x00" +
-	"\xe4\x93\xbe<\x8f\x11\xfd\x14\xc6\xb8\xd6_K\xc3+\x85" +
-	"\x95\x96\xb4\x17\xcc\xb4c\xd7\xf2p\x84\xc1\x00\xfb\xcbf" +
-	"\x8ef\x18\xcc%\x8b0@\xcc\x01z\x0d\xd3\xd47\xcf" +
-	"\x84\xedKu8aX@\xce4\xfakq\x9e\x05\xc1" +
-	"4hBGU\xd5\xfb\x1bI\xcfcw\xbb\x8e\xe96" +
-	"\xa0\xa3\xa6:\xbc\x16\x17^\xcb56Zf}\x18\xb9" +
-	"U\xd7\x0cU\x87\xf8\x9b\xf9b+\xe7\xbaZmV\xd2" +
-	"\x09\xcd\x81\xd6\xd1\xe8\x1cV\xc7\x9a\x06\xca\x95\x09j\xc7" +
-	" \xb4\xea\xfa\x04\xb4s\xe9\xe4\xe8\xd8\xa3\xea.\x9f\xf5" +
-	"\xd2\x1c]\xefHS\x85\x0a\xea\xc6\xacq\xb6'y=" +
-	"~\xdc\x0aG\xdc>!\xa9\x0d\x91\x15F\xc3\xd9\x07:" +
-	"\xe8\xee\x94?\xe2\x85I\xe8\x8f\xcf\xdb\x0d\x8cq'\xf8" +
-	"\xd4o\x8c\x9aTFE\xb5n\xff?O\x0fq;G" +
-	"\xa3\xc7%'\xccx\x05r\xe9:\xd77<\\N\xc6" +
-	"`\x16\x80d\x1a\x17\x86\xd2\xb8\x90\xc0\xc2D:\xfd\xa3" +
-	"\xeePV\xfc<,\x13};&\xf3\x83|+\x9e\x98" +
-	"\x91\xff\x99\xee\x00\x17\xb8\x7f}\x8d\xe8\x0d\x1f\x170\xc0" +
-	"\x85\xba\x7f\xbfN\xf4\xc94.\xb88=\x13\x17X\x84" +
-	"\x0b\x94\xcf\x87\x88~\xd8\xc7\x85L\x80\x0b\x0f\xe0\xb33" +
-	"\xf2\x7fAK\x80\x0b\xc7\xf0\x85\x19\xf9\xbf\xb05\xc0\x85" +
-	"\x93>\xff\x93D?\xeb\xe3BO\x80\x0bg|\x1cy" +
-	"\x86\xe8/\x12.\xb8\x96^q,\xcd\x00\x1cK\x82\xb5" +
-	"\xda\xf8\x1a\xe7\x8dn\xc8\xe9\xda\x1e\x1ecvMS\xf5" +
-	"\xf5\xae\xaaCG\xc5Q\xab\xbb\x92\x16X\xb7\xfbT\xa3" +
-	"f\xe3\xb8\xba\x8b\x13\xd2\x8b\xe9\x9a\xe8\xe8\xf6Vni" +
-	"\xa3\x80I\xd3\x1c\xf7\x08\xb9\xb2i6\xb7\x0e~\xef\xc5" +
-	"\xad\x00T\xe2\xef\xea\xead\x7fM\xe7\xbd\x18u\x0a\xcc" +
-	"H*\x8dF\xdf\x98\x86\x81A\xf9\x1e\xd6:f\xd6\xe5" +
-	"F\xd8\x86G\xf5}\xb8\xd4T\xb8\xf9d\x83W\x9d^" +
-	"\x13\x0dG3\\>\xeb\x82\xea\xb8k\xec\xe2\xb5\x0dh" +
-	"T\xcd\x9af\x8c\xc1\xac\xfe\x9f}\xd6\xf6!\xd5\xd0\xf8" +
-	"\xd9\x8c\xa9\xd5\xbd\xb4\xa2\x13\x04\x1fK\xa8<K\x9d\xc9" +
-	"\x14]\xaa\xfa\xa7J\x16W\xed\xd4\x008\xcfk\xe1\xb2" +
-	")H2z-\xcfZ\x00\xe2E8F\xdbFi\xf7" +
-	"^\x10$M\xc4dI\x8b\xd1NV\xba\xdd\x02A\x1a" +
-	"\x11Q\x88\x7f\x7f\xc0\xe8\xb7\x03\xa9\x7f\x1a\x04i\x83\x88" +
-	",\xfe\xd1\x00\xa3]\x9f\xb4\xae\x07\x04i\x95\xe8E\x13" +
-	"\x03\x94\x02q\xba\xd0\x8b\x12\x1f:\xfc\xd4\xefB/\xda" +
-	"C`4Y\x00t\xe1\xfe\xb0,tazy\xc5>" +
-	"\xab\xbd\x9f\xbbM\xecIZ\x99\x08#\x0fL'\x9dL" +
-	"<R=\xf0t\xbaK\x0c7\x03\xc7\x0e\x86{\x85\xb3" +
-	"\xa9\xcd\xc0\x19j\x1d\xcf2T~&$\xf52\x0a\xbb" +
-	"h\xdf\x83\xa6\x15\xcdx\xf3\xac}\xc2\xe0\x0c;\xb8\xe6" +
-	"\xe5\x8fW3\xc7\xfd\x0e\x0f\x83\xablH\x10;\xbd\x11" +
-	"Z\x92\xda\x08a4]\x8a3\x00>\xbd\x1fZr\x89" +
-	"Q%=+\xf9\x15'\xe3GM\xf4\xeb\x08F\xbfS" +
-	"I\x12y?+z\xd1<\x85Q\xb9\"\xe7\xa5]v" +
-	"\x99C\xe5\x10\xef\xb0?O%\x88\xf6\xdb\x97\xde\x0d\x04" +
-	"\xef\xe4(\xd8\x02\x85\xe2{'R[*\xdd\x0c\xe7\xa1" +
-	"\xdc\xe6tK;\x8f\xad\x02\x81\xa3\x064G\x87\x9b\xc2" +
-	"oy\xaa\x93\x8e\xe3oy\xd2\x9b\xc7S\xca\xdd\x03a" +
-	"P>\x167\x9c\xd2\xa3\xd3\xc9\x06+\x0e\xbf\xa7\x06\x92" +
-	")\xc5\x9f\x09C9E\xd7J`S7\xc7\x065\x83" +
-	"\xdb\xd4\x825M\xfa\x0dn\xd5U\x83\x1b\xe8\x10\x18\xb9" +
-	"\x16!\xeaL\xe4\xea_\x9f\xea\xdc\xe6S\xbf\x12\x06{" +
-	"\x10\xebayM\xcd\x91'R+\x96Hy\xe5\x85p" +
-	"u\xb1#\xa5\xfc\xed4Gng\xa8\x8c\x0b\xe8\xa9\xae" +
-	"c\x8e4j*:|\xa3\xc5w\xbb\\4\xaaS\xc9" +
-	"<E\x13E\xd5\x1e\xc1\x06\xf5~\x1b-^\xda\xed\xf2" +
-	"4C\xb4\x18\x06Q3k\xb36\xc2s4[7\xf3" +
-	"\x9d\x15\xb3\xba\x8b;3\x16\xe6\x01\\F\xaa\xa8C\xc9" +
-	"V8\xd2D\x1bJv\xc21\x8c\xec\xa6\x80j0T" +
-	"\xf6\xa5`dj:q\xf8\xdc\xd5\xf5\xf7S\x10\xe7Q" +
-	"r\xce\xad\xedP\x89\x7f\xaeDK~\x9f\xb9\xccM\x07" +
-	"\xc4\xd9\x86\xa9_O\xe9\x11!\xbc\xfc\xff\x02\x00\x00\xff" +
-	"\xff~Y\x81&"
+const schema_db8274f9144abc7e = "x\xda\xccZ}\x90\x14ez\x7f\x9e\xeeY\x9a\x85]" +
+	"f:=\x96+\x02#[\x12\x85\x13\xa2\"\x89\xb7I" +
+	"n\xf6\x03\xb8]\x8e\x8f\xe9\x9d\x05\xbd\x95K\xd1;\xf3" +
+	"\xeen/=\xddCw\x0f\xb0\x1b8\x84\xc2xl\xe4" +
+	"\x04OR\xe2\xe1\x95\xa0\xc4\x8fp9\xf0\xa0\xa2\x06-" +
+	"M\xee\"\xe6\x8ex\\ %\x17\xadS\xd1J\x9d\xa5" +
+	"eP)c\xca\xb3SO\x7f\xef\xec\xba\x80I\xaa\xee" +
+	"\x1f\x98z\xfay?\x9e\xaf\xdf\xf3\xf1\xee\x8dC\x93\x9a" +
+	"\xb9\x9bj\xaeK\x02\xc8\x87k&8l\xce/\x87\x1e" +
+	"\x9e\xf5\x8f\xdb@\x9e\x8a\xe8|\xfb\xf8\x92\xf4\xa7\xf6\xb6" +
+	"\x7f\x87\x1a^\x00\x98?(\x0c\xa1\xb4S\x10\x00\xa4\x1d" +
+	"\xc2\x7f\x00:5\xbf\x7f\xe6\x8d\xf2\x1b\xc2v\x10\xa7\xc6" +
+	"\x999b.M\\\x82\xd2\xd6\x89\xc4\xbcy\xe2\x06@" +
+	"\xe7OJ\xaf\x1c\xf8\xc3=?#f.b\x06\x9c\xff" +
+	"\xce\xc4!\x94>u9/L\\\x01\xe8|t\x7f\xc3" +
+	"\xdf\xec\xff\x97\x13w\x81x\x1d\x82\x7fv}\xed\xaf\x10" +
+	"P\x9aY\xfb#@\xe7_o\xdc\xf4\xf6\x9a\x8fv\x7f" +
+	"g\xe4\xb9\x09\xe2{\xb1v\x18\xa5\xb3\xb5\x02\xf0\xceC" +
+	"w\xa4\xff\x19\x1f\xfed7\x88\xd7\xd36H\x9f\x8f\xd5" +
+	"N\xe2\x00\xa5\x93\xb5Y@\xe7\x95\x1b\x8e?\xbb\xeb\xc7" +
+	"w\x7f\x1f\xe4\xeb\x10\xc1[\xff~\xed\x7f\xd398\x89" +
+	"\x18\xce?\xfa\x95\xc4\x0f_\xf9\xbd\x1f\xb8\x0c\xce\xc1S" +
+	"\xb7=\xb5\xeb\xc7\xd7\xbc\x0b+9\x01\x13\x00\xf3gO" +
+	"2\x89w\xc1$\xd2\xc5\xfd\xaf>\xb7\xbc\xb4\xfb\xc1\x03" +
+	"\xde\xa5\xdd\xbd\xae\x98\xccq\x90p\xb6w|RZ\xf9" +
+	"H\xfe\x11_\x1c\xf7S\xed\xe4\x0fi\xe9\xf4\xc9\xb4t" +
+	"\xc1\xaf\xdeY\xb1\xec\xa9\xde\xc7|\x06\xf7\xa2\x9fN~" +
+	"\x8a\x18j\xeb\xe8\x1e'6\xa4\xeei\xf9\xa3{\x1f\xab" +
+	"\xb6J\x0dq\xce\xad\x1bFiQ\x1d\xfdl\xa9\xbb\x0d" +
+	"\x01\x9d\xe1\xaf>\xb7\xea\xa3\xbf\xb0\x9e\x04y.&\x9c" +
+	"\x9f\xec8\xb7~\xf6\x13\xbd/\xb9\xd7\xe6\x01\xe6?S" +
+	"\xffK\xda\xfad=\xa9\xb2\xfe\xef\xe7,\xbf\xf7\xed\xa5" +
+	"Gh\xeb\x98Y\xbcK\x94\xa64\xa1\xb4y\x0aYf" +
+	"p\x0aq\xff\xe2\x86U\xcf?\x7f\xb8\xefH\xf5E\\" +
+	"\x8b_\x95\\\x82\xd2\xdc$q\xcfN\x12\xf7\x15\x1d\xf8" +
+	"\xda\x0b7%\xfe.n\xc7\xd7\x93\xef\xd2\xe1\xe7]\x86" +
+	";>;\xf6\x0f\x8b>8\xfdL\xdcB\xbbS\x1cY" +
+	"\xe8`\x8a\x04\xef\x1e\xc6\xd2kM\xcd\xcf\x83|=\xa2" +
+	"3\xb0g\x93\xdd\xfe\xc0N\x07V\xa2\x80\x1c\xc0\xfc\x93" +
+	"\xa9!\xda\xecl\x8a\xfck\xfa\xfb\xad\xf5\xfa\x07\xdb^" +
+	"\xa8rF\xf7\xd4\x05\xe2\x12\x94:D\xba\xda\"\xf1G" +
+	"\x80\x9f<y\xf7\xae\x8es\x0b_\x92\xa7b\xa2Z\xe8" +
+	"7\xc5!\x94.\x10\xef\xfc\xf3b\x86\xf4\x19j\xb0\x8a" +
+	"\xdd\x95z\xa64\x80\xd2\x02\x89~\xde$\xb9\xecK\xee" +
+	"\xf8\xde}5\xef|\xef\xa5j\x95R\xe0\xcc\xff\xd3\xb4" +
+	"\x89\x92\x9c\xa6\x9f\xcb\xd2\xbf\xe6\x00\x9d\xa9\x87\xff\xf8o" +
+	"[\x8bg\x7f6F\x10I\x9b\xaf\xfcP\xdaq%\xfd" +
+	"\xba\xebJ\x92\xf1\xdc\xdc#\x7f\xfe\x9b\x9d\xa7N\xc7=" +
+	"\xe5\xcd+]\x8f\xbdp%)\xec\xee\xaf\x0c\x0e-\x9f" +
+	"5|\xa6\xda@.\xe7\x15\x0d\xc3(\xcdmp\x0d\xd4" +
+	"@\xdbq\xef(W\xdd\xf9o_{-\xe6\xb3{\x1b" +
+	"\xdeBH8\xcbW\xdd1P\xbb\xf9\xdc\xb9\xf8A;" +
+	"\x1b\\\xd3\xedo\xa0\x83\x8e\x8a\xf7I\xc7\xf7\xff\xf5\xdb" +
+	"t\x90P\xad\xee\x17\x1b\xbaQ:C\x07\xcd?\xd5\xf0" +
+	"\x18\x09\x19\xc6\xceX\x8es\xf2\xea&\x94^\xbf\x9a\xee" +
+	"u\xf6j\xba\xd7\x825-l\xf5\xad\xb7\xbf\x0b\xe2T" +
+	"~\x04T\\5\xad\x09\xa5\xd9\xd3h\xd1\xaciw\xa3" +
+	"4w\xba\x00\xe0|\xb7\xaf\xfb\xe5\xf3m\xfb\xff\xb3z" +
+	"s/\x08\xa77\xa14k\xbak\xaa\xe9\xae}\xe6\xdf" +
+	"\xf4\x97\xef\xefy\xa4\xed\xfc\xa8\xddK3ZQ\xda<" +
+	"\xc3u\xf7\x19_\x97\x9e\x98\xe1n\xfe\xed\x85+\xbe\xda" +
+	"\xf8\xe2\x87qM\xec\x9e\xe1F\xef\xc1\x19\xa4\x89\xde[" +
+	"\xdf\xfb\xfa\xac\xef\xfe\xd3\x87U\xf6s\x19\x7f:c\x0e" +
+	"Jg\xdc\x1dO\x11\xf3\x07\x8b\x7fpzjr\xea\xc7" +
+	"c\xc5\xf1\x85\x19\x03(\xd5f\xe8gM\xe6^\xba\xe8" +
+	"\xedo=\xb8!\xfb\xfd\x8f?!\xb9\xf8*\x9c{\xe6" +
+	"\x9an\x94N^C;\xbf|\x0d\xc5\xd2\xd2Cg\xbf" +
+	"\xd6\xbf\xe7\xc4\xa7c\"we\xe66\x94v\xcct\x1d" +
+	"i&A\xce_\x09\xfb\xce\xdd\xf9\xeb?\xfb,.U" +
+	"\xa9\xf1-\x92jk#I\xb5\xe9\x83\xbd\xed\xf7\xae>" +
+	"\xf4y\x9ca\x7f\xe3\xb3\xc4p\xc4e\x08\x83q,O" +
+	";\xd5\xd8\x8a\xd2\x9b\x8dt\xde\xeb\x8dY\x98\xeb\xd8\x15" +
+	"]g\x9aYN\x14\xfe \xf8Y\x98WP\xcaz\xb9" +
+	"\xa9\xa5b\xf73\xddV\x0b\x8a\xcd:Y\xd6*\x1b\xba" +
+	"\xc5r\x88r\x8aO\x00$\x10@T\x06\x00\xe45<" +
+	"\xca\x1a\x87\"b\x9a\xd0ZT\x89\xd8\xcf\xa3ls(" +
+	"r\\\x9a\x10A\\\xd7\x08 k<\xca\x1b9D>" +
+	"Mx'V\xee\x03\x907\xf2(o\xe7\xd0)3\xb3" +
+	"\xa4\xe8L\x87\xa4\xbd\xc84\xb1\x0e8\xac\x03tLf" +
+	"\x9b\x83J\x8f\x06I\x16#\x0b\x03\x1bl\xac\x07\x0e\xeb" +
+	"\x01\x9d~\xa3bZ+u\x1bU\xad\x93\xf5\x9a\xcc\xc2" +
+	"~\x9c\x00\x1cN\x00\x1cO\xbc6C\xd7Y\xc1\xceW" +
+	"\x0a\x05fY\x00$\xd9\xc4P\xb2\xd9\x0f\x02\xc87\xf0" +
+	"(\xdf\x1a\x93l\x01Iv\x0b\x8fr3\x87\x8e\xc5\xcc" +
+	"\xf5\xcc\\j`A\xb1UC_\xae\xf0%\x16^\xbb" +
+	"\xa0\xa9L\xb7\xdb\x0cH\xea\xbdj\x1f\xa6\xa2P\x00\xc4" +
+	"\xd4\xf8\x17[\xb4Q\xb5lU\xef\xebr\xe9\xd9\x9c\xa1" +
+	"\xa9\x85A\xba]\x9d\xab\xc9\xe9M\xb4\x87xE7\x00" +
+	"r\xa2\xd8\x0a\x90U\xfbt\xc3dNQ\xb5\x0a$\x14" +
+	"\xf0\x05{K\x8f\xa2)z\x81\x85\x07M\x18}\x90w" +
+	"@\xde\x95c\x9e\x12\xb3\xf6\xb59\xc5T\xf8\x92%\xd7" +
+	"\x85\xfaX\xd4\x0d /\xe4Q\xce\xc5\xf4\xb1l\x09\x80" +
+	"\xbc\x94G\xf9\xf6\x98\xa5W\xb6\x02\xc89\x1e\xe5\xd5\x1c" +
+	":\x86\xa9\xf6\xa9z\x1b\x03\xde\x8c\x1b\xcc\xb2u\xa5\xc4" +
+	"\x00 P\xd8\x16\xa3LJ\xb40\x15\xa1t\x95\xa6j" +
+	"F\x0b\xd0\xce4\xcd\xb8\xcd0\xb5\xe2\x0a\xef\x1c\x83\xb4" +
+	"\xed\x9a2\\&\x8cay\xd78$\xb7Z`\xf3*" +
+	"\x16\xf3\xd6UL\xd7\x90\xd7v2\xab\xa2\xd9\x16\x80\x9c" +
+	"\x08\xc5\xafo\x02\x90'\xf2(\xa79\xcc\x9a.\x03\xa6" +
+	"\"P\xaf\xba\xea\xc5t]\xd1M\xd6\xa7Z63=" +
+	"\xf2\xb5YRx\xc9\x8a\x1fH\xfe\x97\xe2Q\x9e\xc6\xa1" +
+	"\xd3g*\x05\x96c&\xaaFq\xb9\xa2\x1by\x9e\x15" +
+	"\xb0\x068\xac\x19\xdf\x93\x16+\xaa\xc6\x8a\x9et\xf3\x0a" +
+	"\x19\xf7\x7f\x8a\xde:\xc7\xf1\xc2\xb7;\x0a\xdfz\xfc\xdc" +
+	"\xf1\xe3w(\x8a\xdfz\xee\xb7\xce\xe8\x00\xae\xe7?s" +
+	"\xfc\x10\xa6\x88\xb0y\x94\xef\xa4\x88\xa8\x94I\xa7\x16\xf0" +
+	"\x86\x89\xa9\x08%}\xed\xb0b\x1fiZ\x87,+\x90" +
+	"\xa21\x15d{\x8fA(\x1a\xfd\x98\x8aJ\x19\x7f\x99" +
+	"\xc9\xd63\xd3b9H\x9a\xc6\xc6ALEY\xbfJ" +
+	"\xebS.W\xeb\x81\xa1\xc3U\xe3\xaf7Y\xc1\x83\x0c" +
+	"\x7fy.\xe3\x19-\x06\x87\xa4\xa3\xd5<\xca\xfd\xb1 " +
+	"a=\x00r\x91G\xb9\x1c\x0b\x92\xd2\x92H\x9b\"\x1f" +
+	"\xe0!EN\x99Gy\x137\x12\xe1\xd8z\xa6\xdb\x0b" +
+	"\xd5>\x10\x98\xf5\xff\x10F#\xa4\xf4e\x0c\xa5\x8b\xb9" +
+	"$yK\x1d\x8fr\x03\xc15}e6\x056\x9d\x16" +
+	"\x16\xc2\x17?\xad\x8d\xfe\xf5\xc17\xe7\xefb\xfa\xf8\xdb" +
+	"\x10\x1e\xb6\x97\x0e{\x80G\xf9\xd1\x98*\xf7\x9b\x00\xf2" +
+	"\xc3<\xca\x878D_\x93O\x1c\x00\x90\x0f\xf1(?" +
+	"M\x9a\xe4<M\x1e\x9bCm\x13\x8f\xf2\xcf9\x14\x13" +
+	"|\x9a\xba\x02\xf1e\x0a\xa9\x9f\xf3(\xbf\xca\xa1X\x93" +
+	"Hc\x0d\x80x\x86\xacs\x9aG\xf9\x8d/B\xab\x82" +
+	"fT\x8a\xbd\x9a\x02\x19\x93\x15;\x16\x86t\xbdR\xca" +
+	"\x99l\xbd\x8aF\xc5j\xb1mV\x12\xca\xb6\x15$\x9e" +
+	"\xa4\xad\xf4Y8\x050\xc7#\xa6\xa2R\x12\x90\x88\xe1" +
+	"\x9eh\xb2\xe2*fZ*o\xe8a\xeePu\x9b\xe9" +
+	"\xf6R\x05\x84\x1e\xa6\x85\xd4q\xb0\xa5\xd3\x8f\x10\x8a\x0f" +
+	"?\xd8\x8d\x08\x0f\xb1\x8f`|\x9a\xe3\xf8J\\D\xba" +
+	"i\xe6Q^\xca\xe1t\xfc\x9c\xc8\xa4\xc7\x8eN\x00\xb9" +
+	"\x9dG\xb9\x8b\xc3\xe9\xdco\x89L\x9a\x94\xbb#4O" +
+	"\xf6\xdbv\x19SQ\x89\xe9\x1b{\x03\xeb\xb1\x8c\xc2Z" +
+	"\x06H\xa0\x18\xd6;\xfe\xd7~\x1f\xa4\x81\xd7\x8a\x98\x8a" +
+	"Z\xc4*O\xe1\xbf(Cg\xa9\x1e0L7\x01F" +
+	"\xe9\xe8\xe6H\x88\xc0;:\xba#\x09D\xae\xd9\x13K" +
+	"\xee\x89\xee\x9f)(\x15\x8b\x8d,-Zzm\xe0\x99" +
+	"\x19\xa2\xa9\xd5oT\xb4b'\x03\xc16\x07\x11\x81C" +
+	"\x1c\x1fc\x17\x1a\xed1\xc5{n<v\xda\x0c\xb3f" +
+	"w<k\xfa\xea_I\xea\xef\xf2P\xc2\xd1\x08\xa5\xf4" +
+	"v\x03x\xcb\x0e\xaf\xeb\x11s\x86\xeb\x9c\x02p(\x00" +
+	":\x95\xb2e\x9bL)\x01\x86\xdeF\xfcS.#\x19" +
+	"U\x81bNI\xbaq\xff\xbb\x94\xfa/?\x87{\xf9" +
+	"tD\x06?\x10K\xa8\x05\x7f5\xba\xcb\xdb\x0c]\xb8" +
+	"\xec*\xcdG0/\x87\xcc\xf3k\x02* \x83\xe4:" +
+	"\x9b\x92\xc1\xb5<\xca7\xc6\x93\xeb\\R\xd1\xf5<\xca" +
+	"\xb7p(0\x93\xf2d\xd8\xe9{\x87n\xb1\xbc\x8a\x14" +
+	"S\xd1\x18\xe7\xe2\xd7\x89\x15\xeb\xaa\xa1\x8fr\xc3\xc6(" +
+	"\\B\x13v\xdc\x1c\xb3k`\xc2e=\x91]\x85\xb5" +
+	"l0\xb0R\x86\x95\x145B#\xdf\xb8- |#" +
+	"\xe2\x19\xb7\xa8\xf5\x93\xbf\x97\xfa\xb3\x9e\xb5\xe8\x92\xe9\xf0" +
+	"\x92\x9b\x87\x01\xe4;y\x94\xef\x89]r\x07\xf5\x08\xf7" +
+	"\xf0(?\x10\xbb\xe4\x1eR\xe2.\x1e\xe5}\xb1\xec\xb9" +
+	"\x97\x0c\xbc\x8fG\xf9q\x0e1\xe1A\xfeA\x82\xfc\xc7" +
+	"y\x94\x8fr.`\xb7\xb7\xb4\x19:\xfa\x97\xb0\x00\xc2" +
+	">\xa1\x9f)\xa6\xdd\xc3\x14\xb4;t\x9b\x99\xeb\x15\xd4" +
+	"\x02H\xd8b\xab%fT\xec\x10\"J\xcaF\xb7\xb0" +
+	"\xc2b\xbb\xb7JPl\x0bk\x81\xc3Z\x8aH\x8b\x99" +
+	"m&+\"YC\xd1r\x0ao\xf7_\x8a\x82F\x82" +
+	"xr\x0c\xf5PY\xb6\x89G\xf9;\x04%\x18\x9b&" +
+	"\x89w\x0d\x00\xe7\"\x09\xc9\xbc\xae5^Zp^\x9a" +
+	"\x8b\xb7ZnB\x9c\x00 n%\xedl\xe7Q\xde\xc5" +
+	"\x05Wk7 \xebEh\xb5\xa9\xfdVf\x0b\xa1\xa6" +
+	"\xca\"y\xfdzAEC\xefr\x15\x85\x91\xa6\x0aF" +
+	"\xa9l\x92+\xab\x86.W\x14M\xe5\xed\xc1p\xe1\xb8" +
+	"\xba H\xf2ByE9\xe3\x1a\x8b\x94qK\xa0\x0c" +
+	"\xe9[\xb8\x04 \xbf\x1ay\xcc\xf7c\xe4.\x12\xc3V" +
+	"\x80\xfc\x1a\xa2k\x18y\x8c\xa4\xe2T\x80|\x91\xe8e" +
+	"\x0c;P\xa9\x84O\x02\xe4\xcbD\xde\x84Q\xa9 \x0d" +
+	"\xba\xdbo$\xfav\x8c\xaa\x05i+\xce\x01\xc8o\"" +
+	"\xfa\x03D\x9f\xc0\xb9\x9a\x94\xf6\xe0\x00@\xfe~\xa2?" +
+	"Lt\xa1&M\xed\xb6\xf4\x10\x9a\x00\xf9}D\x7f\x9c" +
+	"\xe8\x13\x1b\xd28\x11@:\xe8\xd2\x1f%\xfaa\xa2\xd7" +
+	"^\x95\xc6Z\x00\xe9\x87\xb8\x0d \x7f\x88\xe8O\x13}" +
+	"\x12\xa6q\x12\x80t\x0c\x1f\x04\xc8?M\xf4\x9f\x10}" +
+	"\xf2\x844N\x06\x90^t\xefs\x9c\xe8'\x88^\x97" +
+	"Hc\x1d\x80\xf4S<\x00\x90?A\xf4\xd3\x18\xe2]" +
+	"G1\x0e\xbb\xe4njTv\xf0\x86\x15\x9a\x9c\xf9\x1d" +
+	"(z9!g$\xa9\x05\xc5d4*\x06\xc4$\xa0" +
+	"S6\x0cm\xf9H8\xbfX\xe5\xe3\xbb\x0b$\x0d\xbd" +
+	"\xa3\x18\xc6\x9f\xe7dK\x0d\xc8\x14\x14\xad\xa3\x1c\xd5B" +
+	"VK\xc56*e\xc8\x14\x15\x9b\x15\xc3\x84lV\xf4" +
+	"\xc5\xa6Q\xeaBf\x96T]\xd1 \xfc2\x9e\xcf%" +
+	"+\x15\xb5\x18\xee=n\x01\x17\xba'W\xed\x9e\x99r" +
+	"S\x97\xd2W5-\x98\x13a}\x08]so\x8e\xa0" +
+	">\x19\x0f\xa9\xcczE\xab\xb0K\xa9\xec\xc6\xed?:" +
+	"\xb3^\xffr\xb165\x98m]\xbc4_Y\x95F" +
+	"\xbd\xe46j4\xd2\x1a\x09\x1b\xcaj\xfa\xe3\x92v." +
+	"J`\x81Iz\xfd6\x142\xb4w\xcc9\xc2\xe1\xa3" +
+	"\xef\x1c\x97\xaa\x89>f{\xbf:\xf4^\x83r\xbd\xa0" +
+	"\x94\xac/\xb9\xba\x93Y\xc9K\xd1b4N\xbcx2" +
+	"n\xef\xea\xcaE\x13\x09\xdeC\xf2\x1bC\xf0j\xc1N" +
+	"\x80|3E\xe7R\x0cu(u\xb8 \xd2N\xe4." +
+	"\x8cJXIv\xc1\"G\xf4\xd5\x1859\xd27\xdd" +
+	" \x8f00\xd1\xe2\x81\x17s\xb7\x0f\xb1N\xacA\x0f" +
+	"\xbcJ\xee\xfe\x1a\xd17\xc6\xc1\xab\x82\xc3#\xc0N\xe0" +
+	"=\xf0\xda\xea\x82\xcev\xa2\xefr\xc1+\xe1\x81\xd7N" +
+	"|\x0a \xbf\x8b\xe8\xfb\\\xf0\xaa\xf1\xc0k/>;" +
+	"\x02\xec&M\xf0\xc0\xeb\xa0\xcb\xff8\xd1\x8f\xba\xe0\xd5" +
+	"\xea\x81\xd7\x11\x17\xec\x0e\x13\xfd8\x81T\xc5\xd4\xf2\xb6" +
+	"\xa9\xea\x80}Ql\x14\xca\xdf`\xac\xdc\x02IM]" +
+	"\xcf\xc2\xc4RT\x15maE\xd1 \x93\xb7\x95\xc2\xda" +
+	"\xa8N\xd7\xacvE/Z\xd8\xaf\xace\x94\x8e\x84x" +
+	"\xe2\xb65k\x153\xd5^\xc0\xa8\xb2\x0f\x0b\x99d\xce" +
+	"0\xaa\xeb\x1b\xb7@d\xa6\x87p\xe1\xb7\x92\xb2\xb1\xa3" +
+	"\xa8\xb16\x0c\xca\x19^\x8f\xd2\xa1J_\x0c]G\xaf" +
+	"\xc6\xe8R3#\x8b\x87\xb2\xdf+\x04EHW\xb6\xaa" +
+	"\xba`\x1b\xcb\xac`\xb7\x19\xa8\xdb\xaa^a\xa36(" +
+	"\xf4W\xf4\xb5\xac\xb8\x08\xf5\x82QT\xf5>\x18\xd5\xa4" +
+	"\xf0_4\x08\x8aU]n4c\xec!M\x9c\xdd\x04" +
+	"\x9c\x0b]TC\x88MQ\xab\x9f-\xb8\xab\xb2&S" +
+	"\xacX\x97:\xcei\xfe\xe0\xd2\x0b2\xaf\xad\xaf\x01\x08" +
+	"_\x9d0\x98\xdc\x8bG\x86\x80\x13\x9f\x100z\xf0\xc0" +
+	"\xe0}C|\xc8\x04N\xdc# \x17\xbe\x06b\xf0\x92" +
+	"'\xee\x18\x06N\xbcK@>|\xa1\xc3`,.\x0e" +
+	"\xb6\x02'\x96\x04L\x84\xaf\x95\x18\xcc\xd4E\x85\xea\xa4" +
+	"o\x0aX\x13>\xfda\xf0p#.\xdb\x06\x9c\xb8H" +
+	"p\x82v\x08\xb2\x9e\x18\xcd\xe8\x04\x80\x01\x19\x172\x9a" +
+	"\xd1\x09FI\x18\xb4M\x00\xcd\xb8\xc5\x87\xe7ft\x82" +
+	"a*$\x0b\x8a\xcd\x9a\xa9\xd7\xf4>\xa2\x0f\xde\xd0\x8c" +
+	"\xf1!%\xffE\x0d\xce\xd8\x85rkT\xcc\x05\x00\xbc" +
+	"u8\xaa\xe5\xc2\xa6r\xe7\x93\xf1:\xd9\x9f\x8d\xec\xdd" +
+	"\xe6OV\x8e\xc6f#G\xa8x>\xca\xa3\xfc\x0b." +
+	"\xaa\x0c\x02\x9f\x0e\xe6zh\x98A\x97;\xcex\xcf\xf7" +
+	"|\xbf\x86\xad\x1e\xf29E\xa3\xdf\xadq\xd1\xdb\xca\x82" +
+	"(\x1d\xc4'\x7fSb\x93?\x0c\xfakaD\xf6\x88" +
+	"\xcf\x01\xa7\\\xa4Y\x8bw\x8bn:K\xb8.\x19\xbc" +
+	"sb\xf0$-\x8a\xe4Z\xf5\x82\x13t\x94\x18\xe4B" +
+	"\xa82\xd9e\xb6\xd5\x9d,\xf3\xbfI\xd6c8\x88w" +
+	"N\x92<\xd2\x13(\xdcw 6\xa7\xd3\x0c\xbf#L" +
+	".\x8f\x17\xf5\xe3\xe8\xca\xbbpP\x82'i1\xed?" +
+	"-\xdc\xffX\xa3?\\;\x1e+v\x9ei\xf4\x1d\xe8" +
+	"\x85X\x9f\xf6\xdc\x12\x00\xf9\xb87q\x0b\x1e}\xce\x90" +
+	"\xa3\xbe\xca\xa3\xfcv\xcc\xfd\xde$\xc67x\x94\xdf\x8b" +
+	"\xf2\x95\xf8\x1b\xeaY\xde\xe3Q\xfe/JV\x09\xafg" +
+	"\xb9@\xfd\xe9\xc7<v\xa2\xdf?\x07/B\x153B" +
+	"o\xcd\xe8[\xaa\xea\xcc\xa2\xb2\xb4j*\x12<3\xa1" +
+	"M\x98X1\x09\xd8G\x02h\xc7\xc2X5\x1b\x0e\x89" +
+	"\x90\x99y\x8a\xe1\"Z\xe1\xf0e\xec\xb1\xec8\xaa\xcd" +
+	"\xfb\x81\xe4\xc5\x91_\x17\xc4\xba\xf4\x03\xb1\x01V\xa0X" +
+	"\xf9Y\x7f0\xb4&\xa6\xd8o\xf5D\x83f\x02\x1bc" +
+	"e\xb9\xa8\xa0\xcd\x16\x9bl]\x85\x09za0\xeaV" +
+	"\xa9_+X+\xb1L\x15\xf4b\x93e\xd7UX\x9c" +
+	"!x\\\x00A5\x8a\xa3^\x15\xc6\xa8\x12oc=" +
+	"y\xa3\xb0\x96\xd9#\x1e]\xaa\x1e\x06;\xa3\x97\x85\xf0" +
+	"]\xb03\xfe.\xe8C\xd4\xba\x81h\xe6\x1dB\xd4\xe0" +
+	"p\xd4\xea\x8e]\x16\xfc\xdfd\xf2/\xf56FE\xb1" +
+	"p)\x05c\xf8';_r\x02\x7f\xa9\xf5}\xf4\xe2" +
+	"{\x99S+\x08q\x03c\x7f\xd1A\x87p\xfe\xe6\xff" +
+	"\x13\x00\x00\xff\xff<\x08\xe4z"
 
 func init() {
 	schemas.Register(schema_db8274f9144abc7e,
+		0x82c325a07ad22a65,
 		0x8407e070e0d52605,
 		0x84cb9536a2cf6d3c,
+		0x85c8cea1ab1894f3,
 		0x8891f360e47c30d3,
 		0x91f7a001ca145b9d,
 		0x9b87b390babc2ccf,
 		0x9e12cfad042ba4f1,
 		0xa29a916d4ebdd894,
+		0xa353a3556df74984,
 		0xa766b24d4fe5da35,
 		0xa78f37418c1077c8,
 		0xaa7386f356bd398a,
@@ -3926,6 +4603,7 @@ func init() {
 		0xc766a92976e389c4,
 		0xc793e50592935b4a,
 		0xcbd96442ae3bb01a,
+		0xd4d18de97bb12de3,
 		0xd58a254e7a792b87,
 		0xdc3ed6801961e502,
 		0xe3e37d096a5b564e,
@@ -3939,6 +4617,7 @@ func init() {
 		0xf41a0f001ad49e46,
 		0xf7f49b3f779ae258,
 		0xf9c895683ed9ac4c,
+		0xfc5edf80e39c0796,
 		0xfeac5c8f4899ef7c,
 		0xff8d9848747c956a)
 }

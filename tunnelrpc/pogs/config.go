@@ -197,11 +197,14 @@ func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
 		return nil, err
 	}
 
-	dialContext := (&net.Dialer{
+	dialer := &net.Dialer{
 		Timeout:   hc.ProxyConnectionTimeout,
 		KeepAlive: hc.TCPKeepAlive,
-		DualStack: hc.DialDualStack,
-	}).DialContext
+	}
+	if !hc.DialDualStack {
+		dialer.FallbackDelay = -1
+	}
+	dialContext := dialer.DialContext
 	transport := &http.Transport{
 		Proxy:       http.ProxyFromEnvironment,
 		DialContext: dialContext,
@@ -270,7 +273,6 @@ func (*HelloWorldOriginConfig) Service() (originservice.OriginService, error) {
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
-			DualStack: true,
 		}).DialContext,
 		TLSClientConfig: &tls.Config{
 			RootCAs: rootCAs,

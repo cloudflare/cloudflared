@@ -4,19 +4,18 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
@@ -59,12 +58,12 @@ func newMetrics(namespace, subsystem string) *metrics {
 // EdgeManagerConfigurable is the configurable attributes of a EdgeConnectionManager
 type EdgeManagerConfigurable struct {
 	TunnelHostnames []h2mux.TunnelHostname
-	*pogs.EdgeConnectionConfig
+	*tunnelpogs.EdgeConnectionConfig
 }
 
 type CloudflaredConfig struct {
 	CloudflaredID uuid.UUID
-	Tags          []pogs.Tag
+	Tags          []tunnelpogs.Tag
 	BuildInfo     *buildinfo.BuildInfo
 	IntentLabel   string
 }
@@ -127,13 +126,13 @@ func (em *EdgeManager) UpdateConfigurable(newConfigurable *EdgeManagerConfigurab
 	em.state.updateConfigurable(newConfigurable)
 }
 
-func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
-	edgeIP := em.serviceDiscoverer.Addr()
-	edgeConn, err := em.dialEdge(ctx, edgeIP)
+func (em *EdgeManager) newConnection(ctx context.Context) *tunnelpogs.ConnectError {
+	edgeTCPAddr := em.serviceDiscoverer.Addr()
+	configurable := em.state.getConfigurable()
+	edgeConn, err := DialEdge(ctx, configurable.Timeout, em.tlsConfig, edgeTCPAddr)
 	if err != nil {
 		return retryConnection(fmt.Sprintf("dial edge error: %v", err))
 	}
-	configurable := em.state.getConfigurable()
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
 	muxer, err := h2mux.Handshake(edgeConn, edgeConn, h2mux.MuxerConfig{
@@ -148,14 +147,14 @@ func (em *EdgeManager) newConnection(ctx context.Context) *pogs.ConnectError {
 		retryConnection(fmt.Sprintf("couldn't perform handshake with edge: %v", err))
 	}
 
-	h2muxConn, err := newConnection(muxer, edgeIP)
+	h2muxConn, err := newConnection(muxer)
 	if err != nil {
 		return retryConnection(fmt.Sprintf("couldn't create h2mux connection: %v", err))
 	}
 
 	go em.serveConn(ctx, h2muxConn)
 
-	connResult, err := h2muxConn.Connect(ctx, &pogs.ConnectParameters{
+	connResult, err := h2muxConn.Connect(ctx, &tunnelpogs.ConnectParameters{
 		CloudflaredID:       em.cloudflaredConfig.CloudflaredID,
 		CloudflaredVersion:  em.cloudflaredConfig.BuildInfo.CloudflaredVersion,
 		NumPreviousAttempts: 0,
@@ -194,28 +193,6 @@ func (em *EdgeManager) serveConn(ctx context.Context, conn *Connection) {
 	err := conn.Serve(ctx)
 	em.logger.WithError(err).Warn("Connection closed")
 	em.state.closeConnection(conn)
-}
-
-func (em *EdgeManager) dialEdge(ctx context.Context, edgeIP *net.TCPAddr) (*tls.Conn, error) {
-	timeout := em.state.getConfigurable().Timeout
-	// Inherit from parent context so we can cancel (Ctrl-C) while dialing
-	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
-	defer dialCancel()
-
-	dialer := net.Dialer{DualStack: true}
-	edgeConn, err := dialer.DialContext(dialCtx, "tcp", edgeIP.String())
-	if err != nil {
-		return nil, dialError{cause: errors.Wrap(err, "DialContext error")}
-	}
-	tlsEdgeConn := tls.Client(edgeConn, em.tlsConfig)
-	tlsEdgeConn.SetDeadline(time.Now().Add(timeout))
-
-	if err = tlsEdgeConn.Handshake(); err != nil {
-		return nil, dialError{cause: errors.Wrap(err, "Handshake with edge error")}
-	}
-	// clear the deadline on the conn; h2mux has its own timeouts
-	tlsEdgeConn.SetDeadline(time.Time{})
-	return tlsEdgeConn, nil
 }
 
 func (em *EdgeManager) noRetryMessage() string {
@@ -308,8 +285,8 @@ func (ems *edgeManagerState) getUserCredential() []byte {
 	return ems.userCredential
 }
 
-func retryConnection(cause string) *pogs.ConnectError {
-	return &pogs.ConnectError{
+func retryConnection(cause string) *tunnelpogs.ConnectError {
+	return &tunnelpogs.ConnectError{
 		Cause:       cause,
 		RetryAfter:  defaultRetryAfter,
 		ShouldRetry: true,

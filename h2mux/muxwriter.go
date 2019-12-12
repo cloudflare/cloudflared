@@ -54,6 +54,13 @@ type MuxedStreamRequest struct {
 	body   io.Reader
 }
 
+func NewMuxedStreamRequest(stream *MuxedStream, body io.Reader) MuxedStreamRequest {
+	return MuxedStreamRequest{
+		stream: stream,
+		body:   body,
+	}
+}
+
 func (r *MuxedStreamRequest) flushBody() {
 	io.Copy(r.stream, r.body)
 	r.stream.CloseWrite()

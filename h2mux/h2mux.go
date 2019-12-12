@@ -353,9 +353,11 @@ func (m *Muxer) Serve(ctx context.Context) error {
 }
 
 // Shutdown is called to initiate the "happy path" of muxer termination.
-func (m *Muxer) Shutdown() {
+// It blocks new streams from being created.
+// It returns a channel that is closed when the last stream has been closed.
+func (m *Muxer) Shutdown() <-chan struct{} {
 	m.explicitShutdown.Fuse(true)
-	m.muxReader.Shutdown()
+	return m.muxReader.Shutdown()
 }
 
 // IsUnexpectedTunnelError identifies errors that are expected when shutting down the h2mux tunnel.
@@ -390,7 +392,7 @@ func isConnectionClosedError(err error) bool {
 // Called by proxy server and tunnel
 func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader) (*MuxedStream, error) {
 	stream := m.NewStream(headers)
-	if err := m.MakeMuxedStreamRequest(ctx, MuxedStreamRequest{stream, body}); err != nil {
+	if err := m.MakeMuxedStreamRequest(ctx, NewMuxedStreamRequest(stream, body)); err != nil {
 		return nil, err
 	}
 	if err := m.AwaitResponseHeaders(ctx, stream); err != nil {
@@ -401,7 +403,7 @@ func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader
 
 func (m *Muxer) OpenRPCStream(ctx context.Context) (*MuxedStream, error) {
 	stream := m.NewStream(RPCHeaders())
-	if err := m.MakeMuxedStreamRequest(ctx, MuxedStreamRequest{stream: stream, body: nil}); err != nil {
+	if err := m.MakeMuxedStreamRequest(ctx, NewMuxedStreamRequest(stream, nil)); err != nil {
 		return nil, err
 	}
 	if err := m.AwaitResponseHeaders(ctx, stream); err != nil {

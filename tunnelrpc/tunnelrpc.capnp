@@ -19,6 +19,10 @@ struct TunnelRegistration {
     permanentFailure @3 :Bool;
     # Displayed to user
     tunnelID @4 :Text;
+    # How long should this connection wait to retry in seconds, if the error wasn't permanent
+    retryAfterSeconds @5 :UInt16;
+    # A unique ID used to reconnect this tunnel.
+    eventDigest @6 :Data;
 }
 
 struct RegistrationOptions {
@@ -44,6 +48,8 @@ struct RegistrationOptions {
     # cross stream compression setting, 0 - off, 3 - high
     compressionQuality @10 :UInt64;
     uuid @11 :Text;
+    # number of previous attempts to send RegisterTunnel/ReconnectTunnel
+    numPreviousAttempts @12 :UInt8;
 }
 
 struct CapnpConnectParameters {
@@ -274,11 +280,20 @@ struct FailedConfig {
 	reason @4 :Text;
 }
 
+struct AuthenticateResponse {
+    permanentErr @0 :Text;
+    retryableErr @1 :Text;
+    jwt @2 :Data;
+    hoursUntilRefresh @3 :UInt8;
+}
+
 interface TunnelServer {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
     connect @3 (parameters :CapnpConnectParameters) -> (result :ConnectResult);
+    authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
+    reconnectTunnel @5 (jwt :Data, eventDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }
 
 interface ClientService {

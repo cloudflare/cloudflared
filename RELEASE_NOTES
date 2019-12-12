@@ -1,3 +1,19 @@
+2019.11.3
+- 2019-11-20 TUN-2562: Update Cloudflare Origin CA RSA root
+
+2019.11.2
+- 2019-11-18 TUN-2567: AuthOutcome can be turned back into AuthResponse
+- 2019-11-18 TUN-2563: Exposes config_version metrics
+
+2019.11.1
+- 2019-11-12 Add db-connect, a SQL over HTTPS server
+- 2019-11-12 TUN-2053: Add a /healthcheck endpoint to the metrics server
+- 2019-11-13 TUN-2178: public API to create new h2mux.MuxedStreamRequest
+- 2019-11-13 TUN-2490: respect original representation of HTTP request path
+- 2019-11-18 TUN-2547: TunnelRPC definitions for Authenticate flow
+- 2019-11-18 TUN-2551: TunnelRPC definitions for ReconnectTunnel flow
+- 2019-11-05 TUN-2506: Expose active streams metrics
+
 2019.11.0
 - 2019-11-04 TUN-2502: Switch to go modules
 - 2019-11-04 TUN-2500: Don't send client registration errors to Sentry
