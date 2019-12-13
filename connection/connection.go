@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,9 +20,10 @@ const (
 type Connection struct {
 	id    uuid.UUID
 	muxer *h2mux.Muxer
+	addr  *net.TCPAddr
 }
 
-func newConnection(muxer *h2mux.Muxer) (*Connection, error) {
+func newConnection(muxer *h2mux.Muxer, addr *net.TCPAddr) (*Connection, error) {
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return nil, err
@@ -29,6 +31,7 @@ func newConnection(muxer *h2mux.Muxer) (*Connection, error) {
 	return &Connection{
 		id:    id,
 		muxer: muxer,
+		addr:  addr,
 	}, nil
 }
 

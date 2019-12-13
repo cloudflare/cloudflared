@@ -156,7 +156,11 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 }
 
 func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID) error {
-	return NewSupervisor(config, cloudflaredID).Run(ctx, connectedSignal)
+	s, err := NewSupervisor(config, cloudflaredID)
+	if err != nil {
+		return err
+	}
+	return s.Run(ctx, connectedSignal)
 }
 
 func ServeTunnelLoop(ctx context.Context,

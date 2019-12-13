@@ -127,7 +127,10 @@ func (em *EdgeManager) UpdateConfigurable(newConfigurable *EdgeManagerConfigurab
 }
 
 func (em *EdgeManager) newConnection(ctx context.Context) *tunnelpogs.ConnectError {
-	edgeTCPAddr := em.serviceDiscoverer.Addr()
+	edgeTCPAddr, err := em.serviceDiscoverer.Addr()
+	if err != nil {
+		return retryConnection(fmt.Sprintf("edge address discovery error: %v", err))
+	}
 	configurable := em.state.getConfigurable()
 	edgeConn, err := DialEdge(ctx, configurable.Timeout, em.tlsConfig, edgeTCPAddr)
 	if err != nil {
@@ -147,7 +150,7 @@ func (em *EdgeManager) newConnection(ctx context.Context) *tunnelpogs.ConnectErr
 		retryConnection(fmt.Sprintf("couldn't perform handshake with edge: %v", err))
 	}
 
-	h2muxConn, err := newConnection(muxer)
+	h2muxConn, err := newConnection(muxer, edgeTCPAddr)
 	if err != nil {
 		return retryConnection(fmt.Sprintf("couldn't create h2mux connection: %v", err))
 	}
@@ -186,6 +189,7 @@ func (em *EdgeManager) closeConnection(ctx context.Context) error {
 		return fmt.Errorf("no connection to close")
 	}
 	conn.Shutdown()
+	// teardown will be handled by EdgeManager.serveConn in another goroutine
 	return nil
 }
 
@@ -193,6 +197,7 @@ func (em *EdgeManager) serveConn(ctx context.Context, conn *Connection) {
 	err := conn.Serve(ctx)
 	em.logger.WithError(err).Warn("Connection closed")
 	em.state.closeConnection(conn)
+	em.serviceDiscoverer.ReplaceAddr(conn.addr)
 }
 
 func (em *EdgeManager) noRetryMessage() string {
@@ -221,14 +226,14 @@ func newEdgeConnectionManagerState(configurable *EdgeManagerConfigurable, userCr
 	}
 }
 
-func (ems *edgeManagerState) shouldCreateConnection(availableEdgeAddrs uint8) bool {
+func (ems *edgeManagerState) shouldCreateConnection(availableEdgeAddrs int) bool {
 	ems.RLock()
 	defer ems.RUnlock()
-	expectedHAConns := ems.configurable.NumHAConnections
+	expectedHAConns := int(ems.configurable.NumHAConnections)
 	if availableEdgeAddrs < expectedHAConns {
 		expectedHAConns = availableEdgeAddrs
 	}
-	return uint8(len(ems.conns)) < expectedHAConns
+	return len(ems.conns) < expectedHAConns
 }
 
 func (ems *edgeManagerState) shouldReduceConnection() bool {

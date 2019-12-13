@@ -24,7 +24,10 @@ func TestRefreshAuthBackoff(t *testing.T) {
 		return time.After(d)
 	}
 
-	s := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 	backoff := &BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return nil, fmt.Errorf("authentication failure")
@@ -66,7 +69,10 @@ func TestRefreshAuthSuccess(t *testing.T) {
 		return time.After(d)
 	}
 
-	s := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 	backoff := &BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return tunnelpogs.NewAuthSuccess([]byte("jwt"), 19), nil
@@ -92,7 +98,10 @@ func TestRefreshAuthUnknown(t *testing.T) {
 		return time.After(d)
 	}
 
-	s := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 	backoff := &BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return tunnelpogs.NewAuthUnknown(errors.New("auth unknown"), 19), nil
@@ -112,7 +121,10 @@ func TestRefreshAuthFail(t *testing.T) {
 	logger := logrus.New()
 	logger.Level = logrus.ErrorLevel
 
-	s := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 	backoff := &BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return tunnelpogs.NewAuthFail(errors.New("auth fail")), nil
