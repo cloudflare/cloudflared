@@ -73,7 +73,7 @@ ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 64 ]; then s
 Description=Update Argo Tunnel
 
 [Timer]
-OnUnitActiveSec=1d
+OnCalendar=daily
 
 [Install]
 WantedBy=timers.target
