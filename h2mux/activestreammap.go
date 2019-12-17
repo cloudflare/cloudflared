@@ -43,6 +43,7 @@ func newActiveStreamMap(useClientStreamNumbers bool, activeStreams prometheus.Ga
 	return m
 }
 
+// This function should be called while `m` is locked.
 func (m *activeStreamMap) notifyStreamsEmpty() {
 	m.closeOnce.Do(func() {
 		close(m.streamsEmptyChan)
@@ -87,7 +88,9 @@ func (m *activeStreamMap) Delete(streamID uint32) {
 		delete(m.streams, streamID)
 		m.activeStreams.Dec()
 	}
-	if len(m.streams) == 0 {
+
+	// shutting down, and now the map is empty
+	if m.ignoreNewStreams && len(m.streams) == 0 {
 		m.notifyStreamsEmpty()
 	}
 }
@@ -104,7 +107,7 @@ func (m *activeStreamMap) Shutdown() (done <-chan struct{}, alreadyInProgress bo
 	}
 	m.ignoreNewStreams = true
 	if len(m.streams) == 0 {
-		// nothing to shut down
+		// there are no streams to wait for
 		m.notifyStreamsEmpty()
 	}
 	return m.streamsEmptyChan, false

@@ -1,3 +1,4 @@
+
 FROM golang:1.12-alpine as builder
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/

@@ -60,6 +60,67 @@ func TestShutdown(t *testing.T) {
 	}
 }
 
+func TestEmptyBeforeShutdown(t *testing.T) {
+	const numStreams = 1000
+	m := newActiveStreamMap(true, NewActiveStreamsMetrics("test", t.Name()))
+
+	// Add all the streams
+	{
+		var wg sync.WaitGroup
+		wg.Add(numStreams)
+		for i := 0; i < numStreams; i++ {
+			go func(streamID int) {
+				defer wg.Done()
+				stream := &MuxedStream{streamID: uint32(streamID)}
+				ok := m.Set(stream)
+				assert.True(t, ok)
+			}(i)
+		}
+		wg.Wait()
+	}
+	assert.Equal(t, numStreams, m.Len(), "All the streams should have been added")
+
+	// Delete all the streams, bringing m to size 0
+	{
+		var wg sync.WaitGroup
+		wg.Add(numStreams)
+		for i := 0; i < numStreams; i++ {
+			go func(streamID int) {
+				defer wg.Done()
+				m.Delete(uint32(streamID))
+			}(i)
+		}
+		wg.Wait()
+	}
+	assert.Equal(t, 0, m.Len(), "All the streams should have been deleted")
+
+	// Add one stream back
+	const soloStreamID = uint32(0)
+	ok := m.Set(&MuxedStream{streamID: soloStreamID})
+	assert.True(t, ok)
+
+	shutdownChan, alreadyInProgress := m.Shutdown()
+	select {
+	case <-shutdownChan:
+		assert.Fail(t, "before Shutdown(), shutdownChan shouldn't be closed")
+	default:
+	}
+	assert.False(t, alreadyInProgress)
+
+	shutdownChan2, alreadyInProgress2 := m.Shutdown()
+	assert.Equal(t, shutdownChan, shutdownChan2, "repeated calls to Shutdown() should return the same channel")
+	assert.True(t, alreadyInProgress2, "repeated calls to Shutdown() should return true for 'in progress'")
+
+	// Remove the remaining stream
+	m.Delete(soloStreamID)
+
+	select {
+	case <-shutdownChan:
+	default:
+		assert.Fail(t, "After all the streams are deleted, shutdownChan should have been closed")
+	}
+}
+
 type noopBuffer struct {
 	isClosed bool
 }
