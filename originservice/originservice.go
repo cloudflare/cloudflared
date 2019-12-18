@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/log"
@@ -33,6 +34,7 @@ type HTTPService struct {
 	client          http.RoundTripper
 	originURL       *url.URL
 	chunkedEncoding bool
+	bufferPool      *buffer.Pool
 }
 
 func NewHTTPService(transport http.RoundTripper, url *url.URL, chunkedEncoding bool) OriginService {
@@ -40,6 +42,7 @@ func NewHTTPService(transport http.RoundTripper, url *url.URL, chunkedEncoding b
 		client:          transport,
 		originURL:       url,
 		chunkedEncoding: chunkedEncoding,
+		bufferPool:      buffer.NewPool(512 * 1024),
 	}
 }
 
@@ -71,7 +74,9 @@ func (hc *HTTPService) Proxy(stream *h2mux.MuxedStream, req *http.Request) (*htt
 	} else {
 		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
 		// compression generates dictionary on first write
-		io.CopyBuffer(stream, resp.Body, make([]byte, 512*1024))
+		buf := hc.bufferPool.Get()
+		defer hc.bufferPool.Put(buf)
+		io.CopyBuffer(stream, resp.Body, buf)
 	}
 	return resp, nil
 }
@@ -142,10 +147,11 @@ func (wsc *WebsocketService) Shutdown() {
 
 // HelloWorldService talks to the hello world example origin
 type HelloWorldService struct {
-	client    http.RoundTripper
-	listener  net.Listener
-	originURL *url.URL
-	shutdownC chan struct{}
+	client     http.RoundTripper
+	listener   net.Listener
+	originURL  *url.URL
+	shutdownC  chan struct{}
+	bufferPool *buffer.Pool
 }
 
 func NewHelloWorldService(transport http.RoundTripper) (OriginService, error) {
@@ -164,7 +170,8 @@ func NewHelloWorldService(transport http.RoundTripper) (OriginService, error) {
 			Scheme: "https",
 			Host:   listener.Addr().String(),
 		},
-		shutdownC: shutdownC,
+		shutdownC:  shutdownC,
+		bufferPool: buffer.NewPool(512 * 1024),
 	}, nil
 }
 
@@ -184,7 +191,9 @@ func (hwc *HelloWorldService) Proxy(stream *h2mux.MuxedStream, req *http.Request
 
 	// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
 	// compression generates dictionary on first write
-	io.CopyBuffer(stream, resp.Body, make([]byte, 512*1024))
+	buf := hwc.bufferPool.Get()
+	defer hwc.bufferPool.Put(buf)
+	io.CopyBuffer(stream, resp.Body, buf)
 
 	return resp, nil
 }
