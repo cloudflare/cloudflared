@@ -1,3 +1,22 @@
+2019.12.0
+- 2019-12-11 TUN-2631: only notify that activeStreamMap is closed if ignoreNewStreams=true
+- 2019-12-17 bug(cloudflared): Set the MaxIdleConnsPerHost of http.Transport to proxy-keepalive-connections (#155)
+- 2019-12-17 refactor(docker): optimize Dockerfile (#126)
+- 2019-12-19 Fix timer scheduling for systemd update service (#159)
+- 2019-12-13 TUN-2637: Manage edge IPs in a region-aware manner
+- 2019-12-03 bug(cloudflared): nil pointer deference on h2DictWriter Close() (#154)
+- 2019-12-03 TUN-2608: h2mux.Muxer.Shutdown always returns a non-nil channel
+- 2019-12-04 TUN-2555: origin/supervisor.go calls Authenticate
+- 2019-12-06 TUN-2554: cloudflared calls ReconnectTunnel
+- 2019-11-20 TUN-2575: Constructors + simpler conversions for AuthOutcome
+- 2019-11-22 Fix Docker build failure (#149)
+- 2019-11-21 TUN-2573: Refactor TunnelRegistration into PermanentRegistrationError, RetryableRegistrationError and SuccessfulTunnelRegistration
+- 2019-11-22 TUN-2582: EventDigest field in tunnelrpc
+- 2019-11-22 Fix "happy eyeballs" not being disabled since Golang 1.12 upgrade * The Dialer.DualStack setting is now ignored and deprecated; RFC 6555 Fast Fallback ("Happy Eyeballs") is now enabled by default. To disable, set Dialer.FallbackDelay to a negative value.
+- 2019-11-25 TUN-2591: ReconnectTunnel now sends EventDigest
+- 2019-11-21 TUN-2606: add DialEdge helpers
+- 2019-11-21 TUN-2607: add RPC stream helpers
+
 2019.11.3
 - 2019-11-20 TUN-2562: Update Cloudflare Origin CA RSA root
 
