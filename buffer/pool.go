@@ -5,6 +5,8 @@ import (
 )
 
 type Pool struct {
+	// A Pool must not be copied after first use.
+	// https://golang.org/pkg/sync/#Pool
 	buffers sync.Pool
 }
 
