@@ -72,7 +72,15 @@ type tunnelError struct {
 }
 
 func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
-	edgeIPs, err := connection.NewEdgeAddrResolver(config.Logger)
+	var (
+		edgeIPs connection.EdgeServiceDiscoverer
+		err     error
+	)
+	if len(config.EdgeAddrs) > 0 {
+		edgeIPs, err = connection.NewEdgeHostnameResolver(config.EdgeAddrs)
+	} else {
+		edgeIPs, err = connection.NewEdgeAddrResolver(config.Logger)
+	}
 	if err != nil {
 		return nil, err
 	}

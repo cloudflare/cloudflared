@@ -539,7 +539,7 @@ func NewTunnelHandler(ctx context.Context,
 	// Client mux handshake with agent server
 	h.muxer, err = h2mux.Handshake(edgeConn, edgeConn, config.muxerConfig(h), h.metrics.activeStreams)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "Handshake with edge error")
+		return nil, "", errors.Wrap(err, "h2mux handshake with edge error")
 	}
 	return h, edgeConn.LocalAddr().String(), nil
 }

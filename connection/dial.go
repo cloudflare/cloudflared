@@ -29,7 +29,7 @@ func DialEdge(
 	tlsEdgeConn.SetDeadline(time.Now().Add(timeout))
 
 	if err = tlsEdgeConn.Handshake(); err != nil {
-		return nil, newDialError(err, "Handshake with edge error")
+		return nil, newDialError(err, "TLS handshake with edge error")
 	}
 	// clear the deadline on the conn; h2mux has its own timeouts
 	tlsEdgeConn.SetDeadline(time.Time{})
