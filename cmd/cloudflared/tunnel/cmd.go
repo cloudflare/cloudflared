@@ -980,7 +980,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "use-reconnect-token",
 			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
-			Value:   true,
 			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
 			Hidden:  true,
 		}),
