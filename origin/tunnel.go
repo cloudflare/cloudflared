@@ -273,7 +273,7 @@ func ServeTunnel(
 			eventDigest, eventDigestErr := credentialManager.EventDigest()
 			// if we have both credentials, we can reconnect
 			if tokenErr == nil && eventDigestErr == nil {
-				return ReconnectTunnel(ctx, token, eventDigest, handler.muxer, config, logger, connectionID, originLocalIP, u)
+				return ReconnectTunnel(serveCtx, token, eventDigest, handler.muxer, config, logger, connectionID, originLocalIP, u)
 			}
 			// log errors and proceed to RegisterTunnel
 			if tokenErr != nil {
