@@ -354,6 +354,7 @@ func (s *Supervisor) refreshAuth(
 	logger := s.config.Logger.WithField("subsystem", subsystemRefreshAuth)
 	authOutcome, err := authenticate(ctx, backoff.Retries())
 	if err != nil {
+		s.config.Metrics.authFail.WithLabelValues(err.Error()).Inc()
 		if duration, ok := backoff.GetBackoffDuration(ctx); ok {
 			logger.WithError(err).Warnf("Retrying in %v", duration)
 			return backoff.BackoffTimer(), nil
@@ -366,15 +367,20 @@ func (s *Supervisor) refreshAuth(
 	switch outcome := authOutcome.(type) {
 	case tunnelpogs.AuthSuccess:
 		s.SetReconnectToken(outcome.JWT())
+		s.config.Metrics.authSuccess.Inc()
 		return timeAfter(outcome.RefreshAfter()), nil
 	case tunnelpogs.AuthUnknown:
 		duration := outcome.RefreshAfter()
+		s.config.Metrics.authFail.WithLabelValues(outcome.Error()).Inc()
 		logger.WithError(outcome).Warnf("Retrying in %v", duration)
 		return timeAfter(duration), nil
 	case tunnelpogs.AuthFail:
+		s.config.Metrics.authFail.WithLabelValues(outcome.Error()).Inc()
 		return nil, outcome
 	default:
-		return nil, fmt.Errorf("Unexpected outcome type %T", authOutcome)
+		err := fmt.Errorf("Unexpected outcome type %T", authOutcome)
+		s.config.Metrics.authFail.WithLabelValues(err.Error()).Inc()
+		return nil, err
 	}
 }
 

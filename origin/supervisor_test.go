@@ -8,11 +8,36 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
+
+func testConfig(logger *logrus.Logger) *TunnelConfig {
+	metrics := TunnelMetrics{}
+
+	metrics.authSuccess = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "tunnel_authenticate_success",
+			Help:      "Count of successful tunnel authenticate",
+		},
+	)
+
+	metrics.authFail = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: metricsNamespace,
+			Subsystem: tunnelSubsystem,
+			Name:      "tunnel_authenticate_fail",
+			Help:      "Count of tunnel authenticate errors by type",
+		},
+		[]string{"error"},
+	)
+	return &TunnelConfig{Logger: logger, Metrics: &metrics}
+}
 
 func TestRefreshAuthBackoff(t *testing.T) {
 	logger := logrus.New()
@@ -24,7 +49,7 @@ func TestRefreshAuthBackoff(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -69,7 +94,7 @@ func TestRefreshAuthSuccess(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -98,7 +123,7 @@ func TestRefreshAuthUnknown(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -121,7 +146,7 @@ func TestRefreshAuthFail(t *testing.T) {
 	logger := logrus.New()
 	logger.Level = logrus.ErrorLevel
 
-	s, err := NewSupervisor(&TunnelConfig{Logger: logger}, uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
