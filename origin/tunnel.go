@@ -45,6 +45,7 @@ type registerRPCName string
 const (
 	register  registerRPCName = "register"
 	reconnect registerRPCName = "reconnect"
+	unknown   registerRPCName = "unknown"
 )
 
 type TunnelConfig struct {
@@ -120,8 +121,8 @@ type clientRegisterTunnelError struct {
 	cause error
 }
 
-func newClientRegisterTunnelError(cause error, counter *prometheus.CounterVec) clientRegisterTunnelError {
-	counter.WithLabelValues(cause.Error()).Inc()
+func newClientRegisterTunnelError(cause error, counter *prometheus.CounterVec, name registerRPCName) clientRegisterTunnelError {
+	counter.WithLabelValues(cause.Error(), string(name)).Inc()
 	return clientRegisterTunnelError{cause: cause}
 }
 
@@ -313,7 +314,7 @@ func ServeTunnel(
 
 	err = errGroup.Wait()
 	if err != nil {
-		_ = newClientRegisterTunnelError(err, config.Metrics.regFail)
+		_ = newClientRegisterTunnelError(err, config.Metrics.regFail, unknown)
 
 		switch castedErr := err.(type) {
 		case dupConnRegisterTunnelError:
@@ -355,7 +356,7 @@ func RegisterTunnel(
 	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger.WithField("subsystem", "rpc-register"), openStreamTimeout)
 	if err != nil {
 		// RPC stream open error
-		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
+		return newClientRegisterTunnelError(err, config.Metrics.rpcFail, register)
 	}
 	defer tunnelServer.Close()
 	// Request server info without blocking tunnel registration; must use capnp library directly.
@@ -392,7 +393,7 @@ func ReconnectTunnel(
 	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger.WithField("subsystem", "rpc-reconnect"), openStreamTimeout)
 	if err != nil {
 		// RPC stream open error
-		return newClientRegisterTunnelError(err, config.Metrics.rpcFail)
+		return newClientRegisterTunnelError(err, config.Metrics.rpcFail, reconnect)
 	}
 	defer tunnelServer.Close()
 	// Request server info without blocking tunnel registration; must use capnp library directly.
