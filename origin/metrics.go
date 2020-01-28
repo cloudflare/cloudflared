@@ -58,7 +58,7 @@ type TunnelMetrics struct {
 	// oldServerLocations stores the last server the tunnel was connected to
 	oldServerLocations map[string]string
 
-	regSuccess prometheus.Counter
+	regSuccess *prometheus.CounterVec
 	regFail    *prometheus.CounterVec
 	rpcFail    *prometheus.CounterVec
 
@@ -428,7 +428,7 @@ func NewTunnelMetrics() *TunnelMetrics {
 			Name:      "tunnel_register_fail",
 			Help:      "Count of tunnel registration errors by type",
 		},
-		[]string{"error"},
+		[]string{"error", "rpcName"},
 	)
 	prometheus.MustRegister(registerFail)
 
@@ -443,13 +443,15 @@ func NewTunnelMetrics() *TunnelMetrics {
 	)
 	prometheus.MustRegister(userHostnamesCounts)
 
-	registerSuccess := prometheus.NewCounter(
+	registerSuccess := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: metricsNamespace,
 			Subsystem: tunnelSubsystem,
 			Name:      "tunnel_register_success",
 			Help:      "Count of successful tunnel registrations",
-		})
+		},
+		[]string{"rpcName"},
+	)
 	prometheus.MustRegister(registerSuccess)
 
 	return &TunnelMetrics{

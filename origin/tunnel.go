@@ -40,6 +40,13 @@ const (
 	DuplicateConnectionError = "EDUPCONN"
 )
 
+type registerRPCName string
+
+const (
+	register  registerRPCName = "register"
+	reconnect registerRPCName = "reconnect"
+)
+
 type TunnelConfig struct {
 	BuildInfo            *buildinfo.BuildInfo
 	ClientID             string
@@ -364,10 +371,10 @@ func RegisterTunnel(
 	)
 	if registrationErr := registration.DeserializeError(); registrationErr != nil {
 		// RegisterTunnel RPC failure
-		return processRegisterTunnelError(registrationErr, config.Metrics)
+		return processRegisterTunnelError(registrationErr, config.Metrics, register)
 	}
 	credentialManager.SetEventDigest(registration.EventDigest)
-	return processRegistrationSuccess(config, logger, connectionID, registration)
+	return processRegistrationSuccess(config, logger, connectionID, registration, register)
 }
 
 func ReconnectTunnel(
@@ -402,12 +409,12 @@ func ReconnectTunnel(
 	)
 	if registrationErr := registration.DeserializeError(); registrationErr != nil {
 		// ReconnectTunnel RPC failure
-		return processRegisterTunnelError(registrationErr, config.Metrics)
+		return processRegisterTunnelError(registrationErr, config.Metrics, reconnect)
 	}
-	return processRegistrationSuccess(config, logger, connectionID, registration)
+	return processRegistrationSuccess(config, logger, connectionID, registration, reconnect)
 }
 
-func processRegistrationSuccess(config *TunnelConfig, logger *log.Entry, connectionID uint8, registration *tunnelpogs.TunnelRegistration) error {
+func processRegistrationSuccess(config *TunnelConfig, logger *log.Entry, connectionID uint8, registration *tunnelpogs.TunnelRegistration, name registerRPCName) error {
 	for _, logLine := range registration.LogLines {
 		logger.Info(logLine)
 	}
@@ -432,16 +439,16 @@ func processRegistrationSuccess(config *TunnelConfig, logger *log.Entry, connect
 	config.Metrics.userHostnamesCounts.WithLabelValues(registration.Url).Inc()
 
 	logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
-	config.Metrics.regSuccess.Inc()
+	config.Metrics.regSuccess.WithLabelValues(string(name)).Inc()
 	return nil
 }
 
-func processRegisterTunnelError(err tunnelpogs.TunnelRegistrationError, metrics *TunnelMetrics) error {
+func processRegisterTunnelError(err tunnelpogs.TunnelRegistrationError, metrics *TunnelMetrics, name registerRPCName) error {
 	if err.Error() == DuplicateConnectionError {
-		metrics.regFail.WithLabelValues("dup_edge_conn").Inc()
+		metrics.regFail.WithLabelValues("dup_edge_conn", string(name)).Inc()
 		return dupConnRegisterTunnelError{}
 	}
-	metrics.regFail.WithLabelValues("server_error").Inc()
+	metrics.regFail.WithLabelValues("server_error", string(name)).Inc()
 	return serverRegisterTunnelError{
 		cause:     fmt.Errorf("Server error: %s", err.Error()),
 		permanent: err.IsPermanent(),
