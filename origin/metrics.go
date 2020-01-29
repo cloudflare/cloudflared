@@ -419,7 +419,7 @@ func NewTunnelMetrics() *TunnelMetrics {
 			Name:      "tunnel_rpc_fail",
 			Help:      "Count of RPC connection errors by type",
 		},
-		[]string{"error"},
+		[]string{"error", "rpcName"},
 	)
 	prometheus.MustRegister(rpcFail)
 
