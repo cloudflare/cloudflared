@@ -97,7 +97,12 @@ func (r *MuxReader) run(parentLogger *log.Entry) error {
 			switch e := err.(type) {
 			case http2.StreamError:
 				errLogger.Warn("stream error")
-				r.streamError(e.StreamID, e.Code)
+				// Ideally we wouldn't return here, since that aborts the muxer.
+				// We should communicate the error to the relevant MuxedStream
+				// data structure, so that callers of MuxedStream.Read() and
+				// MuxedStream.Write() would see it. Then we could `continue`
+				// and keep the muxer going.
+				return r.streamError(e.StreamID, e.Code)
 			case http2.ConnectionError:
 				errLogger.Warn("connection error")
 				return r.connectionError(err)
