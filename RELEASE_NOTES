@@ -1,3 +1,14 @@
+2020.2.0
+- 2020-01-30 TUN-2651: Fix panic in h2mux reader when a stream error is encountered
+- 2020-01-27 TUN-2645: Revert "TUN-2645: Turn on reconnect tokens"
+- 2020-01-28 TUN-2693: Metrics for ReconnectTunnel
+- 2020-01-28 TUN-2696: Add unknown registerRPCName
+- 2020-01-28 TUN-2699: Metrics for Authenticate RPCs
+- 2020-01-28 TUN-2690: cloudflared reconnect uses wrong context
+- 2020-01-29 TUN-2707: Inconsistent cardinality in tunnel error metrics
+- 2020-01-13 TUN-2645: Turn on reconnect tokens
+- 2019-12-23 TUN-2646: Make --edge flag work again for local development
+
 2019.12.0
 - 2019-12-11 TUN-2631: only notify that activeStreamMap is closed if ignoreNewStreams=true
 - 2019-12-17 bug(cloudflared): Set the MaxIdleConnsPerHost of http.Transport to proxy-keepalive-connections (#155)
