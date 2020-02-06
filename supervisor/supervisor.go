@@ -1,3 +1,4 @@
+// Package supervisor is used by declarative tunnels to get/apply new config from the edge.
 package supervisor
 
 import (
@@ -13,6 +14,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -56,7 +58,7 @@ func NewSupervisor(
 	defaultClientConfig *pogs.ClientConfig,
 	userCredential []byte,
 	tlsConfig *tls.Config,
-	serviceDiscoverer connection.EdgeServiceDiscoverer,
+	serviceDiscoverer *edgediscovery.Edge,
 	cloudflaredConfig *connection.CloudflaredConfig,
 	autoupdater *updater.AutoUpdater,
 	supportAutoupdate bool,

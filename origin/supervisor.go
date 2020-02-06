@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -39,10 +40,12 @@ var (
 	errEventDigestUnset = errors.New("event digest unset")
 )
 
+// Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
+// reconnects them if they disconnect.
 type Supervisor struct {
 	cloudflaredUUID   uuid.UUID
 	config            *TunnelConfig
-	edgeIPs           connection.EdgeServiceDiscoverer
+	edgeIPs           *edgediscovery.Edge
 	lastResolve       time.Time
 	resolverC         chan resolveResult
 	tunnelErrors      chan tunnelError
@@ -73,13 +76,13 @@ type tunnelError struct {
 
 func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 	var (
-		edgeIPs connection.EdgeServiceDiscoverer
+		edgeIPs *edgediscovery.Edge
 		err     error
 	)
 	if len(config.EdgeAddrs) > 0 {
-		edgeIPs, err = connection.NewEdgeHostnameResolver(config.EdgeAddrs)
+		edgeIPs, err = edgediscovery.StaticEdge(config.Logger, config.EdgeAddrs)
 	} else {
-		edgeIPs, err = connection.NewEdgeAddrResolver(config.Logger)
+		edgeIPs, err = edgediscovery.ResolveEdge(config.Logger)
 	}
 	if err != nil {
 		return nil, err
@@ -141,14 +144,8 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 					backoffTimer = backoff.BackoffTimer()
 				}
 
-				// If the error is a dial error, the problem is likely to be network related
-				// try another addr before refreshing since we are likely to get back the
-				// same IPs in the same order. Same problem with duplicate connection error.
-				if s.unusedIPs() && tunnelError.addr != nil {
-					s.edgeIPs.MarkAddrBad(tunnelError.addr)
-				} else {
-					s.refreshEdgeIPs()
-				}
+				// Previously we'd mark the edge address as bad here, but now we'll just silently use
+				// another.
 			}
 		// Backoff was set and its timer expired
 		case <-backoffTimer:
@@ -191,11 +188,6 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal) error {
 	logger := s.logger
 
-	err := s.edgeIPs.Refresh()
-	if err != nil {
-		logger.Infof("ResolveEdgeIPs err")
-		return err
-	}
 	s.lastResolve = time.Now()
 	availableAddrs := int(s.edgeIPs.AvailableAddrs())
 	if s.config.HAConnections > availableAddrs {
@@ -228,17 +220,19 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		addr *net.TCPAddr
 		err  error
 	)
+	const thisConnID = 0
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: 0, addr: addr, err: err}
+		s.tunnelErrors <- tunnelError{index: thisConnID, addr: addr, err: err}
 	}()
 
-	addr, err = s.edgeIPs.Addr()
+	addr, err = s.edgeIPs.GetAddr(thisConnID)
 	if err != nil {
 		return
 	}
 
-	err = ServeTunnelLoop(ctx, s, s.config, addr, 0, connectedSignal, s.cloudflaredUUID)
-
+	err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID)
+	// If the first tunnel disconnects, keep restarting it.
+	edgeErrors := 0
 	for s.unusedIPs() {
 		if ctx.Err() != nil {
 			return
@@ -249,15 +243,17 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		// try the next address if it was a dialError(network problem) or
 		// dupConnRegisterTunnelError
 		case connection.DialError, dupConnRegisterTunnelError:
-			s.edgeIPs.MarkAddrBad(addr)
+			edgeErrors++
 		default:
 			return
 		}
-		addr, err = s.edgeIPs.Addr()
-		if err != nil {
-			return
+		if edgeErrors >= 2 {
+			addr, err = s.edgeIPs.GetDifferentAddr(thisConnID)
+			if err != nil {
+				return
+			}
 		}
-		err = ServeTunnelLoop(ctx, s, s.config, addr, 0, connectedSignal, s.cloudflaredUUID)
+		err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID)
 	}
 }
 
@@ -272,7 +268,7 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 		s.tunnelErrors <- tunnelError{index: index, addr: addr, err: err}
 	}()
 
-	addr, err = s.edgeIPs.Addr()
+	addr, err = s.edgeIPs.GetAddr(index)
 	if err != nil {
 		return
 	}
@@ -300,20 +296,6 @@ func (s *Supervisor) waitForNextTunnel(index int) bool {
 
 func (s *Supervisor) unusedIPs() bool {
 	return s.edgeIPs.AvailableAddrs() > s.config.HAConnections
-}
-
-func (s *Supervisor) refreshEdgeIPs() {
-	if s.resolverC != nil {
-		return
-	}
-	if time.Since(s.lastResolve) < resolveTTL {
-		return
-	}
-	s.resolverC = make(chan resolveResult)
-	go func() {
-		err := s.edgeIPs.Refresh()
-		s.resolverC <- resolveResult{err: err}
-	}()
 }
 
 func (s *Supervisor) ReconnectToken() ([]byte, error) {
@@ -385,7 +367,7 @@ func (s *Supervisor) refreshAuth(
 }
 
 func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) (tunnelpogs.AuthOutcome, error) {
-	arbitraryEdgeIP, err := s.edgeIPs.AnyAddr()
+	arbitraryEdgeIP, err := s.edgeIPs.GetAddrForRPC()
 	if err != nil {
 		return nil, err
 	}

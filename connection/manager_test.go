@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -8,8 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -48,14 +49,15 @@ func mockEdgeManager() *EdgeManager {
 	newConfigChan := make(chan<- *pogs.ClientConfig)
 	useConfigResultChan := make(<-chan *pogs.UseConfigurationResult)
 	logger := logrus.New()
+	edge := edgediscovery.MockEdge(logger, []*net.TCPAddr{})
 	return NewEdgeManager(
 		streamhandler.NewStreamHandler(newConfigChan, useConfigResultChan, logger),
 		configurable,
 		[]byte{},
 		nil,
-		&mockEdgeServiceDiscoverer{},
+		edge,
 		cloudflaredConfig,
-		logrus.New(),
+		logger,
 	)
 }
 

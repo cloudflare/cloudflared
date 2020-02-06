@@ -18,9 +18,11 @@ const (
 )
 
 type Connection struct {
-	id    uuid.UUID
-	muxer *h2mux.Muxer
-	addr  *net.TCPAddr
+	id          uuid.UUID
+	muxer       *h2mux.Muxer
+	addr        *net.TCPAddr
+	isLongLived bool
+	longLivedID int
 }
 
 func newConnection(muxer *h2mux.Muxer, addr *net.TCPAddr) (*Connection, error) {

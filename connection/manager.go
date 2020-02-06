@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -35,7 +36,7 @@ type EdgeManager struct {
 	// cloudflaredConfig is the cloudflared configuration that is determined when the process first starts
 	cloudflaredConfig *CloudflaredConfig
 	// serviceDiscoverer returns the next edge addr to connect to
-	serviceDiscoverer EdgeServiceDiscoverer
+	serviceDiscoverer *edgediscovery.Edge
 	// state is attributes of ConnectionManager that can change during runtime.
 	state *edgeManagerState
 
@@ -73,7 +74,7 @@ func NewEdgeManager(
 	edgeConnMgrConfigurable *EdgeManagerConfigurable,
 	userCredential []byte,
 	tlsConfig *tls.Config,
-	serviceDiscoverer EdgeServiceDiscoverer,
+	serviceDiscoverer *edgediscovery.Edge,
 	cloudflaredConfig *CloudflaredConfig,
 	logger *logrus.Logger,
 ) *EdgeManager {
@@ -91,27 +92,29 @@ func NewEdgeManager(
 func (em *EdgeManager) Run(ctx context.Context) error {
 	defer em.shutdown()
 
-	resolveEdgeIPTicker := time.Tick(resolveEdgeAddrTTL)
+	// Currently, declarative tunnels don't have any concept of a stable connection
+	// Each edge connection is transient and when it dies, it is replaced by a different one,
+	// not restarted.
+	// So in the future we should really change this so that n connections are stored individually
+	connIndex := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Wrap(ctx.Err(), "EdgeConnectionManager terminated")
-		case <-resolveEdgeIPTicker:
-			if err := em.serviceDiscoverer.Refresh(); err != nil {
-				em.logger.WithError(err).Warn("Cannot refresh Cloudflare edge addresses")
-			}
 		default:
 			time.Sleep(1 * time.Second)
 		}
 		// Create/delete connection one at a time, so we don't need to adjust for connections that are being created/deleted
 		// in shouldCreateConnection or shouldReduceConnection calculation
 		if em.state.shouldCreateConnection(em.serviceDiscoverer.AvailableAddrs()) {
-			if connErr := em.newConnection(ctx); connErr != nil {
+			if connErr := em.newConnection(ctx, connIndex); connErr != nil {
 				if !connErr.ShouldRetry {
 					em.logger.WithError(connErr).Error(em.noRetryMessage())
 					return connErr
 				}
 				em.logger.WithError(connErr).Error("cannot create new connection")
+			} else {
+				connIndex++
 			}
 		} else if em.state.shouldReduceConnection() {
 			if err := em.closeConnection(ctx); err != nil {
@@ -126,8 +129,8 @@ func (em *EdgeManager) UpdateConfigurable(newConfigurable *EdgeManagerConfigurab
 	em.state.updateConfigurable(newConfigurable)
 }
 
-func (em *EdgeManager) newConnection(ctx context.Context) *tunnelpogs.ConnectError {
-	edgeTCPAddr, err := em.serviceDiscoverer.Addr()
+func (em *EdgeManager) newConnection(ctx context.Context, index int) *tunnelpogs.ConnectError {
+	edgeTCPAddr, err := em.serviceDiscoverer.GetAddr(index)
 	if err != nil {
 		return retryConnection(fmt.Sprintf("edge address discovery error: %v", err))
 	}
@@ -197,7 +200,7 @@ func (em *EdgeManager) serveConn(ctx context.Context, conn *Connection) {
 	err := conn.Serve(ctx)
 	em.logger.WithError(err).Warn("Connection closed")
 	em.state.closeConnection(conn)
-	em.serviceDiscoverer.ReplaceAddr(conn.addr)
+	em.serviceDiscoverer.GiveBack(conn.addr)
 }
 
 func (em *EdgeManager) noRetryMessage() string {
