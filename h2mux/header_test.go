@@ -1,4 +1,4 @@
-package streamhandler
+package h2mux
 
 import (
 	"fmt"
@@ -11,7 +11,6 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,12 +20,12 @@ func TestH2RequestHeadersToH1Request_RegularHeaders(t *testing.T) {
 	assert.NoError(t, err)
 
 	headersConversionErr := H2RequestHeadersToH1Request(
-		[]h2mux.Header{
-			h2mux.Header{
+		[]Header{
+			{
 				Name:  "Mock header 1",
 				Value: "Mock value 1",
 			},
-			h2mux.Header{
+			{
 				Name:  "Mock header 2",
 				Value: "Mock value 2",
 			},
@@ -47,7 +46,7 @@ func TestH2RequestHeadersToH1Request_NoHeaders(t *testing.T) {
 	assert.NoError(t, err)
 
 	headersConversionErr := H2RequestHeadersToH1Request(
-		[]h2mux.Header{},
+		[]Header{},
 		request,
 	)
 
@@ -61,12 +60,12 @@ func TestH2RequestHeadersToH1Request_InvalidHostPath(t *testing.T) {
 	assert.NoError(t, err)
 
 	headersConversionErr := H2RequestHeadersToH1Request(
-		[]h2mux.Header{
-			h2mux.Header{
+		[]Header{
+			{
 				Name:  ":path",
 				Value: "//bad_path/",
 			},
-			h2mux.Header{
+			{
 				Name:  "Mock header",
 				Value: "Mock value",
 			},
@@ -88,12 +87,12 @@ func TestH2RequestHeadersToH1Request_HostPathWithQuery(t *testing.T) {
 	assert.NoError(t, err)
 
 	headersConversionErr := H2RequestHeadersToH1Request(
-		[]h2mux.Header{
-			h2mux.Header{
+		[]Header{
+			{
 				Name:  ":path",
 				Value: "/?query=mock%20value",
 			},
-			h2mux.Header{
+			{
 				Name:  "Mock header",
 				Value: "Mock value",
 			},
@@ -115,12 +114,12 @@ func TestH2RequestHeadersToH1Request_HostPathWithURLEncoding(t *testing.T) {
 	assert.NoError(t, err)
 
 	headersConversionErr := H2RequestHeadersToH1Request(
-		[]h2mux.Header{
-			h2mux.Header{
+		[]Header{
+			{
 				Name:  ":path",
 				Value: "/mock%20path",
 			},
-			h2mux.Header{
+			{
 				Name:  "Mock header",
 				Value: "Mock value",
 			},
@@ -278,12 +277,12 @@ func TestH2RequestHeadersToH1Request_WeirdURLs(t *testing.T) {
 		request, err := http.NewRequest(http.MethodGet, requestURL, nil)
 		assert.NoError(t, err)
 		headersConversionErr := H2RequestHeadersToH1Request(
-			[]h2mux.Header{
-				h2mux.Header{
+			[]Header{
+				{
 					Name:  ":path",
 					Value: testCase.path,
 				},
-				h2mux.Header{
+				{
 					Name:  "Mock header",
 					Value: "Mock value",
 				},
@@ -354,11 +353,11 @@ func TestH2RequestHeadersToH1Request_QuickCheck(t *testing.T) {
 				const expectedMethod = "POST"
 				const expectedHostname = "request.hostname.example.com"
 
-				h2 := []h2mux.Header{
-					h2mux.Header{Name: ":method", Value: expectedMethod},
-					h2mux.Header{Name: ":scheme", Value: testScheme},
-					h2mux.Header{Name: ":authority", Value: expectedHostname},
-					h2mux.Header{Name: ":path", Value: testPath},
+				h2 := []Header{
+					{Name: ":method", Value: expectedMethod},
+					{Name: ":scheme", Value: testScheme},
+					{Name: ":authority", Value: expectedHostname},
+					{Name: ":path", Value: testPath},
 				}
 				h1, err := http.NewRequest("GET", testOrigin.url, nil)
 				require.NoError(t, err)
@@ -406,14 +405,14 @@ func randomASCIIText(rand *rand.Rand, minLength int, maxLength int) string {
 // i.e. one that can pass unchanged through url.URL.String()
 func randomHTTP1Path(t *testing.T, rand *rand.Rand, minLength int, maxLength int) string {
 	text := randomASCIIText(rand, minLength, maxLength)
-	regexp, err := regexp.Compile("[^/;,]*")
+	re, err := regexp.Compile("[^/;,]*")
 	require.NoError(t, err)
-	return "/" + regexp.ReplaceAllStringFunc(text, url.PathEscape)
+	return "/" + re.ReplaceAllStringFunc(text, url.PathEscape)
 }
 
 // Calls `randomASCIIText` and ensures the result is a valid URL query,
 // i.e. one that can pass unchanged through url.URL.String()
-func randomHTTP1Query(t *testing.T, rand *rand.Rand, minLength int, maxLength int) string {
+func randomHTTP1Query(rand *rand.Rand, minLength int, maxLength int) string {
 	text := randomASCIIText(rand, minLength, maxLength)
 	return "?" + strings.ReplaceAll(text, "#", "%23")
 }
@@ -422,9 +421,9 @@ func randomHTTP1Query(t *testing.T, rand *rand.Rand, minLength int, maxLength in
 // i.e. one that can pass unchanged through url.URL.String()
 func randomHTTP1Fragment(t *testing.T, rand *rand.Rand, minLength int, maxLength int) string {
 	text := randomASCIIText(rand, minLength, maxLength)
-	url, err := url.Parse("#" + text)
+	u, err := url.Parse("#" + text)
 	require.NoError(t, err)
-	return url.String()
+	return u.String()
 }
 
 // Assemble a random :path pseudoheader that is legal by Go stdlib standards
@@ -432,10 +431,78 @@ func randomHTTP1Fragment(t *testing.T, rand *rand.Rand, minLength int, maxLength
 func randomHTTP2Path(t *testing.T, rand *rand.Rand) string {
 	result := randomHTTP1Path(t, rand, 1, 64)
 	if rand.Intn(2) == 1 {
-		result += randomHTTP1Query(t, rand, 1, 32)
+		result += randomHTTP1Query(rand, 1, 32)
 	}
 	if rand.Intn(2) == 1 {
 		result += randomHTTP1Fragment(t, rand, 1, 16)
 	}
 	return result
+}
+
+func TestSerializeHeaders(t *testing.T) {
+	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	assert.NoError(t, err)
+
+	mockHeaders := map[string][]string{
+		"Mock-Header-One":        {"Mock header one value", "three"},
+		"Mock-Header-Two-Long":   {"Mock header two value\nlong"},
+		":;":                     {":;", ";:"},
+		":":                      {":"},
+		";":                      {";"},
+		";;":                     {";;"},
+		"Empty values":           {"", ""},
+		"":                       {"Empty key"},
+		"control\tcharacter\b\n": {"value\n\b\t"},
+		";\v:":                   {":\v;"},
+	}
+
+	for header, values := range mockHeaders {
+		for _, value := range values {
+			// Note that Golang's http library is opinionated;
+			// at this point every header name will be title-cased in order to comply with the HTTP RFC
+			// This means our proxy is not completely transparent when it comes to proxying headers
+			request.Header.Add(header, value)
+		}
+	}
+
+	serializedHeaders := SerializeHeaders(request)
+
+	// Sanity check: the headers serialized to something that's not an empty string
+	assert.NotEqual(t, "", serializedHeaders)
+
+	// Deserialize back, and ensure we get the same set of headers
+	deserializedHeaders, err := DeserializeHeaders(serializedHeaders)
+	assert.NoError(t, err)
+
+	assert.Equal(t, len(mockHeaders), len(deserializedHeaders))
+	for header, value := range deserializedHeaders {
+		assert.NotEqual(t, "", value)
+		assert.Equal(t, mockHeaders[header], value)
+	}
+}
+
+func TestSerializeNoHeaders(t *testing.T) {
+	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+	assert.NoError(t, err)
+
+	serializedHeaders := SerializeHeaders(request)
+	deserializedHeaders, err := DeserializeHeaders(serializedHeaders)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(deserializedHeaders))
+}
+
+func TestDeserializeMalformed(t *testing.T) {
+	var err error
+
+	malformedData := []string{
+		"malformed data",
+		"bW9jawo=",                   // "mock"
+		"bW9jawo=:ZGF0YQo=:bW9jawo=", // "mock:data:mock"
+		"::",
+	}
+
+	for _, malformedValue := range malformedData {
+		_, err = DeserializeHeaders([]byte(malformedValue))
+		assert.Error(t, err)
+	}
 }

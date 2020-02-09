@@ -488,16 +488,6 @@ func LogServerInfo(
 	metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
 }
 
-func H1ResponseToH2Response(h1 *http.Response) (h2 []h2mux.Header) {
-	h2 = []h2mux.Header{{Name: ":status", Value: fmt.Sprintf("%d", h1.StatusCode)}}
-	for headerName, headerValues := range h1.Header {
-		for _, headerValue := range headerValues {
-			h2 = append(h2, h2mux.Header{Name: strings.ToLower(headerName), Value: headerValue})
-		}
-	}
-	return
-}
-
 type TunnelHandler struct {
 	originUrl      string
 	httpHostHeader string
@@ -511,8 +501,6 @@ type TunnelHandler struct {
 	logger            *log.Logger
 	noChunkedEncoding bool
 }
-
-var dialer = net.Dialer{}
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
 func NewTunnelHandler(ctx context.Context,
@@ -592,7 +580,7 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 	if err != nil {
 		return nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
 	}
-	err = streamhandler.H2RequestHeadersToH1Request(stream.Headers, req)
+	err = h2mux.H2RequestHeadersToH1Request(stream.Headers, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid request received")
 	}
@@ -611,7 +599,7 @@ func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Requ
 		return nil, err
 	}
 	defer conn.Close()
-	err = stream.WriteHeaders(H1ResponseToH2Response(response))
+	err = stream.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(response))
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
@@ -645,7 +633,7 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request) 
 	}
 	defer response.Body.Close()
 
-	err = stream.WriteHeaders(H1ResponseToH2Response(response))
+	err = stream.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(response))
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}

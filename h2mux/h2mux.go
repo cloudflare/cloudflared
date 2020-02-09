@@ -90,10 +90,6 @@ type Muxer struct {
 	compressionQuality CompressionPreset
 }
 
-type Header struct {
-	Name, Value string
-}
-
 func RPCHeaders() []Header {
 	return []Header{
 		{Name: ":method", Value: "RPC"},
