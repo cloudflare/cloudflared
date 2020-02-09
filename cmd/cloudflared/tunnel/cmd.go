@@ -74,7 +74,7 @@ const (
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
 
-	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
+	debugLevelWarning = "At debug level, request URL, method, protocol, content length and header will be logged. " +
 		"Response status, content length and header will also be logged in debug level."
 
 	LogFieldCommand             = "command"
