@@ -42,6 +42,17 @@ stretch: &stretch
       - export GOARCH=arm
       - export CC=arm-linux-gnueabihf-gcc
       - make release
+  release-linux-arm64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - crossbuild-essential-arm64
+      - gcc-arm-linux-gnueabi64
+    post-cache:
+      - export GOOS=linux
+      - export GOARCH=arm64
+      - export CC=arm-linux-gnueabi64-gcc
+      - make release
   release-linux-386:
     build_dir: *build_dir
     builddeps:
