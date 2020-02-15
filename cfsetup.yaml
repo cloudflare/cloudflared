@@ -46,12 +46,12 @@ stretch: &stretch
     build_dir: *build_dir
     builddeps:
       - *pinned_go
-      - crossbuild-essential-arm64
-      - gcc-arm-linux-gnueabi64
+      - build-essential
+      - gcc-aarch64-linux-gnu
     post-cache:
       - export GOOS=linux
       - export GOARCH=arm64
-      - export CC=arm-linux-gnueabi64-gcc
+      - export CC=gcc-aarch64-linux-gnu
       - make release
   release-linux-386:
     build_dir: *build_dir
