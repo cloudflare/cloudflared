@@ -690,7 +690,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "edge",
-			Usage:   "Address of the Cloudflare tunnel server.",
+			Usage:   "Address of the Cloudflare tunnel server. Only works in Cloudflare's internal testing environment.",
 			EnvVars: []string{"TUNNEL_EDGE"},
 			Hidden:  true,
 		}),
