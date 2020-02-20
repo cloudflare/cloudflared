@@ -17,10 +17,10 @@ type Header struct {
 
 var headerEncoding = base64.RawStdEncoding
 
-// H2RequestHeadersToH1Request converts the HTTP/2 headers to an HTTP/1 Request
+// OldH2RequestHeadersToH1Request converts the HTTP/2 headers to an HTTP/1 Request
 // object. This includes conversion of the pseudo-headers into their closest
 // HTTP/1 equivalents. See https://tools.ietf.org/html/rfc7540#section-8.1.2.3
-func H2RequestHeadersToH1Request(h2 []Header, h1 *http.Request) error {
+func OldH2RequestHeadersToH1Request(h2 []Header, h1 *http.Request) error {
 	for _, header := range h2 {
 		switch header.Name {
 		case ":method":
@@ -73,7 +73,7 @@ func H2RequestHeadersToH1Request(h2 []Header, h1 *http.Request) error {
 	return nil
 }
 
-func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
+func OldH1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 	h2 = []Header{{Name: ":status", Value: fmt.Sprintf("%d", h1.StatusCode)}}
 	for headerName, headerValues := range h1.Header {
 		for _, headerValue := range headerValues {

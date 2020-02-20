@@ -19,7 +19,7 @@ func TestH2RequestHeadersToH1Request_RegularHeaders(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	assert.NoError(t, err)
 
-	headersConversionErr := H2RequestHeadersToH1Request(
+	headersConversionErr := OldH2RequestHeadersToH1Request(
 		[]Header{
 			{
 				Name:  "Mock header 1",
@@ -45,7 +45,7 @@ func TestH2RequestHeadersToH1Request_NoHeaders(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	assert.NoError(t, err)
 
-	headersConversionErr := H2RequestHeadersToH1Request(
+	headersConversionErr := OldH2RequestHeadersToH1Request(
 		[]Header{},
 		request,
 	)
@@ -59,7 +59,7 @@ func TestH2RequestHeadersToH1Request_InvalidHostPath(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	assert.NoError(t, err)
 
-	headersConversionErr := H2RequestHeadersToH1Request(
+	headersConversionErr := OldH2RequestHeadersToH1Request(
 		[]Header{
 			{
 				Name:  ":path",
@@ -86,7 +86,7 @@ func TestH2RequestHeadersToH1Request_HostPathWithQuery(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com/", nil)
 	assert.NoError(t, err)
 
-	headersConversionErr := H2RequestHeadersToH1Request(
+	headersConversionErr := OldH2RequestHeadersToH1Request(
 		[]Header{
 			{
 				Name:  ":path",
@@ -113,7 +113,7 @@ func TestH2RequestHeadersToH1Request_HostPathWithURLEncoding(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com/", nil)
 	assert.NoError(t, err)
 
-	headersConversionErr := H2RequestHeadersToH1Request(
+	headersConversionErr := OldH2RequestHeadersToH1Request(
 		[]Header{
 			{
 				Name:  ":path",
@@ -276,7 +276,7 @@ func TestH2RequestHeadersToH1Request_WeirdURLs(t *testing.T) {
 
 		request, err := http.NewRequest(http.MethodGet, requestURL, nil)
 		assert.NoError(t, err)
-		headersConversionErr := H2RequestHeadersToH1Request(
+		headersConversionErr := OldH2RequestHeadersToH1Request(
 			[]Header{
 				{
 					Name:  ":path",
@@ -362,7 +362,7 @@ func TestH2RequestHeadersToH1Request_QuickCheck(t *testing.T) {
 				h1, err := http.NewRequest("GET", testOrigin.url, nil)
 				require.NoError(t, err)
 
-				err = H2RequestHeadersToH1Request(h2, h1)
+				err = OldH2RequestHeadersToH1Request(h2, h1)
 				return assert.NoError(t, err) &&
 					assert.Equal(t, expectedMethod, h1.Method) &&
 					assert.Equal(t, expectedHostname, h1.Host) &&

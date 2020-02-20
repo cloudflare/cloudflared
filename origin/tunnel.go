@@ -580,7 +580,7 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 	if err != nil {
 		return nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
 	}
-	err = h2mux.H2RequestHeadersToH1Request(stream.Headers, req)
+	err = h2mux.OldH2RequestHeadersToH1Request(stream.Headers, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid request received")
 	}
@@ -599,7 +599,7 @@ func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Requ
 		return nil, err
 	}
 	defer conn.Close()
-	err = stream.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(response))
+	err = stream.WriteHeaders(h2mux.OldH1ResponseToH2ResponseHeaders(response))
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
@@ -633,7 +633,7 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request) 
 	}
 	defer response.Body.Close()
 
-	err = stream.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(response))
+	err = stream.WriteHeaders(h2mux.OldH1ResponseToH2ResponseHeaders(response))
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
