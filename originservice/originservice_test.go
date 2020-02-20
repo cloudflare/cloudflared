@@ -39,7 +39,7 @@ func TestIsEventStream(t *testing.T) {
 			// Content-Type and text/event-stream are case-insensitive. text/event-stream can be followed by OWS parameter
 			resp: &http.Response{
 				Header: http.Header{
-					"content-type": []string{"appication/json", "text/html", "Text/event-stream;charset=utf-8"},
+					"content-type": []string{"application/json", "text/html", "Text/event-stream;charset=utf-8"},
 				},
 			},
 			isEventStream: true,

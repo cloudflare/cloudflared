@@ -278,10 +278,10 @@ func sqlRows(rows *sql.Rows) ([]map[string]interface{}, error) {
 func sqlValue(val interface{}, col *sql.ColumnType) interface{} {
 	bytes, ok := val.([]byte)
 	if ok {
-		// Opportunistically check for embeded JSON and convert it to a first-class object.
-		var embeded interface{}
-		if json.Unmarshal(bytes, &embeded) == nil {
-			return embeded
+		// Opportunistically check for embedded JSON and convert it to a first-class object.
+		var embedded interface{}
+		if json.Unmarshal(bytes, &embedded) == nil {
+			return embedded
 		}
 
 		// STOR-604: investigate a way to coerce PostgreSQL arrays '{a, b, ...}' into JSON.

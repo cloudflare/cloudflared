@@ -468,7 +468,7 @@ func assignDictToStream(s *MuxedStream, p []byte) bool {
 		}
 	} else {
 		// Use the overflow dictionary as last resort
-		// If slots are availabe generate new dictioanries for path and content-type
+		// If slots are available generate new dictionaries for path and content-type
 		useID, _ = h2d.getGenericDictID()
 		pathID, pathFound = h2d.getNextDictID()
 		if pathFound {

@@ -74,7 +74,7 @@ func ValidateUrl(originUrl string) (string, error) {
 	if net.ParseIP(originUrl) != nil {
 		return validateIP("", originUrl, "")
 	} else if strings.HasPrefix(originUrl, "[") && strings.HasSuffix(originUrl, "]") {
-		// ParseIP doesn't recoginze [::1]
+		// ParseIP doesn't recognize [::1]
 		return validateIP("", originUrl[1:len(originUrl)-1], "")
 	}
 

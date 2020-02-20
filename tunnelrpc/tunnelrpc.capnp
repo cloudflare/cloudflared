@@ -100,7 +100,7 @@ struct ClientConfig {
     # supervisorConfig  is configuration for supervisor, the component that manages connection manager,
     # autoupdater and metrics server
     supervisorConfig @1 :SupervisorConfig;
-    # edgeConnectionConfig is configuration for connection manager, the componenet that manages connections with the edge
+    # edgeConnectionConfig is the configuration for the connection manager, the component that manages connections with the edge
     edgeConnectionConfig @2 :EdgeConnectionConfig;
     # Configuration for cloudflared to run as a DNS-over-HTTPS proxy.
     # cloudflared CLI option: `proxy-dns`
