@@ -25,7 +25,7 @@ require (
 	github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
-	github.com/google/certificate-transparency-go v1.1.0
+	github.com/google/certificate-transparency-go v1.1.0 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/websocket v1.4.0
@@ -38,7 +38,7 @@ require (
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/mholt/caddy v0.0.0-20180807230124-d3b731e9255b // indirect
-	github.com/miekg/dns v1.1.8
+	github.com/miekg/dns v1.1.27
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
@@ -53,7 +53,7 @@ require (
 	github.com/stretchr/testify v1.3.0
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0
-	golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 	golang.org/x/net v0.0.0-20191007182048-72f939374954
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20191008105621-543471e840be

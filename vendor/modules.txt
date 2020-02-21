@@ -1,5 +1,7 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
+# github.com/DATA-DOG/go-sqlmock v1.3.3
+github.com/DATA-DOG/go-sqlmock
 # github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239
 github.com/anmitsu/go-shlex
 # github.com/aws/aws-sdk-go v1.25.8
@@ -52,6 +54,8 @@ github.com/cloudflare/brotli-go/dec
 github.com/cloudflare/brotli-go/enc
 # github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 github.com/cloudflare/golibs/lrucache
+# github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58
+github.com/cloudflare/golz4
 # github.com/coredns/coredns v1.2.0
 github.com/coredns/coredns/core/dnsserver
 github.com/coredns/coredns/coremain
@@ -83,8 +87,11 @@ github.com/coreos/go-oidc/jose
 github.com/coreos/go-systemd/daemon
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/elgs/gosqljson v0.0.0-20160403005647-027aa4915315
-github.com/elgs/gosqljson
+# github.com/denisenkom/go-mssqldb v0.0.0-20191001013358-cfbb681360f0
+github.com/denisenkom/go-mssqldb
+github.com/denisenkom/go-mssqldb/internal/cp
+github.com/denisenkom/go-mssqldb/internal/decimal
+github.com/denisenkom/go-mssqldb/internal/querytext
 # github.com/equinox-io/equinox v1.2.0
 github.com/equinox-io/equinox
 github.com/equinox-io/equinox/internal/go-update
@@ -100,8 +107,12 @@ github.com/flynn/go-shlex
 github.com/getsentry/raven-go
 # github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
 github.com/gliderlabs/ssh
+# github.com/go-sql-driver/mysql v1.4.1
+github.com/go-sql-driver/mysql
 # github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 github.com/golang-collections/collections/queue
+# github.com/golang-sql/civil v0.0.0-20190719163853-cb61b32ac6fe
+github.com/golang-sql/civil
 # github.com/golang/protobuf v1.3.2
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
@@ -112,14 +123,28 @@ github.com/golang/protobuf/ptypes/timestamp
 github.com/google/uuid
 # github.com/gorilla/mux v1.7.3
 github.com/gorilla/mux
-# github.com/gorilla/websocket v1.2.0
+# github.com/gorilla/websocket v1.4.0
 github.com/gorilla/websocket
 # github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc
 # github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af
 github.com/jmespath/go-jmespath
+# github.com/jmoiron/sqlx v1.2.0
+github.com/jmoiron/sqlx
+github.com/jmoiron/sqlx/reflectx
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
+# github.com/kshvakov/clickhouse v1.3.11
+github.com/kshvakov/clickhouse
+github.com/kshvakov/clickhouse/lib/binary
+github.com/kshvakov/clickhouse/lib/cityhash102
+github.com/kshvakov/clickhouse/lib/column
+github.com/kshvakov/clickhouse/lib/data
+github.com/kshvakov/clickhouse/lib/leakypool
+github.com/kshvakov/clickhouse/lib/lz4
+github.com/kshvakov/clickhouse/lib/protocol
+github.com/kshvakov/clickhouse/lib/types
+github.com/kshvakov/clickhouse/lib/writebuffer
 # github.com/lib/pq v1.2.0
 github.com/lib/pq
 github.com/lib/pq/oid
@@ -128,13 +153,15 @@ github.com/lib/pq/scram
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.10
 github.com/mattn/go-isatty
+# github.com/mattn/go-sqlite3 v1.11.0
+github.com/mattn/go-sqlite3
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/mholt/caddy v0.0.0-20180807230124-d3b731e9255b
 github.com/mholt/caddy
 github.com/mholt/caddy/caddyfile
 github.com/mholt/caddy/telemetry
-# github.com/miekg/dns v1.1.8
+# github.com/miekg/dns v1.1.27
 github.com/miekg/dns
 # github.com/mitchellh/go-homedir v1.1.0
 github.com/mitchellh/go-homedir
@@ -146,6 +173,9 @@ github.com/opentracing/opentracing-go/log
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
+# github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35
+github.com/pquerna/cachecontrol
+github.com/pquerna/cachecontrol/cacheobject
 # github.com/prometheus/client_golang v1.0.0 => github.com/prometheus/client_golang v0.9.0-pre1
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/promhttp
@@ -166,14 +196,18 @@ github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# golang.org/x/crypto v0.0.0-20191002192127-34f69633bfdc
+# github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0
+github.com/xo/dburl
+# golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 golang.org/x/crypto/curve25519
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/internal/subtle
+golang.org/x/crypto/md4
 golang.org/x/crypto/nacl/box
 golang.org/x/crypto/nacl/secretbox
+golang.org/x/crypto/pbkdf2
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/ssh
@@ -181,6 +215,7 @@ golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.0.0-20191007182048-72f939374954
 golang.org/x/net/bpf
 golang.org/x/net/context
+golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
@@ -192,6 +227,9 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/trace
 golang.org/x/net/websocket
+# golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+golang.org/x/oauth2
+golang.org/x/oauth2/internal
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 # golang.org/x/sys v0.0.0-20191008105621-543471e840be
@@ -207,6 +245,15 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
+# google.golang.org/appengine v1.5.0
+google.golang.org/appengine/cloudsql
+google.golang.org/appengine/internal
+google.golang.org/appengine/internal/base
+google.golang.org/appengine/internal/datastore
+google.golang.org/appengine/internal/log
+google.golang.org/appengine/internal/remote_api
+google.golang.org/appengine/internal/urlfetch
+google.golang.org/appengine/urlfetch
 # google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.24.0
@@ -243,6 +290,12 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
+# gopkg.in/coreos/go-oidc.v2 v2.1.0
+gopkg.in/coreos/go-oidc.v2
+# gopkg.in/square/go-jose.v2 v2.4.0
+gopkg.in/square/go-jose.v2
+gopkg.in/square/go-jose.v2/cipher
+gopkg.in/square/go-jose.v2/json
 # gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8
 gopkg.in/urfave/cli.v2
 gopkg.in/urfave/cli.v2/altsrc
