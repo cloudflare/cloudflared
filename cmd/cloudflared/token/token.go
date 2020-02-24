@@ -2,12 +2,14 @@ package token
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/path"
@@ -32,6 +34,21 @@ type lock struct {
 type signalHandler struct {
 	sigChannel chan os.Signal
 	signals    []os.Signal
+}
+
+type jwtPayload struct {
+	Aud   []string `json:"aud"`
+	Email string   `json:"email"`
+	Exp   int      `json:"exp"`
+	Iat   int      `json:"iat"`
+	Nbf   int      `json:"nbf"`
+	Iss   string   `json:"iss"`
+	Type  string   `json:"type"`
+	Subt  string   `json:"sub"`
+}
+
+func (p jwtPayload) isExpired() bool {
+	return int(time.Now().Unix()) > p.Exp
 }
 
 func (s *signalHandler) register(handler func()) {
@@ -147,7 +164,7 @@ func FetchToken(appURL *url.URL) (string, error) {
 	return string(token), nil
 }
 
-// GetTokenIfExists will return the token from local storage if it exists
+// GetTokenIfExists will return the token from local storage if it exists and not expired
 func GetTokenIfExists(url *url.URL) (string, error) {
 	path, err := path.GenerateFilePathFromURL(url, keyName)
 	if err != nil {
@@ -159,6 +176,17 @@ func GetTokenIfExists(url *url.URL) (string, error) {
 	}
 	token, err := jose.ParseJWT(string(content))
 	if err != nil {
+		return "", err
+	}
+
+	var payload jwtPayload
+	err = json.Unmarshal(token.Payload, &payload)
+	if err != nil {
+		return "", err
+	}
+
+	if payload.isExpired() {
+		err := os.Remove(path)
 		return "", err
 	}
 
