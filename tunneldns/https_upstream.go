@@ -83,7 +83,7 @@ func (u *UpstreamHTTPS) exchangeWireformat(msg []byte) ([]byte, error) {
 	}
 
 	req.Header.Add("Content-Type", "application/dns-message")
-	req.Host = u.endpoint.Hostname()
+	req.Host = u.endpoint.Host
 
 	resp, err := u.client.Do(req)
 	if err != nil {
