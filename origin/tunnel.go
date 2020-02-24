@@ -20,6 +20,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -178,6 +179,7 @@ func ServeTunnelLoop(ctx context.Context,
 	connectionID uint8,
 	connectedSignal *signal.Signal,
 	u uuid.UUID,
+	bufferPool *buffer.Pool,
 ) error {
 	connectionLogger := config.Logger.WithField("connectionID", connectionID)
 	config.Metrics.incrementHaConnections()
@@ -201,6 +203,7 @@ func ServeTunnelLoop(ctx context.Context,
 			connectedFuse,
 			&backoff,
 			u,
+			bufferPool,
 		)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
@@ -223,6 +226,7 @@ func ServeTunnel(
 	connectedFuse *h2mux.BooleanFuse,
 	backoff *BackoffHandler,
 	u uuid.UUID,
+	bufferPool *buffer.Pool,
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -243,7 +247,7 @@ func ServeTunnel(
 	tags["ha"] = connectionTag
 
 	// Returns error from parsing the origin URL or handshake errors
-	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr, connectionID)
+	handler, originLocalIP, err := NewTunnelHandler(ctx, config, addr, connectionID, bufferPool)
 	if err != nil {
 		errLog := logger.WithError(err)
 		switch err.(type) {
@@ -500,6 +504,8 @@ type TunnelHandler struct {
 	connectionID      string
 	logger            *log.Logger
 	noChunkedEncoding bool
+
+	bufferPool *buffer.Pool
 }
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
@@ -507,6 +513,7 @@ func NewTunnelHandler(ctx context.Context,
 	config *TunnelConfig,
 	addr *net.TCPAddr,
 	connectionID uint8,
+	bufferPool *buffer.Pool,
 ) (*TunnelHandler, string, error) {
 	originURL, err := validation.ValidateUrl(config.OriginUrl)
 	if err != nil {
@@ -522,6 +529,7 @@ func NewTunnelHandler(ctx context.Context,
 		connectionID:      uint8ToString(connectionID),
 		logger:            config.Logger,
 		noChunkedEncoding: config.NoChunkedEncoding,
+		bufferPool:        bufferPool,
 	}
 	if h.httpClient == nil {
 		h.httpClient = http.DefaultTransport
@@ -642,7 +650,9 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request) 
 	} else {
 		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
 		// compression generates dictionary on first write
-		io.CopyBuffer(stream, response.Body, make([]byte, 512*1024))
+		buf := h.bufferPool.Get()
+		defer h.bufferPool.Put(buf)
+		io.CopyBuffer(stream, response.Body, buf)
 	}
 	return response, nil
 }

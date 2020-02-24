@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -62,6 +63,8 @@ type Supervisor struct {
 
 	eventDigestLock *sync.RWMutex
 	eventDigest     []byte
+
+	bufferPool *buffer.Pool
 }
 
 type resolveResult struct {
@@ -96,6 +99,7 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		logger:            config.Logger.WithField("subsystem", "supervisor"),
 		jwtLock:           &sync.RWMutex{},
 		eventDigestLock:   &sync.RWMutex{},
+		bufferPool:        buffer.NewPool(512 * 1024),
 	}, nil
 }
 
@@ -230,7 +234,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		return
 	}
 
-	err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID)
+	err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID, s.bufferPool)
 	// If the first tunnel disconnects, keep restarting it.
 	edgeErrors := 0
 	for s.unusedIPs() {
@@ -253,7 +257,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 				return
 			}
 		}
-		err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID)
+		err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID, s.bufferPool)
 	}
 }
 
@@ -272,7 +276,7 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 	if err != nil {
 		return
 	}
-	err = ServeTunnelLoop(ctx, s, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID)
+	err = ServeTunnelLoop(ctx, s, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID, s.bufferPool)
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {
