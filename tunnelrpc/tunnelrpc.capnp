@@ -50,6 +50,8 @@ struct RegistrationOptions {
     uuid @11 :Text;
     # number of previous attempts to send RegisterTunnel/ReconnectTunnel
     numPreviousAttempts @12 :UInt8;
+    # Set of features this cloudflared knows it supports
+    features @13 :List(Text);
 }
 
 struct CapnpConnectParameters {
