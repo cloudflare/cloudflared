@@ -610,3 +610,43 @@ func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, expectedUserHeaders, actualUserHeaders)
 }
+
+// The purpose of this test is to check that our code and the http.Header
+// implementation don't throw validation errors about header size
+func TestHeaderSize(t *testing.T) {
+	largeValue := randSeq(5 * 1024 * 1024) // 5Mb
+	largeHeaders := http.Header{
+		"User-header": {largeValue},
+	}
+	mockResponse := http.Response{
+		StatusCode: 200,
+		Header:     largeHeaders,
+	}
+
+	serializedHeaders := H1ResponseToH2ResponseHeaders(&mockResponse)
+	request, err := http.NewRequest(http.MethodGet, "https://example.com/", nil)
+	assert.NoError(t, err)
+	for _, header := range serializedHeaders {
+		request.Header.Set(header.Name, header.Value)
+	}
+
+	for _, header := range serializedHeaders {
+		if header.Name != ResponseUserHeadersField {
+			continue
+		}
+
+		deserializedHeaders, err := DeserializeHeaders(header.Value)
+		assert.NoError(t, err)
+		assert.Equal(t, largeValue, deserializedHeaders[0].Value)
+	}
+}
+
+func randSeq(n int) string {
+	randomizer := rand.New(rand.NewSource(17))
+	var letters = []rune(":;,+/=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[randomizer.Intn(len(letters))]
+	}
+	return string(b)
+}
