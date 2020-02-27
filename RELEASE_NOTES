@@ -1,3 +1,14 @@
+2020.2.1
+- 2020-02-20 TUN-2745: Rename existing header management functions
+- 2020-02-21 TUN-2746: Add the new header management functions
+- 2020-02-25 perf(cloudflared): reuse memory from buffer pool to get better throughput (#161)
+- 2020-02-25 Tweak HTTP host header. Fixes #107 (#168)
+- 2020-02-25 TUN-2765: Add list of features to tunnelrpc
+- 2020-02-19 TUN-2725: Specify in code that --edge is for internal testing only
+- 2020-02-19 TUN-2703: Muxer.Serve terminates when its context is Done
+- 2020-02-09 TUN-2717: Function to serialize/deserialize HTTP headers
+- 2020-02-05 TUN-2714: New edge discovery. Connections try to reconnect to the same edge IP.
+
 2020.2.0
 - 2020-01-30 TUN-2651: Fix panic in h2mux reader when a stream error is encountered
 - 2020-01-27 TUN-2645: Revert "TUN-2645: Turn on reconnect tokens"
