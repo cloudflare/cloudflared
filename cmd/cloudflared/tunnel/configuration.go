@@ -237,7 +237,6 @@ func prepareTunnelConfig(
 	err = validation.ValidateHTTPService(originURL, hostname, httpTransport)
 	if err != nil {
 		logger.WithError(err).Error("unable to connect to the origin")
-		return nil, errors.Wrap(err, "unable to connect to the origin")
 	}
 
 	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
