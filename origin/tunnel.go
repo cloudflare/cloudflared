@@ -161,6 +161,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		RunFromTerminal:      c.RunFromTerminal,
 		CompressionQuality:   c.CompressionQuality,
 		UUID:                 uuid.String(),
+		Features:             connection.SUPPORTED_FEATURES,
 	}
 }
 

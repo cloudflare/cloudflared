@@ -168,6 +168,7 @@ type RegistrationOptions struct {
 	CompressionQuality   uint64 `capnp:"compressionQuality"`
 	UUID                 string `capnp:"uuid"`
 	NumPreviousAttempts  uint8
+	Features             []string
 }
 
 func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {
