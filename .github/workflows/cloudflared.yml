@@ -1,0 +1,21 @@
+name: cloudflared
+
+on:
+  push:
+    paths:
+      - '!**/*.md'
+  pull_request:
+    paths:
+      - '!**/*.md'
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Build Container Image
+        run: |
+          TARGET_GOARCH=arm make container
