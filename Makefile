@@ -1,3 +1,4 @@
+# Test
 VERSION       := $(shell git rev-parse HEAD)
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
