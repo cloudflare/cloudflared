@@ -1,4 +1,4 @@
-VERSION       := $(shell git describe --tags --always --dirty="-dev")
+VERSION       := $(shell git rev-parse HEAD)
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 
@@ -16,8 +16,26 @@ ifeq ($(EQUINOX_IS_DRAFT), true)
 	EQUINOX_FLAGS := --draft $(EQUINOX_FLAGS)
 endif
 
-ifeq ($(GOARCH),)
-	GOARCH := amd64
+LOCAL_ARCH ?= $(shell uname -m)
+ifeq ($(LOCAL_ARCH),x86_64)
+    TARGET_GOARCH ?= amd64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
+    TARGET_GOARCH ?= arm64
+else ifeq ($(LOCAL_ARCH),aarch64)
+    TARGET_GOARCH ?= arm64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
+    TARGET_GOARCH ?= arm
+else
+    $(error This system's architecture $(LOCAL_ARCH) isn't supported)
+endif
+
+LOCAL_OS ?= $(shell uname)
+ifeq ($(LOCAL_OS),Linux)
+    TARGET_OS ?= linux
+else ifeq ($(LOCAL_OS),Darwin)
+    TARGET_OS ?= darwin
+else
+    $(error This system's OS $(LOCAL_OS) isn't supported)
 endif
 
 .PHONY: all
@@ -29,11 +47,11 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_GOARCH) go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: container
 container:
-	docker build -t cloudflare/cloudflared:"$(VERSION)" .
+	docker build -t cloudflare/cloudflared-$(TARGET_GOARCH):$(VERSION) .
 
 .PHONY: test
 test: vet
@@ -48,7 +66,7 @@ cloudflared-deb: cloudflared
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t deb --deb-compression bzip2 \
-		-a $(GOARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
+		-a $(TARGET_OS) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
 
 .PHONY: cloudflared-darwin-amd64.tgz
 cloudflared-darwin-amd64.tgz: cloudflared

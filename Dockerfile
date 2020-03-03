@@ -1,8 +1,11 @@
 # use a builder image for building cloudflare
+ARG TARGET_GOOS=linux
+ARG TARGET_GOARCH=arm
 FROM golang:1.13.3 as builder
-ENV GO111MODULE=on
-ENV CGO_ENABLED=0
-ENV GOOS=linux
+ENV GO111MODULE=on \
+    CGO_ENABLED=0 \
+    GOOS=${TARGET_GOOS} \
+    GOARCH=${TARGET_GOARCH}
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
@@ -11,8 +14,6 @@ COPY . .
 
 # compile cloudflared
 RUN make cloudflared
-
-# ---
 
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian10:nonroot
