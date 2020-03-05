@@ -39,6 +39,7 @@ const (
 var (
 	errJWTUnset         = errors.New("JWT unset")
 	errEventDigestUnset = errors.New("event digest unset")
+	errConnDigestUnset  = errors.New("conn digest unset")
 )
 
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
@@ -63,6 +64,9 @@ type Supervisor struct {
 
 	eventDigestLock *sync.RWMutex
 	eventDigest     []byte
+
+	connDigestLock *sync.RWMutex
+	connDigest     []byte
 
 	bufferPool *buffer.Pool
 }
@@ -330,6 +334,21 @@ func (s *Supervisor) SetEventDigest(eventDigest []byte) {
 	s.eventDigestLock.Lock()
 	defer s.eventDigestLock.Unlock()
 	s.eventDigest = eventDigest
+}
+
+func (s *Supervisor) ConnDigest() ([]byte, error) {
+	s.connDigestLock.RLock()
+	defer s.connDigestLock.RUnlock()
+	if s.connDigest == nil {
+		return nil, errConnDigestUnset
+	}
+	return s.connDigest, nil
+}
+
+func (s *Supervisor) SetConnDigest(connDigest []byte) {
+	s.connDigestLock.Lock()
+	defer s.connDigestLock.Unlock()
+	s.connDigest = connDigest
 }
 
 func (s *Supervisor) refreshAuth(

@@ -93,6 +93,8 @@ type ReconnectTunnelCredentialManager interface {
 	ReconnectToken() ([]byte, error)
 	EventDigest() ([]byte, error)
 	SetEventDigest(eventDigest []byte)
+	ConnDigest() ([]byte, error)
+	SetConnDigest(connDigest []byte)
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -380,6 +382,7 @@ func RegisterTunnel(
 		return processRegisterTunnelError(registrationErr, config.Metrics, register)
 	}
 	credentialManager.SetEventDigest(registration.EventDigest)
+	credentialManager.SetConnDigest(registration.ConnDigest)
 	return processRegistrationSuccess(config, logger, connectionID, registration, register)
 }
 

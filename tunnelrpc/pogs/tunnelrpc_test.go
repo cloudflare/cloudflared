@@ -22,6 +22,7 @@ var (
 	testErr         = fmt.Errorf("Invalid credential")
 	testLogLines    = []string{"all", "working"}
 	testEventDigest = []byte("asdf")
+	testConnDigest  = []byte("lkjh")
 )
 
 // *PermanentRegistrationError implements TunnelRegistrationError
@@ -32,8 +33,8 @@ var _ TunnelRegistrationError = (*RetryableRegistrationError)(nil)
 
 func TestTunnelRegistration(t *testing.T) {
 	testCases := []*TunnelRegistration{
-		NewSuccessfulTunnelRegistration(testURL, testLogLines, testTunnelID, testEventDigest),
-		NewSuccessfulTunnelRegistration(testURL, nil, testTunnelID, testEventDigest),
+		NewSuccessfulTunnelRegistration(testURL, testLogLines, testTunnelID, testEventDigest, testConnDigest),
+		NewSuccessfulTunnelRegistration(testURL, nil, testTunnelID, testEventDigest, testConnDigest),
 		NewPermanentRegistrationError(testErr).Serialize(),
 		NewRetryableRegistrationError(testErr, testRetryAfterSeconds).Serialize(),
 	}

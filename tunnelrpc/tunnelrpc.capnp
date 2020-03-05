@@ -23,6 +23,8 @@ struct TunnelRegistration {
     retryAfterSeconds @5 :UInt16;
     # A unique ID used to reconnect this tunnel.
     eventDigest @6 :Data;
+    # A unique ID used to prove this tunnel was previously connected to a given metal.
+    connDigest @7 :Data;
 }
 
 struct RegistrationOptions {
