@@ -437,7 +437,7 @@ type TunnelServer interface {
 	UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error
 	Connect(ctx context.Context, parameters *ConnectParameters) (ConnectResult, error)
 	Authenticate(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*AuthenticateResponse, error)
-	ReconnectTunnel(ctx context.Context, jwt, eventDigest []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
+	ReconnectTunnel(ctx context.Context, jwt, eventDigest, connDigest []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 }
 
 func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {

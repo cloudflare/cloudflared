@@ -85,6 +85,8 @@ type TunnelConfig struct {
 
 	// feature-flag to use new edge reconnect tokens
 	UseReconnectToken bool
+	// feature-flag for using ConnectionDigest
+	UseQuickReconnects bool
 }
 
 // ReconnectTunnelCredentialManager is invoked by functions in this file to
@@ -280,7 +282,15 @@ func ServeTunnel(
 			eventDigest, eventDigestErr := credentialManager.EventDigest()
 			// if we have both credentials, we can reconnect
 			if tokenErr == nil && eventDigestErr == nil {
-				return ReconnectTunnel(serveCtx, token, eventDigest, handler.muxer, config, logger, connectionID, originLocalIP, u)
+				var connDigest []byte
+
+				// check if we can use Quick Reconnects
+				if config.UseQuickReconnects {
+					if digest, connDigestErr := credentialManager.ConnDigest(); connDigestErr == nil {
+						connDigest = digest
+					}
+				}
+				return ReconnectTunnel(serveCtx, token, eventDigest, connDigest, handler.muxer, config, logger, connectionID, originLocalIP, u)
 			}
 			// log errors and proceed to RegisterTunnel
 			if tokenErr != nil {
@@ -389,7 +399,7 @@ func RegisterTunnel(
 func ReconnectTunnel(
 	ctx context.Context,
 	token []byte,
-	eventDigest []byte,
+	eventDigest, connDigest []byte,
 	muxer *h2mux.Muxer,
 	config *TunnelConfig,
 	logger *log.Entry,
@@ -413,6 +423,7 @@ func ReconnectTunnel(
 		ctx,
 		token,
 		eventDigest,
+		connDigest,
 		config.Hostname,
 		config.RegistrationOptions(connectionID, originLocalIP, uuid),
 	)

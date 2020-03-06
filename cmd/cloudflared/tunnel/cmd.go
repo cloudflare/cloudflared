@@ -984,6 +984,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "use-quick-reconnects",
+			Usage:   "Test reestablishing connections with the new 'connection digest' flow.",
+			EnvVars: []string{"TUNNEL_USE_QUICK_RECONNECTS"},
+			Hidden:  true,
+		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "dial-edge-timeout",
 			Usage:   "Maximum wait time to set up a connection with the edge",

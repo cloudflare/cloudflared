@@ -276,6 +276,7 @@ func prepareTunnelConfig(
 		TransportLogger:      transportLogger,
 		UseDeclarativeTunnel: c.Bool("use-declarative-tunnels"),
 		UseReconnectToken:    c.Bool("use-reconnect-token"),
+		UseQuickReconnects:   c.Bool("use-quick-reconnects"),
 	}, nil
 }
 
