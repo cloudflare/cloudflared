@@ -1,9 +1,9 @@
 package connection
 
 const (
-	FEATURE_SERIALIZED_HEADERS = "serialized_headers"
+	FeatureSerializedHeaders = "serialized_headers"
 )
 
-var SUPPORTED_FEATURES = []string{
-	//FEATURE_SERIALIZED_HEADERS,
+var SupportedFeatures = []string{
+	FeatureSerializedHeaders,
 }

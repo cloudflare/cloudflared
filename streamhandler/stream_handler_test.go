@@ -31,11 +31,11 @@ var (
 		{Name: ":scheme", Value: "http"},
 		{Name: ":authority", Value: "example.com"},
 		{Name: ":path", Value: "/"},
+
+		// Regular headers must always come after the pseudoheaders
+		{Name: h2mux.RequestUserHeadersField, Value: ""},
 	}
-	tunnelHostnameHeader = h2mux.Header{
-		Name:  h2mux.CloudflaredProxyTunnelHostnameHeader,
-		Value: testTunnelHostname.String(),
-	}
+	tunnelHostnameHeader = h2mux.Header{Name: h2mux.CloudflaredProxyTunnelHostnameHeader, Value: testTunnelHostname.String()}
 )
 
 func TestServeRequest(t *testing.T) {
@@ -69,29 +69,73 @@ func TestServeRequest(t *testing.T) {
 	assertRespBody(t, message, stream)
 }
 
-func TestServeBadRequest(t *testing.T) {
+func createStreamHandler() *StreamHandler {
 	configChan := make(chan *pogs.ClientConfig)
 	useConfigResultChan := make(chan *pogs.UseConfigurationResult)
-	streamHandler := NewStreamHandler(configChan, useConfigResultChan, logrus.New())
 
+	return NewStreamHandler(configChan, useConfigResultChan, logrus.New())
+}
+
+func createRequestMuxPair(t *testing.T, streamHandler *StreamHandler) *DefaultMuxerPair {
 	muxPair := NewDefaultMuxerPair(t, streamHandler)
 	muxPair.Serve(t)
 
+	return muxPair
+}
+
+func TestServeStatusBadRequest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testOpenStreamTimeout)
 	defer cancel()
 
 	// No tunnel hostname header, expect to get 400 Bad Request
-	stream, err := muxPair.EdgeMux.OpenStream(ctx, baseHeaders, nil)
+	stream, err := createRequestMuxPair(t, createStreamHandler()).EdgeMux.OpenStream(ctx, baseHeaders, nil)
 	assert.NoError(t, err)
 	assertStatusHeader(t, http.StatusBadRequest, stream.Headers)
 	assertRespBody(t, statusBadRequest.text, stream)
+}
+
+func TestServeInvalidContentLength(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testOpenStreamTimeout)
+	defer cancel()
+
+	// Invalid content-length, wouldn't be able to create a request
+	// Expect to get 400 Bad Request
+	headers := append(baseHeaders, tunnelHostnameHeader)
+	headers = append(headers, h2mux.Header{
+		Name:  "content-length",
+		Value: "x",
+	})
+	streamHandler := createStreamHandler()
+	streamHandler.UpdateConfig([]*pogs.ReverseProxyConfig{
+		{
+			TunnelHostname: testTunnelHostname,
+			OriginConfig: &pogs.HTTPOriginConfig{
+				URLString: "",
+			},
+		},
+	})
+	mux := createRequestMuxPair(t, streamHandler).EdgeMux
+	stream, err := mux.OpenStream(ctx, headers, nil)
+	assert.NoError(t, err)
+	assertStatusHeader(t, http.StatusBadRequest, stream.Headers)
+	assertRespBody(t, statusBadRequest.text, stream)
+}
+
+func TestServeStatusNotFound(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testOpenStreamTimeout)
+	defer cancel()
 
 	// No mapping for the tunnel hostname, expect to get 404 Not Found
 	headers := append(baseHeaders, tunnelHostnameHeader)
-	stream, err = muxPair.EdgeMux.OpenStream(ctx, headers, nil)
+	stream, err := createRequestMuxPair(t, createStreamHandler()).EdgeMux.OpenStream(ctx, headers, nil)
 	assert.NoError(t, err)
 	assertStatusHeader(t, http.StatusNotFound, stream.Headers)
 	assertRespBody(t, statusNotFound.text, stream)
+}
+
+func TestServeStatusBadGateway(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testOpenStreamTimeout)
+	defer cancel()
 
 	// Nothing listening on empty url, so proxy would fail. Expect to get 502 Bad Gateway
 	reverseProxyConfigs := []*pogs.ReverseProxyConfig{
@@ -102,21 +146,13 @@ func TestServeBadRequest(t *testing.T) {
 			},
 		},
 	}
+	streamHandler := createStreamHandler()
 	streamHandler.UpdateConfig(reverseProxyConfigs)
-	stream, err = muxPair.EdgeMux.OpenStream(ctx, headers, nil)
+	headers := append(baseHeaders, tunnelHostnameHeader)
+	stream, err := createRequestMuxPair(t, streamHandler).EdgeMux.OpenStream(ctx, headers, nil)
 	assert.NoError(t, err)
 	assertStatusHeader(t, http.StatusBadGateway, stream.Headers)
 	assertRespBody(t, statusBadGateway.text, stream)
-
-	// Invalid content-length, wouldn't not be able to create a request. Expect to get 400 Bad Request
-	headers = append(headers, h2mux.Header{
-		Name:  "content-length",
-		Value: "x",
-	})
-	stream, err = muxPair.EdgeMux.OpenStream(ctx, headers, nil)
-	assert.NoError(t, err)
-	assertStatusHeader(t, http.StatusBadRequest, stream.Headers)
-	assertRespBody(t, statusBadRequest.text, stream)
 }
 
 func assertStatusHeader(t *testing.T, expectedStatus int, headers []h2mux.Header) {
@@ -218,6 +254,6 @@ type mockHTTPHandler struct {
 	message []byte
 }
 
-func (mth *mockHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write(mth.message)
+func (mth *mockHTTPHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	_, _ = w.Write(mth.message)
 }

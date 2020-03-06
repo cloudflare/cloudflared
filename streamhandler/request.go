@@ -26,7 +26,7 @@ func createRequest(stream *h2mux.MuxedStream, url *url.URL) (*http.Request, erro
 	if err != nil {
 		return nil, errors.Wrap(err, "unexpected error from http.NewRequest")
 	}
-	err = h2mux.OldH2RequestHeadersToH1Request(stream.Headers, req)
+	err = h2mux.H2RequestHeadersToH1Request(stream.Headers, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid request received")
 	}
