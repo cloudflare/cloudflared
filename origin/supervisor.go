@@ -39,7 +39,6 @@ const (
 var (
 	errJWTUnset         = errors.New("JWT unset")
 	errEventDigestUnset = errors.New("event digest unset")
-	errConnDigestUnset  = errors.New("conn digest unset")
 )
 
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
@@ -66,7 +65,7 @@ type Supervisor struct {
 	eventDigest     []byte
 
 	connDigestLock sync.RWMutex
-	connDigest     []byte
+	connDigest     map[uint8][]byte
 
 	bufferPool *buffer.Pool
 }
@@ -101,6 +100,7 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		tunnelErrors:      make(chan tunnelError),
 		tunnelsConnecting: map[int]chan struct{}{},
 		logger:            config.Logger.WithField("subsystem", "supervisor"),
+		connDigest:        make(map[uint8][]byte),
 		bufferPool:        buffer.NewPool(512 * 1024),
 	}, nil
 }
@@ -334,19 +334,20 @@ func (s *Supervisor) SetEventDigest(eventDigest []byte) {
 	s.eventDigest = eventDigest
 }
 
-func (s *Supervisor) ConnDigest() ([]byte, error) {
+func (s *Supervisor) ConnDigest(connID uint8) ([]byte, error) {
 	s.connDigestLock.RLock()
 	defer s.connDigestLock.RUnlock()
-	if s.connDigest == nil {
-		return nil, errConnDigestUnset
+	digest, ok := s.connDigest[connID]
+	if !ok {
+		return nil, fmt.Errorf("no connection digest for connection %v", connID)
 	}
-	return s.connDigest, nil
+	return digest, nil
 }
 
-func (s *Supervisor) SetConnDigest(connDigest []byte) {
+func (s *Supervisor) SetConnDigest(connID uint8, connDigest []byte) {
 	s.connDigestLock.Lock()
 	defer s.connDigestLock.Unlock()
-	s.connDigest = connDigest
+	s.connDigest[connID] = connDigest
 }
 
 func (s *Supervisor) refreshAuth(

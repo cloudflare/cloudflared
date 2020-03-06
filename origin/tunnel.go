@@ -95,8 +95,8 @@ type ReconnectTunnelCredentialManager interface {
 	ReconnectToken() ([]byte, error)
 	EventDigest() ([]byte, error)
 	SetEventDigest(eventDigest []byte)
-	ConnDigest() ([]byte, error)
-	SetConnDigest(connDigest []byte)
+	ConnDigest(connID uint8) ([]byte, error)
+	SetConnDigest(connID uint8, connDigest []byte)
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -286,7 +286,7 @@ func ServeTunnel(
 
 				// check if we can use Quick Reconnects
 				if config.UseQuickReconnects {
-					if digest, connDigestErr := credentialManager.ConnDigest(); connDigestErr == nil {
+					if digest, connDigestErr := credentialManager.ConnDigest(connectionID); connDigestErr == nil {
 						connDigest = digest
 					}
 				}
@@ -392,7 +392,7 @@ func RegisterTunnel(
 		return processRegisterTunnelError(registrationErr, config.Metrics, register)
 	}
 	credentialManager.SetEventDigest(registration.EventDigest)
-	credentialManager.SetConnDigest(registration.ConnDigest)
+	credentialManager.SetConnDigest(connectionID, registration.ConnDigest)
 	return processRegistrationSuccess(config, logger, connectionID, registration, register)
 }
 
