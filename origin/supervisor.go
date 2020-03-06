@@ -103,6 +103,7 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		logger:            config.Logger.WithField("subsystem", "supervisor"),
 		jwtLock:           &sync.RWMutex{},
 		eventDigestLock:   &sync.RWMutex{},
+		connDigestLock:    &sync.RWMutex{},
 		bufferPool:        buffer.NewPool(512 * 1024),
 	}, nil
 }
