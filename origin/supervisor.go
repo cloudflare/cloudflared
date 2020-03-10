@@ -59,13 +59,13 @@ type Supervisor struct {
 
 	logger *logrus.Entry
 
-	jwtLock *sync.RWMutex
+	jwtLock sync.RWMutex
 	jwt     []byte
 
-	eventDigestLock *sync.RWMutex
+	eventDigestLock sync.RWMutex
 	eventDigest     []byte
 
-	connDigestLock *sync.RWMutex
+	connDigestLock sync.RWMutex
 	connDigest     []byte
 
 	bufferPool *buffer.Pool
@@ -101,8 +101,6 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		tunnelErrors:      make(chan tunnelError),
 		tunnelsConnecting: map[int]chan struct{}{},
 		logger:            config.Logger.WithField("subsystem", "supervisor"),
-		jwtLock:           &sync.RWMutex{},
-		eventDigestLock:   &sync.RWMutex{},
 		bufferPool:        buffer.NewPool(512 * 1024),
 	}, nil
 }
