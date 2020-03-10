@@ -250,28 +250,52 @@ func (w *MuxWriter) encodeHeaders(headers []Header) ([]byte, error) {
 // writeHeaders writes a block of encoded headers, splitting it into multiple frames if necessary.
 func (w *MuxWriter) writeHeaders(streamID uint32, headers []Header) error {
 	encodedHeaders, err := w.encodeHeaders(headers)
-	if err != nil {
+	if err != nil || len(encodedHeaders) == 0 {
 		return err
 	}
+
 	blockSize := int(w.maxFrameSize)
-	endHeaders := len(encodedHeaders) == 0
-	for !endHeaders && err == nil {
-		blockFragment := encodedHeaders
-		if len(encodedHeaders) > blockSize {
-			blockFragment = blockFragment[:blockSize]
-			encodedHeaders = encodedHeaders[blockSize:]
-			// Send CONTINUATION frame if the headers can't be fit into 1 frame
-			err = w.f.WriteContinuation(streamID, endHeaders, blockFragment)
-		} else {
-			endHeaders = true
-			err = w.f.WriteHeaders(http2.HeadersFrameParam{
-				StreamID:      streamID,
-				EndHeaders:    endHeaders,
-				BlockFragment: blockFragment,
-			})
+	// CONTINUATION is unnecessary; the headers fit within the blockSize
+	if len(encodedHeaders) < blockSize {
+		return w.f.WriteHeaders(http2.HeadersFrameParam{
+			StreamID:      streamID,
+			EndHeaders:    true,
+			BlockFragment: encodedHeaders,
+		})
+	}
+
+	choppedHeaders := chopEncodedHeaders(encodedHeaders, blockSize)
+	// len(choppedHeaders) is at least 2
+	if err := w.f.WriteHeaders(http2.HeadersFrameParam{StreamID: streamID, EndHeaders: false, BlockFragment: choppedHeaders[0]}); err != nil {
+		return err
+	}
+	for i := 1; i < len(choppedHeaders)-1; i++ {
+		if err := w.f.WriteContinuation(streamID, false, choppedHeaders[i]); err != nil {
+			return err
 		}
 	}
-	return err
+	if err := w.f.WriteContinuation(streamID, true, choppedHeaders[len(choppedHeaders)-1]); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Partition a slice of bytes into `len(slice) / blockSize` slices of length `blockSize`
+func chopEncodedHeaders(headers []byte, chunkSize int) [][]byte {
+	var divided [][]byte
+
+	for i := 0; i < len(headers); i += chunkSize {
+		end := i + chunkSize
+
+		if end > len(headers) {
+			end = len(headers)
+		}
+
+		divided = append(divided, headers[i:end])
+	}
+
+	return divided
 }
 
 func (w *MuxWriter) writeUseDictionary(dictRequest useDictRequest) error {
