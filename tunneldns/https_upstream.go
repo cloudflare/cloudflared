@@ -35,6 +35,10 @@ func NewUpstreamHTTPS(endpoint string) (Upstream, error) {
 
 	// Update TLS and HTTP client configuration
 	tls := &tls.Config{ServerName: u.Hostname()}
+	if u.Fragment != "" {
+		// Allow server name override via anchor on the url
+		tls.ServerName = u.Fragment
+	}
 	transport := &http.Transport{
 		TLSClientConfig:    tls,
 		DisableCompression: true,
@@ -84,6 +88,10 @@ func (u *UpstreamHTTPS) exchangeWireformat(msg []byte) ([]byte, error) {
 
 	req.Header.Add("Content-Type", "application/dns-message")
 	req.Host = u.endpoint.Host
+	if u.endpoint.Fragment != "" {
+		// Allow server name override via anchor on the url
+		req.Host = u.endpoint.Fragment
+	}
 
 	resp, err := u.client.Do(req)
 	if err != nil {

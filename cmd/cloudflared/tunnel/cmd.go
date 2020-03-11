@@ -129,8 +129,8 @@ func Commands() []*cli.Command {
 				},
 				&cli.StringSliceFlag{
 					Name:    "upstream",
-					Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-					Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
+					Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy. If required, the Host header can be manually set by appending a hash to the URL.",
+					Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://1.0.0.1/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
 					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 				},
 			},
@@ -934,8 +934,8 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "proxy-dns-upstream",
-			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
+			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy. If required, the Host header can be manually set by appending a hash to the URL.",
+			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://1.0.0.1/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 			Hidden:  shouldHide,
 		}),
