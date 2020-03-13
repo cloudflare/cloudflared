@@ -290,7 +290,7 @@ func ServeTunnel(
 						connDigest = digest
 					}
 				}
-				return ReconnectTunnel(serveCtx, token, eventDigest, connDigest, handler.muxer, config, logger, connectionID, originLocalIP, u)
+				return ReconnectTunnel(serveCtx, token, eventDigest, connDigest, handler.muxer, config, logger, connectionID, originLocalIP, u, credentialManager)
 			}
 			// log errors and proceed to RegisterTunnel
 			if tokenErr != nil {
@@ -392,8 +392,7 @@ func RegisterTunnel(
 		return processRegisterTunnelError(registrationErr, config.Metrics, register)
 	}
 	credentialManager.SetEventDigest(registration.EventDigest)
-	credentialManager.SetConnDigest(connectionID, registration.ConnDigest)
-	return processRegistrationSuccess(config, logger, connectionID, registration, register)
+	return processRegistrationSuccess(config, logger, connectionID, registration, register, credentialManager)
 }
 
 func ReconnectTunnel(
@@ -406,6 +405,7 @@ func ReconnectTunnel(
 	connectionID uint8,
 	originLocalIP string,
 	uuid uuid.UUID,
+	credentialManager ReconnectTunnelCredentialManager,
 ) error {
 	config.TransportLogger.Debug("initiating RPC stream to reconnect")
 	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger.WithField("subsystem", "rpc-reconnect"), openStreamTimeout)
@@ -431,10 +431,17 @@ func ReconnectTunnel(
 		// ReconnectTunnel RPC failure
 		return processRegisterTunnelError(registrationErr, config.Metrics, reconnect)
 	}
-	return processRegistrationSuccess(config, logger, connectionID, registration, reconnect)
+	return processRegistrationSuccess(config, logger, connectionID, registration, reconnect, credentialManager)
 }
 
-func processRegistrationSuccess(config *TunnelConfig, logger *log.Entry, connectionID uint8, registration *tunnelpogs.TunnelRegistration, name registerRPCName) error {
+func processRegistrationSuccess(
+	config *TunnelConfig,
+	logger *log.Entry,
+	connectionID uint8,
+	registration *tunnelpogs.TunnelRegistration,
+	name registerRPCName,
+	credentialManager ReconnectTunnelCredentialManager,
+) error {
 	for _, logLine := range registration.LogLines {
 		logger.Info(logLine)
 	}
@@ -456,6 +463,7 @@ func processRegistrationSuccess(config *TunnelConfig, logger *log.Entry, connect
 		}
 	}
 
+	credentialManager.SetConnDigest(connectionID, registration.ConnDigest)
 	config.Metrics.userHostnamesCounts.WithLabelValues(registration.Url).Inc()
 
 	logger.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
