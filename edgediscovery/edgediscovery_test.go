@@ -47,6 +47,24 @@ func TestGiveBack(t *testing.T) {
 	edge.GiveBack(addr)
 	assert.Equal(t, 4, edge.AvailableAddrs())
 }
+
+func TestRPCAndProxyShareSingleEdgeIP(t *testing.T) {
+	l := logrus.New()
+
+	// Make an edge with a single IP
+	edge := MockEdge(l, []*net.TCPAddr{&addr0})
+	tunnelConnID := 0
+
+	// Use the IP for a tunnel
+	addrTunnel, err := edge.GetAddr(tunnelConnID)
+	assert.NoError(t, err)
+
+	// Ensure the IP can be used for RPC too
+	addrRPC, err := edge.GetAddrForRPC()
+	assert.NoError(t, err)
+	assert.Equal(t, addrTunnel, addrRPC)
+}
+
 func TestGetAddrForRPC(t *testing.T) {
 	l := logrus.New()
 	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})

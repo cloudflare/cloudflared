@@ -68,8 +68,8 @@ func NewNoResolve(addrs []*net.TCPAddr) *Regions {
 
 // GetAnyAddress returns an arbitrary address from the larger region.
 func (rs *Regions) GetAnyAddress() *net.TCPAddr {
-	if rs.region1.AvailableAddrs() > rs.region2.AvailableAddrs() {
-		return rs.region1.GetAnyAddress()
+	if addr := rs.region1.GetAnyAddress(); addr != nil {
+		return addr
 	}
 	return rs.region2.GetAnyAddress()
 }
