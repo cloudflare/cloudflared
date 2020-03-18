@@ -43,7 +43,7 @@ func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger *logrus.Logg
 		defer wg.Done()
 		err = server.Serve(l)
 	}()
-	logger.WithField("addr", l.Addr()).Info("Starting metrics server")
+	logger.WithField("addr", fmt.Sprintf("%v/metrics", l.Addr())).Info("Starting metrics server")
 	// server.Serve will hang if server.Shutdown is called before the server is
 	// fully started up. So add artificial delay.
 	time.Sleep(startupTime)
