@@ -103,7 +103,8 @@ func ParseUserHeaders(headerNameToParseFrom string, headers []Header) ([]Header,
 func IsControlHeader(headerName string) bool {
 	headerName = strings.ToLower(headerName)
 
-	return strings.ToLower(headerName) == "content-length" ||
+	return headerName == "content-length" ||
+		headerName == "connection" || headerName == "upgrade" || // Websocket headers
 		strings.HasPrefix(headerName, ":") ||
 		strings.HasPrefix(headerName, "cf-")
 }
