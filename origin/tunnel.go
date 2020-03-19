@@ -323,8 +323,13 @@ func ServeTunnel(
 	})
 
 	errGroup.Go(func() error {
-		<-reconnectCh
-		return fmt.Errorf("received disconnect signal")
+		select {
+		case <-reconnectCh:
+			return fmt.Errorf("received disconnect signal")
+		case <-serveCtx.Done():
+			return nil
+		}
+
 	})
 
 	errGroup.Go(func() error {
