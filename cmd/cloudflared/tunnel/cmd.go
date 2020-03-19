@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/url"
 	"os"
+	ossig "os/signal"
 	"reflect"
 	"runtime"
 	"runtime/trace"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cloudflare/cloudflared/awsuploader"
@@ -399,10 +401,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return err
 	}
 
+	// When the user sends SIGUSR1, disconnect all connections.
+	reconnectCh := make(chan os.Signal, 1)
+	ossig.Notify(reconnectCh, syscall.SIGUSR1)
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID)
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
 	}()
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -169,12 +170,12 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID) error {
+func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan os.Signal) error {
 	s, err := NewSupervisor(config, cloudflaredID)
 	if err != nil {
 		return err
 	}
-	return s.Run(ctx, connectedSignal)
+	return s.Run(ctx, connectedSignal, reconnectCh)
 }
 
 func ServeTunnelLoop(ctx context.Context,
@@ -185,6 +186,7 @@ func ServeTunnelLoop(ctx context.Context,
 	connectedSignal *signal.Signal,
 	u uuid.UUID,
 	bufferPool *buffer.Pool,
+	reconnectCh chan os.Signal,
 ) error {
 	connectionLogger := config.Logger.WithField("connectionID", connectionID)
 	config.Metrics.incrementHaConnections()
@@ -209,6 +211,7 @@ func ServeTunnelLoop(ctx context.Context,
 			&backoff,
 			u,
 			bufferPool,
+			reconnectCh,
 		)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
@@ -232,6 +235,7 @@ func ServeTunnel(
 	backoff *BackoffHandler,
 	u uuid.UUID,
 	bufferPool *buffer.Pool,
+	reconnectCh chan os.Signal,
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -316,6 +320,11 @@ func ServeTunnel(
 				handler.UpdateMetrics(connectionTag)
 			}
 		}
+	})
+
+	errGroup.Go(func() error {
+		<-reconnectCh
+		return fmt.Errorf("received disconnect signal")
 	})
 
 	errGroup.Go(func() error {
