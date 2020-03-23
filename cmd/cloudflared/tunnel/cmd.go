@@ -602,6 +602,8 @@ func hostnameFromURI(uri string) string {
 		return addPortIfMissing(u, 22)
 	case "rdp":
 		return addPortIfMissing(u, 3389)
+	case "tcp":
+		return addPortIfMissing(u, 7864) // just a random port since there isn't a default in this case
 	}
 	return ""
 }

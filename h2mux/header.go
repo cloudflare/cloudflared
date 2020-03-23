@@ -3,11 +3,12 @@ package h2mux
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/pkg/errors"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 type Header struct {
@@ -71,6 +72,9 @@ func H2RequestHeadersToH1Request(h2 []Header, h1 *http.Request) error {
 				return fmt.Errorf("unparseable content length")
 			}
 			h1.ContentLength = contentLength
+		case "connection", "upgrade":
+			// for websocket header support
+			h1.Header.Add(http.CanonicalHeaderKey(header.Name), header.Value)
 		default:
 			// Ignore any other header;
 			// User headers will be read from `RequestUserHeadersField`
@@ -109,6 +113,15 @@ func IsControlHeader(headerName string) bool {
 		strings.HasPrefix(headerName, "cf-")
 }
 
+// IsWebsocketClientHeader returns true if the header name is required by the client to upgrade properly
+func IsWebsocketClientHeader(headerName string) bool {
+	headerName = strings.ToLower(headerName)
+
+	return headerName == "sec-websocket-accept" ||
+		headerName == "connection" ||
+		headerName == "upgrade"
+}
+
 func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 	h2 = []Header{
 		{Name: ":status", Value: strconv.Itoa(h1.StatusCode)},
@@ -122,7 +135,7 @@ func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 
 				// Since these are http2 headers, they're required to be lowercase
 				h2 = append(h2, Header{Name: strings.ToLower(header), Value: value})
-			} else if !IsControlHeader(header) {
+			} else if !IsControlHeader(header) || IsWebsocketClientHeader(header) {
 				// User headers, on the other hand, must all be serialized so that
 				// HTTP/2 header validation won't be applied to HTTP/1 header values
 				if _, ok := userHeaders[header]; ok {
