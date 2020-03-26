@@ -1,3 +1,25 @@
+2020.3.0
+- 2020-03-23 AUTH-2394 fixed header for websockets. Added TCP alias
+- 2020-03-10 TUN-2797: Fix panic in SetConnDigest by making mutexes values.
+- 2020-03-13 TUN-2807: cloudflared hello-world shouldn't assume it's my first tunnel
+- 2020-03-13 TUN-2756: Set connection digest after reconnect.
+- 2020-03-16 TUN-2812: Tunnel proxies and RPCs can share an edge address
+- 2020-03-18 TUN-2816: cloudflared metrics server should be more discoverable
+- 2020-03-19 TUN-2820: Serialized headers for Websockets
+- 2020-03-19 TUN-2819: cloudflared should close its connections when a signal is sent
+- 2020-03-19 TUN-2823: Bugfix. cloudflared would hang forever if error occurred.
+- 2020-03-10 TUN-2796: Implement HTTP2 CONTINUATION headers correctly
+- 2020-03-02 TUN-2779: update sample HTML pages
+- 2020-03-04 TUN-2785: Use reconnect token by default
+- 2020-03-05 TUN-2754: Add ConnDigest to cloudflared and its RPCs
+- 2020-03-06 TUN-2755: ReconnectTunnel RPC now transmits ConnectionDigest
+- 2020-03-06 TUN-2761: Use the new header management functions in cloudflared
+- 2020-03-06 TUN-2788: cloudflared should store one ConnDigest per HA connection
+- 2020-02-26 TUN-2767: Test for large headers
+- 2020-02-28 do not terminate tunnel if origin is not reachable on start-up (#177)
+- 2020-02-28 TUN-2776: Add header serialization feature in cloudflared
+- 2020-02-21 TUN-2748: Insecure randomness vulnerability in github.com/miekg/dns
+
 2020.2.1
 - 2020-02-20 TUN-2745: Rename existing header management functions
 - 2020-02-21 TUN-2746: Add the new header management functions
