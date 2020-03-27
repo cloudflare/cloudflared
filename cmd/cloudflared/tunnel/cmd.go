@@ -1,18 +1,17 @@
 package tunnel
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
-	ossig "os/signal"
 	"reflect"
 	"runtime"
 	"runtime/trace"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/cloudflare/cloudflared/awsuploader"
@@ -401,9 +400,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return err
 	}
 
-	// When the user sends SIGUSR1, disconnect all connections.
-	reconnectCh := make(chan os.Signal, 1)
-	ossig.Notify(reconnectCh, syscall.SIGUSR1)
+	reconnectCh := make(chan struct{}, 1)
+	if c.IsSet("stdin-control") {
+		logger.Warn("Enabling control through stdin")
+		go stdinControl(reconnectCh)
+	}
 
 	wg.Add(1)
 	go func() {
@@ -1066,5 +1067,28 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"HOST_KEY_PATH"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "stdin-control",
+			Usage:   "Control the process using commands sent through stdin",
+			EnvVars: []string{"STDIN-CONTROL"},
+			Hidden:  true,
+			Value:   false,
+		}),
+	}
+}
+
+func stdinControl(reconnectCh chan struct{}) {
+	for {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			command := scanner.Text()
+
+			switch command {
+			case "reconnect":
+				reconnectCh <- struct{}{}
+			default:
+				logger.Warn("Unknown command: ", command)
+			}
+		}
 	}
 }

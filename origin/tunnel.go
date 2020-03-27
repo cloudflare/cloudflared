@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -170,7 +169,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan os.Signal) error {
+func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan struct{}) error {
 	s, err := NewSupervisor(config, cloudflaredID)
 	if err != nil {
 		return err
@@ -186,7 +185,7 @@ func ServeTunnelLoop(ctx context.Context,
 	connectedSignal *signal.Signal,
 	u uuid.UUID,
 	bufferPool *buffer.Pool,
-	reconnectCh chan os.Signal,
+	reconnectCh chan struct{},
 ) error {
 	connectionLogger := config.Logger.WithField("connectionID", connectionID)
 	config.Metrics.incrementHaConnections()
@@ -235,7 +234,7 @@ func ServeTunnel(
 	backoff *BackoffHandler,
 	u uuid.UUID,
 	bufferPool *buffer.Pool,
-	reconnectCh chan os.Signal,
+	reconnectCh chan struct{},
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
