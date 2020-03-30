@@ -83,6 +83,11 @@ stretch: &stretch
       - (cd / && go get github.com/BurntSushi/go-sumtype)
       - export PATH="$HOME/go/bin:$PATH"
       - make test
+  update-homebrew:
+    builddeps:
+      - s3cmd
+    post-cache:
+      - .teamcity/update-homebrew.sh
 
 jessie: *stretch
 
