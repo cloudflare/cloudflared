@@ -1,3 +1,7 @@
+2020.3.2
+- 2020-03-31 TUN-2854: Quick Reconnects should be an optional supported feature
+- 2020-03-30 TUN-2850: Tunnel stripping Cloudflare headers
+
 2020.3.1
 - 2020-03-27 TUN-2846: Trigger debug reconnects from stdin commands, not SIGUSR1
 
