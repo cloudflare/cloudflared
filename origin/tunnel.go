@@ -39,6 +39,8 @@ const (
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	TagHeaderNamePrefix      = "Cf-Warp-Tag-"
 	DuplicateConnectionError = "EDUPCONN"
+	FeatureSerializedHeaders = "serialized_headers"
+	FeatureQuickReconnects   = "quick_reconnects"
 )
 
 type registerRPCName string
@@ -165,8 +167,16 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		RunFromTerminal:      c.RunFromTerminal,
 		CompressionQuality:   c.CompressionQuality,
 		UUID:                 uuid.String(),
-		Features:             connection.SupportedFeatures,
+		Features:             c.SupportedFeatures(),
 	}
+}
+
+func (c *TunnelConfig) SupportedFeatures() []string {
+	basic := []string{FeatureSerializedHeaders}
+	if c.UseQuickReconnects {
+		basic = append(basic, FeatureQuickReconnects)
+	}
+	return basic
 }
 
 func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan struct{}) error {
