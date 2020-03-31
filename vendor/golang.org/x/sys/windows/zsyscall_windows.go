@@ -224,6 +224,7 @@ var (
 	procFindNextVolumeMountPointW                            = modkernel32.NewProc("FindNextVolumeMountPointW")
 	procFindVolumeClose                                      = modkernel32.NewProc("FindVolumeClose")
 	procFindVolumeMountPointClose                            = modkernel32.NewProc("FindVolumeMountPointClose")
+	procGetDiskFreeSpaceExW                                  = modkernel32.NewProc("GetDiskFreeSpaceExW")
 	procGetDriveTypeW                                        = modkernel32.NewProc("GetDriveTypeW")
 	procGetLogicalDrives                                     = modkernel32.NewProc("GetLogicalDrives")
 	procGetLogicalDriveStringsW                              = modkernel32.NewProc("GetLogicalDriveStringsW")
@@ -2493,6 +2494,18 @@ func FindVolumeClose(findVolume Handle) (err error) {
 
 func FindVolumeMountPointClose(findVolumeMountPoint Handle) (err error) {
 	r1, _, e1 := syscall.Syscall(procFindVolumeMountPointClose.Addr(), 1, uintptr(findVolumeMountPoint), 0, 0)
+	if r1 == 0 {
+		if e1 != 0 {
+			err = errnoErr(e1)
+		} else {
+			err = syscall.EINVAL
+		}
+	}
+	return
+}
+
+func GetDiskFreeSpaceEx(directoryName *uint16, freeBytesAvailableToCaller *uint64, totalNumberOfBytes *uint64, totalNumberOfFreeBytes *uint64) (err error) {
+	r1, _, e1 := syscall.Syscall6(procGetDiskFreeSpaceExW.Addr(), 4, uintptr(unsafe.Pointer(directoryName)), uintptr(unsafe.Pointer(freeBytesAvailableToCaller)), uintptr(unsafe.Pointer(totalNumberOfBytes)), uintptr(unsafe.Pointer(totalNumberOfFreeBytes)), 0, 0)
 	if r1 == 0 {
 		if e1 != 0 {
 			err = errnoErr(e1)

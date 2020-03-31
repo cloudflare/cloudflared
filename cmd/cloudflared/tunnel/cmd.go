@@ -24,6 +24,7 @@ import (
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/sshlog"
 	"github.com/cloudflare/cloudflared/sshserver"
 	"github.com/cloudflare/cloudflared/supervisor"
@@ -76,6 +77,9 @@ const (
 
 	// hostKeyPath is the path of the dir to save SSH host keys too
 	hostKeyPath = "host-key-path"
+
+	// socks5Flag is to enable the socks server to deframe
+	socks5Flag = "socks5"
 
 	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
 )
@@ -390,7 +394,18 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- websocket.StartProxyServer(logger, listener, host, shutdownC)
+			streamHandler := websocket.DefaultStreamHandler
+			if c.IsSet(socks5Flag) {
+				logger.Info("SOCKS5 server started")
+				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn) {
+					dialer := socks.NewConnDialer(remoteConn)
+					requestHandler := socks.NewRequestHandler(dialer)
+					socksServer := socks.NewConnectionHandler(requestHandler)
+
+					socksServer.Serve(wsConn)
+				}
+			}
+			errC <- websocket.StartProxyServer(logger, listener, host, shutdownC, streamHandler)
 		}()
 		c.Set("url", "http://"+listener.Addr().String())
 	}
@@ -1073,6 +1088,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"STDIN-CONTROL"},
 			Hidden:  true,
 			Value:   false,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    socks5Flag,
+			Usage:   "specify if this tunnel is running as a SOCK5 Server",
+			EnvVars: []string{"TUNNEL_SOCKS"},
+			Value:   false,
+			Hidden:  false,
 		}),
 	}
 }

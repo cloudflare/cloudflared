@@ -116,10 +116,15 @@ func Stream(conn, backendConn io.ReadWriter) {
 	<-proxyDone
 }
 
+// DefaultStreamHandler is provided to the the standard websocket to origin stream
+// This exist to allow SOCKS to deframe data before it gets to the origin
+func DefaultStreamHandler(wsConn *Conn, remoteConn net.Conn) {
+	Stream(wsConn, remoteConn)
+}
+
 // StartProxyServer will start a websocket server that will decode
 // the websocket data and write the resulting data to the provided
-// address
-func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote string, shutdownC <-chan struct{}) error {
+func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote string, shutdownC <-chan struct{}, streamHandler func(wsConn *Conn, remoteConn net.Conn)) error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -165,7 +170,7 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, remote strin
 			}
 		}
 
-		Stream(&Conn{conn}, stream)
+		streamHandler(&Conn{conn}, stream)
 	})
 
 	return httpServer.Serve(listener)

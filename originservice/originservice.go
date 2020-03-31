@@ -105,7 +105,7 @@ func NewWebSocketService(tlsConfig *tls.Config, url *url.URL) (OriginService, er
 	}
 	shutdownC := make(chan struct{})
 	go func() {
-		websocket.StartProxyServer(log.CreateLogger(), listener, url.String(), shutdownC)
+		websocket.StartProxyServer(log.CreateLogger(), listener, url.String(), shutdownC, websocket.DefaultStreamHandler)
 	}()
 	return &WebsocketService{
 		tlsConfig: tlsConfig,

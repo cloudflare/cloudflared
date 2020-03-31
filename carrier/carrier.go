@@ -11,14 +11,21 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
-	cloudflaredWebsocket "github.com/cloudflare/cloudflared/websocket"
-	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
+	"github.com/pkg/errors"
 )
 
 type StartOptions struct {
 	OriginURL string
 	Headers   http.Header
+}
+
+// Connection wraps up all the needed functions to forward over the tunnel
+type Connection interface {
+	// ServeStream is used to forward data from the client to the edge
+	ServeStream(*StartOptions, io.ReadWriter) error
+
+	// StartServer is used to listen for incoming connections from the edge to the origin
+	StartServer(net.Listener, string, <-chan struct{}) error
 }
 
 // StdinoutStream is empty struct for wrapping stdin/stdout
@@ -44,29 +51,27 @@ func closeRespBody(resp *http.Response) {
 	}
 }
 
-// StartClient will copy the data from stdin/stdout over a WebSocket connection
-// to the edge (originURL)
-func StartClient(logger *logrus.Logger, stream io.ReadWriter, options *StartOptions) error {
-	return serveStream(logger, stream, options)
-}
-
-// StartServer will setup a listener on a specified address/port and then
+// StartForwarder will setup a listener on a specified address/port and then
 // forward connections to the origin by calling `Serve()`.
-func StartServer(logger *logrus.Logger, address string, shutdownC <-chan struct{}, options *StartOptions) error {
+func StartForwarder(conn Connection, address string, shutdownC <-chan struct{}, options *StartOptions) error {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		logger.WithError(err).Error("failed to start forwarding server")
-		return err
+		return errors.Wrap(err, "failed to start forwarding server")
 	}
-	logger.Info("Started listening on ", address)
-	return Serve(logger, listener, shutdownC, options)
+	return Serve(conn, listener, shutdownC, options)
+}
+
+// StartClient will copy the data from stdin/stdout over a WebSocket connection
+// to the edge (originURL)
+func StartClient(conn Connection, stream io.ReadWriter, options *StartOptions) error {
+	return serveStream(conn, stream, options)
 }
 
 // Serve accepts incoming connections on the specified net.Listener.
 // Each connection is handled in a new goroutine: its data is copied over a
 // WebSocket connection to the edge (originURL).
 // `Serve` always closes `listener`.
-func Serve(logger *logrus.Logger, listener net.Listener, shutdownC <-chan struct{}, options *StartOptions) error {
+func Serve(remoteConn Connection, listener net.Listener, shutdownC <-chan struct{}, options *StartOptions) error {
 	defer listener.Close()
 	for {
 		select {
@@ -77,53 +82,20 @@ func Serve(logger *logrus.Logger, listener net.Listener, shutdownC <-chan struct
 			if err != nil {
 				return err
 			}
-			go serveConnection(logger, conn, options)
+			go serveConnection(remoteConn, conn, options)
 		}
 	}
 }
 
 // serveConnection handles connections for the Serve() call
-func serveConnection(logger *logrus.Logger, c net.Conn, options *StartOptions) {
+func serveConnection(remoteConn Connection, c net.Conn, options *StartOptions) {
 	defer c.Close()
-	serveStream(logger, c, options)
+	serveStream(remoteConn, c, options)
 }
 
 // serveStream will serve the data over the WebSocket stream
-func serveStream(logger *logrus.Logger, conn io.ReadWriter, options *StartOptions) error {
-	wsConn, err := createWebsocketStream(options)
-	if err != nil {
-		logger.WithError(err).Errorf("failed to connect to %s\n", options.OriginURL)
-		return err
-	}
-	defer wsConn.Close()
-
-	cloudflaredWebsocket.Stream(wsConn, conn)
-
-	return nil
-}
-
-// createWebsocketStream will create a WebSocket connection to stream data over
-// It also handles redirects from Access and will present that flow if
-// the token is not present on the request
-func createWebsocketStream(options *StartOptions) (*cloudflaredWebsocket.Conn, error) {
-	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header = options.Headers
-
-	wsConn, resp, err := cloudflaredWebsocket.ClientConnect(req, nil)
-	defer closeRespBody(resp)
-	if err != nil && IsAccessResponse(resp) {
-		wsConn, err = createAccessAuthenticatedStream(options)
-		if err != nil {
-			return nil, err
-		}
-	} else if err != nil {
-		return nil, err
-	}
-
-	return &cloudflaredWebsocket.Conn{Conn: wsConn}, nil
+func serveStream(remoteConn Connection, conn io.ReadWriter, options *StartOptions) error {
+	return remoteConn.ServeStream(options, conn)
 }
 
 // IsAccessResponse checks the http Response to see if the url location
@@ -144,49 +116,7 @@ func IsAccessResponse(resp *http.Response) bool {
 	return false
 }
 
-// createAccessAuthenticatedStream will try load a token from storage and make
-// a connection with the token set on the request. If it still get redirect,
-// this probably means the token in storage is invalid (expired/revoked). If that
-// happens it deletes the token and runs the connection again, so the user can
-// login again and generate a new one.
-func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, error) {
-	wsConn, resp, err := createAccessWebSocketStream(options)
-	defer closeRespBody(resp)
-	if err == nil {
-		return wsConn, nil
-	}
-
-	if !IsAccessResponse(resp) {
-		return nil, err
-	}
-
-	// Access Token is invalid for some reason. Go through regen flow
-	originReq, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := token.RemoveTokenIfExists(originReq.URL); err != nil {
-		return nil, err
-	}
-	wsConn, resp, err = createAccessWebSocketStream(options)
-	defer closeRespBody(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return wsConn, nil
-}
-
-// createAccessWebSocketStream builds an Access request and makes a connection
-func createAccessWebSocketStream(options *StartOptions) (*websocket.Conn, *http.Response, error) {
-	req, err := BuildAccessRequest(options)
-	if err != nil {
-		return nil, nil, err
-	}
-	return cloudflaredWebsocket.ClientConnect(req, nil)
-}
-
-// buildAccessRequest builds an HTTP request with the Access token set
+// BuildAccessRequest builds an HTTP request with the Access token set
 func BuildAccessRequest(options *StartOptions) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {

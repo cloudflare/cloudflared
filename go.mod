@@ -25,14 +25,15 @@ require (
 	github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
-	github.com/google/certificate-transparency-go v1.1.0 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/websocket v1.4.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645 // indirect
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
+	github.com/kr/pretty v0.1.0 // indirect
 	github.com/kshvakov/clickhouse v1.3.11
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lib/pq v1.2.0
 	github.com/mattn/go-colorable v0.1.4
 	github.com/mattn/go-isatty v0.0.10 // indirect
@@ -54,11 +55,15 @@ require (
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
-	golang.org/x/net v0.0.0-20191007182048-72f939374954
+	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys v0.0.0-20191008105621-543471e840be
+	golang.org/x/sys v0.0.0-20191020212454-3e7259c5e7c2
+	golang.org/x/text v0.3.2 // indirect
+	google.golang.org/appengine v1.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd // indirect
 	google.golang.org/grpc v1.24.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/coreos/go-oidc.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
 	gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8

@@ -44,6 +44,9 @@ func ssh(c *cli.Context) error {
 		Headers:   headers,
 	}
 
+	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
+	wsConn := carrier.NewWSConnection(logger, false)
+
 	if c.NArg() > 0 || c.IsSet(sshURLFlag) {
 		localForwarder, err := config.ValidateUrl(c)
 		if err != nil {
@@ -55,10 +58,12 @@ func ssh(c *cli.Context) error {
 			logger.WithError(err).Error("Error validating origin URL")
 			return errors.Wrap(err, "error validating origin URL")
 		}
-		return carrier.StartServer(logger, forwarder.Host, shutdownC, options)
+
+		logger.Infof("Start Websocket listener on: %s", forwarder.Host)
+		return carrier.StartForwarder(wsConn, forwarder.Host, shutdownC, options)
 	}
 
-	return carrier.StartClient(logger, &carrier.StdinoutStream{}, options)
+	return carrier.StartClient(wsConn, &carrier.StdinoutStream{}, options)
 }
 
 func buildRequestHeaders(values []string) http.Header {

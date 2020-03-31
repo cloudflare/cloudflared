@@ -2415,7 +2415,11 @@ func (rws *responseWriterState) writeChunk(p []byte) (n int, err error) {
 			clen = strconv.Itoa(len(p))
 		}
 		_, hasContentType := rws.snapHeader["Content-Type"]
-		if !hasContentType && bodyAllowedForStatus(rws.status) && len(p) > 0 {
+		// If the Content-Encoding is non-blank, we shouldn't
+		// sniff the body. See Issue golang.org/issue/31753.
+		ce := rws.snapHeader.Get("Content-Encoding")
+		hasCE := len(ce) > 0
+		if !hasCE && !hasContentType && bodyAllowedForStatus(rws.status) && len(p) > 0 {
 			ctype = http.DetectContentType(p)
 		}
 		var date string
