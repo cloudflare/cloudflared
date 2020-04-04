@@ -138,6 +138,12 @@ func Commands() []*cli.Command {
 					Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
 					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 				},
+				&cli.StringSliceFlag{
+					Name:    "bootstrap",
+					Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+					Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+					EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
+				},
 			},
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 			Hidden:    false,
@@ -961,6 +967,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
 			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "proxy-dns-bootstrap",
+			Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+			Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{

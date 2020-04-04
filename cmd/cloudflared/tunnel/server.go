@@ -14,7 +14,7 @@ func runDNSProxyServer(c *cli.Context, dnsReadySignal, shutdownC chan struct{}) 
 		logger.Errorf("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
 		return errors.New("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
 	}
-	listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"))
+	listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"), c.StringSlice("proxy-dns-bootstrap"))
 	if err != nil {
 		close(dnsReadySignal)
 		listener.Stop()

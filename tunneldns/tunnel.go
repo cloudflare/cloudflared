@@ -35,7 +35,7 @@ func Run(c *cli.Context) error {
 
 	go metrics.ServeMetrics(metricsListener, nil, logger)
 
-	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"))
+	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"))
 	if err != nil {
 		logger.WithError(err).Errorf("Failed to create the listeners")
 		return err
@@ -117,12 +117,12 @@ func (l *Listener) Stop() error {
 }
 
 // CreateListener configures the server and bound sockets
-func CreateListener(address string, port uint16, upstreams []string) (*Listener, error) {
+func CreateListener(address string, port uint16, upstreams []string, bootstraps []string) (*Listener, error) {
 	// Build the list of upstreams
 	upstreamList := make([]Upstream, 0)
 	for _, url := range upstreams {
 		logger.WithField("url", url).Infof("Adding DNS upstream")
-		upstream, err := NewUpstreamHTTPS(url)
+		upstream, err := NewUpstreamHTTPS(url, bootstraps)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create HTTPS upstream")
 		}
