@@ -2,6 +2,7 @@ package h2mux
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -20,6 +21,10 @@ var headerEncoding = base64.RawStdEncoding
 const (
 	RequestUserHeadersField  = "cf-cloudflared-request-headers"
 	ResponseUserHeadersField = "cf-cloudflared-response-headers"
+
+	ResponseMetaHeaderField   = "cf-cloudflared-response-meta"
+	ResponseSourceCloudflared = "cloudflared"
+	ResponseSourceOrigin      = "origin"
 )
 
 // H2RequestHeadersToH1Request converts the HTTP/2 headers coming from origintunneld
@@ -225,4 +230,20 @@ func CreateSerializedHeaders(headersField string, headers ...http.Header) []Head
 		headersField,
 		strings.Join(serializedHeaderChunks, ";"),
 	}}
+}
+
+type responseMetaHeader struct {
+	Source string `json:"src"`
+}
+
+func CreateResponseMetaHeader(source string) Header {
+	jsonResponseMetaHeader, err := json.Marshal(responseMetaHeader{Source: source})
+	if err != nil {
+		panic(err)
+	}
+
+	return Header{
+		Name:  ResponseMetaHeaderField,
+		Value: string(jsonResponseMetaHeader),
+	}
 }

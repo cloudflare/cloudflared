@@ -180,11 +180,12 @@ func (s *StreamHandler) requestLogger(req *http.Request, tunnelHostname h2mux.Tu
 }
 
 func (s *StreamHandler) writeErrorStatus(stream *h2mux.MuxedStream, status *httpErrorStatus) {
-	stream.WriteHeaders([]h2mux.Header{
+	_ = stream.WriteHeaders([]h2mux.Header{
 		{
 			Name:  statusPseudoHeader,
 			Value: status.status,
 		},
+		h2mux.CreateResponseMetaHeader(h2mux.ResponseSourceCloudflared),
 	})
-	stream.Write(status.text)
+	_, _ = stream.Write(status.text)
 }

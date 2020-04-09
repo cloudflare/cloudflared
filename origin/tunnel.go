@@ -688,7 +688,9 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request) 
 	}
 	defer response.Body.Close()
 
-	err = stream.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(response))
+	headers := h2mux.H1ResponseToH2ResponseHeaders(response)
+	headers = append(headers, h2mux.CreateResponseMetaHeader(h2mux.ResponseSourceOrigin))
+	err = stream.WriteHeaders(headers)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
@@ -725,7 +727,10 @@ func (h *TunnelHandler) isEventStream(response *http.Response) bool {
 
 func (h *TunnelHandler) logError(stream *h2mux.MuxedStream, err error) {
 	h.logger.WithError(err).Error("HTTP request error")
-	stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: "502"}})
+	stream.WriteHeaders([]h2mux.Header{
+		{Name: ":status", Value: "502"},
+		h2mux.CreateResponseMetaHeader(h2mux.ResponseSourceCloudflared),
+	})
 	stream.Write([]byte("502 Bad Gateway"))
 	h.metrics.incrementResponses(h.connectionID, "502")
 }
