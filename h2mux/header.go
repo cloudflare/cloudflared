@@ -232,12 +232,12 @@ func CreateSerializedHeaders(headersField string, headers ...http.Header) []Head
 	}}
 }
 
-type responseMetaHeader struct {
+type ResponseMetaHeader struct {
 	Source string `json:"src"`
 }
 
 func CreateResponseMetaHeader(headerName, source string) Header {
-	jsonResponseMetaHeader, err := json.Marshal(responseMetaHeader{Source: source})
+	jsonResponseMetaHeader, err := json.Marshal(ResponseMetaHeader{Source: source})
 	if err != nil {
 		panic(err)
 	}
