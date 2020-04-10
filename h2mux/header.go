@@ -236,14 +236,14 @@ type responseMetaHeader struct {
 	Source string `json:"src"`
 }
 
-func CreateResponseMetaHeader(source string) Header {
+func CreateResponseMetaHeader(headerName, source string) Header {
 	jsonResponseMetaHeader, err := json.Marshal(responseMetaHeader{Source: source})
 	if err != nil {
 		panic(err)
 	}
 
 	return Header{
-		Name:  ResponseMetaHeaderField,
+		Name:  headerName,
 		Value: string(jsonResponseMetaHeader),
 	}
 }

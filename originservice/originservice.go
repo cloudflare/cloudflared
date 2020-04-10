@@ -67,7 +67,7 @@ func (hc *HTTPService) Proxy(stream *h2mux.MuxedStream, req *http.Request) (*htt
 	defer resp.Body.Close()
 
 	responseHeaders := h1ResponseToH2Response(resp)
-	responseHeaders = append(responseHeaders, h2mux.CreateResponseMetaHeader(responseSourceOrigin))
+	responseHeaders = append(responseHeaders, h2mux.CreateResponseMetaHeader(h2mux.ResponseMetaHeaderField, responseSourceOrigin))
 	err = stream.WriteHeaders(responseHeaders)
 	if err != nil {
 		return nil, errors.Wrap(err, "error writing response header to HTTP origin")

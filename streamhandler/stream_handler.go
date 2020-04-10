@@ -185,7 +185,7 @@ func (s *StreamHandler) writeErrorStatus(stream *h2mux.MuxedStream, status *http
 			Name:  statusPseudoHeader,
 			Value: status.status,
 		},
-		h2mux.CreateResponseMetaHeader(h2mux.ResponseSourceCloudflared),
+		h2mux.CreateResponseMetaHeader(h2mux.ResponseMetaHeaderField, h2mux.ResponseSourceCloudflared),
 	})
 	_, _ = stream.Write(status.text)
 }
