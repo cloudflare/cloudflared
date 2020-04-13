@@ -103,6 +103,8 @@ github.com/equinox-io/equinox/proto
 github.com/facebookgo/grace/gracenet
 # github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568
 github.com/flynn/go-shlex
+# github.com/fsnotify/fsnotify v1.4.9
+github.com/fsnotify/fsnotify
 # github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
 github.com/getsentry/raven-go
 # github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0

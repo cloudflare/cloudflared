@@ -21,6 +21,7 @@ require (
 	github.com/facebookgo/stack v0.0.0-20160209184415-751773369052 // indirect
 	github.com/facebookgo/subset v0.0.0-20150612182917-8dac2c3c4870 // indirect
 	github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
 	github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
 	github.com/go-sql-driver/mysql v1.4.1
@@ -67,7 +68,7 @@ require (
 	gopkg.in/coreos/go-oidc.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
 	gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8
-	gopkg.in/yaml.v2 v2.2.4 // indirect
+	gopkg.in/yaml.v2 v2.2.4
 	zombiezen.com/go/capnproto2 v0.0.0-20180616160808-7cfd211c19c7
 )
 

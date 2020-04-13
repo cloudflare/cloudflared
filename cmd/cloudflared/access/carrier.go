@@ -12,6 +12,32 @@ import (
 	cli "gopkg.in/urfave/cli.v2"
 )
 
+// StartForwarder starts a client side websocket forward
+func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}) error {
+	validURLString, err := validation.ValidateUrl(forwarder.Listener)
+	if err != nil {
+		logger.WithError(err).Error("Error validating origin URL")
+		return errors.Wrap(err, "error validating origin URL")
+	}
+
+	validURL, err := url.Parse(validURLString)
+	if err != nil {
+		logger.WithError(err).Error("Error parsing origin URL")
+		return errors.Wrap(err, "error parsing origin URL")
+	}
+
+	options := &carrier.StartOptions{
+		OriginURL: forwarder.URL,
+		Headers:   make(http.Header), //TODO: TUN-2688 support custom headers from config file
+	}
+
+	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
+	wsConn := carrier.NewWSConnection(logger, false)
+
+	logger.Infof("Start Websocket listener on: %s", validURL.Host)
+	return carrier.StartForwarder(wsConn, validURL.Host, shutdown, options)
+}
+
 // ssh will start a WS proxy server for server mode
 // or copy from stdin/stdout for client mode
 // useful for proxying other protocols (like ssh) over websockets
