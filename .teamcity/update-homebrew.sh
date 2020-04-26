@@ -15,6 +15,11 @@ if [[ ! -f "$FILENAME" ]] ; then
     exit 1
 fi
 
+if [[ "${GITHUB_PRIVATE_KEY:-}" == "" ]] ; then
+    echo "Missing GITHUB_PRIVATE_KEY"
+    exit 1
+fi
+
 # upload to s3 bucket for use by Homebrew formula
 s3cmd \
     --acl-public --signature-v2 --access_key="$AWS_ACCESS_KEY_ID" --secret_key="$AWS_SECRET_ACCESS_KEY" --host-bucket="%(bucket)s.s3.cfdata.org" \
@@ -27,7 +32,9 @@ SHA256=$(sha256sum "$FILENAME" | cut -b1-64)
 # set up git (note that UserKnownHostsFile is an absolute path so we can cd wherever)
 mkdir -p tmp
 ssh-keyscan -t rsa github.com > tmp/github.txt
-export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$PWD/tmp/github.txt"
+echo "$GITHUB_PRIVATE_KEY" > tmp/private.key
+chmod 0400 tmp/private.key
+export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$PWD/tmp/github.txt -i $PWD/tmp/private.key -o IdentitiesOnly=yes"
 
 # clone Homebrew repo into tmp/homebrew-cloudflare
 git clone git@github.com:cloudflare/homebrew-cloudflare.git tmp/homebrew-cloudflare    
