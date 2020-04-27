@@ -274,7 +274,7 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 		s.tunnelErrors <- tunnelError{index: index, addr: addr, err: err}
 	}()
 
-	addr, err = s.edgeIPs.GetAddr(index)
+	addr, err = s.edgeIPs.GetDifferentAddr(index)
 	if err != nil {
 		return
 	}

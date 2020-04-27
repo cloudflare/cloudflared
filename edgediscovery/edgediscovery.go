@@ -100,7 +100,7 @@ func (ed *Edge) GetAddr(connID int) (*net.TCPAddr, error) {
 		logger.Debug("No addresses left to give proxy connection")
 		return nil, errNoAddressesLeft
 	}
-	logger.Debug("Giving connection its new address")
+	logger.Debugf("Giving connection its new address %s", addr)
 	return addr, nil
 }
 
@@ -120,9 +120,10 @@ func (ed *Edge) GetDifferentAddr(connID int) (*net.TCPAddr, error) {
 	addr := ed.regions.GetUnusedAddr(oldAddr, connID)
 	if addr == nil {
 		logger.Debug("No addresses left to give proxy connection")
+		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	logger.Debug("Giving connection its new address")
+	logger.Debugf("Giving connection its new address %s", addr)
 	return addr, nil
 }
 

@@ -86,21 +86,28 @@ func (rs *Regions) AddrUsedBy(connID int) *net.TCPAddr {
 // GetUnusedAddr gets an unused addr from the edge, excluding the given addr. Prefer to use addresses
 // evenly across both regions.
 func (rs *Regions) GetUnusedAddr(excluding *net.TCPAddr, connID int) *net.TCPAddr {
-	var addr *net.TCPAddr
 	if rs.region1.AvailableAddrs() > rs.region2.AvailableAddrs() {
-		addr = rs.region1.GetUnusedIP(excluding)
-		rs.region1.Use(addr, connID)
-	} else {
-		addr = rs.region2.GetUnusedIP(excluding)
-		rs.region2.Use(addr, connID)
+		return getAddrs(excluding, connID, &rs.region1, &rs.region2)
 	}
 
-	if addr == nil {
-		return nil
+	return getAddrs(excluding, connID, &rs.region2, &rs.region1)
+}
+
+// getAddrs tries to grab address form `first` region, then `second` region
+// this is an unrolled loop over 2 element array
+func getAddrs(excluding *net.TCPAddr, connID int, first *Region, second *Region) *net.TCPAddr {
+	addr := first.GetUnusedIP(excluding)
+	if addr != nil {
+		first.Use(addr, connID)
+		return addr
+	}
+	addr = second.GetUnusedIP(excluding)
+	if addr != nil {
+		second.Use(addr, connID)
+		return addr
 	}
 
-	// Mark the address as used and return it
-	return addr
+	return nil
 }
 
 // AvailableAddrs returns how many edge addresses aren't used.

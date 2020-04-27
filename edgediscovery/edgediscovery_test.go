@@ -83,6 +83,30 @@ func TestGetAddrForRPC(t *testing.T) {
 	assert.Equal(t, 4, edge.AvailableAddrs())
 }
 
+func TestOnePerRegion(t *testing.T) {
+	l := logrus.New()
+
+	// Make an edge with only one address
+	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1})
+
+	// Use the only address
+	const connID = 0
+	a1, err := edge.GetAddr(connID)
+	assert.NoError(t, err)
+	assert.NotNil(t, a1)
+
+	// if the first address is bad, get the second one
+	a2, err := edge.GetDifferentAddr(connID)
+	assert.NoError(t, err)
+	assert.NotNil(t, a2)
+	assert.NotEqual(t, a1, a2)
+
+	// now that second one is bad, get the first one again
+	a3, err := edge.GetDifferentAddr(connID)
+	assert.NoError(t, err)
+	assert.Equal(t, a1, a3)
+}
+
 func TestOnlyOneAddrLeft(t *testing.T) {
 	l := logrus.New()
 
@@ -98,6 +122,11 @@ func TestOnlyOneAddrLeft(t *testing.T) {
 	// If that edge address is "bad", there's no alternative address.
 	_, err = edge.GetDifferentAddr(connID)
 	assert.Error(t, err)
+
+	// previously bad address should become available again on next iteration.
+	addr, err = edge.GetDifferentAddr(connID)
+	assert.NoError(t, err)
+	assert.NotNil(t, addr)
 }
 
 func TestNoAddrsLeft(t *testing.T) {
