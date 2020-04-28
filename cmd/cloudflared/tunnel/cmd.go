@@ -39,6 +39,7 @@ import (
 	"github.com/getsentry/raven-go"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
@@ -433,7 +434,6 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		defer wg.Done()
 		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
 	}()
-
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))
 }
 
@@ -607,9 +607,15 @@ func notifySystemd(waitForSignal *signal.Signal) {
 
 func writePidFile(waitForSignal *signal.Signal, pidFile string) {
 	<-waitForSignal.Wait()
-	file, err := os.Create(pidFile)
+	expandedPath, err := homedir.Expand(pidFile)
 	if err != nil {
-		logger.WithError(err).Errorf("Unable to write pid to %s", pidFile)
+		logger.WithError(err).Errorf("Unable to expand %s, try to use absolute path in --pidfile", pidFile)
+		return
+	}
+	file, err := os.Create(expandedPath)
+	if err != nil {
+		logger.WithError(err).Errorf("Unable to write pid to %s", expandedPath)
+		return
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "%d", os.Getpid())

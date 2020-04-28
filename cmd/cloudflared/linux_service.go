@@ -118,10 +118,6 @@ case "$1" in
             echo "Starting $name"
             $cmd >> "$stdout_log" 2>> "$stderr_log" &
             echo $! > "$pid_file"
-            if ! is_running; then
-                echo "Unable to start, see $stdout_log and $stderr_log"
-                exit 1
-            fi
         fi
     ;;
     stop)

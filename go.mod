@@ -3,6 +3,7 @@ module github.com/cloudflare/cloudflared
 go 1.12
 
 require (
+	github.com/BurntSushi/go-sumtype v0.0.0-20190304192233-fcb4a6205bdc // indirect
 	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/aws/aws-sdk-go v1.25.8

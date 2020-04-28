@@ -2,6 +2,7 @@ package updater
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"runtime"
 	"time"
@@ -31,6 +32,33 @@ EKx0BZogHSor9Wy5VztdFaAaVbsJiCbO
 `)
 	logger = log.CreateLogger()
 )
+
+// BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
+// https://pkg.go.dev/gopkg.in/urfave/cli.v2?tab=doc#ExitCoder
+type statusSuccess struct {
+	newVersion string
+}
+
+func (u *statusSuccess) Error() string {
+	return fmt.Sprintf("cloudflared has been updated to version %s", u.newVersion)
+}
+
+func (u *statusSuccess) ExitCode() int {
+	return 11
+}
+
+// UpdateErr implements ExitCoder interface, the app will exit with status code 10
+type statusErr struct {
+	err error
+}
+
+func (e *statusErr) Error() string {
+	return fmt.Sprintf("failed to update cloudflared: %v", e.err)
+}
+
+func (e *statusErr) ExitCode() int {
+	return 10
+}
 
 type UpdateOutcome struct {
 	Updated bool
@@ -67,14 +95,15 @@ func checkForUpdateAndApply() UpdateOutcome {
 func Update(_ *cli.Context) error {
 	updateOutcome := loggedUpdate()
 	if updateOutcome.Error != nil {
-		os.Exit(10)
+		return &statusErr{updateOutcome.Error}
 	}
 
 	if updateOutcome.noUpdate() {
 		logger.Infof("cloudflared is up to date (%s)", updateOutcome.Version)
+		return nil
 	}
 
-	return updateOutcome.Error
+	return &statusSuccess{newVersion: updateOutcome.Version}
 }
 
 // Checks for an update and applies it if one is available
@@ -126,15 +155,19 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 			updateOutcome := loggedUpdate()
 			if updateOutcome.Updated {
 				os.Args = append(os.Args, "--is-autoupdated=true")
-				pid, err := a.listeners.StartProcess()
-				if err != nil {
-					logger.WithError(err).Error("Unable to restart server automatically")
-					return err
+				if IsSysV() {
+					// SysV doesn't have a mechanism to keep service alive, we have to restart the process
+					logger.Infof("Restarting service managed by SysV...")
+					pid, err := a.listeners.StartProcess()
+					if err != nil {
+						logger.WithError(err).Error("Unable to restart server automatically")
+						return &statusErr{err: err}
+					}
+					// stop old process after autoupdate. Otherwise we create a new process
+					// after each update
+					logger.Infof("PID of the new process is %d", pid)
 				}
-				// stop old process after autoupdate. Otherwise we create a new process
-				// after each update
-				logger.Infof("PID of the new process is %d", pid)
-				return nil
+				return &statusSuccess{newVersion: updateOutcome.Version}
 			}
 		}
 		select {
@@ -186,4 +219,15 @@ func SupportAutoUpdate() bool {
 
 func isRunningFromTerminal() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func IsSysV() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+
+	if _, err := os.Stat("/run/systemd/system"); err == nil {
+		return false
+	}
+	return true
 }

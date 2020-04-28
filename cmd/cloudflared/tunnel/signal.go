@@ -17,9 +17,11 @@ func waitForSignal(errC chan error, shutdownC chan struct{}) error {
 
 	select {
 	case err := <-errC:
+		logger.Infof("terminating due to error: %v", err)
 		close(shutdownC)
 		return err
-	case <-signals:
+	case s := <-signals:
+		logger.Infof("terminating due to signal %s", s)
 		close(shutdownC)
 	case <-shutdownC:
 	}
@@ -44,10 +46,12 @@ func waitForSignalWithGraceShutdown(errC chan error,
 
 	select {
 	case err := <-errC:
+		logger.Infof("Initiating graceful shutdown due to %v ...", err)
 		close(graceShutdownC)
 		close(shutdownC)
 		return err
-	case <-signals:
+	case s := <-signals:
+		logger.Infof("Initiating graceful shutdown due to signal %s ...", s)
 		close(graceShutdownC)
 		waitForGracePeriod(signals, errC, shutdownC, gracePeriod)
 	case <-graceShutdownC:
@@ -64,7 +68,6 @@ func waitForGracePeriod(signals chan os.Signal,
 	shutdownC chan struct{},
 	gracePeriod time.Duration,
 ) {
-	logger.Infof("Initiating graceful shutdown...")
 	// Unregister signal handler early, so the client can send a second SIGTERM/SIGINT
 	// to force shutdown cloudflared
 	signal.Stop(signals)

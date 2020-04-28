@@ -60,7 +60,7 @@ func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemp
 			<false/>
 		</dict>
 		<key>ThrottleInterval</key>
-		<integer>20</integer>
+		<integer>5</integer>
 	</dict>
 </plist>`, launchdIdentifier, stdoutPath, stderrPath),
 	}
