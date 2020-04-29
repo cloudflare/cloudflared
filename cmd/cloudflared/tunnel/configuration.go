@@ -71,7 +71,7 @@ func logClientOptions(c *cli.Context) {
 		flags[flag] = c.Generic(flag)
 	}
 
-	sliceFlags := []string{"header", "tag", "proxy-dns-upstream", "upstream", "edge"}
+	sliceFlags := []string{"header", "tag", "proxy-dns-upstream", "upstream", "edge", "host-to-origin"}
 	for _, sliceFlag := range sliceFlags {
 		if len(c.StringSlice(sliceFlag)) > 0 {
 			flags[sliceFlag] = strings.Join(c.StringSlice(sliceFlag), ", ")
@@ -179,6 +179,15 @@ func prepareTunnelConfig(
 		return nil, errors.Wrap(err, "Error validating origin URL")
 	}
 
+	hostToOriginUrls := make(map[string]string)
+	hostToOrigins := c.StringSlice("host-to-origin")
+	for _, hostToOrigin := range hostToOrigins {
+		hostToOriginArr := strings.Split(hostToOrigin, "=")
+		if len(hostToOriginArr) == 2 {
+			hostToOriginUrls[hostToOriginArr[0]] = hostToOriginArr[1]
+		}
+	}
+
 	var originCert []byte
 	if !isFreeTunnel {
 		originCert, err = getOriginCert(c)
@@ -268,6 +277,7 @@ func prepareTunnelConfig(
 		NoChunkedEncoding:    c.Bool("no-chunked-encoding"),
 		OriginCert:           originCert,
 		OriginUrl:            originURL,
+		HostToOriginUrls:     hostToOriginUrls,
 		ReportedVersion:      version,
 		Retries:              c.Uint("retries"),
 		RunFromTerminal:      isRunningFromTerminal(),

@@ -85,6 +85,8 @@ type TunnelConfig struct {
 	// OriginUrl may not be used if a user specifies a unix socket.
 	OriginUrl string
 
+	// Optional mapping to enable routing to multiple OriginUrls based on Host header.
+	HostToOriginUrls map[string]string
 	// feature-flag to use new edge reconnect tokens
 	UseReconnectToken bool
 	// feature-flag for using ConnectionDigest
@@ -540,6 +542,7 @@ func LogServerInfo(
 
 type TunnelHandler struct {
 	originUrl      string
+	hostToOriginUrls map[string]string
 	httpHostHeader string
 	muxer          *h2mux.Muxer
 	httpClient     http.RoundTripper
@@ -565,8 +568,16 @@ func NewTunnelHandler(ctx context.Context,
 	if err != nil {
 		return nil, "", fmt.Errorf("unable to parse origin URL %#v", originURL)
 	}
+	for k, _ := range config.HostToOriginUrls {
+		hostOriginURL, err := validation.ValidateUrl(config.HostToOriginUrls[k])
+		if err != nil {
+			return nil, "", fmt.Errorf("unable to parse origin URL %#v", hostOriginURL)
+		}
+		config.HostToOriginUrls[k] = hostOriginURL
+	}
 	h := &TunnelHandler{
 		originUrl:         originURL,
+		hostToOriginUrls:  config.HostToOriginUrls,
 		httpHostHeader:    config.HTTPHostHeader,
 		httpClient:        config.HTTPTransport,
 		tlsConfig:         config.ClientTlsConfig,
@@ -629,8 +640,27 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	return nil
 }
 
+func getOriginUrlForHost(h2 []h2mux.Header, hostToOriginUrls map[string]string) (string, string) {
+	host := ""
+	for _, header := range h2 {
+		switch strings.ToLower(header.Name) {
+		case ":authority":
+			host := header.Value
+			if val, ok := hostToOriginUrls[header.Value]; ok {
+			    return host, val
+			}
+		}
+	}
+	return host, ""
+}
+
 func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request, error) {
-	req, err := http.NewRequest("GET", h.originUrl, h2mux.MuxedStreamReader{MuxedStream: stream})
+	host, origin := getOriginUrlForHost(stream.Headers, h.hostToOriginUrls)
+
+	if host == "" {
+		origin = h.originUrl
+	}
+	req, err := http.NewRequest("GET", origin, h2mux.MuxedStreamReader{MuxedStream: stream})
 	if err != nil {
 		return nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
 	}

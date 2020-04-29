@@ -768,6 +768,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_HOSTNAME"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "host-to-origin",
+			Usage:   "Decalre a direct host to origin mapping i.e. host1.example.com=http://localhost:8080. This takes precedence over the single url mapping.",
+			EnvVars: []string{"HOST_TO_ORIGIN"},
+			Hidden:  shouldHide,
+		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "http-host-header",
 			Usage:   "Sets the HTTP Host header for the local webserver.",
