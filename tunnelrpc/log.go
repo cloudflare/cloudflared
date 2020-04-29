@@ -3,14 +3,14 @@ package tunnelrpc
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 	"golang.org/x/net/trace"
 	"zombiezen.com/go/capnproto2/rpc"
 )
 
 // ConnLogger wraps a logrus *log.Entry for a connection.
 type ConnLogger struct {
-	Entry *log.Entry
+	Entry logger.Service
 }
 
 func (c ConnLogger) Infof(ctx context.Context, format string, args ...interface{}) {
@@ -21,7 +21,7 @@ func (c ConnLogger) Errorf(ctx context.Context, format string, args ...interface
 	c.Entry.Errorf(format, args...)
 }
 
-func ConnLog(log *log.Entry) rpc.ConnOption {
+func ConnLog(log logger.Service) rpc.ConnOption {
 	return rpc.ConnLog(ConnLogger{log})
 }
 

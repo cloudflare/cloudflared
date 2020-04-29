@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 // DirectoryUploadManager is used to manage file uploads on an interval from a directory
 type DirectoryUploadManager struct {
-	logger        *logrus.Logger
+	logger        logger.Service
 	uploader      Uploader
 	rootDirectory string
 	sweepInterval time.Duration
@@ -23,7 +23,7 @@ type DirectoryUploadManager struct {
 // uploader is an Uploader to use as an actual uploading engine
 // directory is the directory to sweep for files to upload
 // sweepInterval is how often to iterate the directory and upload the files within
-func NewDirectoryUploadManager(logger *logrus.Logger, uploader Uploader, directory string, sweepInterval time.Duration, shutdownC chan struct{}) *DirectoryUploadManager {
+func NewDirectoryUploadManager(logger logger.Service, uploader Uploader, directory string, sweepInterval time.Duration, shutdownC chan struct{}) *DirectoryUploadManager {
 	workerCount := 10
 	manager := &DirectoryUploadManager{
 		logger:        logger,
@@ -97,7 +97,7 @@ func (m *DirectoryUploadManager) worker() {
 			return
 		case filepath := <-m.workQueue:
 			if err := m.Upload(filepath); err != nil {
-				m.logger.WithError(err).Error("Cannot upload file to s3 bucket")
+				m.logger.Errorf("Cannot upload file to s3 bucket: %s", err)
 			} else {
 				os.Remove(filepath)
 			}

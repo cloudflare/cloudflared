@@ -5,12 +5,14 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 // waitForSignal notifies all routines to shutdownC immediately by closing the
 // shutdownC when one of the routines in main exits, or when this process receives
 // SIGTERM/SIGINT
-func waitForSignal(errC chan error, shutdownC chan struct{}) error {
+func waitForSignal(errC chan error, shutdownC chan struct{}, logger logger.Service) error {
 	signals := make(chan os.Signal, 10)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
@@ -39,6 +41,7 @@ func waitForSignal(errC chan error, shutdownC chan struct{}) error {
 func waitForSignalWithGraceShutdown(errC chan error,
 	shutdownC, graceShutdownC chan struct{},
 	gracePeriod time.Duration,
+	logger logger.Service,
 ) error {
 	signals := make(chan os.Signal, 10)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
@@ -53,9 +56,9 @@ func waitForSignalWithGraceShutdown(errC chan error,
 	case s := <-signals:
 		logger.Infof("Initiating graceful shutdown due to signal %s ...", s)
 		close(graceShutdownC)
-		waitForGracePeriod(signals, errC, shutdownC, gracePeriod)
+		waitForGracePeriod(signals, errC, shutdownC, gracePeriod, logger)
 	case <-graceShutdownC:
-		waitForGracePeriod(signals, errC, shutdownC, gracePeriod)
+		waitForGracePeriod(signals, errC, shutdownC, gracePeriod, logger)
 	case <-shutdownC:
 		close(graceShutdownC)
 	}
@@ -67,6 +70,7 @@ func waitForGracePeriod(signals chan os.Signal,
 	errC chan error,
 	shutdownC chan struct{},
 	gracePeriod time.Duration,
+	logger logger.Service,
 ) {
 	// Unregister signal handler early, so the client can send a second SIGTERM/SIGINT
 	// to force shutdown cloudflared

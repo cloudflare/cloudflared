@@ -7,16 +7,16 @@ import (
 	"net/http"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/socks"
 	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 )
 
 // Websocket is used to carry data via WS binary frames over the tunnel from client to the origin
 // This implements the functions for glider proxy (sock5) and the carrier interface
 type Websocket struct {
-	logger  *logrus.Logger
+	logger  logger.Service
 	isSocks bool
 }
 
@@ -35,7 +35,7 @@ func (d *wsdialer) Dial(address string) (io.ReadWriteCloser, *socks.AddrSpec, er
 }
 
 // NewWSConnection returns a new connection object
-func NewWSConnection(logger *logrus.Logger, isSocks bool) Connection {
+func NewWSConnection(logger logger.Service, isSocks bool) Connection {
 	return &Websocket{
 		logger:  logger,
 		isSocks: isSocks,
@@ -45,9 +45,9 @@ func NewWSConnection(logger *logrus.Logger, isSocks bool) Connection {
 // ServeStream will create a Websocket client stream connection to the edge
 // it blocks and writes the raw data from conn over the tunnel
 func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) error {
-	wsConn, err := createWebsocketStream(options)
+	wsConn, err := createWebsocketStream(options, ws.logger)
 	if err != nil {
-		ws.logger.WithError(err).Errorf("failed to connect to %s", options.OriginURL)
+		ws.logger.Errorf("failed to connect to %s with error: %s", options.OriginURL, err)
 		return err
 	}
 	defer wsConn.Close()
@@ -73,7 +73,7 @@ func (ws *Websocket) StartServer(listener net.Listener, remote string, shutdownC
 // createWebsocketStream will create a WebSocket connection to stream data over
 // It also handles redirects from Access and will present that flow if
 // the token is not present on the request
-func createWebsocketStream(options *StartOptions) (*cfwebsocket.Conn, error) {
+func createWebsocketStream(options *StartOptions, logger logger.Service) (*cfwebsocket.Conn, error) {
 	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func createWebsocketStream(options *StartOptions) (*cfwebsocket.Conn, error) {
 	wsConn, resp, err := cfwebsocket.ClientConnect(req, nil)
 	defer closeRespBody(resp)
 	if err != nil && IsAccessResponse(resp) {
-		wsConn, err = createAccessAuthenticatedStream(options)
+		wsConn, err = createAccessAuthenticatedStream(options, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -99,8 +99,8 @@ func createWebsocketStream(options *StartOptions) (*cfwebsocket.Conn, error) {
 // this probably means the token in storage is invalid (expired/revoked). If that
 // happens it deletes the token and runs the connection again, so the user can
 // login again and generate a new one.
-func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, error) {
-	wsConn, resp, err := createAccessWebSocketStream(options)
+func createAccessAuthenticatedStream(options *StartOptions, logger logger.Service) (*websocket.Conn, error) {
+	wsConn, resp, err := createAccessWebSocketStream(options, logger)
 	defer closeRespBody(resp)
 	if err == nil {
 		return wsConn, nil
@@ -118,7 +118,7 @@ func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, er
 	if err := token.RemoveTokenIfExists(originReq.URL); err != nil {
 		return nil, err
 	}
-	wsConn, resp, err = createAccessWebSocketStream(options)
+	wsConn, resp, err = createAccessWebSocketStream(options, logger)
 	defer closeRespBody(resp)
 	if err != nil {
 		return nil, err
@@ -128,8 +128,8 @@ func createAccessAuthenticatedStream(options *StartOptions) (*websocket.Conn, er
 }
 
 // createAccessWebSocketStream builds an Access request and makes a connection
-func createAccessWebSocketStream(options *StartOptions) (*websocket.Conn, *http.Response, error) {
-	req, err := BuildAccessRequest(options)
+func createAccessWebSocketStream(options *StartOptions, logger logger.Service) (*websocket.Conn, *http.Response, error) {
+	req, err := BuildAccessRequest(options, logger)
 	if err != nil {
 		return nil, nil, err
 	}

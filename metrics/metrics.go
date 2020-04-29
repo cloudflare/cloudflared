@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/net/trace"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger *logrus.Logger) (err error) {
+func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger logger.Service) (err error) {
 	var wg sync.WaitGroup
 	// Metrics port is privileged, so no need for further access control
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
@@ -43,7 +43,7 @@ func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger *logrus.Logg
 		defer wg.Done()
 		err = server.Serve(l)
 	}()
-	logger.WithField("addr", fmt.Sprintf("%v/metrics", l.Addr())).Info("Starting metrics server")
+	logger.Infof("Starting metrics server on %s", fmt.Sprintf("%v/metrics", l.Addr()))
 	// server.Serve will hang if server.Shutdown is called before the server is
 	// fully started up. So add artificial delay.
 	time.Sleep(startupTime)
@@ -58,7 +58,7 @@ func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger *logrus.Logg
 		logger.Info("Metrics server stopped")
 		return nil
 	}
-	logger.WithError(err).Error("Metrics server quit with error")
+	logger.Errorf("Metrics server quit with error: %s", err)
 	return err
 }
 

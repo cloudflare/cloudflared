@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,7 +32,7 @@ var (
 )
 
 func TestGiveBack(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Give this connection an address
@@ -49,7 +49,7 @@ func TestGiveBack(t *testing.T) {
 }
 
 func TestRPCAndProxyShareSingleEdgeIP(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	// Make an edge with a single IP
 	edge := MockEdge(l, []*net.TCPAddr{&addr0})
@@ -66,7 +66,7 @@ func TestRPCAndProxyShareSingleEdgeIP(t *testing.T) {
 }
 
 func TestGetAddrForRPC(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Get a connection
@@ -84,7 +84,7 @@ func TestGetAddrForRPC(t *testing.T) {
 }
 
 func TestOnePerRegion(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	// Make an edge with only one address
 	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1})
@@ -108,7 +108,7 @@ func TestOnePerRegion(t *testing.T) {
 }
 
 func TestOnlyOneAddrLeft(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	// Make an edge with only one address
 	edge := MockEdge(l, []*net.TCPAddr{&addr0})
@@ -130,7 +130,7 @@ func TestOnlyOneAddrLeft(t *testing.T) {
 }
 
 func TestNoAddrsLeft(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	// Make an edge with no addresses
 	edge := MockEdge(l, []*net.TCPAddr{})
@@ -142,7 +142,7 @@ func TestNoAddrsLeft(t *testing.T) {
 }
 
 func TestGetAddr(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Give this connection an address
@@ -158,7 +158,7 @@ func TestGetAddr(t *testing.T) {
 }
 
 func TestGetDifferentAddr(t *testing.T) {
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	edge := MockEdge(l, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Give this connection an address

@@ -12,8 +12,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cloudflare/cloudflared/logger"
+	"github.com/pkg/errors"
 	cli "gopkg.in/urfave/cli.v2"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
@@ -65,6 +68,12 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	//     2. get ERROR_FAILED_SERVICE_CONTROLLER_CONNECT
 	// This involves actually trying to start the service.
 
+	logger, err := logger.New()
+	if err != nil {
+		os.Exit(1)
+		return
+	}
+
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
 		logger.Fatalf("failed to determine if we are running in an interactive session: %v", err)
@@ -97,9 +106,15 @@ type windowsService struct {
 
 // called by the package code at the start of the service
 func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
+	logger, err := logger.New()
+	if err != nil {
+		os.Exit(1)
+		return
+	}
+
 	elog, err := eventlog.Open(windowsServiceName)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot open event log for %s", windowsServiceName)
+		logger.Errorf("Cannot open event log for %s with error: %s", windowsServiceName, err)
 		return
 	}
 	defer elog.Close()
@@ -160,6 +175,11 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 }
 
 func installWindowsService(c *cli.Context) error {
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	logger.Infof("Installing Argo Tunnel Windows service")
 	exepath, err := os.Executable()
 	if err != nil {
@@ -168,7 +188,7 @@ func installWindowsService(c *cli.Context) error {
 	}
 	m, err := mgr.Connect()
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot establish a connection to the service control manager")
+		logger.Errorf("Cannot establish a connection to the service control manager: %s", err)
 		return err
 	}
 	defer m.Disconnect()
@@ -189,18 +209,23 @@ func installWindowsService(c *cli.Context) error {
 	err = eventlog.InstallAsEventCreate(windowsServiceName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	if err != nil {
 		s.Delete()
-		logger.WithError(err).Errorf("Cannot install event logger")
+		logger.Errorf("Cannot install event logger: %s", err)
 		return fmt.Errorf("SetupEventLogSource() failed: %s", err)
 	}
 	err = configRecoveryOption(s.Handle)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot set service recovery actions")
+		logger.Errorf("Cannot set service recovery actions: %s", err)
 		logger.Infof("See %s to manually configure service recovery actions", windowsServiceUrl)
 	}
 	return nil
 }
 
 func uninstallWindowsService(c *cli.Context) error {
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	logger.Infof("Uninstalling Argo Tunnel Windows Service")
 	m, err := mgr.Connect()
 	if err != nil {

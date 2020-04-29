@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 // ForwardServiceType is used to identify what kind of overwatch service this is
@@ -14,11 +15,12 @@ const ForwardServiceType = "forward"
 type ForwarderService struct {
 	forwarder config.Forwarder
 	shutdown  chan struct{}
+	logger    logger.Service
 }
 
 // NewForwardService creates a new forwarder service
-func NewForwardService(f config.Forwarder) *ForwarderService {
-	return &ForwarderService{forwarder: f, shutdown: make(chan struct{}, 1)}
+func NewForwardService(f config.Forwarder, logger logger.Service) *ForwarderService {
+	return &ForwarderService{forwarder: f, shutdown: make(chan struct{}, 1), logger: logger}
 }
 
 // Name is used to figure out this service is related to the others (normally the addr it binds to)
@@ -44,5 +46,5 @@ func (s *ForwarderService) Shutdown() {
 
 // Run is the run loop that is started by the overwatch service
 func (s *ForwarderService) Run() error {
-	return access.StartForwarder(s.forwarder, s.shutdown)
+	return access.StartForwarder(s.forwarder, s.shutdown, s.logger)
 }

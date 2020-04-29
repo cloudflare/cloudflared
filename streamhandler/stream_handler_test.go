@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
@@ -39,9 +39,10 @@ var (
 )
 
 func TestServeRequest(t *testing.T) {
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	configChan := make(chan *pogs.ClientConfig)
 	useConfigResultChan := make(chan *pogs.UseConfigurationResult)
-	streamHandler := NewStreamHandler(configChan, useConfigResultChan, logrus.New())
+	streamHandler := NewStreamHandler(configChan, useConfigResultChan, l)
 
 	message := []byte("Hello cloudflared")
 	httpServer := httptest.NewServer(&mockHTTPHandler{message})
@@ -72,8 +73,9 @@ func TestServeRequest(t *testing.T) {
 func createStreamHandler() *StreamHandler {
 	configChan := make(chan *pogs.ClientConfig)
 	useConfigResultChan := make(chan *pogs.UseConfigurationResult)
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 
-	return NewStreamHandler(configChan, useConfigResultChan, logrus.New())
+	return NewStreamHandler(configChan, useConfigResultChan, l)
 }
 
 func createRequestMuxPair(t *testing.T, streamHandler *StreamHandler) *DefaultMuxerPair {
@@ -185,7 +187,7 @@ func NewDefaultMuxerPair(t *testing.T, h h2mux.MuxedStreamHandler) *DefaultMuxer
 			Handler:                 h,
 			IsClient:                true,
 			Name:                    "origin",
-			Logger:                  logrus.NewEntry(logrus.New()),
+			Logger:                  logger.NewOutputWriter(logger.NewMockWriteManager()),
 			DefaultWindowSize:       (1 << 8) - 1,
 			MaxWindowSize:           (1 << 15) - 1,
 			StreamWriteBufferMaxLen: 1024,
@@ -195,7 +197,7 @@ func NewDefaultMuxerPair(t *testing.T, h h2mux.MuxedStreamHandler) *DefaultMuxer
 			Timeout:                 testHandshakeTimeout,
 			IsClient:                false,
 			Name:                    "edge",
-			Logger:                  logrus.NewEntry(logrus.New()),
+			Logger:                  logger.NewOutputWriter(logger.NewMockWriteManager()),
 			DefaultWindowSize:       (1 << 8) - 1,
 			MaxWindowSize:           (1 << 15) - 1,
 			StreamWriteBufferMaxLen: 1024,

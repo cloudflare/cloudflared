@@ -16,10 +16,10 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 )
 
 type Supervisor struct {
@@ -30,7 +30,7 @@ type Supervisor struct {
 	newConfigChan       <-chan *pogs.ClientConfig
 	useConfigResultChan chan<- *pogs.UseConfigurationResult
 	state               *state
-	logger              *logrus.Entry
+	logger              logger.Service
 	metrics             metrics
 }
 
@@ -62,7 +62,7 @@ func NewSupervisor(
 	cloudflaredConfig *connection.CloudflaredConfig,
 	autoupdater *updater.AutoUpdater,
 	supportAutoupdate bool,
-	logger *logrus.Logger,
+	logger logger.Service,
 ) (*Supervisor, error) {
 	newConfigChan := make(chan *pogs.ClientConfig)
 	useConfigResultChan := make(chan *pogs.UseConfigurationResult)
@@ -93,7 +93,7 @@ func NewSupervisor(
 		newConfigChan:       newConfigChan,
 		useConfigResultChan: useConfigResultChan,
 		state:               newState(defaultClientConfig),
-		logger:              logger.WithField("subsystem", "supervisor"),
+		logger:              logger,
 		metrics:             newMetrics(),
 	}, nil
 }
@@ -120,7 +120,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 
 	err := errGroup.Wait()
-	s.logger.Warnf("Supervisor terminated, reason: %v", err)
+	s.logger.Errorf("Supervisor terminated, reason: %v", err)
 	return err
 }
 

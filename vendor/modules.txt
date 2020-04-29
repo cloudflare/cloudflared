@@ -2,6 +2,10 @@
 github.com/BurntSushi/toml
 # github.com/DATA-DOG/go-sqlmock v1.3.3
 github.com/DATA-DOG/go-sqlmock
+# github.com/acmacalister/skittles v0.0.0-20160609003031-7423546701e1
+github.com/acmacalister/skittles
+# github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
+github.com/alecthomas/units
 # github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239
 github.com/anmitsu/go-shlex
 # github.com/aws/aws-sdk-go v1.25.8
@@ -52,9 +56,6 @@ github.com/cloudflare/brotli-go/brotli
 github.com/cloudflare/brotli-go/common
 github.com/cloudflare/brotli-go/dec
 github.com/cloudflare/brotli-go/enc
-# github.com/cloudflare/cfssl v0.0.0-20141119014638-2f7f44e802e2
-github.com/cloudflare/cfssl/log
-github.com/cloudflare/cfssl/revoke
 # github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 github.com/cloudflare/golibs/lrucache
 # github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58
@@ -137,8 +138,6 @@ github.com/jmespath/go-jmespath
 # github.com/jmoiron/sqlx v1.2.0
 github.com/jmoiron/sqlx
 github.com/jmoiron/sqlx/reflectx
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
-github.com/konsorten/go-windows-terminal-sequences
 # github.com/kshvakov/clickhouse v1.3.11
 github.com/kshvakov/clickhouse
 github.com/kshvakov/clickhouse/lib/binary
@@ -154,10 +153,6 @@ github.com/kshvakov/clickhouse/lib/writebuffer
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
-# github.com/mattn/go-colorable v0.1.4
-github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.10
-github.com/mattn/go-isatty
 # github.com/mattn/go-sqlite3 v1.11.0
 github.com/mattn/go-sqlite3
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
@@ -194,10 +189,6 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
-github.com/rifflock/lfshook
-# github.com/sirupsen/logrus v1.4.2
-github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require

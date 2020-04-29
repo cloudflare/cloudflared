@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/watcher"
 	"github.com/stretchr/testify/assert"
 )
@@ -65,7 +65,8 @@ func TestConfigChanged(t *testing.T) {
 	wait := make(chan struct{})
 	w := &mockFileWatcher{path: filePath, ready: wait}
 
-	logger := log.CreateLogger()
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+
 	service, err := NewFileManager(w, filePath, logger)
 	service.ReadConfig = configRead
 	assert.NoError(t, err)

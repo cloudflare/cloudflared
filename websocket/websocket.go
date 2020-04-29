@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshserver"
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -125,7 +125,7 @@ func DefaultStreamHandler(wsConn *Conn, remoteConn net.Conn, _ http.Header) {
 
 // StartProxyServer will start a websocket server that will decode
 // the websocket data and write the resulting data to the provided
-func StartProxyServer(logger *logrus.Logger, listener net.Listener, staticHost string, shutdownC <-chan struct{}, streamHandler func(wsConn *Conn, remoteConn net.Conn, requestHeaders http.Header)) error {
+func StartProxyServer(logger logger.Service, listener net.Listener, staticHost string, shutdownC <-chan struct{}, streamHandler func(wsConn *Conn, remoteConn net.Conn, requestHeaders http.Header)) error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -151,7 +151,7 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, staticHost s
 
 		stream, err := net.Dial("tcp", finalDestination)
 		if err != nil {
-			logger.WithError(err).Error("Cannot connect to remote.")
+			logger.Errorf("Cannot connect to remote: %s", err)
 			return
 		}
 		defer stream.Close()
@@ -162,7 +162,7 @@ func StartProxyServer(logger *logrus.Logger, listener net.Listener, staticHost s
 		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logger.WithError(err).Error("failed to upgrade")
+			logger.Errorf("failed to upgrade: %s", err)
 			return
 		}
 		conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -250,14 +250,14 @@ func changeRequestScheme(req *http.Request) string {
 }
 
 // pinger simulates the websocket connection to keep it alive
-func pinger(logger *logrus.Logger, ws *websocket.Conn, done chan struct{}) {
+func pinger(logger logger.Service, ws *websocket.Conn, done chan struct{}) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(writeWait)); err != nil {
-				logger.WithError(err).Debug("failed to send ping message")
+				logger.Debugf("failed to send ping message: %s", err)
 			}
 		case <-done:
 			return

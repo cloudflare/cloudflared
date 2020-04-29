@@ -9,6 +9,7 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -61,6 +62,35 @@ func FindDefaultConfigPath() string {
 		}
 	}
 	return ""
+}
+
+// FindLogSettings gets the log directory and level from the config file
+func FindLogSettings() (string, string) {
+	configPath := FindDefaultConfigPath()
+	defaultDirectory := filepath.Dir(configPath)
+	defaultLevel := "info"
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return defaultDirectory, defaultLevel
+	}
+	defer file.Close()
+
+	var config Root
+	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
+		return defaultDirectory, defaultLevel
+	}
+
+	directory := defaultDirectory
+	if config.LogDirectory != "" {
+		directory = config.LogDirectory
+	}
+
+	level := defaultLevel
+	if config.LogLevel != "" {
+		level = config.LogLevel
+	}
+	return directory, level
 }
 
 // ValidateUnixSocket ensures --unix-socket param is used exclusively

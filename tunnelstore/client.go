@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -42,11 +42,12 @@ type RESTClient struct {
 	baseURL   string
 	authToken string
 	client    http.Client
+	logger    logger.Service
 }
 
 var _ Client = (*RESTClient)(nil)
 
-func NewRESTClient(baseURL string, accountTag string, authToken string) *RESTClient {
+func NewRESTClient(baseURL string, accountTag string, authToken string, logger logger.Service) *RESTClient {
 	if strings.HasSuffix(baseURL, "/") {
 		baseURL = baseURL[:len(baseURL)-1]
 	}
@@ -61,6 +62,7 @@ func NewRESTClient(baseURL string, accountTag string, authToken string) *RESTCli
 			},
 			Timeout: defaultTimeout,
 		},
+		logger: logger,
 	}
 }
 
@@ -146,7 +148,7 @@ func (r *RESTClient) resolve(target string) string {
 
 func (r *RESTClient) sendRequest(method string, target string, body io.Reader) (*http.Response, error) {
 	url := r.resolve(target)
-	logrus.Debugf("%s %s", method, url)
+	r.logger.Debugf("%s %s", method, url)
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't create %s request", method)
@@ -180,5 +182,3 @@ func statusCodeToError(op string, resp *http.Response) error {
 	return errors.Errorf("API call to %s tunnel failed with status %d: %s", op,
 		resp.StatusCode, http.StatusText(resp.StatusCode))
 }
-
-

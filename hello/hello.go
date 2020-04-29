@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
@@ -91,7 +91,7 @@ const indexTemplate = `
 </html>
 `
 
-func StartHelloWorldServer(logger *logrus.Logger, listener net.Listener, shutdownC <-chan struct{}) error {
+func StartHelloWorldServer(logger logger.Service, listener net.Listener, shutdownC <-chan struct{}) error {
 	logger.Infof("Starting Hello World server at %s", listener.Addr())
 	serverName := defaultServerName
 	if hostname, err := os.Hostname(); err == nil {
@@ -148,7 +148,7 @@ func uptimeHandler(startTime time.Time) http.HandlerFunc {
 }
 
 // This handler will echo message
-func websocketHandler(logger *logrus.Logger, upgrader websocket.Upgrader) http.HandlerFunc {
+func websocketHandler(logger logger.Service, upgrader websocket.Upgrader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -158,12 +158,12 @@ func websocketHandler(logger *logrus.Logger, upgrader websocket.Upgrader) http.H
 		for {
 			mt, message, err := conn.ReadMessage()
 			if err != nil {
-				logger.WithError(err).Error("websocket read message error")
+				logger.Errorf("websocket read message error: %s", err)
 				break
 			}
 
 			if err := conn.WriteMessage(mt, message); err != nil {
-				logger.WithError(err).Error("websocket write message error")
+				logger.Errorf("websocket write message error: %s", err)
 				break
 			}
 		}

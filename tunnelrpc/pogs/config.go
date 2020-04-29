@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/originservice"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -171,7 +172,7 @@ func (_ *ReverseProxyConfig) isFallibleConfig() {}
 //go-sumtype:decl OriginConfig
 type OriginConfig interface {
 	// Service returns a OriginService used to proxy to the origin
-	Service() (originservice.OriginService, error)
+	Service(logger.Service) (originservice.OriginService, error)
 	// go-sumtype requires at least one unexported method, otherwise it will complain that interface is not sealed
 	isOriginConfig()
 }
@@ -191,7 +192,7 @@ type HTTPOriginConfig struct {
 	ChunkedEncoding        bool
 }
 
-func (hc *HTTPOriginConfig) Service() (originservice.OriginService, error) {
+func (hc *HTTPOriginConfig) Service(logger logger.Service) (originservice.OriginService, error) {
 	rootCAs, err := tlsconfig.LoadCustomOriginCA(hc.OriginCAPool)
 	if err != nil {
 		return nil, err
@@ -239,7 +240,7 @@ type WebSocketOriginConfig struct {
 	OriginServerName string
 }
 
-func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error) {
+func (wsc *WebSocketOriginConfig) Service(logger logger.Service) (originservice.OriginService, error) {
 	rootCAs, err := tlsconfig.LoadCustomOriginCA(wsc.OriginCAPool)
 	if err != nil {
 		return nil, err
@@ -254,14 +255,14 @@ func (wsc *WebSocketOriginConfig) Service() (originservice.OriginService, error)
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s is not a valid URL", wsc.URLString)
 	}
-	return originservice.NewWebSocketService(tlsConfig, url)
+	return originservice.NewWebSocketService(tlsConfig, url, logger)
 }
 
 func (*WebSocketOriginConfig) isOriginConfig() {}
 
 type HelloWorldOriginConfig struct{}
 
-func (*HelloWorldOriginConfig) Service() (originservice.OriginService, error) {
+func (*HelloWorldOriginConfig) Service(logger logger.Service) (originservice.OriginService, error) {
 	helloCert, err := tlsconfig.GetHelloCertificateX509()
 	if err != nil {
 		return nil, errors.Wrap(err, "Cannot get Hello World server certificate")
@@ -282,7 +283,7 @@ func (*HelloWorldOriginConfig) Service() (originservice.OriginService, error) {
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	}
-	return originservice.NewHelloWorldService(transport)
+	return originservice.NewHelloWorldService(transport, logger)
 }
 
 func (*HelloWorldOriginConfig) isOriginConfig() {}

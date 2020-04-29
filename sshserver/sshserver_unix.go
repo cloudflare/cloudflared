@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/sshlog"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -66,7 +66,7 @@ func (c sshConn) Close() error {
 type SSHProxy struct {
 	ssh.Server
 	hostname   string
-	logger     *logrus.Logger
+	logger     logger.Service
 	shutdownC  chan struct{}
 	caCert     ssh.PublicKey
 	logManager sshlog.Manager
@@ -78,7 +78,7 @@ type SSHPreamble struct {
 }
 
 // New creates a new SSHProxy and configures its host keys and authentication by the data provided
-func New(logManager sshlog.Manager, logger *logrus.Logger, version, localAddress, hostname, hostKeyDir string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHProxy, error) {
+func New(logManager sshlog.Manager, logger logger.Service, version, localAddress, hostname, hostKeyDir string, shutdownC chan struct{}, idleTimeout, maxTimeout time.Duration) (*SSHProxy, error) {
 	sshProxy := SSHProxy{
 		hostname:   hostname,
 		logger:     logger,
@@ -112,7 +112,7 @@ func (s *SSHProxy) Start() error {
 	go func() {
 		<-s.shutdownC
 		if err := s.Close(); err != nil {
-			s.logger.WithError(err).Error("Cannot close SSH server")
+			s.logger.Errorf("Cannot close SSH server: %s", err)
 		}
 	}()
 
@@ -141,9 +141,9 @@ func (s *SSHProxy) connCallback(ctx ssh.Context, conn net.Conn) net.Conn {
 	preamble, err := s.readPreamble(conn)
 	if err != nil {
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			s.logger.Warn("Could not establish session. Client likely does not have --destination set and is using old-style ssh config")
+			s.logger.Info("Could not establish session. Client likely does not have --destination set and is using old-style ssh config")
 		} else if err != io.EOF {
-			s.logger.WithError(err).Error("failed to read SSH preamble")
+			s.logger.Errorf("failed to read SSH preamble: %s", err)
 		}
 		return nil
 	}
@@ -151,7 +151,7 @@ func (s *SSHProxy) connCallback(ctx ssh.Context, conn net.Conn) net.Conn {
 
 	logger, sessionID, err := s.auditLogger()
 	if err != nil {
-		s.logger.WithError(err).Error("failed to configure logger")
+		s.logger.Errorf("failed to configure logger: %s", err)
 		return nil
 	}
 	ctx.SetValue(sshContextEventLogger, logger)
@@ -175,14 +175,14 @@ func (s *SSHProxy) channelHandler(srv *ssh.Server, conn *gossh.ServerConn, newCh
 		msg := fmt.Sprintf("channel type %s is not supported", newChan.ChannelType())
 		s.logger.Info(msg)
 		if err := newChan.Reject(gossh.UnknownChannelType, msg); err != nil {
-			s.logger.WithError(err).Error("Error rejecting SSH channel")
+			s.logger.Errorf("Error rejecting SSH channel: %s", err)
 		}
 		return
 	}
 
 	localChan, localChanReqs, err := newChan.Accept()
 	if err != nil {
-		s.logger.WithError(err).Error("Failed to accept session channel")
+		s.logger.Errorf("Failed to accept session channel: %s", err)
 		return
 	}
 	defer localChan.Close()
@@ -196,7 +196,7 @@ func (s *SSHProxy) channelHandler(srv *ssh.Server, conn *gossh.ServerConn, newCh
 
 	remoteChan, remoteChanReqs, err := client.OpenChannel(newChan.ChannelType(), newChan.ExtraData())
 	if err != nil {
-		s.logger.WithError(err).Error("Failed to open remote channel")
+		s.logger.Errorf("Failed to open remote channel: %s", err)
 		return
 	}
 
@@ -211,13 +211,13 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 	done := make(chan struct{}, 2)
 	go func() {
 		if _, err := io.Copy(localChan, remoteChan); err != nil {
-			s.logger.WithError(err).Error("remote to local copy error")
+			s.logger.Errorf("remote to local copy error: %s", err)
 		}
 		done <- struct{}{}
 	}()
 	go func() {
 		if _, err := io.Copy(remoteChan, localChan); err != nil {
-			s.logger.WithError(err).Error("local to remote copy error")
+			s.logger.Errorf("local to remote copy error: %s", err)
 		}
 		done <- struct{}{}
 	}()
@@ -227,12 +227,12 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 	localStderr := localChan.Stderr()
 	go func() {
 		if _, err := io.Copy(remoteStderr, localStderr); err != nil {
-			s.logger.WithError(err).Error("stderr local to remote copy error")
+			s.logger.Errorf("stderr local to remote copy error: %s", err)
 		}
 	}()
 	go func() {
 		if _, err := io.Copy(localStderr, remoteStderr); err != nil {
-			s.logger.WithError(err).Error("stderr remote to local copy error")
+			s.logger.Errorf("stderr remote to local copy error: %s", err)
 		}
 	}()
 
@@ -247,7 +247,7 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 				return
 			}
 			if err := s.forwardChannelRequest(remoteChan, req); err != nil {
-				s.logger.WithError(err).Error("Failed to forward request")
+				s.logger.Errorf("Failed to forward request: %s", err)
 				return
 			}
 
@@ -258,7 +258,7 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 				return
 			}
 			if err := s.forwardChannelRequest(localChan, req); err != nil {
-				s.logger.WithError(err).Error("Failed to forward request")
+				s.logger.Errorf("Failed to forward request: %s", err)
 				return
 			}
 		case <-done:
@@ -278,7 +278,7 @@ func (s *SSHProxy) readPreamble(conn net.Conn) (*SSHPreamble, error) {
 	}
 	defer func() {
 		if err := conn.SetReadDeadline(time.Time{}); err != nil {
-			s.logger.WithError(err).Error("Failed to unset conn read deadline")
+			s.logger.Errorf("Failed to unset conn read deadline: %s", err)
 		}
 	}()
 
@@ -341,7 +341,7 @@ func (s *SSHProxy) dialDestination(ctx ssh.Context) (*gossh.Client, error) {
 
 	signer, err := s.genSSHSigner(preamble.JWT)
 	if err != nil {
-		s.logger.WithError(err).Error("Failed to generate signed short lived cert")
+		s.logger.Errorf("Failed to generate signed short lived cert: %s", err)
 		return nil, err
 	}
 	s.logger.Debugf("Short lived certificate for %s connecting to %s:\n\n%s", ctx.User(), preamble.Destination, gossh.MarshalAuthorizedKey(signer.PublicKey()))
@@ -356,7 +356,7 @@ func (s *SSHProxy) dialDestination(ctx ssh.Context) (*gossh.Client, error) {
 
 	client, err := gossh.Dial("tcp", preamble.Destination, clientConfig)
 	if err != nil {
-		s.logger.WithError(err).Info("Failed to connect to destination SSH server")
+		s.logger.Errorf("Failed to connect to destination SSH server: %s", err)
 		return nil, err
 	}
 	return client, nil
@@ -421,7 +421,7 @@ func (s *SSHProxy) logChannelRequest(req *gossh.Request, conn *gossh.ServerConn,
 	case "exec":
 		var payload struct{ Value string }
 		if err := gossh.Unmarshal(req.Payload, &payload); err != nil {
-			s.logger.WithError(err).Errorf("Failed to unmarshal channel request payload: %s:%s", req.Type, req.Payload)
+			s.logger.Errorf("Failed to unmarshal channel request payload: %s:%s with error: %s", req.Type, req.Payload, err)
 		}
 		event = payload.Value
 
@@ -481,11 +481,11 @@ func (s *SSHProxy) logAuditEvent(conn *gossh.ServerConn, event, eventType string
 	}
 	data, err := json.Marshal(&ae)
 	if err != nil {
-		s.logger.WithError(err).Error("Failed to marshal audit event. malformed audit object")
+		s.logger.Errorf("Failed to marshal audit event. malformed audit object: %s", err)
 		return
 	}
 	line := string(data) + "\n"
 	if _, err := writer.Write([]byte(line)); err != nil {
-		s.logger.WithError(err).Error("Failed to write audit event.")
+		s.logger.Errorf("Failed to write audit event: %s", err)
 	}
 }

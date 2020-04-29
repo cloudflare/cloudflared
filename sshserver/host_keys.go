@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	rsaFilename       = "ssh_host_rsa_key"
-	ecdsaFilename     = "ssh_host_ecdsa_key"
+	rsaFilename   = "ssh_host_rsa_key"
+	ecdsaFilename = "ssh_host_ecdsa_key"
 )
 
 var defaultHostKeyDir = filepath.Join(".cloudflared", "host_keys")
@@ -68,7 +68,7 @@ func (s *SSHProxy) configureRSAKey(basePath string) error {
 			return err
 		}
 
-		s.logger.Debug("Created new RSA SSH host key: ", keyPath)
+		s.logger.Debugf("Created new RSA SSH host key: %s", keyPath)
 	}
 	if err := s.SetOption(ssh.HostKeyFile(keyPath)); err != nil {
 		return errors.Wrap(err, "Could not set SSH RSA host key")
@@ -98,7 +98,7 @@ func (s *SSHProxy) configureECDSAKey(basePath string) error {
 			return err
 		}
 
-		s.logger.Debug("Created new ECDSA SSH host key: ", keyPath)
+		s.logger.Debugf("Created new ECDSA SSH host key: %s", keyPath)
 	}
 	if err := s.SetOption(ssh.HostKeyFile(keyPath)); err != nil {
 		return errors.Wrap(err, "Could not set SSH ECDSA host key")

@@ -23,20 +23,22 @@ type Tunnel struct {
 // DNSResolver represents a client side DNS resolver
 type DNSResolver struct {
 	Enabled    bool     `json:"enabled"`
-	Address    string   `json:"address"`
-	Port       uint16   `json:"port"`
-	Upstreams  []string `json:"upstreams"`
-	Bootstraps []string `json:"bootstraps"`
+	Address    string   `json:"address,omitempty"`
+	Port       uint16   `json:"port,omitempty"`
+	Upstreams  []string `json:"upstreams,omitempty"`
+	Bootstraps []string `json:"bootstraps,omitempty"`
 }
 
 // Root is the base options to configure the service
 type Root struct {
-	OrgKey          string      `json:"org_key"`
+	OrgKey          string      `json:"org_key" yaml:"orgKey"`
 	ConfigType      string      `json:"type"`
-	CheckinInterval int         `json:"checkin_interval"`
+	LogDirectory    string      `json:"log_directory" yaml:"logDirectory,omitempty"`
+	LogLevel        string      `json:"log_level" yaml:"logLevel"`
+	CheckinInterval int         `json:"checkin_interval" yaml:"checkinInterval"`
 	Forwarders      []Forwarder `json:"forwarders,omitempty"`
 	Tunnels         []Tunnel    `json:"tunnels,omitempty"`
-	Resolver        DNSResolver `json:"resolver"`
+	Resolver        DNSResolver `json:"resolver,omitempty"`
 }
 
 // Hash returns the computed values to see if the forwarder values change

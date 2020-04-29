@@ -14,7 +14,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/path"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/transfer"
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/coreos/go-oidc/jose"
 )
@@ -22,8 +22,6 @@ import (
 const (
 	keyName = "token"
 )
-
-var logger = log.CreateLogger()
 
 type lock struct {
 	lockFilePath string
@@ -130,7 +128,7 @@ func isTokenLocked(lockFilePath string) bool {
 }
 
 // FetchToken will either load a stored token or generate a new one
-func FetchToken(appURL *url.URL) (string, error) {
+func FetchToken(appURL *url.URL, logger logger.Service) (string, error) {
 	if token, err := GetTokenIfExists(appURL); token != "" && err == nil {
 		return token, nil
 	}
@@ -156,7 +154,7 @@ func FetchToken(appURL *url.URL) (string, error) {
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	token, err := transfer.Run(appURL, keyName, keyName, "", path, true)
+	token, err := transfer.Run(appURL, keyName, keyName, "", path, true, logger)
 	if err != nil {
 		return "", err
 	}

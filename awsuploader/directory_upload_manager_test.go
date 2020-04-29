@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 type MockUploader struct {
@@ -49,7 +49,7 @@ func setupTestDirectory(t *testing.T) string {
 func createUploadManager(t *testing.T, shouldFailUpload bool) *DirectoryUploadManager {
 	rootDirectory := setupTestDirectory(t)
 	uploader := NewMockUploader(shouldFailUpload)
-	logger := logrus.New()
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 	shutdownC := make(chan struct{})
 	return NewDirectoryUploadManager(logger, uploader, rootDirectory, 1*time.Second, shutdownC)
 }

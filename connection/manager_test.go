@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -48,7 +48,7 @@ var (
 func mockEdgeManager() *EdgeManager {
 	newConfigChan := make(chan<- *pogs.ClientConfig)
 	useConfigResultChan := make(<-chan *pogs.UseConfigurationResult)
-	logger := logrus.New()
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 	edge := edgediscovery.MockEdge(logger, []*net.TCPAddr{})
 	return NewEdgeManager(
 		streamhandler.NewStreamHandler(newConfigChan, useConfigResultChan, logger),

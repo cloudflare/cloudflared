@@ -9,7 +9,9 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/transfer"
+	"github.com/cloudflare/cloudflared/logger"
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 	cli "gopkg.in/urfave/cli.v2"
 )
 
@@ -19,6 +21,11 @@ const (
 )
 
 func login(c *cli.Context) error {
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	path, ok, err := checkForExistingCert()
 	if ok {
 		fmt.Fprintf(os.Stdout, "You have an existing certificate at %s which login would overwrite.\nIf this is intentional, please move or delete that file then run this command again.\n", path)
@@ -33,7 +40,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	_, err = transfer.Run(loginURL, "cert", "callback", callbackStoreURL, path, false)
+	_, err = transfer.Run(loginURL, "cert", "callback", callbackStoreURL, path, false, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to write the certificate due to the following error:\n%v\n\nYour browser will download the certificate instead. You will have to manually\ncopy it to the following path:\n\n%s\n", err, path)
 		return err

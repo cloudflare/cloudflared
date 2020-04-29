@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -27,6 +28,8 @@ func testChannelClosed(t *testing.T, c chan struct{}) {
 }
 
 func TestWaitForSignal(t *testing.T) {
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+
 	// Test handling server error
 	errC := make(chan error)
 	shutdownC := make(chan struct{})
@@ -36,7 +39,7 @@ func TestWaitForSignal(t *testing.T) {
 	}()
 
 	// received error, shutdownC should be closed
-	err := waitForSignal(errC, shutdownC)
+	err := waitForSignal(errC, shutdownC, logger)
 	assert.Equal(t, serverErr, err)
 	testChannelClosed(t, shutdownC)
 
@@ -56,7 +59,7 @@ func TestWaitForSignal(t *testing.T) {
 			syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignal(errC, shutdownC)
+		err = waitForSignal(errC, shutdownC, logger)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, shutdownErr, <-errC)
 		testChannelClosed(t, shutdownC)
@@ -73,8 +76,10 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 		errC <- serverErr
 	}()
 
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+
 	// received error, both shutdownC and graceshutdownC should be closed
-	err := waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+	err := waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
 	assert.Equal(t, serverErr, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
@@ -84,7 +89,7 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 	shutdownC = make(chan struct{})
 	graceshutdownC = make(chan struct{})
 	close(shutdownC)
-	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
 	assert.NoError(t, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
@@ -94,7 +99,7 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 	shutdownC = make(chan struct{})
 	graceshutdownC = make(chan struct{})
 	close(graceshutdownC)
-	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
 	assert.NoError(t, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
@@ -117,7 +122,7 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 			syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, graceShutdownErr, <-errC)
 		testChannelClosed(t, shutdownC)
@@ -143,7 +148,7 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 			syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, shutdownErr, <-errC)
 		testChannelClosed(t, shutdownC)

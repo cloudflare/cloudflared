@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 	capnp "zombiezen.com/go/capnproto2"
 )
 
@@ -13,7 +13,7 @@ const sessionLogFileName = "test-session-logger.log"
 
 func createSessionLogger(t *testing.T) *SessionLogger {
 	os.Remove(sessionLogFileName)
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	logger, err := NewSessionLogger(sessionLogFileName, l, time.Millisecond, 1024)
 	if err != nil {
 		t.Fatal("couldn't create the logger!", err)

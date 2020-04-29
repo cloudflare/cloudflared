@@ -15,7 +15,7 @@ import (
 	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/pkg/errors"
 )
@@ -101,14 +101,14 @@ type WebsocketService struct {
 	shutdownC chan struct{}
 }
 
-func NewWebSocketService(tlsConfig *tls.Config, url *url.URL) (OriginService, error) {
+func NewWebSocketService(tlsConfig *tls.Config, url *url.URL, logger logger.Service) (OriginService, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:")
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot start Websocket Proxy Server")
 	}
 	shutdownC := make(chan struct{})
 	go func() {
-		websocket.StartProxyServer(log.CreateLogger(), listener, url.String(), shutdownC, websocket.DefaultStreamHandler)
+		websocket.StartProxyServer(logger, listener, url.String(), shutdownC, websocket.DefaultStreamHandler)
 	}()
 	return &WebsocketService{
 		tlsConfig: tlsConfig,
@@ -157,14 +157,14 @@ type HelloWorldService struct {
 	bufferPool *buffer.Pool
 }
 
-func NewHelloWorldService(transport http.RoundTripper) (OriginService, error) {
+func NewHelloWorldService(transport http.RoundTripper, logger logger.Service) (OriginService, error) {
 	listener, err := hello.CreateTLSListener("127.0.0.1:")
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot start Hello World Server")
 	}
 	shutdownC := make(chan struct{})
 	go func() {
-		hello.StartHelloWorldServer(log.CreateLogger(), listener, shutdownC)
+		hello.StartHelloWorldServer(logger, listener, shutdownC)
 	}()
 	return &HelloWorldService{
 		client:   transport,

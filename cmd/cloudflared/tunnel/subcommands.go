@@ -12,14 +12,15 @@ import (
 
 	"github.com/cloudflare/cloudflared/certutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 var (
 	outputFormatFlag = &cli.StringFlag{
-		Name:  "output",
+		Name:    "output",
 		Aliases: []string{"o"},
-		Usage: "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
+		Usage:   "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
 	}
 )
 
@@ -42,7 +43,12 @@ func createTunnel(c *cli.Context) error {
 	}
 	name := c.Args().First()
 
-	client, err := newTunnelstoreClient(c)
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	client, err := newTunnelstoreClient(c, logger)
 	if err != nil {
 		return err
 	}
@@ -72,7 +78,12 @@ func buildListCommand() *cli.Command {
 }
 
 func listTunnels(c *cli.Context) error {
-	client, err := newTunnelstoreClient(c)
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	client, err := newTunnelstoreClient(c, logger)
 	if err != nil {
 		return err
 	}
@@ -114,7 +125,12 @@ func deleteTunnel(c *cli.Context) error {
 	}
 	id := c.Args().First()
 
-	client, err := newTunnelstoreClient(c)
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	client, err := newTunnelstoreClient(c, logger)
 	if err != nil {
 		return err
 	}
@@ -139,13 +155,13 @@ func renderOutput(format string, v interface{}) error {
 	}
 }
 
-func newTunnelstoreClient(c *cli.Context) (tunnelstore.Client, error) {
-	originCertPath, err := findOriginCert(c)
+func newTunnelstoreClient(c *cli.Context, logger logger.Service) (tunnelstore.Client, error) {
+	originCertPath, err := findOriginCert(c, logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error locating origin cert")
 	}
 
-	blocks, err := readOriginCert(originCertPath)
+	blocks, err := readOriginCert(originCertPath, logger)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Can't read origin cert from %s", originCertPath)
 	}
@@ -159,7 +175,7 @@ func newTunnelstoreClient(c *cli.Context) (tunnelstore.Client, error) {
 		return nil, errors.Errorf(`Origin certificate needs to be refreshed before creating new tunnels.\nDelete %s and run "cloudflared login" to obtain a new cert.`, originCertPath)
 	}
 
-	client := tunnelstore.NewRESTClient(c.String("api-url"), cert.AccountID, cert.ServiceKey)
+	client := tunnelstore.NewRESTClient(c.String("api-url"), cert.AccountID, cert.ServiceKey, logger)
 
 	return client, nil
 }

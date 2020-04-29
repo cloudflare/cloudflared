@@ -7,11 +7,11 @@ import (
 	"strconv"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelhostnamemapper"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"zombiezen.com/go/capnproto2/rpc"
 )
 
@@ -45,19 +45,19 @@ type StreamHandler struct {
 	useConfigResultChan <-chan *pogs.UseConfigurationResult
 	// originMapper maps tunnel hostname to origin service
 	tunnelHostnameMapper *tunnelhostnamemapper.TunnelHostnameMapper
-	logger               *logrus.Entry
+	logger               logger.Service
 }
 
 // NewStreamHandler creates a new StreamHandler
 func NewStreamHandler(newConfigChan chan<- *pogs.ClientConfig,
 	useConfigResultChan <-chan *pogs.UseConfigurationResult,
-	logger *logrus.Logger,
+	logger logger.Service,
 ) *StreamHandler {
 	return &StreamHandler{
 		newConfigChan:        newConfigChan,
 		useConfigResultChan:  useConfigResultChan,
 		tunnelHostnameMapper: tunnelhostnamemapper.NewTunnelHostnameMapper(),
-		logger:               logger.WithField("subsystem", "streamHandler"),
+		logger:               logger,
 	}
 }
 
@@ -66,14 +66,14 @@ func (s *StreamHandler) UseConfiguration(ctx context.Context, config *pogs.Clien
 	select {
 	case <-ctx.Done():
 		err := fmt.Errorf("Timeout while sending new config to Supervisor")
-		s.logger.Error(err)
+		s.logger.Errorf("streamHandler: %s", err)
 		return nil, err
 	case s.newConfigChan <- config:
 	}
 	select {
 	case <-ctx.Done():
 		err := fmt.Errorf("Timeout applying new configuration")
-		s.logger.Error(err)
+		s.logger.Errorf("streamHandler: %s", err)
 		return nil, err
 	case result := <-s.useConfigResultChan:
 		return result, nil
@@ -93,9 +93,9 @@ func (s *StreamHandler) UpdateConfig(newConfig []*pogs.ReverseProxyConfig) (fail
 	toAdd := s.tunnelHostnameMapper.ToAdd(newConfig)
 	for _, tunnelConfig := range toAdd {
 		tunnelHostname := tunnelConfig.TunnelHostname
-		originSerice, err := tunnelConfig.OriginConfig.Service()
+		originSerice, err := tunnelConfig.OriginConfig.Service(s.logger)
 		if err != nil {
-			s.logger.WithField("tunnelHostname", tunnelHostname).WithError(err).Error("Invalid origin service config")
+			s.logger.Errorf("streamHandler: tunnelHostname: %s Invalid origin service config: %s", tunnelHostname, err)
 			failedConfigs = append(failedConfigs, &pogs.FailedConfig{
 				Config: tunnelConfig,
 				Reason: tunnelConfig.FailReason(err),
@@ -103,7 +103,7 @@ func (s *StreamHandler) UpdateConfig(newConfig []*pogs.ReverseProxyConfig) (fail
 			continue
 		}
 		s.tunnelHostnameMapper.Add(tunnelConfig.TunnelHostname, originSerice)
-		s.logger.WithField("tunnelHostname", tunnelHostname).Infof("New origin service config: %v", originSerice.Summary())
+		s.logger.Infof("streamHandler: tunnelHostname: %s New origin service config: %v", tunnelHostname, originSerice.Summary())
 	}
 	return
 }
@@ -114,7 +114,7 @@ func (s *StreamHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		return s.serveRPC(stream)
 	}
 	if err := s.serveRequest(stream); err != nil {
-		s.logger.Error(err)
+		s.logger.Errorf("streamHandler: %s", err)
 		return err
 	}
 	return nil
@@ -123,11 +123,10 @@ func (s *StreamHandler) ServeStream(stream *h2mux.MuxedStream) error {
 func (s *StreamHandler) serveRPC(stream *h2mux.MuxedStream) error {
 	stream.WriteHeaders([]h2mux.Header{{Name: ":status", Value: "200"}})
 	main := pogs.ClientService_ServerToClient(s)
-	rpcLogger := s.logger.WithField("subsystem", "clientserver-rpc")
 	rpcConn := rpc.NewConn(
-		tunnelrpc.NewTransportLogger(rpcLogger, rpc.StreamTransport(stream)),
+		tunnelrpc.NewTransportLogger(s.logger, rpc.StreamTransport(stream)),
 		rpc.MainInterface(main.Client),
-		tunnelrpc.ConnLog(s.logger.WithField("subsystem", "clientserver-rpc-transport")),
+		tunnelrpc.ConnLog(s.logger),
 	)
 	return rpcConn.Wait()
 }
@@ -151,8 +150,8 @@ func (s *StreamHandler) serveRequest(stream *h2mux.MuxedStream) error {
 		return errors.Wrap(err, "cannot create request")
 	}
 
-	logger := s.requestLogger(req, tunnelHostname)
-	logger.Debugf("Request Headers %+v", req.Header)
+	cfRay := s.logRequest(req, tunnelHostname)
+	s.logger.Debugf("streamHandler: tunnelHostname: %s CF-RAY: %s Request Headers %+v", tunnelHostname, cfRay, req.Header)
 
 	resp, err := originService.Proxy(stream, req)
 	if err != nil {
@@ -160,23 +159,22 @@ func (s *StreamHandler) serveRequest(stream *h2mux.MuxedStream) error {
 		return errors.Wrap(err, "cannot proxy request")
 	}
 
-	logger.WithField("status", resp.Status).Debugf("Response Headers %+v", resp.Header)
+	s.logger.Debugf("streamHandler: tunnelHostname: %s CF-RAY: %s status: %s Response Headers %+v", tunnelHostname, cfRay, resp.Status, resp.Header)
 	return nil
 }
 
-func (s *StreamHandler) requestLogger(req *http.Request, tunnelHostname h2mux.TunnelHostname) *logrus.Entry {
+func (s *StreamHandler) logRequest(req *http.Request, tunnelHostname h2mux.TunnelHostname) string {
 	cfRay := FindCfRayHeader(req)
 	lbProbe := IsLBProbeRequest(req)
-	logger := s.logger.WithField("tunnelHostname", tunnelHostname)
+	logger := s.logger
 	if cfRay != "" {
-		logger = logger.WithField("CF-RAY", cfRay)
-		logger.Debugf("%s %s %s", req.Method, req.URL, req.Proto)
+		logger.Debugf("streamHandler: tunnelHostname: %s CF-RAY: %s %s %s %s", tunnelHostname, cfRay, req.Method, req.URL, req.Proto)
 	} else if lbProbe {
-		logger.Debugf("Load Balancer health check %s %s %s", req.Method, req.URL, req.Proto)
+		logger.Debugf("streamHandler: tunnelHostname: %s CF-RAY: %s Load Balancer health check %s %s %s", tunnelHostname, cfRay, req.Method, req.URL, req.Proto)
 	} else {
-		logger.Warnf("Requests %v does not have CF-RAY header. Please open a support ticket with Cloudflare.", req)
+		logger.Infof("streamHandler: tunnelHostname: %s CF-RAY: %s Requests %v does not have CF-RAY header. Please open a support ticket with Cloudflare.", tunnelHostname, cfRay, req)
 	}
-	return logger
+	return cfRay
 }
 
 func (s *StreamHandler) writeErrorStatus(stream *h2mux.MuxedStream, status *httpErrorStatus) {

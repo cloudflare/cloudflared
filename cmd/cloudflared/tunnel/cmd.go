@@ -25,6 +25,7 @@ import (
 	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
@@ -93,6 +94,9 @@ const (
 	bastionFlag = "bastion"
 
 	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
+
+	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
+		"Response status, content length and header will also be logged in debug level."
 )
 
 var (
@@ -212,7 +216,28 @@ func Init(v string, s, g chan struct{}) {
 	version, shutdownC, graceShutdownC = v, s, g
 }
 
+func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
+	loggerOpts := []logger.Option{}
+	logPath := c.String("logfile")
+	if logPath != "" {
+		loggerOpts = append(loggerOpts, logger.DefaultFile(logPath))
+	}
+
+	logLevel := c.String("loglevel")
+	if isTransport {
+		logLevel = c.String("transport-loglevel")
+	}
+	loggerOpts = append(loggerOpts, logger.LogLevelString(logLevel))
+
+	return logger.New(loggerOpts...)
+}
+
 func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}) error {
+	logger, err := createLogger(c, false)
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
@@ -221,64 +246,45 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
-		logger.Warnf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
-	}
-
-	if err := configMainLogger(c); err != nil {
-		return errors.Wrap(err, "Error configuring logger")
-	}
-
-	transportLogger, err := configTransportLogger(c)
-	if err != nil {
-		return errors.Wrap(err, "Error configuring transport logger")
+		logger.Infof("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
 	}
 
 	if c.IsSet("trace-output") {
 		tmpTraceFile, err := ioutil.TempFile("", "trace")
 		if err != nil {
-			logger.WithError(err).Error("Failed to create new temporary file to save trace output")
+			logger.Errorf("Failed to create new temporary file to save trace output: %s", err)
 		}
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				logger.WithError(err).Errorf("Failed to close trace output file %s", tmpTraceFile.Name())
+				logger.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
 			}
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
-				logger.WithError(err).Errorf("Failed to rename temporary trace output file %s to %s", tmpTraceFile.Name(), c.String("trace-output"))
+				logger.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
 			} else {
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
-					logger.WithError(err).Errorf("Failed to remove the temporary trace file %s", tmpTraceFile.Name())
+					logger.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
 				}
 			}
 		}()
 
 		if err := trace.Start(tmpTraceFile); err != nil {
-			logger.WithError(err).Error("Failed to start trace")
+			logger.Errorf("Failed to start trace: %s", err)
 			return errors.Wrap(err, "Error starting tracing")
 		}
 		defer trace.Stop()
 	}
 
-	if c.String("logfile") != "" {
-		if err := initLogFile(c, logger, transportLogger); err != nil {
-			logger.Error(err)
-		}
-	}
-
-	if err := handleDeprecatedOptions(c); err != nil {
-		return err
-	}
-
 	buildInfo := buildinfo.GetBuildInfo(version)
 	buildInfo.Log(logger)
-	logClientOptions(c)
+	logClientOptions(c, logger)
 
 	if c.IsSet("proxy-dns") {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC)
+			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, logger)
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -289,7 +295,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		logger.WithError(err).Error("Error opening metrics server listener")
+		logger.Errorf("Error opening metrics server listener: %s", err)
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
@@ -301,12 +307,12 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
-		go writePidFile(connectedSignal, c.String("pidfile"))
+		go writePidFile(connectedSignal, c.String("pidfile"), logger)
 	}
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		logger.WithError(err).Error("Cannot generate cloudflared ID")
+		logger.Errorf("Cannot generate cloudflared ID: %s", err)
 		return err
 	}
 
@@ -317,16 +323,16 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}()
 
 	if c.IsSet("use-declarative-tunnels") {
-		return startDeclarativeTunnel(ctx, c, cloudflaredID, buildInfo, &listeners)
+		return startDeclarativeTunnel(ctx, c, cloudflaredID, buildInfo, &listeners, logger)
 	}
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c) {
+	if updater.IsAutoupdateEnabled(c, logger) {
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners)
+			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, logger)
 			errC <- autoupdater.Run(ctx)
 		}()
 	}
@@ -335,14 +341,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0)
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, logger)
 	}
 
 	if c.IsSet("hello-world") {
 		logger.Infof("hello-world set")
 		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
 		if err != nil {
-			logger.WithError(err).Error("Cannot start Hello World Server")
+			logger.Errorf("Cannot start Hello World Server: %s", err)
 			return errors.Wrap(err, "Cannot start Hello World Server")
 		}
 		defer helloListener.Close()
@@ -369,13 +375,13 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
 			if err != nil {
 				msg := "Cannot create uploader for SSH Server"
-				logger.WithError(err).Error(msg)
+				logger.Errorf("%s: %s", msg, err)
 				return errors.Wrap(err, msg)
 			}
 
 			if err := os.MkdirAll(sshLogFileDirectory, 0700); err != nil {
 				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
-				logger.WithError(err).Errorf(msg)
+				logger.Errorf("%s: %s", msg, err)
 				return errors.Wrap(err, msg)
 			}
 
@@ -389,14 +395,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			msg := "Cannot create new SSH Server"
-			logger.WithError(err).Error(msg)
+			logger.Errorf("%s: %s", msg, err)
 			return errors.Wrap(err, msg)
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
-				logger.WithError(err).Error("SSH server error")
+				logger.Errorf("SSH server error: %s", err)
 				// TODO: remove when declarative tunnels are implemented.
 				close(shutdownC)
 			}
@@ -407,7 +413,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
-			logger.WithError(err).Error("Cannot start Websocket Proxy Server")
+			logger.Errorf("Cannot start Websocket Proxy Server: %s", err)
 			return errors.Wrap(err, "Cannot start Websocket Proxy Server")
 		}
 		wg.Add(1)
@@ -428,7 +434,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 					if finalDestination := requestHeaders.Get(h2mux.CFJumpDestinationHeader); finalDestination != "" {
 						token := requestHeaders.Get(h2mux.CFAccessTokenHeader)
 						if err := websocket.SendSSHPreamble(remoteConn, finalDestination, token); err != nil {
-							logger.WithError(err).Error("Failed to send SSH preamble")
+							logger.Errorf("Failed to send SSH preamble: %s", err)
 							return
 						}
 					}
@@ -440,6 +446,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "http://"+listener.Addr().String())
 	}
 
+	transportLogger, err := createLogger(c, true)
+	if err != nil {
+		return errors.Wrap(err, "error setting up transport logger")
+	}
+
 	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
 	if err != nil {
 		return err
@@ -447,8 +458,8 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
-		logger.Warn("Enabling control through stdin")
-		go stdinControl(reconnectCh)
+		logger.Info("Enabling control through stdin")
+		go stdinControl(reconnectCh, logger)
 	}
 
 	wg.Add(1)
@@ -456,21 +467,27 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		defer wg.Done()
 		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
 	}()
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))
+
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
 }
 
 func Before(c *cli.Context) error {
+	logger, err := createLogger(c, false)
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	if c.String("config") == "" {
 		logger.Debugf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
 	}
 	inputSource, err := config.FindInputSourceContext(c)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot load configuration from %s", c.String("config"))
+		logger.Errorf("Cannot load configuration from %s: %s", c.String("config"), err)
 		return err
 	} else if inputSource != nil {
 		err := altsrc.ApplyInputSourceValues(c, inputSource, c.App.Flags)
 		if err != nil {
-			logger.WithError(err).Errorf("Cannot apply configuration from %s", c.String("config"))
+			logger.Errorf("Cannot apply configuration from %s: %s", c.String("config"), err)
 			return err
 		}
 		logger.Debugf("Applied configuration from %s", c.String("config"))
@@ -488,10 +505,11 @@ func startDeclarativeTunnel(ctx context.Context,
 	cloudflaredID uuid.UUID,
 	buildInfo *buildinfo.BuildInfo,
 	listeners *gracenet.Net,
+	logger logger.Service,
 ) error {
 	reverseProxyOrigin, err := defaultOriginConfig(c)
 	if err != nil {
-		logger.WithError(err)
+		logger.Errorf("%s", err)
 		return err
 	}
 	reverseProxyConfig, err := pogs.NewReverseProxyConfig(
@@ -502,7 +520,7 @@ func startDeclarativeTunnel(ctx context.Context,
 		c.Uint64("compression-quality"),
 	)
 	if err != nil {
-		logger.WithError(err).Error("Cannot initialize default client config because reverse proxy config is invalid")
+		logger.Errorf("Cannot initialize default client config because reverse proxy config is invalid: %s", err)
 		return err
 	}
 	defaultClientConfig := &pogs.ClientConfig{
@@ -522,22 +540,22 @@ func startDeclarativeTunnel(ctx context.Context,
 		ReverseProxyConfigs: []*pogs.ReverseProxyConfig{reverseProxyConfig},
 	}
 
-	autoupdater := updater.NewAutoUpdater(defaultClientConfig.SupervisorConfig.AutoUpdateFrequency, listeners)
+	autoupdater := updater.NewAutoUpdater(defaultClientConfig.SupervisorConfig.AutoUpdateFrequency, listeners, logger)
 
-	originCert, err := getOriginCert(c)
+	originCert, err := getOriginCert(c, logger)
 	if err != nil {
-		logger.WithError(err).Error("error getting origin cert")
+		logger.Errorf("error getting origin cert: %s", err)
 		return err
 	}
 	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
 	if err != nil {
-		logger.WithError(err).Error("unable to create TLS config to connect with edge")
+		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
 		return err
 	}
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		logger.WithError(err).Error("unable to parse tag")
+		logger.Errorf("unable to parse tag: %s", err)
 		return err
 	}
 
@@ -556,13 +574,13 @@ func startDeclarativeTunnel(ctx context.Context,
 
 	serviceDiscoverer, err := serviceDiscoverer(c, logger)
 	if err != nil {
-		logger.WithError(err).Error("unable to create service discoverer")
+		logger.Errorf("unable to create service discoverer: %s", err)
 		return err
 	}
 	supervisor, err := supervisor.NewSupervisor(defaultClientConfig, originCert, toEdgeTLSConfig,
-		serviceDiscoverer, cloudflaredConfig, autoupdater, updater.SupportAutoUpdate(), logger)
+		serviceDiscoverer, cloudflaredConfig, autoupdater, updater.SupportAutoUpdate(logger), logger)
 	if err != nil {
-		logger.WithError(err).Error("unable to create Supervisor")
+		logger.Errorf("unable to create Supervisor: %s", err)
 		return err
 	}
 	return supervisor.Run(ctx)
@@ -604,17 +622,18 @@ func waitToShutdown(wg *sync.WaitGroup,
 	errC chan error,
 	shutdownC, graceShutdownC chan struct{},
 	gracePeriod time.Duration,
+	logger logger.Service,
 ) error {
 	var err error
 	if gracePeriod > 0 {
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod, logger)
 	} else {
-		err = waitForSignal(errC, shutdownC)
+		err = waitForSignal(errC, shutdownC, logger)
 		close(graceShutdownC)
 	}
 
 	if err != nil {
-		logger.WithError(err).Error("Quitting due to error")
+		logger.Errorf("Quitting due to error: %s", err)
 	} else {
 		logger.Info("Quitting...")
 	}
@@ -632,16 +651,16 @@ func notifySystemd(waitForSignal *signal.Signal) {
 	daemon.SdNotify(false, "READY=1")
 }
 
-func writePidFile(waitForSignal *signal.Signal, pidFile string) {
+func writePidFile(waitForSignal *signal.Signal, pidFile string, logger logger.Service) {
 	<-waitForSignal.Wait()
 	expandedPath, err := homedir.Expand(pidFile)
 	if err != nil {
-		logger.WithError(err).Errorf("Unable to expand %s, try to use absolute path in --pidfile", pidFile)
+		logger.Errorf("Unable to expand %s, try to use absolute path in --pidfile: %s", pidFile, err)
 		return
 	}
 	file, err := os.Create(expandedPath)
 	if err != nil {
-		logger.WithError(err).Errorf("Unable to write pid to %s", expandedPath)
+		logger.Errorf("Unable to write pid to %s: %s", expandedPath, err)
 		return
 	}
 	defer file.Close()
@@ -888,15 +907,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "loglevel",
 			Value:   "info",
-			Usage:   "Application logging level {panic, fatal, error, warn, info, debug}. " + debugLevelWarning,
+			Usage:   "Application logging level {fatal, error, info, debug}. " + debugLevelWarning,
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "transport-loglevel",
 			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
-			Value:   "warn",
-			Usage:   "Transport logging level(previously called protocol logging level) {panic, fatal, error, warn, info, debug}",
+			Value:   "fatal",
+			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
 			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
@@ -1163,7 +1182,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 	}
 }
 
-func stdinControl(reconnectCh chan origin.ReconnectSignal) {
+func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service) {
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -1185,7 +1204,7 @@ func stdinControl(reconnectCh chan origin.ReconnectSignal) {
 				logger.Infof("Sending reconnect signal %+v", reconnect)
 				reconnectCh <- reconnect
 			default:
-				logger.Warn("Unknown command: ", command)
+				logger.Infof("Unknown command: %s", command)
 				fallthrough
 			case "help":
 				logger.Info(`Supported command: 

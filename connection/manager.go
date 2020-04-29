@@ -10,11 +10,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/streamhandler"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -40,7 +40,7 @@ type EdgeManager struct {
 	// state is attributes of ConnectionManager that can change during runtime.
 	state *edgeManagerState
 
-	logger *logrus.Entry
+	logger logger.Service
 
 	metrics *metrics
 }
@@ -76,7 +76,7 @@ func NewEdgeManager(
 	tlsConfig *tls.Config,
 	serviceDiscoverer *edgediscovery.Edge,
 	cloudflaredConfig *CloudflaredConfig,
-	logger *logrus.Logger,
+	logger logger.Service,
 ) *EdgeManager {
 	return &EdgeManager{
 		streamHandler:     streamHandler,
@@ -84,7 +84,7 @@ func NewEdgeManager(
 		cloudflaredConfig: cloudflaredConfig,
 		serviceDiscoverer: serviceDiscoverer,
 		state:             newEdgeConnectionManagerState(edgeConnMgrConfigurable, userCredential),
-		logger:            logger.WithField("subsystem", "connectionManager"),
+		logger:            logger,
 		metrics:           newMetrics(packageNamespace, edgeManagerSubsystem),
 	}
 }
@@ -109,16 +109,16 @@ func (em *EdgeManager) Run(ctx context.Context) error {
 		if em.state.shouldCreateConnection(em.serviceDiscoverer.AvailableAddrs()) {
 			if connErr := em.newConnection(ctx, connIndex); connErr != nil {
 				if !connErr.ShouldRetry {
-					em.logger.WithError(connErr).Error(em.noRetryMessage())
+					em.logger.Errorf("connectionManager: %s with error: %s", em.noRetryMessage(), connErr)
 					return connErr
 				}
-				em.logger.WithError(connErr).Error("cannot create new connection")
+				em.logger.Errorf("connectionManager: cannot create new connection: %s", connErr)
 			} else {
 				connIndex++
 			}
 		} else if em.state.shouldReduceConnection() {
 			if err := em.closeConnection(ctx); err != nil {
-				em.logger.WithError(err).Error("cannot close connection")
+				em.logger.Errorf("connectionManager: cannot close connection: %s", err)
 			}
 		}
 	}
@@ -147,7 +147,7 @@ func (em *EdgeManager) newConnection(ctx context.Context, index int) *tunnelpogs
 		IsClient:          true,
 		HeartbeatInterval: configurable.HeartbeatInterval,
 		MaxHeartbeats:     configurable.MaxFailedHeartbeats,
-		Logger:            em.logger.WithField("subsystem", "muxer"),
+		Logger:            em.logger,
 	}, em.metrics.activeStreams)
 	if err != nil {
 		retryConnection(fmt.Sprintf("couldn't perform handshake with edge: %v", err))
@@ -178,7 +178,7 @@ func (em *EdgeManager) newConnection(ctx context.Context, index int) *tunnelpogs
 	}
 
 	em.state.newConnection(h2muxConn)
-	em.logger.Infof("connected to %s", connResult.ConnectedTo())
+	em.logger.Infof("connectionManager: connected to %s", connResult.ConnectedTo())
 
 	if connResult.ClientConfig() != nil {
 		em.streamHandler.UseConfiguration(ctx, connResult.ClientConfig())
@@ -198,7 +198,7 @@ func (em *EdgeManager) closeConnection(ctx context.Context) error {
 
 func (em *EdgeManager) serveConn(ctx context.Context, conn *Connection) {
 	err := conn.Serve(ctx)
-	em.logger.WithError(err).Warn("Connection closed")
+	em.logger.Errorf("connectionManager: Connection closed: %s", err)
 	em.state.closeConnection(conn)
 	em.serviceDiscoverer.GiveBack(conn.addr)
 }

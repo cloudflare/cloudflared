@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	capnp "zombiezen.com/go/capnproto2"
 )
@@ -241,9 +242,10 @@ func TestOriginConfigInvalidURL(t *testing.T) {
 			URLString: "127.0.0.1:36192",
 		},
 	}
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	for _, config := range invalidConfigs {
-		service, err := config.Service()
+		service, err := config.Service(logger)
 		assert.Error(t, err)
 		assert.Nil(t, service)
 	}

@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -43,8 +43,8 @@ func (c *Connection) Serve(ctx context.Context) error {
 }
 
 // Connect is used to establish connections with cloudflare's edge network
-func (c *Connection) Connect(ctx context.Context, parameters *tunnelpogs.ConnectParameters, logger *logrus.Entry) (tunnelpogs.ConnectResult, error) {
-	tsClient, err := NewRPCClient(ctx, c.muxer, logger.WithField("rpc", "connect"), openStreamTimeout)
+func (c *Connection) Connect(ctx context.Context, parameters *tunnelpogs.ConnectParameters, logger logger.Service) (tunnelpogs.ConnectResult, error) {
+	tsClient, err := NewRPCClient(ctx, c.muxer, logger, openStreamTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot create new RPC connection")
 	}

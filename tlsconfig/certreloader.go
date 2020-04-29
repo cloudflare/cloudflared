@@ -8,9 +8,9 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -65,7 +65,7 @@ func (cr *CertReloader) LoadCert() error {
 	return nil
 }
 
-func LoadOriginCA(c *cli.Context, logger *logrus.Logger) (*x509.CertPool, error) {
+func LoadOriginCA(c *cli.Context, logger logger.Service) (*x509.CertPool, error) {
 	var originCustomCAPool []byte
 
 	originCAPoolFilename := c.String(OriginCAPoolFlag)
@@ -151,7 +151,7 @@ func CreateTunnelConfig(c *cli.Context) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-func loadOriginCertPool(originCAPoolPEM []byte, logger *logrus.Logger) (*x509.CertPool, error) {
+func loadOriginCertPool(originCAPoolPEM []byte, logger logger.Service) (*x509.CertPool, error) {
 	// Get the global pool
 	certPool, err := loadGlobalCertPool(logger)
 	if err != nil {
@@ -161,19 +161,19 @@ func loadOriginCertPool(originCAPoolPEM []byte, logger *logrus.Logger) (*x509.Ce
 	// Then, add any custom origin CA pool the user may have passed
 	if originCAPoolPEM != nil {
 		if !certPool.AppendCertsFromPEM(originCAPoolPEM) {
-			logger.Warn("could not append the provided origin CA to the cloudflared certificate pool")
+			logger.Info("could not append the provided origin CA to the cloudflared certificate pool")
 		}
 	}
 
 	return certPool, nil
 }
 
-func loadGlobalCertPool(logger *logrus.Logger) (*x509.CertPool, error) {
+func loadGlobalCertPool(logger logger.Service) (*x509.CertPool, error) {
 	// First, obtain the system certificate pool
 	certPool, err := x509.SystemCertPool()
 	if err != nil {
 		if runtime.GOOS != "windows" { // See https://github.com/golang/go/issues/16736
-			logger.WithError(err).Warn("error obtaining the system certificates")
+			logger.Infof("error obtaining the system certificates: %s", err)
 		}
 		certPool = x509.NewCertPool()
 	}

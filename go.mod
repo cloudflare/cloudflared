@@ -5,12 +5,14 @@ go 1.12
 require (
 	github.com/BurntSushi/go-sumtype v0.0.0-20190304192233-fcb4a6205bdc // indirect
 	github.com/DATA-DOG/go-sqlmock v1.3.3
+	github.com/acmacalister/skittles v0.0.0-20160609003031-7423546701e1
+	github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/aws/aws-sdk-go v1.25.8
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
 	github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93
-	github.com/cloudflare/cfssl v0.0.0-20141119014638-2f7f44e802e2
+	github.com/cloudflare/cfssl v0.0.0-20141119014638-2f7f44e802e2 // indirect
 	github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 	github.com/coredns/coredns v1.2.0
 	github.com/coreos/go-oidc v0.0.0-20171002155002-a93f71fdfe73
@@ -37,7 +39,7 @@ require (
 	github.com/kshvakov/clickhouse v1.3.11
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lib/pq v1.2.0
-	github.com/mattn/go-colorable v0.1.4
+	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/mholt/caddy v0.0.0-20180807230124-d3b731e9255b // indirect
@@ -51,8 +53,8 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/common v0.7.0 // indirect
 	github.com/prometheus/procfs v0.0.5 // indirect
-	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
-	github.com/sirupsen/logrus v1.4.2
+	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5 // indirect
+	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/stretchr/testify v1.3.0
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0

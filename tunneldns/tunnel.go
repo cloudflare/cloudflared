@@ -8,7 +8,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 
 	"github.com/coredns/coredns/core/dnsserver"
@@ -18,26 +19,31 @@ import (
 	"gopkg.in/urfave/cli.v2"
 )
 
-var logger = log.CreateLogger()
-
 // Listener is an adapter between CoreDNS server and Warp runnable
 type Listener struct {
 	server *dnsserver.Server
 	wg     sync.WaitGroup
+	logger logger.Service
 }
 
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
+	logDirectory, logLevel := config.FindLogSettings()
+	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	metricsListener, err := net.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		logger.WithError(err).Fatal("Failed to open the metrics listener")
+		logger.Fatalf("Failed to open the metrics listener: %s", err)
 	}
 
 	go metrics.ServeMetrics(metricsListener, nil, logger)
 
-	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"))
+	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"), logger)
 	if err != nil {
-		logger.WithError(err).Errorf("Failed to create the listeners")
+		logger.Errorf("Failed to create the listeners: %s", err)
 		return err
 	}
 
@@ -45,7 +51,7 @@ func Run(c *cli.Context) error {
 	readySignal := make(chan struct{})
 	err = listener.Start(readySignal)
 	if err != nil {
-		logger.WithError(err).Errorf("Failed to start the listeners")
+		logger.Errorf("Failed to start the listeners: %s", err)
 		return listener.Stop()
 	}
 	<-readySignal
@@ -59,7 +65,7 @@ func Run(c *cli.Context) error {
 	// Shut down server
 	err = listener.Stop()
 	if err != nil {
-		logger.WithError(err).Errorf("failed to stop")
+		logger.Errorf("failed to stop: %s", err)
 	}
 	return err
 }
@@ -80,7 +86,7 @@ func createConfig(address string, port uint16, p plugin.Handler) *dnsserver.Conf
 // Start blocks for serving requests
 func (l *Listener) Start(readySignal chan struct{}) error {
 	defer close(readySignal)
-	logger.WithField("addr", l.server.Address()).Infof("Starting DNS over HTTPS proxy server")
+	l.logger.Infof("Starting DNS over HTTPS proxy server on: %s", l.server.Address())
 
 	// Start UDP listener
 	if udp, err := l.server.ListenPacket(); err == nil {
@@ -117,12 +123,12 @@ func (l *Listener) Stop() error {
 }
 
 // CreateListener configures the server and bound sockets
-func CreateListener(address string, port uint16, upstreams []string, bootstraps []string) (*Listener, error) {
+func CreateListener(address string, port uint16, upstreams []string, bootstraps []string, logger logger.Service) (*Listener, error) {
 	// Build the list of upstreams
 	upstreamList := make([]Upstream, 0)
 	for _, url := range upstreams {
-		logger.WithField("url", url).Infof("Adding DNS upstream")
-		upstream, err := NewUpstreamHTTPS(url, bootstraps)
+		logger.Infof("Adding DNS upstream - url: %s", url)
+		upstream, err := NewUpstreamHTTPS(url, bootstraps, logger)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create HTTPS upstream")
 		}
@@ -144,5 +150,5 @@ func CreateListener(address string, port uint16, upstreams []string, bootstraps 
 		return nil, err
 	}
 
-	return &Listener{server: server}, nil
+	return &Listener{server: server, logger: logger}, nil
 }

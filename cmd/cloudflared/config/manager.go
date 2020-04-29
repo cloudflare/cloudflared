@@ -4,9 +4,8 @@ import (
 	"errors"
 	"os"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/watcher"
-
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -27,12 +26,12 @@ type FileManager struct {
 	watcher    watcher.Notifier
 	notifier   Notifier
 	configPath string
-	logger     *logrus.Logger
+	logger     logger.Service
 	ReadConfig func(string) (Root, error)
 }
 
 // NewFileManager creates a config manager
-func NewFileManager(watcher watcher.Notifier, configPath string, logger *logrus.Logger) (*FileManager, error) {
+func NewFileManager(watcher watcher.Notifier, configPath string, logger logger.Service) (*FileManager, error) {
 	m := &FileManager{
 		watcher:    watcher,
 		configPath: configPath,
@@ -94,7 +93,7 @@ func readConfigFromPath(configPath string) (Root, error) {
 func (m *FileManager) WatcherItemDidChange(filepath string) {
 	config, err := m.GetConfig()
 	if err != nil {
-		m.logger.WithError(err).Error("Failed to read new config")
+		m.logger.Errorf("Failed to read new config: %s", err)
 		return
 	}
 	m.logger.Info("Config file has been updated")
@@ -103,5 +102,5 @@ func (m *FileManager) WatcherItemDidChange(filepath string) {
 
 // WatcherDidError notifies of errors with the file watcher
 func (m *FileManager) WatcherDidError(err error) {
-	m.logger.WithError(err).Error("Config watcher encountered an error")
+	m.logger.Errorf("Config watcher encountered an error: %s", err)
 }

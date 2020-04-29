@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/prometheus/client_golang/prometheus"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/sync/errgroup"
@@ -48,7 +48,7 @@ type MuxerConfig struct {
 	// The minimum number of heartbeats to send before terminating the connection.
 	MaxHeartbeats uint64
 	// Logger to use
-	Logger             *log.Entry
+	Logger             logger.Service
 	CompressionQuality CompressionSetting
 	// Initial size for HTTP2 flow control windows
 	DefaultWindowSize uint32
@@ -136,10 +136,10 @@ func Handshake(
 	handshakeSetting := http2.Setting{ID: SettingMuxerMagic, Val: MuxerMagicEdge}
 	compressionSetting := http2.Setting{ID: SettingCompression, Val: config.CompressionQuality.toH2Setting()}
 	if CompressionIsSupported() {
-		log.Debug("Compression is supported")
+		config.Logger.Debug("muxer: Compression is supported")
 		m.compressionQuality = config.CompressionQuality.getPreset()
 	} else {
-		log.Debug("Compression is not supported")
+		config.Logger.Debug("muxer: Compression is not supported")
 		compressionSetting = http2.Setting{ID: SettingCompression, Val: 0}
 	}
 
@@ -176,12 +176,12 @@ func Handshake(
 	// Sanity check to enusre idelDuration is sane
 	if idleDuration == 0 || idleDuration < defaultTimeout {
 		idleDuration = defaultTimeout
-		config.Logger.Warn("Minimum idle time has been adjusted to ", defaultTimeout)
+		config.Logger.Infof("muxer: Minimum idle time has been adjusted to %d", defaultTimeout)
 	}
 	maxRetries := config.MaxHeartbeats
 	if maxRetries == 0 {
 		maxRetries = defaultRetries
-		config.Logger.Warn("Minimum number of unacked heartbeats to send before closing the connection has been adjusted to ", maxRetries)
+		config.Logger.Infof("muxer: Minimum number of unacked heartbeats to send before closing the connection has been adjusted to %d", maxRetries)
 	}
 
 	compBytesBefore, compBytesAfter := NewAtomicCounter(0), NewAtomicCounter(0)

@@ -10,9 +10,10 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/urfave/cli.v2"
 
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/equinox-io/equinox"
 	"github.com/facebookgo/grace/gracenet"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -30,7 +31,6 @@ dsCmJ/QZ6aw0w9qkkwEpne1Lmo6+0pGexZzFZOH6w5amShn+RXt7qkSid9iWlzGq
 EKx0BZogHSor9Wy5VztdFaAaVbsJiCbO
 -----END ECDSA PUBLIC KEY-----
 `)
-	logger = log.CreateLogger()
 )
 
 // BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
@@ -93,7 +93,12 @@ func checkForUpdateAndApply() UpdateOutcome {
 }
 
 func Update(_ *cli.Context) error {
-	updateOutcome := loggedUpdate()
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	updateOutcome := loggedUpdate(logger)
 	if updateOutcome.Error != nil {
 		return &statusErr{updateOutcome.Error}
 	}
@@ -107,13 +112,13 @@ func Update(_ *cli.Context) error {
 }
 
 // Checks for an update and applies it if one is available
-func loggedUpdate() UpdateOutcome {
+func loggedUpdate(logger logger.Service) UpdateOutcome {
 	updateOutcome := checkForUpdateAndApply()
 	if updateOutcome.Updated {
 		logger.Infof("cloudflared has been updated to version %s", updateOutcome.Version)
 	}
 	if updateOutcome.Error != nil {
-		logger.WithError(updateOutcome.Error).Error("update check failed")
+		logger.Errorf("update check failed: %s", updateOutcome.Error)
 	}
 
 	return updateOutcome
@@ -124,6 +129,7 @@ type AutoUpdater struct {
 	configurable     *configurable
 	listeners        *gracenet.Net
 	updateConfigChan chan *configurable
+	logger           logger.Service
 }
 
 // AutoUpdaterConfigurable is the attributes of AutoUpdater that can be reconfigured during runtime
@@ -132,7 +138,7 @@ type configurable struct {
 	freq    time.Duration
 }
 
-func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net) *AutoUpdater {
+func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net, logger logger.Service) *AutoUpdater {
 	updaterConfigurable := &configurable{
 		enabled: true,
 		freq:    freq,
@@ -145,6 +151,7 @@ func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net) *AutoUpdater {
 		configurable:     updaterConfigurable,
 		listeners:        listeners,
 		updateConfigChan: make(chan *configurable),
+		logger:           logger,
 	}
 }
 
@@ -152,20 +159,20 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
 	for {
 		if a.configurable.enabled {
-			updateOutcome := loggedUpdate()
+			updateOutcome := loggedUpdate(a.logger)
 			if updateOutcome.Updated {
 				os.Args = append(os.Args, "--is-autoupdated=true")
 				if IsSysV() {
 					// SysV doesn't have a mechanism to keep service alive, we have to restart the process
-					logger.Infof("Restarting service managed by SysV...")
+					a.logger.Info("Restarting service managed by SysV...")
 					pid, err := a.listeners.StartProcess()
 					if err != nil {
-						logger.WithError(err).Error("Unable to restart server automatically")
+						a.logger.Errorf("Unable to restart server automatically: %s", err)
 						return &statusErr{err: err}
 					}
 					// stop old process after autoupdate. Otherwise we create a new process
 					// after each update
-					logger.Infof("PID of the new process is %d", pid)
+					a.logger.Infof("PID of the new process is %d", pid)
 				}
 				return &statusSuccess{newVersion: updateOutcome.Version}
 			}
@@ -197,14 +204,14 @@ func (a *AutoUpdater) Update(newFreq time.Duration) {
 	a.updateConfigChan <- newConfigurable
 }
 
-func IsAutoupdateEnabled(c *cli.Context) bool {
-	if !SupportAutoUpdate() {
+func IsAutoupdateEnabled(c *cli.Context, l logger.Service) bool {
+	if !SupportAutoUpdate(l) {
 		return false
 	}
 	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
 }
 
-func SupportAutoUpdate() bool {
+func SupportAutoUpdate(logger logger.Service) bool {
 	if runtime.GOOS == "windows" {
 		logger.Info(noUpdateOnWindowsMessage)
 		return false

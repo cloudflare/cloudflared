@@ -6,8 +6,7 @@ import (
 	"sync"
 
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
@@ -20,7 +19,7 @@ var errNoAddressesLeft = fmt.Errorf("There are no free edge addresses left")
 type Edge struct {
 	regions *allregions.Regions
 	sync.Mutex
-	logger *logrus.Entry
+	logger logger.Service
 }
 
 // ------------------------------------
@@ -29,37 +28,34 @@ type Edge struct {
 
 // ResolveEdge runs the initial discovery of the Cloudflare edge, finding Addrs that can be allocated
 // to connections.
-func ResolveEdge(l *logrus.Logger) (*Edge, error) {
-	logger := l.WithField("subsystem", subsystem)
-	regions, err := allregions.ResolveEdge(logger)
+func ResolveEdge(l logger.Service) (*Edge, error) {
+	regions, err := allregions.ResolveEdge(l)
 	if err != nil {
 		return new(Edge), err
 	}
 	return &Edge{
-		logger:  logger,
+		logger:  l,
 		regions: regions,
 	}, nil
 }
 
 // StaticEdge creates a list of edge addresses from the list of hostnames. Mainly used for testing connectivity.
-func StaticEdge(l *logrus.Logger, hostnames []string) (*Edge, error) {
-	logger := l.WithField("subsystem", subsystem)
+func StaticEdge(l logger.Service, hostnames []string) (*Edge, error) {
 	regions, err := allregions.StaticEdge(hostnames)
 	if err != nil {
 		return new(Edge), err
 	}
 	return &Edge{
-		logger:  logger,
+		logger:  l,
 		regions: regions,
 	}, nil
 }
 
 // MockEdge creates a Cloudflare Edge from arbitrary TCP addresses. Used for testing.
-func MockEdge(l *logrus.Logger, addrs []*net.TCPAddr) *Edge {
-	logger := l.WithField("subsystem", subsystem)
+func MockEdge(l logger.Service, addrs []*net.TCPAddr) *Edge {
 	regions := allregions.NewNoResolve(addrs)
 	return &Edge{
-		logger:  logger,
+		logger:  l,
 		regions: regions,
 	}
 }
@@ -83,24 +79,20 @@ func (ed *Edge) GetAddrForRPC() (*net.TCPAddr, error) {
 func (ed *Edge) GetAddr(connID int) (*net.TCPAddr, error) {
 	ed.Lock()
 	defer ed.Unlock()
-	logger := ed.logger.WithFields(logrus.Fields{
-		"connID":   connID,
-		"function": "GetAddr",
-	})
 
 	// If this connection has already used an edge addr, return it.
 	if addr := ed.regions.AddrUsedBy(connID); addr != nil {
-		logger.Debug("Returning same address back to proxy connection")
+		ed.logger.Debugf("edgediscovery - GetAddr: Returning same address back to proxy connection: connID: %d", connID)
 		return addr, nil
 	}
 
 	// Otherwise, give it an unused one
 	addr := ed.regions.GetUnusedAddr(nil, connID)
 	if addr == nil {
-		logger.Debug("No addresses left to give proxy connection")
+		ed.logger.Debugf("edgediscovery - GetAddr: No addresses left to give proxy connection: connID: %d", connID)
 		return nil, errNoAddressesLeft
 	}
-	logger.Debugf("Giving connection its new address %s", addr)
+	ed.logger.Debugf("edgediscovery - GetAddr: Giving connection its new address %s: connID: %d", addr, connID)
 	return addr, nil
 }
 
@@ -108,10 +100,6 @@ func (ed *Edge) GetAddr(connID int) (*net.TCPAddr, error) {
 func (ed *Edge) GetDifferentAddr(connID int) (*net.TCPAddr, error) {
 	ed.Lock()
 	defer ed.Unlock()
-	logger := ed.logger.WithFields(logrus.Fields{
-		"connID":   connID,
-		"function": "GetDifferentAddr",
-	})
 
 	oldAddr := ed.regions.AddrUsedBy(connID)
 	if oldAddr != nil {
@@ -119,11 +107,11 @@ func (ed *Edge) GetDifferentAddr(connID int) (*net.TCPAddr, error) {
 	}
 	addr := ed.regions.GetUnusedAddr(oldAddr, connID)
 	if addr == nil {
-		logger.Debug("No addresses left to give proxy connection")
+		ed.logger.Debugf("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection: connID: %d", connID)
 		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	logger.Debugf("Giving connection its new address %s", addr)
+	ed.logger.Debugf("edgediscovery - GetDifferentAddr: Giving connection its new address %s: connID: %d", addr, connID)
 	return addr, nil
 }
 
@@ -139,6 +127,6 @@ func (ed *Edge) AvailableAddrs() int {
 func (ed *Edge) GiveBack(addr *net.TCPAddr) bool {
 	ed.Lock()
 	defer ed.Unlock()
-	ed.logger.WithField("function", "GiveBack").Debug("Address now unused")
+	ed.logger.Debug("edgediscovery - GiveBack: Address now unused")
 	return ed.regions.GiveBack(addr)
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
 	"github.com/cloudflare/cloudflared/watcher"
@@ -28,7 +28,6 @@ const (
 var (
 	Version   = "DEV"
 	BuildTime = "unknown"
-	logger    = log.CreateLogger()
 	// Mostly network errors that we don't want reported back to Sentry, this is done by substring match.
 	ignoredErrors = []string{
 		"connection reset by peer",
@@ -148,7 +147,6 @@ func userHomeDir() (string, error) {
 	// use with sudo.
 	homeDir, err := homedir.Dir()
 	if err != nil {
-		logger.WithError(err).Error("Cannot determine home directory for the user")
 		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
 	return homeDir, nil
@@ -167,17 +165,25 @@ func handleError(err error) {
 
 // cloudflared was started without any flags
 func handleServiceMode(shutdownC chan struct{}) error {
+	logDirectory, logLevel := config.FindLogSettings()
+
+	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+	logger.Infof("logging to directory: %s", logDirectory)
+
 	// start the main run loop that reads from the config file
 	f, err := watcher.NewFile()
 	if err != nil {
-		logger.WithError(err).Error("Cannot load config file")
+		logger.Errorf("Cannot load config file: %s", err)
 		return err
 	}
 
 	configPath := config.FindDefaultConfigPath()
 	configManager, err := config.NewFileManager(f, configPath, logger)
 	if err != nil {
-		logger.WithError(err).Error("Cannot setup config file for monitoring")
+		logger.Errorf("Cannot setup config file for monitoring: %s", err)
 		return err
 	}
 
@@ -185,7 +191,7 @@ func handleServiceMode(shutdownC chan struct{}) error {
 
 	appService := NewAppService(configManager, serviceManager, shutdownC, logger)
 	if err := appService.Run(); err != nil {
-		logger.WithError(err).Error("Failed to start app service")
+		logger.Errorf("Failed to start app service: %s", err)
 		return err
 	}
 	return nil

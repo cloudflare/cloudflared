@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 // Regions stores Cloudflare edge network IPs, partitioned into two regions.
@@ -19,7 +19,7 @@ type Regions struct {
 // ------------------------------------
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
-func ResolveEdge(logger *logrus.Entry) (*Regions, error) {
+func ResolveEdge(logger logger.Service) (*Regions, error) {
 	addrLists, err := edgeDiscovery(logger)
 	if err != nil {
 		return nil, err

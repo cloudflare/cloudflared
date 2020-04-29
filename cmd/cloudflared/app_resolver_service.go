@@ -2,8 +2,8 @@ package main
 
 import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunneldns"
-	"github.com/sirupsen/logrus"
 )
 
 // ResolverServiceType is used to identify what kind of overwatch service this is
@@ -15,11 +15,11 @@ const ResolverServiceType = "resolver"
 type ResolverService struct {
 	resolver config.DNSResolver
 	shutdown chan struct{}
-	logger   *logrus.Logger
+	logger   logger.Service
 }
 
 // NewResolverService creates a new resolver service
-func NewResolverService(r config.DNSResolver, logger *logrus.Logger) *ResolverService {
+func NewResolverService(r config.DNSResolver, logger logger.Service) *ResolverService {
 	return &ResolverService{resolver: r,
 		shutdown: make(chan struct{}),
 		logger:   logger,
@@ -51,7 +51,7 @@ func (s *ResolverService) Shutdown() {
 func (s *ResolverService) Run() error {
 	// create a listener
 	l, err := tunneldns.CreateListener(s.resolver.AddressOrDefault(), s.resolver.PortOrDefault(),
-		s.resolver.UpstreamsOrDefault(), s.resolver.BootstrapsOrDefault())
+		s.resolver.UpstreamsOrDefault(), s.resolver.BootstrapsOrDefault(), s.logger)
 	if err != nil {
 		return err
 	}

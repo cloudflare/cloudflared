@@ -47,7 +47,7 @@ func TestFileChanged(t *testing.T) {
 	assert.NoError(t, err)
 
 	// give it time to trigger
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	service.Shutdown()
 
 	assert.Equal(t, filePath, n.eventPath, "notifier didn't get an new file write event")

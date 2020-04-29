@@ -14,7 +14,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/encrypter"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
-	"github.com/cloudflare/cloudflared/log"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
@@ -22,15 +22,13 @@ const (
 	clientTimeout = time.Second * 60
 )
 
-var logger = log.CreateLogger()
-
 // Run does the transfer "dance" with the end result downloading the supported resource.
 // The expanded description is run is encapsulation of shared business logic needed
 // to request a resource (token/cert/etc) from the transfer service (loginhelper).
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool) ([]byte, error) {
+func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool, logger logger.Service) ([]byte, error) {
 	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -51,7 +49,7 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 	var resourceData []byte
 
 	if shouldEncrypt {
-		buf, key, err := transferRequest(baseStoreURL + "transfer/" + encrypterClient.PublicKey())
+		buf, key, err := transferRequest(baseStoreURL+"transfer/"+encrypterClient.PublicKey(), logger)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +65,7 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 
 		resourceData = decrypted
 	} else {
-		buf, _, err := transferRequest(baseStoreURL + encrypterClient.PublicKey())
+		buf, _, err := transferRequest(baseStoreURL+encrypterClient.PublicKey(), logger)
 		if err != nil {
 			return nil, err
 		}
@@ -99,17 +97,17 @@ func buildRequestURL(baseURL *url.URL, key, value string, cli bool) (string, err
 }
 
 // transferRequest downloads the requested resource from the request URL
-func transferRequest(requestURL string) ([]byte, string, error) {
+func transferRequest(requestURL string, logger logger.Service) ([]byte, string, error) {
 	client := &http.Client{Timeout: clientTimeout}
 	const pollAttempts = 10
 	// we do "long polling" on the endpoint to get the resource.
 	for i := 0; i < pollAttempts; i++ {
-		buf, key, err := poll(client, requestURL)
+		buf, key, err := poll(client, requestURL, logger)
 		if err != nil {
 			return nil, "", err
 		} else if len(buf) > 0 {
 			if err := putSuccess(client, requestURL); err != nil {
-				logger.WithError(err).Error("Failed to update resource success")
+				logger.Errorf("Failed to update resource success: %s", err)
 			}
 			return buf, key, nil
 		}
@@ -118,7 +116,7 @@ func transferRequest(requestURL string) ([]byte, string, error) {
 }
 
 // poll the endpoint for the request resource, waiting for the user interaction
-func poll(client *http.Client, requestURL string) ([]byte, string, error) {
+func poll(client *http.Client, requestURL string, logger logger.Service) ([]byte, string, error) {
 	resp, err := client.Get(requestURL)
 	if err != nil {
 		return nil, "", err
