@@ -32,7 +32,7 @@ func createLogger(t *testing.T) *Logger {
 //	}()
 //
 //	logger.Write([]byte(testStr))
-//	time.Sleep(2 * time.Millisecond)
+//	time.DelayBeforeReconnect(2 * time.Millisecond)
 //	data, err := ioutil.ReadFile(logFileName)
 //	if err != nil {
 //		t.Fatal("couldn't read the log file!", err)

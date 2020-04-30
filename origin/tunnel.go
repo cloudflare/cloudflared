@@ -179,7 +179,7 @@ func (c *TunnelConfig) SupportedFeatures() []string {
 	return basic
 }
 
-func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan struct{}) error {
+func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan ReconnectSignal) error {
 	s, err := NewSupervisor(config, cloudflaredID)
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func ServeTunnelLoop(ctx context.Context,
 	connectedSignal *signal.Signal,
 	u uuid.UUID,
 	bufferPool *buffer.Pool,
-	reconnectCh chan struct{},
+	reconnectCh chan ReconnectSignal,
 ) error {
 	connectionLogger := config.Logger.WithField("connectionID", connectionID)
 	config.Metrics.incrementHaConnections()
@@ -244,7 +244,7 @@ func ServeTunnel(
 	backoff *BackoffHandler,
 	u uuid.UUID,
 	bufferPool *buffer.Pool,
-	reconnectCh chan struct{},
+	reconnectCh chan ReconnectSignal,
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -332,13 +332,14 @@ func ServeTunnel(
 	})
 
 	errGroup.Go(func() error {
-		select {
-		case <-reconnectCh:
-			return fmt.Errorf("received disconnect signal")
-		case <-serveCtx.Done():
-			return nil
+		for {
+			select {
+			case reconnect := <-reconnectCh:
+				return &reconnect
+			case <-serveCtx.Done():
+				return nil
+			}
 		}
-
 	})
 
 	errGroup.Go(func() error {
@@ -372,7 +373,11 @@ func ServeTunnel(
 			logger.WithError(castedErr.cause).Error("Register tunnel error on client side")
 			return err, true
 		case muxerShutdownError:
-			logger.Infof("Muxer shutdown")
+			logger.Info("Muxer shutdown")
+			return err, true
+		case *ReconnectSignal:
+			logger.Warnf("Restarting due to reconnect signal in %d seconds", castedErr.Delay)
+			castedErr.DelayBeforeReconnect()
 			return err, true
 		default:
 			logger.WithError(err).Error("Serve tunnel error")

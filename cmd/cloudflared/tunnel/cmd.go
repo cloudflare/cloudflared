@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/trace"
+	"strings"
 	"sync"
 	"time"
 
@@ -421,7 +422,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return err
 	}
 
-	reconnectCh := make(chan struct{}, 1)
+	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
 		logger.Warn("Enabling control through stdin")
 		go stdinControl(reconnectCh)
@@ -1112,17 +1113,34 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 	}
 }
 
-func stdinControl(reconnectCh chan struct{}) {
+func stdinControl(reconnectCh chan origin.ReconnectSignal) {
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			command := scanner.Text()
+			parts := strings.SplitN(command, " ", 2)
 
-			switch command {
+			switch parts[0] {
+			case "":
+				break
 			case "reconnect":
-				reconnectCh <- struct{}{}
+				var reconnect origin.ReconnectSignal
+				if len(parts) > 1 {
+					var err error
+					if reconnect.Delay, err = time.ParseDuration(parts[1]); err != nil {
+						logger.Error(err.Error())
+						continue
+					}
+				}
+				logger.Infof("Sending reconnect signal %+v", reconnect)
+				reconnectCh <- reconnect
 			default:
 				logger.Warn("Unknown command: ", command)
+				fallthrough
+			case "help":
+				logger.Info(`Supported command: 
+reconnect [delay] 
+- restarts one randomly chosen connection with optional delay before reconnect`)
 			}
 		}
 	}
