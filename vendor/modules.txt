@@ -44,7 +44,7 @@ github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
-# github.com/certifi/gocertifi v0.0.0-20180118203423-deb3ae2ef261
+# github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894
 github.com/certifi/gocertifi
 # github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93
 github.com/cloudflare/brotli-go
@@ -52,6 +52,9 @@ github.com/cloudflare/brotli-go/brotli
 github.com/cloudflare/brotli-go/common
 github.com/cloudflare/brotli-go/dec
 github.com/cloudflare/brotli-go/enc
+# github.com/cloudflare/cfssl v0.0.0-20141119014638-2f7f44e802e2
+github.com/cloudflare/cfssl/log
+github.com/cloudflare/cfssl/revoke
 # github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 github.com/cloudflare/golibs/lrucache
 # github.com/cloudflare/golz4 v0.0.0-20150217214814-ef862a3cdc58
@@ -244,7 +247,7 @@ golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
-# golang.org/x/text v0.3.2
+# golang.org/x/text v0.3.0
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
