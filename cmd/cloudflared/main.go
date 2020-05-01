@@ -11,6 +11,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/log"
 	"github.com/cloudflare/cloudflared/metrics"
+	"github.com/cloudflare/cloudflared/overwatch"
 	"github.com/cloudflare/cloudflared/watcher"
 
 	raven "github.com/getsentry/raven-go"
@@ -180,7 +181,9 @@ func handleServiceMode(shutdownC chan struct{}) error {
 		return err
 	}
 
-	appService := NewAppService(configManager, shutdownC, logger)
+	serviceManager := overwatch.NewAppManager(nil)
+
+	appService := NewAppService(configManager, serviceManager, shutdownC, logger)
 	if err := appService.Run(); err != nil {
 		logger.WithError(err).Error("Failed to start app service")
 		return err

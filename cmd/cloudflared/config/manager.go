@@ -28,14 +28,16 @@ type FileManager struct {
 	notifier   Notifier
 	configPath string
 	logger     *logrus.Logger
+	ReadConfig func(string) (Root, error)
 }
 
 // NewFileManager creates a config manager
-func NewFileManager(watcher watcher.Notifier, configPath string, logger *logrus.Logger) (Manager, error) {
+func NewFileManager(watcher watcher.Notifier, configPath string, logger *logrus.Logger) (*FileManager, error) {
 	m := &FileManager{
 		watcher:    watcher,
 		configPath: configPath,
 		logger:     logger,
+		ReadConfig: readConfigFromPath,
 	}
 	err := watcher.Add(configPath)
 	return m, err
@@ -58,11 +60,20 @@ func (m *FileManager) Start(notifier Notifier) error {
 
 // GetConfig reads the yaml file from the disk
 func (m *FileManager) GetConfig() (Root, error) {
-	if m.configPath == "" {
+	return m.ReadConfig(m.configPath)
+}
+
+// Shutdown stops the watcher
+func (m *FileManager) Shutdown() {
+	m.watcher.Shutdown()
+}
+
+func readConfigFromPath(configPath string) (Root, error) {
+	if configPath == "" {
 		return Root{}, errors.New("unable to find config file")
 	}
 
-	file, err := os.Open(m.configPath)
+	file, err := os.Open(configPath)
 	if err != nil {
 		return Root{}, err
 	}
@@ -74,11 +85,6 @@ func (m *FileManager) GetConfig() (Root, error) {
 	}
 
 	return config, nil
-}
-
-// Shutdown stops the watcher
-func (m *FileManager) Shutdown() {
-	m.watcher.Shutdown()
 }
 
 // File change notifications from the watcher
