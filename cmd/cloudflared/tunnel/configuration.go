@@ -233,10 +233,11 @@ func prepareTunnelConfig(
 	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
 		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
 	}
-
-	err = validation.ValidateHTTPService(originURL, hostname, httpTransport)
-	if err != nil {
-		logger.WithError(err).Error("unable to connect to the origin")
+	// If tunnel running in bastion mode, a connection to origin will not exist until initiated by the client.
+	if !c.IsSet(bastionFlag) {
+		if err = validation.ValidateHTTPService(originURL, hostname, httpTransport); err != nil {
+			logger.WithError(err).Error("unable to connect to the origin")
+		}
 	}
 
 	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)

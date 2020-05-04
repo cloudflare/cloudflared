@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
+	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/pkg/errors"
 )
 
@@ -145,7 +146,7 @@ func BuildAccessRequest(options *StartOptions) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	originRequest.Header.Set("cf-access-token", token)
+	originRequest.Header.Set(h2mux.CFAccessTokenHeader, token)
 
 	for k, v := range options.Headers {
 		if len(v) >= 1 {

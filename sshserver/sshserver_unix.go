@@ -267,6 +267,7 @@ func (s *SSHProxy) proxyChannel(localChan, remoteChan gossh.Channel, localChanRe
 	}
 }
 
+
 // readPreamble reads a preamble from the SSH connection before any SSH traffic is sent.
 // This preamble is a JSON encoded struct containing the users JWT and ultimate destination.
 // The first 4 bytes contain the length of the preamble which follows immediately.

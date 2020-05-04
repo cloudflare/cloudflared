@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/pkg/errors"
 	cli "gopkg.in/urfave/cli.v2"
@@ -54,15 +55,15 @@ func ssh(c *cli.Context) error {
 	// get the headers from the cmdline and add them
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
-		headers.Add("CF-Access-Client-Id", c.String(sshTokenIDFlag))
+		headers.Add(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}
 	if c.IsSet(sshTokenSecretFlag) {
-		headers.Add("CF-Access-Client-Secret", c.String(sshTokenSecretFlag))
+		headers.Add(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
 
 	destination := c.String(sshDestinationFlag)
 	if destination != "" {
-		headers.Add("CF-Access-SSH-Destination", destination)
+		headers.Add(h2mux.CFJumpDestinationHeader, destination)
 	}
 
 	options := &carrier.StartOptions{

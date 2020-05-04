@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"reflect"
@@ -22,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/dbconnect"
+	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
@@ -81,8 +83,14 @@ const (
 	// hostKeyPath is the path of the dir to save SSH host keys too
 	hostKeyPath = "host-key-path"
 
+	//sshServerFlag enables cloudflared ssh proxy server
+	sshServerFlag = "ssh-server"
+
 	// socks5Flag is to enable the socks server to deframe
 	socks5Flag = "socks5"
+
+	// bastionFlag is to enable bastion, or jump host, operation
+	bastionFlag = "bastion"
 
 	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
 )
@@ -343,12 +351,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
-	if c.IsSet("ssh-server") {
+	if c.IsSet(sshServerFlag) {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			msg := fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS)
 			logger.Error(msg)
 			return errors.New(msg)
-
 		}
 
 		logger.Infof("ssh-server set")
@@ -394,7 +401,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "ssh://"+localServerAddress)
 	}
 
-	if host := hostnameFromURI(c.String("url")); host != "" {
+	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
 			logger.WithError(err).Error("Cannot start Websocket Proxy Server")
@@ -406,15 +413,26 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			streamHandler := websocket.DefaultStreamHandler
 			if c.IsSet(socks5Flag) {
 				logger.Info("SOCKS5 server started")
-				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn) {
+				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, _ http.Header) {
 					dialer := socks.NewConnDialer(remoteConn)
 					requestHandler := socks.NewRequestHandler(dialer)
 					socksServer := socks.NewConnectionHandler(requestHandler)
 
 					socksServer.Serve(wsConn)
 				}
+			} else if c.IsSet(sshServerFlag) {
+				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, requestHeaders http.Header) {
+					if finalDestination := requestHeaders.Get(h2mux.CFJumpDestinationHeader); finalDestination != "" {
+						token := requestHeaders.Get(h2mux.CFAccessTokenHeader)
+						if err := websocket.SendSSHPreamble(remoteConn, finalDestination, token); err != nil {
+							logger.WithError(err).Error("Failed to send SSH preamble")
+							return
+						}
+					}
+					websocket.DefaultStreamHandler(wsConn, remoteConn, requestHeaders)
+				}
 			}
-			errC <- websocket.StartProxyServer(logger, listener, host, shutdownC, streamHandler)
+			errC <- websocket.StartProxyServer(logger, listener, staticHost, shutdownC, streamHandler)
 		}()
 		c.Set("url", "http://"+listener.Addr().String())
 	}
@@ -455,6 +473,11 @@ func Before(c *cli.Context) error {
 		logger.Debugf("Applied configuration from %s", c.String("config"))
 	}
 	return nil
+}
+
+// isProxyDestinationConfigured returns true if there is a static host set or if bastion mode is set.
+func isProxyDestinationConfigured(staticHost string, c *cli.Context) bool {
+	return staticHost != "" || c.IsSet(bastionFlag)
 }
 
 func startDeclarativeTunnel(ctx context.Context,
@@ -882,7 +905,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "ssh-server",
+			Name:    sshServerFlag,
 			Value:   false,
 			Usage:   "Run an SSH Server",
 			EnvVars: []string{"TUNNEL_SSH_SERVER"},
@@ -1118,7 +1141,14 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "specify if this tunnel is running as a SOCK5 Server",
 			EnvVars: []string{"TUNNEL_SOCKS"},
 			Value:   false,
-			Hidden:  false,
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    bastionFlag,
+			Value:   false,
+			Usage:   "Runs as jump host",
+			EnvVars: []string{"TUNNEL_BASTION"},
+			Hidden:  shouldHide,
 		}),
 	}
 }

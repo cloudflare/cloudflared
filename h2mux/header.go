@@ -25,6 +25,11 @@ const (
 	ResponseMetaHeaderField   = "cf-cloudflared-response-meta"
 	ResponseSourceCloudflared = "cloudflared"
 	ResponseSourceOrigin      = "origin"
+
+	CFAccessTokenHeader        = "cf-access-token"
+	CFJumpDestinationHeader    = "CF-Access-Jump-Destination"
+	CFAccessClientIDHeader     = "CF-Access-Client-Id"
+	CFAccessClientSecretHeader = "CF-Access-Client-Secret"
 )
 
 // H2RequestHeadersToH1Request converts the HTTP/2 headers coming from origintunneld
