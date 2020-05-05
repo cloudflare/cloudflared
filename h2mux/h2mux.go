@@ -206,9 +206,9 @@ func Handshake(
 		initialStreamWindow:     m.config.DefaultWindowSize,
 		streamWindowMax:         m.config.MaxWindowSize,
 		streamWriteBufferMaxLen: m.config.StreamWriteBufferMaxLen,
-		r:                       m.r,
-		metricsUpdater:          m.muxMetricsUpdater,
-		bytesRead:               inBoundCounter,
+		r:              m.r,
+		metricsUpdater: m.muxMetricsUpdater,
+		bytesRead:      inBoundCounter,
 	}
 	m.muxWriter = &MuxWriter{
 		f:               m.f,
@@ -327,7 +327,11 @@ func (m *Muxer) Serve(ctx context.Context) error {
 			m.explicitShutdown.Fuse(false)
 			m.r.Close()
 			m.abort()
-			ch <- err
+			// don't block if parent goroutine quit early
+			select {
+			case ch <- err:
+			default:
+			}
 		}()
 		select {
 		case err := <-ch:
@@ -344,7 +348,11 @@ func (m *Muxer) Serve(ctx context.Context) error {
 			m.explicitShutdown.Fuse(false)
 			m.w.Close()
 			m.abort()
-			ch <- err
+			// don't block if parent goroutine quit early
+			select {
+			case ch <- err:
+			default:
+			}
 		}()
 		select {
 		case err := <-ch:
@@ -358,7 +366,11 @@ func (m *Muxer) Serve(ctx context.Context) error {
 		ch := make(chan error)
 		go func() {
 			err := m.muxMetricsUpdater.run(m.config.Logger)
-			ch <- err
+			// don't block if parent goroutine quit early
+			select {
+			case ch <- err:
+			default:
+			}
 		}()
 		select {
 		case err := <-ch:

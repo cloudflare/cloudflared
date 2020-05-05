@@ -521,6 +521,7 @@ type TunnelServer_PogsClient struct {
 }
 
 func (c TunnelServer_PogsClient) Close() error {
+	c.Client.Close()
 	return c.Conn.Close()
 }
 

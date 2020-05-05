@@ -30,7 +30,11 @@ func (f *File) Add(filepath string) error {
 
 // Shutdown stop the file watching run loop
 func (f *File) Shutdown() {
-	f.shutdown <- struct{}{}
+	// don't block if Start quit early
+	select {
+	case f.shutdown <- struct{}{}:
+	default:
+	}
 }
 
 // Start is a runloop to watch for files changes from the file paths added from Add()

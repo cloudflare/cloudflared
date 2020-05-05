@@ -79,7 +79,11 @@ func Serve(remoteConn Connection, listener net.Listener, shutdownC <-chan struct
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
-				errChan <- err
+				// don't block if parent goroutine quit early
+				select {
+				case errChan <- err:
+				default:
+				}
 				return
 			}
 			go serveConnection(remoteConn, conn, options)

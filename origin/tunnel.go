@@ -322,7 +322,10 @@ func ServeTunnel(
 			select {
 			case <-serveCtx.Done():
 				// UnregisterTunnel blocks until the RPC call returns
-				err := UnregisterTunnel(handler.muxer, config.GracePeriod, config.TransportLogger)
+				var err error
+				if connectedFuse.Value() {
+					err = UnregisterTunnel(handler.muxer, config.GracePeriod, config.TransportLogger)
+				}
 				handler.muxer.Shutdown()
 				return err
 			case <-updateMetricsTickC:
@@ -519,6 +522,8 @@ func UnregisterTunnel(muxer *h2mux.Muxer, gracePeriod time.Duration, logger *log
 		// RPC stream open error
 		return err
 	}
+	defer tunnelServer.Close()
+
 	// gracePeriod is encoded in int64 using capnproto
 	return tunnelServer.UnregisterTunnel(ctx, gracePeriod.Nanoseconds())
 }
