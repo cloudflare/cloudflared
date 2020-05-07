@@ -1031,6 +1031,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "use-quick-reconnects",
 			Usage:   "Test reestablishing connections with the new 'connection digest' flow.",
+			Value:   true,
 			EnvVars: []string{"TUNNEL_USE_QUICK_RECONNECTS"},
 			Hidden:  true,
 		}),
