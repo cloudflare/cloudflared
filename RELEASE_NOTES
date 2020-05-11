@@ -1,3 +1,8 @@
+2020.5.1
+- 2020-05-07 TUN-2860: Enable quick reconnect feature by default
+- 2020-05-07 AUTH-2564: error handling and minor fixes
+- 2020-05-01 AUTH-2588 add DoH to service mode
+
 2020.5.0
 - 2020-05-01 TUN-2943: Copy certutil from edge into cloudflared
 - 2020-05-05 TUN-2955: Fix connection and goroutine leaks when tunnel conection is terminated on error. Only unregister tunnels that had connected successfully. Close edge connection used to unregister the tunnel. Use buffered channels for error channels where receiver may quit early on context cancellation.
