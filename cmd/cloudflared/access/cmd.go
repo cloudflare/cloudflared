@@ -85,13 +85,13 @@ func Commands() []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:     "access",
-			Category: "Access (BETA)",
+			Aliases:  []string{"forward"},
+			Category: "Access",
 			Usage:    "access <subcommand>",
-			Description: `(BETA) Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
+			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are 
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected 
-			applications from the command line. This feature is considered beta. Your feedback is greatly appreciated!
-			https://cfl.re/CLIAuthBeta`,
+			applications from the command line.`,
 			Subcommands: []*cli.Command{
 				{
 					Name:   "login",
@@ -133,22 +133,24 @@ func Commands() []*cli.Command {
 				{
 					Name:        "ssh",
 					Action:      errorHandler(ssh),
-					Aliases:     []string{"rdp", "tcp"},
+					Aliases:     []string{"rdp", "tcp", "smb"},
 					Usage:       "",
 					ArgsUsage:   "",
 					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name:  sshHostnameFlag,
-							Usage: "specify the hostname of your application.",
+							Name:    sshHostnameFlag,
+							Aliases: []string{"tunnel-host", "T"},
+							Usage:   "specify the hostname of your application.",
 						},
 						&cli.StringFlag{
 							Name:  sshDestinationFlag,
 							Usage: "specify the destination address of your SSH server.",
 						},
 						&cli.StringFlag{
-							Name:  sshURLFlag,
-							Usage: "specify the host:port to forward data to Cloudflare edge.",
+							Name:    sshURLFlag,
+							Aliases: []string{"listener", "L"},
+							Usage:   "specify the host:port to forward data to Cloudflare edge.",
 						},
 						&cli.StringSliceFlag{
 							Name:    sshHeaderFlag,

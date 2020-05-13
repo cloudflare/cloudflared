@@ -23,7 +23,7 @@ const (
 )
 
 var (
-	supportedProtocols = []string{"http", "https", "rdp"}
+	supportedProtocols = []string{"http", "https", "rdp", "ssh", "smb", "tcp"}
 	validationTimeout  = time.Duration(30 * time.Second)
 )
 
