@@ -131,12 +131,12 @@ func Commands() []*cli.Command {
 					},
 				},
 				{
-					Name:        "ssh",
+					Name:        "tcp",
 					Action:      errorHandler(ssh),
-					Aliases:     []string{"rdp", "tcp", "smb"},
+					Aliases:     []string{"rdp", "ssh", "smb"},
 					Usage:       "",
 					ArgsUsage:   "",
-					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
+					Description: `The tcp subcommand sends data over a proxy to the Cloudflare edge.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
 							Name:    sshHostnameFlag,
