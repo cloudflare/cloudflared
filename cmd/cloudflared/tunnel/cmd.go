@@ -17,6 +17,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/awsuploader"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/connection"
@@ -100,7 +101,7 @@ func Commands() []*cli.Command {
 	cmds := []*cli.Command{
 		{
 			Name:      "login",
-			Action:    login,
+			Action:    cliutil.ErrorHandler(login),
 			Usage:     "Generate a configuration file with your login details",
 			ArgsUsage: " ",
 			Flags: []cli.Flag{
@@ -113,7 +114,7 @@ func Commands() []*cli.Command {
 		},
 		{
 			Name:   "proxy-dns",
-			Action: tunneldns.Run,
+			Action: cliutil.ErrorHandler(tunneldns.Run),
 			Usage:  "Run a DNS over HTTPS proxy server.",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -162,7 +163,7 @@ func Commands() []*cli.Command {
 
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",
-		Action:    tunnel,
+		Action:    cliutil.ErrorHandler(tunnel),
 		Before:    Before,
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
@@ -662,13 +663,13 @@ func dbConnectCmd() *cli.Command {
 	}
 
 	// Override action to setup the Proxy, then if successful, start the tunnel daemon.
-	cmd.Action = func(c *cli.Context) error {
+	cmd.Action = cliutil.ErrorHandler(func(c *cli.Context) error {
 		err := dbconnect.CmdAction(c)
 		if err == nil {
 			err = tunnel(c)
 		}
 		return err
-	}
+	})
 
 	return cmd
 }

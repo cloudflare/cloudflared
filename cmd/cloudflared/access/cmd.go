@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/sshgen"
@@ -66,20 +67,6 @@ func Flags() []cli.Flag {
 	return []cli.Flag{} // no flags yet.
 }
 
-// Ensures exit with error code if actionFunc returns an error
-func errorHandler(actionFunc cli.ActionFunc) cli.ActionFunc {
-	return func(ctx *cli.Context) error {
-		err := actionFunc(ctx)
-
-		if err != nil {
-			// os.Exits with error code if err is cli.ExitCoder or cli.MultiError
-			cli.HandleExitCoder(err)
-			err = cli.Exit(err.Error(), 1)
-		}
-		return err
-	}
-}
-
 // Commands returns all the Access related subcommands
 func Commands() []*cli.Command {
 	return []*cli.Command{
@@ -95,7 +82,7 @@ func Commands() []*cli.Command {
 			Subcommands: []*cli.Command{
 				{
 					Name:   "login",
-					Action: errorHandler(login),
+					Action: cliutil.ErrorHandler(login),
 					Usage:  "login <url of access application>",
 					Description: `The login subcommand initiates an authentication flow with your identity provider.
 					The subcommand will launch a browser. For headless systems, a url is provided.
@@ -111,7 +98,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:   "curl",
-					Action: errorHandler(curl),
+					Action: cliutil.ErrorHandler(curl),
 					Usage:  "curl [--allow-request, -ar] <url> [<curl args>...]",
 					Description: `The curl subcommand wraps curl and automatically injects the JWT into a cf-access-token
 					header when using curl to reach an application behind Access.`,
@@ -120,7 +107,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "token",
-					Action:      errorHandler(generateToken),
+					Action:      cliutil.ErrorHandler(generateToken),
 					Usage:       "token -app=<url of access application>",
 					ArgsUsage:   "url of Access application",
 					Description: `The token subcommand produces a JWT which can be used to authenticate requests.`,
@@ -132,7 +119,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "tcp",
-					Action:      errorHandler(ssh),
+					Action:      cliutil.ErrorHandler(ssh),
 					Aliases:     []string{"rdp", "ssh", "smb"},
 					Usage:       "",
 					ArgsUsage:   "",
@@ -171,7 +158,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "ssh-config",
-					Action:      errorHandler(sshConfig),
+					Action:      cliutil.ErrorHandler(sshConfig),
 					Usage:       "",
 					Description: `Prints an example configuration ~/.ssh/config`,
 					Flags: []cli.Flag{
@@ -187,7 +174,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "ssh-gen",
-					Action:      errorHandler(sshGen),
+					Action:      cliutil.ErrorHandler(sshGen),
 					Usage:       "",
 					Description: `Generates a short lived certificate for given hostname`,
 					Flags: []cli.Flag{
