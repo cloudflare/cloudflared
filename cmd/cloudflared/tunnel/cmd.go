@@ -168,6 +168,9 @@ func Commands() []*cli.Command {
 		c.Hidden = false
 		subcommands = append(subcommands, &c)
 	}
+	subcommands = append(subcommands, buildCreateCommand())
+	subcommands = append(subcommands, buildListCommand())
+	subcommands = append(subcommands, buildDeleteCommand())
 
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",
@@ -175,7 +178,7 @@ func Commands() []*cli.Command {
 		Before:    Before,
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
-		ArgsUsage: "[origin-url]",
+		ArgsUsage: " ",
 		Description: `Argo Tunnel asks you to specify a hostname on a Cloudflare-powered
 		domain you control and a local address. Traffic from that hostname is routed
 		(optionally via a Cloudflare Load Balancer) to this machine and appears on the
@@ -841,6 +844,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "api-ca-key",
 			Usage:   "This parameter has been deprecated since version 2017.10.1.",
 			EnvVars: []string{"TUNNEL_API_CA_KEY"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "api-url",
+			Usage:   "Base URL for Cloudflare API v4",
+			EnvVars: []string{"TUNNEL_API_URL"},
+			Value:   "https://api.cloudflare.com/client/v4",
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{

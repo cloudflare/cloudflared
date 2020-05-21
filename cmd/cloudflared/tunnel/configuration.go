@@ -102,27 +102,29 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world"))
 }
 
-func getOriginCert(c *cli.Context) ([]byte, error) {
-	if c.String("origincert") == "" {
+func findOriginCert(c *cli.Context) (string, error) {
+	originCertPath := c.String("origincert")
+	if originCertPath == "" {
 		logger.Warnf("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigDirs)
 		if isRunningFromTerminal() {
 			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
-			return nil, fmt.Errorf("Client didn't specify origincert path when running from terminal")
+			return "", fmt.Errorf("Client didn't specify origincert path when running from terminal")
 		} else {
 			logger.Errorf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
-			return nil, fmt.Errorf("Client didn't specify origincert path")
+			return "", fmt.Errorf("Client didn't specify origincert path")
 		}
 	}
-	// Check that the user has acquired a certificate using the login command
-	originCertPath, err := homedir.Expand(c.String("origincert"))
+	var err error
+	originCertPath, err = homedir.Expand(originCertPath)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot resolve path %s", c.String("origincert"))
-		return nil, fmt.Errorf("Cannot resolve path %s", c.String("origincert"))
+		logger.WithError(err).Errorf("Cannot resolve path %s", originCertPath)
+		return "", fmt.Errorf("Cannot resolve path %s", originCertPath)
 	}
+	// Check that the user has acquired a certificate using the login command
 	ok, err := config.FileExists(originCertPath)
 	if err != nil {
-		logger.Errorf("Cannot check if origin cert exists at path %s", c.String("origincert"))
-		return nil, fmt.Errorf("Cannot check if origin cert exists at path %s", c.String("origincert"))
+		logger.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
+		return "", fmt.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
 	}
 	if !ok {
 		logger.Errorf(`Cannot find a valid certificate for your origin at the path:
@@ -134,8 +136,15 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
 	%s login
 `, originCertPath, os.Args[0])
-		return nil, fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
+		return "", fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
 	}
+
+	return originCertPath, nil
+}
+
+func readOriginCert(originCertPath string) ([]byte, error) {
+	logger.Debugf("Reading origin cert from %s", originCertPath)
+
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
@@ -143,6 +152,14 @@ If you don't have a certificate signed by Cloudflare, run the command:
 		return nil, fmt.Errorf("Cannot read %s to load origin certificate", originCertPath)
 	}
 	return originCert, nil
+}
+
+func getOriginCert(c *cli.Context) ([]byte, error) {
+	if originCertPath, err := findOriginCert(c); err != nil {
+		return nil, err
+	} else {
+		return readOriginCert(originCertPath)
+	}
 }
 
 func prepareTunnelConfig(
