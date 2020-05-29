@@ -155,7 +155,7 @@ func (p Ptr) text() (b []byte, ok bool) {
 		// Text must be null-terminated.
 		return nil, false
 	}
-	return b[:len(b)-1 : len(b)], true
+	return b[: len(b)-1 : len(b)], true
 }
 
 // Data attempts to convert p into Data, returning nil if p is not a

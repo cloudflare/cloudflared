@@ -21,7 +21,6 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
@@ -32,10 +31,8 @@ import (
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/sshlog"
 	"github.com/cloudflare/cloudflared/sshserver"
-	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 
 	"github.com/coreos/go-systemd/daemon"
@@ -92,8 +89,6 @@ const (
 
 	// bastionFlag is to enable bastion, or jump host, operation
 	bastionFlag = "bastion"
-
-	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
 
 	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
 		"Response status, content length and header will also be logged in debug level."
@@ -322,10 +317,6 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		cancel()
 	}()
 
-	if c.IsSet("use-declarative-tunnels") {
-		return startDeclarativeTunnel(ctx, c, cloudflaredID, buildInfo, &listeners, logger)
-	}
-
 	// update needs to be after DNS proxy is up to resolve equinox server address
 	if updater.IsAutoupdateEnabled(c, logger) {
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
@@ -498,124 +489,6 @@ func Before(c *cli.Context) error {
 // isProxyDestinationConfigured returns true if there is a static host set or if bastion mode is set.
 func isProxyDestinationConfigured(staticHost string, c *cli.Context) bool {
 	return staticHost != "" || c.IsSet(bastionFlag)
-}
-
-func startDeclarativeTunnel(ctx context.Context,
-	c *cli.Context,
-	cloudflaredID uuid.UUID,
-	buildInfo *buildinfo.BuildInfo,
-	listeners *gracenet.Net,
-	logger logger.Service,
-) error {
-	reverseProxyOrigin, err := defaultOriginConfig(c)
-	if err != nil {
-		logger.Errorf("%s", err)
-		return err
-	}
-	reverseProxyConfig, err := pogs.NewReverseProxyConfig(
-		c.String("hostname"),
-		reverseProxyOrigin,
-		c.Uint64("retries"),
-		c.Duration("proxy-connection-timeout"),
-		c.Uint64("compression-quality"),
-	)
-	if err != nil {
-		logger.Errorf("Cannot initialize default client config because reverse proxy config is invalid: %s", err)
-		return err
-	}
-	defaultClientConfig := &pogs.ClientConfig{
-		Version: pogs.InitVersion(),
-		SupervisorConfig: &pogs.SupervisorConfig{
-			AutoUpdateFrequency:    c.Duration("autoupdate-freq"),
-			MetricsUpdateFrequency: c.Duration("metrics-update-freq"),
-			GracePeriod:            c.Duration("grace-period"),
-		},
-		EdgeConnectionConfig: &pogs.EdgeConnectionConfig{
-			NumHAConnections:    uint8(c.Int("ha-connections")),
-			HeartbeatInterval:   c.Duration("heartbeat-interval"),
-			Timeout:             c.Duration("dial-edge-timeout"),
-			MaxFailedHeartbeats: c.Uint64("heartbeat-count"),
-		},
-		DoHProxyConfigs:     []*pogs.DoHProxyConfig{},
-		ReverseProxyConfigs: []*pogs.ReverseProxyConfig{reverseProxyConfig},
-	}
-
-	autoupdater := updater.NewAutoUpdater(defaultClientConfig.SupervisorConfig.AutoUpdateFrequency, listeners, logger)
-
-	originCert, err := getOriginCert(c, logger)
-	if err != nil {
-		logger.Errorf("error getting origin cert: %s", err)
-		return err
-	}
-	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
-	if err != nil {
-		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
-		return err
-	}
-
-	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
-	if err != nil {
-		logger.Errorf("unable to parse tag: %s", err)
-		return err
-	}
-
-	intentLabel := c.String("intent")
-	if intentLabel == "" {
-		logger.Error("--intent was empty")
-		return fmt.Errorf(noIntentMsg)
-	}
-
-	cloudflaredConfig := &connection.CloudflaredConfig{
-		BuildInfo:     buildInfo,
-		CloudflaredID: cloudflaredID,
-		IntentLabel:   intentLabel,
-		Tags:          tags,
-	}
-
-	serviceDiscoverer, err := serviceDiscoverer(c, logger)
-	if err != nil {
-		logger.Errorf("unable to create service discoverer: %s", err)
-		return err
-	}
-	supervisor, err := supervisor.NewSupervisor(defaultClientConfig, originCert, toEdgeTLSConfig,
-		serviceDiscoverer, cloudflaredConfig, autoupdater, updater.SupportAutoUpdate(logger), logger)
-	if err != nil {
-		logger.Errorf("unable to create Supervisor: %s", err)
-		return err
-	}
-	return supervisor.Run(ctx)
-}
-
-func defaultOriginConfig(c *cli.Context) (pogs.OriginConfig, error) {
-	if c.IsSet("hello-world") {
-		return &pogs.HelloWorldOriginConfig{}, nil
-	}
-	originConfig := &pogs.HTTPOriginConfig{
-		TCPKeepAlive:           c.Duration("proxy-tcp-keepalive"),
-		DialDualStack:          !c.Bool("proxy-no-happy-eyeballs"),
-		TLSHandshakeTimeout:    c.Duration("proxy-tls-timeout"),
-		TLSVerify:              !c.Bool("no-tls-verify"),
-		OriginCAPool:           c.String("origin-ca-pool"),
-		OriginServerName:       c.String("origin-server-name"),
-		MaxIdleConnections:     c.Uint64("proxy-keepalive-connections"),
-		IdleConnectionTimeout:  c.Duration("proxy-keepalive-timeout"),
-		ProxyConnectionTimeout: c.Duration("proxy-connection-timeout"),
-		ExpectContinueTimeout:  c.Duration("proxy-expect-continue-timeout"),
-		ChunkedEncoding:        c.Bool("no-chunked-encoding"),
-	}
-	if c.IsSet("unix-socket") {
-		unixSocket, err := config.ValidateUnixSocket(c)
-		if err != nil {
-			return nil, errors.Wrap(err, "error validating --unix-socket")
-		}
-		originConfig.URLString = unixSocket
-	}
-	originAddr, err := config.ValidateUrl(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "error validating origin URL")
-	}
-	originConfig.URLString = originAddr
-	return originConfig, nil
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
@@ -1063,18 +936,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Name of trace output file, generated when cloudflared stops.",
 			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
 			Hidden:  shouldHide,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "use-declarative-tunnels",
-			Usage:   "Test establishing connections with declarative tunnel methods.",
-			EnvVars: []string{"TUNNEL_USE_DECLARATIVE"},
-			Hidden:  true,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "intent",
-			Usage:   "The label of an Intent from which `cloudflared` should gets its tunnels from. Intents can be created in the Origin Registry UI.",
-			EnvVars: []string{"TUNNEL_INTENT"},
-			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "use-reconnect-token",

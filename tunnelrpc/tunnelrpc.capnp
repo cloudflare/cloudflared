@@ -295,7 +295,8 @@ interface TunnelServer {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
-    connect @3 (parameters :CapnpConnectParameters) -> (result :ConnectResult);
+    # obsoleteDeclarativeTunnelConnect RPC deprecated in TUN-3019
+    obsoleteDeclarativeTunnelConnect @3 (parameters :CapnpConnectParameters) -> (result :ConnectResult);
     authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
     reconnectTunnel @5 (jwt :Data, eventDigest :Data, connDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }

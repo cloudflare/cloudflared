@@ -70,7 +70,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
 	gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8
 	gopkg.in/yaml.v2 v2.2.4
-	zombiezen.com/go/capnproto2 v0.0.0-20180616160808-7cfd211c19c7
+	zombiezen.com/go/capnproto2 v2.18.0+incompatible
 )
 
 // ../../go/pkg/mod/github.com/coredns/coredns@v1.2.0/plugin/metrics/metrics.go:40:49: too many arguments in call to prometheus.NewProcessCollector

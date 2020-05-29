@@ -25,7 +25,6 @@ import (
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/signal"
-	"github.com/cloudflare/cloudflared/streamhandler"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
@@ -618,8 +617,8 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 		return reqErr
 	}
 
-	cfRay := streamhandler.FindCfRayHeader(req)
-	lbProbe := streamhandler.IsLBProbeRequest(req)
+	cfRay := findCfRayHeader(req)
+	lbProbe := isLBProbeRequest(req)
 	h.logRequest(req, cfRay, lbProbe)
 
 	var resp *http.Response
@@ -832,4 +831,12 @@ func activeIncidentsMsg(incidents []Incident) string {
 	}
 	return preamble + " " + strings.Join(incidentStrings, "; ")
 
+}
+
+func findCfRayHeader(h1 *http.Request) string {
+	return h1.Header.Get("Cf-Ray")
+}
+
+func isLBProbeRequest(req *http.Request) bool {
+	return strings.HasPrefix(req.UserAgent(), lbProbeUserAgentPrefix)
 }

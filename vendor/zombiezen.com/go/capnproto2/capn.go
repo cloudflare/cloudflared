@@ -200,6 +200,9 @@ func (s *Segment) readListPtr(base Address, val rawPointer) (List, error) {
 		}
 		sz := hdr.structSize()
 		n := int32(hdr.offset())
+		if n < 0 {
+			return List{}, errListSize
+		}
 		// TODO(light): check that this has the same end address
 		if tsize, ok := sz.totalSize().times(n); !ok {
 			return List{}, errOverflow
@@ -214,11 +217,15 @@ func (s *Segment) readListPtr(base Address, val rawPointer) (List, error) {
 			flags:  isCompositeList,
 		}, nil
 	}
+	n := val.numListElements()
+	if n < 0 {
+		return List{}, errListSize
+	}
 	if lt == bit1List {
 		return List{
 			seg:    s,
 			off:    addr,
-			length: val.numListElements(),
+			length: n,
 			flags:  isBitList,
 		}, nil
 	}
@@ -226,7 +233,7 @@ func (s *Segment) readListPtr(base Address, val rawPointer) (List, error) {
 		seg:    s,
 		size:   val.elementSize(),
 		off:    addr,
-		length: val.numListElements(),
+		length: n,
 	}, nil
 }
 

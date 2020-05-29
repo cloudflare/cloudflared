@@ -14,7 +14,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -288,15 +287,6 @@ func prepareTunnelConfig(
 		UseReconnectToken:    c.Bool("use-reconnect-token"),
 		UseQuickReconnects:   c.Bool("use-quick-reconnects"),
 	}, nil
-}
-
-func serviceDiscoverer(c *cli.Context, logger logger.Service) (*edgediscovery.Edge, error) {
-	// If --edge is specfied, resolve edge server addresses
-	if len(c.StringSlice("edge")) > 0 {
-		return edgediscovery.StaticEdge(logger, c.StringSlice("edge"))
-	}
-	// Otherwise lookup edge server addresses through service discovery
-	return edgediscovery.ResolveEdge(logger)
 }
 
 func isRunningFromTerminal() bool {

@@ -1,5 +1,10 @@
 # Go Cap'n Proto Release Notes
 
+## 2.17.3
+
+- Clear read limits for `const` messages in schemas.
+  ([#131](https://github.com/capnproto/go-capnproto2/pull/131))
+
 ## 2.17.0
 
 - Add `capnp.Canonicalize` function that implements the
