@@ -16,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	cli "gopkg.in/urfave/cli.v2"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
