@@ -78,7 +78,55 @@ struct AuthenticateResponse {
     hoursUntilRefresh @3 :UInt8;
 }
 
-interface TunnelServer {
+struct ClientInfo {
+    # The tunnel client's unique identifier, used to verify a reconnection.
+    clientId @0 :Data;
+    # Set of features this cloudflared knows it supports
+    features @1 :List(Text);
+    # Information about the running binary.
+    version @2 :Text;
+    # Client OS and CPU info
+    arch @3 :Text;
+}
+
+struct ConnectionOptions {
+    # client details
+    client @0 :ClientInfo;
+    # origin LAN IP
+    originLocalIp @1 :Data;
+    # What to do if connection already exists
+    replaceExisting @2 :Bool;
+    # cross stream compression setting, 0 - off, 3 - high
+    compressionQuality @3 :UInt8;
+}
+
+struct ConnectionResponse {
+    result :union {
+        error @0 :ConnectionError;
+        connectionDetails @1 :ConnectionDetails;
+    }
+}
+
+struct ConnectionError {
+    cause @0 :Text;
+    # How long should this connection wait to retry in ns
+    retryAfter @1 :Int64;
+    shouldRetry @2 :Bool;
+}
+
+struct ConnectionDetails {
+    # identifier of this connection
+    uuid @0 :Data;
+    # airport code of the colo where this connection landed
+    locationName @1 :Text;
+}
+
+interface RegistrationServer {
+    registerConnection @0 (auth :Data, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
+    unregisterConnection @1 () -> ();
+}
+
+interface TunnelServer extends (RegistrationServer) {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
