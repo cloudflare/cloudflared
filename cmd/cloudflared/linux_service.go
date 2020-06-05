@@ -184,17 +184,24 @@ func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile str
 	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
 		return err
 	}
+
 	srcCredentialPath := filepath.Join(userConfigDir, userCredentialFile)
 	destCredentialPath := filepath.Join(serviceConfigDir, serviceCredentialFile)
-	if err := copyCredential(srcCredentialPath, destCredentialPath); err != nil {
-		return err
+	if srcCredentialPath != destCredentialPath {
+		if err := copyCredential(srcCredentialPath, destCredentialPath); err != nil {
+			return err
+		}
 	}
+
 	srcConfigPath := filepath.Join(userConfigDir, userConfigFile)
 	destConfigPath := filepath.Join(serviceConfigDir, serviceConfigFile)
-	if err := copyConfig(srcConfigPath, destConfigPath); err != nil {
-		return err
+	if srcConfigPath != destConfigPath {
+		if err := copyConfig(srcConfigPath, destConfigPath); err != nil {
+			return err
+		}
+		logger.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
 	}
-	logger.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
+
 	return nil
 }
 
