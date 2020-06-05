@@ -401,6 +401,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "ssh://"+localServerAddress)
 	}
 
+	url := c.String("url")
+	hostname := c.String("hostname")
+	if url == hostname && url != "" && hostname != "" {
+		errText := "hostname and url shouldn't match. See --help for more information"
+		logger.Error(errText)
+		return fmt.Errorf(errText)
+	}
+
 	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
