@@ -253,7 +253,7 @@ func nonWebSocketRequestPage() []byte {
 					<div class="main-message">
 						<div class="title">  Success </div>
 						<div class="sub-title">
-						You are now logged in and can reach this application over SSH from your command line. 
+						You are now logged in and can reach this application. 
 							You can close this browser window.
 						</div>
 					</div>

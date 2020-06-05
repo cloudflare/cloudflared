@@ -64,7 +64,10 @@ func TestManagerDuplicate(t *testing.T) {
 
 func TestManagerErrorChannel(t *testing.T) {
 	errChan := make(chan error)
-	m := NewAppManager(errChan)
+	serviceCallback := func(t string, name string, err error) {
+		errChan <- err
+	}
+	m := NewAppManager(serviceCallback)
 
 	err := errors.New("test error")
 	first := &mockService{serviceName: "first", serviceType: "mock", runError: err}

@@ -1,14 +1,20 @@
 package overwatch
 
+// ServiceCallback is a service notify it's runloop finished.
+// the first parameter is the service type
+// the second parameter is the service name
+// the third parameter is an optional error if the service failed
+type ServiceCallback func(string, string, error)
+
 // AppManager is the default implementation of overwatch service management
 type AppManager struct {
-	services  map[string]Service
-	errorChan chan error
+	services map[string]Service
+	callback ServiceCallback
 }
 
 // NewAppManager creates a new overwatch manager
-func NewAppManager(errorChan chan error) Manager {
-	return &AppManager{services: make(map[string]Service), errorChan: errorChan}
+func NewAppManager(callback ServiceCallback) Manager {
+	return &AppManager{services: make(map[string]Service), callback: callback}
 }
 
 // Add takes in a new service to manage.
@@ -47,7 +53,7 @@ func (m *AppManager) Services() []Service {
 
 func (m *AppManager) serviceRun(service Service) {
 	err := service.Run()
-	if err != nil && m.errorChan != nil {
-		m.errorChan <- err
+	if m.callback != nil {
+		m.callback(service.Type(), service.Name(), err)
 	}
 }

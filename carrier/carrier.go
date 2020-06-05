@@ -66,7 +66,7 @@ func StartForwarder(conn Connection, address string, shutdownC <-chan struct{}, 
 // StartClient will copy the data from stdin/stdout over a WebSocket connection
 // to the edge (originURL)
 func StartClient(conn Connection, stream io.ReadWriter, options *StartOptions) error {
-	return serveStream(conn, stream, options)
+	return conn.ServeStream(options, stream)
 }
 
 // Serve accepts incoming connections on the specified net.Listener.
@@ -103,12 +103,7 @@ func Serve(remoteConn Connection, listener net.Listener, shutdownC <-chan struct
 // serveConnection handles connections for the Serve() call
 func serveConnection(remoteConn Connection, c net.Conn, options *StartOptions) {
 	defer c.Close()
-	serveStream(remoteConn, c, options)
-}
-
-// serveStream will serve the data over the WebSocket stream
-func serveStream(remoteConn Connection, conn io.ReadWriter, options *StartOptions) error {
-	return remoteConn.ServeStream(options, conn)
+	remoteConn.ServeStream(options, c)
 }
 
 // IsAccessResponse checks the http Response to see if the url location

@@ -18,13 +18,11 @@ import (
 func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger logger.Service) error {
 	validURLString, err := validation.ValidateUrl(forwarder.Listener)
 	if err != nil {
-		logger.Errorf("Error validating origin URL: %s", err)
 		return errors.Wrap(err, "error validating origin URL")
 	}
 
 	validURL, err := url.Parse(validURLString)
 	if err != nil {
-		logger.Errorf("Error parsing origin URL: %s", err)
 		return errors.Wrap(err, "error parsing origin URL")
 	}
 

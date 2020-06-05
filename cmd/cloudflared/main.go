@@ -187,7 +187,12 @@ func handleServiceMode(shutdownC chan struct{}) error {
 		return err
 	}
 
-	serviceManager := overwatch.NewAppManager(nil)
+	serviceCallback := func(t string, name string, err error) {
+		if err != nil {
+			logger.Errorf("%s service: %s encountered an error: %s", t, name, err)
+		}
+	}
+	serviceManager := overwatch.NewAppManager(serviceCallback)
 
 	appService := NewAppService(configManager, serviceManager, shutdownC, logger)
 	if err := appService.Run(); err != nil {
