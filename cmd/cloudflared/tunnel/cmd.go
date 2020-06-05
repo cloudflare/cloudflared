@@ -90,6 +90,8 @@ const (
 	// bastionFlag is to enable bastion, or jump host, operation
 	bastionFlag = "bastion"
 
+	logDirectoryFlag = "log-directory"
+
 	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
 		"Response status, content length and header will also be logged in debug level."
 )
@@ -213,7 +215,7 @@ func Init(v string, s, g chan struct{}) {
 
 func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	loggerOpts := []logger.Option{}
-	logPath := c.String("logfile")
+	logPath := c.String(logDirectoryFlag)
 	if logPath != "" {
 		loggerOpts = append(loggerOpts, logger.DefaultFile(logPath))
 	}
@@ -828,8 +830,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "logfile",
-			Usage:   "Save application log to this file for reporting issues.",
+			Name:    logDirectoryFlag,
+			Aliases: []string{"logfile"}, // This flag used to be called logfile when it was a single file
+			Usage:   "Save application log to this directory for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGFILE"},
 			Hidden:  shouldHide,
 		}),

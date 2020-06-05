@@ -25,14 +25,16 @@ import (
 )
 
 const (
-	sshHostnameFlag    = "hostname"
-	sshDestinationFlag = "destination"
-	sshURLFlag         = "url"
-	sshHeaderFlag      = "header"
-	sshTokenIDFlag     = "service-token-id"
-	sshTokenSecretFlag = "service-token-secret"
-	sshGenCertFlag     = "short-lived-cert"
-	sshConfigTemplate  = `
+	sshHostnameFlag     = "hostname"
+	sshDestinationFlag  = "destination"
+	sshURLFlag          = "url"
+	sshHeaderFlag       = "header"
+	sshTokenIDFlag      = "service-token-id"
+	sshTokenSecretFlag  = "service-token-secret"
+	sshGenCertFlag      = "short-lived-cert"
+	sshLogDirectoryFlag = "log-directory"
+	sshLogLevelFlag     = "log-level"
+	sshConfigTemplate   = `
 Add to your {{.Home}}/.ssh/config:
 
 Host {{.Hostname}}
@@ -153,6 +155,16 @@ func Commands() []*cli.Command {
 							Name:    sshTokenSecretFlag,
 							Aliases: []string{"secret"},
 							Usage:   "specify an Access service token secret you wish to use.",
+						},
+						&cli.StringFlag{
+							Name:    sshLogDirectoryFlag,
+							Aliases: []string{"logfile"}, //added to match the tunnel side
+							Usage:   "Save application log to this directory for reporting issues.",
+						},
+						&cli.StringFlag{
+							Name:    sshLogLevelFlag,
+							Aliases: []string{"loglevel"}, //added to match the tunnel side
+							Usage:   "Application logging level {fatal, error, info, debug}. ",
 						},
 					},
 				},

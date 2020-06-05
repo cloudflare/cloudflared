@@ -44,6 +44,17 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger
 // (which you can put Access in front of)
 func ssh(c *cli.Context) error {
 	logDirectory, logLevel := config.FindLogSettings()
+
+	flagLogDirectory := c.String(sshLogDirectoryFlag)
+	if flagLogDirectory != "" {
+		logDirectory = flagLogDirectory
+	}
+
+	flagLogLevel := c.String(sshLogLevelFlag)
+	if flagLogLevel != "" {
+		logLevel = flagLogLevel
+	}
+
 	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
