@@ -9,7 +9,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/logger"
+	log "github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
 	"github.com/cloudflare/cloudflared/watcher"
@@ -167,11 +167,13 @@ func handleError(err error) {
 func handleServiceMode(shutdownC chan struct{}) error {
 	logDirectory, logLevel := config.FindLogSettings()
 
-	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
+	logger, err := log.New(log.DefaultFile(logDirectory), log.LogLevelString(logLevel))
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
 	logger.Infof("logging to directory: %s", logDirectory)
+
+	defer log.SharedWriteManager.Shutdown()
 
 	// start the main run loop that reads from the config file
 	f, err := watcher.NewFile()

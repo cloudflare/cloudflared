@@ -9,8 +9,10 @@ import (
 
 // Forwarder represents a client side listener to forward traffic to the edge
 type Forwarder struct {
-	URL      string `json:"url"`
-	Listener string `json:"listener"`
+	URL           string `json:"url"`
+	Listener      string `json:"listener"`
+	TokenClientID string `json:"service_token_id" yaml:"serviceTokenID"`
+	TokenSecret   string `json:"secret_token_id" yaml:"serviceTokenSecret"`
 }
 
 // Tunnel represents a tunnel that should be started
@@ -46,6 +48,8 @@ func (f *Forwarder) Hash() string {
 	h := md5.New()
 	io.WriteString(h, f.URL)
 	io.WriteString(h, f.Listener)
+	io.WriteString(h, f.TokenClientID)
+	io.WriteString(h, f.TokenSecret)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

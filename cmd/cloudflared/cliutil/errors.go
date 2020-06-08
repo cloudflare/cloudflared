@@ -3,6 +3,7 @@ package cliutil
 import (
 	"fmt"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -34,6 +35,7 @@ func ErrorHandler(actionFunc cli.ActionFunc) cli.ActionFunc {
 			cli.HandleExitCoder(err)
 			err = cli.Exit(err.Error(), 1)
 		}
+		logger.SharedWriteManager.Shutdown()
 		return err
 	}
 }

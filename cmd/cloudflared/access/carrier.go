@@ -26,9 +26,19 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger
 		return errors.Wrap(err, "error parsing origin URL")
 	}
 
+	// get the headers from the config file and add to the request
+	headers := make(http.Header)
+	if forwarder.TokenClientID != "" {
+		headers.Set(h2mux.CFAccessClientIDHeader, forwarder.TokenClientID)
+	}
+
+	if forwarder.TokenSecret != "" {
+		headers.Set(h2mux.CFAccessClientSecretHeader, forwarder.TokenSecret)
+	}
+
 	options := &carrier.StartOptions{
 		OriginURL: forwarder.URL,
-		Headers:   make(http.Header), //TODO: TUN-2688 support custom headers from config file
+		Headers:   headers, //TODO: TUN-2688 support custom headers from config file
 	}
 
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
@@ -71,10 +81,10 @@ func ssh(c *cli.Context) error {
 	// get the headers from the cmdline and add them
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
-		headers.Add(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
+		headers.Set(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}
 	if c.IsSet(sshTokenSecretFlag) {
-		headers.Add(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
+		headers.Set(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
 
 	destination := c.String(sshDestinationFlag)

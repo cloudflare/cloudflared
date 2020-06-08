@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/logger"
@@ -80,6 +81,9 @@ func createWebsocketStream(options *StartOptions, logger logger.Service) (*cfweb
 	}
 	req.Header = options.Headers
 
+	dump, err := httputil.DumpRequest(req, false)
+	logger.Debugf("Websocket request: %s", string(dump))
+
 	wsConn, resp, err := cfwebsocket.ClientConnect(req, nil)
 	defer closeRespBody(resp)
 	if err != nil && IsAccessResponse(resp) {
@@ -133,5 +137,9 @@ func createAccessWebSocketStream(options *StartOptions, logger logger.Service) (
 	if err != nil {
 		return nil, nil, err
 	}
+
+	dump, err := httputil.DumpRequest(req, false)
+	logger.Debugf("Access Websocket request: %s", string(dump))
+
 	return cfwebsocket.ClientConnect(req, nil)
 }

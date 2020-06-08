@@ -146,12 +146,12 @@ func Commands() []*cli.Command {
 							Aliases: []string{"H"},
 							Usage:   "specify additional headers you wish to send.",
 						},
-						&cli.StringSliceFlag{
+						&cli.StringFlag{
 							Name:    sshTokenIDFlag,
 							Aliases: []string{"id"},
 							Usage:   "specify an Access service token ID you wish to use.",
 						},
-						&cli.StringSliceFlag{
+						&cli.StringFlag{
 							Name:    sshTokenSecretFlag,
 							Aliases: []string{"secret"},
 							Usage:   "specify an Access service token secret you wish to use.",
