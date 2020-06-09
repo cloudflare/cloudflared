@@ -34,6 +34,8 @@ ifeq ($(LOCAL_OS),linux)
     TARGET_OS ?= linux
 else ifeq ($(LOCAL_OS),darwin)
     TARGET_OS ?= darwin
+else ifeq ($(LOCAL_OS),windows)
+    TARGET_OS ?= windows
 else
     $(error This system's OS $(LOCAL_OS) isn't supported)
 endif
