@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -97,16 +99,39 @@ func listTunnels(c *cli.Context) error {
 		return renderOutput(outputFormat, tunnels)
 	}
 	if len(tunnels) > 0 {
-		const listFormat = "%-40s%-40s%s\n"
-		fmt.Printf(listFormat, "ID", "NAME", "CREATED")
+		const listFormat = "%-40s%-30s%-30s%s\n"
+		fmt.Printf(listFormat, "ID", "NAME", "CREATED", "CONNECTIONS")
 		for _, t := range tunnels {
-			fmt.Printf(listFormat, t.ID, t.Name, t.CreatedAt.Format(time.RFC3339))
+			fmt.Printf(listFormat, t.ID, t.Name, t.CreatedAt.Format(time.RFC3339), fmtConnections(t.Connections))
 		}
 	} else {
 		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
 	}
 
 	return nil
+}
+
+func fmtConnections(connections []tunnelstore.Connection) string {
+
+	// Count connections per colo
+	numConnsPerColo := make(map[string]uint, len(connections))
+	for _, connection := range connections {
+		numConnsPerColo[connection.ColoName]++
+	}
+
+	// Get sorted list of colos
+	sortedColos := []string{}
+	for coloName := range numConnsPerColo {
+		sortedColos = append(sortedColos, coloName)
+	}
+	sort.Strings(sortedColos)
+
+	// Map each colo to its frequency, combine into output string.
+	var output []string
+	for _, coloName := range sortedColos {
+		output = append(output, fmt.Sprintf("%dx%s", numConnsPerColo[coloName], coloName))
+	}
+	return strings.Join(output, ", ")
 }
 
 func buildDeleteCommand() *cli.Command {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -26,9 +27,15 @@ var (
 )
 
 type Tunnel struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Connections []Connection `json:"connections"`
+}
+
+type Connection struct {
+	ColoName string    `json:"colo_name"`
+	ID       uuid.UUID `json:"uuid"`
 }
 
 type Client interface {
