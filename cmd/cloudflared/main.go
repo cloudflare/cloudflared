@@ -61,7 +61,7 @@ func main() {
 	app := &cli.App{}
 	app.Name = "cloudflared"
 	app.Usage = "Cloudflare's command-line tool and agent"
-	app.ArgsUsage = "origin-url"
+	app.UsageText = "cloudflared [global options] [command] [command options]"
 	app.Copyright = fmt.Sprintf(
 		`(c) %d Cloudflare Inc.
    Your installation of cloudflared software constitutes a symbol of your signature indicating that you accept

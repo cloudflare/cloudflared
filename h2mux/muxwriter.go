@@ -204,7 +204,7 @@ func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger logger.Service) 
 		}
 		// update the amount of data wrote
 		w.bytesWrote.IncrementBy(uint64(len(payload)))
-		logger.Errorf("mux - write: output data: %d: streamID: %d", len(payload), stream.streamID)
+		logger.Debugf("mux - write: output data: %d: streamID: %d", len(payload), stream.streamID)
 
 		if sentEOF {
 			if stream.readBuffer.Closed() {

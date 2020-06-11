@@ -223,6 +223,9 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	logLevel := c.String("loglevel")
 	if isTransport {
 		logLevel = c.String("transport-loglevel")
+		if logLevel == "" {
+			logLevel = "fatal"
+		}
 	}
 	loggerOpts = append(loggerOpts, logger.LogLevelString(logLevel))
 
