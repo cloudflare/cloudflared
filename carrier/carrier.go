@@ -131,7 +131,7 @@ func BuildAccessRequest(options *StartOptions, logger logger.Service) (*http.Req
 		return nil, err
 	}
 
-	token, err := token.FetchToken(req.URL, logger)
+	token, err := token.FetchTokenWithRedirect(req.URL, logger)
 	if err != nil {
 		return nil, err
 	}

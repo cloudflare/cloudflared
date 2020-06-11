@@ -351,7 +351,7 @@ func sshGen(c *cli.Context) error {
 	// this fetchToken function mutates the appURL param. We should refactor that
 	fetchTokenURL := &url.URL{}
 	*fetchTokenURL = *originURL
-	cfdToken, err := token.FetchToken(fetchTokenURL, logger)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, logger)
 	if err != nil {
 		return err
 	}
