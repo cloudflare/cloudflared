@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
@@ -31,7 +32,7 @@ func Run(c *cli.Context) error {
 	logDirectory, logLevel := config.FindLogSettings()
 	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
 	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
 	metricsListener, err := net.Listen("tcp", c.String("metrics"))

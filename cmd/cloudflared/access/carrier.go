@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
@@ -67,7 +68,7 @@ func ssh(c *cli.Context) error {
 
 	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
 	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
 	// get the hostname from the cmdline and error out if its not provided

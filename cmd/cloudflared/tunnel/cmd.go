@@ -235,7 +235,7 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}) error {
 	logger, err := createLogger(c, false)
 	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
 	_ = raven.SetDSN(sentryDSN)
@@ -478,7 +478,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 func Before(c *cli.Context) error {
 	logger, err := createLogger(c, false)
 	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
 	if c.String("config") == "" {

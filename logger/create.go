@@ -141,7 +141,7 @@ func ParseLevelString(lvl string) ([]Level, error) {
 		return []Level{FatalLevel}, nil
 	case "error":
 		return []Level{FatalLevel, ErrorLevel}, nil
-	case "info":
+	case "info", "warn":
 		return []Level{FatalLevel, ErrorLevel, InfoLevel}, nil
 	case "debug":
 		return []Level{FatalLevel, ErrorLevel, InfoLevel, DebugLevel}, nil

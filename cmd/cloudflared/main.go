@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
@@ -165,15 +166,14 @@ func handleError(err error) {
 
 // cloudflared was started without any flags
 func handleServiceMode(shutdownC chan struct{}) error {
+	defer log.SharedWriteManager.Shutdown()
 	logDirectory, logLevel := config.FindLogSettings()
 
 	logger, err := log.New(log.DefaultFile(logDirectory), log.LogLevelString(logLevel))
 	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 	logger.Infof("logging to directory: %s", logDirectory)
-
-	defer log.SharedWriteManager.Shutdown()
 
 	// start the main run loop that reads from the config file
 	f, err := watcher.NewFile()
