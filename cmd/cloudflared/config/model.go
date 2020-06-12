@@ -13,6 +13,7 @@ type Forwarder struct {
 	Listener      string `json:"listener"`
 	TokenClientID string `json:"service_token_id" yaml:"serviceTokenID"`
 	TokenSecret   string `json:"secret_token_id" yaml:"serviceTokenSecret"`
+	Destination   string `json:"destination"`
 }
 
 // Tunnel represents a tunnel that should be started
@@ -50,6 +51,7 @@ func (f *Forwarder) Hash() string {
 	io.WriteString(h, f.Listener)
 	io.WriteString(h, f.TokenClientID)
 	io.WriteString(h, f.TokenSecret)
+	io.WriteString(h, f.Destination)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

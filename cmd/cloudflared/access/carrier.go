@@ -37,6 +37,10 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger
 		headers.Set(h2mux.CFAccessClientSecretHeader, forwarder.TokenSecret)
 	}
 
+	if forwarder.Destination != "" {
+		headers.Add(h2mux.CFJumpDestinationHeader, forwarder.Destination)
+	}
+
 	options := &carrier.StartOptions{
 		OriginURL: forwarder.URL,
 		Headers:   headers, //TODO: TUN-2688 support custom headers from config file
