@@ -16,6 +16,8 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 )
 
+const testAccountTag = "abc123"
+
 func TestMarshalConnectionOptions(t *testing.T) {
 	clientID := uuid.New()
 	orig := ConnectionOptions{
@@ -47,6 +49,7 @@ func TestMarshalConnectionOptions(t *testing.T) {
 
 func TestConnectionRegistrationRPC(t *testing.T) {
 	p1, p2 := net.Pipe()
+
 	t1, t2 := rpc.StreamTransport(p1), rpc.StreamTransport(p2)
 
 	// Server-side
@@ -84,9 +87,14 @@ func TestConnectionRegistrationRPC(t *testing.T) {
 	testImpl.details = &expectedDetails
 	testImpl.err = nil
 
+	auth := TunnelAuth{
+		AccountTag:   testAccountTag,
+		TunnelSecret: []byte{1, 2, 3, 4},
+	}
+
 	// success
 	tunnelID := uuid.New()
-	details, err := client.Register(ctx, []byte{1, 2, 3}, tunnelID, 2, options)
+	details, err := client.RegisterConnection(ctx, auth, tunnelID, 2, options)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedDetails, *details)
 
@@ -94,15 +102,15 @@ func TestConnectionRegistrationRPC(t *testing.T) {
 	testImpl.details = nil
 	testImpl.err = errors.New("internal")
 
-	_, err = client.Register(ctx, []byte{1, 2, 3}, tunnelID, 2, options)
+	_, err = client.RegisterConnection(ctx, auth, tunnelID, 2, options)
 	assert.EqualError(t, err, "internal")
 
 	// retriable error
 	testImpl.details = nil
-	const delay = 27*time.Second
+	const delay = 27 * time.Second
 	testImpl.err = RetryErrorAfter(errors.New("retryable"), delay)
 
-	_, err = client.Register(ctx, []byte{1, 2, 3}, tunnelID, 2, options)
+	_, err = client.RegisterConnection(ctx, auth, tunnelID, 2, options)
 	assert.EqualError(t, err, "retryable")
 
 	re, ok := err.(*RetryableError)
@@ -117,7 +125,10 @@ type testConnectionRegistrationServer struct {
 	err     error
 }
 
-func (t testConnectionRegistrationServer) Register(ctx context.Context, auth []byte, tunnelUUID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
+func (t *testConnectionRegistrationServer) RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
+	if auth.AccountTag != testAccountTag {
+		panic("bad account tag: " + auth.AccountTag)
+	}
 	if t.err != nil {
 		return nil, t.err
 	}

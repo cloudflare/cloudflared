@@ -11,12 +11,12 @@ import (
 // mocks for specific unit tests without having to implement every method
 type mockTunnelServerBase struct{}
 
-func (mockTunnelServerBase) Register(ctx context.Context, auth []byte, tunnelUUID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
-	panic("unexpected call to Register")
+func (mockTunnelServerBase) RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
+	panic("unexpected call to RegisterConnection")
 }
 
-func (mockTunnelServerBase) Unregister(ctx context.Context) {
-	panic("unexpected call to Unregister")
+func (mockTunnelServerBase) UnregisterConnection(ctx context.Context) {
+	panic("unexpected call to UnregisterConnection")
 }
 
 func (mockTunnelServerBase) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) *TunnelRegistration {

@@ -121,8 +121,13 @@ struct ConnectionDetails {
     locationName @1 :Text;
 }
 
+struct TunnelAuth {
+  accountTag @0 :Text;
+  tunnelSecret @1 :Data;
+}
+
 interface RegistrationServer {
-    registerConnection @0 (auth :Data, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
+    registerConnection @0 (auth :TunnelAuth, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
     unregisterConnection @1 () -> ();
 }
 

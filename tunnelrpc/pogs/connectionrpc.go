@@ -14,7 +14,7 @@ import (
 )
 
 type RegistrationServer interface {
-	RegisterConnection(ctx context.Context, auth []byte, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error)
+	RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error)
 	UnregisterConnection(ctx context.Context)
 }
 
@@ -32,12 +32,25 @@ type ConnectionOptions struct {
 	CompressionQuality uint8
 }
 
+type TunnelAuth struct {
+	AccountTag   string
+	TunnelSecret []byte
+}
+
 func (p *ConnectionOptions) MarshalCapnproto(s tunnelrpc.ConnectionOptions) error {
 	return pogs.Insert(tunnelrpc.ConnectionOptions_TypeID, s.Struct, p)
 }
 
 func (p *ConnectionOptions) UnmarshalCapnproto(s tunnelrpc.ConnectionOptions) error {
 	return pogs.Extract(p, tunnelrpc.ConnectionOptions_TypeID, s.Struct)
+}
+
+func (a *TunnelAuth) MarshalCapnproto(s tunnelrpc.TunnelAuth) error {
+	return pogs.Insert(tunnelrpc.TunnelAuth_TypeID, s.Struct, a)
+}
+
+func (a *TunnelAuth) UnmarshalCapnproto(s tunnelrpc.TunnelAuth) error {
+	return pogs.Extract(a, tunnelrpc.TunnelAuth_TypeID, s.Struct)
 }
 
 type ConnectionDetails struct {
@@ -92,6 +105,11 @@ func (i TunnelServer_PogsImpl) RegisterConnection(p tunnelrpc.RegistrationServer
 	if err != nil {
 		return err
 	}
+	var pogsAuth TunnelAuth
+	err = pogsAuth.UnmarshalCapnproto(auth)
+	if err != nil {
+		return err
+	}
 	uuidBytes, err := p.Params.TunnelId()
 	if err != nil {
 		return err
@@ -111,7 +129,7 @@ func (i TunnelServer_PogsImpl) RegisterConnection(p tunnelrpc.RegistrationServer
 		return err
 	}
 
-	connDetails, callError := i.impl.RegisterConnection(p.Ctx, auth, tunnelID, connIndex, &pogsOptions)
+	connDetails, callError := i.impl.RegisterConnection(p.Ctx, pogsAuth, tunnelID, connIndex, &pogsOptions)
 
 	resp, err := p.Results.NewResult()
 	if err != nil {
@@ -140,10 +158,17 @@ func (i TunnelServer_PogsImpl) UnregisterConnection(p tunnelrpc.RegistrationServ
 	return nil
 }
 
-func (c TunnelServer_PogsClient) RegisterConnection(ctx context.Context, auth []byte, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
+func (c TunnelServer_PogsClient) RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.RegisterConnection(ctx, func(p tunnelrpc.RegistrationServer_registerConnection_Params) error {
-		err := p.SetAuth(auth)
+		tunnelAuth, err := p.NewAuth()
+		if err != nil {
+			return err
+		}
+		if err = auth.MarshalCapnproto(tunnelAuth); err != nil {
+			return err
+		}
+		err = p.SetAuth(tunnelAuth)
 		if err != nil {
 			return err
 		}
