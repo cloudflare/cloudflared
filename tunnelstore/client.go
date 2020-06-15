@@ -39,7 +39,7 @@ type Connection struct {
 }
 
 type Client interface {
-	CreateTunnel(name string) (*Tunnel, error)
+	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
 	GetTunnel(id string) (*Tunnel, error)
 	DeleteTunnel(id string) error
 	ListTunnels() ([]Tunnel, error)
@@ -74,15 +74,17 @@ func NewRESTClient(baseURL string, accountTag string, authToken string, logger l
 }
 
 type newTunnel struct {
-	Name string `json:"name"`
+	Name         string `json:"name"`
+	TunnelSecret []byte `json:"tunnel_secret"`
 }
 
-func (r *RESTClient) CreateTunnel(name string) (*Tunnel, error) {
+func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error) {
 	if name == "" {
 		return nil, errors.New("tunnel name required")
 	}
 	body, err := json.Marshal(&newTunnel{
-		Name: name,
+		Name:         name,
+		TunnelSecret: tunnelSecret,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to serialize new tunnel request")

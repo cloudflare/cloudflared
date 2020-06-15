@@ -6,6 +6,7 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelstore"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_fmtConnections(t *testing.T) {
@@ -68,4 +69,11 @@ func Test_fmtConnections(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTunnelfilePath(t *testing.T) {
+	actual, err := tunnelFilePath("tunnel", "~/.cloudflared/cert.pem")
+	assert.NoError(t, err)
+	expected := "~/.cloudflared/tunnel.json"
+	assert.Equal(t, expected, actual)
 }
