@@ -33,7 +33,7 @@ func NewFileRollingWriter(directory, baseFileName string, maxFileSize int64, max
 // Write is an implementation of io.writer the rolls the file once it reaches its max size
 // It is expected the caller to Write is doing so in a thread safe manner (as WriteManager does).
 func (w *FileRollingWriter) Write(p []byte) (n int, err error) {
-	logFile := buildPath(w.directory, w.baseFileName)
+	logFile, isSingleFile := buildPath(w.directory, w.baseFileName)
 	if w.fileHandle == nil {
 		h, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0664)
 		if err != nil {
@@ -55,7 +55,7 @@ func (w *FileRollingWriter) Write(p []byte) (n int, err error) {
 	written, err := w.fileHandle.Write(p)
 
 	// check if the file needs to be rolled
-	if err == nil && info.Size()+int64(written) > w.maxFileSize {
+	if err == nil && info.Size()+int64(written) > w.maxFileSize && !isSingleFile {
 		// close the file handle than do the renaming. A new one will be opened on the next write
 		w.Close()
 		w.rename(logFile, 1)
@@ -77,7 +77,10 @@ func (w *FileRollingWriter) Close() {
 // but if cloudflared-1.log already exists, it is renamed to cloudflared-2.log,
 // then the other files move in to their postion
 func (w *FileRollingWriter) rename(sourcePath string, index uint) {
-	destinationPath := buildPath(w.directory, fmt.Sprintf("%s-%d", w.baseFileName, index))
+	destinationPath, isSingleFile := buildPath(w.directory, fmt.Sprintf("%s-%d", w.baseFileName, index))
+	if isSingleFile {
+		return //don't need to rename anything, it is a single file
+	}
 
 	// rolled to the max amount of files allowed on disk
 	if index >= w.maxFileCount {
@@ -93,8 +96,13 @@ func (w *FileRollingWriter) rename(sourcePath string, index uint) {
 	os.Rename(sourcePath, destinationPath)
 }
 
-func buildPath(directory, fileName string) string {
-	return filepath.Join(directory, fileName+".log")
+// return the path to the log file and if it is a single file or not.
+// true means a single file. false means a rolled file
+func buildPath(directory, fileName string) (string, bool) {
+	if !isDirectory(directory) { // not a directory, so try and treat it as a single file for backwards compatibility sake
+		return directory, true
+	}
+	return filepath.Join(directory, fileName+".log"), false
 }
 
 func exists(filePath string) bool {
@@ -102,4 +110,16 @@ func exists(filePath string) bool {
 		return false
 	}
 	return true
+}
+
+func isDirectory(path string) bool {
+	if path == "" {
+		return true
+	}
+
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fileInfo.IsDir()
 }

@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/acmacalister/skittles"
@@ -58,14 +59,17 @@ func (f *DefaultFormatter) Content(l Level, c string) string {
 
 // TerminalFormatter is setup for colored output
 type TerminalFormatter struct {
-	format string
+	format        string
+	supportsColor bool
 }
 
 // NewTerminalFormatter creates a Terminal formatter for colored output
 // format is the time format to use for timestamp formatting
 func NewTerminalFormatter(format string) Formatter {
+	supportsColor := (runtime.GOOS != "windows")
 	return &TerminalFormatter{
-		format: format,
+		format:        format,
+		supportsColor: supportsColor,
 	}
 }
 
@@ -74,13 +78,13 @@ func (f *TerminalFormatter) Timestamp(l Level, d time.Time) string {
 	t := ""
 	switch l {
 	case InfoLevel:
-		t = skittles.Cyan("[INFO] ")
+		t = f.output("[INFO] ", skittles.Cyan)
 	case ErrorLevel:
-		t = skittles.Red("[ERROR] ")
+		t = f.output("[ERROR] ", skittles.Red)
 	case DebugLevel:
-		t = skittles.Yellow("[DEBUG] ")
+		t = f.output("[DEBUG] ", skittles.Yellow)
 	case FatalLevel:
-		t = skittles.Red("[FATAL] ")
+		t = f.output("[FATAL] ", skittles.Red)
 	}
 	return t
 }
@@ -88,4 +92,11 @@ func (f *TerminalFormatter) Timestamp(l Level, d time.Time) string {
 // Content just writes the log line straight to the sources
 func (f *TerminalFormatter) Content(l Level, c string) string {
 	return c
+}
+
+func (f *TerminalFormatter) output(msg string, colorFunc func(interface{}) string) string {
+	if f.supportsColor {
+		return colorFunc(msg)
+	}
+	return msg
 }
