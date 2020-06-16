@@ -25,12 +25,12 @@ func TestSessionLogWrite(t *testing.T) {
 	testStr := "hi"
 	logger := createSessionLogger(t)
 	defer func() {
-		logger.Close()
 		os.Remove(sessionLogFileName)
 	}()
 
 	logger.Write([]byte(testStr))
-	time.Sleep(2 * time.Millisecond)
+	logger.Close()
+
 	f, err := os.Open(sessionLogFileName)
 	if err != nil {
 		t.Fatal("couldn't read the log file!", err)
