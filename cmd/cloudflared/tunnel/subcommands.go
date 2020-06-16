@@ -22,6 +22,11 @@ import (
 )
 
 var (
+	showDeletedFlag = &cli.BoolFlag{
+		Name:    "show-deleted",
+		Aliases: []string{"d"},
+		Usage:   "Include deleted tunnels in the list",
+	}
 	outputFormatFlag = &cli.StringFlag{
 		Name:    "output",
 		Aliases: []string{"o"},
@@ -137,7 +142,7 @@ func buildListCommand() *cli.Command {
 		Usage:     "List existing tunnels",
 		ArgsUsage: " ",
 		Hidden:    hideSubcommands,
-		Flags:     []cli.Flag{outputFormatFlag},
+		Flags:     []cli.Flag{outputFormatFlag, showDeletedFlag},
 	}
 }
 
@@ -157,9 +162,20 @@ func listTunnels(c *cli.Context) error {
 	}
 	client := newTunnelstoreClient(c, cert, logger)
 
-	tunnels, err := client.ListTunnels()
+	allTunnels, err := client.ListTunnels()
 	if err != nil {
 		return errors.Wrap(err, "Error listing tunnels")
+	}
+
+	var tunnels []tunnelstore.Tunnel
+	if c.Bool("show-deleted") {
+		tunnels = allTunnels
+	} else {
+		for _, tunnel := range allTunnels {
+			if tunnel.DeletedAt.IsZero() {
+				tunnels = append(tunnels, tunnel)
+			}
+		}
 	}
 
 	if outputFormat := c.String(outputFormatFlag.Name); outputFormat != "" {
