@@ -1,3 +1,7 @@
+2020.6.3
+- 2020-06-15 DEVTOOLS-7321: Add openssh-client pkg for missing ssh-keyscan
+- 2020-06-15 AUTH-2813 adds back a single file support a cloudflared log file
+
 2020.6.2
 - 2020-06-11 AUTH-2648 updated usage text
 - 2020-06-11 AUTH-2763 don't redirect from curl command
