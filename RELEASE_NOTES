@@ -1,3 +1,9 @@
+2020.6.4
+- 2020-06-11 TUN-3085: Pass connection authentication information using TunnelAuth struct
+- 2020-06-15 TUN-3084: Generate and store tunnel_secret value during tunnel creation
+- 2020-06-16 AUTH-2815 add the log file to support the config.yaml file
+- 2020-06-02 TUN-3015: Add a new cap'n'proto RPC interface for connection registration as well as matching client and server implementations. The old interface extends the new one for backward compatibility.
+
 2020.6.3
 - 2020-06-15 DEVTOOLS-7321: Add openssh-client pkg for missing ssh-keyscan
 - 2020-06-15 AUTH-2813 adds back a single file support a cloudflared log file
