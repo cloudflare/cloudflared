@@ -215,7 +215,12 @@ func Init(v string, s, g chan struct{}) {
 
 func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	loggerOpts := []logger.Option{}
-	logPath := c.String(logDirectoryFlag)
+
+	logPath := c.String("logfile")
+	if logPath != "" {
+		logPath = c.String(logDirectoryFlag)
+	}
+
 	if logPath != "" {
 		loggerOpts = append(loggerOpts, logger.DefaultFile(logPath))
 	}
@@ -833,10 +838,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logDirectoryFlag,
-			Aliases: []string{"logfile"}, // This flag used to be called logfile when it was a single file
-			Usage:   "Save application log to this directory for reporting issues.",
+			Name:    "logfile",
+			Usage:   "Save application log to this file for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGFILE"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    logDirectoryFlag,
+			Usage:   "Save application log to this directory for reporting issues.",
+			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{

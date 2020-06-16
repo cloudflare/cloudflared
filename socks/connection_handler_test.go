@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/proxy"
@@ -58,7 +59,6 @@ func startTestServer(t *testing.T, httpHandler func(w http.ResponseWriter, r *ht
 
 	// start the servers
 	go http.ListenAndServe(":8085", mux)
-
 }
 
 func respondWithJSON(w http.ResponseWriter, v interface{}, status int) {
@@ -78,6 +78,7 @@ func OkJSONResponseHandler(w http.ResponseWriter, r *http.Request) {
 
 func TestSocksConnection(t *testing.T) {
 	startTestServer(t, OkJSONResponseHandler)
+	time.Sleep(100 * time.Millisecond)
 	b := sendSocksRequest(t)
 	assert.True(t, len(b) > 0, "no data returned!")
 
