@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,6 +32,14 @@ var (
 		Name:    "output",
 		Aliases: []string{"o"},
 		Usage:   "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
+	}
+	forceFlag = &cli.StringFlag{
+		Name:    "force",
+		Aliases: []string{"f"},
+		Usage: "By default, if a tunnel is currently being run from a cloudflared, you can't " +
+			"simultaneously rerun it again from a second cloudflared. The --force flag lets you " +
+			"overwrite the previous tunnel. If you want to use a single hostname with multiple " +
+			"tunnels, you can do so with Cloudflare's Load Balancer product.",
 	}
 )
 
@@ -117,13 +126,6 @@ func writeTunnelCredentials(tunnelID, accountID, originCertPath string, tunnelSe
 	if err != nil {
 		return err
 	}
-	logger.Infof("Writing tunnel credentials to %v. cloudflared chose this file based on where your origin certificate was found.", filePath)
-	logger.Infof("Keep this file secret. To revoke these credentials, delete the tunnel.")
-	file, err := os.Create(filePath)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Unable to write to %s", filePath))
-	}
-	defer file.Close()
 	body, err := json.Marshal(pogs.TunnelAuth{
 		AccountTag:   accountID,
 		TunnelSecret: tunnelSecret,
@@ -131,8 +133,23 @@ func writeTunnelCredentials(tunnelID, accountID, originCertPath string, tunnelSe
 	if err != nil {
 		return errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
 	}
-	fmt.Fprintf(file, "%d", body)
-	return nil
+	logger.Infof("Writing tunnel credentials to %v. cloudflared chose this file based on where your origin certificate was found.", filePath)
+	logger.Infof("Keep this file secret. To revoke these credentials, delete the tunnel.")
+	return ioutil.WriteFile(filePath, body, 400)
+}
+
+func readTunnelCredentials(tunnelID, originCertPath string) (*pogs.TunnelAuth, error) {
+	filePath, err := tunnelFilePath(tunnelID, originCertPath)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "couldn't read tunnel credentials from %v", filePath)
+	}
+	auth := pogs.TunnelAuth{}
+	err = json.Unmarshal(body, &auth)
+	return &auth, errors.Wrap(err, "couldn't parse tunnel credentials from JSON")
 }
 
 func buildListCommand() *cli.Command {
@@ -289,4 +306,38 @@ func getOriginCertFromContext(originCertPath string, logger logger.Service) (*ce
 		return nil, errors.Errorf(`Origin certificate needs to be refreshed before creating new tunnels.\nDelete %s and run "cloudflared login" to obtain a new cert.`, originCertPath)
 	}
 	return cert, nil
+}
+
+func buildRunCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "run",
+		Action:    cliutil.ErrorHandler(runTunnel),
+		Usage:     "Proxy a local web server by running the given tunnel",
+		ArgsUsage: "TUNNEL-ID",
+		Hidden:    hideSubcommands,
+		Flags:     []cli.Flag{forceFlag},
+	}
+}
+
+func runTunnel(c *cli.Context) error {
+	if c.NArg() != 1 {
+		return cliutil.UsageError(`"cloudflared tunnel run" requires exactly 1 argument, the ID of the tunnel to run.`)
+	}
+	id := c.Args().First()
+
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	originCertPath, err := findOriginCert(c, logger)
+	if err != nil {
+		return errors.Wrap(err, "Error locating origin cert")
+	}
+	credentials, err := readTunnelCredentials(id, originCertPath)
+	if err != nil {
+		return err
+	}
+	logger.Debugf("Read credentials for %v", credentials.AccountTag)
+	panic("TODO: start tunnel supervisor")
 }

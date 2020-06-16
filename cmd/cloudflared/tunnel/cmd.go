@@ -172,6 +172,7 @@ func Commands() []*cli.Command {
 	subcommands = append(subcommands, buildCreateCommand())
 	subcommands = append(subcommands, buildListCommand())
 	subcommands = append(subcommands, buildDeleteCommand())
+	subcommands = append(subcommands, buildRunCommand())
 
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",
@@ -1092,8 +1093,8 @@ func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service
 				logger.Infof("Unknown command: %s", command)
 				fallthrough
 			case "help":
-				logger.Info(`Supported command: 
-reconnect [delay] 
+				logger.Info(`Supported command:
+reconnect [delay]
 - restarts one randomly chosen connection with optional delay before reconnect`)
 			}
 		}
