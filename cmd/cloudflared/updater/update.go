@@ -67,7 +67,7 @@ type UpdateOutcome struct {
 }
 
 func (uo *UpdateOutcome) noUpdate() bool {
-	return uo.Error != nil && uo.Updated == false
+	return uo.Error == nil && uo.Updated == false
 }
 
 func checkForUpdateAndApply() UpdateOutcome {
