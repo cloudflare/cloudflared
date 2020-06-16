@@ -217,7 +217,7 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	loggerOpts := []logger.Option{}
 
 	logPath := c.String("logfile")
-	if logPath != "" {
+	if logPath == "" {
 		logPath = c.String(logDirectoryFlag)
 	}
 
