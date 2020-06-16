@@ -2,12 +2,6 @@
 
 set -euo pipefail
 
-if ! git describe --tags --exact-match 2>/dev/null ; then
-    echo "Skipping public release for an untagged commit."
-    echo "##teamcity[buildStatus status='SUCCESS' text='Skipped due to lack of tag']"
-    exit 0
-fi
-
 if [[ "$(uname)" != "Darwin" ]] ; then
     echo "This should be run on macOS"
     exit 1
