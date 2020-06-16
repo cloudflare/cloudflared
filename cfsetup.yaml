@@ -85,6 +85,7 @@ stretch: &stretch
       - make test
   update-homebrew:
     builddeps:
+      - openssh-client
       - s3cmd
     post-cache:
       - .teamcity/update-homebrew.sh
