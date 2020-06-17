@@ -1,3 +1,11 @@
+2020.6.5
+- 2020-06-16 DEVTOOLS-7321: Don't skip macOS builds based on tag
+- 2020-06-16 fix for a flaky test
+- 2020-06-16 AUTH-2815 flag check was wrong. stupid oversight
+- 2020-06-16 TUN-3101: Tunnel list command should only show non-deleted, by default
+- 2020-06-16 TUN-3066: Command line action for tunnel run
+- 2020-06-16 TUN-3100 make updater report the right text
+
 2020.6.4
 - 2020-06-11 TUN-3085: Pass connection authentication information using TunnelAuth struct
 - 2020-06-15 TUN-3084: Generate and store tunnel_secret value during tunnel creation
