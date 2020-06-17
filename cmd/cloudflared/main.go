@@ -129,7 +129,7 @@ func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionF
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
-		raven.CapturePanic(func() { err = tunnel.StartServer(c, version, shutdownC, graceShutdownC) }, nil)
+		raven.CapturePanic(func() { err = tunnel.StartServer(c, version, shutdownC, graceShutdownC, nil) }, nil)
 		exitCode := 0
 		if err != nil {
 			handleError(err)

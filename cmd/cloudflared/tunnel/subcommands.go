@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/cloudflared/certutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 )
@@ -339,5 +340,5 @@ func runTunnel(c *cli.Context) error {
 		return err
 	}
 	logger.Debugf("Read credentials for %v", credentials.AccountTag)
-	panic("TODO: start tunnel supervisor")
+	return StartServer(c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: id})
 }

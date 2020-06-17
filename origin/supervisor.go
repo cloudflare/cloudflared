@@ -68,6 +68,8 @@ type Supervisor struct {
 	connDigest     map[uint8][]byte
 
 	bufferPool *buffer.Pool
+
+	namedTunnel *NamedTunnelConfig
 }
 
 type resolveResult struct {
@@ -80,7 +82,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID, namedTunnel *NamedTunnelConfig) (*Supervisor, error) {
 	var (
 		edgeIPs *edgediscovery.Edge
 		err     error
@@ -94,7 +96,7 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		return nil, err
 	}
 	return &Supervisor{
-		cloudflaredUUID:   u,
+		cloudflaredUUID:   cloudflaredUUID,
 		config:            config,
 		edgeIPs:           edgeIPs,
 		tunnelErrors:      make(chan tunnelError),
@@ -102,6 +104,7 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		logger:            config.Logger,
 		connDigest:        make(map[uint8][]byte),
 		bufferPool:        buffer.NewPool(512 * 1024),
+		namedTunnel:       namedTunnel,
 	}, nil
 }
 

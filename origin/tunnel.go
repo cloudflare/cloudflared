@@ -26,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -178,8 +179,13 @@ func (c *TunnelConfig) SupportedFeatures() []string {
 	return basic
 }
 
-func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan ReconnectSignal) error {
-	s, err := NewSupervisor(config, cloudflaredID)
+type NamedTunnelConfig struct {
+	Auth pogs.TunnelAuth
+	ID   string
+}
+
+func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan ReconnectSignal, namedTunnel *NamedTunnelConfig) error {
+	s, err := NewSupervisor(config, cloudflaredID, namedTunnel)
 	if err != nil {
 		return err
 	}
@@ -192,7 +198,7 @@ func ServeTunnelLoop(ctx context.Context,
 	addr *net.TCPAddr,
 	connectionID uint8,
 	connectedSignal *signal.Signal,
-	u uuid.UUID,
+	cloudflaredUUID uuid.UUID,
 	bufferPool *buffer.Pool,
 	reconnectCh chan ReconnectSignal,
 ) error {
@@ -216,7 +222,7 @@ func ServeTunnelLoop(ctx context.Context,
 			addr, connectionID,
 			connectedFuse,
 			&backoff,
-			u,
+			cloudflaredUUID,
 			bufferPool,
 			reconnectCh,
 		)
@@ -240,7 +246,7 @@ func ServeTunnel(
 	connectionID uint8,
 	connectedFuse *h2mux.BooleanFuse,
 	backoff *BackoffHandler,
-	u uuid.UUID,
+	cloudflaredUUID uuid.UUID,
 	bufferPool *buffer.Pool,
 	reconnectCh chan ReconnectSignal,
 ) (err error, recoverable bool) {
@@ -300,7 +306,7 @@ func ServeTunnel(
 						connDigest = digest
 					}
 				}
-				return ReconnectTunnel(serveCtx, token, eventDigest, connDigest, handler.muxer, config, logger, connectionID, originLocalIP, u, credentialManager)
+				return ReconnectTunnel(serveCtx, token, eventDigest, connDigest, handler.muxer, config, logger, connectionID, originLocalIP, cloudflaredUUID, credentialManager)
 			}
 			// log errors and proceed to RegisterTunnel
 			if tokenErr != nil {
@@ -310,7 +316,7 @@ func ServeTunnel(
 				logger.Errorf("Couldn't get event digest: %s", eventDigestErr)
 			}
 		}
-		return RegisterTunnel(serveCtx, credentialManager, handler.muxer, config, logger, connectionID, originLocalIP, u)
+		return RegisterTunnel(serveCtx, credentialManager, handler.muxer, config, logger, connectionID, originLocalIP, cloudflaredUUID)
 	})
 
 	errGroup.Go(func() error {

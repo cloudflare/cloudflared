@@ -207,7 +207,7 @@ func Commands() []*cli.Command {
 }
 
 func tunnel(c *cli.Context) error {
-	return StartServer(c, version, shutdownC, graceShutdownC)
+	return StartServer(c, version, shutdownC, graceShutdownC, nil)
 }
 
 func Init(v string, s, g chan struct{}) {
@@ -238,7 +238,7 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	return logger.New(loggerOpts...)
 }
 
-func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}) error {
+func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig) error {
 	logger, err := createLogger(c, false)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
@@ -475,7 +475,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh, namedTunnel)
 	}()
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
