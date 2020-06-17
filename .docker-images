@@ -1,0 +1,8 @@
+images:
+  - name: cloudflared
+    dockerfile: Dockerfile
+    context: .
+    registries:
+    - name: docker.io/michael9127
+      user: env:DOCKER_USER
+      password: env:DOCKER_PASSWORD  
