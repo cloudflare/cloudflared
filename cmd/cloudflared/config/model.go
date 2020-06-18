@@ -34,14 +34,11 @@ type DNSResolver struct {
 
 // Root is the base options to configure the service
 type Root struct {
-	OrgKey          string      `json:"org_key" yaml:"orgKey"`
-	ConfigType      string      `json:"type"`
-	LogDirectory    string      `json:"log_directory" yaml:"logDirectory,omitempty"`
-	LogLevel        string      `json:"log_level" yaml:"logLevel"`
-	CheckinInterval int         `json:"checkin_interval" yaml:"checkinInterval"`
-	Forwarders      []Forwarder `json:"forwarders,omitempty"`
-	Tunnels         []Tunnel    `json:"tunnels,omitempty"`
-	Resolver        DNSResolver `json:"resolver,omitempty"`
+	LogDirectory string      `json:"log_directory" yaml:"logDirectory,omitempty"`
+	LogLevel     string      `json:"log_level" yaml:"logLevel,omitempty"`
+	Forwarders   []Forwarder `json:"forwarders,omitempty" yaml:"forwarders,omitempty"`
+	Tunnels      []Tunnel    `json:"tunnels,omitempty" yaml:"tunnels,omitempty"`
+	Resolver     DNSResolver `json:"resolver,omitempty" yaml:"resolver,omitempty"`
 }
 
 // Hash returns the computed values to see if the forwarder values change

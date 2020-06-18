@@ -182,7 +182,7 @@ func handleServiceMode(shutdownC chan struct{}) error {
 		return err
 	}
 
-	configPath := config.FindDefaultConfigPath()
+	configPath := config.FindOrCreateConfigPath()
 	configManager, err := config.NewFileManager(f, configPath, logger)
 	if err != nil {
 		logger.Errorf("Cannot setup config file for monitoring: %s", err)

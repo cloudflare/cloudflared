@@ -49,9 +49,6 @@ func TestConfigChanged(t *testing.T) {
 		os.Remove(filePath)
 	}()
 	c := &Root{
-		OrgKey:          "abcd",
-		ConfigType:      "mytype",
-		CheckinInterval: 1,
 		Forwarders: []Forwarder{
 			{
 				URL:      "test.daltoniam.com",

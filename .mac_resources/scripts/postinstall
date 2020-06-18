@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# uninstall first in case this is an upgrade
+/usr/local/bin/cloudflared service uninstall
+
+# install the new service using launchctl
+/usr/local/bin/cloudflared service install
