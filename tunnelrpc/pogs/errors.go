@@ -37,9 +37,12 @@ func (re *RPCError) Error() string {
 }
 
 func wrapRPCError(err error) *RPCError {
-	return &RPCError{
-		err: err,
+	if err != nil {
+		return &RPCError{
+			err: err,
+		}
 	}
+	return nil
 }
 
 func newRPCError(format string, args ...interface{}) *RPCError {

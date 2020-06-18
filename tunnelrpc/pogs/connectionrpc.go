@@ -229,5 +229,8 @@ func (c TunnelServer_PogsClient) Unregister(ctx context.Context) error {
 		return nil
 	})
 	_, err := promise.Struct()
-	return wrapRPCError(err)
+	if err != nil {
+		return wrapRPCError(err)
+	}
+	return nil
 }
