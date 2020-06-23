@@ -40,6 +40,12 @@ else
     $(error This system's OS $(LOCAL_OS) isn't supported)
 endif
 
+ifeq ($(TARGET_OS), windows)
+	EXECUTABLE_PATH=./cloudflared.exe
+else
+	EXECUTABLE_PATH=./cloudflared
+endif
+
 .PHONY: all
 all: cloudflared test
 
@@ -87,6 +93,10 @@ homebrew-release: homebrew-upload
 .PHONY: release
 release: bin/equinox
 	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+
+.PHONY: github-release
+github-release: cloudflared
+	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
 
 bin/equinox:
 	mkdir -p bin

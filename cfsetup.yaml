@@ -31,6 +31,18 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=amd64
       - make release
+  github-release-linux-amd64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - make github-release
   release-linux-armv6:
     build_dir: *build_dir
     builddeps:
@@ -42,6 +54,20 @@ stretch: &stretch
       - export GOARCH=arm
       - export CC=arm-linux-gnueabihf-gcc
       - make release
+  github-release-linux-armv6:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - crossbuild-essential-armhf
+      - gcc-arm-linux-gnueabihf
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=arm
+      - export CC=arm-linux-gnueabihf-gcc
+      - make github-release
   release-linux-386:
     build_dir: *build_dir
     builddeps:
@@ -51,6 +77,18 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=386
       - make release
+  github-release-linux-386:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - gcc-multilib
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=386
+      - make github-release
   release-windows-amd64:
     build_dir: *build_dir
     builddeps:
@@ -61,6 +99,19 @@ stretch: &stretch
       - export GOARCH=amd64
       - export CC=x86_64-w64-mingw32-gcc
       - make release
+  github-release-windows-amd64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - gcc-mingw-w64
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=windows
+      - export GOARCH=amd64
+      - export CC=x86_64-w64-mingw32-gcc
+      - make github-release
   release-windows-386:
     build_dir: *build_dir
     builddeps:
@@ -71,6 +122,19 @@ stretch: &stretch
       - export GOARCH=386
       - export CC=i686-w64-mingw32-gcc-win32
       - make release
+  github-release-windows-386:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - gcc-mingw-w64
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=windows
+      - export GOARCH=386
+      - export CC=i686-w64-mingw32-gcc-win32
+      - make github-release
   test:
     build_dir: *build_dir
     builddeps:
