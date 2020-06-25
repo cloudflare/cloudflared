@@ -223,7 +223,7 @@ func (c TunnelServer_PogsClient) RegisterConnection(ctx context.Context, auth Tu
 	return nil, newRPCError("unknown result which %d", result.Which())
 }
 
-func (c TunnelServer_PogsClient) Unregister(ctx context.Context) error {
+func (c TunnelServer_PogsClient) UnregisterConnection(ctx context.Context) error {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.UnregisterConnection(ctx, func(p tunnelrpc.RegistrationServer_unregisterConnection_Params) error {
 		return nil

@@ -106,7 +106,7 @@ func ssh(c *cli.Context) error {
 	wsConn := carrier.NewWSConnection(logger, false)
 
 	if c.NArg() > 0 || c.IsSet(sshURLFlag) {
-		localForwarder, err := config.ValidateUrl(c)
+		localForwarder, err := config.ValidateUrl(c, true)
 		if err != nil {
 			logger.Errorf("Error validating origin URL: %s", err)
 			return errors.Wrap(err, "error validating origin URL")

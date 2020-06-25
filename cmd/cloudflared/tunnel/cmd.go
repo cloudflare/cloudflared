@@ -359,7 +359,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			defer wg.Done()
 			hello.StartHelloWorldServer(logger, helloListener, shutdownC)
 		}()
-		c.Set("url", "https://"+helloListener.Addr().String())
+		forceSetFlag(c, "url", "https://"+helloListener.Addr().String())
 	}
 
 	if c.IsSet(sshServerFlag) {
@@ -409,7 +409,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 				close(shutdownC)
 			}
 		}()
-		c.Set("url", "ssh://"+localServerAddress)
+		forceSetFlag(c, "url", "ssh://"+localServerAddress)
 	}
 
 	url := c.String("url")
@@ -453,7 +453,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			}
 			errC <- websocket.StartProxyServer(logger, listener, staticHost, shutdownC, streamHandler)
 		}()
-		c.Set("url", "http://"+listener.Addr().String())
+		forceSetFlag(c, "url", "http://"+listener.Addr().String())
 	}
 
 	transportLogger, err := createLogger(c, true)
@@ -461,7 +461,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return errors.Wrap(err, "error setting up transport logger")
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger, namedTunnel)
 	if err != nil {
 		return err
 	}
@@ -475,10 +475,19 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh, namedTunnel)
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
 	}()
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
+}
+
+// forceSetFlag attempts to set the given flag value in the closest context that has it defined
+func forceSetFlag(c *cli.Context, name, value string) {
+	for _, ctx := range c.Lineage() {
+		if err := ctx.Set(name, value); err == nil {
+			break
+		}
+	}
 }
 
 func Before(c *cli.Context) error {
@@ -967,13 +976,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
 			Value:   true,
 			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
-			Hidden:  true,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "use-quick-reconnects",
-			Usage:   "Test reestablishing connections with the new 'connection digest' flow.",
-			Value:   true,
-			EnvVars: []string{"TUNNEL_USE_QUICK_RECONNECTS"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{

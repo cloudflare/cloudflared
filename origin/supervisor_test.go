@@ -48,7 +48,7 @@ func TestRefreshAuthBackoff(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -92,7 +92,7 @@ func TestRefreshAuthSuccess(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -120,7 +120,7 @@ func TestRefreshAuthUnknown(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -142,7 +142,7 @@ func TestRefreshAuthUnknown(t *testing.T) {
 func TestRefreshAuthFail(t *testing.T) {
 	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
+	s, err := NewSupervisor(testConfig(logger), uuid.New())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}

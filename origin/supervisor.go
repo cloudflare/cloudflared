@@ -68,8 +68,6 @@ type Supervisor struct {
 	connDigest     map[uint8][]byte
 
 	bufferPool *buffer.Pool
-
-	namedTunnel *NamedTunnelConfig
 }
 
 type resolveResult struct {
@@ -82,7 +80,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID, namedTunnel *NamedTunnelConfig) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor, error) {
 	var (
 		edgeIPs *edgediscovery.Edge
 		err     error
@@ -95,6 +93,7 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID, namedTunnel 
 	if err != nil {
 		return nil, err
 	}
+
 	return &Supervisor{
 		cloudflaredUUID:   cloudflaredUUID,
 		config:            config,
@@ -104,7 +103,6 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID, namedTunnel 
 		logger:            config.Logger,
 		connDigest:        make(map[uint8][]byte),
 		bufferPool:        buffer.NewPool(512 * 1024),
-		namedTunnel:       namedTunnel,
 	}, nil
 }
 
@@ -229,17 +227,17 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		addr *net.TCPAddr
 		err  error
 	)
-	const thisConnID = 0
+	const firstConnIndex = 0
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: thisConnID, addr: addr, err: err}
+		s.tunnelErrors <- tunnelError{index: firstConnIndex, addr: addr, err: err}
 	}()
 
-	addr, err = s.edgeIPs.GetAddr(thisConnID)
+	addr, err = s.edgeIPs.GetAddr(firstConnIndex)
 	if err != nil {
 		return
 	}
 
-	err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
+	err = ServeTunnelLoop(ctx, s, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
 	// If the first tunnel disconnects, keep restarting it.
 	edgeErrors := 0
 	for s.unusedIPs() {
@@ -257,12 +255,12 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 			return
 		}
 		if edgeErrors >= 2 {
-			addr, err = s.edgeIPs.GetDifferentAddr(thisConnID)
+			addr, err = s.edgeIPs.GetDifferentAddr(firstConnIndex)
 			if err != nil {
 				return
 			}
 		}
-		err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
+		err = ServeTunnelLoop(ctx, s, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
 	}
 }
 

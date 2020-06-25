@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/yaml.v2"
@@ -34,7 +35,7 @@ var (
 		Aliases: []string{"o"},
 		Usage:   "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
 	}
-	forceFlag = &cli.StringFlag{
+	forceFlag = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
 		Usage: "By default, if a tunnel is currently being run from a cloudflared, you can't " +
@@ -148,9 +149,12 @@ func readTunnelCredentials(tunnelID, originCertPath string) (*pogs.TunnelAuth, e
 	if err != nil {
 		return nil, errors.Wrapf(err, "couldn't read tunnel credentials from %v", filePath)
 	}
-	auth := pogs.TunnelAuth{}
-	err = json.Unmarshal(body, &auth)
-	return &auth, errors.Wrap(err, "couldn't parse tunnel credentials from JSON")
+
+	var auth pogs.TunnelAuth
+	if err = json.Unmarshal(body, &auth); err != nil {
+		return nil, err
+	}
+	return &auth, nil
 }
 
 func buildListCommand() *cli.Command {
@@ -325,6 +329,10 @@ func runTunnel(c *cli.Context) error {
 		return cliutil.UsageError(`"cloudflared tunnel run" requires exactly 1 argument, the ID of the tunnel to run.`)
 	}
 	id := c.Args().First()
+	tunnelID, err := uuid.Parse(id)
+	if err != nil {
+		return errors.Wrap(err, "error parsing tunnel ID")
+	}
 
 	logger, err := logger.New()
 	if err != nil {
@@ -340,5 +348,5 @@ func runTunnel(c *cli.Context) error {
 		return err
 	}
 	logger.Debugf("Read credentials for %v", credentials.AccountTag)
-	return StartServer(c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: id})
+	return StartServer(c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID})
 }

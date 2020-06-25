@@ -158,7 +158,10 @@ func prepareTunnelConfig(
 	version string,
 	logger logger.Service,
 	transportLogger logger.Service,
+	namedTunnel *origin.NamedTunnelConfig,
 ) (*origin.TunnelConfig, error) {
+	compatibilityMode := namedTunnel == nil
+
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
 		logger.Errorf("Invalid hostname: %s", err)
@@ -181,7 +184,7 @@ func prepareTunnelConfig(
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
 
-	originURL, err := config.ValidateUrl(c)
+	originURL, err := config.ValidateUrl(c, compatibilityMode)
 	if err != nil {
 		logger.Errorf("Error validating origin URL: %s", err)
 		return nil, errors.Wrap(err, "Error validating origin URL")
@@ -254,38 +257,52 @@ func prepareTunnelConfig(
 		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
 	}
 
+	if namedTunnel != nil {
+		clientUUID, err := uuid.NewRandom()
+		if err != nil {
+			return nil, errors.Wrap(err, "can't generate clientUUID")
+		}
+		namedTunnel.Client = tunnelpogs.ClientInfo{
+			ClientID: clientUUID[:],
+			Features: []string{origin.FeatureSerializedHeaders},
+			Version:  version,
+			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
+		}
+	}
+
 	return &origin.TunnelConfig{
-		BuildInfo:            buildInfo,
-		ClientID:             clientID,
-		ClientTlsConfig:      httpTransport.TLSClientConfig,
-		CompressionQuality:   c.Uint64("compression-quality"),
-		EdgeAddrs:            c.StringSlice("edge"),
-		GracePeriod:          c.Duration("grace-period"),
-		HAConnections:        c.Int("ha-connections"),
-		HTTPTransport:        httpTransport,
-		HeartbeatInterval:    c.Duration("heartbeat-interval"),
-		Hostname:             hostname,
-		HTTPHostHeader:       c.String("http-host-header"),
-		IncidentLookup:       origin.NewIncidentLookup(),
-		IsAutoupdated:        c.Bool("is-autoupdated"),
-		IsFreeTunnel:         isFreeTunnel,
-		LBPool:               c.String("lb-pool"),
-		Logger:               logger,
-		TransportLogger:      transportLogger,
-		MaxHeartbeats:        c.Uint64("heartbeat-count"),
-		Metrics:              tunnelMetrics,
-		MetricsUpdateFreq:    c.Duration("metrics-update-freq"),
-		NoChunkedEncoding:    c.Bool("no-chunked-encoding"),
-		OriginCert:           originCert,
-		OriginUrl:            originURL,
-		ReportedVersion:      version,
-		Retries:              c.Uint("retries"),
-		RunFromTerminal:      isRunningFromTerminal(),
-		Tags:                 tags,
-		TlsConfig:            toEdgeTLSConfig,
-		UseDeclarativeTunnel: c.Bool("use-declarative-tunnels"),
-		UseReconnectToken:    c.Bool("use-reconnect-token"),
-		UseQuickReconnects:   c.Bool("use-quick-reconnects"),
+		BuildInfo:          buildInfo,
+		ClientID:           clientID,
+		ClientTlsConfig:    httpTransport.TLSClientConfig,
+		CompressionQuality: c.Uint64("compression-quality"),
+		EdgeAddrs:          c.StringSlice("edge"),
+		GracePeriod:        c.Duration("grace-period"),
+		HAConnections:      c.Int("ha-connections"),
+		HTTPTransport:      httpTransport,
+		HeartbeatInterval:  c.Duration("heartbeat-interval"),
+		Hostname:           hostname,
+		HTTPHostHeader:     c.String("http-host-header"),
+		IncidentLookup:     origin.NewIncidentLookup(),
+		IsAutoupdated:      c.Bool("is-autoupdated"),
+		IsFreeTunnel:       isFreeTunnel,
+		LBPool:             c.String("lb-pool"),
+		Logger:             logger,
+		TransportLogger:    transportLogger,
+		MaxHeartbeats:      c.Uint64("heartbeat-count"),
+		Metrics:            tunnelMetrics,
+		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
+		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
+		OriginCert:         originCert,
+		OriginUrl:          originURL,
+		ReportedVersion:    version,
+		Retries:            c.Uint("retries"),
+		RunFromTerminal:    isRunningFromTerminal(),
+		Tags:               tags,
+		TlsConfig:          toEdgeTLSConfig,
+		NamedTunnel:        namedTunnel,
+		ReplaceExisting:    c.Bool("force"),
+		// turn off use of reconnect token and auth refresh when using named tunnels
+		UseReconnectToken:  compatibilityMode && c.Bool("use-reconnect-token"),
 	}, nil
 }
 
