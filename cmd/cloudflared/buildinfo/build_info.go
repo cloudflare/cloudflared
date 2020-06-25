@@ -3,7 +3,7 @@ package buildinfo
 import (
 	"runtime"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 type BuildInfo struct {
@@ -22,7 +22,7 @@ func GetBuildInfo(cloudflaredVersion string) *BuildInfo {
 	}
 }
 
-func (bi *BuildInfo) Log(logger *logrus.Logger) {
+func (bi *BuildInfo) Log(logger logger.Service) {
 	logger.Infof("Version %s", bi.CloudflaredVersion)
 	logger.Infof("GOOS: %s, GOVersion: %s, GoArch: %s", bi.GoOS, bi.GoVersion, bi.GoArch)
 }

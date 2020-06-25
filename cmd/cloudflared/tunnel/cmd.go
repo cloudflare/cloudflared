@@ -1,34 +1,38 @@
 package tunnel
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"reflect"
 	"runtime"
 	"runtime/trace"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/cloudflare/cloudflared/awsuploader"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/dbconnect"
+	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/sshlog"
 	"github.com/cloudflare/cloudflared/sshserver"
-	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 
 	"github.com/coreos/go-systemd/daemon"
@@ -36,6 +40,7 @@ import (
 	"github.com/getsentry/raven-go"
 	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
@@ -76,7 +81,19 @@ const (
 	// hostKeyPath is the path of the dir to save SSH host keys too
 	hostKeyPath = "host-key-path"
 
-	noIntentMsg = "The --intent argument is required. Cloudflared looks up an Intent to determine what configuration to use (i.e. which tunnels to start). If you don't have any Intents yet, you can use a placeholder Intent Label for now. Then, when you make an Intent with that label, cloudflared will get notified and open the tunnels you specified in that Intent."
+	//sshServerFlag enables cloudflared ssh proxy server
+	sshServerFlag = "ssh-server"
+
+	// socks5Flag is to enable the socks server to deframe
+	socks5Flag = "socks5"
+
+	// bastionFlag is to enable bastion, or jump host, operation
+	bastionFlag = "bastion"
+
+	logDirectoryFlag = "log-directory"
+
+	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
+		"Response status, content length and header will also be logged in debug level."
 )
 
 var (
@@ -93,7 +110,7 @@ func Commands() []*cli.Command {
 	cmds := []*cli.Command{
 		{
 			Name:      "login",
-			Action:    login,
+			Action:    cliutil.ErrorHandler(login),
 			Usage:     "Generate a configuration file with your login details",
 			ArgsUsage: " ",
 			Flags: []cli.Flag{
@@ -106,7 +123,7 @@ func Commands() []*cli.Command {
 		},
 		{
 			Name:   "proxy-dns",
-			Action: tunneldns.Run,
+			Action: cliutil.ErrorHandler(tunneldns.Run),
 			Usage:  "Run a DNS over HTTPS proxy server.",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -133,6 +150,12 @@ func Commands() []*cli.Command {
 					Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
 					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 				},
+				&cli.StringSliceFlag{
+					Name:    "bootstrap",
+					Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+					Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+					EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
+				},
 			},
 			ArgsUsage: " ", // can't be the empty string or we get the default output
 			Hidden:    false,
@@ -146,14 +169,18 @@ func Commands() []*cli.Command {
 		c.Hidden = false
 		subcommands = append(subcommands, &c)
 	}
+	subcommands = append(subcommands, buildCreateCommand())
+	subcommands = append(subcommands, buildListCommand())
+	subcommands = append(subcommands, buildDeleteCommand())
+	subcommands = append(subcommands, buildRunCommand())
 
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",
-		Action:    tunnel,
+		Action:    cliutil.ErrorHandler(tunnel),
 		Before:    Before,
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
-		ArgsUsage: "[origin-url]",
+		ArgsUsage: " ",
 		Description: `Argo Tunnel asks you to specify a hostname on a Cloudflare-powered
 		domain you control and a local address. Traffic from that hostname is routed
 		(optionally via a Cloudflare Load Balancer) to this machine and appears on the
@@ -180,14 +207,43 @@ func Commands() []*cli.Command {
 }
 
 func tunnel(c *cli.Context) error {
-	return StartServer(c, version, shutdownC, graceShutdownC)
+	return StartServer(c, version, shutdownC, graceShutdownC, nil)
 }
 
 func Init(v string, s, g chan struct{}) {
 	version, shutdownC, graceShutdownC = v, s, g
 }
 
-func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}) error {
+func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
+	loggerOpts := []logger.Option{}
+
+	logPath := c.String("logfile")
+	if logPath == "" {
+		logPath = c.String(logDirectoryFlag)
+	}
+
+	if logPath != "" {
+		loggerOpts = append(loggerOpts, logger.DefaultFile(logPath))
+	}
+
+	logLevel := c.String("loglevel")
+	if isTransport {
+		logLevel = c.String("transport-loglevel")
+		if logLevel == "" {
+			logLevel = "fatal"
+		}
+	}
+	loggerOpts = append(loggerOpts, logger.LogLevelString(logLevel))
+
+	return logger.New(loggerOpts...)
+}
+
+func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig) error {
+	logger, err := createLogger(c, false)
+	if err != nil {
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
+	}
+
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
@@ -196,64 +252,45 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
-		logger.Warnf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
-	}
-
-	if err := configMainLogger(c); err != nil {
-		return errors.Wrap(err, "Error configuring logger")
-	}
-
-	transportLogger, err := configTransportLogger(c)
-	if err != nil {
-		return errors.Wrap(err, "Error configuring transport logger")
+		logger.Infof("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
 	}
 
 	if c.IsSet("trace-output") {
 		tmpTraceFile, err := ioutil.TempFile("", "trace")
 		if err != nil {
-			logger.WithError(err).Error("Failed to create new temporary file to save trace output")
+			logger.Errorf("Failed to create new temporary file to save trace output: %s", err)
 		}
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				logger.WithError(err).Errorf("Failed to close trace output file %s", tmpTraceFile.Name())
+				logger.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
 			}
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
-				logger.WithError(err).Errorf("Failed to rename temporary trace output file %s to %s", tmpTraceFile.Name(), c.String("trace-output"))
+				logger.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
 			} else {
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
-					logger.WithError(err).Errorf("Failed to remove the temporary trace file %s", tmpTraceFile.Name())
+					logger.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
 				}
 			}
 		}()
 
 		if err := trace.Start(tmpTraceFile); err != nil {
-			logger.WithError(err).Error("Failed to start trace")
+			logger.Errorf("Failed to start trace: %s", err)
 			return errors.Wrap(err, "Error starting tracing")
 		}
 		defer trace.Stop()
 	}
 
-	if c.String("logfile") != "" {
-		if err := initLogFile(c, logger, transportLogger); err != nil {
-			logger.Error(err)
-		}
-	}
-
-	if err := handleDeprecatedOptions(c); err != nil {
-		return err
-	}
-
 	buildInfo := buildinfo.GetBuildInfo(version)
 	buildInfo.Log(logger)
-	logClientOptions(c)
+	logClientOptions(c, logger)
 
 	if c.IsSet("proxy-dns") {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC)
+			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, logger)
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -264,7 +301,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		logger.WithError(err).Error("Error opening metrics server listener")
+		logger.Errorf("Error opening metrics server listener: %s", err)
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
@@ -276,12 +313,12 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
-		go writePidFile(connectedSignal, c.String("pidfile"))
+		go writePidFile(connectedSignal, c.String("pidfile"), logger)
 	}
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		logger.WithError(err).Error("Cannot generate cloudflared ID")
+		logger.Errorf("Cannot generate cloudflared ID: %s", err)
 		return err
 	}
 
@@ -291,17 +328,13 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		cancel()
 	}()
 
-	if c.IsSet("use-declarative-tunnels") {
-		return startDeclarativeTunnel(ctx, c, cloudflaredID, buildInfo, &listeners)
-	}
-
 	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c) {
+	if updater.IsAutoupdateEnabled(c, logger) {
 		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners)
+			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, logger)
 			errC <- autoupdater.Run(ctx)
 		}()
 	}
@@ -310,14 +343,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0)
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, logger)
 	}
 
 	if c.IsSet("hello-world") {
 		logger.Infof("hello-world set")
 		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
 		if err != nil {
-			logger.WithError(err).Error("Cannot start Hello World Server")
+			logger.Errorf("Cannot start Hello World Server: %s", err)
 			return errors.Wrap(err, "Cannot start Hello World Server")
 		}
 		defer helloListener.Close()
@@ -329,12 +362,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "https://"+helloListener.Addr().String())
 	}
 
-	if c.IsSet("ssh-server") {
+	if c.IsSet(sshServerFlag) {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			msg := fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS)
 			logger.Error(msg)
 			return errors.New(msg)
-
 		}
 
 		logger.Infof("ssh-server set")
@@ -345,13 +377,13 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
 			if err != nil {
 				msg := "Cannot create uploader for SSH Server"
-				logger.WithError(err).Error(msg)
+				logger.Errorf("%s: %s", msg, err)
 				return errors.Wrap(err, msg)
 			}
 
 			if err := os.MkdirAll(sshLogFileDirectory, 0700); err != nil {
 				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
-				logger.WithError(err).Errorf(msg)
+				logger.Errorf("%s: %s", msg, err)
 				return errors.Wrap(err, msg)
 			}
 
@@ -365,14 +397,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			msg := "Cannot create new SSH Server"
-			logger.WithError(err).Error(msg)
+			logger.Errorf("%s: %s", msg, err)
 			return errors.Wrap(err, msg)
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
-				logger.WithError(err).Error("SSH server error")
+				logger.Errorf("SSH server error: %s", err)
 				// TODO: remove when declarative tunnels are implemented.
 				close(shutdownC)
 			}
@@ -380,18 +412,53 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		c.Set("url", "ssh://"+localServerAddress)
 	}
 
-	if host := hostnameFromURI(c.String("url")); host != "" {
+	url := c.String("url")
+	hostname := c.String("hostname")
+	if url == hostname && url != "" && hostname != "" {
+		errText := "hostname and url shouldn't match. See --help for more information"
+		logger.Error(errText)
+		return fmt.Errorf(errText)
+	}
+
+	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
-			logger.WithError(err).Error("Cannot start Websocket Proxy Server")
+			logger.Errorf("Cannot start Websocket Proxy Server: %s", err)
 			return errors.Wrap(err, "Cannot start Websocket Proxy Server")
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- websocket.StartProxyServer(logger, listener, host, shutdownC)
+			streamHandler := websocket.DefaultStreamHandler
+			if c.IsSet(socks5Flag) {
+				logger.Info("SOCKS5 server started")
+				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, _ http.Header) {
+					dialer := socks.NewConnDialer(remoteConn)
+					requestHandler := socks.NewRequestHandler(dialer)
+					socksServer := socks.NewConnectionHandler(requestHandler)
+
+					socksServer.Serve(wsConn)
+				}
+			} else if c.IsSet(sshServerFlag) {
+				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, requestHeaders http.Header) {
+					if finalDestination := requestHeaders.Get(h2mux.CFJumpDestinationHeader); finalDestination != "" {
+						token := requestHeaders.Get(h2mux.CFAccessTokenHeader)
+						if err := websocket.SendSSHPreamble(remoteConn, finalDestination, token); err != nil {
+							logger.Errorf("Failed to send SSH preamble: %s", err)
+							return
+						}
+					}
+					websocket.DefaultStreamHandler(wsConn, remoteConn, requestHeaders)
+				}
+			}
+			errC <- websocket.StartProxyServer(logger, listener, staticHost, shutdownC, streamHandler)
 		}()
 		c.Set("url", "http://"+listener.Addr().String())
+	}
+
+	transportLogger, err := createLogger(c, true)
+	if err != nil {
+		return errors.Wrap(err, "error setting up transport logger")
 	}
 
 	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger)
@@ -399,27 +466,38 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return err
 	}
 
+	reconnectCh := make(chan origin.ReconnectSignal, 1)
+	if c.IsSet("stdin-control") {
+		logger.Info("Enabling control through stdin")
+		go stdinControl(reconnectCh, logger)
+	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID)
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh, namedTunnel)
 	}()
 
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"))
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
 }
 
 func Before(c *cli.Context) error {
+	logger, err := createLogger(c, false)
+	if err != nil {
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
+	}
+
 	if c.String("config") == "" {
 		logger.Debugf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
 	}
 	inputSource, err := config.FindInputSourceContext(c)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot load configuration from %s", c.String("config"))
+		logger.Errorf("Cannot load configuration from %s: %s", c.String("config"), err)
 		return err
 	} else if inputSource != nil {
 		err := altsrc.ApplyInputSourceValues(c, inputSource, c.App.Flags)
 		if err != nil {
-			logger.WithError(err).Errorf("Cannot apply configuration from %s", c.String("config"))
+			logger.Errorf("Cannot apply configuration from %s: %s", c.String("config"), err)
 			return err
 		}
 		logger.Debugf("Applied configuration from %s", c.String("config"))
@@ -427,138 +505,27 @@ func Before(c *cli.Context) error {
 	return nil
 }
 
-func startDeclarativeTunnel(ctx context.Context,
-	c *cli.Context,
-	cloudflaredID uuid.UUID,
-	buildInfo *buildinfo.BuildInfo,
-	listeners *gracenet.Net,
-) error {
-	reverseProxyOrigin, err := defaultOriginConfig(c)
-	if err != nil {
-		logger.WithError(err)
-		return err
-	}
-	reverseProxyConfig, err := pogs.NewReverseProxyConfig(
-		c.String("hostname"),
-		reverseProxyOrigin,
-		c.Uint64("retries"),
-		c.Duration("proxy-connection-timeout"),
-		c.Uint64("compression-quality"),
-	)
-	if err != nil {
-		logger.WithError(err).Error("Cannot initialize default client config because reverse proxy config is invalid")
-		return err
-	}
-	defaultClientConfig := &pogs.ClientConfig{
-		Version: pogs.InitVersion(),
-		SupervisorConfig: &pogs.SupervisorConfig{
-			AutoUpdateFrequency:    c.Duration("autoupdate-freq"),
-			MetricsUpdateFrequency: c.Duration("metrics-update-freq"),
-			GracePeriod:            c.Duration("grace-period"),
-		},
-		EdgeConnectionConfig: &pogs.EdgeConnectionConfig{
-			NumHAConnections:    uint8(c.Int("ha-connections")),
-			HeartbeatInterval:   c.Duration("heartbeat-interval"),
-			Timeout:             c.Duration("dial-edge-timeout"),
-			MaxFailedHeartbeats: c.Uint64("heartbeat-count"),
-		},
-		DoHProxyConfigs:     []*pogs.DoHProxyConfig{},
-		ReverseProxyConfigs: []*pogs.ReverseProxyConfig{reverseProxyConfig},
-	}
-
-	autoupdater := updater.NewAutoUpdater(defaultClientConfig.SupervisorConfig.AutoUpdateFrequency, listeners)
-
-	originCert, err := getOriginCert(c)
-	if err != nil {
-		logger.WithError(err).Error("error getting origin cert")
-		return err
-	}
-	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
-	if err != nil {
-		logger.WithError(err).Error("unable to create TLS config to connect with edge")
-		return err
-	}
-
-	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
-	if err != nil {
-		logger.WithError(err).Error("unable to parse tag")
-		return err
-	}
-
-	intentLabel := c.String("intent")
-	if intentLabel == "" {
-		logger.Error("--intent was empty")
-		return fmt.Errorf(noIntentMsg)
-	}
-
-	cloudflaredConfig := &connection.CloudflaredConfig{
-		BuildInfo:     buildInfo,
-		CloudflaredID: cloudflaredID,
-		IntentLabel:   intentLabel,
-		Tags:          tags,
-	}
-
-	serviceDiscoverer, err := serviceDiscoverer(c, logger)
-	if err != nil {
-		logger.WithError(err).Error("unable to create service discoverer")
-		return err
-	}
-	supervisor, err := supervisor.NewSupervisor(defaultClientConfig, originCert, toEdgeTLSConfig,
-		serviceDiscoverer, cloudflaredConfig, autoupdater, updater.SupportAutoUpdate(), logger)
-	if err != nil {
-		logger.WithError(err).Error("unable to create Supervisor")
-		return err
-	}
-	return supervisor.Run(ctx)
-}
-
-func defaultOriginConfig(c *cli.Context) (pogs.OriginConfig, error) {
-	if c.IsSet("hello-world") {
-		return &pogs.HelloWorldOriginConfig{}, nil
-	}
-	originConfig := &pogs.HTTPOriginConfig{
-		TCPKeepAlive:           c.Duration("proxy-tcp-keepalive"),
-		DialDualStack:          !c.Bool("proxy-no-happy-eyeballs"),
-		TLSHandshakeTimeout:    c.Duration("proxy-tls-timeout"),
-		TLSVerify:              !c.Bool("no-tls-verify"),
-		OriginCAPool:           c.String("origin-ca-pool"),
-		OriginServerName:       c.String("origin-server-name"),
-		MaxIdleConnections:     c.Uint64("proxy-keepalive-connections"),
-		IdleConnectionTimeout:  c.Duration("proxy-keepalive-timeout"),
-		ProxyConnectionTimeout: c.Duration("proxy-connection-timeout"),
-		ExpectContinueTimeout:  c.Duration("proxy-expect-continue-timeout"),
-		ChunkedEncoding:        c.Bool("no-chunked-encoding"),
-	}
-	if c.IsSet("unix-socket") {
-		unixSocket, err := config.ValidateUnixSocket(c)
-		if err != nil {
-			return nil, errors.Wrap(err, "error validating --unix-socket")
-		}
-		originConfig.URLString = unixSocket
-	}
-	originAddr, err := config.ValidateUrl(c)
-	if err != nil {
-		return nil, errors.Wrap(err, "error validating origin URL")
-	}
-	originConfig.URLString = originAddr
-	return originConfig, nil
+// isProxyDestinationConfigured returns true if there is a static host set or if bastion mode is set.
+func isProxyDestinationConfigured(staticHost string, c *cli.Context) bool {
+	return staticHost != "" || c.IsSet(bastionFlag)
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
 	errC chan error,
 	shutdownC, graceShutdownC chan struct{},
 	gracePeriod time.Duration,
+	logger logger.Service,
 ) error {
 	var err error
 	if gracePeriod > 0 {
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod, logger)
 	} else {
-		err = waitForSignal(errC, shutdownC)
+		err = waitForSignal(errC, shutdownC, logger)
 		close(graceShutdownC)
 	}
 
 	if err != nil {
-		logger.WithError(err).Error("Quitting due to error")
+		logger.Errorf("Quitting due to error: %s", err)
 	} else {
 		logger.Info("Quitting...")
 	}
@@ -576,11 +543,17 @@ func notifySystemd(waitForSignal *signal.Signal) {
 	daemon.SdNotify(false, "READY=1")
 }
 
-func writePidFile(waitForSignal *signal.Signal, pidFile string) {
+func writePidFile(waitForSignal *signal.Signal, pidFile string, logger logger.Service) {
 	<-waitForSignal.Wait()
-	file, err := os.Create(pidFile)
+	expandedPath, err := homedir.Expand(pidFile)
 	if err != nil {
-		logger.WithError(err).Errorf("Unable to write pid to %s", pidFile)
+		logger.Errorf("Unable to expand %s, try to use absolute path in --pidfile: %s", pidFile, err)
+		return
+	}
+	file, err := os.Create(expandedPath)
+	if err != nil {
+		logger.Errorf("Unable to write pid to %s: %s", expandedPath, err)
+		return
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "%d", os.Getpid())
@@ -596,6 +569,10 @@ func hostnameFromURI(uri string) string {
 		return addPortIfMissing(u, 22)
 	case "rdp":
 		return addPortIfMissing(u, 3389)
+	case "smb":
+		return addPortIfMissing(u, 445)
+	case "tcp":
+		return addPortIfMissing(u, 7864) // just a random port since there isn't a default in this case
 	}
 	return ""
 }
@@ -623,13 +600,13 @@ func dbConnectCmd() *cli.Command {
 	}
 
 	// Override action to setup the Proxy, then if successful, start the tunnel daemon.
-	cmd.Action = func(c *cli.Context) error {
+	cmd.Action = cliutil.ErrorHandler(func(c *cli.Context) error {
 		err := dbconnect.CmdAction(c)
 		if err == nil {
 			err = tunnel(c)
 		}
 		return err
-	}
+	})
 
 	return cmd
 }
@@ -690,7 +667,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "edge",
-			Usage:   "Address of the Cloudflare tunnel server.",
+			Usage:   "Address of the Cloudflare tunnel server. Only works in Cloudflare's internal testing environment.",
 			EnvVars: []string{"TUNNEL_EDGE"},
 			Hidden:  true,
 		}),
@@ -781,6 +758,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "api-url",
+			Usage:   "Base URL for Cloudflare API v4",
+			EnvVars: []string{"TUNNEL_API_URL"},
+			Value:   "https://api.cloudflare.com/client/v4",
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "metrics",
 			Value:   "localhost:",
 			Usage:   "Listen address for metrics reporting.",
@@ -815,15 +799,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "loglevel",
 			Value:   "info",
-			Usage:   "Application logging level {panic, fatal, error, warn, info, debug}. " + debugLevelWarning,
+			Usage:   "Application logging level {fatal, error, info, debug}. " + debugLevelWarning,
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "transport-loglevel",
 			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
-			Value:   "warn",
-			Usage:   "Transport logging level(previously called protocol logging level) {panic, fatal, error, warn, info, debug}",
+			Value:   "fatal",
+			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
 			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
@@ -842,7 +826,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "ssh-server",
+			Name:    sshServerFlag,
 			Value:   false,
 			Usage:   "Run an SSH Server",
 			EnvVars: []string{"TUNNEL_SSH_SERVER"},
@@ -858,6 +842,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "logfile",
 			Usage:   "Save application log to this file for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGFILE"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    logDirectoryFlag,
+			Usage:   "Save application log to this directory for reporting issues.",
+			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
@@ -939,6 +929,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "proxy-dns-bootstrap",
+			Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+			Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
+			Hidden:  shouldHide,
+		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "grace-period",
 			Usage:   "Duration to accept new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
@@ -966,21 +963,17 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "use-declarative-tunnels",
-			Usage:   "Test establishing connections with declarative tunnel methods.",
-			EnvVars: []string{"TUNNEL_USE_DECLARATIVE"},
-			Hidden:  true,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "intent",
-			Usage:   "The label of an Intent from which `cloudflared` should gets its tunnels from. Intents can be created in the Origin Registry UI.",
-			EnvVars: []string{"TUNNEL_INTENT"},
+			Name:    "use-reconnect-token",
+			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
+			Value:   true,
+			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "use-reconnect-token",
-			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
-			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
+			Name:    "use-quick-reconnects",
+			Usage:   "Test reestablishing connections with the new 'connection digest' flow.",
+			Value:   true,
+			EnvVars: []string{"TUNNEL_USE_QUICK_RECONNECTS"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
@@ -1051,5 +1044,59 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"HOST_KEY_PATH"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "stdin-control",
+			Usage:   "Control the process using commands sent through stdin",
+			EnvVars: []string{"STDIN-CONTROL"},
+			Hidden:  true,
+			Value:   false,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    socks5Flag,
+			Usage:   "specify if this tunnel is running as a SOCK5 Server",
+			EnvVars: []string{"TUNNEL_SOCKS"},
+			Value:   false,
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    bastionFlag,
+			Value:   false,
+			Usage:   "Runs as jump host",
+			EnvVars: []string{"TUNNEL_BASTION"},
+			Hidden:  shouldHide,
+		}),
+	}
+}
+
+func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service) {
+	for {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			command := scanner.Text()
+			parts := strings.SplitN(command, " ", 2)
+
+			switch parts[0] {
+			case "":
+				break
+			case "reconnect":
+				var reconnect origin.ReconnectSignal
+				if len(parts) > 1 {
+					var err error
+					if reconnect.Delay, err = time.ParseDuration(parts[1]); err != nil {
+						logger.Error(err.Error())
+						continue
+					}
+				}
+				logger.Infof("Sending reconnect signal %+v", reconnect)
+				reconnectCh <- reconnect
+			default:
+				logger.Infof("Unknown command: %s", command)
+				fallthrough
+			case "help":
+				logger.Info(`Supported command:
+reconnect [delay]
+- restarts one randomly chosen connection with optional delay before reconnect`)
+			}
+		}
 	}
 }

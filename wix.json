@@ -1,0 +1,45 @@
+{
+  "product": "cloudflared",
+  "company": "cloudflare",
+  "license": "LICENSE",
+  "upgrade-code": "23f90fdd-9328-47ea-ab52-5380855a4b12",
+  "files": {
+    "guid": "35e5e858-9372-4449-bf73-1cd6f7267128",
+    "items": [
+      "cloudflared.exe"
+    ]
+  },
+  "env": {
+    "guid": "6bb74449-d10d-4f4a-933e-6fc9fa006eae",
+    "vars": [
+        {
+          "name": "CFDPATH",
+          "value": "[INSTALLDIR].",
+          "permanent": "no",
+          "system": "yes",
+          "action": "set",
+          "part": "all"
+        }
+    ]
+  },
+  "shortcuts": {},
+  "choco": {
+    "description": "cloudflared connects your machine or user identity to Cloudflare's global network.",
+    "project-url": "https://github.com/cloudflare/cloudflared",
+    "license-url": "https://github.com/cloudflare/cloudflared/blob/master/LICENSE"
+  },
+  "hooks": [
+    {
+      "command": "sc.exe create Cloudflared binPath=\"[INSTALLDIR]cloudflared.exe\" type=share start=auto DisplayName=\"Cloudflared\"",
+      "when": "install"
+    },
+    {
+      "command": "sc.exe start Cloudflared",
+      "when": "install"
+    },
+    {
+      "command": "sc.exe delete Cloudflared",
+      "when": "uninstall"
+    }
+  ]
+}

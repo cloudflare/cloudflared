@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	rpc "zombiezen.com/go/capnproto2/rpc"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -18,7 +18,7 @@ import (
 func NewRPCClient(
 	ctx context.Context,
 	muxer *h2mux.Muxer,
-	logger *logrus.Entry,
+	logger logger.Service,
 	openStreamTimeout time.Duration,
 ) (client tunnelpogs.TunnelServer_PogsClient, err error) {
 	openStreamCtx, openStreamCancel := context.WithTimeout(ctx, openStreamTimeout)

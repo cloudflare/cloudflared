@@ -14,7 +14,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/urfave/cli.v2"
 )
@@ -47,25 +46,16 @@ func findDefaultOriginCertPath() string {
 	return ""
 }
 
-func generateRandomClientID(logger *logrus.Logger) (string, error) {
+func generateRandomClientID(logger logger.Service) (string, error) {
 	u, err := uuid.NewRandom()
 	if err != nil {
-		logger.WithError(err).Error("couldn't create UUID for client ID")
+		logger.Errorf("couldn't create UUID for client ID %s", err)
 		return "", err
 	}
 	return u.String(), nil
 }
 
-func handleDeprecatedOptions(c *cli.Context) error {
-	// Fail if the user provided an old authentication method
-	if c.IsSet("api-key") || c.IsSet("api-email") || c.IsSet("api-ca-key") {
-		logger.Error("You don't need to give us your api-key anymore. Please use the new login method. Just run cloudflared login")
-		return fmt.Errorf("Client provided deprecated options")
-	}
-	return nil
-}
-
-func logClientOptions(c *cli.Context) {
+func logClientOptions(c *cli.Context, logger logger.Service) {
 	flags := make(map[string]interface{})
 	for _, flag := range c.LocalFlagNames() {
 		flags[flag] = c.Generic(flag)
@@ -79,7 +69,7 @@ func logClientOptions(c *cli.Context) {
 	}
 
 	if len(flags) > 0 {
-		logger.WithFields(flags).Info("Flags")
+		logger.Infof("Environment variables %v", flags)
 	}
 
 	envs := make(map[string]string)
@@ -102,27 +92,29 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world"))
 }
 
-func getOriginCert(c *cli.Context) ([]byte, error) {
-	if c.String("origincert") == "" {
-		logger.Warnf("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigDirs)
+func findOriginCert(c *cli.Context, logger logger.Service) (string, error) {
+	originCertPath := c.String("origincert")
+	if originCertPath == "" {
+		logger.Infof("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigDirs)
 		if isRunningFromTerminal() {
 			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
-			return nil, fmt.Errorf("Client didn't specify origincert path when running from terminal")
+			return "", fmt.Errorf("Client didn't specify origincert path when running from terminal")
 		} else {
 			logger.Errorf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
-			return nil, fmt.Errorf("Client didn't specify origincert path")
+			return "", fmt.Errorf("Client didn't specify origincert path")
 		}
 	}
-	// Check that the user has acquired a certificate using the login command
-	originCertPath, err := homedir.Expand(c.String("origincert"))
+	var err error
+	originCertPath, err = homedir.Expand(originCertPath)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot resolve path %s", c.String("origincert"))
-		return nil, fmt.Errorf("Cannot resolve path %s", c.String("origincert"))
+		logger.Errorf("Cannot resolve path %s: %s", originCertPath, err)
+		return "", fmt.Errorf("Cannot resolve path %s", originCertPath)
 	}
+	// Check that the user has acquired a certificate using the login command
 	ok, err := config.FileExists(originCertPath)
 	if err != nil {
-		logger.Errorf("Cannot check if origin cert exists at path %s", c.String("origincert"))
-		return nil, fmt.Errorf("Cannot check if origin cert exists at path %s", c.String("origincert"))
+		logger.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
+		return "", fmt.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
 	}
 	if !ok {
 		logger.Errorf(`Cannot find a valid certificate for your origin at the path:
@@ -134,26 +126,42 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
 	%s login
 `, originCertPath, os.Args[0])
-		return nil, fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
+		return "", fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
 	}
+
+	return originCertPath, nil
+}
+
+func readOriginCert(originCertPath string, logger logger.Service) ([]byte, error) {
+	logger.Debugf("Reading origin cert from %s", originCertPath)
+
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
-		logger.WithError(err).Errorf("Cannot read %s to load origin certificate", originCertPath)
+		logger.Errorf("Cannot read %s to load origin certificate: %s", originCertPath, err)
 		return nil, fmt.Errorf("Cannot read %s to load origin certificate", originCertPath)
 	}
 	return originCert, nil
 }
 
+func getOriginCert(c *cli.Context, logger logger.Service) ([]byte, error) {
+	if originCertPath, err := findOriginCert(c, logger); err != nil {
+		return nil, err
+	} else {
+		return readOriginCert(originCertPath, logger)
+	}
+}
+
 func prepareTunnelConfig(
 	c *cli.Context,
 	buildInfo *buildinfo.BuildInfo,
-	version string, logger,
-	transportLogger *logrus.Logger,
+	version string,
+	logger logger.Service,
+	transportLogger logger.Service,
 ) (*origin.TunnelConfig, error) {
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
-		logger.WithError(err).Error("Invalid hostname")
+		logger.Errorf("Invalid hostname: %s", err)
 		return nil, errors.Wrap(err, "Invalid hostname")
 	}
 	isFreeTunnel := hostname == ""
@@ -167,7 +175,7 @@ func prepareTunnelConfig(
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		logger.WithError(err).Error("Tag parse failure")
+		logger.Errorf("Tag parse failure: %s", err)
 		return nil, errors.Wrap(err, "Tag parse failure")
 	}
 
@@ -175,13 +183,13 @@ func prepareTunnelConfig(
 
 	originURL, err := config.ValidateUrl(c)
 	if err != nil {
-		logger.WithError(err).Error("Error validating origin URL")
+		logger.Errorf("Error validating origin URL: %s", err)
 		return nil, errors.Wrap(err, "Error validating origin URL")
 	}
 
 	var originCert []byte
 	if !isFreeTunnel {
-		originCert, err = getOriginCert(c)
+		originCert, err = getOriginCert(c, logger)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error getting origin cert")
 		}
@@ -189,7 +197,7 @@ func prepareTunnelConfig(
 
 	originCertPool, err := tlsconfig.LoadOriginCA(c, logger)
 	if err != nil {
-		logger.WithError(err).Error("Error loading cert pool")
+		logger.Errorf("Error loading cert pool: %s", err)
 		return nil, errors.Wrap(err, "Error loading cert pool")
 	}
 
@@ -216,7 +224,7 @@ func prepareTunnelConfig(
 	if c.IsSet("unix-socket") {
 		unixSocket, err := config.ValidateUnixSocket(c)
 		if err != nil {
-			logger.WithError(err).Error("Error validating --unix-socket")
+			logger.Errorf("Error validating --unix-socket: %s", err)
 			return nil, errors.Wrap(err, "Error validating --unix-socket")
 		}
 
@@ -233,16 +241,16 @@ func prepareTunnelConfig(
 	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
 		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
 	}
-
-	err = validation.ValidateHTTPService(originURL, hostname, httpTransport)
-	if err != nil {
-		logger.WithError(err).Error("unable to connect to the origin")
-		return nil, errors.Wrap(err, "unable to connect to the origin")
+	// If tunnel running in bastion mode, a connection to origin will not exist until initiated by the client.
+	if !c.IsSet(bastionFlag) {
+		if err = validation.ValidateHTTPService(originURL, hostname, httpTransport); err != nil {
+			logger.Errorf("unable to connect to the origin: %s", err)
+		}
 	}
 
 	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
 	if err != nil {
-		logger.WithError(err).Error("unable to create TLS config to connect with edge")
+		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
 		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
 	}
 
@@ -263,6 +271,7 @@ func prepareTunnelConfig(
 		IsFreeTunnel:         isFreeTunnel,
 		LBPool:               c.String("lb-pool"),
 		Logger:               logger,
+		TransportLogger:      transportLogger,
 		MaxHeartbeats:        c.Uint64("heartbeat-count"),
 		Metrics:              tunnelMetrics,
 		MetricsUpdateFreq:    c.Duration("metrics-update-freq"),
@@ -274,19 +283,10 @@ func prepareTunnelConfig(
 		RunFromTerminal:      isRunningFromTerminal(),
 		Tags:                 tags,
 		TlsConfig:            toEdgeTLSConfig,
-		TransportLogger:      transportLogger,
 		UseDeclarativeTunnel: c.Bool("use-declarative-tunnels"),
 		UseReconnectToken:    c.Bool("use-reconnect-token"),
+		UseQuickReconnects:   c.Bool("use-quick-reconnects"),
 	}, nil
-}
-
-func serviceDiscoverer(c *cli.Context, logger *logrus.Logger) (*edgediscovery.Edge, error) {
-	// If --edge is specfied, resolve edge server addresses
-	if len(c.StringSlice("edge")) > 0 {
-		return edgediscovery.StaticEdge(logger, c.StringSlice("edge"))
-	}
-	// Otherwise lookup edge server addresses through service discovery
-	return edgediscovery.ResolveEdge(logger)
 }
 
 func isRunningFromTerminal() bool {

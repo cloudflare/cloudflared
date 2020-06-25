@@ -7,17 +7,43 @@ PACKAGE_DIR   := $(CURDIR)/packaging
 INSTALL_BINDIR := usr/local/bin
 
 EQUINOX_FLAGS = --version="$(VERSION)" \
-				 --platforms="$(EQUINOX_BUILD_PLATFORMS)" \
-				 --app="$(EQUINOX_APP_ID)" \
-				 --token="$(EQUINOX_TOKEN)" \
-				 --channel="$(EQUINOX_CHANNEL)"
+	--platforms="$(EQUINOX_BUILD_PLATFORMS)" \
+	--app="$(EQUINOX_APP_ID)" \
+	--token="$(EQUINOX_TOKEN)" \
+	--channel="$(EQUINOX_CHANNEL)"
 
 ifeq ($(EQUINOX_IS_DRAFT), true)
 	EQUINOX_FLAGS := --draft $(EQUINOX_FLAGS)
 endif
 
-ifeq ($(GOARCH),)
-	GOARCH := amd64
+LOCAL_ARCH ?= $(shell uname -m)
+ifeq ($(LOCAL_ARCH),x86_64)
+    TARGET_ARCH ?= amd64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
+    TARGET_ARCH ?= arm64
+else ifeq ($(LOCAL_ARCH),aarch64)
+    TARGET_ARCH ?= arm64
+else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
+    TARGET_ARCH ?= arm
+else
+    $(error This system's architecture $(LOCAL_ARCH) isn't supported)
+endif
+
+LOCAL_OS ?= $(shell go env GOOS)
+ifeq ($(LOCAL_OS),linux)
+    TARGET_OS ?= linux
+else ifeq ($(LOCAL_OS),darwin)
+    TARGET_OS ?= darwin
+else ifeq ($(LOCAL_OS),windows)
+    TARGET_OS ?= windows
+else
+    $(error This system's OS $(LOCAL_OS) isn't supported)
+endif
+
+ifeq ($(TARGET_OS), windows)
+	EXECUTABLE_PATH=./cloudflared.exe
+else
+	EXECUTABLE_PATH=./cloudflared
 endif
 
 .PHONY: all
@@ -29,11 +55,11 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: container
 container:
-	docker build -t cloudflare/cloudflared:"$(VERSION)" .
+	docker build --build-arg=TARGET_ARCH=$(TARGET_ARCH) --build-arg=TARGET_OS=$(TARGET_OS) -t cloudflare/cloudflared-$(TARGET_OS)-$(TARGET_ARCH):"$(VERSION)" .
 
 .PHONY: test
 test: vet
@@ -48,7 +74,7 @@ cloudflared-deb: cloudflared
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t deb --deb-compression bzip2 \
-		-a $(GOARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
+		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
 
 .PHONY: cloudflared-darwin-amd64.tgz
 cloudflared-darwin-amd64.tgz: cloudflared
@@ -67,6 +93,10 @@ homebrew-release: homebrew-upload
 .PHONY: release
 release: bin/equinox
 	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+
+.PHONY: github-release
+github-release: cloudflared
+	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
 
 bin/equinox:
 	mkdir -p bin

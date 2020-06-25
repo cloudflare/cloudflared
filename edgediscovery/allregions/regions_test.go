@@ -58,6 +58,7 @@ func TestRegions_Giveback_Region1(t *testing.T) {
 	rs.GiveBack(&addr0)
 	assert.Equal(t, &addr0, rs.GetUnusedAddr(nil, 3))
 }
+
 func TestRegions_Giveback_Region2(t *testing.T) {
 	rs := makeRegions()
 	rs.region1.Use(&addr0, 0)

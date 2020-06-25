@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
 
+	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -55,13 +56,20 @@ type Supervisor struct {
 	nextConnectedIndex  int
 	nextConnectedSignal chan struct{}
 
-	logger *logrus.Entry
+	logger logger.Service
 
-	jwtLock *sync.RWMutex
+	jwtLock sync.RWMutex
 	jwt     []byte
 
-	eventDigestLock *sync.RWMutex
+	eventDigestLock sync.RWMutex
 	eventDigest     []byte
+
+	connDigestLock sync.RWMutex
+	connDigest     map[uint8][]byte
+
+	bufferPool *buffer.Pool
+
+	namedTunnel *NamedTunnelConfig
 }
 
 type resolveResult struct {
@@ -74,7 +82,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID, namedTunnel *NamedTunnelConfig) (*Supervisor, error) {
 	var (
 		edgeIPs *edgediscovery.Edge
 		err     error
@@ -88,20 +96,21 @@ func NewSupervisor(config *TunnelConfig, u uuid.UUID) (*Supervisor, error) {
 		return nil, err
 	}
 	return &Supervisor{
-		cloudflaredUUID:   u,
+		cloudflaredUUID:   cloudflaredUUID,
 		config:            config,
 		edgeIPs:           edgeIPs,
 		tunnelErrors:      make(chan tunnelError),
 		tunnelsConnecting: map[int]chan struct{}{},
-		logger:            config.Logger.WithField("subsystem", "supervisor"),
-		jwtLock:           &sync.RWMutex{},
-		eventDigestLock:   &sync.RWMutex{},
+		logger:            config.Logger,
+		connDigest:        make(map[uint8][]byte),
+		bufferPool:        buffer.NewPool(512 * 1024),
+		namedTunnel:       namedTunnel,
 	}, nil
 }
 
-func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) error {
+func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
 	logger := s.config.Logger
-	if err := s.initialize(ctx, connectedSignal); err != nil {
+	if err := s.initialize(ctx, connectedSignal, reconnectCh); err != nil {
 		return err
 	}
 	var tunnelsWaiting []int
@@ -117,7 +126,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 		if timer, err := s.refreshAuth(ctx, refreshAuthBackoff, s.authenticate); err == nil {
 			refreshAuthBackoffTimer = timer
 		} else {
-			logger.WithError(err).Errorf("initial refreshAuth failed, retrying in %v", refreshAuthRetryDuration)
+			logger.Errorf("supervisor: initial refreshAuth failed, retrying in %v: %s", refreshAuthRetryDuration, err)
 			refreshAuthBackoffTimer = time.After(refreshAuthRetryDuration)
 		}
 	}
@@ -136,7 +145,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil {
-				logger.WithError(tunnelError.err).Warn("Tunnel disconnected due to error")
+				logger.Infof("supervisor: Tunnel disconnected due to error: %s", tunnelError.err)
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -151,7 +160,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 		case <-backoffTimer:
 			backoffTimer = nil
 			for _, index := range tunnelsWaiting {
-				go s.startTunnel(ctx, index, s.newConnectedTunnelSignal(index))
+				go s.startTunnel(ctx, index, s.newConnectedTunnelSignal(index), reconnectCh)
 			}
 			tunnelsActive += len(tunnelsWaiting)
 			tunnelsWaiting = nil
@@ -159,7 +168,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 		case <-refreshAuthBackoffTimer:
 			newTimer, err := s.refreshAuth(ctx, refreshAuthBackoff, s.authenticate)
 			if err != nil {
-				logger.WithError(err).Error("Authentication failed")
+				logger.Errorf("supervisor: Authentication failed: %s", err)
 				// Permanent failure. Leave the `select` without setting the
 				// channel to be non-null, so we'll never hit this case of the `select` again.
 				continue
@@ -176,26 +185,26 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal) er
 			s.lastResolve = time.Now()
 			s.resolverC = nil
 			if result.err == nil {
-				logger.Debug("Service discovery refresh complete")
+				logger.Debug("supervisor: Service discovery refresh complete")
 			} else {
-				logger.WithError(result.err).Error("Service discovery error")
+				logger.Errorf("supervisor: Service discovery error: %s", result.err)
 			}
 		}
 	}
 }
 
 // Returns nil if initialization succeeded, else the initialization error.
-func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal) error {
+func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
 	logger := s.logger
 
 	s.lastResolve = time.Now()
 	availableAddrs := int(s.edgeIPs.AvailableAddrs())
 	if s.config.HAConnections > availableAddrs {
-		logger.Warnf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
+		logger.Infof("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
 		s.config.HAConnections = availableAddrs
 	}
 
-	go s.startFirstTunnel(ctx, connectedSignal)
+	go s.startFirstTunnel(ctx, connectedSignal, reconnectCh)
 	select {
 	case <-ctx.Done():
 		<-s.tunnelErrors
@@ -207,7 +216,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Sig
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
 		ch := signal.New(make(chan struct{}))
-		go s.startTunnel(ctx, i, ch)
+		go s.startTunnel(ctx, i, ch, reconnectCh)
 		time.Sleep(registrationInterval)
 	}
 	return nil
@@ -215,7 +224,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Sig
 
 // startTunnel starts the first tunnel connection. The resulting error will be sent on
 // s.tunnelErrors. It will send a signal via connectedSignal if registration succeed
-func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *signal.Signal) {
+func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) {
 	var (
 		addr *net.TCPAddr
 		err  error
@@ -230,7 +239,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		return
 	}
 
-	err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID)
+	err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
 	// If the first tunnel disconnects, keep restarting it.
 	edgeErrors := 0
 	for s.unusedIPs() {
@@ -253,13 +262,13 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 				return
 			}
 		}
-		err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID)
+		err = ServeTunnelLoop(ctx, s, s.config, addr, thisConnID, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
 	}
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
 // s.tunnelErrors.
-func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal *signal.Signal) {
+func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) {
 	var (
 		addr *net.TCPAddr
 		err  error
@@ -268,11 +277,11 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 		s.tunnelErrors <- tunnelError{index: index, addr: addr, err: err}
 	}()
 
-	addr, err = s.edgeIPs.GetAddr(index)
+	addr, err = s.edgeIPs.GetDifferentAddr(index)
 	if err != nil {
 		return
 	}
-	err = ServeTunnelLoop(ctx, s, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID)
+	err = ServeTunnelLoop(ctx, s, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {
@@ -328,17 +337,33 @@ func (s *Supervisor) SetEventDigest(eventDigest []byte) {
 	s.eventDigest = eventDigest
 }
 
+func (s *Supervisor) ConnDigest(connID uint8) ([]byte, error) {
+	s.connDigestLock.RLock()
+	defer s.connDigestLock.RUnlock()
+	digest, ok := s.connDigest[connID]
+	if !ok {
+		return nil, fmt.Errorf("no connection digest for connection %v", connID)
+	}
+	return digest, nil
+}
+
+func (s *Supervisor) SetConnDigest(connID uint8, connDigest []byte) {
+	s.connDigestLock.Lock()
+	defer s.connDigestLock.Unlock()
+	s.connDigest[connID] = connDigest
+}
+
 func (s *Supervisor) refreshAuth(
 	ctx context.Context,
 	backoff *BackoffHandler,
 	authenticate func(ctx context.Context, numPreviousAttempts int) (tunnelpogs.AuthOutcome, error),
 ) (retryTimer <-chan time.Time, err error) {
-	logger := s.config.Logger.WithField("subsystem", subsystemRefreshAuth)
+	logger := s.config.Logger
 	authOutcome, err := authenticate(ctx, backoff.Retries())
 	if err != nil {
 		s.config.Metrics.authFail.WithLabelValues(err.Error()).Inc()
 		if duration, ok := backoff.GetBackoffDuration(ctx); ok {
-			logger.WithError(err).Warnf("Retrying in %v", duration)
+			logger.Debugf("refresh_auth: Retrying in %v: %s", duration, err)
 			return backoff.BackoffTimer(), nil
 		}
 		return nil, err
@@ -354,13 +379,13 @@ func (s *Supervisor) refreshAuth(
 	case tunnelpogs.AuthUnknown:
 		duration := outcome.RefreshAfter()
 		s.config.Metrics.authFail.WithLabelValues(outcome.Error()).Inc()
-		logger.WithError(outcome).Warnf("Retrying in %v", duration)
+		logger.Debugf("refresh_auth: Retrying in %v: %s", duration, outcome)
 		return timeAfter(duration), nil
 	case tunnelpogs.AuthFail:
 		s.config.Metrics.authFail.WithLabelValues(outcome.Error()).Inc()
 		return nil, outcome
 	default:
-		err := fmt.Errorf("Unexpected outcome type %T", authOutcome)
+		err := fmt.Errorf("refresh_auth: Unexpected outcome type %T", authOutcome)
 		s.config.Metrics.authFail.WithLabelValues(err.Error()).Inc()
 		return nil, err
 	}
@@ -383,7 +408,6 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		return nil // noop
 	})
 	muxerConfig := s.config.muxerConfig(handler)
-	muxerConfig.Logger = muxerConfig.Logger.WithField("subsystem", subsystemRefreshAuth)
 	muxer, err := h2mux.Handshake(edgeConn, edgeConn, muxerConfig, s.config.Metrics.activeStreams)
 	if err != nil {
 		return nil, err
@@ -395,7 +419,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		<-muxer.Shutdown()
 	}()
 
-	tunnelServer, err := connection.NewRPCClient(ctx, muxer, s.logger.WithField("subsystem", subsystemRefreshAuth), openStreamTimeout)
+	tunnelServer, err := connection.NewRPCClient(ctx, muxer, s.logger, openStreamTimeout)
 	if err != nil {
 		return nil, err
 	}

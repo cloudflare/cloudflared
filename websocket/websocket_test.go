@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tlsconfig"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/websocket"
 )
@@ -62,7 +62,7 @@ func TestGenerateAcceptKey(t *testing.T) {
 }
 
 func TestServe(t *testing.T) {
-	logger := logrus.New()
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 	shutdownC := make(chan struct{})
 	errC := make(chan error)
 	listener, err := hello.CreateTLSListener("localhost:1111")
@@ -105,7 +105,7 @@ func TestServe(t *testing.T) {
 // 	remoteAddress := "localhost:1113"
 // 	listenerAddress := "localhost:1112"
 // 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
-// 	logger := logrus.New()
+// 	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 // 	shutdownC := make(chan struct{})
 
 // 	listener, err := net.Listen("tcp", listenerAddress)

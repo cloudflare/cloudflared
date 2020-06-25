@@ -1,4 +1,4 @@
-pinned_go: &pinned_go go=1.12.7-1
+pinned_go: &pinned_go go=1.12.9-1
 build_dir: &build_dir /cfsetup_build
 default-flavor: stretch
 stretch: &stretch
@@ -31,6 +31,18 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=amd64
       - make release
+  github-release-linux-amd64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - make github-release
   release-linux-armv6:
     build_dir: *build_dir
     builddeps:
@@ -53,6 +65,20 @@ stretch: &stretch
       - export GOARCH=arm64
       - export CC=gcc-aarch64-linux-gnu
       - make release
+  github-release-linux-armv6:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - crossbuild-essential-armhf
+      - gcc-arm-linux-gnueabihf
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=arm
+      - export CC=arm-linux-gnueabihf-gcc
+      - make github-release
   release-linux-386:
     build_dir: *build_dir
     builddeps:
@@ -62,6 +88,18 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=386
       - make release
+  github-release-linux-386:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - gcc-multilib
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=386
+      - make github-release
   release-windows-amd64:
     build_dir: *build_dir
     builddeps:
@@ -72,6 +110,19 @@ stretch: &stretch
       - export GOARCH=amd64
       - export CC=x86_64-w64-mingw32-gcc
       - make release
+  github-release-windows-amd64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - gcc-mingw-w64
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=windows
+      - export GOARCH=amd64
+      - export CC=x86_64-w64-mingw32-gcc
+      - make github-release
   release-windows-386:
     build_dir: *build_dir
     builddeps:
@@ -82,6 +133,19 @@ stretch: &stretch
       - export GOARCH=386
       - export CC=i686-w64-mingw32-gcc-win32
       - make release
+  github-release-windows-386:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - gcc-mingw-w64
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=windows
+      - export GOARCH=386
+      - export CC=i686-w64-mingw32-gcc-win32
+      - make github-release
   test:
     build_dir: *build_dir
     builddeps:
@@ -94,8 +158,16 @@ stretch: &stretch
       - (cd / && go get github.com/BurntSushi/go-sumtype)
       - export PATH="$HOME/go/bin:$PATH"
       - make test
+  update-homebrew:
+    builddeps:
+      - openssh-client
+      - s3cmd
+    post-cache:
+      - .teamcity/update-homebrew.sh
 
 jessie: *stretch
+
+buster: *stretch
 
 # cfsetup compose
 default-stack: test_dbconnect

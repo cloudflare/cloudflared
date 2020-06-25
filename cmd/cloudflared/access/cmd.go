@@ -10,27 +10,31 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
+	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
 
-	"github.com/cloudflare/cloudflared/log"
-	raven "github.com/getsentry/raven-go"
-	cli "gopkg.in/urfave/cli.v2"
+	"github.com/getsentry/raven-go"
+	"gopkg.in/urfave/cli.v2"
 )
 
 const (
-	sshHostnameFlag    = "hostname"
-	sshDestinationFlag = "destination"
-	sshURLFlag         = "url"
-	sshHeaderFlag      = "header"
-	sshTokenIDFlag     = "service-token-id"
-	sshTokenSecretFlag = "service-token-secret"
-	sshGenCertFlag     = "short-lived-cert"
-	sshConfigTemplate  = `
+	sshHostnameFlag     = "hostname"
+	sshDestinationFlag  = "destination"
+	sshURLFlag          = "url"
+	sshHeaderFlag       = "header"
+	sshTokenIDFlag      = "service-token-id"
+	sshTokenSecretFlag  = "service-token-secret"
+	sshGenCertFlag      = "short-lived-cert"
+	sshLogDirectoryFlag = "log-directory"
+	sshLogLevelFlag     = "log-level"
+	sshConfigTemplate   = `
 Add to your {{.Home}}/.ssh/config:
 
 Host {{.Hostname}}
@@ -51,7 +55,6 @@ Host cfpipe-{{.Hostname}}
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
 
 var (
-	logger         = log.CreateLogger()
 	shutdownC      chan struct{}
 	graceShutdownC chan struct{}
 )
@@ -71,17 +74,17 @@ func Commands() []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:     "access",
-			Category: "Access (BETA)",
+			Aliases:  []string{"forward"},
+			Category: "Access",
 			Usage:    "access <subcommand>",
-			Description: `(BETA) Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
+			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are 
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected 
-			applications from the command line. This feature is considered beta. Your feedback is greatly appreciated!
-			https://cfl.re/CLIAuthBeta`,
+			applications from the command line.`,
 			Subcommands: []*cli.Command{
 				{
 					Name:   "login",
-					Action: login,
+					Action: cliutil.ErrorHandler(login),
 					Usage:  "login <url of access application>",
 					Description: `The login subcommand initiates an authentication flow with your identity provider.
 					The subcommand will launch a browser. For headless systems, a url is provided.
@@ -97,7 +100,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:   "curl",
-					Action: curl,
+					Action: cliutil.ErrorHandler(curl),
 					Usage:  "curl [--allow-request, -ar] <url> [<curl args>...]",
 					Description: `The curl subcommand wraps curl and automatically injects the JWT into a cf-access-token
 					header when using curl to reach an application behind Access.`,
@@ -106,7 +109,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "token",
-					Action:      generateToken,
+					Action:      cliutil.ErrorHandler(generateToken),
 					Usage:       "token -app=<url of access application>",
 					ArgsUsage:   "url of Access application",
 					Description: `The token subcommand produces a JWT which can be used to authenticate requests.`,
@@ -117,45 +120,57 @@ func Commands() []*cli.Command {
 					},
 				},
 				{
-					Name:        "ssh",
-					Action:      ssh,
-					Aliases:     []string{"rdp"},
+					Name:        "tcp",
+					Action:      cliutil.ErrorHandler(ssh),
+					Aliases:     []string{"rdp", "ssh", "smb"},
 					Usage:       "",
 					ArgsUsage:   "",
-					Description: `The ssh subcommand sends data over a proxy to the Cloudflare edge.`,
+					Description: `The tcp subcommand sends data over a proxy to the Cloudflare edge.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name:  sshHostnameFlag,
-							Usage: "specify the hostname of your application.",
+							Name:    sshHostnameFlag,
+							Aliases: []string{"tunnel-host", "T"},
+							Usage:   "specify the hostname of your application.",
 						},
 						&cli.StringFlag{
 							Name:  sshDestinationFlag,
 							Usage: "specify the destination address of your SSH server.",
 						},
 						&cli.StringFlag{
-							Name:  sshURLFlag,
-							Usage: "specify the host:port to forward data to Cloudflare edge.",
+							Name:    sshURLFlag,
+							Aliases: []string{"listener", "L"},
+							Usage:   "specify the host:port to forward data to Cloudflare edge.",
 						},
 						&cli.StringSliceFlag{
 							Name:    sshHeaderFlag,
 							Aliases: []string{"H"},
 							Usage:   "specify additional headers you wish to send.",
 						},
-						&cli.StringSliceFlag{
+						&cli.StringFlag{
 							Name:    sshTokenIDFlag,
 							Aliases: []string{"id"},
 							Usage:   "specify an Access service token ID you wish to use.",
 						},
-						&cli.StringSliceFlag{
+						&cli.StringFlag{
 							Name:    sshTokenSecretFlag,
 							Aliases: []string{"secret"},
 							Usage:   "specify an Access service token secret you wish to use.",
+						},
+						&cli.StringFlag{
+							Name:    sshLogDirectoryFlag,
+							Aliases: []string{"logfile"}, //added to match the tunnel side
+							Usage:   "Save application log to this directory for reporting issues.",
+						},
+						&cli.StringFlag{
+							Name:    sshLogLevelFlag,
+							Aliases: []string{"loglevel"}, //added to match the tunnel side
+							Usage:   "Application logging level {fatal, error, info, debug}. ",
 						},
 					},
 				},
 				{
 					Name:        "ssh-config",
-					Action:      sshConfig,
+					Action:      cliutil.ErrorHandler(sshConfig),
 					Usage:       "",
 					Description: `Prints an example configuration ~/.ssh/config`,
 					Flags: []cli.Flag{
@@ -171,7 +186,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "ssh-gen",
-					Action:      sshGen,
+					Action:      cliutil.ErrorHandler(sshGen),
 					Usage:       "",
 					Description: `Generates a short lived certificate for given hostname`,
 					Flags: []cli.Flag{
@@ -188,8 +203,15 @@ func Commands() []*cli.Command {
 
 // login pops up the browser window to do the actual login and JWT generation
 func login(c *cli.Context) error {
-	raven.SetDSN(sentryDSN)
-	logger := log.CreateLogger()
+	if err := raven.SetDSN(sentryDSN); err != nil {
+		return err
+	}
+
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	args := c.Args()
 	rawURL := ensureURLScheme(args.First())
 	appURL, err := url.Parse(rawURL)
@@ -197,17 +219,20 @@ func login(c *cli.Context) error {
 		logger.Errorf("Please provide the url of the Access application\n")
 		return err
 	}
-	if err := verifyTokenAtEdge(appURL, c); err != nil {
-		logger.WithError(err).Error("Could not verify token")
+	if err := verifyTokenAtEdge(appURL, c, logger); err != nil {
+		logger.Errorf("Could not verify token: %s", err)
 		return err
 	}
 
-	token, err := token.GetTokenIfExists(appURL)
-	if err != nil || token == "" {
+	cfdToken, err := token.GetTokenIfExists(appURL)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "Unable to find token for provided application.")
 		return err
+	} else if cfdToken == "" {
+		fmt.Fprintln(os.Stderr, "token for provided application was empty.")
+		return errors.New("empty application token")
 	}
-	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", string(token))
+	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
 
 	return nil
 }
@@ -224,8 +249,14 @@ func ensureURLScheme(url string) string {
 
 // curl provides a wrapper around curl, passing Access JWT along in request
 func curl(c *cli.Context) error {
-	raven.SetDSN(sentryDSN)
-	logger := log.CreateLogger()
+	if err := raven.SetDSN(sentryDSN); err != nil {
+		return err
+	}
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	args := c.Args()
 	if args.Len() < 1 {
 		logger.Error("Please provide the access app and command you wish to run.")
@@ -233,7 +264,7 @@ func curl(c *cli.Context) error {
 	}
 
 	cmdArgs, allowRequest := parseAllowRequest(args.Slice())
-	appURL, err := getAppURL(cmdArgs)
+	appURL, err := getAppURL(cmdArgs, logger)
 	if err != nil {
 		return err
 	}
@@ -241,24 +272,26 @@ func curl(c *cli.Context) error {
 	tok, err := token.GetTokenIfExists(appURL)
 	if err != nil || tok == "" {
 		if allowRequest {
-			logger.Warn("You don't have an Access token set. Please run access token <access application> to fetch one.")
+			logger.Info("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return shell.Run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL)
+		tok, err = token.FetchToken(appURL, logger)
 		if err != nil {
-			logger.Error("Failed to refresh token: ", err)
+			logger.Errorf("Failed to refresh token: %s", err)
 			return err
 		}
 	}
 
 	cmdArgs = append(cmdArgs, "-H")
-	cmdArgs = append(cmdArgs, fmt.Sprintf("cf-access-token: %s", tok))
+	cmdArgs = append(cmdArgs, fmt.Sprintf("%s: %s", h2mux.CFAccessTokenHeader, tok))
 	return shell.Run("curl", cmdArgs...)
 }
 
 // token dumps provided token to stdout
 func generateToken(c *cli.Context) error {
-	raven.SetDSN(sentryDSN)
+	if err := raven.SetDSN(sentryDSN); err != nil {
+		return err
+	}
 	appURL, err := url.Parse(c.String("app"))
 	if err != nil || c.NumFlags() < 1 {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
@@ -298,6 +331,11 @@ func sshConfig(c *cli.Context) error {
 
 // sshGen generates a short lived certificate for provided hostname
 func sshGen(c *cli.Context) error {
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
 	hostname, err := validation.ValidateHostname(rawHostName)
@@ -313,12 +351,12 @@ func sshGen(c *cli.Context) error {
 	// this fetchToken function mutates the appURL param. We should refactor that
 	fetchTokenURL := &url.URL{}
 	*fetchTokenURL = *originURL
-	token, err := token.FetchToken(fetchTokenURL)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, logger)
 	if err != nil {
 		return err
 	}
 
-	if err := sshgen.GenerateShortLivedCertificate(originURL, token); err != nil {
+	if err := sshgen.GenerateShortLivedCertificate(originURL, cfdToken); err != nil {
 		return err
 	}
 
@@ -326,7 +364,7 @@ func sshGen(c *cli.Context) error {
 }
 
 // getAppURL will pull the appURL needed for fetching a user's Access token
-func getAppURL(cmdArgs []string) (*url.URL, error) {
+func getAppURL(cmdArgs []string, logger logger.Service) (*url.URL, error) {
 	if len(cmdArgs) < 1 {
 		logger.Error("Please provide a valid URL as the first argument to curl.")
 		return nil, errors.New("not a valid url")
@@ -400,17 +438,17 @@ func isFileThere(candidate string) bool {
 // verifyTokenAtEdge checks for a token on disk, or generates a new one.
 // Then makes a request to to the origin with the token to ensure it is valid.
 // Returns nil if token is valid.
-func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context) error {
+func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, logger logger.Service) error {
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
-		headers.Add("CF-Access-Client-Id", c.String(sshTokenIDFlag))
+		headers.Add(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}
 	if c.IsSet(sshTokenSecretFlag) {
-		headers.Add("CF-Access-Client-Secret", c.String(sshTokenSecretFlag))
+		headers.Add(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
 	options := &carrier.StartOptions{OriginURL: appUrl.String(), Headers: headers}
 
-	if valid, err := isTokenValid(options); err != nil {
+	if valid, err := isTokenValid(options, logger); err != nil {
 		return err
 	} else if valid {
 		return nil
@@ -420,7 +458,7 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context) error {
 		return err
 	}
 
-	if valid, err := isTokenValid(options); err != nil {
+	if valid, err := isTokenValid(options, logger); err != nil {
 		return err
 	} else if !valid {
 		return errors.New("failed to verify token")
@@ -430,8 +468,8 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context) error {
 }
 
 // isTokenValid makes a request to the origin and returns true if the response was not a 302.
-func isTokenValid(options *carrier.StartOptions) (bool, error) {
-	req, err := carrier.BuildAccessRequest(options)
+func isTokenValid(options *carrier.StartOptions, logger logger.Service) (bool, error) {
+	req, err := carrier.BuildAccessRequest(options, logger)
 	if err != nil {
 		return false, errors.Wrap(err, "Could not create access request")
 	}

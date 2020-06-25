@@ -5,13 +5,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 // Manager be managing logs bruh
 type Manager interface {
-	NewLogger(string, *logrus.Logger) (io.WriteCloser, error)
-	NewSessionLogger(string, *logrus.Logger) (io.WriteCloser, error)
+	NewLogger(string, logger.Service) (io.WriteCloser, error)
+	NewSessionLogger(string, logger.Service) (io.WriteCloser, error)
 }
 
 type manager struct {
@@ -25,10 +25,10 @@ func New(baseDirectory string) Manager {
 	}
 }
 
-func (m *manager) NewLogger(name string, logger *logrus.Logger) (io.WriteCloser, error) {
+func (m *manager) NewLogger(name string, logger logger.Service) (io.WriteCloser, error) {
 	return NewLogger(filepath.Join(m.baseDirectory, name), logger, time.Second, defaultFileSizeLimit)
 }
 
-func (m *manager) NewSessionLogger(name string, logger *logrus.Logger) (io.WriteCloser, error) {
+func (m *manager) NewSessionLogger(name string, logger logger.Service) (io.WriteCloser, error) {
 	return NewSessionLogger(filepath.Join(m.baseDirectory, name), logger, time.Second, defaultFileSizeLimit)
 }

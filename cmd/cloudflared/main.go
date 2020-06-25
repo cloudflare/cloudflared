@@ -6,10 +6,14 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/log"
+	log "github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
+	"github.com/cloudflare/cloudflared/overwatch"
+	"github.com/cloudflare/cloudflared/watcher"
 
 	raven "github.com/getsentry/raven-go"
 	homedir "github.com/mitchellh/go-homedir"
@@ -25,7 +29,6 @@ const (
 var (
 	Version   = "DEV"
 	BuildTime = "unknown"
-	logger    = log.CreateLogger()
 	// Mostly network errors that we don't want reported back to Sentry, this is done by substring match.
 	ignoredErrors = []string{
 		"connection reset by peer",
@@ -59,7 +62,7 @@ func main() {
 	app := &cli.App{}
 	app.Name = "cloudflared"
 	app.Usage = "Cloudflare's command-line tool and agent"
-	app.ArgsUsage = "origin-url"
+	app.UsageText = "cloudflared [global options] [command] [command options]"
 	app.Copyright = fmt.Sprintf(
 		`(c) %d Cloudflare Inc.
    Your installation of cloudflared software constitutes a symbol of your signature indicating that you accept
@@ -121,12 +124,12 @@ func isEmptyInvocation(c *cli.Context) bool {
 func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionFunc {
 	return func(c *cli.Context) (err error) {
 		if isEmptyInvocation(c) {
-			cli.ShowAppHelpAndExit(c, 1)
+			return handleServiceMode(shutdownC)
 		}
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
-		raven.CapturePanic(func() { err = tunnel.StartServer(c, version, shutdownC, graceShutdownC) }, nil)
+		raven.CapturePanic(func() { err = tunnel.StartServer(c, version, shutdownC, graceShutdownC, nil) }, nil)
 		exitCode := 0
 		if err != nil {
 			handleError(err)
@@ -145,7 +148,6 @@ func userHomeDir() (string, error) {
 	// use with sudo.
 	homeDir, err := homedir.Dir()
 	if err != nil {
-		logger.WithError(err).Error("Cannot determine home directory for the user")
 		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
 	return homeDir, nil
@@ -160,4 +162,44 @@ func handleError(err error) {
 		}
 	}
 	raven.CaptureError(err, nil)
+}
+
+// cloudflared was started without any flags
+func handleServiceMode(shutdownC chan struct{}) error {
+	defer log.SharedWriteManager.Shutdown()
+	logDirectory, logLevel := config.FindLogSettings()
+
+	logger, err := log.New(log.DefaultFile(logDirectory), log.LogLevelString(logLevel))
+	if err != nil {
+		return cliutil.PrintLoggerSetupError("error setting up logger", err)
+	}
+	logger.Infof("logging to directory: %s", logDirectory)
+
+	// start the main run loop that reads from the config file
+	f, err := watcher.NewFile()
+	if err != nil {
+		logger.Errorf("Cannot load config file: %s", err)
+		return err
+	}
+
+	configPath := config.FindOrCreateConfigPath()
+	configManager, err := config.NewFileManager(f, configPath, logger)
+	if err != nil {
+		logger.Errorf("Cannot setup config file for monitoring: %s", err)
+		return err
+	}
+
+	serviceCallback := func(t string, name string, err error) {
+		if err != nil {
+			logger.Errorf("%s service: %s encountered an error: %s", t, name, err)
+		}
+	}
+	serviceManager := overwatch.NewAppManager(serviceCallback)
+
+	appService := NewAppService(configManager, serviceManager, shutdownC, logger)
+	if err := appService.Run(); err != nil {
+		logger.Errorf("Failed to start app service: %s", err)
+		return err
+	}
+	return nil
 }

@@ -15,11 +15,19 @@ import (
 // The tunnel package is responsible for appending this to tunnel.Commands().
 func Cmd() *cli.Command {
 	return &cli.Command{
-		Category:  "Database Connect (ALPHA)",
+		Category:  "Database Connect (ALPHA) - Deprecated",
 		Name:      "db-connect",
-		Usage:     "Access your SQL database from Cloudflare Workers or the browser",
+		Usage:     "deprecated: Access your SQL database from Cloudflare Workers or the browser",
 		ArgsUsage: " ",
 		Description: `
+		This feature has been deprecated. 
+		Please see: 
+
+		cloudflared access tcp --help 
+
+		for setting up database connections to the cloudflare edge.
+		
+
 		Creates a connection between your database and the Cloudflare edge.
 		Now you can execute SQL commands anywhere you can send HTTPS requests.
 

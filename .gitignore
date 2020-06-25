@@ -9,6 +9,7 @@ guide/public
 \#*\#
 cscope.*
 cloudflared
+cloudflared.pkg
 cloudflared.exe
 !cmd/cloudflared/
 .DS_Store

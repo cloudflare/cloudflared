@@ -4,23 +4,63 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/cloudflare/cloudflared/validation"
 	homedir "github.com/mitchellh/go-homedir"
 	"gopkg.in/urfave/cli.v2"
 	"gopkg.in/urfave/cli.v2/altsrc"
+	"gopkg.in/yaml.v2"
 )
 
 var (
-	// File names from which we attempt to read configuration.
+	// DefaultConfigFiles is the file names from which we attempt to read configuration.
 	DefaultConfigFiles = []string{"config.yml", "config.yaml"}
+
+	// DefaultUnixConfigLocation is the primary location to find a config file
+	DefaultUnixConfigLocation = "/usr/local/etc/cloudflared"
+
+	// DefaultUnixLogLocation is the primary location to find log files
+	DefaultUnixLogLocation = "/var/log/cloudflared"
 
 	// Launchd doesn't set root env variables, so there is default
 	// Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
-	DefaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/usr/local/etc/cloudflared", "/etc/cloudflared"}
+	DefaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/etc/cloudflared", DefaultUnixConfigLocation}
 )
 
 const DefaultCredentialFile = "cert.pem"
+
+// DefaultConfigDirectory returns the default directory of the config file
+func DefaultConfigDirectory() string {
+	if runtime.GOOS == "windows" {
+		path := os.Getenv("CFDPATH")
+		if path == "" {
+			path = filepath.Join(os.Getenv("ProgramFiles(x86)"), "cloudflared")
+			if _, err := os.Stat(path); os.IsNotExist(err) { //doesn't exist, so return an empty failure string
+				return ""
+			}
+		}
+		return path
+	}
+	return DefaultUnixConfigLocation
+}
+
+// DefaultLogDirectory returns the default directory for log files
+func DefaultLogDirectory() string {
+	if runtime.GOOS == "windows" {
+		return DefaultConfigDirectory()
+	}
+	return DefaultUnixLogLocation
+}
+
+// DefaultConfigPath returns the default location of a config file
+func DefaultConfigPath() string {
+	dir := DefaultConfigDirectory()
+	if dir == "" {
+		return DefaultConfigFiles[0]
+	}
+	return filepath.Join(dir, DefaultConfigFiles[0])
+}
 
 // FileExists checks to see if a file exist at the provided path.
 func FileExists(path string) (bool, error) {
@@ -61,6 +101,68 @@ func FindDefaultConfigPath() string {
 		}
 	}
 	return ""
+}
+
+// FindOrCreateConfigPath returns the first path that contains a config file
+// or creates one in the primary default path if it doesn't exist
+func FindOrCreateConfigPath() string {
+	path := FindDefaultConfigPath()
+
+	if path == "" {
+		// create the default directory if it doesn't exist
+		path = DefaultConfigPath()
+		if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+			return ""
+		}
+
+		// write a new config file out
+		file, err := os.Create(path)
+		if err != nil {
+			return ""
+		}
+		defer file.Close()
+
+		logDir := DefaultLogDirectory()
+		os.MkdirAll(logDir, os.ModePerm) //try and create it. Doesn't matter if it succeed or not, only byproduct will be no logs
+
+		c := Root{
+			LogDirectory: logDir,
+		}
+		if err := yaml.NewEncoder(file).Encode(&c); err != nil {
+			return ""
+		}
+	}
+
+	return path
+}
+
+// FindLogSettings gets the log directory and level from the config file
+func FindLogSettings() (string, string) {
+	configPath := FindOrCreateConfigPath()
+	defaultDirectory := DefaultLogDirectory()
+	defaultLevel := "info"
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return defaultDirectory, defaultLevel
+	}
+	defer file.Close()
+
+	var config Root
+	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
+		return defaultDirectory, defaultLevel
+	}
+
+	directory := defaultDirectory
+	if config.LogDirectory != "" {
+		directory = config.LogDirectory
+	}
+
+	level := defaultLevel
+	if config.LogLevel != "" {
+		level = config.LogLevel
+	}
+	return directory, level
 }
 
 // ValidateUnixSocket ensures --unix-socket param is used exclusively

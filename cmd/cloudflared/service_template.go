@@ -73,21 +73,16 @@ func runCommand(command string, args ...string) error {
 	cmd := exec.Command(command, args...)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		logger.WithError(err).Infof("error getting stderr pipe")
 		return fmt.Errorf("error getting stderr pipe: %v", err)
 	}
 	err = cmd.Start()
 	if err != nil {
-		logger.WithError(err).Infof("error starting %s", command)
 		return fmt.Errorf("error starting %s: %v", command, err)
 	}
-	commandErr, _ := ioutil.ReadAll(stderr)
-	if len(commandErr) > 0 {
-		logger.Errorf("%s: %s", command, commandErr)
-	}
+
+	ioutil.ReadAll(stderr)
 	err = cmd.Wait()
 	if err != nil {
-		logger.WithError(err).Infof("%s returned error", command)
 		return fmt.Errorf("%s returned with error: %v", command, err)
 	}
 	return nil
@@ -148,8 +143,7 @@ func copyConfig(srcConfigPath, destConfigPath string) error {
 	// Copy or create config
 	destFile, exists, err := openFile(destConfigPath, true)
 	if err != nil {
-		logger.WithError(err).Infof("cannot open %s", destConfigPath)
-		return err
+		return fmt.Errorf("cannot open %s with error: %s", destConfigPath, err)
 	} else if exists {
 		// config already exists, do nothing
 		return nil
@@ -173,7 +167,6 @@ func copyConfig(srcConfigPath, destConfigPath string) error {
 		if err != nil {
 			return fmt.Errorf("unable to copy %s to %s: %v", srcConfigPath, destConfigPath, err)
 		}
-		logger.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
 	}
 
 	return nil

@@ -112,7 +112,7 @@ func (r *record) read() ([]byte, error) {
 		}
 		p := packed.NewReader(bufio.NewReader(z))
 		r.data, r.err = ioutil.ReadAll(p)
-		if err != nil {
+		if r.err != nil {
 			r.data = nil
 			return
 		}

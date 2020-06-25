@@ -3,7 +3,7 @@ package allregions
 import (
 	"testing"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +19,8 @@ func TestEdgeDiscovery(t *testing.T) {
 		}
 	}
 
-	addrLists, err := edgeDiscovery(logrus.New().WithFields(logrus.Fields{}))
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
+	addrLists, err := edgeDiscovery(l)
 	assert.NoError(t, err)
 	actualAddrSet := map[string]bool{}
 	for _, addrs := range addrLists {

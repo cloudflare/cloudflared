@@ -8,20 +8,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const logFileName = "test-logger.log"
 
 func createLogger(t *testing.T) *Logger {
 	os.Remove(logFileName)
-	l := logrus.New()
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	logger, err := NewLogger(logFileName, l, time.Millisecond, 1024)
 	if err != nil {
 		t.Fatal("couldn't create the logger!", err)
 	}
 	return logger
 }
+
 // AUTH-2115 TODO: fix this test
 //func TestWrite(t *testing.T) {
 //	testStr := "hi"
@@ -32,7 +33,7 @@ func createLogger(t *testing.T) *Logger {
 //	}()
 //
 //	logger.Write([]byte(testStr))
-//	time.Sleep(2 * time.Millisecond)
+//	time.DelayBeforeReconnect(2 * time.Millisecond)
 //	data, err := ioutil.ReadFile(logFileName)
 //	if err != nil {
 //		t.Fatal("couldn't read the log file!", err)

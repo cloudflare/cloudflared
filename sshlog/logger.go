@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
@@ -24,7 +24,7 @@ type Logger struct {
 	filename      string
 	file          *os.File
 	writeBuffer   *bufio.Writer
-	logger        *logrus.Logger
+	logger        logger.Service
 	flushInterval time.Duration
 	maxFileSize   int64
 	done          chan struct{}
@@ -35,10 +35,10 @@ type Logger struct {
 // drained and closed when the caller is finished, so instances should call
 // Close when finished with this Logger instance. Writes will be flushed to disk
 // every second (fsync). filename is the name of the logfile to be created. The
-// logger variable is a logrus that will log all i/o, filesystem error etc, that
+// logger variable is a logger service that will log all i/o, filesystem error etc, that
 // that shouldn't end execution of the logger, but are useful to report to the
 // caller.
-func NewLogger(filename string, logger *logrus.Logger, flushInterval time.Duration, maxFileSize int64) (*Logger, error) {
+func NewLogger(filename string, logger logger.Service, flushInterval time.Duration, maxFileSize int64) (*Logger, error) {
 	if logger == nil {
 		return nil, errors.New("logger can't be nil")
 	}
@@ -87,7 +87,7 @@ func (l *Logger) writer() {
 		select {
 		case <-ticker.C:
 			if err := l.write(); err != nil {
-				l.logger.Errorln(err)
+				l.logger.Errorf("%s", err)
 			}
 		case <-l.done:
 			return

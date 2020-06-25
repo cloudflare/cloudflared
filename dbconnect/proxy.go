@@ -11,17 +11,17 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // Proxy is an HTTP server that proxies requests to a Client.
 type Proxy struct {
 	client          Client
 	accessValidator *validation.Access
-	logger          *logrus.Logger
+	logger          logger.Service
 }
 
 // NewInsecureProxy creates a Proxy that talks to a Client at an origin.
@@ -43,7 +43,12 @@ func NewInsecureProxy(ctx context.Context, origin string) (*Proxy, error) {
 		return nil, errors.Wrap(err, "could not connect to the database")
 	}
 
-	return &Proxy{client, nil, logrus.New()}, nil
+	logger, err := logger.New()
+	if err != nil {
+		return nil, errors.Wrap(err, "error setting up logger")
+	}
+
+	return &Proxy{client, nil, logger}, nil
 }
 
 // NewSecureProxy creates a Proxy that talks to a Client at an origin.
@@ -90,7 +95,8 @@ func (proxy *Proxy) IsAllowed(r *http.Request, verbose ...bool) bool {
 	// Warn administrators that invalid JWTs are being rejected. This is indicative
 	// of either a misconfiguration of the CLI or a massive failure of upstream systems.
 	if len(verbose) > 0 {
-		proxy.httpLog(r, err).Error("Failed JWT authentication")
+		cfRay := proxy.getRayHeader(r)
+		proxy.logger.Infof("dbproxy: Failed JWT authentication: cf-ray: %s %s", cfRay, err)
 	}
 
 	return false
@@ -234,13 +240,14 @@ func (proxy *Proxy) httpRespondErr(w http.ResponseWriter, r *http.Request, defau
 
 	proxy.httpRespond(w, r, status, err.Error())
 	if len(err.Error()) > 0 {
-		proxy.httpLog(r, err).Warn("Database proxy error")
+		cfRay := proxy.getRayHeader(r)
+		proxy.logger.Infof("dbproxy: Database proxy error: cf-ray: %s %s", cfRay, err)
 	}
 }
 
-// httpLog returns a logrus.Entry that is formatted to output a request Cf-ray.
-func (proxy *Proxy) httpLog(r *http.Request, err error) *logrus.Entry {
-	return proxy.logger.WithContext(r.Context()).WithField("CF-RAY", r.Header.Get("Cf-ray")).WithError(err)
+// getRayHeader returns the request's Cf-ray header.
+func (proxy *Proxy) getRayHeader(r *http.Request) string {
+	return r.Header.Get("Cf-ray")
 }
 
 // httpError extracts common errors and returns an status code and friendly error.

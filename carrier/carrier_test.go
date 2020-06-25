@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cloudflare/cloudflared/logger"
 	ws "github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,7 +43,8 @@ func (s *testStreamer) Write(p []byte) (int, error) {
 
 func TestStartClient(t *testing.T) {
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
-	logger := logrus.New()
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	wsConn := NewWSConnection(logger, false)
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 
@@ -52,7 +53,7 @@ func TestStartClient(t *testing.T) {
 		OriginURL: "http://" + ts.Listener.Addr().String(),
 		Headers:   nil,
 	}
-	err := StartClient(logger, buf, options)
+	err := StartClient(wsConn, buf, options)
 	assert.NoError(t, err)
 	buf.Write([]byte(message))
 
@@ -67,8 +68,9 @@ func TestStartServer(t *testing.T) {
 		t.Fatalf("Error starting listener: %v", err)
 	}
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
-	logger := logrus.New()
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 	shutdownC := make(chan struct{})
+	wsConn := NewWSConnection(logger, false)
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 	options := &StartOptions{
@@ -77,7 +79,7 @@ func TestStartServer(t *testing.T) {
 	}
 
 	go func() {
-		err := Serve(logger, listener, shutdownC, options)
+		err := Serve(wsConn, listener, shutdownC, options)
 		if err != nil {
 			t.Fatalf("Error running server: %v", err)
 		}

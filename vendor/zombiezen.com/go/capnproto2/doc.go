@@ -81,10 +81,10 @@ Structs
 
 For the following schema:
 
-struct Foo @0x8423424e9b01c0af {
-  num @0 :UInt32;
-  bar @1 :Foo;
-}
+	struct Foo @0x8423424e9b01c0af {
+	  num @0 :UInt32;
+	  bar @1 :Foo;
+	}
 
 capnpc-go will generate:
 
@@ -168,9 +168,9 @@ For each group a typedef is created with a different method set for just the
 groups fields:
 
 	struct Foo {
-		group :Group {
-			field @0 :Bool;
-		}
+	  group :Group {
+	    field @0 :Bool;
+	  }
 	}
 
 generates the following:
@@ -194,10 +194,10 @@ Named unions are treated as a group with an inner unnamed union. Unnamed
 unions generate an enum Type_Which and a corresponding Which() function:
 
 	struct Foo {
-		union {
-			a @0 :Bool;
-			b @1 :Bool;
-		}
+	  union {
+	    a @0 :Bool;
+	    b @1 :Bool;
+	  }
 	}
 
 generates the following:
@@ -225,10 +225,10 @@ For voids in unions, there is a void setter that just sets the discriminator.
 For example:
 
 	struct Foo {
-		union {
-			a @0 :Void;
-			b @1 :Void;
-		}
+	  union {
+	    a @0 :Void;
+	    b @1 :Void;
+	  }
 	}
 
 generates the following:
@@ -241,14 +241,14 @@ the discriminator. This must be called before the group getter can be
 used to set values. For example:
 
 	struct Foo {
-		union {
-			a :group {
-				v :Bool
-			}
-			b :group {
-				v :Bool
-			}
-		}
+	  union {
+	    a :group {
+	      v :Bool
+	    }
+	    b :group {
+	      v :Bool
+	    }
+	  }
 	}
 
 and in usage:
@@ -293,10 +293,10 @@ but the tags can be customized with a $Go.tag or $Go.notag annotation.
 For example:
 
 	enum ElementSize {
-		empty @0           $Go.tag("void");
-		bit @1             $Go.tag("1 bit");
-		byte @2            $Go.tag("8 bits");
-		inlineComposite @7 $Go.notag;
+	  empty @0           $Go.tag("void");
+	  bit @1             $Go.tag("1 bit");
+	  byte @2            $Go.tag("8 bits");
+	  inlineComposite @7 $Go.notag;
 	}
 
 In the generated go file:

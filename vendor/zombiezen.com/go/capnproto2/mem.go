@@ -360,7 +360,7 @@ func (ssa *singleSegmentArena) Allocate(sz Size, segs map[SegmentID]*Segment) (S
 	if hasCapacity(data, sz) {
 		return 0, data, nil
 	}
-	inc, err := nextAlloc(int64(len(data)), int64(maxSegmentSize()), sz)
+	inc, err := nextAlloc(int64(cap(data)), int64(maxSegmentSize()), sz)
 	if err != nil {
 		return 0, nil, fmt.Errorf("capnp: alloc %d bytes: %v", sz, err)
 	}

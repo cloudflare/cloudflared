@@ -42,20 +42,26 @@ func MarshalList(typeID uint64, l capnp.List) (string, error) {
 
 // An Encoder writes the text format of Cap'n Proto messages to an output stream.
 type Encoder struct {
-	w     errWriter
+	w     indentWriter
 	tmp   []byte
 	nodes nodemap.Map
 }
 
 // NewEncoder returns a new encoder that writes to w.
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{w: errWriter{w: w}}
+	return &Encoder{w: indentWriter{w: w}}
 }
 
 // UseRegistry changes the registry that the encoder consults for
 // schemas from the default registry.
 func (enc *Encoder) UseRegistry(reg *schemas.Registry) {
 	enc.nodes.UseRegistry(reg)
+}
+
+// SetIndent sets string to indent each level with.
+// An empty string disables indentation.
+func (enc *Encoder) SetIndent(indent string) {
+	enc.w.indentPerLevel = indent
 }
 
 // Encode writes the text representation of s to the stream.
@@ -133,8 +139,14 @@ func (enc *Encoder) marshalStruct(typeID uint64, s capnp.Struct) error {
 	if n.StructNode().DiscriminantCount() > 0 {
 		discriminant = s.Uint16(capnp.DataOffset(n.StructNode().DiscriminantOffset() * 2))
 	}
-	enc.w.WriteByte('(')
 	fields := codeOrderFields(n.StructNode())
+	if len(fields) == 0 {
+		enc.w.WriteString("()")
+		return nil
+	}
+	enc.w.WriteByte('(')
+	enc.w.Indent()
+	enc.w.NewLine()
 	first := true
 	for _, f := range fields {
 		if !(f.Which() == schema.Field_Which_slot || f.Which() == schema.Field_Which_group) {
@@ -144,7 +156,8 @@ func (enc *Encoder) marshalStruct(typeID uint64, s capnp.Struct) error {
 			continue
 		}
 		if !first {
-			enc.w.WriteString(", ")
+			enc.w.WriteByte(',')
+			enc.w.NewLineOrSpace()
 		}
 		first = false
 		name, err := f.NameBytes()
@@ -164,6 +177,8 @@ func (enc *Encoder) marshalStruct(typeID uint64, s capnp.Struct) error {
 			}
 		}
 	}
+	enc.w.NewLine()
+	enc.w.Unindent()
 	enc.w.WriteByte(')')
 	return nil
 }
@@ -298,101 +313,154 @@ func codeOrderFields(s schema.Node_structNode) []schema.Field {
 }
 
 func (enc *Encoder) marshalList(elem schema.Type, l capnp.List) error {
-	switch elem.Which() {
-	case schema.Type_Which_void:
-		enc.w.WriteString(capnp.VoidList{List: l}.String())
-	case schema.Type_Which_bool:
-		enc.w.WriteString(capnp.BitList{List: l}.String())
-	case schema.Type_Which_int8:
-		enc.w.WriteString(capnp.Int8List{List: l}.String())
-	case schema.Type_Which_int16:
-		enc.w.WriteString(capnp.Int16List{List: l}.String())
-	case schema.Type_Which_int32:
-		enc.w.WriteString(capnp.Int32List{List: l}.String())
-	case schema.Type_Which_int64:
-		enc.w.WriteString(capnp.Int64List{List: l}.String())
-	case schema.Type_Which_uint8:
-		enc.w.WriteString(capnp.UInt8List{List: l}.String())
-	case schema.Type_Which_uint16:
-		enc.w.WriteString(capnp.UInt16List{List: l}.String())
-	case schema.Type_Which_uint32:
-		enc.w.WriteString(capnp.UInt32List{List: l}.String())
-	case schema.Type_Which_uint64:
-		enc.w.WriteString(capnp.UInt64List{List: l}.String())
-	case schema.Type_Which_float32:
-		enc.w.WriteString(capnp.Float32List{List: l}.String())
-	case schema.Type_Which_float64:
-		enc.w.WriteString(capnp.Float64List{List: l}.String())
-	case schema.Type_Which_data:
-		enc.w.WriteString(capnp.DataList{List: l}.String())
-	case schema.Type_Which_text:
-		enc.w.WriteString(capnp.TextList{List: l}.String())
-	case schema.Type_Which_structType:
+	writeListItems := func(writeItem func(i int) error) error {
+		if l.Len() == 0 {
+			_, err := enc.w.WriteString("[]")
+			return err
+		}
 		enc.w.WriteByte('[')
+		enc.w.Indent()
+		enc.w.NewLine()
 		for i := 0; i < l.Len(); i++ {
-			if i > 0 {
-				enc.w.WriteString(", ")
-			}
-			err := enc.marshalStruct(elem.StructType().TypeId(), l.Struct(i))
+			err := writeItem(i)
 			if err != nil {
 				return err
 			}
+			if i == l.Len()-1 {
+				enc.w.NewLine()
+			} else {
+				enc.w.WriteByte(',')
+				enc.w.NewLineOrSpace()
+			}
 		}
+		enc.w.Unindent()
 		enc.w.WriteByte(']')
+		return nil
+	}
+	writeListItemsN := func(writeItem func(i int) (int, error)) error {
+		return writeListItems(func(i int) error {
+			_, err := writeItem(i)
+			return err
+		})
+	}
+	switch elem.Which() {
+	case schema.Type_Which_void:
+		return writeListItemsN(func(_ int) (int, error) {
+			return enc.w.WriteString("void")
+		})
+	case schema.Type_Which_bool:
+		p := capnp.BitList{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			if p.At(i) {
+				return enc.w.WriteString("true")
+			} else {
+				return enc.w.WriteString("false")
+			}
+		})
+	case schema.Type_Which_int8:
+		p := capnp.Int8List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatInt(int64(p.At(i)), 10))
+		})
+	case schema.Type_Which_int16:
+		p := capnp.Int16List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatInt(int64(p.At(i)), 10))
+		})
+	case schema.Type_Which_int32:
+		p := capnp.Int32List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatInt(int64(p.At(i)), 10))
+		})
+	case schema.Type_Which_int64:
+		p := capnp.Int64List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatInt(p.At(i), 10))
+		})
+	case schema.Type_Which_uint8:
+		p := capnp.UInt8List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatUint(uint64(p.At(i)), 10))
+		})
+	case schema.Type_Which_uint16:
+		p := capnp.UInt16List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatUint(uint64(p.At(i)), 10))
+		})
+	case schema.Type_Which_uint32:
+		p := capnp.UInt32List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatUint(uint64(p.At(i)), 10))
+		})
+	case schema.Type_Which_uint64:
+		p := capnp.UInt64List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatUint(p.At(i), 10))
+		})
+	case schema.Type_Which_float32:
+		p := capnp.Float32List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatFloat(float64(p.At(i)), 'g', -1, 32))
+		})
+	case schema.Type_Which_float64:
+		p := capnp.Float64List{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			return enc.w.WriteString(strconv.FormatFloat(p.At(i), 'g', -1, 64))
+		})
+	case schema.Type_Which_data:
+		p := capnp.DataList{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			s, err := p.At(i)
+			if err != nil {
+				return enc.w.WriteString("<error>")
+			}
+			buf := strquote.Append(nil, s)
+			return enc.w.Write(buf)
+		})
+	case schema.Type_Which_text:
+		p := capnp.TextList{List: l}
+		return writeListItemsN(func(i int) (int, error) {
+			s, err := p.BytesAt(i)
+			if err != nil {
+				return enc.w.WriteString("<error>")
+			}
+			buf := strquote.Append(nil, s)
+			return enc.w.Write(buf)
+		})
+	case schema.Type_Which_structType:
+		return writeListItems(func(i int) error {
+			return enc.marshalStruct(elem.StructType().TypeId(), l.Struct(i))
+		})
 	case schema.Type_Which_list:
-		enc.w.WriteByte('[')
 		ee, err := elem.List().ElementType()
 		if err != nil {
 			return err
 		}
-		for i := 0; i < l.Len(); i++ {
-			if i > 0 {
-				enc.w.WriteString(", ")
-			}
+		return writeListItems(func(i int) error {
 			p, err := capnp.PointerList{List: l}.PtrAt(i)
 			if err != nil {
 				return err
 			}
-			err = enc.marshalList(ee, p.List())
-			if err != nil {
-				return err
-			}
-		}
-		enc.w.WriteByte(']')
+			return enc.marshalList(ee, p.List())
+		})
 	case schema.Type_Which_enum:
-		enc.w.WriteByte('[')
 		il := capnp.UInt16List{List: l}
 		typ := elem.Enum().TypeId()
 		// TODO(light): only search for node once
-		for i := 0; i < il.Len(); i++ {
-			if i > 0 {
-				enc.w.WriteString(", ")
-			}
-			enc.marshalEnum(typ, il.At(i))
-		}
-		enc.w.WriteByte(']')
+		return writeListItems(func(i int) error {
+			return enc.marshalEnum(typ, il.At(i))
+		})
 	case schema.Type_Which_interface:
-		enc.w.WriteByte('[')
-		for i := 0; i < l.Len(); i++ {
-			if i > 0 {
-				enc.w.WriteString(", ")
-			}
-			enc.w.WriteString(interfaceMarker)
-		}
-		enc.w.WriteByte(']')
+		return writeListItemsN(func(_ int) (int, error) {
+			return enc.w.WriteString(interfaceMarker)
+		})
 	case schema.Type_Which_anyPointer:
-		enc.w.WriteByte('[')
-		for i := 0; i < l.Len(); i++ {
-			if i > 0 {
-				enc.w.WriteString(", ")
-			}
-			enc.w.WriteString(anyPointerMarker)
-		}
-		enc.w.WriteByte(']')
+		return writeListItemsN(func(_ int) (int, error) {
+			return enc.w.WriteString(anyPointerMarker)
+		})
 	default:
 		return fmt.Errorf("unknown list type %v", elem.Which())
 	}
-	return nil
 }
 
 func (enc *Encoder) marshalEnum(typ uint64, val uint16) error {
@@ -419,37 +487,96 @@ func (enc *Encoder) marshalEnum(typ uint64, val uint16) error {
 	return nil
 }
 
-type errWriter struct {
+// indentWriter is helper for writing indented text
+type indentWriter struct {
 	w   io.Writer
 	err error
+
+	// indentPerLevel is a string to prepend to a line for every level of indentation.
+	indentPerLevel string
+
+	// current indent level
+	currentIndent int
+
+	// hasLineContent is true when we have written something on the current line.
+	hasLineContent bool
 }
 
-func (ew *errWriter) Write(p []byte) (int, error) {
-	if ew.err != nil {
-		return 0, ew.err
+func (iw *indentWriter) beforeWrite() {
+	if iw.err != nil {
+		return
+	}
+	if len(iw.indentPerLevel) > 0 && !iw.hasLineContent {
+		iw.hasLineContent = true
+		for i := 0; i < iw.currentIndent; i++ {
+			_, err := iw.w.Write([]byte(iw.indentPerLevel))
+			if err != nil {
+				iw.err = err
+				return
+			}
+		}
+	}
+}
+
+func (iw *indentWriter) Write(p []byte) (int, error) {
+	iw.beforeWrite()
+	if iw.err != nil {
+		return 0, iw.err
 	}
 	var n int
-	n, ew.err = ew.w.Write(p)
-	return n, ew.err
+	n, iw.err = iw.w.Write(p)
+	return n, iw.err
 }
 
-func (ew *errWriter) WriteString(s string) (int, error) {
-	if ew.err != nil {
-		return 0, ew.err
+func (iw *indentWriter) WriteString(s string) (int, error) {
+	iw.beforeWrite()
+	if iw.err != nil {
+		return 0, iw.err
 	}
 	var n int
-	n, ew.err = io.WriteString(ew.w, s)
-	return n, ew.err
+	n, iw.err = io.WriteString(iw.w, s)
+	return n, iw.err
 }
 
-func (ew *errWriter) WriteByte(b byte) error {
-	if ew.err != nil {
-		return ew.err
+func (iw *indentWriter) WriteByte(b byte) error {
+	iw.beforeWrite()
+	if iw.err != nil {
+		return iw.err
 	}
-	if bw, ok := ew.w.(io.ByteWriter); ok {
-		ew.err = bw.WriteByte(b)
+	if bw, ok := iw.w.(io.ByteWriter); ok {
+		iw.err = bw.WriteByte(b)
 	} else {
-		_, ew.err = ew.w.Write([]byte{b})
+		_, iw.err = iw.w.Write([]byte{b})
 	}
-	return ew.err
+	return iw.err
+}
+
+func (iw *indentWriter) Indent() {
+	iw.currentIndent++
+}
+
+func (iw *indentWriter) Unindent() {
+	iw.currentIndent--
+}
+
+func (iw *indentWriter) NewLine() {
+	if len(iw.indentPerLevel) > 0 && iw.hasLineContent {
+		if iw.err != nil {
+			return
+		}
+		if bw, ok := iw.w.(io.ByteWriter); ok {
+			iw.err = bw.WriteByte('\n')
+		} else {
+			_, iw.err = iw.w.Write([]byte{'\n'})
+		}
+		iw.hasLineContent = false
+	}
+}
+
+func (iw *indentWriter) NewLineOrSpace() {
+	if len(iw.indentPerLevel) > 0 {
+		iw.NewLine()
+	} else {
+		iw.WriteByte(' ')
+	}
 }

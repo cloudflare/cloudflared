@@ -142,6 +142,9 @@ func Unpack(dst, src []byte) ([]byte, error) {
 			dst = allocWords(dst, int(src[0]))
 			src = src[1:]
 			n := copy(dst[start:], src)
+			if n < len(dst)-start {
+				return dst, io.ErrUnexpectedEOF
+			}
 			src = src[n:]
 		}
 	}
@@ -281,22 +284,22 @@ func (r *Reader) ReadWord(p []byte) error {
 	switch tag {
 	case zeroTag:
 		z, err := r.rd.ReadByte()
-		if err == io.EOF {
-			r.err = io.ErrUnexpectedEOF
-			return nil
-		} else if err != nil {
+		if err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
 			r.err = err
-			return nil
+			return err
 		}
 		r.zeroes = int(z)
 	case unpackedTag:
 		l, err := r.rd.ReadByte()
-		if err == io.EOF {
-			r.err = io.ErrUnexpectedEOF
-			return nil
-		} else if err != nil {
+		if err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
 			r.err = err
-			return nil
+			return err
 		}
 		r.literal = int(l)
 	}

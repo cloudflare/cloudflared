@@ -9,13 +9,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-func testConfig(logger *logrus.Logger) *TunnelConfig {
+func testConfig(logger logger.Service) *TunnelConfig {
 	metrics := TunnelMetrics{}
 
 	metrics.authSuccess = prometheus.NewCounter(
@@ -40,8 +40,7 @@ func testConfig(logger *logrus.Logger) *TunnelConfig {
 }
 
 func TestRefreshAuthBackoff(t *testing.T) {
-	logger := logrus.New()
-	logger.Level = logrus.ErrorLevel
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	var wait time.Duration
 	timeAfter = func(d time.Duration) <-chan time.Time {
@@ -49,7 +48,7 @@ func TestRefreshAuthBackoff(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -85,8 +84,7 @@ func TestRefreshAuthBackoff(t *testing.T) {
 }
 
 func TestRefreshAuthSuccess(t *testing.T) {
-	logger := logrus.New()
-	logger.Level = logrus.ErrorLevel
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	var wait time.Duration
 	timeAfter = func(d time.Duration) <-chan time.Time {
@@ -94,7 +92,7 @@ func TestRefreshAuthSuccess(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -114,8 +112,7 @@ func TestRefreshAuthSuccess(t *testing.T) {
 }
 
 func TestRefreshAuthUnknown(t *testing.T) {
-	logger := logrus.New()
-	logger.Level = logrus.ErrorLevel
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	var wait time.Duration
 	timeAfter = func(d time.Duration) <-chan time.Time {
@@ -123,7 +120,7 @@ func TestRefreshAuthUnknown(t *testing.T) {
 		return time.After(d)
 	}
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -143,10 +140,9 @@ func TestRefreshAuthUnknown(t *testing.T) {
 }
 
 func TestRefreshAuthFail(t *testing.T) {
-	logger := logrus.New()
-	logger.Level = logrus.ErrorLevel
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
-	s, err := NewSupervisor(testConfig(logger), uuid.New())
+	s, err := NewSupervisor(testConfig(logger), uuid.New(), nil)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}

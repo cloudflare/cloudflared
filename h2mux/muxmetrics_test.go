@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,7 +91,7 @@ func TestMuxMetricsUpdater(t *testing.T) {
 	abortChan := make(chan struct{})
 	compBefore, compAfter := NewAtomicCounter(0), NewAtomicCounter(0)
 	m := newMuxMetricsUpdater(abortChan, compBefore, compAfter)
-	logger := log.NewEntry(log.New())
+	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	go func() {
 		errChan <- m.run(logger)

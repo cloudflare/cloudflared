@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
@@ -28,7 +28,7 @@ const (
 
 func TestMain(m *testing.M) {
 	if os.Getenv("VERBOSE") == "1" {
-		log.SetLevel(log.DebugLevel)
+		//TODO: set log level
 	}
 	os.Exit(m.Run())
 }
@@ -51,7 +51,7 @@ func NewDefaultMuxerPair(t assert.TestingT, testName string, f MuxedStreamFunc) 
 			Handler:                 f,
 			IsClient:                true,
 			Name:                    "origin",
-			Logger:                  log.NewEntry(log.New()),
+			Logger:                  logger.NewOutputWriter(logger.NewMockWriteManager()),
 			DefaultWindowSize:       (1 << 8) - 1,
 			MaxWindowSize:           (1 << 15) - 1,
 			StreamWriteBufferMaxLen: 1024,
@@ -63,7 +63,7 @@ func NewDefaultMuxerPair(t assert.TestingT, testName string, f MuxedStreamFunc) 
 			Timeout:                 testHandshakeTimeout,
 			IsClient:                false,
 			Name:                    "edge",
-			Logger:                  log.NewEntry(log.New()),
+			Logger:                  logger.NewOutputWriter(logger.NewMockWriteManager()),
 			DefaultWindowSize:       (1 << 8) - 1,
 			MaxWindowSize:           (1 << 15) - 1,
 			StreamWriteBufferMaxLen: 1024,
@@ -86,7 +86,7 @@ func NewCompressedMuxerPair(t assert.TestingT, testName string, quality Compress
 			IsClient:           true,
 			Name:               "origin",
 			CompressionQuality: quality,
-			Logger:             log.NewEntry(log.New()),
+			Logger:             logger.NewOutputWriter(logger.NewMockWriteManager()),
 			HeartbeatInterval:  defaultTimeout,
 			MaxHeartbeats:      defaultRetries,
 		},
@@ -96,7 +96,7 @@ func NewCompressedMuxerPair(t assert.TestingT, testName string, quality Compress
 			IsClient:           false,
 			Name:               "edge",
 			CompressionQuality: quality,
-			Logger:             log.NewEntry(log.New()),
+			Logger:             logger.NewOutputWriter(logger.NewMockWriteManager()),
 			HeartbeatInterval:  defaultTimeout,
 			MaxHeartbeats:      defaultRetries,
 		},
@@ -301,6 +301,7 @@ func TestSingleStreamLargeResponseBody(t *testing.T) {
 }
 
 func TestMultipleStreams(t *testing.T) {
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 	f := MuxedStreamFunc(func(stream *MuxedStream) error {
 		if len(stream.Headers) != 1 {
 			t.Fatalf("expected %d headers, got %d", 1, len(stream.Headers))
@@ -308,13 +309,13 @@ func TestMultipleStreams(t *testing.T) {
 		if stream.Headers[0].Name != "client-token" {
 			t.Fatalf("expected header name %s, got %s", "client-token", stream.Headers[0].Name)
 		}
-		log.Debugf("Got request for stream %s", stream.Headers[0].Value)
+		l.Debugf("Got request for stream %s", stream.Headers[0].Value)
 		stream.WriteHeaders([]Header{
 			{Name: "response-token", Value: stream.Headers[0].Value},
 		})
-		log.Debugf("Wrote headers for stream %s", stream.Headers[0].Value)
+		l.Debugf("Wrote headers for stream %s", stream.Headers[0].Value)
 		stream.Write([]byte("OK"))
-		log.Debugf("Wrote body for stream %s", stream.Headers[0].Value)
+		l.Debugf("Wrote body for stream %s", stream.Headers[0].Value)
 		return nil
 	})
 	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
@@ -332,7 +333,7 @@ func TestMultipleStreams(t *testing.T) {
 				[]Header{{Name: "client-token", Value: tokenString}},
 				nil,
 			)
-			log.Debugf("Got headers for stream %d", tokenId)
+			l.Debugf("Got headers for stream %d", tokenId)
 			if err != nil {
 				errorsC <- err
 				return
@@ -370,7 +371,7 @@ func TestMultipleStreams(t *testing.T) {
 	testFail := false
 	for err := range errorsC {
 		testFail = true
-		log.Error(err)
+		l.Errorf("%s", err)
 	}
 	if testFail {
 		t.Fatalf("TestMultipleStreams failed")
@@ -448,6 +449,8 @@ func TestMultipleStreamsFlowControl(t *testing.T) {
 }
 
 func TestGracefulShutdown(t *testing.T) {
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
+
 	sendC := make(chan struct{})
 	responseBuf := bytes.Repeat([]byte("Hello world"), 65536)
 
@@ -456,17 +459,17 @@ func TestGracefulShutdown(t *testing.T) {
 			{Name: "response-header", Value: "responseValue"},
 		})
 		<-sendC
-		log.Debugf("Writing %d bytes", len(responseBuf))
+		l.Debugf("Writing %d bytes", len(responseBuf))
 		stream.Write(responseBuf)
 		stream.CloseWrite()
-		log.Debugf("Wrote %d bytes", len(responseBuf))
+		l.Debugf("Wrote %d bytes", len(responseBuf))
 		// Reading from the stream will block until the edge closes its end of the stream.
 		// Otherwise, we'll close the whole connection before receiving the 'stream closed'
 		// message from the edge.
 		// Graceful shutdown works if you omit this, it just gives spurious errors for now -
 		// TODO ignore errors when writing 'stream closed' and we're shutting down.
 		stream.Read([]byte{0})
-		log.Debugf("Handler ends")
+		l.Debugf("Handler ends")
 		return nil
 	})
 	muxPair := NewDefaultMuxerPair(t, t.Name(), f)
@@ -483,7 +486,7 @@ func TestGracefulShutdown(t *testing.T) {
 	muxPair.EdgeMux.Shutdown()
 	close(sendC)
 	responseBody := make([]byte, len(responseBuf))
-	log.Debugf("Waiting for %d bytes", len(responseBuf))
+	l.Debugf("Waiting for %d bytes", len(responseBuf))
 	n, err := io.ReadFull(stream, responseBody)
 	if err != nil {
 		t.Fatalf("error from (*MuxedStream).Read with %d bytes read: %s", n, err)
@@ -676,6 +679,7 @@ func AssertIfPipeReadable(t *testing.T, pipe io.ReadCloser) {
 }
 
 func TestMultipleStreamsWithDictionaries(t *testing.T) {
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
 
 	for q := CompressionNone; q <= CompressionMax; q++ {
 		htmlBody := `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"` +
@@ -812,7 +816,7 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 		testFail := false
 		for err := range errorsC {
 			testFail = true
-			log.Error(err)
+			l.Errorf("%s", err)
 		}
 		if testFail {
 			t.Fatalf("TestMultipleStreams failed")
@@ -826,6 +830,8 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 }
 
 func sampleSiteHandler(files map[string][]byte) MuxedStreamFunc {
+	l := logger.NewOutputWriter(logger.NewMockWriteManager())
+
 	return func(stream *MuxedStream) error {
 		var contentType string
 		var pathHeader Header
@@ -853,13 +859,13 @@ func sampleSiteHandler(files map[string][]byte) MuxedStreamFunc {
 		stream.WriteHeaders([]Header{
 			Header{Name: "content-type", Value: contentType},
 		})
-		log.Debugf("Wrote headers for stream %s", pathHeader.Value)
+		l.Debugf("Wrote headers for stream %s", pathHeader.Value)
 		file, ok := files[pathHeader.Value]
 		if !ok {
 			return fmt.Errorf("%s content is not preloaded", pathHeader.Value)
 		}
 		stream.Write(file)
-		log.Debugf("Wrote body for stream %s", pathHeader.Value)
+		l.Debugf("Wrote body for stream %s", pathHeader.Value)
 		return nil
 	}
 }

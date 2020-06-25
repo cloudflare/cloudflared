@@ -3,7 +3,7 @@ package sshlog
 import (
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/cloudflare/cloudflared/logger"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 )
@@ -20,7 +20,7 @@ type sessionLogData struct {
 }
 
 // NewSessionLogger creates a new session logger by encapsulating a Logger object and writing capnp encoded messages to it
-func NewSessionLogger(filename string, logger *logrus.Logger, flushInterval time.Duration, maxFileSize int64) (*SessionLogger, error) {
+func NewSessionLogger(filename string, logger logger.Service, flushInterval time.Duration, maxFileSize int64) (*SessionLogger, error) {
 	l, err := NewLogger(filename, logger, flushInterval, maxFileSize)
 	if err != nil {
 		return nil, err

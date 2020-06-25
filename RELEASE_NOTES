@@ -1,3 +1,112 @@
+2020.6.5
+- 2020-06-16 DEVTOOLS-7321: Don't skip macOS builds based on tag
+- 2020-06-16 fix for a flaky test
+- 2020-06-16 AUTH-2815 flag check was wrong. stupid oversight
+- 2020-06-16 TUN-3101: Tunnel list command should only show non-deleted, by default
+- 2020-06-16 TUN-3066: Command line action for tunnel run
+- 2020-06-16 TUN-3100 make updater report the right text
+
+2020.6.4
+- 2020-06-11 TUN-3085: Pass connection authentication information using TunnelAuth struct
+- 2020-06-15 TUN-3084: Generate and store tunnel_secret value during tunnel creation
+- 2020-06-16 AUTH-2815 add the log file to support the config.yaml file
+- 2020-06-02 TUN-3015: Add a new cap'n'proto RPC interface for connection registration as well as matching client and server implementations. The old interface extends the new one for backward compatibility.
+
+2020.6.3
+- 2020-06-15 DEVTOOLS-7321: Add openssh-client pkg for missing ssh-keyscan
+- 2020-06-15 AUTH-2813 adds back a single file support a cloudflared log file
+
+2020.6.2
+- 2020-06-11 AUTH-2648 updated usage text
+- 2020-06-11 AUTH-2763 don't redirect from curl command
+- 2020-06-12 TUN-3090: Upgrade crypto dep
+- 2020-06-11 TUN-3038: Add connections to tunnel list table
+- 2020-06-12 AUTH-2810 added warn for backwards compatibility sake
+
+2020.6.1
+- 2020-06-09 AUTH-2796 fixed windows build
+
+2020.6.0
+- 2020-06-05 AUTH-2645 protect against user mistaken flag input
+- 2020-06-05 AUTH-2687 don't copy config unnecessarily
+- 2020-06-05 AUTH-2169 make access login page more generic
+- 2020-06-05 AUTH-2729 added log file and level to cmd flags to match config file settings
+- 2020-06-08 AUTH-2785 service token flag fix and logger fix
+- 2020-05-20 AUTH-2682: Create buster build
+- 2020-05-21 TUN-2928, TUN-2929, TUN-2930: Add tunnel subcommands to interact with tunnel store service
+- 2020-05-29 Adding support for multi-architecture images and binaries (#184)
+- 2020-05-29 TUN-3019: Remove declarative tunnel entry code
+- 2020-05-29 TUN-3020: Remove declarative tunnel related RPC code
+- 2020-05-13 AUTH-2505 added aliases
+- 2020-05-14 AUTH-2529 added deprecation text to db-connect command
+- 2020-05-18 AUTH-2686: Added error handling to tunnel subcommand
+- 2020-05-04 AUTH-2369: RDP Bastion prototype
+- 2020-04-29 AUTH-2596 added new logger package and replaced logrus
+- 2020-04-25 DEVTOOLS-7321: Use SSH key from env for pushing to GitHub
+- 2020-04-25 DEVTOOLS-7321: Push to a test branch instead of to master
+- 2020-03-30 DEVTOOLS-7321: Add scripts for macOS builds and homebrew uploads
+
+2020.5.1
+- 2020-05-07 TUN-2860: Enable quick reconnect feature by default
+- 2020-05-07 AUTH-2564: error handling and minor fixes
+- 2020-05-01 AUTH-2588 add DoH to service mode
+
+2020.5.0
+- 2020-05-01 TUN-2943: Copy certutil from edge into cloudflared
+- 2020-05-05 TUN-2955: Fix connection and goroutine leaks when tunnel conection is terminated on error. Only unregister tunnels that had connected successfully. Close edge connection used to unregister the tunnel. Use buffered channels for error channels where receiver may quit early on context cancellation.
+- 2020-04-30 TUN-2940: Added delay parameter to stdin reconnect command.
+- 2020-04-27 TUN-2921: Rework address selection logic to avoid corner cases
+- 2020-04-28 TUN-2872: Exit with non-0 status code when the binary is updated so launchd will restart the service
+- 2020-04-13 AUTH-2587 add config watcher and reload logic for access client forwarder
+
+2020.4.0
+- 2020-04-10 TUN-2881: Parameterize response meta information header name in the generating function
+- 2020-04-11 TUN-2894: ResponseMetaHeader should be public
+- 2020-04-09 TUN-2880: Return metadata about source of the response from cloudflared
+- 2020-04-04 ARES-899: Fixes DoH client as system resolver. Fixes #91
+- 2020-03-31 AUTH-2394 added socks5 proxy
+- 2020-02-24 AUTH-2235 GetTokenIfExists now parses JWT payload for json expiry field to detect if the cached access token is expired
+
+2020.3.2
+- 2020-03-31 TUN-2854: Quick Reconnects should be an optional supported feature
+- 2020-03-30 TUN-2850: Tunnel stripping Cloudflare headers
+
+2020.3.1
+- 2020-03-27 TUN-2846: Trigger debug reconnects from stdin commands, not SIGUSR1
+
+2020.3.0
+- 2020-03-23 AUTH-2394 fixed header for websockets. Added TCP alias
+- 2020-03-10 TUN-2797: Fix panic in SetConnDigest by making mutexes values.
+- 2020-03-13 TUN-2807: cloudflared hello-world shouldn't assume it's my first tunnel
+- 2020-03-13 TUN-2756: Set connection digest after reconnect.
+- 2020-03-16 TUN-2812: Tunnel proxies and RPCs can share an edge address
+- 2020-03-18 TUN-2816: cloudflared metrics server should be more discoverable
+- 2020-03-19 TUN-2820: Serialized headers for Websockets
+- 2020-03-19 TUN-2819: cloudflared should close its connections when a signal is sent
+- 2020-03-19 TUN-2823: Bugfix. cloudflared would hang forever if error occurred.
+- 2020-03-10 TUN-2796: Implement HTTP2 CONTINUATION headers correctly
+- 2020-03-02 TUN-2779: update sample HTML pages
+- 2020-03-04 TUN-2785: Use reconnect token by default
+- 2020-03-05 TUN-2754: Add ConnDigest to cloudflared and its RPCs
+- 2020-03-06 TUN-2755: ReconnectTunnel RPC now transmits ConnectionDigest
+- 2020-03-06 TUN-2761: Use the new header management functions in cloudflared
+- 2020-03-06 TUN-2788: cloudflared should store one ConnDigest per HA connection
+- 2020-02-26 TUN-2767: Test for large headers
+- 2020-02-28 do not terminate tunnel if origin is not reachable on start-up (#177)
+- 2020-02-28 TUN-2776: Add header serialization feature in cloudflared
+- 2020-02-21 TUN-2748: Insecure randomness vulnerability in github.com/miekg/dns
+
+2020.2.1
+- 2020-02-20 TUN-2745: Rename existing header management functions
+- 2020-02-21 TUN-2746: Add the new header management functions
+- 2020-02-25 perf(cloudflared): reuse memory from buffer pool to get better throughput (#161)
+- 2020-02-25 Tweak HTTP host header. Fixes #107 (#168)
+- 2020-02-25 TUN-2765: Add list of features to tunnelrpc
+- 2020-02-19 TUN-2725: Specify in code that --edge is for internal testing only
+- 2020-02-19 TUN-2703: Muxer.Serve terminates when its context is Done
+- 2020-02-09 TUN-2717: Function to serialize/deserialize HTTP headers
+- 2020-02-05 TUN-2714: New edge discovery. Connections try to reconnect to the same edge IP.
+
 2020.2.0
 - 2020-01-30 TUN-2651: Fix panic in h2mux reader when a stream error is encountered
 - 2020-01-27 TUN-2645: Revert "TUN-2645: Turn on reconnect tokens"

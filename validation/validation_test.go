@@ -308,7 +308,7 @@ func TestNewAccessValidatorErr(t *testing.T) {
 
 	urls := []string{
 		"",
-		"tcp://test.cloudflareaccess.com",
+		"ftp://test.cloudflareaccess.com",
 		"wss://cloudflarenone.com",
 	}
 

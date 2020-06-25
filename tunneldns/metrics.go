@@ -2,6 +2,7 @@ package tunneldns
 
 import (
 	"context"
+	"sync"
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics/vars"
@@ -12,6 +13,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+var once sync.Once
+
 // MetricsPlugin is an adapter for CoreDNS and built-in metrics
 type MetricsPlugin struct {
 	Next plugin.Handler
@@ -19,13 +22,15 @@ type MetricsPlugin struct {
 
 // NewMetricsPlugin creates a plugin with configured metrics
 func NewMetricsPlugin(next plugin.Handler) *MetricsPlugin {
-	prometheus.MustRegister(vars.RequestCount)
-	prometheus.MustRegister(vars.RequestDuration)
-	prometheus.MustRegister(vars.RequestSize)
-	prometheus.MustRegister(vars.RequestDo)
-	prometheus.MustRegister(vars.RequestType)
-	prometheus.MustRegister(vars.ResponseSize)
-	prometheus.MustRegister(vars.ResponseRcode)
+	once.Do(func() {
+		prometheus.MustRegister(vars.RequestCount)
+		prometheus.MustRegister(vars.RequestDuration)
+		prometheus.MustRegister(vars.RequestSize)
+		prometheus.MustRegister(vars.RequestDo)
+		prometheus.MustRegister(vars.RequestType)
+		prometheus.MustRegister(vars.ResponseSize)
+		prometheus.MustRegister(vars.ResponseRcode)
+	})
 	return &MetricsPlugin{Next: next}
 }
 

@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -58,15 +58,15 @@ var friendlyDNSErrorLines = []string{
 }
 
 // EdgeDiscovery implements HA service discovery lookup.
-func edgeDiscovery(logger *logrus.Entry) ([][]*net.TCPAddr, error) {
+func edgeDiscovery(logger logger.Service) ([][]*net.TCPAddr, error) {
 	_, addrs, err := netLookupSRV(srvService, srvProto, srvName)
 	if err != nil {
 		_, fallbackAddrs, fallbackErr := fallbackLookupSRV(srvService, srvProto, srvName)
 		if fallbackErr != nil || len(fallbackAddrs) == 0 {
 			// use the original DNS error `err` in messages, not `fallbackErr`
-			logger.Errorln("Error looking up Cloudflare edge IPs: the DNS query failed:", err)
+			logger.Errorf("Error looking up Cloudflare edge IPs: the DNS query failed: %s", err)
 			for _, s := range friendlyDNSErrorLines {
-				logger.Errorln(s)
+				logger.Error(s)
 			}
 			return nil, errors.Wrapf(err, "Could not lookup srv records on _%v._%v.%v", srvService, srvProto, srvName)
 		}
