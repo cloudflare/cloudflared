@@ -2,7 +2,9 @@ images:
   - name: cloudflared
     dockerfile: Dockerfile
     context: .
+    verions:
+    - latest
     registries:
-    - name: docker.io/michael9127
+    - name: docker.io/cloudflare
       user: env:DOCKER_USER
-      password: env:DOCKER_PASSWORD  
+      password: env:DOCKER_PASSWORD
