@@ -69,6 +69,13 @@ test: vet
 test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
+.PHONY: publish-deb
+publish-deb: cloudflared-deb
+	for HOST in $(CF_PKG_HOSTS); do \
+		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
+		scp -4 cloudflared_$(VERSION)_amd64.deb cfsync@$$HOST:/state/cf-pkg/staging/apt/$(FLAVOR)/cloudflared/; \
+	done
+
 .PHONY: cloudflared-deb
 cloudflared-deb: cloudflared
 	mkdir -p $(PACKAGE_DIR)
