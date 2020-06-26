@@ -115,20 +115,9 @@ func New(opts ...Option) (Service, error) {
 
 	if !config.terminalOutputDisabled {
 		if len(config.supportedTerminalLevels) == 0 {
-			l.Add(os.Stdout, NewTerminalFormatter(""), InfoLevel)
-			l.Add(os.Stderr, NewTerminalFormatter(""), ErrorLevel, FatalLevel)
+			l.Add(os.Stderr, NewTerminalFormatter(""), InfoLevel, ErrorLevel, FatalLevel)
 		} else {
-			errLevels := []Level{}
-			outLevels := []Level{}
-			for _, level := range config.supportedTerminalLevels {
-				if level == ErrorLevel || level == FatalLevel {
-					errLevels = append(errLevels, level)
-				} else {
-					outLevels = append(outLevels, level)
-				}
-			}
-			l.Add(os.Stdout, NewTerminalFormatter(""), outLevels...)
-			l.Add(os.Stderr, NewTerminalFormatter(""), errLevels...)
+			l.Add(os.Stderr, NewTerminalFormatter(""), config.supportedTerminalLevels...)
 		}
 	}
 	return l, nil
