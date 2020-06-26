@@ -188,6 +188,7 @@ func handleServiceMode(shutdownC chan struct{}) error {
 		logger.Errorf("Cannot setup config file for monitoring: %s", err)
 		return err
 	}
+	logger.Infof("monitoring config file at: %s", configPath)
 
 	serviceCallback := func(t string, name string, err error) {
 		if err != nil {
