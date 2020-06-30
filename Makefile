@@ -71,18 +71,33 @@ test: vet
 test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
-.PHONY: publish-deb
-publish-deb: cloudflared-deb
+define publish_package
 	for HOST in $(CF_PKG_HOSTS); do \
 		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
-		scp -4 cloudflared_$(VERSION)_amd64.deb cfsync@$$HOST:/state/cf-pkg/staging/apt/$(FLAVOR)/cloudflared/; \
+		scp -4 cloudflared_$(VERSION)_amd64.deb cfsync@$$HOST:/state/cf-pkg/staging/$(1)/$(FLAVOR)/cloudflared/; \
 	done
+endef
+
+.PHONY: publish-deb
+publish-deb: cloudflared-deb
+	$(call publish_package,apt)
+
+.PHONY: publish-rpm
+publish-rpm: cloudflared-rpm
+	$(call publish_package,yum)
 
 .PHONY: cloudflared-deb
 cloudflared-deb: cloudflared
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t deb --deb-compression bzip2 \
+		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
+
+.PHONY: cloudflared-rpm
+cloudflared-rpm: cloudflared
+	mkdir -p $(PACKAGE_DIR)
+	cp cloudflared $(PACKAGE_DIR)/cloudflared
+	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t rpm --rpm-compression bzip2 \
 		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
 
 .PHONY: cloudflared-darwin-amd64.tgz
