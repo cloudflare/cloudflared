@@ -17,7 +17,9 @@ ifeq ($(EQUINOX_IS_DRAFT), true)
 endif
 
 LOCAL_ARCH ?= $(shell uname -m)
-ifeq ($(LOCAL_ARCH),x86_64)
+ifneq ($(GOARCH),)
+    TARGET_ARCH ?= $(GOARCH)
+else ifeq ($(LOCAL_ARCH),x86_64)
     TARGET_ARCH ?= amd64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
     TARGET_ARCH ?= arm64

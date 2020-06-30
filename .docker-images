@@ -2,7 +2,7 @@ images:
   - name: cloudflared
     dockerfile: Dockerfile
     context: .
-    verions:
+    versions:
     - latest
     registries:
     - name: docker.io/cloudflare

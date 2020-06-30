@@ -29,6 +29,7 @@ stretch: &stretch
       - build-essential
       - fakeroot
       - rubygem-fpm
+      - openssh-client
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
