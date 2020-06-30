@@ -76,17 +76,18 @@ func NewTerminalFormatter(format string) Formatter {
 // Timestamp returns the log level with a matching color to the log type
 func (f *TerminalFormatter) Timestamp(l Level, d time.Time) string {
 	t := ""
+	dateStr := "[" + d.Format(f.format) + "] " 
 	switch l {
 	case InfoLevel:
-		t = f.output("[INFO] ", skittles.Cyan)
+		t = f.output("INFO", skittles.Cyan)
 	case ErrorLevel:
-		t = f.output("[ERROR] ", skittles.Red)
+		t = f.output("ERROR", skittles.Red)
 	case DebugLevel:
-		t = f.output("[DEBUG] ", skittles.Yellow)
+		t = f.output("DEBUG", skittles.Yellow)
 	case FatalLevel:
-		t = f.output("[FATAL] ", skittles.Red)
+		t = f.output("FATAL", skittles.Red)
 	}
-	return t
+	return t + dateStr
 }
 
 // Content just writes the log line straight to the sources

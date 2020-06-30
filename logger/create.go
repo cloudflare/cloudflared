@@ -114,10 +114,12 @@ func New(opts ...Option) (Service, error) {
 	}
 
 	if !config.terminalOutputDisabled {
+		terminalFormatter := NewTerminalFormatter(time.RFC3339)
+
 		if len(config.supportedTerminalLevels) == 0 {
-			l.Add(os.Stderr, NewTerminalFormatter(""), InfoLevel, ErrorLevel, FatalLevel)
+			l.Add(os.Stderr, terminalFormatter, InfoLevel, ErrorLevel, FatalLevel)
 		} else {
-			l.Add(os.Stderr, NewTerminalFormatter(""), config.supportedTerminalLevels...)
+			l.Add(os.Stderr, terminalFormatter, config.supportedTerminalLevels...)
 		}
 	}
 	return l, nil
