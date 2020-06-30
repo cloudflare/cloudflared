@@ -1,3 +1,13 @@
+2020.6.6
+- 2020-06-23 AUTH-2685: Adds script to create release
+- 2020-06-25 AUTH-2652: Update cloudflare repo
+- 2020-06-26 AUTH-2718: Add target for publishing deb to pkg.cloudflare repo
+- 2020-06-26 AUTH-2849 all log output to stderr
+- 2020-06-17 TUN-3106: Pass NamedTunnel config to StartServer
+- 2020-06-18 TUN-3107: UnregisterConnection shouldn't wrap nil error as RPC error
+- 2020-06-17 AUTH-2652: Adds .docker-images to push images to docker hub
+- 2020-06-18 AUTH-2712 mac package build script and better config file handling when started as a service
+
 2020.6.5
 - 2020-06-16 DEVTOOLS-7321: Don't skip macOS builds based on tag
 - 2020-06-16 fix for a flaky test
