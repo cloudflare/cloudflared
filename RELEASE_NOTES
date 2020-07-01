@@ -1,3 +1,8 @@
+2020.7.0
+- 2020-06-30 TUN-3140: Add timestamps to terminal log entries
+- 2020-06-30 AUTH-2860: Fix builds
+- 2020-06-25 TUN-3007: Implement named tunnel connection registration and unregistration.
+
 2020.6.6
 - 2020-06-23 AUTH-2685: Adds script to create release
 - 2020-06-25 AUTH-2652: Update cloudflare repo
