@@ -9,7 +9,7 @@ import (
 	"github.com/alecthomas/units"
 )
 
-// Option is to encaspulate actions that will be called by Parse and run later to build an Options struct
+// Option is to encapsulate actions that will be called by Parse and run later to build an Options struct
 type Option func(*Options) error
 
 // Options is use to set logging configuration data

@@ -75,7 +75,7 @@ func (w *FileRollingWriter) Close() {
 // rename is how the files are rolled. It works recursively to move the base log file to the rolled ones
 // e.g. cloudflared.log -> cloudflared-1.log,
 // but if cloudflared-1.log already exists, it is renamed to cloudflared-2.log,
-// then the other files move in to their postion
+// then the other files move in to their position
 func (w *FileRollingWriter) rename(sourcePath string, index uint) {
 	destinationPath, isSingleFile := buildPath(w.directory, fmt.Sprintf("%s-%d", w.baseFileName, index))
 	if isSingleFile {

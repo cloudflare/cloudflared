@@ -32,7 +32,7 @@ func waitForSignal(errC chan error, shutdownC chan struct{}, logger logger.Servi
 
 // waitForSignalWithGraceShutdown notifies all routines to shutdown immediately
 // by closing the shutdownC when one of the routines in main exits.
-// When this process recieves SIGTERM/SIGINT, it closes the graceShutdownC to
+// When this process receives SIGTERM/SIGINT, it closes the graceShutdownC to
 // notify certain routines to start graceful shutdown. When grace period is over,
 // or when some routine exits, it notifies the rest of the routines to shutdown
 // immediately by closing shutdownC.

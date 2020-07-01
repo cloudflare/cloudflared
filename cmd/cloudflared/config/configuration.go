@@ -170,7 +170,7 @@ func FindLogSettings() (string, string) {
 // i.e. it fails if a user specifies both --url and --unix-socket
 func ValidateUnixSocket(c *cli.Context) (string, error) {
 	if c.IsSet("unix-socket") && (c.IsSet("url") || c.NArg() > 0) {
-		return "", errors.New("--unix-socket must be used exclusivly.")
+		return "", errors.New("--unix-socket must be used exclusively.")
 	}
 	return c.String("unix-socket"), nil
 }

@@ -46,7 +46,7 @@ func (c *StdinoutStream) Write(p []byte) (int, error) {
 	return os.Stdout.Write(p)
 }
 
-// Helper to allow defering the response close with a check that the resp is not nil
+// Helper to allow deferring the response close with a check that the resp is not nil
 func closeRespBody(resp *http.Response) {
 	if resp != nil {
 		resp.Body.Close()

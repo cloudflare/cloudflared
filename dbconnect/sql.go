@@ -278,7 +278,7 @@ func sqlRows(rows *sql.Rows) ([]map[string]interface{}, error) {
 func sqlValue(val interface{}, col *sql.ColumnType) interface{} {
 	bytes, ok := val.([]byte)
 	if ok {
-		// Opportunistically check for embeded JSON and convert it to a first-class object.
+		// Opportunistically check for embedded JSON and convert it to a first-class object.
 		var embeded interface{}
 		if json.Unmarshal(bytes, &embeded) == nil {
 			return embeded
