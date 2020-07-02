@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/google/uuid"
@@ -244,17 +245,38 @@ func listTunnels(c *cli.Context) error {
 	if outputFormat := c.String(outputFormatFlag.Name); outputFormat != "" {
 		return renderOutput(outputFormat, tunnels)
 	}
+
 	if len(tunnels) > 0 {
-		const listFormat = "%-40s%-30s%-30s%s\n"
-		fmt.Printf(listFormat, "ID", "NAME", "CREATED", "CONNECTIONS")
-		for _, t := range tunnels {
-			fmt.Printf(listFormat, t.ID, t.Name, t.CreatedAt.Format(time.RFC3339), fmtConnections(t.Connections))
-		}
+		fmtAndPrintTunnelList(tunnels)
 	} else {
 		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
 	}
 
 	return nil
+}
+
+func fmtAndPrintTunnelList(tunnels []tunnelstore.Tunnel) {
+	const (
+		minWidth = 0
+		tabWidth = 8
+		padding  = 1
+		padChar  = ' '
+		flags    = 0
+	)
+
+	writer := tabwriter.NewWriter(os.Stdout, minWidth, tabWidth, padding, padChar, flags)
+
+	// Print column headers with tabbed columns
+	fmt.Fprintln(writer, "ID\tNAME\tCREATED\tCONNECTIONS\t")
+
+	// Loop through tunnels, create formatted string for each, and print using tabwriter
+	for _, t := range tunnels {
+		formattedStr := fmt.Sprintf("%s\t%s\t%s\t%s\t", t.ID, t.Name, t.CreatedAt.Format(time.RFC3339), fmtConnections(t.Connections))
+		fmt.Fprintln(writer, formattedStr)
+	}
+
+	// Write data buffered in tabwriter to output
+	writer.Flush()
 }
 
 func fmtConnections(connections []tunnelstore.Connection) string {
