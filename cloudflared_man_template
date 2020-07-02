@@ -1,0 +1,6 @@
+.\" Manpage for cloudflared.
+.TH man 1 ${DATE} "${VERSION}" "cloudflared man page"
+.SH NAME
+cloudflared \- creates a connection to the cloudflare edge network
+.SH DESCRIPTION
+cloudflared creates a persistent connection between a local service and the Cloudflare network. Once the daemon is running and the Tunnel has been configured, the local service can be locked down to only allow connections from Cloudflare.

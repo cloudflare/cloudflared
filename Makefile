@@ -4,7 +4,8 @@ VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DAT
 
 IMPORT_PATH   := github.com/cloudflare/cloudflared
 PACKAGE_DIR   := $(CURDIR)/packaging
-INSTALL_BINDIR := usr/local/bin
+INSTALL_BINDIR := /usr/bin/
+MAN_DIR := /usr/share/man/man1/
 
 EQUINOX_FLAGS = --version="$(VERSION)" \
 	--platforms="$(EQUINOX_BUILD_PLATFORMS)" \
@@ -86,19 +87,22 @@ publish-deb: cloudflared-deb
 publish-rpm: cloudflared-rpm
 	$(call publish_package,yum)
 
-.PHONY: cloudflared-deb
-cloudflared-deb: cloudflared
+define build_package
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
-	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t deb --deb-compression bzip2 \
-		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
+	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > $(PACKAGE_DIR)/cloudflared.1
+	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) --$(1)-compression bzip2 \
+		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared --after-install postinst.sh --after-remove postrm.sh \
+		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(MAN_DIR)
+endef
+
+.PHONY: cloudflared-deb
+cloudflared-deb: cloudflared
+	$(call build_package,deb)
 
 .PHONY: cloudflared-rpm
 cloudflared-rpm: cloudflared
-	mkdir -p $(PACKAGE_DIR)
-	cp cloudflared $(PACKAGE_DIR)/cloudflared
-	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t rpm --rpm-compression bzip2 \
-		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared cloudflared=/usr/local/bin/
+	$(call build_package,rpm)
 
 .PHONY: cloudflared-darwin-amd64.tgz
 cloudflared-darwin-amd64.tgz: cloudflared
