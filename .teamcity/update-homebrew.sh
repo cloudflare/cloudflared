@@ -64,7 +64,4 @@ git config user.name "cloudflare-warp-bot"
 git config user.email "warp-bot@cloudflare.com"
 git commit -m "Release Argo Tunnel $VERSION"
 
-#git push -v origin master
-# don't push to master, push to some testing branch
-git checkout -b deploy-test
-git push -v origin deploy-test
+git push -v origin master
