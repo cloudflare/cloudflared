@@ -92,11 +92,7 @@ func createTunnel(c *cli.Context) error {
 		return err
 	}
 
-	originCertPath, err := findOriginCert(c, logger)
-	if err != nil {
-		return errors.Wrap(err, "Error locating origin cert")
-	}
-	cert, err := getOriginCertFromContext(originCertPath, logger)
+	cert, originCertPath, err := getOriginCertFromContext(c, logger)
 	if err != nil {
 		return err
 	}
@@ -223,11 +219,7 @@ func listTunnels(c *cli.Context) error {
 		return errors.Wrap(err, "error setting up logger")
 	}
 
-	originCertPath, err := findOriginCert(c, logger)
-	if err != nil {
-		return errors.Wrap(err, "Error locating origin cert")
-	}
-	cert, err := getOriginCertFromContext(originCertPath, logger)
+	cert, _, err := getOriginCertFromContext(c, logger)
 	if err != nil {
 		return err
 	}
@@ -310,11 +302,7 @@ func deleteTunnel(c *cli.Context) error {
 		return errors.Wrap(err, "error setting up logger")
 	}
 
-	originCertPath, err := findOriginCert(c, logger)
-	if err != nil {
-		return errors.Wrap(err, "Error locating origin cert")
-	}
-	cert, err := getOriginCertFromContext(originCertPath, logger)
+	cert, _, err := getOriginCertFromContext(c, logger)
 	if err != nil {
 		return err
 	}
@@ -355,22 +343,25 @@ func newTunnelstoreClient(c *cli.Context, cert *certutil.OriginCert, logger logg
 	return client
 }
 
-func getOriginCertFromContext(originCertPath string, logger logger.Service) (*certutil.OriginCert, error) {
-
+func getOriginCertFromContext(c *cli.Context, logger logger.Service) (cert *certutil.OriginCert, originCertPath string, err error) {
+	originCertPath, err = findOriginCert(c, logger)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "Error locating origin cert")
+	}
 	blocks, err := readOriginCert(originCertPath, logger)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Can't read origin cert from %s", originCertPath)
+		return nil, "", errors.Wrapf(err, "Can't read origin cert from %s", originCertPath)
 	}
 
-	cert, err := certutil.DecodeOriginCert(blocks)
+	cert, err = certutil.DecodeOriginCert(blocks)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error decoding origin cert")
+		return nil, "", errors.Wrap(err, "Error decoding origin cert")
 	}
 
 	if cert.AccountID == "" {
-		return nil, errors.Errorf(`Origin certificate needs to be refreshed before creating new tunnels.\nDelete %s and run "cloudflared login" to obtain a new cert.`, originCertPath)
+		return nil, "", errors.Errorf(`Origin certificate needs to be refreshed before creating new tunnels.\nDelete %s and run "cloudflared login" to obtain a new cert.`, originCertPath)
 	}
-	return cert, nil
+	return cert, originCertPath, nil
 }
 
 func buildRunCommand() *cli.Command {
@@ -405,4 +396,41 @@ func runTunnel(c *cli.Context) error {
 	}
 	logger.Debugf("Read credentials for %v", credentials.AccountTag)
 	return StartServer(c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID})
+}
+
+func buildCleanupCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "cleanup",
+		Action:    cliutil.ErrorHandler(cleanupConnections),
+		Usage:     "Cleanup connections for the tunnel with given IDs",
+		ArgsUsage: "TUNNEL-IDS",
+		Hidden:    hideSubcommands,
+	}
+}
+
+func cleanupConnections(c *cli.Context) error {
+	if c.NArg() < 1 {
+		return cliutil.UsageError(`"cloudflared tunnel cleanup" requires at least 1 argument, the IDs of the tunnels to cleanup connections.`)
+	}
+
+	logger, err := logger.New()
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	cert, _, err := getOriginCertFromContext(c, logger)
+	if err != nil {
+		return err
+	}
+	client := newTunnelstoreClient(c, cert, logger)
+
+	for i := 0; i < c.NArg(); i++ {
+		id := c.Args().Get(i)
+		logger.Infof("Cleanup connection for tunnel %s", id)
+		if err := client.CleanupConnections(id); err != nil {
+			logger.Errorf("Error cleaning up connections for tunnel %s, error :%v", id, err)
+		}
+	}
+
+	return nil
 }

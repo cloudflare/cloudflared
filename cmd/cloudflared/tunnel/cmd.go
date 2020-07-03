@@ -173,6 +173,7 @@ func Commands() []*cli.Command {
 	subcommands = append(subcommands, buildListCommand())
 	subcommands = append(subcommands, buildDeleteCommand())
 	subcommands = append(subcommands, buildRunCommand())
+	subcommands = append(subcommands, buildCleanupCommand())
 
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",

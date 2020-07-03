@@ -41,9 +41,10 @@ type Connection struct {
 
 type Client interface {
 	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
-	GetTunnel(id string) (*Tunnel, error)
-	DeleteTunnel(id string) error
+	GetTunnel(tunnelID string) (*Tunnel, error)
+	DeleteTunnel(tunnelID string) error
 	ListTunnels() ([]Tunnel, error)
+	CleanupConnections(tunnelID string) error
 }
 
 type RESTClient struct {
@@ -104,11 +105,11 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 		return nil, ErrTunnelNameConflict
 	}
 
-	return nil, statusCodeToError("create", resp)
+	return nil, statusCodeToError("create tunnel", resp)
 }
 
-func (r *RESTClient) GetTunnel(id string) (*Tunnel, error) {
-	resp, err := r.sendRequest("GET", id, nil)
+func (r *RESTClient) GetTunnel(tunnelID string) (*Tunnel, error) {
+	resp, err := r.sendRequest("GET", tunnelID, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
 	}
@@ -118,17 +119,17 @@ func (r *RESTClient) GetTunnel(id string) (*Tunnel, error) {
 		return unmarshalTunnel(resp.Body)
 	}
 
-	return nil, statusCodeToError("read", resp)
+	return nil, statusCodeToError("get tunnel", resp)
 }
 
-func (r *RESTClient) DeleteTunnel(id string) error {
-	resp, err := r.sendRequest("DELETE", id, nil)
+func (r *RESTClient) DeleteTunnel(tunnelID string) error {
+	resp, err := r.sendRequest("DELETE", tunnelID, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
 	}
 	defer resp.Body.Close()
 
-	return statusCodeToError("delete", resp)
+	return statusCodeToError("delete tunnel", resp)
 }
 
 func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
@@ -146,7 +147,17 @@ func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
 		return tunnels, nil
 	}
 
-	return nil, statusCodeToError("list", resp)
+	return nil, statusCodeToError("list tunnels", resp)
+}
+
+func (r *RESTClient) CleanupConnections(tunnelID string) error {
+	resp, err := r.sendRequest("DELETE", fmt.Sprintf("%s/connections", tunnelID), nil)
+	if err != nil {
+		return errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	return statusCodeToError("cleanup connections", resp)
 }
 
 func (r *RESTClient) resolve(target string) string {
@@ -189,6 +200,6 @@ func statusCodeToError(op string, resp *http.Response) error {
 	case http.StatusNotFound:
 		return ErrNotFound
 	}
-	return errors.Errorf("API call to %s tunnel failed with status %d: %s", op,
+	return errors.Errorf("API call to %s failed with status %d: %s", op,
 		resp.StatusCode, http.StatusText(resp.StatusCode))
 }
