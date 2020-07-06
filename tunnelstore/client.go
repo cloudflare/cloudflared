@@ -27,7 +27,7 @@ var (
 )
 
 type Tunnel struct {
-	ID          string       `json:"id"`
+	ID          uuid.UUID    `json:"id"`
 	Name        string       `json:"name"`
 	CreatedAt   time.Time    `json:"created_at"`
 	DeletedAt   time.Time    `json:"deleted_at"`
@@ -39,30 +39,98 @@ type Connection struct {
 	ID       uuid.UUID `json:"uuid"`
 }
 
+// Route represents a record type that can route to a tunnel
+type Route interface {
+	json.Marshaler
+	RecordType() string
+}
+
+type DNSRoute struct {
+	userHostname string
+}
+
+func NewDNSRoute(userHostname string) Route {
+	return &DNSRoute{
+		userHostname: userHostname,
+	}
+}
+
+func (dr *DNSRoute) MarshalJSON() ([]byte, error) {
+	s := struct {
+		Type         string `json:"type"`
+		UserHostname string `json:"user_hostname"`
+	}{
+		Type:         dr.RecordType(),
+		UserHostname: dr.userHostname,
+	}
+	return json.Marshal(&s)
+}
+
+func (dr *DNSRoute) RecordType() string {
+	return "dns"
+}
+
+type LBRoute struct {
+	lbName string
+	lbPool string
+}
+
+func NewLBRoute(lbName, lbPool string) Route {
+	return &LBRoute{
+		lbName: lbName,
+		lbPool: lbPool,
+	}
+}
+
+func (lr *LBRoute) MarshalJSON() ([]byte, error) {
+	s := struct {
+		Type   string `json:"type"`
+		LBName string `json:"lb_name"`
+		LBPool string `json:"lb_pool"`
+	}{
+		Type:   lr.RecordType(),
+		LBName: lr.lbName,
+		LBPool: lr.lbPool,
+	}
+	return json.Marshal(&s)
+}
+
+func (lr *LBRoute) RecordType() string {
+	return "lb"
+}
+
 type Client interface {
 	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
-	GetTunnel(tunnelID string) (*Tunnel, error)
-	DeleteTunnel(tunnelID string) error
+	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
+	DeleteTunnel(tunnelID uuid.UUID) error
 	ListTunnels() ([]Tunnel, error)
-	CleanupConnections(tunnelID string) error
+	CleanupConnections(tunnelID uuid.UUID) error
+	RouteTunnel(tunnelID uuid.UUID, route Route) error
 }
 
 type RESTClient struct {
-	baseURL   string
-	authToken string
-	client    http.Client
-	logger    logger.Service
+	baseEndpoints *baseEndpoints
+	authToken     string
+	client        http.Client
+	logger        logger.Service
+}
+
+type baseEndpoints struct {
+	accountLevel string
+	zoneLevel    string
 }
 
 var _ Client = (*RESTClient)(nil)
 
-func NewRESTClient(baseURL string, accountTag string, authToken string, logger logger.Service) *RESTClient {
+func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string, logger logger.Service) *RESTClient {
 	if strings.HasSuffix(baseURL, "/") {
 		baseURL = baseURL[:len(baseURL)-1]
 	}
-	url := fmt.Sprintf("%s/accounts/%s/tunnels", baseURL, accountTag)
 	return &RESTClient{
-		baseURL:   url,
+		baseEndpoints: &baseEndpoints{
+			accountLevel: fmt.Sprintf("%s/accounts/%s/tunnels", baseURL, accountTag),
+			zoneLevel:    fmt.Sprintf("%s/zones/%s/tunnels", baseURL, accountTag),
+		},
 		authToken: authToken,
 		client: http.Client{
 			Transport: &http.Transport{
@@ -92,7 +160,7 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 		return nil, errors.Wrap(err, "Failed to serialize new tunnel request")
 	}
 
-	resp, err := r.sendRequest("POST", "", bytes.NewBuffer(body))
+	resp, err := r.sendRequest("POST", r.baseEndpoints.accountLevel, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
 	}
@@ -108,8 +176,9 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 	return nil, statusCodeToError("create tunnel", resp)
 }
 
-func (r *RESTClient) GetTunnel(tunnelID string) (*Tunnel, error) {
-	resp, err := r.sendRequest("GET", tunnelID, nil)
+func (r *RESTClient) GetTunnel(tunnelID uuid.UUID) (*Tunnel, error) {
+	endpoint := fmt.Sprintf("%s/%v", r.baseEndpoints.accountLevel, tunnelID)
+	resp, err := r.sendRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
 	}
@@ -122,8 +191,9 @@ func (r *RESTClient) GetTunnel(tunnelID string) (*Tunnel, error) {
 	return nil, statusCodeToError("get tunnel", resp)
 }
 
-func (r *RESTClient) DeleteTunnel(tunnelID string) error {
-	resp, err := r.sendRequest("DELETE", tunnelID, nil)
+func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
+	endpoint := fmt.Sprintf("%s/%v", r.baseEndpoints.accountLevel, tunnelID)
+	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
 	}
@@ -133,7 +203,7 @@ func (r *RESTClient) DeleteTunnel(tunnelID string) error {
 }
 
 func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
-	resp, err := r.sendRequest("GET", "", nil)
+	resp, err := r.sendRequest("GET", r.baseEndpoints.accountLevel, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
 	}
@@ -150,8 +220,9 @@ func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
 	return nil, statusCodeToError("list tunnels", resp)
 }
 
-func (r *RESTClient) CleanupConnections(tunnelID string) error {
-	resp, err := r.sendRequest("DELETE", fmt.Sprintf("%s/connections", tunnelID), nil)
+func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
+	endpoint := fmt.Sprintf("%s/%v/connections", r.baseEndpoints.accountLevel, tunnelID)
+	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
 	}
@@ -160,15 +231,23 @@ func (r *RESTClient) CleanupConnections(tunnelID string) error {
 	return statusCodeToError("cleanup connections", resp)
 }
 
-func (r *RESTClient) resolve(target string) string {
-	if target != "" {
-		return r.baseURL + "/" + target
+func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route Route) error {
+	body, err := json.Marshal(route)
+	if err != nil {
+		return errors.Wrap(err, "Failed to serialize Route")
 	}
-	return r.baseURL
+
+	endpoint := fmt.Sprintf("%s/%v/routes", r.baseEndpoints.zoneLevel, tunnelID)
+	resp, err := r.sendRequest("PUT", endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	return statusCodeToError("add route", resp)
 }
 
-func (r *RESTClient) sendRequest(method string, target string, body io.Reader) (*http.Response, error) {
-	url := r.resolve(target)
+func (r *RESTClient) sendRequest(method string, url string, body io.Reader) (*http.Response, error) {
 	r.logger.Debugf("%s %s", method, url)
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {

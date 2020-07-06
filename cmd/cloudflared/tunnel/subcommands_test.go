@@ -75,11 +75,13 @@ func Test_fmtConnections(t *testing.T) {
 }
 
 func TestTunnelfilePath(t *testing.T) {
+	tunnelID, err := uuid.Parse("f48d8918-bc23-4647-9d48-082c5b76de65")
+	assert.NoError(t, err)
 	originCertDir := filepath.Dir("~/.cloudflared/cert.pem")
-	actual, err := tunnelFilePath("tunnel", originCertDir)
+	actual, err := tunnelFilePath(tunnelID, originCertDir)
 	assert.NoError(t, err)
 	homeDir, err := homedir.Dir()
 	assert.NoError(t, err)
-	expected := fmt.Sprintf("%s/.cloudflared/tunnel.json", homeDir)
+	expected := fmt.Sprintf("%s/.cloudflared/%v.json", homeDir, tunnelID)
 	assert.Equal(t, expected, actual)
 }
