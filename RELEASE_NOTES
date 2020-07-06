@@ -1,3 +1,9 @@
+2020.7.1
+- 2020-07-02 DEVTOOLS-7321: Push GitHub homebrew updates to master
+- 2020-07-06 TUN-3161: Upgrade golang.org/x/ deps
+- 2020-06-30 AUTH-2854: Create cloudflared RPMs
+- 2020-06-26 AUTH-2850 log config file path
+
 2020.7.0
 - 2020-06-30 TUN-3140: Add timestamps to terminal log entries
 - 2020-06-30 AUTH-2860: Fix builds
