@@ -168,6 +168,8 @@ func setattrlistTimes(path string, times []Timespec, flags int) error {
 
 //sys	ioctl(fd int, req uint, arg uintptr) (err error)
 
+//sys   sysctl(mib []_C_int, old *byte, oldlen *uintptr, new *byte, newlen uintptr) (err error) = SYS___SYSCTL
+
 func sysctlUname(mib []_C_int, old *byte, oldlen *uintptr) error {
 	err := sysctl(mib, old, oldlen, nil, 0)
 	if err != nil {

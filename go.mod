@@ -57,11 +57,11 @@ require (
 	github.com/stretchr/testify v1.3.0
 	github.com/tinylib/msgp v1.1.0 // indirect
 	github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0
-	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
-	golang.org/x/net v0.0.0-20191014212845-da9a3fd4c582
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	golang.org/x/net v0.0.0-20200625001655-4c5254603344
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys v0.0.0-20191020212454-3e7259c5e7c2
+	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae
 	google.golang.org/appengine v1.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20191007204434-a023cd5227bd // indirect
 	google.golang.org/grpc v1.24.0 // indirect
