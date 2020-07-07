@@ -1,6 +1,9 @@
-VERSION       := $(shell git describe --tags --always --dirty="-dev")
+VERSION       := $(shell git describe --tags --always --dirty="-dev" --exclude "w*")
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
+MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
+#MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup. 
+#e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
 
 IMPORT_PATH   := github.com/cloudflare/cloudflared
 PACKAGE_DIR   := $(CURDIR)/packaging
@@ -21,6 +24,8 @@ LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
     TARGET_ARCH ?= $(GOARCH)
 else ifeq ($(LOCAL_ARCH),x86_64)
+    TARGET_ARCH ?= amd64
+else ifeq ($(LOCAL_ARCH),i686)
     TARGET_ARCH ?= amd64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
     TARGET_ARCH ?= arm64
@@ -158,3 +163,7 @@ vet:
 	go vet -mod=vendor ./...
 	which go-sumtype  # go get github.com/BurntSushi/go-sumtype
 	go-sumtype $$(go list -mod=vendor ./...)
+
+.PHONY: msi
+msi: cloudflared
+	go-msi make --msi cloudflared.msi --version $(MSI_VERSION)

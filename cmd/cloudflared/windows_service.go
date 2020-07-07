@@ -150,12 +150,11 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 			switch c.Cmd {
 			case svc.Interrogate:
 				statusChan <- c.CurrentStatus
-			case svc.Stop:
+			case svc.Stop, svc.Shutdown:
 				close(s.graceShutdownC)
+				statusChan <- svc.Status{State: svc.Stopped, Accepts: cmdsAccepted}
 				statusChan <- svc.Status{State: svc.StopPending}
-			case svc.Shutdown:
-				close(s.shutdownC)
-				statusChan <- svc.Status{State: svc.StopPending}
+				return
 			default:
 				elog.Error(1, fmt.Sprintf("unexpected control request #%d", c))
 			}
