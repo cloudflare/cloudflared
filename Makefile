@@ -92,6 +92,11 @@ define build_package
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > $(PACKAGE_DIR)/cloudflared.1
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) --$(1)-compression bzip2 \
+		--description 'Cloudflare Argo tunnel daemon' \
+		--vendor 'Cloudflare' \
+		--license 'Cloudflare Service Agreement' \
+		--url 'https://github.com/cloudflare/cloudflared' \
+		-m 'Cloudflare <support@cloudflare.com>' \
 		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared --after-install postinst.sh --after-remove postrm.sh \
 		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(MAN_DIR)
 endef
