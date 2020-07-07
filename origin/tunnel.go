@@ -105,7 +105,7 @@ type dupConnRegisterTunnelError struct{}
 var errDuplicationConnection = &dupConnRegisterTunnelError{}
 
 func (e dupConnRegisterTunnelError) Error() string {
-	return "already connected to this server"
+	return "already connected to this server, trying another address"
 }
 
 type muxerShutdownError struct{}
@@ -376,29 +376,33 @@ func ServeTunnel(
 
 	err = errGroup.Wait()
 	if err != nil {
-		switch castedErr := err.(type) {
-		case dupConnRegisterTunnelError:
-			logger.Info("Already connected to this server, selecting a different one")
-			return err, true
-		case serverRegisterTunnelError:
-			logger.Errorf("Register tunnel error from server side: %s", castedErr.cause)
+		switch err := err.(type) {
+		case *dupConnRegisterTunnelError:
+			// don't retry this connection anymore, let supervisor pick new a address
+			return err, false
+		case *serverRegisterTunnelError:
+			logger.Errorf("Register tunnel error from server side: %s", err.cause)
 			// Don't send registration error return from server to Sentry. They are
 			// logged on server side
 			if incidents := config.IncidentLookup.ActiveIncidents(); len(incidents) > 0 {
 				logger.Error(activeIncidentsMsg(incidents))
 			}
-			return castedErr.cause, !castedErr.permanent
-		case clientRegisterTunnelError:
-			logger.Errorf("Register tunnel error on client side: %s", castedErr.cause)
+			return err.cause, !err.permanent
+		case *clientRegisterTunnelError:
+			logger.Errorf("Register tunnel error on client side: %s", err.cause)
 			return err, true
-		case muxerShutdownError:
+		case *muxerShutdownError:
 			logger.Info("Muxer shutdown")
 			return err, true
 		case *ReconnectSignal:
-			logger.Infof("Restarting connection %d due to reconnect signal in %d seconds", connectionIndex, castedErr.Delay)
-			castedErr.DelayBeforeReconnect()
+			logger.Infof("Restarting connection %d due to reconnect signal in %d seconds", connectionIndex, err.Delay)
+			err.DelayBeforeReconnect()
 			return err, true
 		default:
+			if err == context.Canceled {
+				logger.Debugf("Serve tunnel error: %s", err)
+				return err, false
+			}
 			logger.Errorf("Serve tunnel error: %s", err)
 			return err, true
 		}
