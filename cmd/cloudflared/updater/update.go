@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"time"
 
 	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/urfave/cli.v2"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/equinox-io/equinox"
 	"github.com/facebookgo/grace/gracenet"
@@ -17,10 +19,12 @@ import (
 )
 
 const (
-	DefaultCheckUpdateFreq   = time.Hour * 24
-	appID                    = "app_idCzgxYerVD"
-	noUpdateInShellMessage   = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
-	noUpdateOnWindowsMessage = "cloudflared will not automatically update on Windows systems."
+	DefaultCheckUpdateFreq        = time.Hour * 24
+	appID                         = "app_idCzgxYerVD"
+	noUpdateInShellMessage        = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
+	noUpdateOnWindowsMessage      = "cloudflared will not automatically update on Windows systems."
+	noUpdateManagedPackageMessage = "cloudflared will not automatically update if installed by a package manager."
+	isManagedInstallFile          = ".installedFromPackageManager"
 )
 
 var (
@@ -96,6 +100,11 @@ func Update(_ *cli.Context) error {
 	logger, err := logger.New()
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
+	}
+
+	if wasInstalledFromPackageManager() {
+		logger.Error("cloudflared was installed by a package manager. Please update using the same method.")
+		return nil
 	}
 
 	updateOutcome := loggedUpdate(logger)
@@ -217,11 +226,21 @@ func SupportAutoUpdate(logger logger.Service) bool {
 		return false
 	}
 
+	if wasInstalledFromPackageManager() {
+		logger.Info(noUpdateManagedPackageMessage)
+		return false
+	}
+
 	if isRunningFromTerminal() {
 		logger.Info(noUpdateInShellMessage)
 		return false
 	}
 	return true
+}
+
+func wasInstalledFromPackageManager() bool {
+	ok, _ := config.FileExists(filepath.Join(config.DefaultUnixConfigLocation, isManagedInstallFile))
+	return ok
 }
 
 func isRunningFromTerminal() bool {
