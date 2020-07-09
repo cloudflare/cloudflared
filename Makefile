@@ -51,6 +51,8 @@ endif
 
 ifeq ($(FLAVOR), centos-7)
 	TARGET_PUBLIC_REPO ?= el7
+else ifeq ($(FLAVOR), centos-6)
+	TARGET_PUBLIC_REPO ?= el6
 else
 	TARGET_PUBLIC_REPO ?= $(FLAVOR)
 endif
