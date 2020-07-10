@@ -55,6 +55,11 @@ var (
 		Aliases: []string{credFileFlagAlias},
 		Usage:   "File path of tunnel credentials",
 	}
+	forceDeleteFlag = &cli.BoolFlag{
+		Name:    "force",
+		Aliases: []string{"f"},
+		Usage: "Allows you to delete a tunnel, even if it has active connections.",
+	}
 )
 
 const hideSubcommands = true
@@ -309,7 +314,7 @@ func buildDeleteCommand() *cli.Command {
 		Usage:     "Delete existing tunnel with given ID",
 		ArgsUsage: "TUNNEL-ID",
 		Hidden:    hideSubcommands,
-		Flags:     []cli.Flag{credentialsFileFlag},
+		Flags:     []cli.Flag{credentialsFileFlag, forceDeleteFlag},
 	}
 }
 
@@ -329,6 +334,28 @@ func deleteTunnel(c *cli.Context) error {
 		return err
 	}
 	client := newTunnelstoreClient(c, cert, logger)
+
+	forceFlagSet := c.Bool("force")
+
+	tunnel, err := client.GetTunnel(id)
+	if err != nil {
+		return errors.Wrapf(err, "Can't get tunnel information. Please check tunnel id: %s", id)
+	}
+
+	// Check if tunnel DeletedAt field has already been set
+	if !tunnel.DeletedAt.IsZero() {
+		return errors.New("This tunnel has already been deleted.")
+	}
+	// Check if tunnel has existing connections and if force flag is set, cleanup connections
+	if len(tunnel.Connections) > 0 {
+		if !forceFlagSet {
+			return errors.New("You can not delete this tunnel because it has active connections. To see connections run the 'list' command. If you believe the tunnel is not active, you can use a -f / --force flag with this command.")
+		}
+		
+		if err := client.CleanupConnections(id); err != nil {
+			return errors.Wrapf(err, "Error cleaning up connections for tunnel %s", id)
+		}
+	}
 
 	if err := client.DeleteTunnel(id); err != nil {
 		return errors.Wrapf(err, "Error deleting tunnel %s", id)
