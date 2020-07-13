@@ -1,3 +1,6 @@
+2020.7.3
+- 2020-07-13 Change scp command to use file glob that matches both cloudflared rpms and debs
+
 2020.7.2
 - 2020-07-02 AUTH-2644: Change install location and add man page
 - 2020-07-02 TUN-3131: Allow user to specify tunnel credentials path, and remove it in tunnel delete command
