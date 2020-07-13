@@ -83,17 +83,17 @@ test-ssh-server:
 define publish_package
 	for HOST in $(CF_PKG_HOSTS); do \
 		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
-		scp -4 cloudflared_$(VERSION)_amd64.deb cfsync@$$HOST:/state/cf-pkg/staging/$(1)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
+		scp -4 cloudflared*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
 	done
 endef
 
 .PHONY: publish-deb
 publish-deb: cloudflared-deb
-	$(call publish_package,apt)
+	$(call publish_package,deb,apt)
 
 .PHONY: publish-rpm
 publish-rpm: cloudflared-rpm
-	$(call publish_package,yum)
+	$(call publish_package,rpm,yum)
 
 define build_package
 	mkdir -p $(PACKAGE_DIR)
