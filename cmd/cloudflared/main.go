@@ -88,7 +88,7 @@ func commands(version func(c *cli.Context)) []*cli.Command {
 	cmds := []*cli.Command{
 		{
 			Name:      "update",
-			Action:    updater.Update,
+			Action:    cliutil.ErrorHandler(updater.Update),
 			Usage:     "Update the agent if a new version exists",
 			ArgsUsage: " ",
 			Description: `Looks for a new version on the official download server.

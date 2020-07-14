@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/urfave/cli.v2"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
 )
@@ -24,12 +25,12 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 			{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as an user launch agent",
-				Action: installLaunchd,
+				Action: cliutil.ErrorHandler(installLaunchd),
 			},
 			{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel launch agent",
-				Action: uninstallLaunchd,
+				Action: cliutil.ErrorHandler(uninstallLaunchd),
 			},
 		},
 	})

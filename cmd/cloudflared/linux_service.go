@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
@@ -21,12 +22,12 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 			&cli.Command{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as a system service",
-				Action: installLinuxService,
+				Action: cliutil.ErrorHandler(installLinuxService),
 			},
 			&cli.Command{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel service",
-				Action: uninstallLinuxService,
+				Action: cliutil.ErrorHandler(uninstallLinuxService),
 			},
 		},
 	})
