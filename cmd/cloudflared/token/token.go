@@ -128,19 +128,19 @@ func isTokenLocked(lockFilePath string) bool {
 }
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
-// it appends a redirect URL to the access cli request if opening the browser
+// it appends the full url as the redirect URL to the access cli request if opening the browser
 func FetchTokenWithRedirect(appURL *url.URL, logger logger.Service) (string, error) {
-	return getToken(appURL, true, logger)
-}
-
-// FetchToken will either load a stored token or generate a new one
-// it doesn't append a redirect URL to the access cli request if opening the browser
-func FetchToken(appURL *url.URL, logger logger.Service) (string, error) {
 	return getToken(appURL, false, logger)
 }
 
+// FetchToken will either load a stored token or generate a new one
+// it appends the host of the appURL as the redirect URL to the access cli request if opening the browser
+func FetchToken(appURL *url.URL, logger logger.Service) (string, error) {
+	return getToken(appURL, true, logger)
+}
+
 // getToken will either load a stored token or generate a new one
-func getToken(appURL *url.URL, shouldRedirect bool, logger logger.Service) (string, error) {
+func getToken(appURL *url.URL, useHostOnly bool, logger logger.Service) (string, error) {
 	if token, err := GetTokenIfExists(appURL); token != "" && err == nil {
 		return token, nil
 	}
@@ -166,7 +166,7 @@ func getToken(appURL *url.URL, shouldRedirect bool, logger logger.Service) (stri
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	token, err := transfer.Run(appURL, keyName, keyName, "", path, true, shouldRedirect, logger)
+	token, err := transfer.Run(appURL, keyName, keyName, "", path, true, useHostOnly, logger)
 	if err != nil {
 		return "", err
 	}

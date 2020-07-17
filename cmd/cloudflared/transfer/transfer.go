@@ -28,12 +28,12 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool, shouldRedirect bool, logger logger.Service) ([]byte, error) {
+func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool, useHostOnly bool, logger logger.Service) ([]byte, error) {
 	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
 	}
-	requestURL, err := buildRequestURL(transferURL, key, value+encrypterClient.PublicKey(), shouldEncrypt, shouldRedirect)
+	requestURL, err := buildRequestURL(transferURL, key, value+encrypterClient.PublicKey(), shouldEncrypt, useHostOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -82,18 +82,18 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 // BuildRequestURL creates a request suitable for a resource transfer.
 // it will return a constructed url based off the base url and query key/value provided.
 // cli will build a url for cli transfer request.
-func buildRequestURL(baseURL *url.URL, key, value string, cli, shouldRedirect bool) (string, error) {
+func buildRequestURL(baseURL *url.URL, key, value string, cli, useHostOnly bool) (string, error) {
 	q := baseURL.Query()
 	q.Set(key, value)
 	baseURL.RawQuery = q.Encode()
+	if useHostOnly {
+		baseURL.Path = ""
+	}
 	if !cli {
 		return baseURL.String(), nil
 	}
-
-	if shouldRedirect {
-		q.Set("redirect_url", baseURL.String()) // we add the token as a query param on both the redirect_url and the main url
-	}
-	baseURL.RawQuery = q.Encode() // and this actual baseURL.
+	q.Set("redirect_url", baseURL.String()) // we add the token as a query param on both the redirect_url and the main url
+	baseURL.RawQuery = q.Encode()           // and this actual baseURL.
 	baseURL.Path = "cdn-cgi/access/cli"
 	return baseURL.String(), nil
 }
