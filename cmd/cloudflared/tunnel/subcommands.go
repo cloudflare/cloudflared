@@ -88,7 +88,7 @@ func createTunnel(c *cli.Context) error {
 	}
 	name := c.Args().First()
 
-	logger, err := logger.New()
+	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -220,7 +220,7 @@ func buildListCommand() *cli.Command {
 }
 
 func listTunnels(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -327,7 +327,7 @@ func deleteTunnel(c *cli.Context) error {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
 
-	logger, err := logger.New()
+	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -437,7 +437,7 @@ func runTunnel(c *cli.Context) error {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
 
-	logger, err := logger.New()
+	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -465,7 +465,7 @@ func cleanupConnections(c *cli.Context) error {
 		return cliutil.UsageError(`"cloudflared tunnel cleanup" requires at least 1 argument, the IDs of the tunnels to cleanup connections.`)
 	}
 
-	logger, err := logger.New()
+	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -515,7 +515,7 @@ func routeTunnel(c *cli.Context) error {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
 
-	logger, err := logger.New()
+	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -543,7 +543,12 @@ func routeTunnel(c *cli.Context) error {
 	}
 
 	client := newTunnelstoreClient(c, cert, logger)
-	return client.RouteTunnel(tunnelID, route)
+
+	if err := client.RouteTunnel(tunnelID, route); err != nil {
+		return errors.Wrap(err, "Failed to route tunnel")
+	}
+
+	return nil
 }
 
 func dnsRouteFromArg(c *cli.Context, tunnelID uuid.UUID) (tunnelstore.Route, error) {
