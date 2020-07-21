@@ -1,3 +1,9 @@
+2020.7.4
+- 2020-07-20 Build cloudflared for arm64 on native agents
+- 2020-07-10 TUN-3048: Handle error when user tries to delete active tunnel
+- 2020-07-14 AUTH-2890: adds error handler to cli actions
+- 2020-07-06 TUN-3156: Add route subcommand under tunnel
+
 2020.7.3
 - 2020-07-13 Change scp command to use file glob that matches both cloudflared rpms and debs
 
