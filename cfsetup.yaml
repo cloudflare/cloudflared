@@ -22,6 +22,17 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=amd64
       - make cloudflared-deb
+  build-deb-arm64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - fakeroot
+      - rubygem-fpm
+    post-cache:
+      - export GOOS=linux
+      - export GOARCH=arm64
+      - make cloudflared-deb
   publish-deb:
     build_dir: *build_dir
     builddeps:
