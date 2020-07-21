@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
@@ -129,7 +130,7 @@ func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string,
 	return &RESTClient{
 		baseEndpoints: &baseEndpoints{
 			accountLevel: fmt.Sprintf("%s/accounts/%s/tunnels", baseURL, accountTag),
-			zoneLevel:    fmt.Sprintf("%s/zones/%s/tunnels", baseURL, accountTag),
+			zoneLevel:    fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneTag),
 		},
 		authToken: authToken,
 		client: http.Client{
@@ -152,15 +153,12 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 	if name == "" {
 		return nil, errors.New("tunnel name required")
 	}
-	body, err := json.Marshal(&newTunnel{
+	body := &newTunnel{
 		Name:         name,
 		TunnelSecret: tunnelSecret,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to serialize new tunnel request")
 	}
 
-	resp, err := r.sendRequest("POST", r.baseEndpoints.accountLevel, bytes.NewBuffer(body))
+	resp, err := r.sendRequest("POST", r.baseEndpoints.accountLevel, body)
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
 	}
@@ -173,7 +171,7 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 		return nil, ErrTunnelNameConflict
 	}
 
-	return nil, statusCodeToError("create tunnel", resp)
+	return nil, r.statusCodeToError("create tunnel", resp)
 }
 
 func (r *RESTClient) GetTunnel(tunnelID uuid.UUID) (*Tunnel, error) {
@@ -188,7 +186,7 @@ func (r *RESTClient) GetTunnel(tunnelID uuid.UUID) (*Tunnel, error) {
 		return unmarshalTunnel(resp.Body)
 	}
 
-	return nil, statusCodeToError("get tunnel", resp)
+	return nil, r.statusCodeToError("get tunnel", resp)
 }
 
 func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
@@ -199,7 +197,7 @@ func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
 	}
 	defer resp.Body.Close()
 
-	return statusCodeToError("delete tunnel", resp)
+	return r.statusCodeToError("delete tunnel", resp)
 }
 
 func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
@@ -217,7 +215,7 @@ func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
 		return tunnels, nil
 	}
 
-	return nil, statusCodeToError("list tunnels", resp)
+	return nil, r.statusCodeToError("list tunnels", resp)
 }
 
 func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
@@ -228,32 +226,37 @@ func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
 	}
 	defer resp.Body.Close()
 
-	return statusCodeToError("cleanup connections", resp)
+	return r.statusCodeToError("cleanup connections", resp)
 }
 
 func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route Route) error {
-	body, err := json.Marshal(route)
-	if err != nil {
-		return errors.Wrap(err, "Failed to serialize Route")
-	}
-
 	endpoint := fmt.Sprintf("%s/%v/routes", r.baseEndpoints.zoneLevel, tunnelID)
-	resp, err := r.sendRequest("PUT", endpoint, bytes.NewBuffer(body))
+	resp, err := r.sendRequest("PUT", endpoint, route)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
 	}
 	defer resp.Body.Close()
 
-	return statusCodeToError("add route", resp)
+	return r.statusCodeToError("add route", resp)
 }
 
-func (r *RESTClient) sendRequest(method string, url string, body io.Reader) (*http.Response, error) {
+func (r *RESTClient) sendRequest(method string, url string, body interface{}) (*http.Response, error) {
 	r.logger.Debugf("%s %s", method, url)
-	req, err := http.NewRequest(method, url, body)
+
+	var bodyReader io.Reader
+	if body != nil {
+		if bodyBytes, err := json.Marshal(body); err != nil {
+			return nil, errors.Wrap(err, "failed to serialize json body")
+		} else {
+			bodyReader = bytes.NewBuffer(bodyBytes)
+		}
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't create %s request", method)
 	}
-	if body != nil {
+	if bodyReader != nil {
 		req.Header.Set("Content-Type", jsonContentType)
 	}
 	req.Header.Add("X-Auth-User-Service-Key", r.authToken)
@@ -268,7 +271,7 @@ func unmarshalTunnel(reader io.Reader) (*Tunnel, error) {
 	return &tunnel, nil
 }
 
-func statusCodeToError(op string, resp *http.Response) error {
+func (r *RESTClient) statusCodeToError(op string, resp *http.Response) error {
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return nil
