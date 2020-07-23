@@ -6,6 +6,7 @@ Creates Github Releases and uploads assets
 import argparse
 import logging
 import os
+import hashlib
 
 from github import Github, GithubException, UnknownObjectException
 
@@ -15,6 +16,30 @@ logging.basicConfig(format=FORMAT)
 CLOUDFLARED_REPO = os.environ.get("GITHUB_REPO", "cloudflare/cloudflared")
 GITHUB_CONFLICT_CODE = "already_exists"
 
+def get_sha256(filename):
+    """ get the sha256 of a file """
+    sha256_hash = hashlib.sha256()
+    with open(filename,"rb") as f:
+        for byte_block in iter(lambda: f.read(4096),b""):
+            sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+
+
+def update_or_add_message(msg, name, sha):
+    """ 
+    updates or builds the github version message for each new asset's sha256. 
+    Searches the existing message string to update or create. 
+    """
+    new_text = '{0}: {1}\n'.format(name, sha)
+    start = msg.find(name)
+    if (start != -1):
+        end = msg.find("\n", start)
+        if (end != -1):
+            return msg.replace(msg[start:end+1], new_text)
+    back = msg.rfind("```")
+    if (back != -1):
+        return '{0}{1}```'.format(msg[:back], new_text)
+    return '{0} \n### SHA256 Checksums:\n```\n {1}```'.format(msg, new_text)
 
 def assert_tag_exists(repo, version):
     """ Raise exception if repo does not contain a tag matching version """
@@ -120,6 +145,14 @@ def main():
             return
 
         release.upload_asset(args.path, name=args.name)
+
+        # add the sha256 of the new artifact to the release message body
+        pkg_hash = get_sha256(args.path)
+
+        # update the release body text
+        msg = update_or_add_message(release.body, args.name, pkg_hash)
+        release.update_release(version, version, msg)
+
     except Exception as e:
         logging.exception(e)
         exit(1)
