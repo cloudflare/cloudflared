@@ -10,7 +10,7 @@ func NewMockWriteManager() OutputManager {
 }
 
 // Append is a mock stub
-func (m *MockWriteManager) Append(data []byte, callback func([]byte)) {
+func (m *MockWriteManager) Append(data []byte, target LogOutput) {
 }
 
 // Shutdown is a mock stub

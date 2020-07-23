@@ -55,6 +55,8 @@ func TestOutputWrite(t *testing.T) {
 	logger := NewOutputWriter(m)
 	logger.Add(&testBuffer, f, InfoLevel)
 
+	logger.Debugf("debug message not logged here")
+
 	testData := "hello Bob Bork, how are you doing?"
 	logger.Info(testData)
 	testTime := f.Timestamp(InfoLevel, time.Now())

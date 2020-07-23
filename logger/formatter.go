@@ -8,17 +8,17 @@ import (
 	"github.com/acmacalister/skittles"
 )
 
-// Level of logging
+// Level of logging, lower number means more verbose logging, higher more terse
 type Level int
 
 const (
-	// InfoLevel is for standard log messages
-	InfoLevel Level = iota
-
 	// DebugLevel is for messages that are intended for purposes debugging only
-	DebugLevel
+	DebugLevel Level = iota
 
-	// ErrorLevel is for error message to indicte something has gone wrong
+	// InfoLevel is for standard log messages
+	InfoLevel
+
+	// ErrorLevel is for error message to indicate something has gone wrong
 	ErrorLevel
 
 	// FatalLevel is for error message that log and kill the program with an os.exit(1)

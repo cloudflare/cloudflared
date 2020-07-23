@@ -7,8 +7,8 @@ import "sync"
 var SharedWriteManager = NewWriteManager()
 
 type writeData struct {
-	writeFunc func([]byte)
-	data      []byte
+	target LogOutput
+	data   []byte
 }
 
 // WriteManager is a logging service that handles managing multiple writing streams
@@ -31,9 +31,9 @@ func NewWriteManager() OutputManager {
 }
 
 // Append adds a message to the writer runloop
-func (m *WriteManager) Append(data []byte, callback func([]byte)) {
+func (m *WriteManager) Append(data []byte, target LogOutput) {
 	m.wg.Add(1)
-	m.writeChan <- writeData{data: data, writeFunc: callback}
+	m.writeChan <- writeData{data: data, target: target}
 }
 
 // Shutdown stops the sync manager service
@@ -49,7 +49,7 @@ func (m *WriteManager) run() {
 		select {
 		case event, ok := <-m.writeChan:
 			if ok {
-				event.writeFunc(event.data)
+				event.target.WriteLogLine(event.data)
 				m.wg.Done()
 			}
 		case <-m.shutdown:

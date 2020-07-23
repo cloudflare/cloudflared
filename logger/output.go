@@ -10,9 +10,13 @@ import (
 // provided for testing
 var osExit = os.Exit
 
+type LogOutput interface {
+	WriteLogLine([]byte)
+}
+
 // OutputManager is used to sync data of Output
 type OutputManager interface {
-	Append([]byte, func([]byte))
+	Append([]byte, LogOutput)
 	Shutdown()
 }
 
@@ -35,38 +39,66 @@ type sourceGroup struct {
 	levelsSupported []Level
 }
 
+func (s *sourceGroup) WriteLogLine(data []byte) {
+	_, _ = s.writer.Write(data)
+}
+
+func (s *sourceGroup) supportsLevel(l Level) bool {
+	for _, level := range s.levelsSupported {
+		if l == level {
+			return true
+		}
+	}
+	return false
+}
+
 // OutputWriter is the standard logging implementation
 type OutputWriter struct {
-	groups     []sourceGroup
+	groups     []*sourceGroup
 	syncWriter OutputManager
+	minLevel   Level
 }
 
 // NewOutputWriter create a new logger
 func NewOutputWriter(syncWriter OutputManager) *OutputWriter {
 	return &OutputWriter{
 		syncWriter: syncWriter,
-		groups:     make([]sourceGroup, 0),
+		groups:     nil,
+		minLevel:   FatalLevel,
 	}
 }
 
 // Add a writer and formatter to output to
 func (s *OutputWriter) Add(writer io.Writer, formatter Formatter, levels ...Level) {
-	s.groups = append(s.groups, sourceGroup{writer: writer, formatter: formatter, levelsSupported: levels})
+	s.groups = append(s.groups, &sourceGroup{writer: writer, formatter: formatter, levelsSupported: levels})
+
+	// track most verbose (lowest) level we need to output
+	for _, level := range levels {
+		if level < s.minLevel {
+			s.minLevel = level
+		}
+	}
 }
 
 // Error writes an error to the logging sources
 func (s *OutputWriter) Error(message string) {
-	s.output(ErrorLevel, message)
+	if s.minLevel <= ErrorLevel {
+		s.output(ErrorLevel, message)
+	}
 }
 
 // Info writes an info string to the logging sources
 func (s *OutputWriter) Info(message string) {
-	s.output(InfoLevel, message)
+	if s.minLevel <= InfoLevel {
+		s.output(InfoLevel, message)
+	}
 }
 
 // Debug writes a debug string to the logging sources
 func (s *OutputWriter) Debug(message string) {
-	s.output(DebugLevel, message)
+	if s.minLevel <= DebugLevel {
+		s.output(DebugLevel, message)
+	}
 }
 
 // Fatal writes a error string to the logging sources and runs does an os.exit()
@@ -78,17 +110,23 @@ func (s *OutputWriter) Fatal(message string) {
 
 // Errorf writes a formatted error to the logging sources
 func (s *OutputWriter) Errorf(format string, args ...interface{}) {
-	s.output(ErrorLevel, fmt.Sprintf(format, args...))
+	if s.minLevel <= ErrorLevel {
+		s.output(ErrorLevel, fmt.Sprintf(format, args...))
+	}
 }
 
 // Infof writes a formatted info statement to the logging sources
 func (s *OutputWriter) Infof(format string, args ...interface{}) {
-	s.output(InfoLevel, fmt.Sprintf(format, args...))
+	if s.minLevel <= InfoLevel {
+		s.output(InfoLevel, fmt.Sprintf(format, args...))
+	}
 }
 
 // Debugf writes a formatted debug statement to the logging sources
 func (s *OutputWriter) Debugf(format string, args ...interface{}) {
-	s.output(DebugLevel, fmt.Sprintf(format, args...))
+	if s.minLevel <= DebugLevel {
+		s.output(DebugLevel, fmt.Sprintf(format, args...))
+	}
 }
 
 // Fatalf writes a  writes a formatted error statement and runs does an os.exit()
@@ -100,29 +138,14 @@ func (s *OutputWriter) Fatalf(format string, args ...interface{}) {
 
 // output does the actual write to the sync manager
 func (s *OutputWriter) output(l Level, content string) {
+	now := time.Now()
 	for _, group := range s.groups {
-		if isSupported(group, l) {
-			logLine := fmt.Sprintf("%s%s\n", group.formatter.Timestamp(l, time.Now()),
+		if group.supportsLevel(l) {
+			logLine := fmt.Sprintf("%s%s\n", group.formatter.Timestamp(l, now),
 				group.formatter.Content(l, content))
-			s.append(group, []byte(logLine))
+			s.syncWriter.Append([]byte(logLine), group)
 		}
 	}
-}
-
-func (s *OutputWriter) append(group sourceGroup, logLine []byte) {
-	s.syncWriter.Append(logLine, func(b []byte) {
-		group.writer.Write(b)
-	})
-}
-
-// isSupported checks if the log level is supported
-func isSupported(group sourceGroup, l Level) bool {
-	for _, level := range group.levelsSupported {
-		if l == level {
-			return true
-		}
-	}
-	return false
 }
 
 // Write implements io.Writer to support SetOutput of the log package
