@@ -19,17 +19,20 @@ const (
 	Disconnected status = iota
 	Connected
 	Reconnecting
+	SetUrl
+	RegisteringTunnel
 )
 
-type ConnEvent struct {
+type TunnelEvent struct {
 	Index     uint8
 	EventType status
 	Location  string
+	Url       string
 }
 
 type uiModel struct {
 	version     string
-	hostname    string
+	edgeURL     string
 	metricsURL  string
 	proxyURL    string
 	connections []connState
@@ -46,14 +49,14 @@ type palette struct {
 func NewUIModel(version, hostname, metricsURL, proxyURL string, haConnections int) *uiModel {
 	return &uiModel{
 		version:     version,
-		hostname:    hostname,
+		edgeURL:     hostname,
 		metricsURL:  metricsURL,
 		proxyURL:    proxyURL,
 		connections: make([]connState, haConnections),
 	}
 }
 
-func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, connEventChan <-chan ConnEvent) {
+func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnelEventChan <-chan TunnelEvent) {
 	palette := palette{url: "#4682B4", connected: "#00FF00", defaultText: "white", disconnected: "red", reconnecting: "orange"}
 
 	app := tview.NewApplication()
@@ -80,7 +83,9 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, connEv
 
 	grid.AddItem(tview.NewTextView().SetText("Metrics:"), 3, 0, 1, 1, 0, 0, false)
 
-	grid.AddItem(tview.NewTextView().SetText(data.hostname), 0, 1, 1, 1, 0, 0, false)
+	tunnelHostText := tview.NewTextView().SetText(data.edgeURL)
+
+	grid.AddItem(tunnelHostText, 0, 1, 1, 1, 0, 0, false)
 	grid.AddItem(newDynamicColorTextView().SetText(fmt.Sprintf("[%s]\u2022[%s] Proxying to [%s::b]%s", palette.connected, palette.defaultText, palette.url, data.proxyURL)), 1, 1, 1, 1, 0, 0, false)
 
 	grid.AddItem(connTable, 2, 1, 1, 1, 0, 0, false)
@@ -94,12 +99,19 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, connEv
 			case <-ctx.Done():
 				app.Stop()
 				return
-			case conn := <-connEventChan:
-				switch conn.EventType {
+			case event := <-tunnelEventChan:
+				switch event.EventType {
 				case Connected:
-					data.setConnTableCell(conn, connTable, palette)
+					data.setConnTableCell(event, connTable, palette)
 				case Disconnected, Reconnecting:
-					data.changeConnStatus(conn, connTable, logger, palette)
+					data.changeConnStatus(event, connTable, logger, palette)
+				case SetUrl:
+					tunnelHostText.SetText(event.Url)
+					data.edgeURL = event.Url
+				case RegisteringTunnel:
+					if data.edgeURL == "" {
+						tunnelHostText.SetText("Registering tunnel...")
+					}
 				}
 			}
 			app.Draw()
@@ -117,8 +129,8 @@ func newDynamicColorTextView() *tview.TextView {
 	return tview.NewTextView().SetDynamicColors(true)
 }
 
-func (data *uiModel) changeConnStatus(conn ConnEvent, table *tview.Table, logger logger.Service, palette palette) {
-	index := int(conn.Index)
+func (data *uiModel) changeConnStatus(event TunnelEvent, table *tview.Table, logger logger.Service, palette palette) {
+	index := int(event.Index)
 	// Get connection location and state
 	connState := data.getConnState(index)
 	// Check if connection is already displayed in UI
@@ -127,11 +139,11 @@ func (data *uiModel) changeConnStatus(conn ConnEvent, table *tview.Table, logger
 		return
 	}
 
-	locationState := conn.Location
+	locationState := event.Location
 
-	if conn.EventType == Disconnected {
+	if event.EventType == Disconnected {
 		connState.state = Disconnected
-	} else if conn.EventType == Reconnecting {
+	} else if event.EventType == Reconnecting {
 		connState.state = Reconnecting
 		locationState = "Reconnecting..."
 	}
@@ -140,7 +152,7 @@ func (data *uiModel) changeConnStatus(conn ConnEvent, table *tview.Table, logger
 	// Get table cell
 	cell := table.GetCell(index, 0)
 	// Change dot color in front of text as well as location state
-	text := newCellText(palette, connectionNum, locationState, conn.EventType)
+	text := newCellText(palette, connectionNum, locationState, event.EventType)
 	cell.SetText(text)
 }
 
@@ -153,16 +165,16 @@ func (data *uiModel) getConnState(connID int) *connState {
 	return nil
 }
 
-func (data *uiModel) setConnTableCell(conn ConnEvent, table *tview.Table, palette palette) {
-	index := int(conn.Index)
+func (data *uiModel) setConnTableCell(event TunnelEvent, table *tview.Table, palette palette) {
+	index := int(event.Index)
 	connectionNum := index + 1
 
 	// Update slice to keep track of connection location and state in UI table
 	data.connections[index].state = Connected
-	data.connections[index].location = conn.Location
+	data.connections[index].location = event.Location
 
 	// Update text in table cell to show disconnected state
-	text := newCellText(palette, connectionNum, conn.Location, conn.EventType)
+	text := newCellText(palette, connectionNum, event.Location, event.EventType)
 	cell := tview.NewTableCell(text)
 	table.SetCell(index, 0, cell)
 }

@@ -533,11 +533,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}()
 
 	if c.IsSet("launch-ui") {
-		connEventChan := make(chan ui.ConnEvent)
-		tunnelConfig.ConnEventChan = connEventChan
+		tunnelEventChan := make(chan ui.TunnelEvent)
+		tunnelConfig.TunnelEventChan = tunnelEventChan
 
 		tunnelInfo := ui.NewUIModel(version, hostname, metricsListener.Addr().String(), tunnelConfig.OriginUrl, tunnelConfig.HAConnections)
-		tunnelInfo.LaunchUI(ctx, logger, connEventChan)
+		tunnelInfo.LaunchUI(ctx, logger, tunnelEventChan)
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)

@@ -89,7 +89,7 @@ type TunnelConfig struct {
 
 	NamedTunnel     *NamedTunnelConfig
 	ReplaceExisting bool
-	ConnEventChan   chan<- ui.ConnEvent
+	TunnelEventChan chan<- ui.TunnelEvent
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -236,8 +236,8 @@ func ServeTunnelLoop(ctx context.Context,
 		)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
-				if config.ConnEventChan != nil {
-					config.ConnEventChan <- ui.ConnEvent{Index: connectionIndex, EventType: ui.Reconnecting}
+				if config.TunnelEventChan != nil {
+					config.TunnelEventChan <- ui.TunnelEvent{Index: connectionIndex, EventType: ui.Reconnecting}
 				}
 
 				config.Logger.Infof("Retrying connection %d in %s seconds", connectionIndex, duration)
@@ -275,9 +275,9 @@ func ServeTunnel(
 	}()
 
 	// If launch-ui flag is set, send disconnect msg
-	if config.ConnEventChan != nil {
+	if config.TunnelEventChan != nil {
 		defer func() {
-			config.ConnEventChan <- ui.ConnEvent{Index: connectionIndex, EventType: ui.Disconnected}
+			config.TunnelEventChan <- ui.TunnelEvent{Index: connectionIndex, EventType: ui.Disconnected}
 		}()
 	}
 
@@ -440,8 +440,8 @@ func RegisterConnection(
 	config.Logger.Infof("Connection %d registered with %s using ID %s", connectionIndex, conn.Location, conn.UUID)
 
 	// If launch-ui flag is set, send connect msg
-	if config.ConnEventChan != nil {
-		config.ConnEventChan <- ui.ConnEvent{Index: connectionIndex, EventType: ui.Connected, Location: conn.Location}
+	if config.TunnelEventChan != nil {
+		config.TunnelEventChan <- ui.TunnelEvent{Index: connectionIndex, EventType: ui.Connected, Location: conn.Location}
 	}
 
 	return nil
@@ -487,6 +487,9 @@ func RegisterTunnel(
 	uuid uuid.UUID,
 ) error {
 	config.TransportLogger.Debug("initiating RPC stream to register")
+	if config.TunnelEventChan != nil {
+		config.TunnelEventChan <- ui.TunnelEvent{EventType: ui.RegisteringTunnel}
+	}
 	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger, openStreamTimeout)
 	if err != nil {
 		// RPC stream open error
@@ -507,6 +510,11 @@ func RegisterTunnel(
 	if registrationErr := registration.DeserializeError(); registrationErr != nil {
 		// RegisterTunnel RPC failure
 		return processRegisterTunnelError(registrationErr, config.Metrics, register)
+	}
+
+	// Send free tunnel URL to UI
+	if config.TunnelEventChan != nil {
+		config.TunnelEventChan <- ui.TunnelEvent{EventType: ui.SetUrl, Url: registration.Url}
 	}
 	credentialManager.SetEventDigest(connectionID, registration.EventDigest)
 	return processRegistrationSuccess(config, logger, connectionID, registration, register, credentialManager)
