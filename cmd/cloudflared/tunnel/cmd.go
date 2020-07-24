@@ -288,6 +288,11 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	}
 	loggerOpts = append(loggerOpts, logger.LogLevelString(logLevel))
 
+	if c.IsSet("launch-ui") {
+		disableOption := logger.DisableTerminal(true)
+		loggerOpts = append(loggerOpts, disableOption)
+	}
+
 	return logger.New(loggerOpts...)
 }
 
@@ -525,6 +530,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		defer wg.Done()
 		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
 	}()
+
+	if c.IsSet("launch-ui") {
+		tunnelInfo := newUIModel(version, hostname, metricsListener.Addr().String(), tunnelConfig.OriginUrl)
+		tunnelInfo.launchUI(ctx, logger)
+	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
 }
@@ -1121,6 +1131,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_NAME"},
 			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
 			Hidden:  true,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:   "launch-ui",
+			Usage:  "Launch tunnel UI and disable logs",
+			Value:  false,
+			Hidden: shouldHide,
 		}),
 	}
 }
