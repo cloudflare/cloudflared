@@ -38,11 +38,12 @@ const (
 // HTTP/1 equivalents. See https://tools.ietf.org/html/rfc7540#section-8.1.2.3
 func H2RequestHeadersToH1Request(h2 []Header, h1 *http.Request) error {
 	for _, header := range h2 {
-		if !IsControlHeader(header.Name) {
+		name := strings.ToLower(header.Name)
+		if !IsControlHeader(name) {
 			continue
 		}
 
-		switch strings.ToLower(header.Name) {
+		switch name {
 		case ":method":
 			h1.Method = header.Value
 		case ":scheme":
@@ -116,18 +117,14 @@ func ParseUserHeaders(headerNameToParseFrom string, headers []Header) ([]Header,
 }
 
 func IsControlHeader(headerName string) bool {
-	headerName = strings.ToLower(headerName)
-
 	return headerName == "content-length" ||
 		headerName == "connection" || headerName == "upgrade" || // Websocket headers
 		strings.HasPrefix(headerName, ":") ||
 		strings.HasPrefix(headerName, "cf-")
 }
 
-// IsWebsocketClientHeader returns true if the header name is required by the client to upgrade properly
-func IsWebsocketClientHeader(headerName string) bool {
-	headerName = strings.ToLower(headerName)
-
+// isWebsocketClientHeader returns true if the header name is required by the client to upgrade properly
+func isWebsocketClientHeader(headerName string) bool {
 	return headerName == "sec-websocket-accept" ||
 		headerName == "connection" ||
 		headerName == "upgrade"
@@ -137,29 +134,24 @@ func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 	h2 = []Header{
 		{Name: ":status", Value: strconv.Itoa(h1.StatusCode)},
 	}
-	userHeaders := http.Header{}
+	userHeaders := make(http.Header, len(h1.Header))
 	for header, values := range h1.Header {
-		for _, value := range values {
-			if strings.ToLower(header) == "content-length" {
-				// This header has meaning in HTTP/2 and will be used by the edge,
-				// so it should be sent as an HTTP/2 response header.
+		h2name := strings.ToLower(header)
+		if h2name == "content-length" {
+			// This header has meaning in HTTP/2 and will be used by the edge,
+			// so it should be sent as an HTTP/2 response header.
 
-				// Since these are http2 headers, they're required to be lowercase
-				h2 = append(h2, Header{Name: strings.ToLower(header), Value: value})
-			} else if !IsControlHeader(header) || IsWebsocketClientHeader(header) {
-				// User headers, on the other hand, must all be serialized so that
-				// HTTP/2 header validation won't be applied to HTTP/1 header values
-				if _, ok := userHeaders[header]; ok {
-					userHeaders[header] = append(userHeaders[header], value)
-				} else {
-					userHeaders[header] = []string{value}
-				}
-			}
+			// Since these are http2 headers, they're required to be lowercase
+			h2 = append(h2, Header{Name: "content-length", Value: values[0]})
+		} else if !IsControlHeader(h2name) || isWebsocketClientHeader(h2name) {
+			// User headers, on the other hand, must all be serialized so that
+			// HTTP/2 header validation won't be applied to HTTP/1 header values
+			userHeaders[header] = values
 		}
 	}
 
 	// Perform user header serialization and set them in the single header
-	h2 = append(h2, CreateSerializedHeaders(ResponseUserHeadersField, userHeaders)...)
+	h2 = append(h2, Header{ResponseUserHeadersField, SerializeHeaders(userHeaders)})
 
 	return h2
 }
@@ -167,26 +159,48 @@ func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 // Serialize HTTP1.x headers by base64-encoding each header name and value,
 // and then joining them in the format of [key:value;]
 func SerializeHeaders(h1Headers http.Header) string {
-	var serializedHeaders []string
+	// compute size of the fully serialized value and largest temp buffer we will need
+	serializedLen := 0
+	maxTempLen := 0
 	for headerName, headerValues := range h1Headers {
 		for _, headerValue := range headerValues {
-			encodedName := make([]byte, headerEncoding.EncodedLen(len(headerName)))
-			headerEncoding.Encode(encodedName, []byte(headerName))
+			nameLen := headerEncoding.EncodedLen(len(headerName))
+			valueLen := headerEncoding.EncodedLen(len(headerValue))
+			const delims = 2
+			serializedLen += delims + nameLen + valueLen
+			if nameLen > maxTempLen {
+				maxTempLen = nameLen
+			}
+			if valueLen > maxTempLen {
+				maxTempLen = valueLen
+			}
+		}
+	}
+	var buf strings.Builder
+	buf.Grow(serializedLen)
 
-			encodedValue := make([]byte, headerEncoding.EncodedLen(len(headerValue)))
-			headerEncoding.Encode(encodedValue, []byte(headerValue))
+	temp := make([]byte, maxTempLen)
+	writeB64 := func(s string) {
+		n := headerEncoding.EncodedLen(len(s))
+		if n > len(temp) {
+			temp = make([]byte, n)
+		}
+		headerEncoding.Encode(temp[:n], []byte(s))
+		buf.Write(temp[:n])
+	}
 
-			serializedHeaders = append(
-				serializedHeaders,
-				strings.Join(
-					[]string{string(encodedName), string(encodedValue)},
-					":",
-				),
-			)
+	for headerName, headerValues := range h1Headers {
+		for _, headerValue := range headerValues {
+			if buf.Len() > 0 {
+				buf.WriteByte(';')
+			}
+			writeB64(headerName)
+			buf.WriteByte(':')
+			writeB64(headerValue)
 		}
 	}
 
-	return strings.Join(serializedHeaders, ";")
+	return buf.String()
 }
 
 // Deserialize headers serialized by `SerializeHeader`
@@ -223,18 +237,6 @@ func DeserializeHeaders(serializedHeaders string) ([]Header, error) {
 	}
 
 	return deserialized, nil
-}
-
-func CreateSerializedHeaders(headersField string, headers ...http.Header) []Header {
-	var serializedHeaderChunks []string
-	for _, headerChunk := range headers {
-		serializedHeaderChunks = append(serializedHeaderChunks, SerializeHeaders(headerChunk))
-	}
-
-	return []Header{{
-		headersField,
-		strings.Join(serializedHeaderChunks, ";"),
-	}}
 }
 
 type ResponseMetaHeader struct {

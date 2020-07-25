@@ -37,10 +37,17 @@ func TestH2RequestHeadersToH1Request_RegularHeaders(t *testing.T) {
 		"Mock header 2": {"Mock value 2"},
 	}
 
-	headersConversionErr := H2RequestHeadersToH1Request(CreateSerializedHeaders(RequestUserHeadersField, mockHeaders), request)
+	headersConversionErr := H2RequestHeadersToH1Request(createSerializedHeaders(RequestUserHeadersField, mockHeaders), request)
 
 	assert.True(t, reflect.DeepEqual(mockHeaders, request.Header))
 	assert.NoError(t, headersConversionErr)
+}
+
+func createSerializedHeaders(headersField string, headers http.Header) []Header {
+	return []Header{{
+		headersField,
+		SerializeHeaders(headers),
+	}}
 }
 
 func TestH2RequestHeadersToH1Request_NoHeaders(t *testing.T) {
@@ -509,40 +516,32 @@ func TestParseHeaders(t *testing.T) {
 	}
 
 	mockHeaders := []Header{
-		{Name: "One", Value: "1"},
+		{Name: "One", Value: "1"}, // will be dropped
 		{Name: "Cf-Two", Value: "cf-value-1"},
 		{Name: "Cf-Two", Value: "cf-value-2"},
 		{Name: RequestUserHeadersField, Value: SerializeHeaders(mockUserHeadersToSerialize)},
 	}
 
 	expectedHeaders := []Header{
+		{Name: "Cf-Two", Value: "cf-value-1"},
+		{Name: "Cf-Two", Value: "cf-value-2"},
 		{Name: "Mock-Header-One", Value: "1"},
 		{Name: "Mock-Header-One", Value: "1.5"},
 		{Name: "Mock-Header-Two", Value: "2"},
 		{Name: "Mock-Header-Three", Value: "3"},
 	}
-	parsedHeaders, err := ParseUserHeaders(RequestUserHeadersField, mockHeaders)
-	assert.NoError(t, err)
-	assert.ElementsMatch(t, expectedHeaders, parsedHeaders)
-}
-
-func TestParseHeadersNoSerializedHeader(t *testing.T) {
-	mockHeaders := []Header{
-		{Name: "One", Value: "1"},
-		{Name: "Cf-Two", Value: "cf-value-1"},
-		{Name: "Cf-Two", Value: "cf-value-2"},
+	h1 := &http.Request{
+		Header: make(http.Header),
 	}
-
-	_, err := ParseUserHeaders(RequestUserHeadersField, mockHeaders)
-	assert.EqualError(t, err, fmt.Sprintf("%s header not found", RequestUserHeadersField))
+	err := H2RequestHeadersToH1Request(mockHeaders, h1)
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, expectedHeaders, stdlibHeaderToH2muxHeader(h1.Header))
 }
 
 func TestIsControlHeader(t *testing.T) {
 	controlHeaders := []string{
 		// Anything that begins with cf-
 		"cf-sample-header",
-		"CF-SAMPLE-HEADER",
-		"Cf-Sample-Header",
 
 		// Any http2 pseudoheader
 		":sample-pseudo-header",
@@ -559,8 +558,8 @@ func TestIsControlHeader(t *testing.T) {
 
 func TestIsNotControlHeader(t *testing.T) {
 	notControlHeaders := []string{
-		"Mock-header",
-		"Another-sample-header",
+		"mock-header",
+		"another-sample-header",
 	}
 
 	for _, header := range notControlHeaders {
