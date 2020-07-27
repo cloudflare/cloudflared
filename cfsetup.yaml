@@ -181,36 +181,6 @@ jessie: *stretch
 
 buster: *stretch
 
-centos-6:
-  build-rpm:
-    build_dir: *build_dir
-    builddeps: &el6_builddeps
-      - https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
-    post-cache:
-      - source /usr/local/rvm/scripts/rvm
-      - rvm use 1.9
-      - sudo yum install -y fakeroot
-      - wget https://golang.org/dl/go1.12.9.linux-amd64.tar.gz -P /tmp/
-      - sudo tar -C /usr/local -xzf /tmp/go1.12.9.linux-amd64.tar.gz
-      - export PATH=$PATH:/usr/local/go/bin
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - make cloudflared-rpm
-  publish-rpm:
-    build_dir: *build_dir
-    builddeps: *el6_builddeps
-    post-cache:
-      - source /usr/local/rvm/scripts/rvm
-      - rvm use 1.9
-      - sudo yum install -y fakeroot
-      - wget https://golang.org/dl/go1.12.9.linux-amd64.tar.gz -P /tmp/
-      - sudo tar -C /usr/local -xzf /tmp/go1.12.9.linux-amd64.tar.gz
-      - export PATH=$PATH:/usr/local/go/bin
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - make publish-rpm
-
-
 centos-7:
   publish-rpm:
     build_dir: *build_dir
