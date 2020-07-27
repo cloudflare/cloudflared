@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	defaultTimeout           time.Duration = 5 * time.Second
 	defaultRetries           uint64        = 5
 	defaultWriteBufferMaxLen int           = 1024 * 1024 // 1mb
+	writeBufferInitialSize   int           = 16 * 1024 // 16KB
 
 	SettingMuxerMagic http2.SettingID = 0x42db
 	MuxerMagicOrigin  uint32          = 0xa2e43c8b
@@ -206,9 +208,9 @@ func Handshake(
 		initialStreamWindow:     m.config.DefaultWindowSize,
 		streamWindowMax:         m.config.MaxWindowSize,
 		streamWriteBufferMaxLen: m.config.StreamWriteBufferMaxLen,
-		r:              m.r,
-		metricsUpdater: m.muxMetricsUpdater,
-		bytesRead:      inBoundCounter,
+		r:                       m.r,
+		metricsUpdater:          m.muxMetricsUpdater,
+		bytesRead:               inBoundCounter,
 	}
 	m.muxWriter = &MuxWriter{
 		f:               m.f,

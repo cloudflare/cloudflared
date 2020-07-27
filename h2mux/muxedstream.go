@@ -138,6 +138,14 @@ func (s *MuxedStream) Write(p []byte) (int, error) {
 	if s.writeEOF {
 		return 0, io.EOF
 	}
+
+	// pre-allocate some space in the write buffer if possible
+	if buffer, ok := s.writeBuffer.(*bytes.Buffer); ok {
+		if buffer.Cap() == 0 {
+			buffer.Grow(writeBufferInitialSize)
+		}
+	}
+
 	totalWritten := 0
 	for totalWritten < len(p) {
 		// If the buffer is full, block till there is more room.
@@ -367,7 +375,9 @@ type streamChunk struct {
 	// true if data frames should be sent
 	sendData bool
 	eof      bool
-	buffer   bytes.Buffer
+
+	buffer []byte
+	offset int
 }
 
 // getChunk atomically extracts a chunk of data to be written by MuxWriter.
@@ -385,8 +395,17 @@ func (s *MuxedStream) getChunk() *streamChunk {
 		eof:          s.writeEOF && uint32(s.writeBuffer.Len()) <= s.sendWindow,
 	}
 	// Copy at most s.sendWindow bytes, adjust the sendWindow accordingly
-	writeLen, _ := io.CopyN(&chunk.buffer, s.writeBuffer, int64(s.sendWindow))
-	s.sendWindow -= uint32(writeLen)
+	toCopy := int(s.sendWindow)
+	if toCopy > s.writeBuffer.Len() {
+		toCopy = s.writeBuffer.Len()
+	}
+
+	if toCopy > 0 {
+		buf := make([]byte, toCopy)
+		writeLen, _ := s.writeBuffer.Read(buf)
+		chunk.buffer = buf[:writeLen]
+		s.sendWindow -= uint32(writeLen)
+	}
 
 	// Allow MuxedStream::Write() to continue, if needed
 	if s.writeBuffer.Len() < s.writeBufferMaxLen {
@@ -421,8 +440,15 @@ func (c *streamChunk) sendDataFrame() bool {
 }
 
 func (c *streamChunk) nextDataFrame(frameSize int) (payload []byte, endStream bool) {
-	payload = c.buffer.Next(frameSize)
-	if c.buffer.Len() == 0 {
+	bytesLeft := len(c.buffer) - c.offset
+	if frameSize > bytesLeft {
+		frameSize = bytesLeft
+	}
+	nextOffset := c.offset + frameSize
+	payload = c.buffer[c.offset:nextOffset]
+	c.offset = nextOffset
+
+	if c.offset == len(c.buffer) {
 		// this is the last data frame in this chunk
 		c.sendData = false
 		if c.eof {
