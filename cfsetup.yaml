@@ -158,6 +158,20 @@ stretch: &stretch
       - export GOARCH=386
       - export CC=i686-w64-mingw32-gcc-win32
       - make github-release
+  github-release-linux-arm64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - crossbuild-essential-armhf
+      - g++-aarch64-linux-gnu
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - export GOOS=linux
+      - export GOARCH=arm64
+      - export CC=aarch64-linux-gnu-gcc
+      - make github-release
   test:
     build_dir: *build_dir
     builddeps:
