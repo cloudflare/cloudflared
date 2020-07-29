@@ -190,6 +190,15 @@ stretch: &stretch
       - s3cmd
     post-cache:
       - .teamcity/update-homebrew.sh
+  github-message-release:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - make github-message
 
 jessie: *stretch
 

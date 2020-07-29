@@ -137,6 +137,10 @@ release: bin/equinox
 github-release: cloudflared
 	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
 
+.PHONY: github-message
+github-message:
+	python3 github_message.py --release-version $(VERSION)
+
 bin/equinox:
 	mkdir -p bin
 	curl -s https://bin.equinox.io/c/75JtLRTsJ3n/release-tool-beta-$(EQUINOX_PLATFORM).tgz | tar xz -C bin/
