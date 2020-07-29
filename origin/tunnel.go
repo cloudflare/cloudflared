@@ -21,6 +21,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
@@ -88,6 +89,7 @@ type TunnelConfig struct {
 
 	NamedTunnel     *NamedTunnelConfig
 	ReplaceExisting bool
+	ConnEventChan   chan<- ui.ConnEvent
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -268,6 +270,13 @@ func ServeTunnel(
 		}
 	}()
 
+	// If launch-ui flag is set, send disconnect msg
+	if config.ConnEventChan != nil {
+		defer func() {
+			config.ConnEventChan <- ui.ConnEvent{Index: connectionIndex, EventType: ui.Disconnected}
+		}()
+	}
+
 	connectionTag := uint8ToString(connectionIndex)
 
 	// Returns error from parsing the origin URL or handshake errors
@@ -425,6 +434,11 @@ func RegisterConnection(
 
 	config.Metrics.regSuccess.WithLabelValues(registerConnection).Inc()
 	config.Logger.Infof("Connection %d registered with %s using ID %s", connectionIndex, conn.Location, conn.UUID)
+
+	// If launch-ui flag is set, send connect msg
+	if config.ConnEventChan != nil {
+		config.ConnEventChan <- ui.ConnEvent{Index: connectionIndex, EventType: ui.Connected, Location: conn.Location}
+	}
 
 	return nil
 }

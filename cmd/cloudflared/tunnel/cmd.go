@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -532,8 +533,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}()
 
 	if c.IsSet("launch-ui") {
-		tunnelInfo := newUIModel(version, hostname, metricsListener.Addr().String(), tunnelConfig.OriginUrl)
-		tunnelInfo.launchUI(ctx, logger)
+		connEventChan := make(chan ui.ConnEvent)
+		tunnelConfig.ConnEventChan = connEventChan
+
+		tunnelInfo := ui.NewUIModel(version, hostname, metricsListener.Addr().String(), tunnelConfig.OriginUrl, tunnelConfig.HAConnections)
+		tunnelInfo.LaunchUI(ctx, logger, connEventChan)
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
