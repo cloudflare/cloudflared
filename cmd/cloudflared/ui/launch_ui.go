@@ -56,7 +56,7 @@ func NewUIModel(version, hostname, metricsURL, proxyURL string, haConnections in
 	}
 }
 
-func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnelEventChan <-chan TunnelEvent) {
+func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnelEventChan <-chan TunnelEvent, logTextView *tview.TextView) {
 	palette := palette{url: "#4682B4", connected: "#00FF00", defaultText: "white", disconnected: "red", reconnecting: "orange"}
 
 	app := tview.NewApplication()
@@ -86,12 +86,14 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 	tunnelHostText := tview.NewTextView().SetText(data.edgeURL)
 
 	grid.AddItem(tunnelHostText, 0, 1, 1, 1, 0, 0, false)
-	grid.AddItem(newDynamicColorTextView().SetText(fmt.Sprintf("[%s]\u2022[%s] Proxying to [%s::b]%s", palette.connected, palette.defaultText, palette.url, data.proxyURL)), 1, 1, 1, 1, 0, 0, false)
+	grid.AddItem(NewDynamicColorTextView().SetText(fmt.Sprintf("[%s]\u2022[%s] Proxying to [%s::b]%s", palette.connected, palette.defaultText, palette.url, data.proxyURL)), 1, 1, 1, 1, 0, 0, false)
 
 	grid.AddItem(connTable, 2, 1, 1, 1, 0, 0, false)
 
-	grid.AddItem(newDynamicColorTextView().SetText(fmt.Sprintf("Metrics at [%s::b]%s/metrics", palette.url, data.metricsURL)), 3, 1, 1, 1, 0, 0, false)
-	grid.AddItem(tview.NewBox(), 4, 0, 1, 2, 0, 0, false)
+	grid.AddItem(NewDynamicColorTextView().SetText(fmt.Sprintf("Metrics at [%s::b]%s/metrics", palette.url, data.metricsURL)), 3, 1, 1, 1, 0, 0, false)
+	// Add TextView to stream logs
+	// LOGS header is displayed in bold
+	grid.AddItem(logTextView.SetText("[::b]LOGS:[::-]\n\n").SetChangedFunc(handleNewText(app, logTextView)), 4, 0, 5, 2, 0, 0, false)
 
 	go func() {
 		for {
@@ -125,8 +127,17 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 	}()
 }
 
-func newDynamicColorTextView() *tview.TextView {
+func NewDynamicColorTextView() *tview.TextView {
 	return tview.NewTextView().SetDynamicColors(true)
+}
+
+// Re-draws application when new logs are streamed to UI
+func handleNewText(app *tview.Application, logTextView *tview.TextView) func() {
+	return func() {
+		app.Draw()
+		// SetFocus to enable scrolling in textview
+		app.SetFocus(logTextView)
+	}
 }
 
 func (data *uiModel) changeConnStatus(event TunnelEvent, table *tview.Table, logger logger.Service, palette palette) {

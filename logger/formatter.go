@@ -63,6 +63,12 @@ type TerminalFormatter struct {
 	supportsColor bool
 }
 
+// UIFormatter is used for streaming logs to UI
+type UIFormatter struct {
+	format        string
+	supportsColor bool
+}
+
 // NewTerminalFormatter creates a Terminal formatter for colored output
 // format is the time format to use for timestamp formatting
 func NewTerminalFormatter(format string) Formatter {
@@ -73,10 +79,39 @@ func NewTerminalFormatter(format string) Formatter {
 	}
 }
 
+func NewUIFormatter(format string) Formatter {
+	supportsColor := (runtime.GOOS != "windows")
+	return &UIFormatter{
+		format:        format,
+		supportsColor: supportsColor,
+	}
+}
+
+// Timestamp uses formatting that is tview-specific for UI
+func (f *UIFormatter) Timestamp(l Level, d time.Time) string {
+	t := ""
+	dateStr := "[" + d.Format(f.format) + "] "
+	switch l {
+	case InfoLevel:
+		t = "[#00ffff]INFO[white]"
+	case ErrorLevel:
+		t = "[red]ERROR[white]"
+	case DebugLevel:
+		t = "[yellow]DEBUG[white]"
+	case FatalLevel:
+		t = "[red]FATAL[white]"
+	}
+	return t + dateStr
+}
+
+func (f *UIFormatter) Content(l Level, c string) string {
+	return c
+}
+
 // Timestamp returns the log level with a matching color to the log type
 func (f *TerminalFormatter) Timestamp(l Level, d time.Time) string {
 	t := ""
-	dateStr := "[" + d.Format(f.format) + "] " 
+	dateStr := "[" + d.Format(f.format) + "] "
 	switch l {
 	case InfoLevel:
 		t = f.output("INFO", skittles.Cyan)

@@ -85,6 +85,14 @@ func LogLevelString(level string) Option {
 	}
 }
 
+func GetSupportedLevels(level string) ([]Level, error) {
+	supported, err := ParseLevelString(level)
+	if err != nil {
+		return nil, err
+	}
+	return supported, nil
+}
+
 // Parse builds the Options struct so the caller knows what actions should be run
 func Parse(opts ...Option) (*Options, error) {
 	options := &Options{}
@@ -98,7 +106,7 @@ func Parse(opts ...Option) (*Options, error) {
 
 // New setups a new logger based on the options.
 // The default behavior is to write to standard out
-func New(opts ...Option) (Service, error) {
+func New(opts ...Option) (*OutputWriter, error) {
 	config, err := Parse(opts...)
 
 	if err != nil {
@@ -123,6 +131,7 @@ func New(opts ...Option) (Service, error) {
 			l.Add(os.Stderr, terminalFormatter, config.supportedTerminalLevels...)
 		}
 	}
+
 	return l, nil
 }
 

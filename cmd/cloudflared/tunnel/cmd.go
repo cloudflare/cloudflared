@@ -36,6 +36,7 @@ import (
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/cloudflare/cloudflared/websocket"
+	"github.com/rivo/tview"
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
@@ -215,11 +216,23 @@ func TunnelCommand(c *cli.Context) error {
 	if name := c.String("name"); name != "" {
 		return adhocNamedTunnel(c, name)
 	}
+
+	if c.IsSet("launch-ui") {
+		// Create textView to stream logs to
+		logTextView := ui.NewDynamicColorTextView()
+		logger, err := createLoggerConfigured(c, false, logTextView)
+		if err != nil {
+			return errors.Wrap(err, "error setting up logger")
+		}
+		return StartServer(c, version, shutdownC, graceShutdownC, nil, logger, logTextView)
+	}
+
 	logger, err := createLogger(c, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
-	return StartServer(c, version, shutdownC, graceShutdownC, nil, logger)
+
+	return StartServer(c, version, shutdownC, graceShutdownC, nil, logger, nil)
 }
 
 func Init(v string, s, g chan struct{}) {
@@ -268,7 +281,7 @@ func routeFromFlag(c *cli.Context, tunnelID uuid.UUID) (tunnelstore.Route, bool)
 	return nil, false
 }
 
-func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
+func createLogger(c *cli.Context, isTransport bool) (*logger.OutputWriter, error) {
 	loggerOpts := []logger.Option{}
 
 	logPath := c.String("logfile")
@@ -297,7 +310,26 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	return logger.New(loggerOpts...)
 }
 
-func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig, logger logger.Service) error {
+// Create logger configured for use in UI
+func createLoggerConfigured(c *cli.Context, isTransport bool, logTextView *tview.TextView) (logger.Service, error) {
+	l, err := createLogger(c, isTransport)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error creating logger")
+	}
+
+	logLevel := c.String("loglevel")
+	supportedLevels, err := logger.GetSupportedLevels(logLevel)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error parsing supported levels")
+	}
+
+	// Add TextView as a group to write output to
+	l.Add(logTextView, logger.NewUIFormatter(time.RFC3339), supportedLevels...)
+
+	return l, nil
+}
+
+func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig, logger logger.Service, logTextView *tview.TextView) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
@@ -537,7 +569,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		tunnelConfig.TunnelEventChan = tunnelEventChan
 
 		tunnelInfo := ui.NewUIModel(version, hostname, metricsListener.Addr().String(), tunnelConfig.OriginUrl, tunnelConfig.HAConnections)
-		tunnelInfo.LaunchUI(ctx, logger, tunnelEventChan)
+		tunnelInfo.LaunchUI(ctx, logger, tunnelEventChan, logTextView)
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
@@ -1138,7 +1170,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "launch-ui",
-			Usage:  "Launch tunnel UI and disable logs",
+			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
 			Value:  false,
 			Hidden: shouldHide,
 		}),
