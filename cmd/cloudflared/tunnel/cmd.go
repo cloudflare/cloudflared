@@ -33,6 +33,7 @@ import (
 	"github.com/cloudflare/cloudflared/sshserver"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/cloudflare/cloudflared/websocket"
 
 	"github.com/coreos/go-systemd/daemon"
@@ -169,6 +170,7 @@ func Commands() []*cli.Command {
 		c.Hidden = false
 		subcommands = append(subcommands, &c)
 	}
+
 	subcommands = append(subcommands, buildCreateCommand())
 	subcommands = append(subcommands, buildListCommand())
 	subcommands = append(subcommands, buildDeleteCommand())
@@ -178,7 +180,7 @@ func Commands() []*cli.Command {
 
 	cmds = append(cmds, &cli.Command{
 		Name:      "tunnel",
-		Action:    cliutil.ErrorHandler(tunnel),
+		Action:    cliutil.ErrorHandler(TunnelCommand),
 		Before:    Before,
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
@@ -208,12 +210,61 @@ func Commands() []*cli.Command {
 	return cmds
 }
 
-func tunnel(c *cli.Context) error {
-	return StartServer(c, version, shutdownC, graceShutdownC, nil)
+func TunnelCommand(c *cli.Context) error {
+	if name := c.String("name"); name != "" {
+		return adhocNamedTunnel(c, name)
+	}
+	logger, err := createLogger(c, false)
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+	return StartServer(c, version, shutdownC, graceShutdownC, nil, logger)
 }
 
 func Init(v string, s, g chan struct{}) {
 	version, shutdownC, graceShutdownC = v, s, g
+}
+
+// adhocNamedTunnel create, route and run a named tunnel in one command
+func adhocNamedTunnel(c *cli.Context, name string) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return err
+	}
+
+	tunnel, ok, err := sc.tunnelActive(name)
+	if err != nil || !ok {
+		tunnel, err = sc.create(name)
+		if err != nil {
+			return errors.Wrap(err, "failed to create tunnel")
+		}
+	} else {
+		sc.logger.Infof("Tunnel already created with ID %s", tunnel.ID)
+	}
+
+	if r, ok := routeFromFlag(c, tunnel.ID); ok {
+		if err := sc.route(tunnel.ID, r); err != nil {
+			sc.logger.Errorf("failed to create route, please create it manually. err: %v.", err)
+		} else {
+			sc.logger.Infof(r.SuccessSummary())
+		}
+	}
+
+	if err := sc.run(tunnel.ID); err != nil {
+		return errors.Wrap(err, "error running tunnel")
+	}
+
+	return nil
+}
+
+func routeFromFlag(c *cli.Context, tunnelID uuid.UUID) (tunnelstore.Route, bool) {
+	if hostname := c.String("hostname"); hostname != "" {
+		if lbPool := c.String("lb-pool"); lbPool != "" {
+			return tunnelstore.NewLBRoute(hostname, lbPool), true
+		}
+		return tunnelstore.NewDNSRoute(hostname), true
+	}
+	return nil, false
 }
 
 func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
@@ -240,12 +291,7 @@ func createLogger(c *cli.Context, isTransport bool) (logger.Service, error) {
 	return logger.New(loggerOpts...)
 }
 
-func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig) error {
-	logger, err := createLogger(c, false)
-	if err != nil {
-		return cliutil.PrintLoggerSetupError("error setting up logger", err)
-	}
-
+func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig, logger logger.Service) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
@@ -614,7 +660,7 @@ func dbConnectCmd() *cli.Command {
 	cmd.Action = cliutil.ErrorHandler(func(c *cli.Context) error {
 		err := dbconnect.CmdAction(c)
 		if err == nil {
-			err = tunnel(c)
+			err = TunnelCommand(c)
 		}
 		return err
 	})
@@ -1068,6 +1114,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Runs as jump host",
 			EnvVars: []string{"TUNNEL_BASTION"},
 			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "name",
+			Aliases: []string{"n"},
+			EnvVars: []string{"TUNNEL_NAME"},
+			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
+			Hidden:  true,
 		}),
 	}
 }

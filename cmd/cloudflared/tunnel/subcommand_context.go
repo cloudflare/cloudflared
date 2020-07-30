@@ -236,7 +236,7 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	return StartServer(sc.c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID})
+	return StartServer(sc.c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID}, sc.logger)
 }
 
 func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
