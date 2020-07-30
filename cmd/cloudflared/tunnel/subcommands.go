@@ -548,6 +548,8 @@ func routeTunnel(c *cli.Context) error {
 		return errors.Wrap(err, "Failed to route tunnel")
 	}
 
+	logger.Infof(route.SuccessSummary())
+
 	return nil
 }
 

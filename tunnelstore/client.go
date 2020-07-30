@@ -44,6 +44,8 @@ type Connection struct {
 type Route interface {
 	json.Marshaler
 	RecordType() string
+	// SuccessSummary explains what will route to this tunnel when it's provisioned successfully
+	SuccessSummary() string
 }
 
 type DNSRoute struct {
@@ -69,6 +71,10 @@ func (dr *DNSRoute) MarshalJSON() ([]byte, error) {
 
 func (dr *DNSRoute) RecordType() string {
 	return "dns"
+}
+
+func (dr *DNSRoute) SuccessSummary() string {
+	return fmt.Sprintf("%s will route to your tunnel", dr.userHostname)
 }
 
 type LBRoute struct {
@@ -98,6 +104,10 @@ func (lr *LBRoute) MarshalJSON() ([]byte, error) {
 
 func (lr *LBRoute) RecordType() string {
 	return "lb"
+}
+
+func (lr *LBRoute) SuccessSummary() string {
+	return fmt.Sprintf("Load balancer %s will route to this tunnel through pool %s", lr.lbName, lr.lbPool)
 }
 
 type Client interface {
