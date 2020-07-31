@@ -26,10 +26,11 @@ type ClientInfo struct {
 }
 
 type ConnectionOptions struct {
-	Client             ClientInfo
-	OriginLocalIP      net.IP `capnp:"originLocalIp"`
-	ReplaceExisting    bool
-	CompressionQuality uint8
+	Client              ClientInfo
+	OriginLocalIP       net.IP `capnp:"originLocalIp"`
+	ReplaceExisting     bool
+	CompressionQuality  uint8
+	NumPreviousAttempts uint8
 }
 
 type TunnelAuth struct {

@@ -172,16 +172,17 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func (c *TunnelConfig) ConnectionOptions(originLocalAddr string) *tunnelpogs.ConnectionOptions {
+func (c *TunnelConfig) ConnectionOptions(originLocalAddr string, numPreviousAttempts uint8) *tunnelpogs.ConnectionOptions {
 	// attempt to parse out origin IP, but don't fail since it's informational field
 	host, _, _ := net.SplitHostPort(originLocalAddr)
 	originIP := net.ParseIP(host)
 
 	return &tunnelpogs.ConnectionOptions{
-		Client:             c.NamedTunnel.Client,
-		OriginLocalIP:      originIP,
-		ReplaceExisting:    c.ReplaceExisting,
-		CompressionQuality: uint8(c.CompressionQuality),
+		Client:              c.NamedTunnel.Client,
+		OriginLocalIP:       originIP,
+		ReplaceExisting:     c.ReplaceExisting,
+		CompressionQuality:  uint8(c.CompressionQuality),
+		NumPreviousAttempts: numPreviousAttempts,
 	}
 }
 
@@ -305,7 +306,7 @@ func ServeTunnel(
 		}()
 
 		if config.NamedTunnel != nil {
-			return RegisterConnection(ctx, handler.muxer, config, connectionIndex, originLocalAddr)
+			return RegisterConnection(ctx, handler.muxer, config, connectionIndex, originLocalAddr, uint8(backoff.retries))
 		}
 
 		if config.UseReconnectToken && connectedFuse.Value() {
@@ -416,6 +417,7 @@ func RegisterConnection(
 	config *TunnelConfig,
 	connectionIndex uint8,
 	originLocalAddr string,
+	numPreviousAttempts uint8,
 ) error {
 	const registerConnection = "registerConnection"
 
@@ -432,7 +434,7 @@ func RegisterConnection(
 		config.NamedTunnel.Auth,
 		config.NamedTunnel.ID,
 		connectionIndex,
-		config.ConnectionOptions(originLocalAddr),
+		config.ConnectionOptions(originLocalAddr, numPreviousAttempts),
 	)
 	if err != nil {
 		if err.Error() == DuplicateConnectionError {

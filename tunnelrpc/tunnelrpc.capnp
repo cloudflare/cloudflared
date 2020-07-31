@@ -98,6 +98,8 @@ struct ConnectionOptions {
     replaceExisting @2 :Bool;
     # cross stream compression setting, 0 - off, 3 - high
     compressionQuality @3 :UInt8;
+    # number of previous attempts to send RegisterConnection
+    numPreviousAttempts @4 :UInt8;
 }
 
 struct ConnectionResponse {
