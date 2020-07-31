@@ -43,7 +43,7 @@ git checkout -f master
 git reset --hard origin/master
 
 # modify cloudflared.rb
-URL="https://developers.cloudflare.com/argo-tunnel/dl/cloudflared-$VERSION-darwin-amd64.tgz"
+URL="https://packages.argotunnel.com/dl/cloudflared-$VERSION-darwin-amd64.tgz"
 tee cloudflared.rb <<EOF
 class Cloudflared < Formula
   desc 'Argo Tunnel'
