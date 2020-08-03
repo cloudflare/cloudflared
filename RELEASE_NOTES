@@ -1,3 +1,19 @@
+2020.8.0
+- 2020-07-30 TUN-3220: tunnel route reports created route
+- 2020-07-31 TUN-3221: ConnectionOptions tracks numPreviousAttempts.
+- 2020-07-20 TUN-3190: Initialize logger using command line flags in tunnels subcommands
+- 2020-07-21 TUN-3192: Use zone ID in tunnelstore request path; improve debug logging
+- 2020-07-23 TUN-3194: Don't render log output when level is not enabled
+- 2020-07-22 AUTH-2016 adds sha256 hashes to releases
+- 2020-07-27 Removes centos 6 build
+- 2020-07-27 TUN-3209: Add benchmark for header serialization
+- 2020-07-24 TUN-3209: improve performance and reduce allocations during user header serialization from h1 to h2
+- 2020-07-26 TUN-3208: Add benchmark for large response write
+- 2020-07-27 TUN-3208: Reduce copies and allocations on h2mux write path. Pre-allocate 16KB write buffer on the first write if possible. Use explicit byte array for chunks on write thread to avoid copying through intermediate buffer due to io.CopyN.
+- 2020-07-28 AUTH-2714: Adds arm64 cloudflared build
+- 2020-07-29 AUTH-2927 run message update after all github builds are done
+- 2020-07-17 AUTH-2902 redirect with just the root host on curl commands
+
 2020.7.4
 - 2020-07-20 Build cloudflared for arm64 on native agents
 - 2020-07-10 TUN-3048: Handle error when user tries to delete active tunnel
