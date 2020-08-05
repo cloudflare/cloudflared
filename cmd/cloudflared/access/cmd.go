@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/idna"
 
 	"github.com/getsentry/raven-go"
-	"gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 )
 
 const (

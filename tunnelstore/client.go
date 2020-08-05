@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -114,7 +116,7 @@ type Client interface {
 	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	DeleteTunnel(tunnelID uuid.UUID) error
-	ListTunnels() ([]Tunnel, error)
+	ListTunnels(filter *Filter) ([]Tunnel, error)
 	CleanupConnections(tunnelID uuid.UUID) error
 	RouteTunnel(tunnelID uuid.UUID, route Route) error
 }
@@ -127,20 +129,28 @@ type RESTClient struct {
 }
 
 type baseEndpoints struct {
-	accountLevel string
-	zoneLevel    string
+	accountLevel url.URL
+	zoneLevel    url.URL
 }
 
 var _ Client = (*RESTClient)(nil)
 
-func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string, logger logger.Service) *RESTClient {
+func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string, logger logger.Service) (*RESTClient, error) {
 	if strings.HasSuffix(baseURL, "/") {
 		baseURL = baseURL[:len(baseURL)-1]
 	}
+	accountLevelEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/tunnels", baseURL, accountTag))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create account level endpoint")
+	}
+	zoneLevelEndpoint, err := url.Parse(fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneTag))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create account level endpoint")
+	}
 	return &RESTClient{
 		baseEndpoints: &baseEndpoints{
-			accountLevel: fmt.Sprintf("%s/accounts/%s/tunnels", baseURL, accountTag),
-			zoneLevel:    fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneTag),
+			accountLevel: *accountLevelEndpoint,
+			zoneLevel:    *zoneLevelEndpoint,
 		},
 		authToken: authToken,
 		client: http.Client{
@@ -151,7 +161,7 @@ func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string,
 			Timeout: defaultTimeout,
 		},
 		logger: logger,
-	}
+	}, nil
 }
 
 type newTunnel struct {
@@ -185,7 +195,8 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 }
 
 func (r *RESTClient) GetTunnel(tunnelID uuid.UUID) (*Tunnel, error) {
-	endpoint := fmt.Sprintf("%s/%v", r.baseEndpoints.accountLevel, tunnelID)
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v", tunnelID))
 	resp, err := r.sendRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
@@ -200,7 +211,8 @@ func (r *RESTClient) GetTunnel(tunnelID uuid.UUID) (*Tunnel, error) {
 }
 
 func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
-	endpoint := fmt.Sprintf("%s/%v", r.baseEndpoints.accountLevel, tunnelID)
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v", tunnelID))
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
@@ -210,8 +222,10 @@ func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
 	return r.statusCodeToError("delete tunnel", resp)
 }
 
-func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
-	resp, err := r.sendRequest("GET", r.baseEndpoints.accountLevel, nil)
+func (r *RESTClient) ListTunnels(filter *Filter) ([]Tunnel, error) {
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.RawQuery = filter.encode()
+	resp, err := r.sendRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "REST request failed")
 	}
@@ -229,7 +243,8 @@ func (r *RESTClient) ListTunnels() ([]Tunnel, error) {
 }
 
 func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
-	endpoint := fmt.Sprintf("%s/%v/connections", r.baseEndpoints.accountLevel, tunnelID)
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/connections", tunnelID))
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
@@ -240,7 +255,8 @@ func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
 }
 
 func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route Route) error {
-	endpoint := fmt.Sprintf("%s/%v/routes", r.baseEndpoints.zoneLevel, tunnelID)
+	endpoint := r.baseEndpoints.zoneLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/routes", tunnelID))
 	resp, err := r.sendRequest("PUT", endpoint, route)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
@@ -250,9 +266,7 @@ func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route Route) error {
 	return r.statusCodeToError("add route", resp)
 }
 
-func (r *RESTClient) sendRequest(method string, url string, body interface{}) (*http.Response, error) {
-	r.logger.Debugf("%s %s", method, url)
-
+func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		if bodyBytes, err := json.Marshal(body); err != nil {
@@ -262,7 +276,7 @@ func (r *RESTClient) sendRequest(method string, url string, body interface{}) (*
 		}
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequest(method, url.String(), bodyReader)
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't create %s request", method)
 	}

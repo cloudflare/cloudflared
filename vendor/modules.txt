@@ -89,6 +89,8 @@ github.com/coredns/coredns/request
 github.com/coreos/go-oidc/jose
 # github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
 github.com/coreos/go-systemd/daemon
+# github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d
+github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
 # github.com/denisenkom/go-mssqldb v0.0.0-20191001013358-cfbb681360f0
@@ -189,9 +191,16 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/russross/blackfriday/v2 v2.0.1
+github.com/russross/blackfriday/v2
+# github.com/shurcooL/sanitized_anchor_name v1.0.0
+github.com/shurcooL/sanitized_anchor_name
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
+# github.com/urfave/cli/v2 v2.2.0
+github.com/urfave/cli/v2
+github.com/urfave/cli/v2/altsrc
 # github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0
 github.com/xo/dburl
 # golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
@@ -298,9 +307,6 @@ gopkg.in/coreos/go-oidc.v2
 gopkg.in/square/go-jose.v2
 gopkg.in/square/go-jose.v2/cipher
 gopkg.in/square/go-jose.v2/json
-# gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8
-gopkg.in/urfave/cli.v2
-gopkg.in/urfave/cli.v2/altsrc
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
 # zombiezen.com/go/capnproto2 v2.18.0+incompatible

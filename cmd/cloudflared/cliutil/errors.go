@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
-	"gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 )
 
 type usageError string

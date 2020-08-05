@@ -23,8 +23,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh/terminal"
-	"gopkg.in/urfave/cli.v2"
 )
 
 var (
@@ -302,7 +302,7 @@ func prepareTunnelConfig(
 		NamedTunnel:        namedTunnel,
 		ReplaceExisting:    c.Bool("force"),
 		// turn off use of reconnect token and auth refresh when using named tunnels
-		UseReconnectToken:  compatibilityMode && c.Bool("use-reconnect-token"),
+		UseReconnectToken: compatibilityMode && c.Bool("use-reconnect-token"),
 	}, nil
 }
 

@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	"gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/certutil"
@@ -36,6 +36,22 @@ var (
 		Name:    "show-deleted",
 		Aliases: []string{"d"},
 		Usage:   "Include deleted tunnels in the list",
+	}
+	listNameFlag = &cli.StringFlag{
+		Name:    "name",
+		Aliases: []string{"n"},
+		Usage:   "List tunnels with the given name",
+	}
+	listExistedAtFlag = &cli.TimestampFlag{
+		Name:    "when",
+		Aliases: []string{"w"},
+		Usage:   fmt.Sprintf("List tunnels that are active at the given time, expect format in RFC3339 (%s)", time.Now().Format(tunnelstore.TimeLayout)),
+		Layout:  tunnelstore.TimeLayout,
+	}
+	listIDFlag = &cli.StringFlag{
+		Name:    "id",
+		Aliases: []string{"i"},
+		Usage:   "List tunnel by ID",
 	}
 	outputFormatFlag = &cli.StringFlag{
 		Name:    "output",
@@ -102,7 +118,10 @@ func createTunnel(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	client := newTunnelstoreClient(c, cert, logger)
+	client, err := newTunnelstoreClient(c, cert, logger)
+	if err != nil {
+		return err
+	}
 
 	tunnel, err := client.CreateTunnel(name, tunnelSecret)
 	if err != nil {
@@ -215,7 +234,7 @@ func buildListCommand() *cli.Command {
 		Usage:     "List existing tunnels",
 		ArgsUsage: " ",
 		Hidden:    hideSubcommands,
-		Flags:     []cli.Flag{outputFormatFlag, showDeletedFlag},
+		Flags:     []cli.Flag{outputFormatFlag, showDeletedFlag, listNameFlag, listExistedAtFlag, listIDFlag},
 	}
 }
 
@@ -229,22 +248,32 @@ func listTunnels(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	client := newTunnelstoreClient(c, cert, logger)
-
-	allTunnels, err := client.ListTunnels()
+	client, err := newTunnelstoreClient(c, cert, logger)
 	if err != nil {
-		return errors.Wrap(err, "Error listing tunnels")
+		return err
 	}
 
-	var tunnels []tunnelstore.Tunnel
-	if c.Bool("show-deleted") {
-		tunnels = allTunnels
-	} else {
-		for _, tunnel := range allTunnels {
-			if tunnel.DeletedAt.IsZero() {
-				tunnels = append(tunnels, tunnel)
-			}
+	filter := tunnelstore.NewFilter()
+	if !c.Bool("show-deleted") {
+		filter.ShowDeleted()
+	}
+	if name := c.String("name"); name != "" {
+		filter.ByName(name)
+	}
+	if existedAt := c.Timestamp("time"); existedAt != nil {
+		filter.ByExistedAt(*existedAt)
+	}
+	if id := c.String("id"); id != "" {
+		tunnelID, err := uuid.Parse(id)
+		if err != nil {
+			return errors.Wrapf(err, "%s is not a valid tunnel ID", id)
 		}
+		filter.ByTunnelID(tunnelID)
+	}
+
+	tunnels, err := client.ListTunnels(filter)
+	if err != nil {
+		return errors.Wrap(err, "Error listing tunnels")
 	}
 
 	if outputFormat := c.String(outputFormatFlag.Name); outputFormat != "" {
@@ -336,7 +365,10 @@ func deleteTunnel(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	client := newTunnelstoreClient(c, cert, logger)
+	client, err := newTunnelstoreClient(c, cert, logger)
+	if err != nil {
+		return err
+	}
 
 	forceFlagSet := c.Bool("force")
 
@@ -390,9 +422,8 @@ func renderOutput(format string, v interface{}) error {
 	}
 }
 
-func newTunnelstoreClient(c *cli.Context, cert *certutil.OriginCert, logger logger.Service) tunnelstore.Client {
-	client := tunnelstore.NewRESTClient(c.String("api-url"), cert.AccountID, cert.ZoneID, cert.ServiceKey, logger)
-	return client
+func newTunnelstoreClient(c *cli.Context, cert *certutil.OriginCert, logger logger.Service) (tunnelstore.Client, error) {
+	return tunnelstore.NewRESTClient(c.String("api-url"), cert.AccountID, cert.ZoneID, cert.ServiceKey, logger)
 }
 
 func getOriginCertFromContext(c *cli.Context, logger logger.Service) (cert *certutil.OriginCert, originCertPath string, err error) {
@@ -474,7 +505,10 @@ func cleanupConnections(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	client := newTunnelstoreClient(c, cert, logger)
+	client, err := newTunnelstoreClient(c, cert, logger)
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < c.NArg(); i++ {
 		tunnelID, err := uuid.Parse(c.Args().Get(i))
@@ -542,7 +576,10 @@ func routeTunnel(c *cli.Context) error {
 		return err
 	}
 
-	client := newTunnelstoreClient(c, cert, logger)
+	client, err := newTunnelstoreClient(c, cert, logger)
+	if err != nil {
+		return err
+	}
 
 	if err := client.RouteTunnel(tunnelID, route); err != nil {
 		return errors.Wrap(err, "Failed to route tunnel")

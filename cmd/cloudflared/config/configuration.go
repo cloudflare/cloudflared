@@ -7,8 +7,8 @@ import (
 	"runtime"
 
 	homedir "github.com/mitchellh/go-homedir"
-	"gopkg.in/urfave/cli.v2"
-	"gopkg.in/urfave/cli.v2/altsrc"
+	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/validation"

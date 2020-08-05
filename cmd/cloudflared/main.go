@@ -17,7 +17,7 @@ import (
 
 	raven "github.com/getsentry/raven-go"
 	homedir "github.com/mitchellh/go-homedir"
-	cli "gopkg.in/urfave/cli.v2"
+	cli "github.com/urfave/cli/v2"
 
 	"github.com/pkg/errors"
 )

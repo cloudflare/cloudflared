@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh/terminal"
-	"gopkg.in/urfave/cli.v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
@@ -38,7 +38,7 @@ EKx0BZogHSor9Wy5VztdFaAaVbsJiCbO
 )
 
 // BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
-// https://pkg.go.dev/gopkg.in/urfave/cli.v2?tab=doc#ExitCoder
+// https://pkg.go.dev/github.com/urfave/cli/v2?tab=doc#ExitCoder
 type statusSuccess struct {
 	newVersion string
 }

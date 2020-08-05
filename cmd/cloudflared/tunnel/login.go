@@ -12,7 +12,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	cli "gopkg.in/urfave/cli.v2"
+	cli "github.com/urfave/cli/v2"
 )
 
 const (

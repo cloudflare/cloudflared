@@ -4,7 +4,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunneldns"
 
-	"gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 
 	"github.com/pkg/errors"
 )

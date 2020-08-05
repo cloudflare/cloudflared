@@ -12,7 +12,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/pkg/errors"
-	cli "gopkg.in/urfave/cli.v2"
+	cli "github.com/urfave/cli/v2"
 )
 
 // StartForwarder starts a client side websocket forward

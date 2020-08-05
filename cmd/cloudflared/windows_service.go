@@ -14,7 +14,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
-	cli "gopkg.in/urfave/cli.v2"
+	cli "github.com/urfave/cli/v2"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"

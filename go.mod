@@ -56,6 +56,7 @@ require (
 	github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5 // indirect
 	github.com/stretchr/testify v1.3.0
 	github.com/tinylib/msgp v1.1.0 // indirect
+	github.com/urfave/cli/v2 v2.2.0
 	github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344
@@ -67,7 +68,7 @@ require (
 	google.golang.org/grpc v1.24.0 // indirect
 	gopkg.in/coreos/go-oidc.v2 v2.1.0
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
-	gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8
+	gopkg.in/urfave/cli.v2 v2.0.0-20180128181224-d604b6ffeee8 // indirect
 	gopkg.in/yaml.v2 v2.2.4
 	zombiezen.com/go/capnproto2 v2.18.0+incompatible
 )

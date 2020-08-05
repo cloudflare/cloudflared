@@ -11,7 +11,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
-	"gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 )
 
 const (
