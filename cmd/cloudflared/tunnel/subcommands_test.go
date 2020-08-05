@@ -41,6 +41,19 @@ func Test_fmtConnections(t *testing.T) {
 			want: "1xDFW",
 		},
 		{
+			name: "with a pending reconnect",
+			args: args{
+				connections: []tunnelstore.Connection{
+					{
+						ColoName:           "DFW",
+						ID:                 uuid.MustParse("ea550130-57fd-4463-aab1-752822231ddd"),
+						IsPendingReconnect: true,
+					},
+				},
+			},
+			want: "",
+		},
+		{
 			name: "many colos",
 			args: args{
 				connections: []tunnelstore.Connection{
@@ -67,7 +80,7 @@ func Test_fmtConnections(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := fmtConnections(tt.args.connections); got != tt.want {
+			if got := fmtConnections(tt.args.connections, false); got != tt.want {
 				t.Errorf("fmtConnections() = %v, want %v", got, tt.want)
 			}
 		})

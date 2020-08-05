@@ -53,6 +53,11 @@ var (
 		Aliases: []string{"i"},
 		Usage:   "List tunnel by ID",
 	}
+	showRecentlyDisconnected = &cli.BoolFlag{
+		Name:    "show-recently-disconnected",
+		Aliases: []string{"rd"},
+		Usage:   "Include connections that have recently disconnected in the list",
+	}
 	outputFormatFlag = &cli.StringFlag{
 		Name:    "output",
 		Aliases: []string{"o"},
@@ -234,7 +239,7 @@ func buildListCommand() *cli.Command {
 		Usage:     "List existing tunnels",
 		ArgsUsage: " ",
 		Hidden:    hideSubcommands,
-		Flags:     []cli.Flag{outputFormatFlag, showDeletedFlag, listNameFlag, listExistedAtFlag, listIDFlag},
+		Flags:     []cli.Flag{outputFormatFlag, showDeletedFlag, listNameFlag, listExistedAtFlag, listIDFlag, showRecentlyDisconnected},
 	}
 }
 
@@ -281,7 +286,7 @@ func listTunnels(c *cli.Context) error {
 	}
 
 	if len(tunnels) > 0 {
-		fmtAndPrintTunnelList(tunnels)
+		fmtAndPrintTunnelList(tunnels, c.Bool("show-recently-disconnected"))
 	} else {
 		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
 	}
@@ -289,7 +294,7 @@ func listTunnels(c *cli.Context) error {
 	return nil
 }
 
-func fmtAndPrintTunnelList(tunnels []tunnelstore.Tunnel) {
+func fmtAndPrintTunnelList(tunnels []tunnelstore.Tunnel, showRecentlyDisconnected bool) {
 	const (
 		minWidth = 0
 		tabWidth = 8
@@ -305,7 +310,13 @@ func fmtAndPrintTunnelList(tunnels []tunnelstore.Tunnel) {
 
 	// Loop through tunnels, create formatted string for each, and print using tabwriter
 	for _, t := range tunnels {
-		formattedStr := fmt.Sprintf("%s\t%s\t%s\t%s\t", t.ID, t.Name, t.CreatedAt.Format(time.RFC3339), fmtConnections(t.Connections))
+		formattedStr := fmt.Sprintf(
+			"%s\t%s\t%s\t%s\t",
+			t.ID,
+			t.Name,
+			t.CreatedAt.Format(time.RFC3339),
+			fmtConnections(t.Connections, showRecentlyDisconnected),
+		)
 		fmt.Fprintln(writer, formattedStr)
 	}
 
@@ -313,12 +324,14 @@ func fmtAndPrintTunnelList(tunnels []tunnelstore.Tunnel) {
 	writer.Flush()
 }
 
-func fmtConnections(connections []tunnelstore.Connection) string {
+func fmtConnections(connections []tunnelstore.Connection, showRecentlyDisconnected bool) string {
 
 	// Count connections per colo
 	numConnsPerColo := make(map[string]uint, len(connections))
 	for _, connection := range connections {
-		numConnsPerColo[connection.ColoName]++
+		if !connection.IsPendingReconnect || showRecentlyDisconnected {
+			numConnsPerColo[connection.ColoName]++
+		}
 	}
 
 	// Get sorted list of colos

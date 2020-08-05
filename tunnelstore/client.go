@@ -38,8 +38,9 @@ type Tunnel struct {
 }
 
 type Connection struct {
-	ColoName string    `json:"colo_name"`
-	ID       uuid.UUID `json:"uuid"`
+	ColoName           string    `json:"colo_name"`
+	ID                 uuid.UUID `json:"uuid"`
+	IsPendingReconnect bool      `json:"is_pending_reconnect"`
 }
 
 // Route represents a record type that can route to a tunnel
