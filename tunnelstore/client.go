@@ -117,7 +117,7 @@ type Client interface {
 	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	DeleteTunnel(tunnelID uuid.UUID) error
-	ListTunnels(filter *Filter) ([]Tunnel, error)
+	ListTunnels(filter *Filter) ([]*Tunnel, error)
 	CleanupConnections(tunnelID uuid.UUID) error
 	RouteTunnel(tunnelID uuid.UUID, route Route) error
 }
@@ -223,7 +223,7 @@ func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
 	return r.statusCodeToError("delete tunnel", resp)
 }
 
-func (r *RESTClient) ListTunnels(filter *Filter) ([]Tunnel, error) {
+func (r *RESTClient) ListTunnels(filter *Filter) ([]*Tunnel, error) {
 	endpoint := r.baseEndpoints.accountLevel
 	endpoint.RawQuery = filter.encode()
 	resp, err := r.sendRequest("GET", endpoint, nil)
@@ -233,7 +233,7 @@ func (r *RESTClient) ListTunnels(filter *Filter) ([]Tunnel, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		var tunnels []Tunnel
+		var tunnels []*Tunnel
 		if err := json.NewDecoder(resp.Body).Decode(&tunnels); err != nil {
 			return nil, errors.Wrap(err, "failed to decode response")
 		}

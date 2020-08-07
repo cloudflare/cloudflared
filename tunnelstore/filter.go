@@ -25,7 +25,7 @@ func (f *Filter) ByName(name string) {
 	f.queryParams.Set("name", name)
 }
 
-func (f *Filter) ShowDeleted() {
+func (f *Filter) NoDeleted() {
 	f.queryParams.Set("is_deleted", "false")
 }
 
