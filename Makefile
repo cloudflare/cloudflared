@@ -146,6 +146,11 @@ github-release: cloudflared
 github-message:
 	python3 github_message.py --release-version $(VERSION)
 
+.PHONY: github-mac-upload
+github-mac-upload:
+	python3 github_release.py --path .artifacts/cloudflared-darwin-amd64.tgz --release-version $(VERSION) --name cloudflared-darwin-amd64.tgz
+	python3 github_release.py --path .artifacts/cloudflared-amd64.pkg --release-version $(VERSION) --name cloudflared-amd64.pkg
+
 bin/equinox:
 	mkdir -p bin
 	curl -s https://bin.equinox.io/c/75JtLRTsJ3n/release-tool-beta-$(EQUINOX_PLATFORM).tgz | tar xz -C bin/

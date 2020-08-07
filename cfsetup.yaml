@@ -172,6 +172,15 @@ stretch: &stretch
       - export GOARCH=arm64
       - export CC=aarch64-linux-gnu-gcc
       - make github-release
+  github-release-macos-amd64:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - python3-setuptools
+      - python3-pip
+    post-cache:
+      - pip3 install pygithub
+      - make github-mac-upload
   test:
     build_dir: *build_dir
     builddeps:
