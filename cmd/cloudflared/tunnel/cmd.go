@@ -422,7 +422,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		return fmt.Errorf(errText)
 	}
 
-	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
+	if staticHost := hostFromURI(url); isProxyDestinationConfigured(staticHost, c) {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
 			logger.Errorf("Cannot start Websocket Proxy Server: %s", err)
@@ -570,7 +570,7 @@ func writePidFile(waitForSignal *signal.Signal, pidFile string, logger logger.Se
 	fmt.Fprintf(file, "%d", os.Getpid())
 }
 
-func hostnameFromURI(uri string) string {
+func hostFromURI(uri string) string {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return ""
