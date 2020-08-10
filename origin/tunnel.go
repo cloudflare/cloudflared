@@ -236,6 +236,10 @@ func ServeTunnelLoop(ctx context.Context,
 		)
 		if recoverable {
 			if duration, ok := backoff.GetBackoffDuration(ctx); ok {
+				if config.ConnEventChan != nil {
+					config.ConnEventChan <- ui.ConnEvent{Index: connectionIndex, EventType: ui.Reconnecting}
+				}
+
 				config.Logger.Infof("Retrying connection %d in %s seconds", connectionIndex, duration)
 				backoff.Backoff(ctx)
 				continue

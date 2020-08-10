@@ -18,6 +18,7 @@ type status int
 const (
 	Disconnected status = iota
 	Connected
+	Reconnecting
 )
 
 type ConnEvent struct {
@@ -39,6 +40,7 @@ type palette struct {
 	connected    string
 	defaultText  string
 	disconnected string
+	reconnecting string
 }
 
 func NewUIModel(version, hostname, metricsURL, proxyURL string, haConnections int) *uiModel {
@@ -52,7 +54,7 @@ func NewUIModel(version, hostname, metricsURL, proxyURL string, haConnections in
 }
 
 func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, connEventChan <-chan ConnEvent) {
-	palette := palette{url: "#4682B4", connected: "#00FF00", defaultText: "white", disconnected: "red"}
+	palette := palette{url: "#4682B4", connected: "#00FF00", defaultText: "white", disconnected: "red", reconnecting: "orange"}
 
 	app := tview.NewApplication()
 
@@ -96,7 +98,7 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, connEv
 				switch conn.EventType {
 				case Connected:
 					data.setConnTableCell(conn, connTable, palette)
-				case Disconnected:
+				case Disconnected, Reconnecting:
 					data.changeConnStatus(conn, connTable, logger, palette)
 				}
 			}
@@ -117,7 +119,7 @@ func newDynamicColorTextView() *tview.TextView {
 
 func (data *uiModel) changeConnStatus(conn ConnEvent, table *tview.Table, logger logger.Service, palette palette) {
 	index := int(conn.Index)
-	// Get table row and connection location
+	// Get connection location and state
 	connState := data.getConnState(index)
 	// Check if connection is already displayed in UI
 	if connState == nil {
@@ -125,12 +127,20 @@ func (data *uiModel) changeConnStatus(conn ConnEvent, table *tview.Table, logger
 		return
 	}
 
-	connState.state = Disconnected
+	locationState := conn.Location
+
+	if conn.EventType == Disconnected {
+		connState.state = Disconnected
+	} else if conn.EventType == Reconnecting {
+		connState.state = Reconnecting
+		locationState = "Reconnecting..."
+	}
+
 	connectionNum := index + 1
 	// Get table cell
 	cell := table.GetCell(index, 0)
-	// Change text in cell to have red dot in front
-	text := newCellText(palette, connectionNum, connState.location, false)
+	// Change dot color in front of text as well as location state
+	text := newCellText(palette, connectionNum, locationState, conn.EventType)
 	cell.SetText(text)
 }
 
@@ -152,17 +162,22 @@ func (data *uiModel) setConnTableCell(conn ConnEvent, table *tview.Table, palett
 	data.connections[index].location = conn.Location
 
 	// Update text in table cell to show disconnected state
-	text := newCellText(palette, connectionNum, conn.Location, true)
+	text := newCellText(palette, connectionNum, conn.Location, conn.EventType)
 	cell := tview.NewTableCell(text)
 	table.SetCell(index, 0, cell)
 }
 
-func newCellText(palette palette, connectionNum int, location string, connected bool) string {
+func newCellText(palette palette, connectionNum int, location string, connectedStatus status) string {
 	const connFmtString = "[%s]\u2022[%s] #%d: %s"
 
-	dotColor := palette.disconnected
-	if connected {
+	var dotColor string
+	switch connectedStatus {
+	case Connected:
 		dotColor = palette.connected
+	case Disconnected:
+		dotColor = palette.disconnected
+	case Reconnecting:
+		dotColor = palette.reconnecting
 	}
 
 	return fmt.Sprintf(connFmtString, dotColor, palette.defaultText, connectionNum, location)
