@@ -86,6 +86,7 @@ func createWebsocketStream(options *StartOptions, logger logger.Service) (*cfweb
 
 	wsConn, resp, err := cfwebsocket.ClientConnect(req, nil)
 	defer closeRespBody(resp)
+
 	if err != nil && IsAccessResponse(resp) {
 		wsConn, err = createAccessAuthenticatedStream(options, logger)
 		if err != nil {
@@ -141,5 +142,16 @@ func createAccessWebSocketStream(options *StartOptions, logger logger.Service) (
 	dump, err := httputil.DumpRequest(req, false)
 	logger.Debugf("Access Websocket request: %s", string(dump))
 
-	return cfwebsocket.ClientConnect(req, nil)
+	conn, resp, err := cfwebsocket.ClientConnect(req, nil)
+
+	if resp != nil {
+		r, err := httputil.DumpResponse(resp, true)
+		if r != nil {
+			logger.Debugf("Websocket response: %q", r)
+		} else if err != nil {
+			logger.Debugf("Websocket response error: %v", err)
+		}
+	}
+
+	return conn, resp, err
 }
