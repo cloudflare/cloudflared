@@ -13,7 +13,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/equinox-io/equinox"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/pkg/errors"
 )
@@ -25,16 +24,12 @@ const (
 	noUpdateOnWindowsMessage      = "cloudflared will not automatically update on Windows systems."
 	noUpdateManagedPackageMessage = "cloudflared will not automatically update if installed by a package manager."
 	isManagedInstallFile          = ".installedFromPackageManager"
+	UpdateURL                     = "https://update.argotunnel.com"
+	StagingUpdateURL              = "https://staging-update.argotunnel.com"
 )
 
 var (
-	publicKey = []byte(`
------BEGIN ECDSA PUBLIC KEY-----
-MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE4OWZocTVZ8Do/L6ScLdkV+9A0IYMHoOf
-dsCmJ/QZ6aw0w9qkkwEpne1Lmo6+0pGexZzFZOH6w5amShn+RXt7qkSid9iWlzGq
-EKx0BZogHSor9Wy5VztdFaAaVbsJiCbO
------END ECDSA PUBLIC KEY-----
-`)
+	version string
 )
 
 // BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
@@ -64,6 +59,13 @@ func (e *statusErr) ExitCode() int {
 	return 10
 }
 
+type updateOptions struct {
+	isBeta    bool
+	isStaging bool
+	isForced  bool
+	version   string
+}
+
 type UpdateOutcome struct {
 	Updated bool
 	Version string
@@ -74,29 +76,44 @@ func (uo *UpdateOutcome) noUpdate() bool {
 	return uo.Error == nil && uo.Updated == false
 }
 
-func checkForUpdateAndApply() UpdateOutcome {
-	var opts equinox.Options
-	if err := opts.SetPublicKeyPEM(publicKey); err != nil {
-		return UpdateOutcome{Error: err}
-	}
+func Init(v string) {
+	version = v
+}
 
-	resp, err := equinox.Check(appID, opts)
-	switch {
-	case err == equinox.NotAvailableErr:
-		return UpdateOutcome{}
-	case err != nil:
-		return UpdateOutcome{Error: err}
-	}
-
-	err = resp.Apply()
+func checkForUpdateAndApply(options updateOptions) UpdateOutcome {
+	cfdPath, err := os.Executable()
 	if err != nil {
 		return UpdateOutcome{Error: err}
 	}
 
-	return UpdateOutcome{Updated: true, Version: resp.ReleaseVersion}
+	url := UpdateURL
+	if options.isStaging {
+		url = StagingUpdateURL
+	}
+
+	s := NewWorkersService(version, url, cfdPath, Options{IsBeta: options.isBeta,
+		IsForced: options.isForced, RequestedVersion: options.version})
+
+	v, err := s.Check()
+	if err != nil {
+		return UpdateOutcome{Error: err}
+	}
+
+	//already on the latest version
+	if v == nil {
+		return UpdateOutcome{}
+	}
+
+	err = v.Apply()
+	if err != nil {
+		return UpdateOutcome{Error: err}
+	}
+
+	return UpdateOutcome{Updated: true, Version: v.String()}
 }
 
-func Update(_ *cli.Context) error {
+// Update is the handler for the update command from the command line
+func Update(c *cli.Context) error {
 	logger, err := logger.New()
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
@@ -107,7 +124,22 @@ func Update(_ *cli.Context) error {
 		return nil
 	}
 
-	updateOutcome := loggedUpdate(logger)
+	isBeta := c.Bool("beta")
+	if isBeta {
+		logger.Info("cloudflared is set to update to the latest beta version")
+	}
+
+	isStaging := c.Bool("staging")
+	if isStaging {
+		logger.Info("cloudflared is set to update from staging")
+	}
+
+	isForced := c.Bool("force")
+	if isForced {
+		logger.Info("cloudflared is set to upgrade to the latest publish version regardless of the current version")
+	}
+
+	updateOutcome := loggedUpdate(logger, updateOptions{isBeta: isBeta, isStaging: isStaging, isForced: isForced, version: c.String("version")})
 	if updateOutcome.Error != nil {
 		return &statusErr{updateOutcome.Error}
 	}
@@ -121,8 +153,8 @@ func Update(_ *cli.Context) error {
 }
 
 // Checks for an update and applies it if one is available
-func loggedUpdate(logger logger.Service) UpdateOutcome {
-	updateOutcome := checkForUpdateAndApply()
+func loggedUpdate(logger logger.Service, options updateOptions) UpdateOutcome {
+	updateOutcome := checkForUpdateAndApply(options)
 	if updateOutcome.Updated {
 		logger.Infof("cloudflared has been updated to version %s", updateOutcome.Version)
 	}
@@ -168,7 +200,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
 	for {
 		if a.configurable.enabled {
-			updateOutcome := loggedUpdate(a.logger)
+			updateOutcome := loggedUpdate(a.logger, updateOptions{})
 			if updateOutcome.Updated {
 				os.Args = append(os.Args, "--is-autoupdated=true")
 				if IsSysV() {

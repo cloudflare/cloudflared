@@ -81,16 +81,37 @@ func main() {
 
 	tunnel.Init(Version, shutdownC, graceShutdownC) // we need this to support the tunnel sub command...
 	access.Init(shutdownC, graceShutdownC)
+	updater.Init(Version)
 	runApp(app, shutdownC, graceShutdownC)
 }
 
 func commands(version func(c *cli.Context)) []*cli.Command {
 	cmds := []*cli.Command{
 		{
-			Name:      "update",
-			Action:    cliutil.ErrorHandler(updater.Update),
-			Usage:     "Update the agent if a new version exists",
-			ArgsUsage: " ",
+			Name:   "update",
+			Action: cliutil.ErrorHandler(updater.Update),
+			Usage:  "Update the agent if a new version exists",
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "beta",
+					Usage: "specify if you wish to update to the latest beta version",
+				},
+				&cli.BoolFlag{
+					Name:   "force",
+					Usage:  "specify if you wish to force an upgrade to the latest version regardless of the current version",
+					Hidden: true,
+				},
+				&cli.BoolFlag{
+					Name:   "staging",
+					Usage:  "specify if you wish to use the staging url for updating",
+					Hidden: true,
+				},
+				&cli.StringFlag{
+					Name:   "version",
+					Usage:  "specify a version you wish to upgrade or downgrade to",
+					Hidden: false,
+				},
+			},
 			Description: `Looks for a new version on the official download server.
 If a new version exists, updates the agent binary and quits.
 Otherwise, does nothing.

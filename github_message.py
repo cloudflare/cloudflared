@@ -97,7 +97,7 @@ def main():
 
         msg = release.body
 
-        for filename in glob.glob(".artifacts/*.*"):
+        for filename in glob.glob("artifacts/*.*"):
             pkg_hash = get_sha256(filename)
             # add the sha256 of the new artifact to the release message body
             msg = update_or_add_message(msg, filename, pkg_hash)

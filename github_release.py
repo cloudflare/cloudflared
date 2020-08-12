@@ -9,6 +9,7 @@ import os
 import shutil
 import hashlib
 import requests
+import tarfile
 
 from github import Github, GithubException, UnknownObjectException
 
@@ -175,8 +176,21 @@ def main():
 
         release.upload_asset(args.path, name=args.name)
 
+        # check and extract if the file is a tar and gzipped file (as is the case with the macos builds)
+        binary_path = args.path
+        if binary_path.endswith("tgz"):
+            try:
+                shutil.rmtree('cfd') 
+            except OSError as e:
+                pass
+            zipfile = tarfile.open(binary_path, "r:gz")
+            zipfile.extractall('cfd') # specify which folder to extract to
+            zipfile.close()
+
+            binary_path = os.path.join(os.getcwd(), 'cfd', 'cloudflared') 
+
         # send the sha256 (the checksum) to workers kv
-        pkg_hash = get_sha256(args.path)
+        pkg_hash = get_sha256(binary_path)
         send_hash(pkg_hash, args.name, args.release_version, args.kv_account_id, args.namespace_id, args.kv_api_token)
 
         # create the artifacts directory if it doesn't exist 
@@ -186,7 +200,8 @@ def main():
 
         # copy the binary to the path
         copy_path = os.path.join(artifact_path, args.name)
-        shutil.copy(args.path, copy_path)
+        if args.path != copy_path:
+            shutil.copy(args.path, copy_path)
 
 
 
