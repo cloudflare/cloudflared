@@ -3,6 +3,7 @@ package logger
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -106,7 +107,7 @@ func New(opts ...Option) (Service, error) {
 
 	l := NewOutputWriter(SharedWriteManager)
 	if config.logFileDirectory != "" {
-		l.Add(NewFileRollingWriter(config.logFileDirectory,
+		l.Add(NewFileRollingWriter(SanitizeLogPath(config.logFileDirectory),
 			"cloudflared",
 			int64(config.maxFileSize),
 			config.maxFileCount),
@@ -138,4 +139,14 @@ func ParseLevelString(lvl string) ([]Level, error) {
 		return []Level{FatalLevel, ErrorLevel, InfoLevel, DebugLevel}, nil
 	}
 	return []Level{}, fmt.Errorf("not a valid log level: %q", lvl)
+}
+
+// SanitizeLogPath checks that the logger log path
+func SanitizeLogPath(path string) string {
+	newPath := strings.TrimSpace(path)
+	// make sure it has a log file extension and is not a directory
+	if filepath.Ext(newPath) != ".log" && !(isDirectory(newPath) || strings.HasSuffix(newPath, "/")) {
+		newPath = newPath + ".log"
+	}
+	return newPath
 }
