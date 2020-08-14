@@ -125,7 +125,7 @@ func (sc *subcommandContext) tunnelCredentialsPath(tunnelID uuid.UUID) (string, 
 	}
 
 	// Last resort look under default config directories
-	for _, configDir := range config.DefaultConfigDirs {
+	for _, configDir := range config.DefaultConfigSearchDirectories() {
 		if filePath, err := tunnelFilePath(tunnelID, configDir); err == nil {
 			if validFilePath(filePath) {
 				return filePath, nil

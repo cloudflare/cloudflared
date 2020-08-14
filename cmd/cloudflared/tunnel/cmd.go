@@ -254,7 +254,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
-		logger.Infof("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
+		logger.Infof("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigSearchDirectories())
 	}
 
 	if c.IsSet("trace-output") {
@@ -499,7 +499,7 @@ func Before(c *cli.Context) error {
 	}
 
 	if c.String("config") == "" {
-		logger.Debugf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigDirs)
+		logger.Debugf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigSearchDirectories())
 	}
 	inputSource, err := config.FindInputSourceContext(c)
 	if err != nil {

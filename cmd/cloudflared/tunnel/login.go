@@ -51,7 +51,7 @@ func login(c *cli.Context) error {
 }
 
 func checkForExistingCert() (string, bool, error) {
-	configPath, err := homedir.Expand(config.DefaultConfigDirs[0])
+	configPath, err := homedir.Expand(config.DefaultConfigSearchDirectories()[0])
 	if err != nil {
 		return "", false, err
 	}

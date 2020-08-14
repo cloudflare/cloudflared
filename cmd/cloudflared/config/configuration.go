@@ -26,7 +26,8 @@ var (
 
 	// Launchd doesn't set root env variables, so there is default
 	// Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
-	DefaultConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp", "/etc/cloudflared", DefaultUnixConfigLocation}
+	defaultUserConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp"}
+	defaultNixConfigDirs  = []string{"/etc/cloudflared", DefaultUnixConfigLocation}
 )
 
 const DefaultCredentialFile = "cert.pem"
@@ -63,6 +64,16 @@ func DefaultConfigPath() string {
 	return filepath.Join(dir, DefaultConfigFiles[0])
 }
 
+// DefaultConfigSearchDirectories returns the default folder locations of the config
+func DefaultConfigSearchDirectories() []string {
+	dirs := make([]string, len(defaultUserConfigDirs))
+	copy(dirs, defaultUserConfigDirs)
+	if runtime.GOOS != "windows" {
+		dirs = append(dirs, defaultNixConfigDirs...)
+	}
+	return dirs
+}
+
 // FileExists checks to see if a file exist at the provided path.
 func FileExists(path string) (bool, error) {
 	f, err := os.Open(path)
@@ -86,10 +97,10 @@ func FindInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, er
 }
 
 // FindDefaultConfigPath returns the first path that contains a config file.
-// If none of the combination of DefaultConfigDirs and DefaultConfigFiles
+// If none of the combination of DefaultConfigSearchDirectories() and DefaultConfigFiles
 // contains a config file, return empty string.
 func FindDefaultConfigPath() string {
-	for _, configDir := range DefaultConfigDirs {
+	for _, configDir := range DefaultConfigSearchDirectories() {
 		for _, configFile := range DefaultConfigFiles {
 			dirPath, err := homedir.Expand(configDir)
 			if err != nil {

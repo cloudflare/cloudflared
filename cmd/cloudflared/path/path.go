@@ -13,7 +13,7 @@ import (
 
 // GenerateFilePathFromURL will return a filepath for given access application url
 func GenerateFilePathFromURL(url *url.URL, suffix string) (string, error) {
-	configPath, err := homedir.Expand(config.DefaultConfigDirs[0])
+	configPath, err := homedir.Expand(config.DefaultConfigSearchDirectories()[0])
 	if err != nil {
 		return "", err
 	}
