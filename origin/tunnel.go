@@ -500,7 +500,7 @@ func RegisterTunnel(
 	serverInfoPromise := tunnelrpc.TunnelServer{Client: tunnelServer.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
+	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger, config.TunnelEventChan)
 	registration := tunnelServer.RegisterTunnel(
 		ctx,
 		config.OriginCert,
@@ -588,6 +588,7 @@ func LogServerInfo(
 	connectionID uint8,
 	metrics *TunnelMetrics,
 	logger logger.Service,
+	tunnelEventChan chan<- ui.TunnelEvent,
 ) {
 	serverInfoMessage, err := promise.Struct()
 	if err != nil {
@@ -598,6 +599,10 @@ func LogServerInfo(
 	if err != nil {
 		logger.Errorf("Failed to retrieve server information: %s", err)
 		return
+	}
+	// If launch-ui flag is set, send connect msg
+	if tunnelEventChan != nil {
+		tunnelEventChan <- ui.TunnelEvent{Index: connectionID, EventType: ui.Connected, Location: serverInfo.LocationName}
 	}
 	logger.Infof("Connected to %s", serverInfo.LocationName)
 	metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
