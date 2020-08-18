@@ -90,16 +90,6 @@ type TunnelConfig struct {
 	ReplaceExisting bool
 }
 
-// ReconnectTunnelCredentialManager is invoked by functions in this file to
-// get/set parameters for ReconnectTunnel RPC calls.
-type ReconnectTunnelCredentialManager interface {
-	ReconnectToken() ([]byte, error)
-	EventDigest() ([]byte, error)
-	SetEventDigest(eventDigest []byte)
-	ConnDigest(connID uint8) ([]byte, error)
-	SetConnDigest(connID uint8, connDigest []byte)
-}
-
 type dupConnRegisterTunnelError struct{}
 
 var errDuplicationConnection = &dupConnRegisterTunnelError{}
@@ -209,7 +199,7 @@ func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSigna
 }
 
 func ServeTunnelLoop(ctx context.Context,
-	credentialManager ReconnectTunnelCredentialManager,
+	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	addr *net.TCPAddr,
 	connectionIndex uint8,
@@ -255,7 +245,7 @@ func ServeTunnelLoop(ctx context.Context,
 
 func ServeTunnel(
 	ctx context.Context,
-	credentialManager ReconnectTunnelCredentialManager,
+	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	logger logger.Service,
 	addr *net.TCPAddr,
@@ -310,24 +300,12 @@ func ServeTunnel(
 		}
 
 		if config.UseReconnectToken && connectedFuse.Value() {
-			token, tokenErr := credentialManager.ReconnectToken()
-			eventDigest, eventDigestErr := credentialManager.EventDigest()
-			// if we have both credentials, we can reconnect
-			if tokenErr == nil && eventDigestErr == nil {
-				var connDigest []byte
-				if digest, connDigestErr := credentialManager.ConnDigest(connectionIndex); connDigestErr == nil {
-					connDigest = digest
-				}
-
-				return ReconnectTunnel(serveCtx, token, eventDigest, connDigest, handler.muxer, config, logger, connectionIndex, originLocalAddr, cloudflaredUUID, credentialManager)
+			err := ReconnectTunnel(serveCtx, handler.muxer, config, logger, connectionIndex, originLocalAddr, cloudflaredUUID, credentialManager)
+			if err == nil {
+				return nil
 			}
 			// log errors and proceed to RegisterTunnel
-			if tokenErr != nil {
-				logger.Errorf("Couldn't get reconnect token: %s", tokenErr)
-			}
-			if eventDigestErr != nil {
-				logger.Errorf("Couldn't get event digest: %s", eventDigestErr)
-			}
+			logger.Errorf("Couldn't reconnect connection %d. Reregistering it instead. Error was: %v", connectionIndex, err)
 		}
 		return RegisterTunnel(serveCtx, credentialManager, handler.muxer, config, logger, connectionIndex, originLocalAddr, cloudflaredUUID)
 	})
@@ -482,7 +460,7 @@ func UnregisterConnection(
 
 func RegisterTunnel(
 	ctx context.Context,
-	credentialManager ReconnectTunnelCredentialManager,
+	credentialManager *reconnectCredentialManager,
 	muxer *h2mux.Muxer,
 	config *TunnelConfig,
 	logger logger.Service,
@@ -512,47 +490,8 @@ func RegisterTunnel(
 		// RegisterTunnel RPC failure
 		return processRegisterTunnelError(registrationErr, config.Metrics, register)
 	}
-	credentialManager.SetEventDigest(registration.EventDigest)
+	credentialManager.SetEventDigest(connectionID, registration.EventDigest)
 	return processRegistrationSuccess(config, logger, connectionID, registration, register, credentialManager)
-}
-
-func ReconnectTunnel(
-	ctx context.Context,
-	token []byte,
-	eventDigest, connDigest []byte,
-	muxer *h2mux.Muxer,
-	config *TunnelConfig,
-	logger logger.Service,
-	connectionID uint8,
-	originLocalAddr string,
-	uuid uuid.UUID,
-	credentialManager ReconnectTunnelCredentialManager,
-) error {
-	config.TransportLogger.Debug("initiating RPC stream to reconnect")
-	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger, openStreamTimeout)
-	if err != nil {
-		// RPC stream open error
-		return newClientRegisterTunnelError(err, config.Metrics.rpcFail, reconnect)
-	}
-	defer tunnelServer.Close()
-	// Request server info without blocking tunnel registration; must use capnp library directly.
-	serverInfoPromise := tunnelrpc.TunnelServer{Client: tunnelServer.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
-		return nil
-	})
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
-	registration := tunnelServer.ReconnectTunnel(
-		ctx,
-		token,
-		eventDigest,
-		connDigest,
-		config.Hostname,
-		config.RegistrationOptions(connectionID, originLocalAddr, uuid),
-	)
-	if registrationErr := registration.DeserializeError(); registrationErr != nil {
-		// ReconnectTunnel RPC failure
-		return processRegisterTunnelError(registrationErr, config.Metrics, reconnect)
-	}
-	return processRegistrationSuccess(config, logger, connectionID, registration, reconnect, credentialManager)
 }
 
 func processRegistrationSuccess(
@@ -561,7 +500,7 @@ func processRegistrationSuccess(
 	connectionID uint8,
 	registration *tunnelpogs.TunnelRegistration,
 	name registerRPCName,
-	credentialManager ReconnectTunnelCredentialManager,
+	credentialManager *reconnectCredentialManager,
 ) error {
 	for _, logLine := range registration.LogLines {
 		logger.Info(logLine)
