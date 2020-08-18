@@ -174,6 +174,9 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 	if name == "" {
 		return nil, errors.New("tunnel name required")
 	}
+	if _, err := uuid.Parse(name); err == nil {
+		return nil, errors.New("you cannot use UUIDs as tunnel names")
+	}
 	body := &newTunnel{
 		Name:         name,
 		TunnelSecret: tunnelSecret,

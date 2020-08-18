@@ -372,18 +372,18 @@ func randomASCIIPrintableChar(rand *rand.Rand) int {
 // between 1 and `maxLength`.
 func randomASCIIText(rand *rand.Rand, minLength int, maxLength int) string {
 	length := minLength + rand.Intn(maxLength)
-	result := ""
+	var result strings.Builder
 	for i := 0; i < length; i++ {
 		c := randomASCIIPrintableChar(rand)
 
 		// 1/4 chance of using percent encoding when not necessary
 		if c == '%' || rand.Intn(4) == 0 {
-			result += fmt.Sprintf("%%%02X", c)
+			result.WriteString(fmt.Sprintf("%%%02X", c))
 		} else {
-			result += string(c)
+			result.WriteByte(byte(c))
 		}
 	}
-	return result
+	return result.String()
 }
 
 // Calls `randomASCIIText` and ensures the result is a valid URL path,
@@ -663,7 +663,7 @@ func BenchmarkH1ResponseToH2ResponseHeaders(b *testing.B) {
 
 	h1resp := &http.Response{
 		StatusCode: 200,
-		Header: h1,
+		Header:     h1,
 	}
 
 	b.ReportAllocs()
@@ -672,4 +672,3 @@ func BenchmarkH1ResponseToH2ResponseHeaders(b *testing.B) {
 		_ = H1ResponseToH2ResponseHeaders(h1resp)
 	}
 }
-

@@ -138,17 +138,17 @@ func (sc *subcommandContext) tunnelCredentialsPath(tunnelID uuid.UUID) (string, 
 func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {
 	client, err := sc.client()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "couldn't create client to talk to Argo Tunnel backend")
 	}
 
 	tunnelSecret, err := generateTunnelSecret()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "couldn't generate the secret for your new tunnel")
 	}
 
 	tunnel, err := client.CreateTunnel(name, tunnelSecret)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Create Tunnel API call failed")
 	}
 
 	credential, err := sc.credential()
@@ -279,4 +279,62 @@ func (sc *subcommandContext) tunnelActive(name string) (*tunnelstore.Tunnel, boo
 	}
 	// There should only be 1 active tunnel for a given name
 	return tunnels[0], true, nil
+}
+
+// findID parses the input. If it's a UUID, return the UUID.
+// Otherwise, assume it's a name, and look up the ID of that tunnel.
+func (sc *subcommandContext) findID(input string) (uuid.UUID, error) {
+	if u, err := uuid.Parse(input); err == nil {
+		return u, nil
+	}
+
+	if tunnel, found, err := sc.tunnelActive(input); err != nil {
+		return uuid.Nil, err
+	} else if found {
+		return tunnel.ID, nil
+	}
+
+	return uuid.Nil, fmt.Errorf("%s is neither the ID nor the name of any of your tunnels", input)
+}
+
+// findIDs is just like mapping `findID` over a slice, but it only uses
+// one Tunnelstore API call.
+func (sc *subcommandContext) findIDs(inputs []string) ([]uuid.UUID, error) {
+
+	// First, look up all tunnels the user has
+	filter := tunnelstore.NewFilter()
+	filter.NoDeleted()
+	tunnels, err := sc.list(filter)
+	if err != nil {
+		return nil, err
+	}
+	// Do the pure list-processing in its own function, so that it can be
+	// unit tested easily.
+	return findIDs(tunnels, inputs)
+}
+
+func findIDs(tunnels []*tunnelstore.Tunnel, inputs []string) ([]uuid.UUID, error) {
+	// Put them into a dictionary for faster lookups
+	nameToID := make(map[string]uuid.UUID, len(tunnels))
+	for _, tunnel := range tunnels {
+		nameToID[tunnel.Name] = tunnel.ID
+	}
+
+	// For each input, try to find the tunnel ID.
+	tunnelIDs := make([]uuid.UUID, len(inputs))
+	var badInputs []string
+	for i, input := range inputs {
+		if id, err := uuid.Parse(input); err == nil {
+			tunnelIDs[i] = id
+		} else if id, ok := nameToID[input]; ok {
+			tunnelIDs[i] = id
+		} else {
+			badInputs = append(badInputs, input)
+		}
+	}
+	if len(badInputs) > 0 {
+		msg := "Please specify either the ID or name of a tunnel. The following inputs were neither: %s"
+		return nil, fmt.Errorf(msg, strings.Join(badInputs, ", "))
+	}
+	return tunnelIDs, nil
 }

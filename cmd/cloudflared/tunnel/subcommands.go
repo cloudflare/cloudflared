@@ -272,28 +272,15 @@ func deleteCommand(c *cli.Context) error {
 	}
 
 	if c.NArg() < 1 {
-		return cliutil.UsageError(`"cloudflared tunnel delete" requires at least argument, the ID of the tunnel to delete.`)
+		return cliutil.UsageError(`"cloudflared tunnel delete" requires at least 1 argument, the ID or name of the tunnel to delete.`)
 	}
 
-	tunnelIDs, err := tunnelIDsFromArgs(c)
+	tunnelIDs, err := sc.findIDs(c.Args().Slice())
 	if err != nil {
 		return err
 	}
 
 	return sc.delete(tunnelIDs)
-}
-
-func tunnelIDsFromArgs(c *cli.Context) ([]uuid.UUID, error) {
-	tunnelIDs := make([]uuid.UUID, 0, c.NArg())
-	for i := 0; i < c.NArg(); i++ {
-		tunnelID, err := uuid.Parse(c.Args().Get(i))
-		if err != nil {
-			return nil, err
-		}
-		tunnelIDs = append(tunnelIDs, tunnelID)
-	}
-	return tunnelIDs, nil
-
 }
 
 func renderOutput(format string, v interface{}) error {
@@ -327,7 +314,7 @@ func runCommand(c *cli.Context) error {
 	}
 
 	if c.NArg() != 1 {
-		return cliutil.UsageError(`"cloudflared tunnel run" requires exactly 1 argument, the ID of the tunnel to run.`)
+		return cliutil.UsageError(`"cloudflared tunnel run" requires exactly 1 argument, the ID or name of the tunnel to run.`)
 	}
 	tunnelID, err := uuid.Parse(c.Args().First())
 	if err != nil {
@@ -357,7 +344,7 @@ func cleanupCommand(c *cli.Context) error {
 		return err
 	}
 
-	tunnelIDs, err := tunnelIDsFromArgs(c)
+	tunnelIDs, err := sc.findIDs(c.Args().Slice())
 	if err != nil {
 		return err
 	}
@@ -417,15 +404,15 @@ func lbRouteFromArg(c *cli.Context, tunnelID uuid.UUID) (tunnelstore.Route, erro
 
 func routeCommand(c *cli.Context) error {
 	if c.NArg() < 2 {
-		return cliutil.UsageError(`"cloudflared tunnel route" requires the first argument to be the route type(dns or lb), followed by the ID of the tunnel`)
+		return cliutil.UsageError(`"cloudflared tunnel route" requires the first argument to be the route type(dns or lb), followed by the ID or name of the tunnel`)
 	}
-	const tunnelIDIndex = 1
-	tunnelID, err := uuid.Parse(c.Args().Get(tunnelIDIndex))
+	sc, err := newSubcommandContext(c)
 	if err != nil {
-		return errors.Wrap(err, "error parsing tunnel ID")
+		return err
 	}
 
-	sc, err := newSubcommandContext(c)
+	const tunnelIDIndex = 1
+	tunnelID, err := sc.findID(c.Args().Get(tunnelIDIndex))
 	if err != nil {
 		return err
 	}
