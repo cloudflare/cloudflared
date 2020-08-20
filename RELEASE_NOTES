@@ -1,3 +1,7 @@
+2020.8.2
+- 2020-08-20 AUTH-3021 fixed the git version call by using the older flag
+- 2020-08-18 TUN-3268: Each connection has its own event digest to reconnect
+
 2020.8.1
 - 2020-08-14 AUTH-2975 don't check /etc on windows
 - 2020-08-14 AUTH-2977 log file protection
