@@ -1,4 +1,4 @@
-VERSION       := $(shell git describe --tags --always --dirty="-dev" --exclude "w*")
+VERSION       := $(shell git describe --tags --always --dirty="-dev" --match "[0-9][0-9][0-9][0-9].*.*")
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
