@@ -107,7 +107,7 @@ def main():
             return
 
         # update the release body text
-        release.update_release(version, version, msg)
+        release.update_release(args.release_version, args.release_version, msg)
 
     except Exception as e:
         logging.exception(e)
