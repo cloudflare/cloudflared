@@ -1,3 +1,18 @@
+2020.8.1
+- 2020-08-14 AUTH-2975 don't check /etc on windows
+- 2020-08-14 AUTH-2977 log file protection
+- 2020-08-18 TUN-3286: Use either ID or name in Named Tunnel subcommands.
+- 2020-08-18 AUTH-2712 fixed the mac build script
+- 2020-08-19 AUTH-2653 disabling signing until we can get the keys
+- 2020-08-05 TUN-3233: List tunnels support filtering by deleted, name, existed at and id
+- 2020-08-05 TUN-3237: By default, don't show connections that are pending reconnect
+- 2020-08-06 TUN-3242: Build with go 1.14
+- 2020-08-07 TUN-3243: Refactor tunnel subcommands to allow commands to compose better
+- 2020-08-07 AUTH-2864 - add macos build to github release
+- 2020-07-31 AUTH-2857 update homebrew script to use new url
+- 2020-07-30 TUN-3213: Create, route and run named tunnels in one command
+- 2020-07-07 AUTH-2712 added MSI build for a windows agent
+
 2020.8.0
 - 2020-07-30 TUN-3220: tunnel route reports created route
 - 2020-07-31 TUN-3221: ConnectionOptions tracks numPreviousAttempts.
