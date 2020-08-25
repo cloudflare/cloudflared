@@ -174,7 +174,7 @@ func ReconnectTunnel(
 	serverInfoPromise := tunnelrpc.TunnelServer{Client: tunnelServer.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger)
+	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger, config.TunnelEventChan)
 	registration := tunnelServer.ReconnectTunnel(
 		ctx,
 		token,
