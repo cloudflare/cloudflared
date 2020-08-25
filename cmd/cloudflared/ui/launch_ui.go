@@ -91,9 +91,13 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 	grid.AddItem(connTable, 2, 1, 1, 1, 0, 0, false)
 
 	grid.AddItem(NewDynamicColorTextView().SetText(fmt.Sprintf("Metrics at [%s::b]%s/metrics", palette.url, data.metricsURL)), 3, 1, 1, 1, 0, 0, false)
+
 	// Add TextView to stream logs
-	// LOGS header is displayed in bold
-	grid.AddItem(logTextView.SetText("[::b]LOGS:[::-]\n\n").SetChangedFunc(handleNewText(app, logTextView)), 4, 0, 5, 2, 0, 0, false)
+	// Logs are displayed in a new grid so a border can be set around them
+	logGrid := tview.NewGrid().SetBorders(true).AddItem(logTextView.SetChangedFunc(handleNewText(app, logTextView)), 0, 0, 5, 2, 0, 0, false)
+	// LogFrame holds the Logs header as well as the grid with the textView for streamed logs
+	logFrame := tview.NewFrame(logGrid).AddText("[::b]Logs:[::-]", true, tview.AlignLeft, tcell.ColorWhite).SetBorders(0, 0, 0, 0, 0, 0)
+	grid.AddItem(logFrame, 4, 0, 5, 2, 0, 0, false)
 
 	go func() {
 		for {
