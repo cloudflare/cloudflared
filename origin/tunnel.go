@@ -537,15 +537,17 @@ func processRegistrationSuccess(
 		logger.Infof("Each HA connection's tunnel IDs: %v", config.Metrics.tunnelsHA.String())
 	}
 
-	// Print out the user's trial zone URL in a nice box (if they requested and got one)
-	if isTrialTunnel := config.Hostname == ""; isTrialTunnel {
-		if url, err := url.Parse(registration.Url); err == nil {
-			for _, line := range asciiBox(trialZoneMsg(url.String()), 2) {
-				logger.Info(line)
+	// Print out the user's trial zone URL in a nice box (if they requested and got one and UI flag is not set)
+	if config.TunnelEventChan == nil {
+		if isTrialTunnel := config.Hostname == ""; isTrialTunnel {
+			if url, err := url.Parse(registration.Url); err == nil {
+				for _, line := range asciiBox(trialZoneMsg(url.String()), 2) {
+					logger.Info(line)
+				}
+			} else {
+				logger.Error("Failed to connect tunnel, please try again.")
+				return fmt.Errorf("empty URL in response from Cloudflare edge")
 			}
-		} else {
-			logger.Error("Failed to connect tunnel, please try again.")
-			return fmt.Errorf("empty URL in response from Cloudflare edge")
 		}
 	}
 
