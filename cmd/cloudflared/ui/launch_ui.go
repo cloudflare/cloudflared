@@ -97,6 +97,8 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 	logGrid := tview.NewGrid().SetBorders(true).AddItem(logTextView.SetChangedFunc(handleNewText(app, logTextView)), 0, 0, 5, 2, 0, 0, false)
 	// LogFrame holds the Logs header as well as the grid with the textView for streamed logs
 	logFrame := tview.NewFrame(logGrid).AddText("[::b]Logs:[::-]", true, tview.AlignLeft, tcell.ColorWhite).SetBorders(0, 0, 0, 0, 0, 0)
+	// Footer for log frame
+	logFrame.AddText("[::d]Use Ctrl+C to exit[::-]", false, tview.AlignRight, tcell.ColorWhite)
 	grid.AddItem(logFrame, 4, 0, 5, 2, 0, 0, false)
 
 	go func() {
