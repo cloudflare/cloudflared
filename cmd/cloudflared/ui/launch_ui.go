@@ -74,7 +74,7 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 	grid.SetColumns(20, 0)
 
 	// SetRows takes a value for each row, representing the size of the row
-	grid.SetRows(1, 1, 11, 1, 0)
+	grid.SetRows(1, 1, len(data.connections), 1, 0)
 
 	// AddItem takes a primitive tview type, row, column, rowSpan, columnSpan, minGridHeight, minGridWidth, and focus
 	grid.AddItem(tview.NewTextView().SetText("Tunnel:"), 0, 0, 1, 1, 0, 0, false)
