@@ -85,14 +85,6 @@ func LogLevelString(level string) Option {
 	}
 }
 
-func GetSupportedLevels(level string) ([]Level, error) {
-	supported, err := ParseLevelString(level)
-	if err != nil {
-		return nil, err
-	}
-	return supported, nil
-}
-
 // Parse builds the Options struct so the caller knows what actions should be run
 func Parse(opts ...Option) (*Options, error) {
 	options := &Options{}
@@ -107,28 +99,28 @@ func Parse(opts ...Option) (*Options, error) {
 // New setups a new logger based on the options.
 // The default behavior is to write to standard out
 func New(opts ...Option) (*OutputWriter, error) {
-	config, err := Parse(opts...)
+	options, err := Parse(opts...)
 
 	if err != nil {
 		return nil, err
 	}
 
 	l := NewOutputWriter(SharedWriteManager)
-	if config.logFileDirectory != "" {
-		l.Add(NewFileRollingWriter(SanitizeLogPath(config.logFileDirectory),
+	if options.logFileDirectory != "" {
+		l.Add(NewFileRollingWriter(SanitizeLogPath(options.logFileDirectory),
 			"cloudflared",
-			int64(config.maxFileSize),
-			config.maxFileCount),
-			NewDefaultFormatter(time.RFC3339Nano), config.supportedFileLevels...)
+			int64(options.maxFileSize),
+			options.maxFileCount),
+			NewDefaultFormatter(time.RFC3339Nano), options.supportedFileLevels...)
 	}
 
-	if !config.terminalOutputDisabled {
+	if !options.terminalOutputDisabled {
 		terminalFormatter := NewTerminalFormatter(time.RFC3339)
 
-		if len(config.supportedTerminalLevels) == 0 {
+		if len(options.supportedTerminalLevels) == 0 {
 			l.Add(os.Stderr, terminalFormatter, InfoLevel, ErrorLevel, FatalLevel)
 		} else {
-			l.Add(os.Stderr, terminalFormatter, config.supportedTerminalLevels...)
+			l.Add(os.Stderr, terminalFormatter, options.supportedTerminalLevels...)
 		}
 	}
 

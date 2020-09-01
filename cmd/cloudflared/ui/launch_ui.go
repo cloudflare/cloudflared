@@ -3,7 +3,10 @@ package ui
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/cloudflare/cloudflared/logger"
+
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 )
@@ -56,8 +59,26 @@ func NewUIModel(version, hostname, metricsURL, proxyURL string, haConnections in
 	}
 }
 
-func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnelEventChan <-chan TunnelEvent, logTextView *tview.TextView) {
-	palette := palette{url: "#4682B4", connected: "#00FF00", defaultText: "white", disconnected: "red", reconnecting: "orange"}
+func (data *uiModel) LaunchUI(
+	ctx context.Context,
+	log logger.Service,
+	logLevels []logger.Level,
+	tunnelEventChan <-chan TunnelEvent,
+) {
+	// Configure the logger to stream logs into the textview
+
+	// Add TextView as a group to write output to
+	logTextView := NewDynamicColorTextView()
+	log.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
+
+	// Construct the UI
+	palette := palette{
+		url:          "lightblue",
+		connected:    "lime",
+		defaultText:  "white",
+		disconnected: "red",
+		reconnecting: "orange",
+	}
 
 	app := tview.NewApplication()
 
@@ -90,7 +111,7 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 
 	grid.AddItem(connTable, 2, 1, 1, 1, 0, 0, false)
 
-	grid.AddItem(NewDynamicColorTextView().SetText(fmt.Sprintf("Metrics at [%s::b]%s/metrics", palette.url, data.metricsURL)), 3, 1, 1, 1, 0, 0, false)
+	grid.AddItem(NewDynamicColorTextView().SetText(fmt.Sprintf("Metrics at [%s::b]http://%s/metrics", palette.url, data.metricsURL)), 3, 1, 1, 1, 0, 0, false)
 
 	// Add TextView to stream logs
 	// Logs are displayed in a new grid so a border can be set around them
@@ -112,7 +133,7 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 				case Connected:
 					data.setConnTableCell(event, connTable, palette)
 				case Disconnected, Reconnecting:
-					data.changeConnStatus(event, connTable, logger, palette)
+					data.changeConnStatus(event, connTable, log, palette)
 				case SetUrl:
 					tunnelHostText.SetText(event.Url)
 					data.edgeURL = event.Url
@@ -128,7 +149,7 @@ func (data *uiModel) LaunchUI(ctx context.Context, logger logger.Service, tunnel
 
 	go func() {
 		if err := app.SetRoot(frame, true).Run(); err != nil {
-			logger.Errorf("Error launching UI: %s", err)
+			log.Errorf("Error launching UI: %s", err)
 		}
 	}()
 }
@@ -197,6 +218,8 @@ func (data *uiModel) setConnTableCell(event TunnelEvent, table *tview.Table, pal
 }
 
 func newCellText(palette palette, connectionNum int, location string, connectedStatus status) string {
+	// HA connection indicator formatted as: "• #<CONNECTION_INDEX>: <COLO>",
+	//  where the left middle dot's color depends on the status of the connection
 	const connFmtString = "[%s]\u2022[%s] #%d: %s"
 
 	var dotColor string

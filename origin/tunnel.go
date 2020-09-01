@@ -186,6 +186,10 @@ func (c *TunnelConfig) SupportedFeatures() []string {
 	return features
 }
 
+func (c *TunnelConfig) IsTrialTunnel() bool {
+	return c.Hostname == ""
+}
+
 type NamedTunnelConfig struct {
 	Auth   pogs.TunnelAuth
 	ID     uuid.UUID
@@ -539,9 +543,9 @@ func processRegistrationSuccess(
 
 	// Print out the user's trial zone URL in a nice box (if they requested and got one and UI flag is not set)
 	if config.TunnelEventChan == nil {
-		if isTrialTunnel := config.Hostname == ""; isTrialTunnel {
-			if url, err := url.Parse(registration.Url); err == nil {
-				for _, line := range asciiBox(trialZoneMsg(url.String()), 2) {
+		if config.IsTrialTunnel() {
+			if registrationURL, err := url.Parse(registration.Url); err == nil {
+				for _, line := range asciiBox(trialZoneMsg(registrationURL.String()), 2) {
 					logger.Info(line)
 				}
 			} else {

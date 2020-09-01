@@ -36,7 +36,6 @@ import (
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/cloudflare/cloudflared/websocket"
-	"github.com/rivo/tview"
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
@@ -92,6 +91,9 @@ const (
 
 	// bastionFlag is to enable bastion, or jump host, operation
 	bastionFlag = "bastion"
+
+	// uiFlag is to enable launching cloudflared in interactive UI mode
+	uiFlag = "ui"
 
 	logDirectoryFlag = "log-directory"
 
@@ -213,26 +215,11 @@ func Commands() []*cli.Command {
 }
 
 func TunnelCommand(c *cli.Context) error {
-	if name := c.String("name"); name != "" {
+	if name := c.String("name"); name != "" { // Start a named tunnel
 		return adhocNamedTunnel(c, name)
+	} else { // Start a classic tunnel
+		return classicTunnel(c)
 	}
-
-	if c.IsSet("launch-ui") {
-		// Create textView to stream logs to
-		logTextView := ui.NewDynamicColorTextView()
-		logger, err := createLoggerConfigured(c, false, logTextView)
-		if err != nil {
-			return errors.Wrap(err, "error setting up logger")
-		}
-		return StartServer(c, version, shutdownC, graceShutdownC, nil, logger, logTextView)
-	}
-
-	logger, err := createLogger(c, false)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
-
-	return StartServer(c, version, shutdownC, graceShutdownC, nil, logger, nil)
 }
 
 func Init(v string, s, g chan struct{}) {
@@ -256,7 +243,7 @@ func adhocNamedTunnel(c *cli.Context, name string) error {
 		sc.logger.Infof("Tunnel already created with ID %s", tunnel.ID)
 	}
 
-	if r, ok := routeFromFlag(c, tunnel.ID); ok {
+	if r, ok := routeFromFlag(c); ok {
 		if err := sc.route(tunnel.ID, r); err != nil {
 			sc.logger.Errorf("failed to create route, please create it manually. err: %v.", err)
 		} else {
@@ -271,7 +258,17 @@ func adhocNamedTunnel(c *cli.Context, name string) error {
 	return nil
 }
 
-func routeFromFlag(c *cli.Context, tunnelID uuid.UUID) (tunnelstore.Route, bool) {
+// classicTunnel creates a "classic" non-named tunnel
+func classicTunnel(c *cli.Context) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return err
+	}
+
+	return StartServer(c, version, shutdownC, graceShutdownC, nil, sc.logger, sc.isUIEnabled)
+}
+
+func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
 	if hostname := c.String("hostname"); hostname != "" {
 		if lbPool := c.String("lb-pool"); lbPool != "" {
 			return tunnelstore.NewLBRoute(hostname, lbPool), true
@@ -281,8 +278,8 @@ func routeFromFlag(c *cli.Context, tunnelID uuid.UUID) (tunnelstore.Route, bool)
 	return nil, false
 }
 
-func createLogger(c *cli.Context, isTransport bool) (*logger.OutputWriter, error) {
-	loggerOpts := []logger.Option{}
+func createLogger(c *cli.Context, isTransport bool, disableTerminal bool) (*logger.OutputWriter, error) {
+	var loggerOpts []logger.Option
 
 	logPath := c.String("logfile")
 	if logPath == "" {
@@ -302,34 +299,28 @@ func createLogger(c *cli.Context, isTransport bool) (*logger.OutputWriter, error
 	}
 	loggerOpts = append(loggerOpts, logger.LogLevelString(logLevel))
 
-	if c.IsSet("launch-ui") {
+	if disableTerminal {
 		disableOption := logger.DisableTerminal(true)
 		loggerOpts = append(loggerOpts, disableOption)
 	}
 
-	return logger.New(loggerOpts...)
-}
-
-// Create logger configured for use in UI
-func createLoggerConfigured(c *cli.Context, isTransport bool, logTextView *tview.TextView) (logger.Service, error) {
-	l, err := createLogger(c, isTransport)
+	l, err := logger.New(loggerOpts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error creating logger")
+		return nil, err
 	}
-
-	logLevel := c.String("loglevel")
-	supportedLevels, err := logger.GetSupportedLevels(logLevel)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error parsing supported levels")
-	}
-
-	// Add TextView as a group to write output to
-	l.Add(logTextView, logger.NewUIFormatter(time.RFC3339), supportedLevels...)
 
 	return l, nil
 }
 
-func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan struct{}, namedTunnel *origin.NamedTunnelConfig, logger logger.Service, logTextView *tview.TextView) error {
+func StartServer(
+	c *cli.Context,
+	version string,
+	shutdownC,
+	graceShutdownC chan struct{},
+	namedTunnel *origin.NamedTunnelConfig,
+	log logger.Service,
+	isUIEnabled bool,
+) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
@@ -338,45 +329,49 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
-		logger.Infof("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigSearchDirectories())
+		log.Infof(
+			"Cannot determine default configuration path. No file %v in %v",
+			config.DefaultConfigFiles,
+			config.DefaultConfigSearchDirectories(),
+		)
 	}
 
 	if c.IsSet("trace-output") {
 		tmpTraceFile, err := ioutil.TempFile("", "trace")
 		if err != nil {
-			logger.Errorf("Failed to create new temporary file to save trace output: %s", err)
+			log.Errorf("Failed to create new temporary file to save trace output: %s", err)
 		}
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				logger.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
+				log.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
 			}
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
-				logger.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
+				log.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
 			} else {
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
-					logger.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
+					log.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
 				}
 			}
 		}()
 
 		if err := trace.Start(tmpTraceFile); err != nil {
-			logger.Errorf("Failed to start trace: %s", err)
+			log.Errorf("Failed to start trace: %s", err)
 			return errors.Wrap(err, "Error starting tracing")
 		}
 		defer trace.Stop()
 	}
 
 	buildInfo := buildinfo.GetBuildInfo(version)
-	buildInfo.Log(logger)
-	logClientOptions(c, logger)
+	buildInfo.Log(log)
+	logClientOptions(c, log)
 
 	if c.IsSet("proxy-dns") {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, logger)
+			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, log)
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -387,24 +382,24 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		logger.Errorf("Error opening metrics server listener: %s", err)
+		log.Errorf("Error opening metrics server listener: %s", err)
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC, logger)
+		errC <- metrics.ServeMetrics(metricsListener, shutdownC, log)
 	}()
 
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
-		go writePidFile(connectedSignal, c.String("pidfile"), logger)
+		go writePidFile(connectedSignal, c.String("pidfile"), log)
 	}
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		logger.Errorf("Cannot generate cloudflared ID: %s", err)
+		log.Errorf("Cannot generate cloudflared ID: %s", err)
 		return err
 	}
 
@@ -415,12 +410,12 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	}()
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c, logger) {
-		logger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+	if updater.IsAutoupdateEnabled(c, log) {
+		log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, logger)
+			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, log)
 			errC <- autoupdater.Run(ctx)
 		}()
 	}
@@ -429,21 +424,21 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, logger)
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, log)
 	}
 
 	if c.IsSet("hello-world") {
-		logger.Infof("hello-world set")
+		log.Infof("hello-world set")
 		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
 		if err != nil {
-			logger.Errorf("Cannot start Hello World Server: %s", err)
+			log.Errorf("Cannot start Hello World Server: %s", err)
 			return errors.Wrap(err, "Cannot start Hello World Server")
 		}
 		defer helloListener.Close()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			hello.StartHelloWorldServer(logger, helloListener, shutdownC)
+			_ = hello.StartHelloWorldServer(log, helloListener, shutdownC)
 		}()
 		forceSetFlag(c, "url", "https://"+helloListener.Addr().String())
 	}
@@ -451,11 +446,11 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	if c.IsSet(sshServerFlag) {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			msg := fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS)
-			logger.Error(msg)
+			log.Error(msg)
 			return errors.New(msg)
 		}
 
-		logger.Infof("ssh-server set")
+		log.Infof("ssh-server set")
 
 		logManager := sshlog.NewEmptyManager()
 		if c.IsSet(bucketNameFlag) && c.IsSet(regionNameFlag) && c.IsSet(accessKeyIDFlag) && c.IsSet(secretIDFlag) {
@@ -463,34 +458,34 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
 			if err != nil {
 				msg := "Cannot create uploader for SSH Server"
-				logger.Errorf("%s: %s", msg, err)
+				log.Errorf("%s: %s", msg, err)
 				return errors.Wrap(err, msg)
 			}
 
 			if err := os.MkdirAll(sshLogFileDirectory, 0700); err != nil {
 				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
-				logger.Errorf("%s: %s", msg, err)
+				log.Errorf("%s: %s", msg, err)
 				return errors.Wrap(err, msg)
 			}
 
 			logManager = sshlog.New(sshLogFileDirectory)
 
-			uploadManager := awsuploader.NewDirectoryUploadManager(logger, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
+			uploadManager := awsuploader.NewDirectoryUploadManager(log, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
 			uploadManager.Start()
 		}
 
 		localServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logManager, logger, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
+		server, err := sshserver.New(logManager, log, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
 		if err != nil {
 			msg := "Cannot create new SSH Server"
-			logger.Errorf("%s: %s", msg, err)
+			log.Errorf("%s: %s", msg, err)
 			return errors.Wrap(err, msg)
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
-				logger.Errorf("SSH server error: %s", err)
+				log.Errorf("SSH server error: %s", err)
 				// TODO: remove when declarative tunnels are implemented.
 				close(shutdownC)
 			}
@@ -502,14 +497,14 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 	hostname := c.String("hostname")
 	if url == hostname && url != "" && hostname != "" {
 		errText := "hostname and url shouldn't match. See --help for more information"
-		logger.Error(errText)
+		log.Error(errText)
 		return fmt.Errorf(errText)
 	}
 
 	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
 		listener, err := net.Listen("tcp", "127.0.0.1:")
 		if err != nil {
-			logger.Errorf("Cannot start Websocket Proxy Server: %s", err)
+			log.Errorf("Cannot start Websocket Proxy Server: %s", err)
 			return errors.Wrap(err, "Cannot start Websocket Proxy Server")
 		}
 		wg.Add(1)
@@ -517,7 +512,7 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 			defer wg.Done()
 			streamHandler := websocket.DefaultStreamHandler
 			if c.IsSet(socks5Flag) {
-				logger.Info("SOCKS5 server started")
+				log.Info("SOCKS5 server started")
 				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, _ http.Header) {
 					dialer := socks.NewConnDialer(remoteConn)
 					requestHandler := socks.NewRequestHandler(dialer)
@@ -530,32 +525,32 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 					if finalDestination := requestHeaders.Get(h2mux.CFJumpDestinationHeader); finalDestination != "" {
 						token := requestHeaders.Get(h2mux.CFAccessTokenHeader)
 						if err := websocket.SendSSHPreamble(remoteConn, finalDestination, token); err != nil {
-							logger.Errorf("Failed to send SSH preamble: %s", err)
+							log.Errorf("Failed to send SSH preamble: %s", err)
 							return
 						}
 					}
 					websocket.DefaultStreamHandler(wsConn, remoteConn, requestHeaders)
 				}
 			}
-			errC <- websocket.StartProxyServer(logger, listener, staticHost, shutdownC, streamHandler)
+			errC <- websocket.StartProxyServer(log, listener, staticHost, shutdownC, streamHandler)
 		}()
 		forceSetFlag(c, "url", "http://"+listener.Addr().String())
 	}
 
-	transportLogger, err := createLogger(c, true)
+	transportLogger, err := createLogger(c, true, false)
 	if err != nil {
 		return errors.Wrap(err, "error setting up transport logger")
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, logger, transportLogger, namedTunnel)
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, log, transportLogger, namedTunnel)
 	if err != nil {
 		return err
 	}
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
-		logger.Info("Enabling control through stdin")
-		go stdinControl(reconnectCh, logger)
+		log.Info("Enabling control through stdin")
+		go stdinControl(reconnectCh, log)
 	}
 
 	wg.Add(1)
@@ -564,15 +559,26 @@ func StartServer(c *cli.Context, version string, shutdownC, graceShutdownC chan 
 		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
 	}()
 
-	if c.IsSet("launch-ui") {
-		tunnelEventChan := make(chan ui.TunnelEvent)
+	if isUIEnabled {
+		const tunnelEventChanBufferSize = 16
+		tunnelEventChan := make(chan ui.TunnelEvent, tunnelEventChanBufferSize)
 		tunnelConfig.TunnelEventChan = tunnelEventChan
 
-		tunnelInfo := ui.NewUIModel(version, hostname, metricsListener.Addr().String(), tunnelConfig.OriginUrl, tunnelConfig.HAConnections)
-		tunnelInfo.LaunchUI(ctx, logger, tunnelEventChan, logTextView)
+		tunnelInfo := ui.NewUIModel(
+			version,
+			hostname,
+			metricsListener.Addr().String(),
+			tunnelConfig.OriginUrl,
+			tunnelConfig.HAConnections,
+		)
+		logLevels, err := logger.ParseLevelString(c.String("loglevel"))
+		if err != nil {
+			return err
+		}
+		tunnelInfo.LaunchUI(ctx, log, logLevels, tunnelEventChan)
 	}
 
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), logger)
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)
 }
 
 // forceSetFlag attempts to set the given flag value in the closest context that has it defined
@@ -585,7 +591,7 @@ func forceSetFlag(c *cli.Context, name, value string) {
 }
 
 func Before(c *cli.Context) error {
-	logger, err := createLogger(c, false)
+	logger, err := createLogger(c, false, false)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
@@ -1169,7 +1175,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   "launch-ui",
+			Name:   uiFlag,
 			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
 			Value:  false,
 			Hidden: shouldHide,

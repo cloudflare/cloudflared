@@ -150,6 +150,60 @@ github.com/flynn/go-shlex
 # github.com/fsnotify/fsnotify v1.4.9
 ## explicit
 github.com/fsnotify/fsnotify
+# github.com/gdamore/encoding v1.0.0
+github.com/gdamore/encoding
+# github.com/gdamore/tcell v1.3.0
+## explicit
+github.com/gdamore/tcell
+github.com/gdamore/tcell/terminfo
+github.com/gdamore/tcell/terminfo/a/adm3a
+github.com/gdamore/tcell/terminfo/a/aixterm
+github.com/gdamore/tcell/terminfo/a/alacritty
+github.com/gdamore/tcell/terminfo/a/ansi
+github.com/gdamore/tcell/terminfo/a/aterm
+github.com/gdamore/tcell/terminfo/b/beterm
+github.com/gdamore/tcell/terminfo/b/bsdos_pc
+github.com/gdamore/tcell/terminfo/base
+github.com/gdamore/tcell/terminfo/c/cygwin
+github.com/gdamore/tcell/terminfo/d/d200
+github.com/gdamore/tcell/terminfo/d/d210
+github.com/gdamore/tcell/terminfo/d/dtterm
+github.com/gdamore/tcell/terminfo/dynamic
+github.com/gdamore/tcell/terminfo/e/emacs
+github.com/gdamore/tcell/terminfo/e/eterm
+github.com/gdamore/tcell/terminfo/extended
+github.com/gdamore/tcell/terminfo/g/gnome
+github.com/gdamore/tcell/terminfo/h/hpterm
+github.com/gdamore/tcell/terminfo/h/hz1500
+github.com/gdamore/tcell/terminfo/k/konsole
+github.com/gdamore/tcell/terminfo/k/kterm
+github.com/gdamore/tcell/terminfo/l/linux
+github.com/gdamore/tcell/terminfo/p/pcansi
+github.com/gdamore/tcell/terminfo/r/rxvt
+github.com/gdamore/tcell/terminfo/s/screen
+github.com/gdamore/tcell/terminfo/s/simpleterm
+github.com/gdamore/tcell/terminfo/s/sun
+github.com/gdamore/tcell/terminfo/t/termite
+github.com/gdamore/tcell/terminfo/t/tvi910
+github.com/gdamore/tcell/terminfo/t/tvi912
+github.com/gdamore/tcell/terminfo/t/tvi921
+github.com/gdamore/tcell/terminfo/t/tvi925
+github.com/gdamore/tcell/terminfo/t/tvi950
+github.com/gdamore/tcell/terminfo/t/tvi970
+github.com/gdamore/tcell/terminfo/v/vt100
+github.com/gdamore/tcell/terminfo/v/vt102
+github.com/gdamore/tcell/terminfo/v/vt220
+github.com/gdamore/tcell/terminfo/v/vt320
+github.com/gdamore/tcell/terminfo/v/vt400
+github.com/gdamore/tcell/terminfo/v/vt420
+github.com/gdamore/tcell/terminfo/v/vt52
+github.com/gdamore/tcell/terminfo/w/wy50
+github.com/gdamore/tcell/terminfo/w/wy60
+github.com/gdamore/tcell/terminfo/w/wy99_ansi
+github.com/gdamore/tcell/terminfo/x/xfce
+github.com/gdamore/tcell/terminfo/x/xnuppc
+github.com/gdamore/tcell/terminfo/x/xterm
+github.com/gdamore/tcell/terminfo/x/xterm_kitty
 # github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
 ## explicit
 github.com/getsentry/raven-go
@@ -210,6 +264,10 @@ github.com/kshvakov/clickhouse/lib/writebuffer
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
+# github.com/lucasb-eyer/go-colorful v1.0.3
+github.com/lucasb-eyer/go-colorful
+# github.com/mattn/go-runewidth v0.0.8
+github.com/mattn/go-runewidth
 # github.com/mattn/go-sqlite3 v1.11.0
 ## explicit
 github.com/mattn/go-sqlite3
@@ -255,6 +313,13 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
+# github.com/rifflock/lfshook v0.0.0-20180920164130-b9218ef580f5
+## explicit
+# github.com/rivo/tview v0.0.0-20200712113419-c65badfc3d92
+## explicit
+github.com/rivo/tview
+# github.com/rivo/uniseg v0.1.0
+github.com/rivo/uniseg
 # github.com/russross/blackfriday/v2 v2.0.1
 github.com/russross/blackfriday/v2
 # github.com/shurcooL/sanitized_anchor_name v1.0.0
@@ -324,6 +389,8 @@ golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
 # golang.org/x/text v0.3.3
+golang.org/x/text/encoding
+golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi

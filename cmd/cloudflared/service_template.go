@@ -80,7 +80,7 @@ func runCommand(command string, args ...string) error {
 		return fmt.Errorf("error starting %s: %v", command, err)
 	}
 
-	ioutil.ReadAll(stderr)
+	_, _ = ioutil.ReadAll(stderr)
 	err = cmd.Wait()
 	if err != nil {
 		return fmt.Errorf("%s returned with error: %v", command, err)

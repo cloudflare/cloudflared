@@ -31,6 +31,8 @@ type Service interface {
 	Infof(format string, args ...interface{})
 	Debugf(format string, args ...interface{})
 	Fatalf(format string, args ...interface{})
+
+	Add(writer io.Writer, formatter Formatter, levels ...Level)
 }
 
 type sourceGroup struct {
@@ -59,7 +61,7 @@ type OutputWriter struct {
 	minLevel   Level
 }
 
-// NewOutputWriter create a new logger
+// NewOutputWriter creates a new logger
 func NewOutputWriter(syncWriter OutputManager) *OutputWriter {
 	return &OutputWriter{
 		syncWriter: syncWriter,

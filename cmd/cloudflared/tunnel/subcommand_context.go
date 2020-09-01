@@ -10,51 +10,41 @@ import (
 
 	"github.com/cloudflare/cloudflared/certutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/rivo/tview"
 	"github.com/urfave/cli/v2"
 )
 
-// subcommandContext carries structs shared between subcommands, to reduce number of arguments needed to pass between subcommands,
-// and make sure they are only initialized once
+// subcommandContext carries structs shared between subcommands, to reduce number of arguments needed to
+// pass between subcommands, and make sure they are only initialized once
 type subcommandContext struct {
-	c          *cli.Context
-	logger     logger.Service
-	uiTextView *tview.TextView
+	c      *cli.Context
+	logger logger.Service
 
 	// These fields should be accessed using their respective Getter
 	tunnelstoreClient tunnelstore.Client
 	userCredential    *userCredential
+
+	isUIEnabled bool
 }
 
 func newSubcommandContext(c *cli.Context) (*subcommandContext, error) {
-	if c.IsSet("launch-ui") {
-		// Create textView to stream logs to
-		logTextView := ui.NewDynamicColorTextView()
-		logger, err := createLoggerConfigured(c, false, logTextView)
-		if err != nil {
-			return nil, errors.Wrap(err, "error setting up logger")
-		}
-		return &subcommandContext{
-			c:          c,
-			logger:     logger,
-			uiTextView: logTextView,
-		}, nil
-	}
+	isUIEnabled := c.IsSet(uiFlag) && c.String("name") != ""
 
-	logger, err := createLogger(c, false)
+	// If UI is enabled, terminal log output should be disabled -- log should be written into a UI log window instead
+	logger, err := createLogger(c, false, isUIEnabled)
 	if err != nil {
 		return nil, errors.Wrap(err, "error setting up logger")
 	}
+
 	return &subcommandContext{
-		c:      c,
-		logger: logger,
+		c:           c,
+		logger:      logger,
+		isUIEnabled: isUIEnabled,
 	}, nil
 }
 
@@ -255,7 +245,15 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		return err
 	}
 
-	return StartServer(sc.c, version, shutdownC, graceShutdownC, &origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID}, sc.logger, sc.uiTextView)
+	return StartServer(
+		sc.c,
+		version,
+		shutdownC,
+		graceShutdownC,
+		&origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID},
+		sc.logger,
+		sc.isUIEnabled,
+	)
 }
 
 func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
