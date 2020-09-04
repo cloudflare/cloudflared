@@ -22,6 +22,7 @@ CODE_SIGN_PRIV="code_sign.p12"
 CODE_SIGN_CERT="code_sign.cer"
 INSTALLER_PRIV="installer.p12"
 INSTALLER_CERT="installer.cer"
+SEC_DUP_MSG="security: SecKeychainItemImport: The specified item already exists in the keychain."
 export PATH="$PATH:/usr/local/bin"
 mkdir -p ../src/github.com/cloudflare/    
 cp -r . ../src/github.com/cloudflare/cloudflared
@@ -33,7 +34,18 @@ if [[ -n "${CFD_CODE_SIGN_KEY:-}" ]]; then
   if [[ -n "${CFD_CODE_SIGN_PASS:-}" ]]; then
     # write private key to disk and then import it keychain
     echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
-    security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}"
+    out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1)
+    exitcode=$?
+    if [ -n "$out" ]; then
+      if [ $exitcode -eq 0 ]; then
+          echo "$out"
+      else
+          if [ "$out" != "${SEC_DUP_MSG}" ]; then
+              echo "$out" >&2
+              exit $exitcode
+          fi
+      fi
+    fi
     rm ${CODE_SIGN_PRIV}
   fi
 fi
@@ -42,7 +54,18 @@ fi
 if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
-  security import ${CODE_SIGN_CERT}
+  out1=$(security import ${CODE_SIGN_CERT} 2>&1)
+  exitcode1=$?
+  if [ -n "$out1" ]; then
+    if [ $exitcode1 -eq 0 ]; then
+        echo "$out1"
+    else
+        if [ "$out1" != "${SEC_DUP_MSG}" ]; then
+            echo "$out1" >&2
+            exit $exitcode1
+        fi
+    fi
+  fi
   rm ${CODE_SIGN_CERT}
 fi
 
@@ -51,7 +74,18 @@ if [[ -n "${CFD_INSTALLER_KEY:-}" ]]; then
   if [[ -n "${CFD_INSTALLER_PASS:-}" ]]; then
     # write private key to disk and then import it into the keychain
     echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
-    security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}"
+    out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1)
+    exitcode2=$?
+    if [ -n "$out2" ]; then
+      if [ $exitcode2 -eq 0 ]; then
+          echo "$out2"
+      else
+          if [ "$out2" != "${SEC_DUP_MSG}" ]; then
+              echo "$out2" >&2
+              exit $exitcode2
+          fi
+      fi
+    fi
     rm ${INSTALLER_PRIV}
   fi
 fi
@@ -60,7 +94,18 @@ fi
 if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
-  security import ${INSTALLER_CERT}
+  out3=$(security import ${INSTALLER_CERT} 2>&1)
+  exitcode3=$?
+  if [ -n "$out3" ]; then
+    if [ $exitcode3 -eq 0 ]; then
+        echo "$out3"
+    else
+        if [ "$out3" != "${SEC_DUP_MSG}" ]; then
+            echo "$out3" >&2
+            exit $exitcode3
+        fi
+    fi
+  fi
   rm ${INSTALLER_CERT}
 fi
 
