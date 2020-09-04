@@ -28,72 +28,68 @@ cp -r . ../src/github.com/cloudflare/cloudflared
 cd ../src/github.com/cloudflare/cloudflared 
 GOCACHE="$PWD/../../../../" GOPATH="$PWD/../../../../" CGO_ENABLED=1 make cloudflared
 
-# TODO: AUTH-2653 - The CFD_CODE_SIGN_KEY and CFD_INSTALLER_KEY are "doubly" gpg encrypted.
-# this needs to be fixed, but I don't have access to the keys to do it. 
-# The private keys are on from Dane's laptop
+# Add code signing private key to the key chain
+if [[ -n "${CFD_CODE_SIGN_KEY:-}" ]]; then
+  if [[ -n "${CFD_CODE_SIGN_PASS:-}" ]]; then
+    # write private key to disk and then import it keychain
+    echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
+    security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}"
+    rm ${CODE_SIGN_PRIV}
+  fi
+fi
 
-# # Add code signing private key to the key chain
-# if [[ -n "${CFD_CODE_SIGN_KEY:-}" ]]; then
-#   if [[ -n "${CFD_CODE_SIGN_PASS:-}" ]]; then
-#     # write private key to disk and then import it keychain
-#     echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
-#     security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}"
-#     rm ${CODE_SIGN_PRIV}
-#   fi
-# fi
+# Add code signing certificate to the key chain
+if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
+  # write certificate to disk and then import it keychain
+  echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
+  security import ${CODE_SIGN_CERT}
+  rm ${CODE_SIGN_CERT}
+fi
 
-# # Add code signing certificate to the key chain
-# if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
-#   # write certificate to disk and then import it keychain
-#   echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
-#   security import ${CODE_SIGN_CERT}
-#   rm ${CODE_SIGN_CERT}
-# fi
+# Add package signing private key to the key chain
+if [[ -n "${CFD_INSTALLER_KEY:-}" ]]; then
+  if [[ -n "${CFD_INSTALLER_PASS:-}" ]]; then
+    # write private key to disk and then import it into the keychain
+    echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
+    security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}"
+    rm ${INSTALLER_PRIV}
+  fi
+fi
 
-# # Add package signing private key to the key chain
-# if [[ -n "${CFD_INSTALLER_KEY:-}" ]]; then
-#   if [[ -n "${CFD_INSTALLER_PASS:-}" ]]; then
-#     # write private key to disk and then import it into the keychain
-#     echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
-#     security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}"
-#     rm ${INSTALLER_PRIV}
-#   fi
-# fi
+# Add package signing certificate to the key chain
+if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
+  # write certificate to disk and then import it keychain
+  echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
+  security import ${INSTALLER_CERT}
+  rm ${INSTALLER_CERT}
+fi
 
-# # Add package signing certificate to the key chain
-# if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
-#   # write certificate to disk and then import it keychain
-#   echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
-#   security import ${INSTALLER_CERT}
-#   rm ${INSTALLER_CERT}
-# fi
+# get the code signing certificate name
+if [[ -n "${CFD_CODE_SIGN_NAME:-}" ]]; then
+  CODE_SIGN_NAME="${CFD_CODE_SIGN_NAME}"
+else
+  if [[ -n "$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Application:")" ]]; then
+    CODE_SIGN_NAME=$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Application:")
+  else
+    CODE_SIGN_NAME=""
+  fi
+fi
 
-# # get the code signing certificate name
-# if [[ -n "${CFD_CODE_SIGN_NAME:-}" ]]; then
-#   CODE_SIGN_NAME="${CFD_CODE_SIGN_NAME}"
-# else
-#   if [[ -n "$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Application:")" ]]; then
-#     CODE_SIGN_NAME=$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Application:")
-#   else
-#     CODE_SIGN_NAME=""
-#   fi
-# fi
+# get the package signing certificate name
+if [[ -n "${CFD_INSTALLER_NAME:-}" ]]; then
+  PKG_SIGN_NAME="${CFD_INSTALLER_NAME}"
+else
+  if [[ -n "$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Installer:")" ]]; then
+    PKG_SIGN_NAME=$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Installer:")
+  else
+    PKG_SIGN_NAME=""
+  fi
+fi
 
-# # get the package signing certificate name
-# if [[ -n "${CFD_INSTALLER_NAME:-}" ]]; then
-#   PKG_SIGN_NAME="${CFD_INSTALLER_NAME}"
-# else
-#   if [[ -n "$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Installer:")" ]]; then
-#     PKG_SIGN_NAME=$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Installer:")
-#   else
-#     PKG_SIGN_NAME=""
-#   fi
-# fi
-
-# # sign the cloudflared binary
-# if [[ -n "${CODE_SIGN_NAME:-}" ]]; then
-#   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
-# fi
+# sign the cloudflared binary
+if [[ -n "${CODE_SIGN_NAME:-}" ]]; then
+  codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
+fi
 
 
 # creating build directory
