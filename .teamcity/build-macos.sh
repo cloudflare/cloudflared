@@ -18,9 +18,9 @@ TARGET_DIRECTORY=".build"
 BINARY_NAME="cloudflared"
 VERSION=$(git describe --tags --always --dirty="-dev")
 PRODUCT="cloudflared"
-CODE_SIGN_PRIV="code_sign.pk12"
+CODE_SIGN_PRIV="code_sign.p12"
 CODE_SIGN_CERT="code_sign.cer"
-INSTALLER_PRIV="installer.pk12"
+INSTALLER_PRIV="installer.p12"
 INSTALLER_CERT="installer.cer"
 export PATH="$PATH:/usr/local/bin"
 mkdir -p ../src/github.com/cloudflare/    
