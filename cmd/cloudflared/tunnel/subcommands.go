@@ -316,7 +316,7 @@ func runCommand(c *cli.Context) error {
 	if c.NArg() != 1 {
 		return cliutil.UsageError(`"cloudflared tunnel run" requires exactly 1 argument, the ID or name of the tunnel to run.`)
 	}
-	tunnelID, err := uuid.Parse(c.Args().First())
+	tunnelID, err := sc.findID(c.Args().First())
 	if err != nil {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
