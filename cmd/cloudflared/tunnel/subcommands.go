@@ -412,20 +412,25 @@ func routeCommand(c *cli.Context) error {
 	}
 
 	const tunnelIDIndex = 1
-	tunnelID, err := sc.findID(c.Args().Get(tunnelIDIndex))
-	if err != nil {
-		return err
-	}
 
 	routeType := c.Args().First()
 	var r tunnelstore.Route
+	var tunnelID uuid.UUID
 	switch routeType {
 	case "dns":
+		tunnelID, err = sc.findID(c.Args().Get(tunnelIDIndex))
+		if err != nil {
+			return err
+		}
 		r, err = dnsRouteFromArg(c, tunnelID)
 		if err != nil {
 			return err
 		}
 	case "lb":
+		tunnelID, err = sc.findID(c.Args().Get(tunnelIDIndex))
+		if err != nil {
+			return err
+		}
 		r, err = lbRouteFromArg(c, tunnelID)
 		if err != nil {
 			return err
