@@ -80,7 +80,7 @@ func (b *BackoffHandler) Backoff(ctx context.Context) bool {
 	}
 }
 
-// Sets a grace period within which the the backoff timer is maintained. After the grace
+// Sets a grace period within which the backoff timer is maintained. After the grace
 // period expires, the number of retries & backoff duration is reset.
 func (b *BackoffHandler) SetGracePeriod() {
 	b.resetDeadline = timeNow().Add(time.Duration(b.GetBaseTime() * 2 << b.retries))

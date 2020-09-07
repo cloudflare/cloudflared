@@ -134,7 +134,7 @@ func Header(t *testing.T, tc Case, resp *dns.Msg) bool {
 	return true
 }
 
-// Section tests if the the section in tc matches rr.
+// Section tests if the section in tc matches rr.
 func Section(t *testing.T, tc Case, sec sect, rr []dns.RR) bool {
 	section := []dns.RR{}
 	switch sec {
