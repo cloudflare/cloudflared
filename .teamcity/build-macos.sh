@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+#set -euo pipefail
 
 if [[ "$(uname)" != "Darwin" ]] ; then
     echo "This should be run on macOS"
@@ -138,6 +138,7 @@ fi
 
 
 # creating build directory
+rm -rf $TARGET_DIRECTORY
 mkdir "${TARGET_DIRECTORY}"
 mkdir "${TARGET_DIRECTORY}/contents"
 cp -r ".mac_resources/scripts" "${TARGET_DIRECTORY}/scripts"
