@@ -302,8 +302,12 @@ func buildRunCommand() *cli.Command {
 		Action:    cliutil.ErrorHandler(runCommand),
 		Usage:     "Proxy a local web server by running the given tunnel",
 		ArgsUsage: "TUNNEL-ID",
-		Hidden:    hideSubcommands,
-		Flags:     []cli.Flag{forceFlag, credentialsFileFlag},
+		Description: "Runs the tunnel, creating a high-availability connection between your server and the Cloudflare " +
+			"edge. This command requires the tunnel credentials file created when `cloudflared tunnel create` was run, but " +
+			"does not require the cert.pem from `cloudflared login`. If you experience problems running the tunnel, " +
+			"`cloudflared tunnel cleanup` may help by removing any old connection records.",
+		Hidden: hideSubcommands,
+		Flags:  []cli.Flag{forceFlag, credentialsFileFlag},
 	}
 }
 
