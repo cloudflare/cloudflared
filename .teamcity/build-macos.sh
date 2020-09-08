@@ -54,7 +54,7 @@ fi
 if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
-  out1=$(security import ${CODE_SIGN_CERT} 2>&1)
+  out1=$(security import ${CODE_SIGN_CERT} -A 2>&1)
   exitcode1=$?
   if [ -n "$out1" ]; then
     if [ $exitcode1 -eq 0 ]; then
@@ -63,6 +63,9 @@ if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
         if [ "$out1" != "${SEC_DUP_MSG}" ]; then
             echo "$out1" >&2
             exit $exitcode1
+        else 
+            echo "already imported code signing certificate"
+            echo "code sign import output: $out1"
         fi
     fi
   fi
@@ -94,7 +97,7 @@ fi
 if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
-  out3=$(security import ${INSTALLER_CERT} 2>&1)
+  out3=$(security import ${INSTALLER_CERT} -A 2>&1)
   exitcode3=$?
   if [ -n "$out3" ]; then
     if [ $exitcode3 -eq 0 ]; then
@@ -103,6 +106,9 @@ if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
         if [ "$out3" != "${SEC_DUP_MSG}" ]; then
             echo "$out3" >&2
             exit $exitcode3
+        else 
+            echo "already imported installer certificate"
+            echo "installer import output: $out3"
         fi
     fi
   fi
@@ -113,8 +119,8 @@ fi
 if [[ -n "${CFD_CODE_SIGN_NAME:-}" ]]; then
   CODE_SIGN_NAME="${CFD_CODE_SIGN_NAME}"
 else
-  if [[ -n "$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Application:")" ]]; then
-    CODE_SIGN_NAME=$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Application:")
+  if [[ -n "$(security find-certificate -c "Developer ID Application" | cut -d'"' -f 4 -s | grep "Developer ID Application:" | head -1)" ]]; then
+    CODE_SIGN_NAME=$(security find-certificate -c "Developer ID Application" | cut -d'"' -f 4 -s | grep "Developer ID Application:" | head -1)
   else
     CODE_SIGN_NAME=""
   fi
@@ -124,8 +130,8 @@ fi
 if [[ -n "${CFD_INSTALLER_NAME:-}" ]]; then
   PKG_SIGN_NAME="${CFD_INSTALLER_NAME}"
 else
-  if [[ -n "$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Installer:")" ]]; then
-    PKG_SIGN_NAME=$(security find-identity -v | cut -d'"' -f 2 -s | grep "Developer ID Installer:")
+  if [[ -n "$(security find-certificate -c "Developer ID Installer" | cut -d'"' -f 4 -s | grep "Developer ID Installer:" | head -1)" ]]; then
+    PKG_SIGN_NAME=$(security find-certificate -c "Developer ID Installer" | cut -d'"' -f 4 -s | grep "Developer ID Installer:" | head -1)
   else
     PKG_SIGN_NAME=""
   fi
