@@ -54,7 +54,8 @@ func (sc *subcommandContext) client() (tunnelstore.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := tunnelstore.NewRESTClient(sc.c.String("api-url"), credential.cert.AccountID, credential.cert.ZoneID, credential.cert.ServiceKey, sc.logger)
+	userAgent := fmt.Sprintf("cloudflared/%s", version)
+	client, err := tunnelstore.NewRESTClient(sc.c.String("api-url"), credential.cert.AccountID, credential.cert.ZoneID, credential.cert.ServiceKey, userAgent, sc.logger)
 	if err != nil {
 		return nil, err
 	}

@@ -125,6 +125,7 @@ type Client interface {
 type RESTClient struct {
 	baseEndpoints *baseEndpoints
 	authToken     string
+	userAgent     string
 	client        http.Client
 	logger        logger.Service
 }
@@ -136,7 +137,7 @@ type baseEndpoints struct {
 
 var _ Client = (*RESTClient)(nil)
 
-func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string, logger logger.Service) (*RESTClient, error) {
+func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, logger logger.Service) (*RESTClient, error) {
 	if strings.HasSuffix(baseURL, "/") {
 		baseURL = baseURL[:len(baseURL)-1]
 	}
@@ -154,6 +155,7 @@ func NewRESTClient(baseURL string, accountTag, zoneTag string, authToken string,
 			zoneLevel:    *zoneLevelEndpoint,
 		},
 		authToken: authToken,
+		userAgent: userAgent,
 		client: http.Client{
 			Transport: &http.Transport{
 				TLSHandshakeTimeout:   defaultTimeout,
@@ -284,6 +286,7 @@ func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (
 	if err != nil {
 		return nil, errors.Wrapf(err, "can't create %s request", method)
 	}
+	req.Header.Set("User-Agent", r.userAgent)
 	if bodyReader != nil {
 		req.Header.Set("Content-Type", jsonContentType)
 	}
