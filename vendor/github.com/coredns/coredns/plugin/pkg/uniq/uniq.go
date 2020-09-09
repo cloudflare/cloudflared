@@ -15,8 +15,7 @@ type item struct {
 // New returns a new initialized U.
 func New() U { return U{u: make(map[string]item)} }
 
-// Set sets function f in U under key. If the key already exists
-// it is not overwritten.
+// Set sets function f in U under key. If the key already exists it is not overwritten.
 func (u U) Set(key string, f func() error) {
 	if _, ok := u.u[key]; ok {
 		return
@@ -24,17 +23,12 @@ func (u U) Set(key string, f func() error) {
 	u.u[key] = item{todo, f}
 }
 
-// SetTodo sets key to 'todo' again.
-func (u U) SetTodo(key string) {
-	v, ok := u.u[key]
-	if !ok {
-		return
-	}
-	v.state = todo
-	u.u[key] = v
+// Unset removes the key.
+func (u U) Unset(key string) {
+	delete(u.u, key)
 }
 
-// ForEach iterates for u executes f for each element that is 'todo' and sets it to 'done'.
+// ForEach iterates over u and executes f for each element that is 'todo' and sets it to 'done'.
 func (u U) ForEach() error {
 	for k, v := range u.u {
 		if v.state == todo {

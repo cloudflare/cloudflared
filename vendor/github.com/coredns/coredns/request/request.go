@@ -2,7 +2,6 @@
 package request
 
 import (
-	"context"
 	"net"
 	"strings"
 
@@ -19,18 +18,16 @@ type Request struct {
 	// Optional lowercased zone of this query.
 	Zone string
 
-	Context context.Context
-
-	// Cache size after first call to Size or Do.
-	size int
-	do   *bool // nil: nothing, otherwise *do value
-	// TODO(miek): opt record itself as well?
+	// Cache size after first call to Size or Do. If size is zero nothing has been cached yet.
+	// Both Size and Do set these values (and cache them).
+	size uint16 // UDP buffer size, or 64K in case of TCP.
+	do   bool   // DNSSEC OK value
 
 	// Caches
+	family    int8   // transport's family.
 	name      string // lowercase qname.
 	ip        string // client's ip.
 	port      string // client's port.
-	family    int    // transport's family.
 	localPort string // server's port.
 	localIP   string // server's ip.
 }
@@ -114,15 +111,11 @@ func (r *Request) RemoteAddr() string { return r.W.RemoteAddr().String() }
 func (r *Request) LocalAddr() string { return r.W.LocalAddr().String() }
 
 // Proto gets the protocol used as the transport. This will be udp or tcp.
-func (r *Request) Proto() string { return Proto(r.W) }
-
-// Proto gets the protocol used as the transport. This will be udp or tcp.
-func Proto(w dns.ResponseWriter) string {
-	// FIXME(miek): why not a method on Request
-	if _, ok := w.RemoteAddr().(*net.UDPAddr); ok {
+func (r *Request) Proto() string {
+	if _, ok := r.W.RemoteAddr().(*net.UDPAddr); ok {
 		return "udp"
 	}
-	if _, ok := w.RemoteAddr().(*net.TCPAddr); ok {
+	if _, ok := r.W.RemoteAddr().(*net.TCPAddr); ok {
 		return "tcp"
 	}
 	return "udp"
@@ -131,7 +124,7 @@ func Proto(w dns.ResponseWriter) string {
 // Family returns the family of the transport, 1 for IPv4 and 2 for IPv6.
 func (r *Request) Family() int {
 	if r.family != 0 {
-		return r.family
+		return int(r.family)
 	}
 
 	var a net.IP
@@ -145,26 +138,20 @@ func (r *Request) Family() int {
 
 	if a.To4() != nil {
 		r.family = 1
-		return r.family
+		return 1
 	}
 	r.family = 2
-	return r.family
+	return 2
 }
 
 // Do returns if the request has the DO (DNSSEC OK) bit set.
 func (r *Request) Do() bool {
-	if r.do != nil {
-		return *r.do
+	if r.size != 0 {
+		return r.do
 	}
 
-	r.do = new(bool)
-
-	if o := r.Req.IsEdns0(); o != nil {
-		*r.do = o.Do()
-		return *r.do
-	}
-	*r.do = false
-	return false
+	r.Size()
+	return r.do
 }
 
 // Len returns the length in bytes in the request.
@@ -174,32 +161,28 @@ func (r *Request) Len() int { return r.Req.Len() }
 // Or when the request was over TCP, we return the maximum allowed size of 64K.
 func (r *Request) Size() int {
 	if r.size != 0 {
-		return r.size
+		return int(r.size)
 	}
 
-	size := 0
+	size := uint16(0)
 	if o := r.Req.IsEdns0(); o != nil {
-		if r.do == nil {
-			r.do = new(bool)
-		}
-		*r.do = o.Do()
-		size = int(o.UDPSize())
+		r.do = o.Do()
+		size = o.UDPSize()
 	}
 
+	// normalize size
 	size = edns.Size(r.Proto(), size)
 	r.size = size
-	return size
+	return int(size)
 }
 
 // SizeAndDo adds an OPT record that the reflects the intent from request.
-// The returned bool indicated if an record was found and normalised.
+// The returned bool indicates if an record was found and normalised.
 func (r *Request) SizeAndDo(m *dns.Msg) bool {
-	o := r.Req.IsEdns0() // TODO(miek): speed this up
+	o := r.Req.IsEdns0()
 	if o == nil {
 		return false
 	}
-
-	odo := o.Do()
 
 	if mo := m.IsEdns0(); mo != nil {
 		mo.Hdr.Name = "."
@@ -208,130 +191,59 @@ func (r *Request) SizeAndDo(m *dns.Msg) bool {
 		mo.SetUDPSize(o.UDPSize())
 		mo.Hdr.Ttl &= 0xff00 // clear flags
 
-		if odo {
+		// Assume if the message m has options set, they are OK and represent what an upstream can do.
+
+		if o.Do() {
 			mo.SetDo()
 		}
 		return true
 	}
 
+	// Reuse the request's OPT record and tack it to m.
 	o.Hdr.Name = "."
 	o.Hdr.Rrtype = dns.TypeOPT
 	o.SetVersion(0)
 	o.Hdr.Ttl &= 0xff00 // clear flags
 
-	if odo {
-		o.SetDo()
+	if len(o.Option) > 0 {
+		o.Option = supportedOptions(o.Option)
 	}
+
 	m.Extra = append(m.Extra, o)
 	return true
 }
 
-// Result is the result of Scrub.
-type Result int
-
-const (
-	// ScrubIgnored is returned when Scrub did nothing to the message.
-	ScrubIgnored Result = iota
-	// ScrubExtra is returned when the reply has been scrubbed by removing RRs from the additional section.
-	ScrubExtra
-	// ScrubAnswer is returned when the reply has been scrubbed by removing RRs from the answer section.
-	ScrubAnswer
-)
-
 // Scrub scrubs the reply message so that it will fit the client's buffer. It will first
 // check if the reply fits without compression and then *with* compression.
-// Scrub will then use binary search to find a save cut off point in the additional section.
-// If even *without* the additional section the reply still doesn't fit we
-// repeat this process for the answer section. If we scrub the answer section
-// we set the TC bit on the reply; indicating the client should retry over TCP.
 // Note, the TC bit will be set regardless of protocol, even TCP message will
 // get the bit, the client should then retry with pigeons.
-func (r *Request) Scrub(reply *dns.Msg) (*dns.Msg, Result) {
-	size := r.Size()
+func (r *Request) Scrub(reply *dns.Msg) *dns.Msg {
+	reply.Truncate(r.Size())
 
-	reply.Compress = false
-	rl := reply.Len()
-	if size >= rl {
-		return reply, ScrubIgnored
+	if reply.Compress {
+		return reply
 	}
 
-	reply.Compress = true
-	rl = reply.Len()
-	if size >= rl {
-		return reply, ScrubIgnored
-	}
-
-	// Account for the OPT record that gets added in SizeAndDo(), subtract that length.
-	sub := 0
-	if r.Do() {
-		sub = optLen
-	}
-	origExtra := reply.Extra
-	re := len(reply.Extra) - sub
-	l, m := 0, 0
-	for l < re {
-		m = (l + re) / 2
-		reply.Extra = origExtra[:m]
-		rl = reply.Len()
-		if rl < size {
-			l = m + 1
-			continue
+	if r.Proto() == "udp" {
+		rl := reply.Len()
+		// Last ditch attempt to avoid fragmentation, if the size is bigger than the v4/v6 UDP fragmentation
+		// limit and sent via UDP compress it (in the hope we go under that limit). Limits taken from NSD:
+		//
+		//    .., 1480 (EDNS/IPv4), 1220 (EDNS/IPv6), or the advertised EDNS buffer size if that is
+		//    smaller than the EDNS default.
+		// See: https://open.nlnetlabs.nl/pipermail/nsd-users/2011-November/001278.html
+		if rl > 1480 && r.Family() == 1 {
+			reply.Compress = true
 		}
-		if rl > size {
-			re = m - 1
-			continue
-		}
-		if rl == size {
-			break
+		if rl > 1220 && r.Family() == 2 {
+			reply.Compress = true
 		}
 	}
 
-	// We may come out of this loop with one rotation too many, m makes it too large, but m-1 works.
-	if rl > size && m > 0 {
-		reply.Extra = origExtra[:m-1]
-		rl = reply.Len()
-	}
-
-	if rl < size {
-		r.SizeAndDo(reply)
-		return reply, ScrubExtra
-	}
-
-	origAnswer := reply.Answer
-	ra := len(reply.Answer)
-	l, m = 0, 0
-	for l < ra {
-		m = (l + ra) / 2
-		reply.Answer = origAnswer[:m]
-		rl = reply.Len()
-		if rl < size {
-			l = m + 1
-			continue
-		}
-		if rl > size {
-			ra = m - 1
-			continue
-		}
-		if rl == size {
-			break
-		}
-	}
-
-	// We may come out of this loop with one rotation too many, m makes it too large, but m-1 works.
-	if rl > size && m > 0 {
-		reply.Answer = origAnswer[:m-1]
-		// No need to recalc length, as we don't use it. We set truncated anyway. Doing
-		// this extra m-1 step does make it fit in the client's buffer however.
-	}
-
-	// It now fits, but Truncated. We can't call sizeAndDo() because that adds a new record (OPT)
-	// in the additional section.
-	reply.Truncated = true
-	return reply, ScrubAnswer
+	return reply
 }
 
-// Type returns the type of the question as a string. If the request is malformed
-// the empty string is returned.
+// Type returns the type of the question as a string. If the request is malformed the empty string is returned.
 func (r *Request) Type() string {
 	if r.Req == nil {
 		return ""
@@ -418,14 +330,6 @@ func (r *Request) QClass() uint16 {
 
 }
 
-// ErrorMessage returns an error message suitable for sending
-// back to the client.
-func (r *Request) ErrorMessage(rcode int) *dns.Msg {
-	m := new(dns.Msg)
-	m.SetRcode(r.Req, rcode)
-	return m
-}
-
 // Clear clears all caching from Request s.
 func (r *Request) Clear() {
 	r.name = ""
@@ -443,7 +347,7 @@ func (r *Request) Match(reply *dns.Msg) bool {
 		return false
 	}
 
-	if reply.Response == false {
+	if !reply.Response {
 		return false
 	}
 
@@ -457,5 +361,3 @@ func (r *Request) Match(reply *dns.Msg) bool {
 
 	return true
 }
-
-const optLen = 12 // OPT record length.

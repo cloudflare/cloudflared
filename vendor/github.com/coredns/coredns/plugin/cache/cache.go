@@ -2,7 +2,6 @@
 package cache
 
 import (
-	"encoding/binary"
 	"hash/fnv"
 	"net"
 	"time"
@@ -16,24 +15,28 @@ import (
 	"github.com/miekg/dns"
 )
 
-// Cache is plugin that looks up responses in a cache and caches replies.
+// Cache is a plugin that looks up responses in a cache and caches replies.
 // It has a success and a denial of existence cache.
 type Cache struct {
 	Next  plugin.Handler
 	Zones []string
 
-	ncache *cache.Cache
-	ncap   int
-	nttl   time.Duration
+	ncache  *cache.Cache
+	ncap    int
+	nttl    time.Duration
+	minnttl time.Duration
 
-	pcache *cache.Cache
-	pcap   int
-	pttl   time.Duration
+	pcache  *cache.Cache
+	pcap    int
+	pttl    time.Duration
+	minpttl time.Duration
 
 	// Prefetch.
 	prefetch   int
 	duration   time.Duration
 	percentage int
+
+	staleUpTo time.Duration
 
 	// Testing.
 	now func() time.Time
@@ -47,9 +50,11 @@ func New() *Cache {
 		pcap:       defaultCap,
 		pcache:     cache.New(defaultCap),
 		pttl:       maxTTL,
+		minpttl:    minTTL,
 		ncap:       defaultCap,
 		ncache:     cache.New(defaultCap),
 		nttl:       maxNTTL,
+		minnttl:    minNTTL,
 		prefetch:   0,
 		duration:   1 * time.Minute,
 		percentage: 10,
@@ -57,27 +62,27 @@ func New() *Cache {
 	}
 }
 
-// Return key under which we store the item, -1 will be returned if we don't store the
-// message.
+// key returns key under which we store the item, -1 will be returned if we don't store the message.
 // Currently we do not cache Truncated, errors zone transfers or dynamic update messages.
-func key(m *dns.Msg, t response.Type, do bool) int {
+// qname holds the already lowercased qname.
+func key(qname string, m *dns.Msg, t response.Type, do bool) (bool, uint64) {
 	// We don't store truncated responses.
 	if m.Truncated {
-		return -1
+		return false, 0
 	}
 	// Nor errors or Meta or Update
 	if t == response.OtherError || t == response.Meta || t == response.Update {
-		return -1
+		return false, 0
 	}
 
-	return int(hash(m.Question[0].Name, m.Question[0].Qtype, do))
+	return true, hash(qname, m.Question[0].Qtype, do)
 }
 
 var one = []byte("1")
 var zero = []byte("0")
 
-func hash(qname string, qtype uint16, do bool) uint32 {
-	h := fnv.New32()
+func hash(qname string, qtype uint16, do bool) uint64 {
+	h := fnv.New64()
 
 	if do {
 		h.Write(one)
@@ -85,19 +90,21 @@ func hash(qname string, qtype uint16, do bool) uint32 {
 		h.Write(zero)
 	}
 
-	b := make([]byte, 2)
-	binary.BigEndian.PutUint16(b, qtype)
-	h.Write(b)
+	h.Write([]byte{byte(qtype >> 8)})
+	h.Write([]byte{byte(qtype)})
+	h.Write([]byte(qname))
+	return h.Sum64()
+}
 
-	for i := range qname {
-		c := qname[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		h.Write([]byte{c})
+func computeTTL(msgTTL, minTTL, maxTTL time.Duration) time.Duration {
+	ttl := msgTTL
+	if ttl < minTTL {
+		ttl = minTTL
 	}
-
-	return h.Sum32()
+	if ttl > maxTTL {
+		ttl = maxTTL
+	}
+	return ttl
 }
 
 // ResponseWriter is a response writer that caches the reply message.
@@ -113,7 +120,7 @@ type ResponseWriter struct {
 
 // newPrefetchResponseWriter returns a Cache ResponseWriter to be used in
 // prefetch requests. It ensures RemoteAddr() can be called even after the
-// original connetion has already been closed.
+// original connection has already been closed.
 func newPrefetchResponseWriter(server string, state request.Request, c *Cache) *ResponseWriter {
 	// Resolve the address now, the connection might be already closed when the
 	// actual prefetch request is made.
@@ -152,19 +159,20 @@ func (w *ResponseWriter) WriteMsg(res *dns.Msg) error {
 	}
 
 	// key returns empty string for anything we don't want to cache.
-	key := key(res, mt, do)
-
-	duration := w.pttl
-	if mt == response.NameError || mt == response.NoData {
-		duration = w.nttl
-	}
+	hasKey, key := key(w.state.Name(), res, mt, do)
 
 	msgTTL := dnsutil.MinimalTTL(res, mt)
-	if msgTTL < duration {
-		duration = msgTTL
+	var duration time.Duration
+	if mt == response.NameError || mt == response.NoData {
+		duration = computeTTL(msgTTL, w.minnttl, w.nttl)
+	} else if mt == response.ServerError {
+		// use default ttl which is 5s
+		duration = minTTL
+	} else {
+		duration = computeTTL(msgTTL, w.minpttl, w.pttl)
 	}
 
-	if key != -1 && duration > 0 {
+	if hasKey && duration > 0 {
 		if w.state.Match(res) {
 			w.set(res, key, mt, duration)
 			cacheSize.WithLabelValues(w.server, Success).Set(float64(w.pcache.Len()))
@@ -195,19 +203,21 @@ func (w *ResponseWriter) WriteMsg(res *dns.Msg) error {
 	return w.ResponseWriter.WriteMsg(res)
 }
 
-func (w *ResponseWriter) set(m *dns.Msg, key int, mt response.Type, duration time.Duration) {
-	if key == -1 || duration == 0 {
-		return
-	}
-
+func (w *ResponseWriter) set(m *dns.Msg, key uint64, mt response.Type, duration time.Duration) {
+	// duration is expected > 0
+	// and key is valid
 	switch mt {
 	case response.NoError, response.Delegation:
 		i := newItem(m, w.now(), duration)
-		w.pcache.Add(uint32(key), i)
+		w.pcache.Add(key, i)
+		// when pre-fetching, remove the negative cache entry if it exists
+		if w.prefetch {
+			w.ncache.Remove(key)
+		}
 
-	case response.NameError, response.NoData:
+	case response.NameError, response.NoData, response.ServerError:
 		i := newItem(m, w.now(), duration)
-		w.ncache.Add(uint32(key), i)
+		w.ncache.Add(key, i)
 
 	case response.OtherError:
 		// don't cache these
@@ -228,7 +238,9 @@ func (w *ResponseWriter) Write(buf []byte) (int, error) {
 
 const (
 	maxTTL  = dnsutil.MaximumDefaulTTL
+	minTTL  = dnsutil.MinimalDefaultTTL
 	maxNTTL = dnsutil.MaximumDefaulTTL / 2
+	minNTTL = dnsutil.MinimalDefaultTTL
 
 	defaultCap = 10000 // default capacity of the cache.
 

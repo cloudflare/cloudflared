@@ -11,9 +11,9 @@ var (
 	RequestCount = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: plugin.Namespace,
 		Subsystem: subsystem,
-		Name:      "request_count_total",
+		Name:      "requests_total",
 		Help:      "Counter of DNS requests made per zone, protocol and family.",
-	}, []string{"server", "zone", "proto", "family"})
+	}, []string{"server", "zone", "proto", "family", "type"})
 
 	RequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: plugin.Namespace,
@@ -21,7 +21,7 @@ var (
 		Name:      "request_duration_seconds",
 		Buckets:   plugin.TimeBuckets,
 		Help:      "Histogram of the time (in seconds) each request took.",
-	}, []string{"server", "zone"})
+	}, []string{"server", "zone", "type"})
 
 	RequestSize = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: plugin.Namespace,
@@ -34,16 +34,9 @@ var (
 	RequestDo = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: plugin.Namespace,
 		Subsystem: subsystem,
-		Name:      "request_do_count_total",
+		Name:      "do_requests_total",
 		Help:      "Counter of DNS requests with DO bit set per zone.",
 	}, []string{"server", "zone"})
-
-	RequestType = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: plugin.Namespace,
-		Subsystem: subsystem,
-		Name:      "request_type_count_total",
-		Help:      "Counter of DNS requests per type, per zone.",
-	}, []string{"server", "zone", "type"})
 
 	ResponseSize = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: plugin.Namespace,
@@ -56,15 +49,21 @@ var (
 	ResponseRcode = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: plugin.Namespace,
 		Subsystem: subsystem,
-		Name:      "response_rcode_count_total",
+		Name:      "responses_total",
 		Help:      "Counter of response status codes.",
 	}, []string{"server", "zone", "rcode"})
 
 	Panic = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: plugin.Namespace,
-		Name:      "panic_count_total",
+		Name:      "panics_total",
 		Help:      "A metrics that counts the number of panics.",
 	})
+
+	PluginEnabled = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: plugin.Namespace,
+		Name:      "plugin_enabled",
+		Help:      "A metric that indicates whether a plugin is enabled on per server and zone basis.",
+	}, []string{"server", "zone", "name"})
 )
 
 const (

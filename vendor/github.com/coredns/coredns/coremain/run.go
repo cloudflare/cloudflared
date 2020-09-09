@@ -2,20 +2,17 @@
 package coremain
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/coredns/coredns/core/dnsserver"
-	clog "github.com/coredns/coredns/plugin/pkg/log"
 
-	"github.com/mholt/caddy"
+	"github.com/caddyserver/caddy"
 )
 
 func init() {
@@ -24,7 +21,6 @@ func init() {
 	setVersion()
 
 	flag.StringVar(&conf, "conf", "", "Corefile to load (default \""+caddy.DefaultConfigFile+"\")")
-	flag.StringVar(&cpu, "cpu", "100%", "CPU cap")
 	flag.BoolVar(&plugins, "plugins", false, "List installed plugins")
 	flag.StringVar(&caddy.PidFile, "pidfile", "", "Path to write pid file")
 	flag.BoolVar(&version, "version", false, "Show version")
@@ -42,7 +38,7 @@ func Run() {
 	caddy.TrapSignals()
 
 	// Reset flag.CommandLine to get rid of unwanted flags for instance from glog (used in kubernetes).
-	// And readd the once we want to keep.
+	// And read the ones we want to keep.
 	flag.VisitAll(func(f *flag.Flag) {
 		if _, ok := flagsBlacklist[f.Name]; ok {
 			return
@@ -62,7 +58,7 @@ func Run() {
 	}
 
 	log.SetOutput(os.Stdout)
-	log.SetFlags(log.LstdFlags)
+	log.SetFlags(0) // Set to 0 because we're doing our own time, with timezone
 
 	if version {
 		showVersion()
@@ -71,11 +67,6 @@ func Run() {
 	if plugins {
 		fmt.Println(caddy.DescribePlugins())
 		os.Exit(0)
-	}
-
-	// Set CPU cap
-	if err := setCPU(cpu); err != nil {
-		mustLogFatal(err)
 	}
 
 	// Get Corefile input
@@ -90,13 +81,9 @@ func Run() {
 		mustLogFatal(err)
 	}
 
-	logVersion()
 	if !dnsserver.Quiet {
 		showVersion()
 	}
-
-	// Execute instantiation events
-	caddy.EmitEvent(caddy.InstanceStartupEvent, instance)
 
 	// Twiddle your thumbs
 	instance.Wait()
@@ -152,12 +139,6 @@ func defaultLoader(serverType string) (caddy.Input, error) {
 	}, nil
 }
 
-// logVersion logs the version that is starting.
-func logVersion() {
-	clog.Info(versionString())
-	clog.Info(releaseString())
-}
-
 // showVersion prints the version that is starting.
 func showVersion() {
 	fmt.Print(versionString())
@@ -189,54 +170,16 @@ func setVersion() {
 	// Only set the appVersion if -ldflags was used
 	if gitNearestTag != "" || gitTag != "" {
 		if devBuild && gitNearestTag != "" {
-			appVersion = fmt.Sprintf("%s (+%s %s)",
-				strings.TrimPrefix(gitNearestTag, "v"), GitCommit, buildDate)
+			appVersion = fmt.Sprintf("%s (+%s %s)", strings.TrimPrefix(gitNearestTag, "v"), GitCommit, buildDate)
 		} else if gitTag != "" {
 			appVersion = strings.TrimPrefix(gitTag, "v")
 		}
 	}
 }
 
-// setCPU parses string cpu and sets GOMAXPROCS
-// according to its value. It accepts either
-// a number (e.g. 3) or a percent (e.g. 50%).
-func setCPU(cpu string) error {
-	var numCPU int
-
-	availCPU := runtime.NumCPU()
-
-	if strings.HasSuffix(cpu, "%") {
-		// Percent
-		var percent float32
-		pctStr := cpu[:len(cpu)-1]
-		pctInt, err := strconv.Atoi(pctStr)
-		if err != nil || pctInt < 1 || pctInt > 100 {
-			return errors.New("invalid CPU value: percentage must be between 1-100")
-		}
-		percent = float32(pctInt) / 100
-		numCPU = int(float32(availCPU) * percent)
-	} else {
-		// Number
-		num, err := strconv.Atoi(cpu)
-		if err != nil || num < 1 {
-			return errors.New("invalid CPU value: provide a number or percent greater than 0")
-		}
-		numCPU = num
-	}
-
-	if numCPU > availCPU {
-		numCPU = availCPU
-	}
-
-	runtime.GOMAXPROCS(numCPU)
-	return nil
-}
-
 // Flags that control program flow or startup
 var (
 	conf    string
-	cpu     string
-	logfile bool
 	version bool
 	plugins bool
 )
@@ -257,14 +200,14 @@ var (
 )
 
 // flagsBlacklist removes flags with these names from our flagset.
-var flagsBlacklist = map[string]bool{
-	"logtostderr":      true,
-	"alsologtostderr":  true,
-	"v":                true,
-	"stderrthreshold":  true,
-	"vmodule":          true,
-	"log_backtrace_at": true,
-	"log_dir":          true,
+var flagsBlacklist = map[string]struct{}{
+	"logtostderr":      {},
+	"alsologtostderr":  {},
+	"v":                {},
+	"stderrthreshold":  {},
+	"vmodule":          {},
+	"log_backtrace_at": {},
+	"log_dir":          {},
 }
 
 var flagsToKeep []*flag.Flag

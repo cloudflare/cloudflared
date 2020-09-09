@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -11,17 +12,12 @@ import (
 	"github.com/coredns/coredns/plugin/pkg/cache"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 
-	"github.com/mholt/caddy"
+	"github.com/caddyserver/caddy"
 )
 
 var log = clog.NewWithPlugin("cache")
 
-func init() {
-	caddy.RegisterPlugin("cache", caddy.Plugin{
-		ServerType: "dns",
-		Action:     setup,
-	})
-}
+func init() { plugin.Register("cache", setup) }
 
 func setup(c *caddy.Controller) error {
 	ca, err := cacheParse(c)
@@ -34,11 +30,9 @@ func setup(c *caddy.Controller) error {
 	})
 
 	c.OnStartup(func() error {
-		once.Do(func() {
-			metrics.MustRegister(c,
-				cacheSize, cacheHits, cacheMisses,
-				cachePrefetches, cacheDrops)
-		})
+		metrics.MustRegister(c,
+			cacheSize, cacheHits, cacheMisses,
+			cachePrefetches, cacheDrops, servedStale)
 		return nil
 	})
 
@@ -101,6 +95,17 @@ func cacheParse(c *caddy.Controller) (*Cache, error) {
 						return nil, fmt.Errorf("cache TTL can not be zero or negative: %d", pttl)
 					}
 					ca.pttl = time.Duration(pttl) * time.Second
+					if len(args) > 2 {
+						minpttl, err := strconv.Atoi(args[2])
+						if err != nil {
+							return nil, err
+						}
+						// Reserve < 0
+						if minpttl < 0 {
+							return nil, fmt.Errorf("cache min TTL can not be negative: %d", minpttl)
+						}
+						ca.minpttl = time.Duration(minpttl) * time.Second
+					}
 				}
 			case Denial:
 				args := c.RemainingArgs()
@@ -122,6 +127,17 @@ func cacheParse(c *caddy.Controller) (*Cache, error) {
 						return nil, fmt.Errorf("cache TTL can not be zero or negative: %d", nttl)
 					}
 					ca.nttl = time.Duration(nttl) * time.Second
+					if len(args) > 2 {
+						minnttl, err := strconv.Atoi(args[2])
+						if err != nil {
+							return nil, err
+						}
+						// Reserve < 0
+						if minnttl < 0 {
+							return nil, fmt.Errorf("cache min TTL can not be negative: %d", minnttl)
+						}
+						ca.minnttl = time.Duration(minnttl) * time.Second
+					}
 				}
 			case "prefetch":
 				args := c.RemainingArgs()
@@ -161,6 +177,22 @@ func cacheParse(c *caddy.Controller) (*Cache, error) {
 					ca.percentage = num
 				}
 
+			case "serve_stale":
+				args := c.RemainingArgs()
+				if len(args) > 1 {
+					return nil, c.ArgErr()
+				}
+				ca.staleUpTo = 1 * time.Hour
+				if len(args) == 1 {
+					d, err := time.ParseDuration(args[0])
+					if err != nil {
+						return nil, err
+					}
+					if d < 0 {
+						return nil, errors.New("invalid negative duration for serve_stale")
+					}
+					ca.staleUpTo = d
+				}
 			default:
 				return nil, c.ArgErr()
 			}

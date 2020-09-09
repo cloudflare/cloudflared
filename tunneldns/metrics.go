@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/plugin/metrics"
 	"github.com/coredns/coredns/plugin/metrics/vars"
 	"github.com/coredns/coredns/plugin/pkg/dnstest"
 	"github.com/coredns/coredns/plugin/pkg/rcode"
@@ -27,7 +28,6 @@ func NewMetricsPlugin(next plugin.Handler) *MetricsPlugin {
 		prometheus.MustRegister(vars.RequestDuration)
 		prometheus.MustRegister(vars.RequestSize)
 		prometheus.MustRegister(vars.RequestDo)
-		prometheus.MustRegister(vars.RequestType)
 		prometheus.MustRegister(vars.ResponseSize)
 		prometheus.MustRegister(vars.ResponseRcode)
 	})
@@ -42,7 +42,8 @@ func (p MetricsPlugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dn
 	status, err := plugin.NextOrFailure(p.Name(), p.Next, ctx, rw, r)
 
 	// Update built-in metrics
-	vars.Report(ctx, state, ".", rcode.ToString(rw.Rcode), rw.Len, rw.Start)
+	server := metrics.WithServer(ctx)
+	vars.Report(server, state, ".", rcode.ToString(rw.Rcode), rw.Len, rw.Start)
 
 	return status, err
 }

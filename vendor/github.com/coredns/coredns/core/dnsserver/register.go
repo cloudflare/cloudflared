@@ -9,9 +9,11 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/pkg/dnsutil"
+	"github.com/coredns/coredns/plugin/pkg/parse"
+	"github.com/coredns/coredns/plugin/pkg/transport"
 
-	"github.com/mholt/caddy"
-	"github.com/mholt/caddy/caddyfile"
+	"github.com/caddyserver/caddy"
+	"github.com/caddyserver/caddy/caddyfile"
 )
 
 const serverType = "dns"
@@ -26,7 +28,7 @@ func init() {
 		DefaultInput: func() caddy.Input {
 			return caddy.CaddyfileInput{
 				Filepath:       "Corefile",
-				Contents:       []byte(".:" + Port + " {\nwhoami\n}\n"),
+				Contents:       []byte(".:" + Port + " {\nwhoami\nlog\n}\n"),
 				ServerTypeName: serverType,
 			}
 		},
@@ -49,6 +51,9 @@ func (h *dnsContext) saveConfig(key string, cfg *Config) {
 	h.configs = append(h.configs, cfg)
 	h.keysToConfigs[key] = cfg
 }
+
+// Compile-time check to ensure dnsContext implements the caddy.Context interface
+var _ caddy.Context = &dnsContext{}
 
 // InspectServerBlocks make sure that everything checks out before
 // executing directives and otherwise prepares the directives to
@@ -111,29 +116,29 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 	var servers []caddy.Server
 	for addr, group := range groups {
 		// switch on addr
-		switch Transport(addr) {
-		case TransportDNS:
+		switch tr, _ := parse.Transport(addr); tr {
+		case transport.DNS:
 			s, err := NewServer(addr, group)
 			if err != nil {
 				return nil, err
 			}
 			servers = append(servers, s)
 
-		case TransportTLS:
+		case transport.TLS:
 			s, err := NewServerTLS(addr, group)
 			if err != nil {
 				return nil, err
 			}
 			servers = append(servers, s)
 
-		case TransportGRPC:
+		case transport.GRPC:
 			s, err := NewServergRPC(addr, group)
 			if err != nil {
 				return nil, err
 			}
 			servers = append(servers, s)
 
-		case TransportHTTPS:
+		case transport.HTTPS:
 			s, err := NewServerHTTPS(addr, group)
 			if err != nil {
 				return nil, err
@@ -234,16 +239,8 @@ func groupConfigsByListenAddr(configs []*Config) (map[string][]*Config, error) {
 	return groups, nil
 }
 
-const (
-	// DefaultPort is the default port.
-	DefaultPort = "53"
-	// TLSPort is the default port for DNS-over-TLS.
-	TLSPort = "853"
-	// GRPCPort is the default port for DNS-over-gRPC.
-	GRPCPort = "443"
-	// HTTPSPort is the default port for DNS-over-HTTPS.
-	HTTPSPort = "443"
-)
+// DefaultPort is the default port.
+const DefaultPort = transport.Port
 
 // These "soft defaults" are configurable by
 // command line flags, etc.

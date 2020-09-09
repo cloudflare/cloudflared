@@ -11,14 +11,14 @@ The default location for the metrics is `localhost:9153`. The metrics path is fi
 The following metrics are exported:
 
 * `coredns_build_info{version, revision, goversion}` - info about CoreDNS itself.
-* `coredns_panic_count_total{}` - total number of panics.
-* `coredns_dns_request_count_total{server, zone, proto, family}` - total query count.
-* `coredns_dns_request_duration_seconds{server, zone}` - duration to process each query.
+* `coredns_panics_total{}` - total number of panics.
+* `coredns_dns_requests_total{server, zone, proto, family, type}` - total query count.
+* `coredns_dns_request_duration_seconds{server, zone, type}` - duration to process each query.
 * `coredns_dns_request_size_bytes{server, zone, proto}` - size of the request in bytes.
-* `coredns_dns_request_do_count_total{server, zone}` -  queries that have the DO bit set
-* `coredns_dns_request_type_count_total{server, zone, type}` - counter of queries per zone and type.
+* `coredns_dns_do_requests_total{server, zone}` -  queries that have the DO bit set
 * `coredns_dns_response_size_bytes{server, zone, proto}` - response size in bytes.
-* `coredns_dns_response_rcode_count_total{server, zone, rcode}` - response per zone and rcode.
+* `coredns_dns_responses_total{server, zone, rcode}` - response per zone and rcode.
+* `coredns_plugin_enabled{server, zone, name}` - indicates whether a plugin is enabled on per server and zone basis.
 
 Each counter has a label `zone` which is the zonename used for the request/response.
 
@@ -32,7 +32,6 @@ Extra labels used are:
 * `type` which holds the query type. It holds most common types (A, AAAA, MX, SOA, CNAME, PTR, TXT,
   NS, SRV, DS, DNSKEY, RRSIG, NSEC, NSEC3, IXFR, AXFR and ANY) and "other" which lumps together all
   other types.
-* The `response_rcode_count_total` has an extra label `rcode` which holds the rcode of the response.
 
 If monitoring is enabled, queries that do not enter the plugin chain are exported under the fake
 name "dropped" (without a closing dot - this is never a valid domain name).
@@ -47,12 +46,12 @@ prometheus [ADDRESS]
 
 For each zone that you want to see metrics for.
 
-It optionally takes an address to which the metrics are exported; the default
-is `localhost:9153`. The metrics path is fixed to `/metrics`.
+It optionally takes a bind address to which the metrics are exported; the default
+listens on `localhost:9153`. The metrics path is fixed to `/metrics`.
 
 ## Examples
 
-Use an alternative address:
+Use an alternative listening address:
 
 ~~~ corefile
 . {
@@ -60,7 +59,7 @@ Use an alternative address:
 }
 ~~~
 
-Or via an enviroment variable (this is supported throughout the Corefile): `export PORT=9253`, and
+Or via an environment variable (this is supported throughout the Corefile): `export PORT=9253`, and
 then:
 
 ~~~ corefile
@@ -75,3 +74,4 @@ When reloading, the Prometheus handler is stopped before the new server instance
 If that new server fails to start, then the initial server instance is still available and DNS queries still served,
 but Prometheus handler stays down.
 Prometheus will not reply HTTP request until a successful reload or a complete restart of CoreDNS.
+Only the plugins that register as Handler are visible in `coredns_plugin_enabled{server, zone, name}`. As of today the plugins reload and bind will not be reported.

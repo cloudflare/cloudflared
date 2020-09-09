@@ -12,6 +12,10 @@ import (
 	"github.com/coredns/coredns/plugin/pkg/dnsutil"
 	"github.com/coredns/coredns/plugin/pkg/doh"
 	"github.com/coredns/coredns/plugin/pkg/response"
+	"github.com/coredns/coredns/plugin/pkg/reuseport"
+	"github.com/coredns/coredns/plugin/pkg/transport"
+
+	"github.com/caddyserver/caddy"
 )
 
 // ServerHTTPS represents an instance of a DNS-over-HTTPS server.
@@ -42,6 +46,9 @@ func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 	return sh, nil
 }
 
+// Compile-time check to ensure Server implements the caddy.GracefulServer interface
+var _ caddy.GracefulServer = &Server{}
+
 // Serve implements caddy.TCPServer interface.
 func (s *ServerHTTPS) Serve(l net.Listener) error {
 	s.m.Lock()
@@ -60,7 +67,7 @@ func (s *ServerHTTPS) ServePacket(p net.PacketConn) error { return nil }
 // Listen implements caddy.TCPServer interface.
 func (s *ServerHTTPS) Listen() (net.Listener, error) {
 
-	l, err := net.Listen("tcp", s.Addr[len(TransportHTTPS+"://"):])
+	l, err := reuseport.Listen("tcp", s.Addr[len(transport.HTTPS+"://"):])
 	if err != nil {
 		return nil, err
 	}
@@ -77,11 +84,10 @@ func (s *ServerHTTPS) OnStartupComplete() {
 		return
 	}
 
-	out := startUpZones(TransportHTTPS+"://", s.Addr, s.zones)
+	out := startUpZones(transport.HTTPS+"://", s.Addr, s.zones)
 	if out != "" {
 		fmt.Print(out)
 	}
-	return
 }
 
 // Stop stops the server. It blocks until the server is totally stopped.
@@ -116,7 +122,16 @@ func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// We just call the normal chain handler - all error handling is done there.
 	// We should expect a packet to be returned that we can send to the client.
-	s.ServeDNS(context.Background(), dw, msg)
+	ctx := context.WithValue(context.Background(), Key{}, s.Server)
+	s.ServeDNS(ctx, dw, msg)
+
+	// See section 4.2.1 of RFC 8484.
+	// We are using code 500 to indicate an unexpected situation when the chain
+	// handler has not provided any response message.
+	if dw.Msg == nil {
+		http.Error(w, "No response", http.StatusInternalServerError)
+		return
+	}
 
 	buf, _ := dw.Msg.Pack()
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/coredns/coredns/plugin"
 
-	"github.com/mholt/caddy"
+	"github.com/caddyserver/caddy"
 )
 
 // Config configuration for a single server.
@@ -21,7 +21,7 @@ type Config struct {
 	// The port to listen on.
 	Port string
 
-	// Root points to a base directory we we find user defined "things".
+	// Root points to a base directory we find user defined "things".
 	// First consumer is the file plugin to looks for zone files in this place.
 	Root string
 

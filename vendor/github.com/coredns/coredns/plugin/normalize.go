@@ -6,16 +6,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/coredns/coredns/plugin/pkg/parse"
 	"github.com/miekg/dns"
 )
 
 // See core/dnsserver/address.go - we should unify these two impls.
 
-// Zones respresents a lists of zone names.
+// Zones represents a lists of zone names.
 type Zones []string
 
-// Matches checks is qname is a subdomain of any of the zones in z.  The match
-// will return the most specific zones that matches other. The empty string
+// Matches checks if qname is a subdomain of any of the zones in z.  The match
+// will return the most specific zones that matches. The empty string
 // signals a not found condition.
 func (z Zones) Matches(qname string) string {
 	zone := ""
@@ -60,25 +61,26 @@ type (
 
 // Normalize will return the host portion of host, stripping
 // of any port or transport. The host will also be fully qualified and lowercased.
+// An empty string is returned on failure
 func (h Host) Normalize() string {
+	// The error can be ignored here, because this function should only be called after the corefile has already been vetted.
+	host, _ := h.MustNormalize()
+	return host
+}
 
+// MustNormalize will return the host portion of host, stripping
+// of any port or transport. The host will also be fully qualified and lowercased.
+// An error is returned on error
+func (h Host) MustNormalize() (string, error) {
 	s := string(h)
+	_, s = parse.Transport(s)
 
-	switch {
-	case strings.HasPrefix(s, TransportTLS+"://"):
-		s = s[len(TransportTLS+"://"):]
-	case strings.HasPrefix(s, TransportDNS+"://"):
-		s = s[len(TransportDNS+"://"):]
-	case strings.HasPrefix(s, TransportGRPC+"://"):
-		s = s[len(TransportGRPC+"://"):]
-	case strings.HasPrefix(s, TransportHTTPS+"://"):
-		s = s[len(TransportHTTPS+"://"):]
+	// The error can be ignored here, because this function is called after the corefile has already been vetted.
+	host, _, _, err := SplitHostPort(s)
+	if err != nil {
+		return "", err
 	}
-
-	// The error can be ignore here, because this function is called after the corefile
-	// has already been vetted.
-	host, _, _, _ := SplitHostPort(s)
-	return Name(host).Normalize()
+	return Name(host).Normalize(), nil
 }
 
 // SplitHostPort splits s up in a host and port portion, taking reverse address notation into account.
@@ -87,7 +89,7 @@ func (h Host) Normalize() string {
 func SplitHostPort(s string) (host, port string, ipnet *net.IPNet, err error) {
 	// If there is: :[0-9]+ on the end we assume this is the port. This works for (ascii) domain
 	// names and our reverse syntax, which always needs a /mask *before* the port.
-	// So from the back, find first colon, and then check if its a number.
+	// So from the back, find first colon, and then check if it's a number.
 	host = s
 
 	colon := strings.LastIndex(s, ":")
@@ -125,7 +127,8 @@ func SplitHostPort(s string) (host, port string, ipnet *net.IPNet, err error) {
 			// Get the first lower octet boundary to see what encompassing zone we should be authoritative for.
 			mod := (bits - ones) % sizeDigit
 			nearest := (bits - ones) + mod
-			offset, end := 0, false
+			offset := 0
+			var end bool
 			for i := 0; i < nearest/sizeDigit; i++ {
 				offset, end = dns.NextLabel(rev, offset)
 				if end {
@@ -137,11 +140,3 @@ func SplitHostPort(s string) (host, port string, ipnet *net.IPNet, err error) {
 	}
 	return host, port, n, nil
 }
-
-// Duplicated from core/dnsserver/address.go !
-const (
-	TransportDNS   = "dns"
-	TransportTLS   = "tls"
-	TransportGRPC  = "grpc"
-	TransportHTTPS = "https"
-)
