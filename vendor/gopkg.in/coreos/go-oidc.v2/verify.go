@@ -87,7 +87,7 @@ type Config struct {
 	// If true, token expiry is not checked.
 	SkipExpiryCheck bool
 
-	// SkipIssuerCheck is intended for specialized cases where the the caller wishes to
+	// SkipIssuerCheck is intended for specialized cases where the caller wishes to
 	// defer issuer validation. When enabled, callers MUST independently verify the Token's
 	// Issuer is a known good value.
 	//

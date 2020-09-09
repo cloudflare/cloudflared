@@ -117,7 +117,7 @@ func Stream(conn, backendConn io.ReadWriter) {
 	<-proxyDone
 }
 
-// DefaultStreamHandler is provided to the the standard websocket to origin stream
+// DefaultStreamHandler is provided to the standard websocket to origin stream
 // This exist to allow SOCKS to deframe data before it gets to the origin
 func DefaultStreamHandler(wsConn *Conn, remoteConn net.Conn, _ http.Header) {
 	Stream(wsConn, remoteConn)

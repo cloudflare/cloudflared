@@ -88,7 +88,7 @@ type Response struct {
 	// Version of the release that will be updated to if applied.
 	ReleaseVersion string
 
-	// Title of the the release
+	// Title of the release
 	ReleaseTitle string
 
 	// Additional details about the release
