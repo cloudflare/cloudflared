@@ -22,6 +22,7 @@ CODE_SIGN_PRIV="code_sign.p12"
 CODE_SIGN_CERT="code_sign.cer"
 INSTALLER_PRIV="installer.p12"
 INSTALLER_CERT="installer.cer"
+BUNDLE_ID="com.cloudflare.cloudflared"
 SEC_DUP_MSG="security: SecKeychainItemImport: The specified item already exists in the keychain."
 export PATH="$PATH:/usr/local/bin"
 mkdir -p ../src/github.com/cloudflare/    
@@ -65,7 +66,6 @@ if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
             exit $exitcode1
         else 
             echo "already imported code signing certificate"
-            echo "code sign import output: $out1"
         fi
     fi
   fi
@@ -108,7 +108,6 @@ if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
             exit $exitcode3
         else 
             echo "already imported installer certificate"
-            echo "installer import output: $out3"
         fi
     fi
   fi
@@ -140,6 +139,12 @@ fi
 # sign the cloudflared binary
 if [[ -n "${CODE_SIGN_NAME:-}" ]]; then
   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
+  
+  # notarize the binary
+  if [[ -n "${CFD_NOTE_PASSWORD:-}" ]]; then
+    zip "${BINARY_NAME}.zip" ${BINARY_NAME} 
+    xcrun altool --notarize-app -f "${BINARY_NAME}.zip" -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
+  fi
 fi
 
 
@@ -164,6 +169,12 @@ if [[ -n "${PKG_SIGN_NAME:-}" ]]; then
       --install-location /usr/local/bin \
       --sign "${PKG_SIGN_NAME}" \
       ${PKGNAME}
+
+      # notarize the package
+      if [[ -n "${CFD_NOTE_PASSWORD:-}" ]]; then
+        xcrun altool --notarize-app -f ${PKGNAME} -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
+        xcrun stapler staple ${PKGNAME}
+      fi
 else
     pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
