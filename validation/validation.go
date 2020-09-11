@@ -176,28 +176,32 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 		return err
 	}
 	initialRequest.Host = hostname
-	_, initialErr := client.Do(initialRequest)
-	if initialErr != nil {
-		// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
-		oldScheme := parsedURL.Scheme
-		parsedURL.Scheme = toggleProtocol(parsedURL.Scheme)
+	resp, initialErr := client.Do(initialRequest)
+	if initialErr == nil {
+		resp.Body.Close()
+		return nil
+	}
 
-		secondRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
-		if err != nil {
-			return err
-		}
-		secondRequest.Host = hostname
-		_, secondErr := client.Do(secondRequest)
-		if secondErr == nil { // Worked this time--advise the user to switch protocols
-			return errors.Errorf(
-				"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %s",
-				parsedURL.Host,
-				oldScheme,
-				parsedURL.Scheme,
-				initialErr,
-				parsedURL,
-			)
-		}
+	// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
+	oldScheme := parsedURL.Scheme
+	parsedURL.Scheme = toggleProtocol(parsedURL.Scheme)
+
+	secondRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
+	if err != nil {
+		return err
+	}
+	secondRequest.Host = hostname
+	resp, secondErr := client.Do(secondRequest)
+	if secondErr == nil { // Worked this time--advise the user to switch protocols
+		resp.Body.Close()
+		return errors.Errorf(
+			"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %s",
+			parsedURL.Host,
+			oldScheme,
+			parsedURL.Scheme,
+			initialErr,
+			parsedURL,
+		)
 	}
 
 	return initialErr

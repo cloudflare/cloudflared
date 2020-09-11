@@ -17,7 +17,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/net/http2"
 	"golang.org/x/sync/errgroup"
+	"zombiezen.com/go/capnproto2/rpc"
 
 	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
@@ -30,6 +32,7 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/validation"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
@@ -304,7 +307,14 @@ func ServeTunnel(
 	connectionTag := uint8ToString(connectionIndex)
 
 	if config.NamedTunnel != nil && config.NamedTunnel.Protocol == http2Protocol {
-		return ServeNamedTunnel(ctx, config, connectionIndex, addr, connectedFuse, reconnectCh)
+		tlsConn, err := RegisterConnection(ctx, config, connectionIndex, uint8(backoff.retries), addr)
+		if err != nil {
+			logger.Errorf("Register connectio error: %+v", err)
+			return err, true
+		}
+		connectedFuse.Fuse(true)
+		backoff.SetGracePeriod()
+		return serveNamedTunnel(ctx, config, tlsConn, connectionIndex, reconnectCh)
 	}
 
 	// Returns error from parsing the origin URL or handshake errors
@@ -331,10 +341,6 @@ func ServeTunnel(
 				backoff.SetGracePeriod()
 			}
 		}()
-
-		if config.NamedTunnel != nil {
-			return RegisterConnection(ctx, handler.muxer, config, connectionIndex, originLocalAddr, uint8(backoff.retries))
-		}
 
 		if config.UseReconnectToken && connectedFuse.Value() {
 			err := ReconnectTunnel(serveCtx, handler.muxer, config, logger, connectionIndex, originLocalAddr, cloudflaredUUID, credentialManager)
@@ -426,7 +432,55 @@ func ServeTunnel(
 	return nil, true
 }
 
-func RegisterConnection(
+func serveNamedTunnel(
+	ctx context.Context,
+	config *TunnelConfig,
+	tlsConn net.Conn,
+	connectionIndex uint8,
+	reconnectCh chan ReconnectSignal,
+) (err error, recoverable bool) {
+	originURLStr, err := validation.ValidateUrl(config.OriginUrl)
+	if err != nil {
+		return fmt.Errorf("unable to parse origin URL %#v", config.OriginUrl), false
+	}
+	originURL, err := url.Parse(originURLStr)
+	if err != nil {
+		return fmt.Errorf("unable to parse origin URL %#v", originURLStr), false
+	}
+
+	originClient := config.HTTPTransport
+	if originClient == nil {
+		originClient = http.DefaultTransport
+	}
+
+	errGroup, serveCtx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		cfdServer := &cfdServer{
+			httpServer:      &http2.Server{},
+			originClient:    originClient,
+			logger:          config.Logger,
+			originURL:       originURL,
+			connectionIndex: uint8ToString(connectionIndex),
+			config:          config,
+		}
+		cfdServer.serve(serveCtx, tlsConn)
+		return fmt.Errorf("Connection with edge closed")
+	})
+
+	errGroup.Go(func() error {
+		select {
+		case reconnect := <-reconnectCh:
+			return &reconnect
+		case <-serveCtx.Done():
+			return nil
+		}
+	})
+
+	err = errGroup.Wait()
+	return err, true
+}
+
+func RegisterConnectionWithH2Mux(
 	ctx context.Context,
 	muxer *h2mux.Muxer,
 	config *TunnelConfig,
@@ -468,6 +522,52 @@ func RegisterConnection(
 	}
 
 	return nil
+}
+
+func RegisterConnection(
+	ctx context.Context,
+	config *TunnelConfig,
+	connectionID uint8,
+	numPreviousAttempts uint8,
+	addr *net.TCPAddr,
+) (net.Conn, error) {
+	originCert, err := tls.X509KeyPair(config.OriginCert, config.OriginCert)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig := config.TlsConfig
+	tlsConfig.Certificates = []tls.Certificate{originCert}
+	tlsServerConn, err := connection.DialEdge(ctx, dialTimeout, config.TlsConfig, addr)
+	if err != nil {
+		return nil, err
+	}
+
+	rpcTransport := tunnelrpc.NewTransportLogger(config.Logger, rpc.StreamTransport(&persistentConn{tlsServerConn}))
+	rpcConn := rpc.NewConn(
+		rpcTransport,
+		tunnelrpc.ConnLog(config.Logger),
+	)
+	rpcClient := tunnelpogs.TunnelServer_PogsClient{Client: rpcConn.Bootstrap(ctx), Conn: rpcConn}
+	connDetail, err := rpcClient.RegisterConnection(
+		ctx,
+		config.NamedTunnel.Auth,
+		config.NamedTunnel.ID,
+		connectionID,
+		config.ConnectionOptions(tlsServerConn.LocalAddr().String(), numPreviousAttempts),
+	)
+	if err != nil {
+		return nil, err
+	}
+	config.Logger.Infof("Connection %d registered with %s using ID %s", connectionID, connDetail.Location, connDetail.UUID)
+	rpcTransport.Close()
+	// Closing the client will also close the connection
+	rpcClient.Close()
+
+	flushMessage := make([]byte, 8)
+	buf := make([]byte, len(flushMessage))
+	tlsServerConn.Write(buf)
+
+	return tlsServerConn, nil
 }
 
 func serverRegistrationErrorFromRPC(err error) *serverRegisterTunnelError {
@@ -698,7 +798,7 @@ func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
 	var resp *http.Response
 	var respErr error
 	if websocket.IsWebSocketUpgrade(req) {
-		resp, respErr = h.serveWebsocket(stream, req, rule)
+		resp, respErr = serveWebsocket(&h2muxWebsocketResp{stream}, req, rule)
 	} else {
 		resp, respErr = h.serveHTTP(stream, req, rule)
 	}
@@ -725,7 +825,7 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 	return req, rule, nil
 }
 
-func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
+func serveWebsocket(wsResp WebsocketResp, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
 	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
 		req.Header.Set("Host", hostHeader)
 		req.Host = hostHeader
@@ -740,13 +840,13 @@ func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Requ
 		return nil, err
 	}
 	defer conn.Close()
-	err = stream.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(response))
+	err = wsResp.WriteRespHeaders(response)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
 	// Copy to/from stream to the undelying connection. Use the underlying
 	// connection because cloudflared doesn't operate on the message themselves
-	websocket.Stream(conn.UnderlyingConn(), stream)
+	websocket.Stream(conn.UnderlyingConn(), wsResp)
 
 	return response, nil
 }

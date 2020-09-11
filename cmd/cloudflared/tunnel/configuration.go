@@ -156,7 +156,8 @@ func prepareTunnelConfig(
 	transportLogger logger.Service,
 	namedTunnel *origin.NamedTunnelConfig,
 ) (*origin.TunnelConfig, error) {
-	compatibilityMode := namedTunnel == nil
+	isNamedTunnel := namedTunnel != nil
+	compatibilityMode := !isNamedTunnel
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
@@ -219,7 +220,7 @@ func prepareTunnelConfig(
 		}
 	}
 
-	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c)
+	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, isNamedTunnel)
 	if err != nil {
 		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
 		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")

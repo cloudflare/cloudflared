@@ -18,7 +18,10 @@ const (
 	OriginCAPoolFlag = "origin-ca-pool"
 	CaCertFlag       = "cacert"
 
-	edgeTLSServerName = "cftunnel.com"
+	// edgeH2muxTLSServerName is the server name to establish h2mux connection with edge
+	edgeH2muxTLSServerName = "cftunnel.com"
+	// edgeH2TLSServerName is the server name to establish http2 connection with edge
+	edgeH2TLSServerName = "h2.cftunnel.com"
 )
 
 // CertReloader can load and reload a TLS certificate from a particular filepath.
@@ -120,13 +123,17 @@ func LoadCustomOriginCA(originCAFilename string) (*x509.CertPool, error) {
 	return certPool, nil
 }
 
-func CreateTunnelConfig(c *cli.Context) (*tls.Config, error) {
+func CreateTunnelConfig(c *cli.Context, isNamedTunnel bool) (*tls.Config, error) {
 	var rootCAs []string
 	if c.String(CaCertFlag) != "" {
 		rootCAs = append(rootCAs, c.String(CaCertFlag))
 	}
 
-	userConfig := &TLSParameters{RootCAs: rootCAs, ServerName: edgeTLSServerName}
+	serverName := edgeH2muxTLSServerName
+	if isNamedTunnel {
+		serverName = edgeH2TLSServerName
+	}
+	userConfig := &TLSParameters{RootCAs: rootCAs, ServerName: serverName}
 	tlsConfig, err := GetConfig(userConfig)
 	if err != nil {
 		return nil, err

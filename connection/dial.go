@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DialEdge makes a TLS connection to a Cloudflare edge node
+// DialEdgeWithH2Mux makes a TLS connection to a Cloudflare edge node
 func DialEdge(
 	ctx context.Context,
 	timeout time.Duration,
@@ -25,6 +25,7 @@ func DialEdge(
 	if err != nil {
 		return nil, newDialError(err, "DialContext error")
 	}
+
 	tlsEdgeConn := tls.Client(edgeConn, tlsConfig)
 	tlsEdgeConn.SetDeadline(time.Now().Add(timeout))
 
