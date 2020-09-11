@@ -303,6 +303,15 @@ func unmarshalTunnel(reader io.Reader) (*Tunnel, error) {
 }
 
 func (r *RESTClient) statusCodeToError(op string, resp *http.Response) error {
+	if resp.Header.Get("Content-Type") == "application/json" {
+		var errorsResp struct{
+			Error string `json:"error"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&errorsResp) == nil && errorsResp.Error != ""{
+			return errors.Errorf("Failed to %s: %s", op, errorsResp.Error)
+		}
+	}
+
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return nil
