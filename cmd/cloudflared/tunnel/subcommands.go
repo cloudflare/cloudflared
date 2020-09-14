@@ -80,15 +80,12 @@ var (
 	}
 )
 
-const hideSubcommands = true
-
 func buildCreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "create",
 		Action:    cliutil.ErrorHandler(createCommand),
 		Usage:     "Create a new tunnel with given name",
 		ArgsUsage: "TUNNEL-NAME",
-		Hidden:    hideSubcommands,
 		Flags:     []cli.Flag{outputFormatFlag},
 	}
 }
@@ -153,7 +150,6 @@ func buildListCommand() *cli.Command {
 		Action:    cliutil.ErrorHandler(listCommand),
 		Usage:     "List existing tunnels",
 		ArgsUsage: " ",
-		Hidden:    hideSubcommands,
 		Flags:     []cli.Flag{outputFormatFlag, showDeletedFlag, listNameFlag, listExistedAtFlag, listIDFlag, showRecentlyDisconnected},
 	}
 }
@@ -209,6 +205,7 @@ func fmtAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnect
 	)
 
 	writer := tabwriter.NewWriter(os.Stdout, minWidth, tabWidth, padding, padChar, flags)
+	defer writer.Flush()
 
 	// Print column headers with tabbed columns
 	fmt.Fprintln(writer, "ID\tNAME\tCREATED\tCONNECTIONS\t")
@@ -224,9 +221,6 @@ func fmtAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnect
 		)
 		fmt.Fprintln(writer, formattedStr)
 	}
-
-	// Write data buffered in tabwriter to output
-	writer.Flush()
 }
 
 func fmtConnections(connections []tunnelstore.Connection, showRecentlyDisconnected bool) string {
@@ -258,9 +252,8 @@ func buildDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "delete",
 		Action:    cliutil.ErrorHandler(deleteCommand),
-		Usage:     "Delete existing tunnel with given IDs",
-		ArgsUsage: "TUNNEL-ID",
-		Hidden:    hideSubcommands,
+		Usage:     "Delete existing tunnel by UUID or name",
+		ArgsUsage: "TUNNEL",
 		Flags:     []cli.Flag{credentialsFileFlag, forceDeleteFlag},
 	}
 }
@@ -301,12 +294,13 @@ func buildRunCommand() *cli.Command {
 		Name:      "run",
 		Action:    cliutil.ErrorHandler(runCommand),
 		Usage:     "Proxy a local web server by running the given tunnel",
-		ArgsUsage: "TUNNEL-ID",
-		Description: "Runs the tunnel, creating a high-availability connection between your server and the Cloudflare " +
-			"edge. This command requires the tunnel credentials file created when `cloudflared tunnel create` was run, but " +
-			"does not require the cert.pem from `cloudflared login`. If you experience problems running the tunnel, " +
-			"`cloudflared tunnel cleanup` may help by removing any old connection records.",
-		Hidden: hideSubcommands,
+		ArgsUsage: "TUNNEL",
+		Description: `Runs the tunnel identified by name or UUUD, creating a highly available connection 
+   between your server and the Cloudflare edge.
+
+   This command requires the tunnel credentials file created when "cloudflared tunnel create" was run, 
+   however it does not need access to cert.pem from "cloudflared login". If you experience problems running
+   the tunnel, "cloudflared tunnel cleanup" may help by removing any old connection records.`,
 		Flags:  []cli.Flag{forceFlag, credentialsFileFlag},
 	}
 }
@@ -332,9 +326,8 @@ func buildCleanupCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "cleanup",
 		Action:    cliutil.ErrorHandler(cleanupCommand),
-		Usage:     "Cleanup connections for the tunnel with given IDs",
-		ArgsUsage: "TUNNEL-IDS",
-		Hidden:    hideSubcommands,
+		Usage:     "Cleanup tunnel connections",
+		ArgsUsage: "TUNNEL",
 	}
 }
 
@@ -362,11 +355,10 @@ func buildRouteCommand() *cli.Command {
 		Action: cliutil.ErrorHandler(routeCommand),
 		Usage:  "Define what hostname or load balancer can route to this tunnel",
 		Description: `The route defines what hostname or load balancer can route to this tunnel.
-	 To route a hostname: cloudflared tunnel route dns <tunnel ID> <hostname>
-	 To route a load balancer: cloudflared tunnel route lb <tunnel ID> <load balancer name> <load balancer pool>
-	 If you don't specify a load balancer pool, we will create a new pool called tunnel:<tunnel ID>`,
-		ArgsUsage: "dns|lb TUNNEL-ID HOSTNAME [LB-POOL]",
-		Hidden:    hideSubcommands,
+
+   To route a hostname: cloudflared tunnel route dns <tunnel ID> <hostname>
+   To use this tunnel as a load balancer origin: cloudflared tunnel route lb <tunnel ID> <load balancer name> <load balancer pool>`,
+		ArgsUsage: "dns|lb TUNNEL HOSTNAME [LB-POOL]",
 	}
 }
 
