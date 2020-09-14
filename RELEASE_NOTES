@@ -1,3 +1,20 @@
+2020.9.0
+- 2020-09-11 TUN-3293: Try to use error information from the body of a failed tunnelstore reresponse if available
+- 2020-09-04 AUTH-2653 renabled signing
+- 2020-09-04 TUN-3377: Tunnel route should check dns/lb before checking tunnel ID
+- 2020-09-04 AUTH-2653 changed to proper file extension
+- 2020-09-04 AUTH-2653 handle duplicate key import errors
+- 2020-09-04 TUN-3345: tunnel run accepts name of tunnel as argument
+- 2020-09-08 AUTH-2653 disble error pipe to see what is failing
+- 2020-09-08 AUTH-2653 search for the certificate and not the identity
+- 2020-09-09 TUN-3284: Use cloudflared/<version> as user agent of tunnelstore client
+- 2020-09-09 TUN-3375: Upgrade x/text and gorilla websocket deps
+- 2020-09-09 TUN-3375: Upgrade coredns and prometheus dependencies
+- 2020-09-09 AUTH-2653 add notarization to mac build
+- 2020-09-08 TUN-3292: Mention cleanup in tunnel run help.
+- 2020-08-20 AUTH-2016 fixed variable fail
+- 2020-08-12 TUN-3352 extra debug logging for websockets
+
 2020.8.2
 - 2020-08-20 AUTH-3021 fixed the git version call by using the older flag
 - 2020-08-18 TUN-3268: Each connection has its own event digest to reconnect
