@@ -98,3 +98,27 @@ func TestTunnelfilePath(t *testing.T) {
 	expected := fmt.Sprintf("%s/.cloudflared/%v.json", homeDir, tunnelID)
 	assert.Equal(t, expected, actual)
 }
+
+func TestValidateName(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "", want: false},
+		{name: "-", want: false},
+		{name: ".", want: false},
+		{name: "a b", want: false},
+		{name: "a+b", want: false},
+		{name: "-ab", want: false},
+
+		{name: "ab", want: true},
+		{name: "ab-c", want: true},
+		{name: "abc.def", want: true},
+		{name: "_ab_c.-d-ef", want: true},
+	}
+	for _, tt := range tests {
+		if got := validateName(tt.name); got != tt.want {
+			t.Errorf("validateName() = %v, want %v", got, tt.want)
+		}
+	}
+}
