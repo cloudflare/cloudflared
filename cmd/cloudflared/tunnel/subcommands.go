@@ -17,6 +17,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/net/idna"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
@@ -377,7 +378,7 @@ func dnsRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 	userHostname := c.Args().Get(userHostnameIndex)
 	if userHostname == "" {
 		return nil, cliutil.UsageError("The third argument should be the hostname")
-	} else if !validateName(userHostname) {
+	} else if !validateHostname(userHostname) {
 		return nil, errors.Errorf("%s is not a valid hostname", userHostname)
 	}
 	return tunnelstore.NewDNSRoute(userHostname), nil
@@ -395,7 +396,7 @@ func lbRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 	lbName := c.Args().Get(lbNameIndex)
 	if lbName == "" {
 		return nil, cliutil.UsageError("The third argument should be the load balancer name")
-	} else if !validateName(lbName) {
+	} else if !validateHostname(lbName) {
 		return nil, errors.Errorf("%s is not a valid load balancer name", lbName)
 	}
 
@@ -413,6 +414,16 @@ var nameRegex = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
 
 func validateName(s string) bool {
 	return nameRegex.MatchString(s)
+}
+
+func validateHostname(s string) bool {
+	// Slightly stricter than PunyCodeProfile
+	idnaProfile := idna.New(
+		idna.ValidateLabels(true),
+		idna.VerifyDNSLength(true))
+
+	puny, err := idnaProfile.ToASCII(s)
+	return err == nil && validateName(puny)
 }
 
 func routeCommand(c *cli.Context) error {
