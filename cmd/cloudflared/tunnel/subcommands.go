@@ -37,18 +37,19 @@ var (
 	listNameFlag = &cli.StringFlag{
 		Name:    "name",
 		Aliases: []string{"n"},
-		Usage:   "List tunnels with the given name",
+		Usage:   "List tunnels with the given `NAME`",
 	}
 	listExistedAtFlag = &cli.TimestampFlag{
 		Name:    "when",
 		Aliases: []string{"w"},
-		Usage:   fmt.Sprintf("List tunnels that are active at the given time, expect format in RFC3339 (%s)", time.Now().Format(tunnelstore.TimeLayout)),
+		Usage:   "List tunnels that are active at the given `TIME` in RFC3339 format",
 		Layout:  tunnelstore.TimeLayout,
+		DefaultText: fmt.Sprintf("current time, %s", time.Now().Format(tunnelstore.TimeLayout)),
 	}
 	listIDFlag = &cli.StringFlag{
 		Name:    "id",
 		Aliases: []string{"i"},
-		Usage:   "List tunnel by ID",
+		Usage:   "List tunnel by `ID`",
 	}
 	showRecentlyDisconnected = &cli.BoolFlag{
 		Name:    "show-recently-disconnected",
