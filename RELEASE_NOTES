@@ -1,3 +1,10 @@
+2020.9.1
+- 2020-09-14 TUN-3395: Unhide named tunnel subcommands, tweak help
+- 2020-09-15 TUN-3395: Improve help for list command
+- 2020-09-14 TUN-3294: Perform basic validation on arguments of route command; remove default pool name which wasn't valid
+- 2020-09-15 TUN-3395: Improve help for list command
+- 2020-09-16 Use Go 1.15.2
+
 2020.9.0
 - 2020-09-11 TUN-3293: Try to use error information from the body of a failed tunnelstore reresponse if available
 - 2020-09-04 AUTH-2653 renabled signing
