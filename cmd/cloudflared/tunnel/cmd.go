@@ -182,7 +182,13 @@ func Commands() []*cli.Command {
 	subcommands = append(subcommands, buildCleanupCommand())
 	subcommands = append(subcommands, buildRouteCommand())
 
-	cmds = append(cmds, &cli.Command{
+	cmds = append(cmds, buildTunnelCommand(subcommands))
+
+	return cmds
+}
+
+func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
+	return &cli.Command{
 		Name:      "tunnel",
 		Action:    cliutil.ErrorHandler(TunnelCommand),
 		Before:    Before,
@@ -198,20 +204,18 @@ func Commands() []*cli.Command {
 
 		To use, begin by calling login to download a certificate:
 
-		  cloudflared tunnel login
+			$ cloudflared tunnel login
 
 		With your certificate installed you can then launch your first tunnel,
 		replacing my.site.com with a subdomain of your site:
 
-		  cloudflared tunnel --hostname my.site.com --url http://localhost:8080
+			$ cloudflared tunnel --hostname my.site.com --url http://localhost:8080
 
 		If you have a web server running on port 8080 (in this example), it will be available on
 		the internet!`,
 		Subcommands: subcommands,
 		Flags:       tunnelFlags(false),
-	})
-
-	return cmds
+	}
 }
 
 func TunnelCommand(c *cli.Context) error {
@@ -748,7 +752,7 @@ func appendFlags(flags []cli.Flag, extraFlags ...cli.Flag) []cli.Flag {
 }
 
 func tunnelFlags(shouldHide bool) []cli.Flag {
-	return []cli.Flag{
+	flags := []cli.Flag{
 		&cli.StringFlag{
 			Name:   "config",
 			Usage:  "Specifies a config file in YAML format.",
@@ -803,13 +807,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    tlsconfig.OriginCAPoolFlag,
 			Usage:   "Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CA_POOL"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "url",
-			Value:   "http://localhost:8080",
-			Usage:   "Connect to the local webserver at `URL`.",
-			EnvVars: []string{"TUNNEL_URL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
@@ -926,20 +923,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Maximum number of retries for connection/protocol errors.",
 			EnvVars: []string{"TUNNEL_RETRIES"},
 			Hidden:  shouldHide,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "hello-world",
-			Value:   false,
-			Usage:   "Run Hello World Server",
-			EnvVars: []string{"TUNNEL_HELLO_WORLD"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    sshServerFlag,
-			Value:   false,
-			Usage:   "Run an SSH Server",
-			EnvVars: []string{"TUNNEL_SSH_SERVER"},
-			Hidden:  true, // TODO: remove when feature is complete
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "pidfile",
@@ -1085,6 +1068,54 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "stdin-control",
+			Usage:   "Control the process using commands sent through stdin",
+			EnvVars: []string{"STDIN-CONTROL"},
+			Hidden:  true,
+			Value:   false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "name",
+			Aliases: []string{"n"},
+			EnvVars: []string{"TUNNEL_NAME"},
+			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:   uiFlag,
+			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
+			Value:  false,
+			Hidden: shouldHide,
+		}),
+		urlFlag(shouldHide),
+		helloWorldFlag(shouldHide),
+		createSocks5Flag(shouldHide),
+	}
+	return append(flags, sshFlags(shouldHide)...)
+}
+
+func urlFlag(shouldHide bool) cli.Flag {
+	return altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    "url",
+		Value:   "http://localhost:8080",
+		Usage:   "Connect to the local webserver at `URL`.",
+		EnvVars: []string{"TUNNEL_URL"},
+		Hidden:  shouldHide,
+	})
+}
+
+func helloWorldFlag(shouldHide bool) cli.Flag {
+	return altsrc.NewBoolFlag(&cli.BoolFlag{
+		Name:    "hello-world",
+		Value:   false,
+		Usage:   "Run Hello World Server",
+		EnvVars: []string{"TUNNEL_HELLO_WORLD"},
+		Hidden:  shouldHide,
+	})
+}
+
+func sshFlags(shouldHide bool) []cli.Flag {
+	return []cli.Flag{
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    sshPortFlag,
 			Usage:   "Localhost port that cloudflared SSH server will run on",
@@ -1117,15 +1148,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    accessKeyIDFlag,
-			Usage:   "Access Key ID of where to upload SSH logs",
-			EnvVars: []string{"ACCESS_CLIENT_ID"},
-			Hidden:  true,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    secretIDFlag,
 			Usage:   "Secret ID of where to upload SSH logs",
 			EnvVars: []string{"SECRET_ID"},
+			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    accessKeyIDFlag,
+			Usage:   "Access Key ID of where to upload SSH logs",
+			EnvVars: []string{"ACCESS_CLIENT_ID"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
@@ -1147,18 +1178,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "stdin-control",
-			Usage:   "Control the process using commands sent through stdin",
-			EnvVars: []string{"STDIN-CONTROL"},
-			Hidden:  true,
+			Name:    sshServerFlag,
 			Value:   false,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    socks5Flag,
-			Usage:   "specify if this tunnel is running as a SOCK5 Server",
-			EnvVars: []string{"TUNNEL_SOCKS"},
-			Value:   false,
-			Hidden:  shouldHide,
+			Usage:   "Run an SSH Server",
+			EnvVars: []string{"TUNNEL_SSH_SERVER"},
+			Hidden:  true, // TODO: remove when feature is complete
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    bastionFlag,
@@ -1167,20 +1191,17 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_BASTION"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "name",
-			Aliases: []string{"n"},
-			EnvVars: []string{"TUNNEL_NAME"},
-			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
-			Hidden:  true,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   uiFlag,
-			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
-			Value:  false,
-			Hidden: shouldHide,
-		}),
 	}
+}
+
+func createSocks5Flag(shouldHide bool) cli.Flag {
+	return altsrc.NewBoolFlag(&cli.BoolFlag{
+		Name:    socks5Flag,
+		Usage:   "specify if this tunnel is running as a SOCK5 Server",
+		EnvVars: []string{"TUNNEL_SOCKS"},
+		Value:   false,
+		Hidden:  shouldHide,
+	})
 }
 
 func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service) {

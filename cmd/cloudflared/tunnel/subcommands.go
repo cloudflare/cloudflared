@@ -42,10 +42,10 @@ var (
 		Usage:   "List tunnels with the given `NAME`",
 	}
 	listExistedAtFlag = &cli.TimestampFlag{
-		Name:    "when",
-		Aliases: []string{"w"},
-		Usage:   "List tunnels that are active at the given `TIME` in RFC3339 format",
-		Layout:  tunnelstore.TimeLayout,
+		Name:        "when",
+		Aliases:     []string{"w"},
+		Usage:       "List tunnels that are active at the given `TIME` in RFC3339 format",
+		Layout:      tunnelstore.TimeLayout,
 		DefaultText: fmt.Sprintf("current time, %s", time.Now().Format(tunnelstore.TimeLayout)),
 	}
 	listIDFlag = &cli.StringFlag{
@@ -293,18 +293,48 @@ func renderOutput(format string, v interface{}) error {
 }
 
 func buildRunCommand() *cli.Command {
+	flags := []cli.Flag{
+		forceFlag,
+		credentialsFileFlag,
+		urlFlag(false),
+		helloWorldFlag(false),
+		createSocks5Flag(false),
+	}
+	flags = append(flags, sshFlags(false)...)
+	var runCommandHelpTemplate = `NAME:
+   {{.HelpName}} - {{.Usage}}
+
+USAGE:
+   {{.UsageText}}
+
+DESCRIPTION:
+   {{.Description}}
+
+TUNNEL COMMAND OPTIONS:
+	See cloudflared tunnel -h
+
+RUN COMMAND OPTIONS:
+   {{range .VisibleFlags}}{{.}}
+   {{end}}
+`
 	return &cli.Command{
 		Name:      "run",
 		Action:    cliutil.ErrorHandler(runCommand),
 		Usage:     "Proxy a local web server by running the given tunnel",
+		UsageText: "cloudflared tunnel [tunnel command options] run [run command options]",
 		ArgsUsage: "TUNNEL",
 		Description: `Runs the tunnel identified by name or UUUD, creating a highly available connection 
    between your server and the Cloudflare edge.
 
    This command requires the tunnel credentials file created when "cloudflared tunnel create" was run, 
    however it does not need access to cert.pem from "cloudflared login". If you experience problems running
-   the tunnel, "cloudflared tunnel cleanup" may help by removing any old connection records.`,
-		Flags:  []cli.Flag{forceFlag, credentialsFileFlag},
+   the tunnel, "cloudflared tunnel cleanup" may help by removing any old connection records.
+
+   All the flags from the tunnel command are available, note that they have to be specified before the run command. There are flags defined both in tunnel and run command. The one in run command will take precedence.
+   For example cloudflared tunnel --url localhost:3000 run --url localhost:5000 <TUNNEL ID> will proxy requests to localhost:5000.
+`,
+		Flags:              flags,
+		CustomHelpTemplate: runCommandHelpTemplate,
 	}
 }
 
@@ -471,4 +501,3 @@ func routeCommand(c *cli.Context) error {
 	sc.logger.Infof(res.SuccessSummary())
 	return nil
 }
-
