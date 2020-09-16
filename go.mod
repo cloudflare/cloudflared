@@ -1,6 +1,6 @@
 module github.com/cloudflare/cloudflared
 
-go 1.14
+go 1.15
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
