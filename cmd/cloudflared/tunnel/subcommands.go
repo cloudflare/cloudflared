@@ -438,7 +438,7 @@ func routeCommand(c *cli.Context) error {
 	const tunnelIDIndex = 1
 
 	routeType := c.Args().First()
-	var r tunnelstore.Route
+	var route tunnelstore.Route
 	var tunnelID uuid.UUID
 	switch routeType {
 	case "dns":
@@ -446,7 +446,7 @@ func routeCommand(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		r, err = dnsRouteFromArg(c)
+		route, err = dnsRouteFromArg(c)
 		if err != nil {
 			return err
 		}
@@ -455,7 +455,7 @@ func routeCommand(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		r, err = lbRouteFromArg(c)
+		route, err = lbRouteFromArg(c)
 		if err != nil {
 			return err
 		}
@@ -463,10 +463,12 @@ func routeCommand(c *cli.Context) error {
 		return cliutil.UsageError("%s is not a recognized route type. Supported route types are dns and lb", routeType)
 	}
 
-	if err := sc.route(tunnelID, r); err != nil {
+	res, err := sc.route(tunnelID, route)
+	if err != nil {
 		return err
 	}
-	sc.logger.Infof(r.SuccessSummary())
+
+	sc.logger.Infof(res.SuccessSummary())
 	return nil
 }
 

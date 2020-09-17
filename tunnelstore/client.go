@@ -43,16 +43,33 @@ type Connection struct {
 	IsPendingReconnect bool      `json:"is_pending_reconnect"`
 }
 
+type Change = string
+
+const (
+	ChangeNew       = "new"
+	ChangeUpdated   = "updated"
+	ChangeUnchanged = "unchanged"
+)
+
 // Route represents a record type that can route to a tunnel
 type Route interface {
 	json.Marshaler
 	RecordType() string
+	UnmarshalResult(body io.Reader) (RouteResult, error)
+}
+
+type RouteResult interface {
 	// SuccessSummary explains what will route to this tunnel when it's provisioned successfully
 	SuccessSummary() string
 }
 
 type DNSRoute struct {
 	userHostname string
+}
+
+type DNSRouteResult struct {
+	route *DNSRoute
+	CName Change `json:"cname"`
 }
 
 func NewDNSRoute(userHostname string) Route {
@@ -72,17 +89,41 @@ func (dr *DNSRoute) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&s)
 }
 
+func (dr *DNSRoute) UnmarshalResult(body io.Reader) (RouteResult, error) {
+	var result DNSRouteResult
+	if err := json.NewDecoder(body).Decode(&result); err != nil {
+		return nil, err
+	}
+	result.route = dr
+	return &result, nil
+}
+
 func (dr *DNSRoute) RecordType() string {
 	return "dns"
 }
 
-func (dr *DNSRoute) SuccessSummary() string {
-	return fmt.Sprintf("%s will route to your tunnel", dr.userHostname)
+func (res *DNSRouteResult) SuccessSummary() string {
+	var msgFmt string
+	switch res.CName {
+	case ChangeNew:
+		msgFmt = "Added CNAME %s which will route to this tunnel"
+	case ChangeUpdated: // this is not currently returned by tunnelsore
+		msgFmt = "%s updated to route to your tunnel"
+	case ChangeUnchanged:
+		msgFmt = "%s is already configured to route to your tunnel"
+	}
+	return fmt.Sprintf(msgFmt, res.route.userHostname)
 }
 
 type LBRoute struct {
 	lbName string
 	lbPool string
+}
+
+type LBRouteResult struct {
+	route        *LBRoute
+	LoadBalancer Change `json:"load_balancer"`
+	Pool         Change `json:"pool"`
 }
 
 func NewLBRoute(lbName, lbPool string) Route {
@@ -109,8 +150,42 @@ func (lr *LBRoute) RecordType() string {
 	return "lb"
 }
 
-func (lr *LBRoute) SuccessSummary() string {
-	return fmt.Sprintf("Load balancer %s will route to this tunnel through pool %s", lr.lbName, lr.lbPool)
+func (lr *LBRoute) UnmarshalResult(body io.Reader) (RouteResult, error) {
+	var result LBRouteResult
+	if err := json.NewDecoder(body).Decode(&result); err != nil {
+		return nil, err
+	}
+	result.route = lr
+	return &result, nil
+}
+
+func (res *LBRouteResult) SuccessSummary() string {
+	var msg string
+	switch res.LoadBalancer + "," + res.Pool {
+	case "new,new":
+		msg = "Created load balancer %s and added a new pool %s with this tunnel as an origin"
+	case "new,updated":
+		msg = "Created load balancer %s with an existing pool %s which was updated to use this tunnel as an origin"
+	case "new,unchanged":
+		msg = "Created load balancer %s with an existing pool %s which already has this tunnel as an origin"
+	case "updated,new":
+		msg = "Added new pool %[2]s with this tunnel as an origin to load balancer %[1]s"
+	case "updated,updated":
+		msg = "Updated pool %[2]s to use this tunnel as an origin and added it to load balancer %[1]s"
+	case "updated,unchanged":
+		msg = "Added pool %[2]s, which already has this tunnel as an origin, to load balancer %[1]s"
+	case "unchanged,updated":
+		msg = "Added this tunnel as an origin in pool %[2]s which is already used by load balancer %[1]s"
+	case "unchanged,unchanged":
+		msg = "Load balancer %s already uses pool %s which has this tunnel as an origin"
+	case "unchanged,new":
+		// this state is not possible
+		fallthrough
+	default:
+		msg = "Something went wrong: failed to modify load balancer %s with pool %s; please check traffic manager configuration in the dashboard"
+	}
+
+	return fmt.Sprintf(msg, res.route.lbName, res.route.lbPool)
 }
 
 type Client interface {
@@ -119,7 +194,7 @@ type Client interface {
 	DeleteTunnel(tunnelID uuid.UUID) error
 	ListTunnels(filter *Filter) ([]*Tunnel, error)
 	CleanupConnections(tunnelID uuid.UUID) error
-	RouteTunnel(tunnelID uuid.UUID, route Route) error
+	RouteTunnel(tunnelID uuid.UUID, route Route) (RouteResult, error)
 }
 
 type RESTClient struct {
@@ -260,16 +335,20 @@ func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
 	return r.statusCodeToError("cleanup connections", resp)
 }
 
-func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route Route) error {
+func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route Route) (RouteResult, error) {
 	endpoint := r.baseEndpoints.zoneLevel
 	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/routes", tunnelID))
 	resp, err := r.sendRequest("PUT", endpoint, route)
 	if err != nil {
-		return errors.Wrap(err, "REST request failed")
+		return nil, errors.Wrap(err, "REST request failed")
 	}
 	defer resp.Body.Close()
 
-	return r.statusCodeToError("add route", resp)
+	if resp.StatusCode == http.StatusOK {
+		return route.UnmarshalResult(resp.Body)
+	}
+
+	return nil, r.statusCodeToError("add route", resp)
 }
 
 func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (*http.Response, error) {
@@ -304,10 +383,10 @@ func unmarshalTunnel(reader io.Reader) (*Tunnel, error) {
 
 func (r *RESTClient) statusCodeToError(op string, resp *http.Response) error {
 	if resp.Header.Get("Content-Type") == "application/json" {
-		var errorsResp struct{
+		var errorsResp struct {
 			Error string `json:"error"`
 		}
-		if json.NewDecoder(resp.Body).Decode(&errorsResp) == nil && errorsResp.Error != ""{
+		if json.NewDecoder(resp.Body).Decode(&errorsResp) == nil && errorsResp.Error != "" {
 			return errors.Errorf("Failed to %s: %s", op, errorsResp.Error)
 		}
 	}

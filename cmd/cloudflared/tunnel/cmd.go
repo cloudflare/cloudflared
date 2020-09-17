@@ -244,10 +244,10 @@ func adhocNamedTunnel(c *cli.Context, name string) error {
 	}
 
 	if r, ok := routeFromFlag(c); ok {
-		if err := sc.route(tunnel.ID, r); err != nil {
+		if res, err := sc.route(tunnel.ID, r); err != nil {
 			sc.logger.Errorf("failed to create route, please create it manually. err: %v.", err)
 		} else {
-			sc.logger.Infof(r.SuccessSummary())
+			sc.logger.Infof(res.SuccessSummary())
 		}
 	}
 

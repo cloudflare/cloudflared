@@ -270,17 +270,13 @@ func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
 	return nil
 }
 
-func (sc *subcommandContext) route(tunnelID uuid.UUID, r tunnelstore.Route) error {
+func (sc *subcommandContext) route(tunnelID uuid.UUID, r tunnelstore.Route) (tunnelstore.RouteResult, error) {
 	client, err := sc.client()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := client.RouteTunnel(tunnelID, r); err != nil {
-		return err
-	}
-
-	return nil
+	return client.RouteTunnel(tunnelID, r)
 }
 
 func (sc *subcommandContext) tunnelActive(name string) (*tunnelstore.Tunnel, bool, error) {
