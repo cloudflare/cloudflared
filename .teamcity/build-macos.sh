@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#set -euo pipefail
-
 if [[ "$(uname)" != "Darwin" ]] ; then
     echo "This should be run on macOS"
     exit 1
@@ -31,8 +29,8 @@ cd ../src/github.com/cloudflare/cloudflared
 GOCACHE="$PWD/../../../../" GOPATH="$PWD/../../../../" CGO_ENABLED=1 make cloudflared
 
 # Add code signing private key to the key chain
-if [[ -n "${CFD_CODE_SIGN_KEY:-}" ]]; then
-  if [[ -n "${CFD_CODE_SIGN_PASS:-}" ]]; then
+if [[ ! -z "$CFD_CODE_SIGN_KEY" ]]; then
+  if [[ ! -z "$CFD_CODE_SIGN_PASS" ]]; then
     # write private key to disk and then import it keychain
     echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
     out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1)
@@ -52,7 +50,7 @@ if [[ -n "${CFD_CODE_SIGN_KEY:-}" ]]; then
 fi
 
 # Add code signing certificate to the key chain
-if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
+if [[ ! -z "$CFD_CODE_SIGN_CERT" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
   out1=$(security import ${CODE_SIGN_CERT} -A 2>&1)
@@ -73,8 +71,8 @@ if [[ -n "${CFD_CODE_SIGN_CERT:-}" ]]; then
 fi
 
 # Add package signing private key to the key chain
-if [[ -n "${CFD_INSTALLER_KEY:-}" ]]; then
-  if [[ -n "${CFD_INSTALLER_PASS:-}" ]]; then
+if [[ ! -z "$CFD_INSTALLER_KEY" ]]; then
+  if [[ ! -z "$CFD_INSTALLER_PASS" ]]; then
     # write private key to disk and then import it into the keychain
     echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
     out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1)
@@ -94,7 +92,7 @@ if [[ -n "${CFD_INSTALLER_KEY:-}" ]]; then
 fi
 
 # Add package signing certificate to the key chain
-if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
+if [[ ! -z "$CFD_INSTALLER_CERT" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
   out3=$(security import ${INSTALLER_CERT} -A 2>&1)
@@ -115,7 +113,7 @@ if [[ -n "${CFD_INSTALLER_CERT:-}" ]]; then
 fi
 
 # get the code signing certificate name
-if [[ -n "${CFD_CODE_SIGN_NAME:-}" ]]; then
+if [[ ! -z "$CFD_CODE_SIGN_NAME" ]]; then
   CODE_SIGN_NAME="${CFD_CODE_SIGN_NAME}"
 else
   if [[ -n "$(security find-certificate -c "Developer ID Application" | cut -d'"' -f 4 -s | grep "Developer ID Application:" | head -1)" ]]; then
@@ -126,7 +124,7 @@ else
 fi
 
 # get the package signing certificate name
-if [[ -n "${CFD_INSTALLER_NAME:-}" ]]; then
+if [[ ! -z "$CFD_INSTALLER_NAME" ]]; then
   PKG_SIGN_NAME="${CFD_INSTALLER_NAME}"
 else
   if [[ -n "$(security find-certificate -c "Developer ID Installer" | cut -d'"' -f 4 -s | grep "Developer ID Installer:" | head -1)" ]]; then
@@ -137,11 +135,11 @@ else
 fi
 
 # sign the cloudflared binary
-if [[ -n "${CODE_SIGN_NAME:-}" ]]; then
+if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
   
   # notarize the binary
-  if [[ -n "${CFD_NOTE_PASSWORD:-}" ]]; then
+  if [[ ! -z "$CFD_NOTE_PASSWORD" ]]; then
     zip "${BINARY_NAME}.zip" ${BINARY_NAME} 
     xcrun altool --notarize-app -f "${BINARY_NAME}.zip" -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
   fi
@@ -161,7 +159,7 @@ cp ${BINARY_NAME} "${TARGET_DIRECTORY}/contents/${PRODUCT}"
 tar czf "$FILENAME" "${BINARY_NAME}"
 
 # build the installer package
-if [[ -n "${PKG_SIGN_NAME:-}" ]]; then
+if [[ ! -z "$PKG_SIGN_NAME" ]]; then
   pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
       --scripts ${TARGET_DIRECTORY}/scripts \
@@ -171,7 +169,7 @@ if [[ -n "${PKG_SIGN_NAME:-}" ]]; then
       ${PKGNAME}
 
       # notarize the package
-      if [[ -n "${CFD_NOTE_PASSWORD:-}" ]]; then
+      if [[ ! -z "$CFD_NOTE_PASSWORD" ]]; then
         xcrun altool --notarize-app -f ${PKGNAME} -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
         xcrun stapler staple ${PKGNAME}
       fi

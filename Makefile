@@ -148,8 +148,8 @@ github-message:
 
 .PHONY: github-mac-upload
 github-mac-upload:
-	python3 github_release.py --path .artifacts/cloudflared-darwin-amd64.tgz --release-version $(VERSION) --name cloudflared-darwin-amd64.tgz
-	python3 github_release.py --path .artifacts/cloudflared-amd64.pkg --release-version $(VERSION) --name cloudflared-amd64.pkg
+	python3 github_release.py --path artifacts/cloudflared-darwin-amd64.tgz --release-version $(VERSION) --name cloudflared-darwin-amd64.tgz
+	python3 github_release.py --path artifacts/cloudflared-amd64.pkg --release-version $(VERSION) --name cloudflared-amd64.pkg
 
 bin/equinox:
 	mkdir -p bin
