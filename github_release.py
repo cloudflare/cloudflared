@@ -7,6 +7,8 @@ import argparse
 import logging
 import os
 import shutil
+import hashlib
+import requests
 
 from github import Github, GithubException, UnknownObjectException
 
@@ -15,6 +17,37 @@ logging.basicConfig(format=FORMAT)
 
 CLOUDFLARED_REPO = os.environ.get("GITHUB_REPO", "cloudflare/cloudflared")
 GITHUB_CONFLICT_CODE = "already_exists"
+BASE_KV_URL = 'https://api.cloudflare.com/client/v4/accounts/'
+UPDATER_PREFIX = 'update'
+
+def get_sha256(filename):
+    """ get the sha256 of a file """
+    sha256_hash = hashlib.sha256()
+    with open(filename,"rb") as f:
+        for byte_block in iter(lambda: f.read(4096),b""):
+            sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+
+def send_hash(pkg_hash, name, version, account, namespace, api_token):
+    """ send the checksum of a file to workers kv """
+    key = '{0}_{1}_{2}'.format(UPDATER_PREFIX, version, name)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + api_token,
+    }
+    response = requests.put(
+            BASE_KV_URL + account + "/storage/kv/namespaces/" + namespace + "/values/" + key,
+            headers=headers,
+            data=pkg_hash
+    )
+
+    if response.status_code != 200:
+        jsonResponse = response.json()
+        errors = jsonResponse["errors"]
+        if len(errors) > 0:
+            raise Exception("failed to upload checksum: {0}", errors[0])
+
+
 
 def assert_tag_exists(repo, version):
     """ Raise exception if repo does not contain a tag matching version """
@@ -79,6 +112,15 @@ def parse_args():
         "--name", default=os.environ.get("ASSET_NAME"), help="Asset Name"
     )
     parser.add_argument(
+        "--namespace-id", default=os.environ.get("KV_NAMESPACE"), help="workersKV namespace id"
+    )
+    parser.add_argument(
+        "--kv-account-id", default=os.environ.get("KV_ACCOUNT"), help="workersKV account id"
+    )
+    parser.add_argument(
+        "--kv-api-token", default=os.environ.get("KV_API_TOKEN"), help="workersKV API Token"
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="Do not create release or upload asset"
     )
 
@@ -98,6 +140,18 @@ def parse_args():
 
     if not args.api_key:
         logging.error("Missing API key")
+        is_valid = False
+    
+    if not args.namespace_id:
+        logging.error("Missing KV namespace id")
+        is_valid = False
+
+    if not args.kv_account_id:
+        logging.error("Missing KV account id")
+        is_valid = False
+
+    if not args.kv_api_token:
+        logging.error("Missing KV API token")
         is_valid = False
 
     if is_valid:
@@ -120,6 +174,10 @@ def main():
             return
 
         release.upload_asset(args.path, name=args.name)
+
+        # send the sha256 (the checksum) to workers kv
+        pkg_hash = get_sha256(args.path)
+        send_hash(pkg_hash, args.name, args.release_version, args.kv_account_id, args.namespace_id, args.kv_api_token)
 
         # create the artifacts directory if it doesn't exist 
         artifact_path = os.path.join(os.getcwd(), 'artifacts') 
