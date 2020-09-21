@@ -124,7 +124,7 @@ func IsControlHeader(headerName string) bool {
 }
 
 // isWebsocketClientHeader returns true if the header name is required by the client to upgrade properly
-func isWebsocketClientHeader(headerName string) bool {
+func IsWebsocketClientHeader(headerName string) bool {
 	return headerName == "sec-websocket-accept" ||
 		headerName == "connection" ||
 		headerName == "upgrade"
@@ -143,7 +143,7 @@ func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 
 			// Since these are http2 headers, they're required to be lowercase
 			h2 = append(h2, Header{Name: "content-length", Value: values[0]})
-		} else if !IsControlHeader(h2name) || isWebsocketClientHeader(h2name) {
+		} else if !IsControlHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values
 			userHeaders[header] = values
