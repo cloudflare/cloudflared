@@ -1,0 +1,9 @@
+---
+basename: "cloudflared"
+comment: "Cloudflare Argo Tunnel"
+copyright: "Cloudflare, Inc"
+arch: "x86"
+abi: "64"
+files:
+    - source: cloudflared
+      destination: /var/db/scripts/jet/cloudflared

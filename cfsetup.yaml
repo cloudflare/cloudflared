@@ -209,6 +209,35 @@ stretch: &stretch
     pre-cache: *install_pygithub
     post-cache:
       - make github-message
+  build-junos:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - python3
+      - genisoimage
+      - jetez
+    pre-cache:
+      - ln -s /usr/bin/genisoimage /usr/bin/mkisofs
+    post-cache:
+      - export GOOS=freebsd
+      - export GOARCH=amd64
+      - make cloudflared-junos
+  publish-junos:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - python3
+      - genisoimage
+      - jetez
+      - s4cmd
+    pre-cache:
+      - ln -s /usr/bin/genisoimage /usr/bin/mkisofs
+    post-cache:
+      - export GOOS=freebsd
+      - export GOARCH=amd64
+      - make publish-cloudflared-junos
 
 jessie: *stretch
 
