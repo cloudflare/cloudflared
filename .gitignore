@@ -5,6 +5,7 @@ guide/public
 /.GOPATH
 /bin
 .idea
+.build
 .vscode
 \#*\#
 cscope.*
@@ -12,6 +13,7 @@ cloudflared
 cloudflared.pkg
 cloudflared.exe
 cloudflared.msi
+cloudflared-x86-64*
 !cmd/cloudflared/
 .DS_Store
 *-session.log
