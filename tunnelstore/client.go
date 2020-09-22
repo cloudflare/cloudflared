@@ -27,6 +27,7 @@ var (
 	ErrUnauthorized       = errors.New("unauthorized")
 	ErrBadRequest         = errors.New("incorrect request parameters")
 	ErrNotFound           = errors.New("not found")
+	ErrAPINoSuccess       = errors.New("API call failed")
 )
 
 type Tunnel struct {
@@ -39,7 +40,7 @@ type Tunnel struct {
 
 type Connection struct {
 	ColoName           string    `json:"colo_name"`
-	ID                 uuid.UUID `json:"uuid"`
+	ID                 uuid.UUID `json:"id"`
 	IsPendingReconnect bool      `json:"is_pending_reconnect"`
 }
 
@@ -91,11 +92,9 @@ func (dr *DNSRoute) MarshalJSON() ([]byte, error) {
 
 func (dr *DNSRoute) UnmarshalResult(body io.Reader) (RouteResult, error) {
 	var result DNSRouteResult
-	if err := json.NewDecoder(body).Decode(&result); err != nil {
-		return nil, err
-	}
+	err := parseResponse(body, &result)
 	result.route = dr
-	return &result, nil
+	return &result, err
 }
 
 func (dr *DNSRoute) RecordType() string {
@@ -152,11 +151,9 @@ func (lr *LBRoute) RecordType() string {
 
 func (lr *LBRoute) UnmarshalResult(body io.Reader) (RouteResult, error) {
 	var result LBRouteResult
-	if err := json.NewDecoder(body).Decode(&result); err != nil {
-		return nil, err
-	}
+	err := parseResponse(body, &result)
 	result.route = lr
-	return &result, nil
+	return &result, err
 }
 
 func (res *LBRouteResult) SuccessSummary() string {
@@ -313,14 +310,16 @@ func (r *RESTClient) ListTunnels(filter *Filter) ([]*Tunnel, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		var tunnels []*Tunnel
-		if err := json.NewDecoder(resp.Body).Decode(&tunnels); err != nil {
-			return nil, errors.Wrap(err, "failed to decode response")
-		}
-		return tunnels, nil
+		return parseListTunnels(resp.Body)
 	}
 
 	return nil, r.statusCodeToError("list tunnels", resp)
+}
+
+func parseListTunnels(body io.ReadCloser) ([]*Tunnel, error) {
+	var tunnels []*Tunnel
+	err := parseResponse(body, &tunnels)
+	return tunnels, err
 }
 
 func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
@@ -370,15 +369,48 @@ func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (
 		req.Header.Set("Content-Type", jsonContentType)
 	}
 	req.Header.Add("X-Auth-User-Service-Key", r.authToken)
+	req.Header.Add("Accept", "application/json;version=1")
 	return r.client.Do(req)
+}
+
+func parseResponse(reader io.Reader, data interface{}) error {
+	// Schema for Tunnelstore responses in the v1 API.
+	// Roughly, it's a wrapper around a particular result that adds failures/errors/etc
+	var result struct {
+		Result  json.RawMessage `json:"result"`
+		Success bool            `json:"success"`
+		Errors  []string        `json:"errors"`
+	}
+	// First, parse the wrapper and check the API call succeeded
+	if err := json.NewDecoder(reader).Decode(&result); err != nil {
+		return errors.Wrap(err, "failed to decode response")
+	}
+	if err := checkErrors(result.Errors); err != nil {
+		return err
+	}
+	if !result.Success {
+		return ErrAPINoSuccess
+	}
+	// At this point we know the API call succeeded, so, parse out the inner
+	// result into the datatype provided as a parameter.
+	return json.Unmarshal(result.Result, &data)
 }
 
 func unmarshalTunnel(reader io.Reader) (*Tunnel, error) {
 	var tunnel Tunnel
-	if err := json.NewDecoder(reader).Decode(&tunnel); err != nil {
-		return nil, errors.Wrap(err, "failed to decode response")
+	err := parseResponse(reader, &tunnel)
+	return &tunnel, err
+}
+
+func checkErrors(errs []string) error {
+	if len(errs) == 0 {
+		return nil
 	}
-	return &tunnel, nil
+	if len(errs) == 1 {
+		return fmt.Errorf("API error: %s", errs[0])
+	}
+	allErrs := strings.Join(errs, "; ")
+	return fmt.Errorf("API errors: %s", allErrs)
 }
 
 func (r *RESTClient) statusCodeToError(op string, resp *http.Response) error {
