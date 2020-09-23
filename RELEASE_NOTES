@@ -1,3 +1,25 @@
+2020.9.2
+- 2020-09-22 TRAFFIC-448: build cloudflare for junos and publish to s3
+- 2020-09-22 TUN-3410: Request the v1 Tunnelstore API
+- 2020-09-17 AUTH-3103 CI build fixes
+- 2020-09-18 AUTH-3110-use-cfsetup-precache
+- 2020-09-17 TUN-3295: Show route command results
+- 2020-09-16 TUN-3291: cloudflared tunnel run -h explains how to use flags from parent command
+- 2020-09-18 AUTH-3109 upload the checksum to workers kv on github releases
+- 2020-09-17 updater service exit code should be 11
+- 2020-09-01 TUN-3216: UI improvements
+- 2020-08-25 Rebased and passed TunnelEventChan to LogServerInfo in new ReconnectTunnel function
+- 2020-08-25 TUN-3321: Add box around logs on UI
+- 2020-08-26 TUN-3328: Filter out free tunnel has started log from UI
+- 2020-08-27 TUN-3333: Add text to UI explaining how to exit
+- 2020-08-27 TUN-3335: Dynamically set connection table size for UI
+- 2020-08-10 TUN-3238: Update UI when connection re-connects
+- 2020-08-17 TUN-3261: Display connections on UI for free classic tunnels
+- 2020-07-24 TUN-3201: Create base cloudflared UI structure
+- 2020-07-29 TUN-3200: Add connection information to UI
+- 2020-07-24 TUN-3255: Update UI to display URL instead of hostname
+- 2020-07-29 TUN-3198: Handle errors while running tunnel UI
+
 2020.9.1
 - 2020-09-14 TUN-3395: Unhide named tunnel subcommands, tweak help
 - 2020-09-15 TUN-3395: Improve help for list command
