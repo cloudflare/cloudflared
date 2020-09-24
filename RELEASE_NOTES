@@ -1,3 +1,10 @@
+2020.9.3
+- 2020-09-22 TRAFFIC-448: build cloudflare for junos and publish to s3
+- 2020-09-22 TUN-3410: Request the v1 Tunnelstore API
+- 2020-09-23 Release 2020.9.2
+- 2020-09-17 updater service exit code should be 11
+- 2020-09-18 AUTH-3109 upload the checksum to workers kv on github releases
+
 2020.9.2
 - 2020-09-22 TRAFFIC-448: build cloudflare for junos and publish to s3
 - 2020-09-22 TUN-3410: Request the v1 Tunnelstore API
