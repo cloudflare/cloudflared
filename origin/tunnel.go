@@ -1,11 +1,9 @@
 package origin
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,9 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/net/http2"
 	"golang.org/x/sync/errgroup"
-	"zombiezen.com/go/capnproto2/rpc"
 
 	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
@@ -32,7 +28,6 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/cloudflare/cloudflared/validation"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
@@ -262,7 +257,6 @@ func ServeTunnelLoop(ctx context.Context,
 				if config.TunnelEventChan != nil {
 					config.TunnelEventChan <- ui.TunnelEvent{Index: connectionIndex, EventType: ui.Reconnecting}
 				}
-
 				config.Logger.Infof("Retrying connection %d in %s seconds", connectionIndex, duration)
 				backoff.Backoff(ctx)
 				continue
@@ -307,14 +301,7 @@ func ServeTunnel(
 	connectionTag := uint8ToString(connectionIndex)
 
 	if config.NamedTunnel != nil && config.NamedTunnel.Protocol == http2Protocol {
-		tlsConn, err := RegisterConnection(ctx, config, connectionIndex, uint8(backoff.retries), addr)
-		if err != nil {
-			logger.Errorf("Register connectio error: %+v", err)
-			return err, true
-		}
-		connectedFuse.Fuse(true)
-		backoff.SetGracePeriod()
-		return serveNamedTunnel(ctx, config, tlsConn, connectionIndex, reconnectCh)
+		return ServeNamedTunnel(ctx, config, connectionIndex, addr, connectedFuse, reconnectCh)
 	}
 
 	// Returns error from parsing the origin URL or handshake errors
@@ -432,54 +419,6 @@ func ServeTunnel(
 	return nil, true
 }
 
-func serveNamedTunnel(
-	ctx context.Context,
-	config *TunnelConfig,
-	tlsConn net.Conn,
-	connectionIndex uint8,
-	reconnectCh chan ReconnectSignal,
-) (err error, recoverable bool) {
-	originURLStr, err := validation.ValidateUrl(config.OriginUrl)
-	if err != nil {
-		return fmt.Errorf("unable to parse origin URL %#v", config.OriginUrl), false
-	}
-	originURL, err := url.Parse(originURLStr)
-	if err != nil {
-		return fmt.Errorf("unable to parse origin URL %#v", originURLStr), false
-	}
-
-	originClient := config.HTTPTransport
-	if originClient == nil {
-		originClient = http.DefaultTransport
-	}
-
-	errGroup, serveCtx := errgroup.WithContext(ctx)
-	errGroup.Go(func() error {
-		cfdServer := &cfdServer{
-			httpServer:      &http2.Server{},
-			originClient:    originClient,
-			logger:          config.Logger,
-			originURL:       originURL,
-			connectionIndex: uint8ToString(connectionIndex),
-			config:          config,
-		}
-		cfdServer.serve(serveCtx, tlsConn)
-		return fmt.Errorf("Connection with edge closed")
-	})
-
-	errGroup.Go(func() error {
-		select {
-		case reconnect := <-reconnectCh:
-			return &reconnect
-		case <-serveCtx.Done():
-			return nil
-		}
-	})
-
-	err = errGroup.Wait()
-	return err, true
-}
-
 func RegisterConnectionWithH2Mux(
 	ctx context.Context,
 	muxer *h2mux.Muxer,
@@ -524,50 +463,44 @@ func RegisterConnectionWithH2Mux(
 	return nil
 }
 
-func RegisterConnection(
+func ServeNamedTunnel(
 	ctx context.Context,
 	config *TunnelConfig,
-	connectionID uint8,
-	numPreviousAttempts uint8,
+	connIndex uint8,
 	addr *net.TCPAddr,
-) (net.Conn, error) {
-	originCert, err := tls.X509KeyPair(config.OriginCert, config.OriginCert)
-	if err != nil {
-		return nil, err
-	}
-	tlsConfig := config.TlsConfig
-	tlsConfig.Certificates = []tls.Certificate{originCert}
+	connectedFuse *h2mux.BooleanFuse,
+	reconnectCh chan ReconnectSignal,
+) (err error, recoverable bool) {
 	tlsServerConn, err := connection.DialEdge(ctx, dialTimeout, config.TlsConfig, addr)
 	if err != nil {
-		return nil, err
+		return err, true
 	}
 
-	rpcTransport := tunnelrpc.NewTransportLogger(config.Logger, rpc.StreamTransport(&persistentConn{tlsServerConn}))
-	rpcConn := rpc.NewConn(
-		rpcTransport,
-		tunnelrpc.ConnLog(config.Logger),
-	)
-	rpcClient := tunnelpogs.TunnelServer_PogsClient{Client: rpcConn.Bootstrap(ctx), Conn: rpcConn}
-	connDetail, err := rpcClient.RegisterConnection(
-		ctx,
-		config.NamedTunnel.Auth,
-		config.NamedTunnel.ID,
-		connectionID,
-		config.ConnectionOptions(tlsServerConn.LocalAddr().String(), numPreviousAttempts),
-	)
+	cfdServer, err := newHTTP2Server(config, connIndex, tlsServerConn.LocalAddr(), connectedFuse)
 	if err != nil {
-		return nil, err
+		return err, false
 	}
-	config.Logger.Infof("Connection %d registered with %s using ID %s", connectionID, connDetail.Location, connDetail.UUID)
-	rpcTransport.Close()
-	// Closing the client will also close the connection
-	rpcClient.Close()
 
-	flushMessage := make([]byte, 8)
-	buf := make([]byte, len(flushMessage))
-	tlsServerConn.Write(buf)
+	errGroup, serveCtx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		cfdServer.serve(serveCtx, tlsServerConn)
+		return fmt.Errorf("Connection with edge closed")
+	})
 
-	return tlsServerConn, nil
+	errGroup.Go(func() error {
+		select {
+		case reconnect := <-reconnectCh:
+			return &reconnect
+		case <-serveCtx.Done():
+			return nil
+		}
+	})
+
+	err = errGroup.Wait()
+	if err != nil {
+		return err, true
+	}
+	return nil, false
 }
 
 func serverRegistrationErrorFromRPC(err error) *serverRegisterTunnelError {
@@ -733,98 +666,6 @@ func LogServerInfo(
 	metrics.registerServerLocation(uint8ToString(connectionID), serverInfo.LocationName)
 }
 
-type TunnelHandler struct {
-	ingressRules ingress.Ingress
-	muxer        *h2mux.Muxer
-	tags         []tunnelpogs.Tag
-	metrics      *TunnelMetrics
-	// connectionID is only used by metrics, and prometheus requires labels to be string
-	connectionID string
-	logger       logger.Service
-
-	bufferPool *buffer.Pool
-}
-
-// NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
-func NewTunnelHandler(ctx context.Context,
-	config *TunnelConfig,
-	addr *net.TCPAddr,
-	connectionID uint8,
-	bufferPool *buffer.Pool,
-) (*TunnelHandler, string, error) {
-
-	h := &TunnelHandler{
-		ingressRules: config.IngressRules,
-		tags:         config.Tags,
-		metrics:      config.Metrics,
-		connectionID: uint8ToString(connectionID),
-		logger:       config.Logger,
-		bufferPool:   bufferPool,
-	}
-
-	edgeConn, err := connection.DialEdge(ctx, dialTimeout, config.TlsConfig, addr)
-	if err != nil {
-		return nil, "", err
-	}
-	// Establish a muxed connection with the edge
-	// Client mux handshake with agent server
-	h.muxer, err = h2mux.Handshake(edgeConn, edgeConn, config.muxerConfig(h), h.metrics.activeStreams)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "h2mux handshake with edge error")
-	}
-	return h, edgeConn.LocalAddr().String(), nil
-}
-
-func (h *TunnelHandler) AppendTagHeaders(r *http.Request) {
-	for _, tag := range h.tags {
-		r.Header.Add(TagHeaderNamePrefix+tag.Name, tag.Value)
-	}
-}
-
-func (h *TunnelHandler) ServeStream(stream *h2mux.MuxedStream) error {
-	h.metrics.incrementRequests(h.connectionID)
-	defer h.metrics.decrementConcurrentRequests(h.connectionID)
-
-	req, rule, reqErr := h.createRequest(stream)
-	if reqErr != nil {
-		h.writeErrorResponse(stream, reqErr)
-		return reqErr
-	}
-
-	cfRay := findCfRayHeader(req)
-	lbProbe := isLBProbeRequest(req)
-	h.logRequest(req, cfRay, lbProbe)
-
-	var resp *http.Response
-	var respErr error
-	if websocket.IsWebSocketUpgrade(req) {
-		resp, respErr = serveWebsocket(&h2muxWebsocketResp{stream}, req, rule)
-	} else {
-		resp, respErr = h.serveHTTP(stream, req, rule)
-	}
-	if respErr != nil {
-		h.writeErrorResponse(stream, respErr)
-		return respErr
-	}
-	h.logResponseOk(resp, cfRay, lbProbe)
-	return nil
-}
-
-func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request, *ingress.Rule, error) {
-	req, err := http.NewRequest("GET", "http://localhost:8080", h2mux.MuxedStreamReader{MuxedStream: stream})
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
-	}
-	err = h2mux.H2RequestHeadersToH1Request(stream.Headers, req)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "invalid request received")
-	}
-	h.AppendTagHeaders(req)
-	// For incoming requests, the Host header is promoted to the Request.Host field and removed from the Header map.
-	rule, _ := h.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
-	return req, rule, nil
-}
-
 func serveWebsocket(wsResp WebsocketResp, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
 	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
 		req.Header.Set("Host", hostHeader)
@@ -849,118 +690,6 @@ func serveWebsocket(wsResp WebsocketResp, req *http.Request, rule *ingress.Rule)
 	websocket.Stream(conn.UnderlyingConn(), wsResp)
 
 	return response, nil
-}
-
-func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
-	// Support for WSGI Servers by switching transfer encoding from chunked to gzip/deflate
-	if rule.Config.DisableChunkedEncoding {
-		req.TransferEncoding = []string{"gzip", "deflate"}
-		cLength, err := strconv.Atoi(req.Header.Get("Content-Length"))
-		if err == nil {
-			req.ContentLength = int64(cLength)
-		}
-	}
-
-	// Request origin to keep connection alive to improve performance
-	req.Header.Set("Connection", "keep-alive")
-
-	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
-		req.Header.Set("Host", hostHeader)
-		req.Host = hostHeader
-	}
-
-	response, err := rule.Service.RoundTrip(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error proxying request to origin")
-	}
-	defer response.Body.Close()
-
-	headers := h2mux.H1ResponseToH2ResponseHeaders(response)
-	headers = append(headers, h2mux.CreateResponseMetaHeader(h2mux.ResponseMetaHeaderField, h2mux.ResponseSourceOrigin))
-	err = stream.WriteHeaders(headers)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error writing response header")
-	}
-	if h.isEventStream(response) {
-		h.writeEventStream(stream, response.Body)
-	} else {
-		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
-		// compression generates dictionary on first write
-		buf := h.bufferPool.Get()
-		defer h.bufferPool.Put(buf)
-		io.CopyBuffer(stream, response.Body, buf)
-	}
-	return response, nil
-}
-
-func (h *TunnelHandler) writeEventStream(stream *h2mux.MuxedStream, responseBody io.ReadCloser) {
-	reader := bufio.NewReader(responseBody)
-	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			break
-		}
-		stream.Write(line)
-	}
-}
-
-func (h *TunnelHandler) isEventStream(response *http.Response) bool {
-	if response.Header.Get("content-type") == "text/event-stream" {
-		h.logger.Debug("Detected Server-Side Events from Origin")
-		return true
-	}
-	return false
-}
-
-func (h *TunnelHandler) writeErrorResponse(stream *h2mux.MuxedStream, err error) {
-	h.logger.Errorf("HTTP request error: %s", err)
-	stream.WriteHeaders([]h2mux.Header{
-		{Name: ":status", Value: "502"},
-		h2mux.CreateResponseMetaHeader(h2mux.ResponseMetaHeaderField, h2mux.ResponseSourceCloudflared),
-	})
-	stream.Write([]byte("502 Bad Gateway"))
-	h.metrics.incrementResponses(h.connectionID, "502")
-}
-
-func (h *TunnelHandler) logRequest(req *http.Request, cfRay string, lbProbe bool) {
-	logger := h.logger
-	if cfRay != "" {
-		logger.Debugf("CF-RAY: %s %s %s %s", cfRay, req.Method, req.URL, req.Proto)
-	} else if lbProbe {
-		logger.Debugf("CF-RAY: %s Load Balancer health check %s %s %s", cfRay, req.Method, req.URL, req.Proto)
-	} else {
-		logger.Infof("CF-RAY: %s All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", cfRay, req.Method, req.URL, req.Proto)
-	}
-	logger.Debugf("CF-RAY: %s Request Headers %+v", cfRay, req.Header)
-
-	if contentLen := req.ContentLength; contentLen == -1 {
-		logger.Debugf("CF-RAY: %s Request Content length unknown", cfRay)
-	} else {
-		logger.Debugf("CF-RAY: %s Request content length %d", cfRay, contentLen)
-	}
-}
-
-func (h *TunnelHandler) logResponseOk(r *http.Response, cfRay string, lbProbe bool) {
-	h.metrics.incrementResponses(h.connectionID, "200")
-	logger := h.logger
-	if cfRay != "" {
-		logger.Debugf("CF-RAY: %s %s", cfRay, r.Status)
-	} else if lbProbe {
-		logger.Debugf("Response to Load Balancer health check %s", r.Status)
-	} else {
-		logger.Infof("%s", r.Status)
-	}
-	logger.Debugf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
-
-	if contentLen := r.ContentLength; contentLen == -1 {
-		logger.Debugf("CF-RAY: %s Response content length unknown", cfRay)
-	} else {
-		logger.Debugf("CF-RAY: %s Response content length %d", cfRay, contentLen)
-	}
-}
-
-func (h *TunnelHandler) UpdateMetrics(connectionID string) {
-	h.metrics.updateMuxerMetrics(connectionID, h.muxer.Metrics())
 }
 
 func uint8ToString(input uint8) string {
