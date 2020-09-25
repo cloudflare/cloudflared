@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/trace"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -506,7 +507,7 @@ func StartServer(
 	}
 
 	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
-		listener, err := net.Listen("tcp", "127.0.0.1:")
+		listener, err := net.Listen("tcp", net.JoinHostPort(c.String("proxy-address"), strconv.Itoa(c.Int("proxy-port"))))
 		if err != nil {
 			log.Errorf("Cannot start Websocket Proxy Server: %s", err)
 			return errors.Wrap(err, "Cannot start Websocket Proxy Server")
@@ -946,6 +947,20 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:   "ha-connections",
 			Value:  4,
 			Hidden: true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "proxy-address",
+			Usage:   "Listen address for the proxy.",
+			Value:   "127.0.0.1",
+			EnvVars: []string{"TUNNEL_PROXY_ADDRESS"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    "proxy-port",
+			Usage:   "Listen port for the proxy.",
+			Value:   0,
+			EnvVars: []string{"TUNNEL_PROXY_PORT"},
+			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   "proxy-connect-timeout",
