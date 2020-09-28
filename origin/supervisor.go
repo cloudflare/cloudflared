@@ -323,16 +323,16 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		<-muxer.Shutdown()
 	}()
 
-	tunnelServer, err := connection.NewRPCClient(ctx, muxer, s.logger, openStreamTimeout)
+	rpcClient, err := newTunnelRPCClient(ctx, muxer, s.config, authenticate)
 	if err != nil {
 		return nil, err
 	}
-	defer tunnelServer.Close()
+	defer rpcClient.Close()
 
 	const arbitraryConnectionID = uint8(0)
 	registrationOptions := s.config.RegistrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
 	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
-	authResponse, err := tunnelServer.Authenticate(
+	authResponse, err := rpcClient.Authenticate(
 		ctx,
 		s.config.OriginCert,
 		s.config.Hostname,

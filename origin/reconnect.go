@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -164,18 +163,17 @@ func ReconnectTunnel(
 	}
 
 	config.TransportLogger.Debug("initiating RPC stream to reconnect")
-	tunnelServer, err := connection.NewRPCClient(ctx, muxer, config.TransportLogger, openStreamTimeout)
+	rpcClient, err := newTunnelRPCClient(ctx, muxer, config, reconnect)
 	if err != nil {
-		// RPC stream open error
-		return newClientRegisterTunnelError(err, config.Metrics.rpcFail, reconnect)
+		return err
 	}
-	defer tunnelServer.Close()
+	defer rpcClient.Close()
 	// Request server info without blocking tunnel registration; must use capnp library directly.
-	serverInfoPromise := tunnelrpc.TunnelServer{Client: tunnelServer.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
+	serverInfoPromise := tunnelrpc.TunnelServer{Client: rpcClient.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
 	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger, config.TunnelEventChan)
-	registration := tunnelServer.ReconnectTunnel(
+	registration := rpcClient.ReconnectTunnel(
 		ctx,
 		token,
 		eventDigest,

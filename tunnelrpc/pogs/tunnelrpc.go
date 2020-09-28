@@ -210,10 +210,11 @@ type TunnelServer interface {
 }
 
 func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {
-	return tunnelrpc.TunnelServer_ServerToClient(TunnelServer_PogsImpl{s})
+	return tunnelrpc.TunnelServer_ServerToClient(TunnelServer_PogsImpl{RegistrationServer_PogsImpl{s}, s})
 }
 
 type TunnelServer_PogsImpl struct {
+	RegistrationServer_PogsImpl
 	impl TunnelServer
 }
 
@@ -268,6 +269,7 @@ func (i TunnelServer_PogsImpl) ObsoleteDeclarativeTunnelConnect(p tunnelrpc.Tunn
 }
 
 type TunnelServer_PogsClient struct {
+	RegistrationServer_PogsClient
 	Client capnp.Client
 	Conn   *rpc.Conn
 }

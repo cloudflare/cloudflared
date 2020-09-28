@@ -62,6 +62,10 @@ func TestConnectionRegistrationRPC(t *testing.T) {
 	clientConn := rpc.NewConn(t2)
 	defer clientConn.Close()
 	client := TunnelServer_PogsClient{
+		RegistrationServer_PogsClient: RegistrationServer_PogsClient{
+			Client: clientConn.Bootstrap(ctx),
+			Conn:   clientConn,
+		},
 		Client: clientConn.Bootstrap(ctx),
 		Conn:   clientConn,
 	}

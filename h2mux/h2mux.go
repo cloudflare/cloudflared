@@ -22,7 +22,7 @@ const (
 	defaultTimeout           time.Duration = 5 * time.Second
 	defaultRetries           uint64        = 5
 	defaultWriteBufferMaxLen int           = 1024 * 1024 // 1mb
-	writeBufferInitialSize   int           = 16 * 1024 // 16KB
+	writeBufferInitialSize   int           = 16 * 1024   // 16KB
 
 	SettingMuxerMagic http2.SettingID = 0x42db
 	MuxerMagicOrigin  uint32          = 0xa2e43c8b
@@ -441,10 +441,16 @@ func (m *Muxer) OpenStream(ctx context.Context, headers []Header, body io.Reader
 func (m *Muxer) OpenRPCStream(ctx context.Context) (*MuxedStream, error) {
 	stream := m.NewStream(RPCHeaders())
 	if err := m.MakeMuxedStreamRequest(ctx, NewMuxedStreamRequest(stream, nil)); err != nil {
+		stream.Close()
 		return nil, err
 	}
 	if err := m.AwaitResponseHeaders(ctx, stream); err != nil {
+		stream.Close()
 		return nil, err
+	}
+	if !IsRPCStreamResponse(stream) {
+		stream.Close()
+		return nil, ErrNotRPCStream
 	}
 	return stream, nil
 }
@@ -498,4 +504,11 @@ func (m *Muxer) abort() {
 // Return how many retries/ticks since the connection was last marked active
 func (m *Muxer) TimerRetries() uint64 {
 	return m.muxWriter.idleTimer.RetryCount()
+}
+
+func IsRPCStreamResponse(stream *MuxedStream) bool {
+	headers := stream.Headers
+	return len(headers) == 1 &&
+		headers[0].Name == ":status" &&
+		headers[0].Value == "200"
 }

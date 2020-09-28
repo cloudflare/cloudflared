@@ -19,6 +19,7 @@ var (
 	ErrUnexpectedFrameType = MuxerProtocolError{"2001 unexpected frame type", http2.ErrCodeProtocol}
 	ErrUnknownStream       = MuxerProtocolError{"2002 unknown stream", http2.ErrCodeProtocol}
 	ErrInvalidStream       = MuxerProtocolError{"2003 invalid stream", http2.ErrCodeProtocol}
+	ErrNotRPCStream        = MuxerProtocolError{"2004 not RPC stream", http2.ErrCodeProtocol}
 
 	ErrStreamHeadersSent               = MuxerApplicationError{"3000 headers already sent"}
 	ErrStreamRequestConnectionClosed   = MuxerApplicationError{"3001 connection closed while opening stream"}
