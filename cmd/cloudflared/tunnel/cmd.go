@@ -753,26 +753,11 @@ func appendFlags(flags []cli.Flag, extraFlags ...cli.Flag) []cli.Flag {
 }
 
 func tunnelFlags(shouldHide bool) []cli.Flag {
-	flags := []cli.Flag{
-		&cli.StringFlag{
-			Name:   "config",
-			Usage:  "Specifies a config file in YAML format.",
-			Value:  config.FindDefaultConfigPath(),
-			Hidden: shouldHide,
-		},
-		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   "autoupdate-freq",
-			Usage:  fmt.Sprintf("Autoupdate frequency. Default is %v.", updater.DefaultCheckUpdateFreq),
-			Value:  updater.DefaultCheckUpdateFreq,
-			Hidden: shouldHide,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "no-autoupdate",
-			Usage:   "Disable periodic check for updates, restarting the server with the new version.",
-			EnvVars: []string{"NO_AUTOUPDATE"},
-			Value:   false,
-			Hidden:  shouldHide,
-		}),
+	flags := configureCloudflaredFlags(shouldHide)
+	flags = append(flags, configureProxyFlags(shouldHide)...)
+	flags = append(flags, configureLoggingFlags(shouldHide)...)
+	flags = append(flags, configureProxyDNSFlags(shouldHide)...)
+	flags = append(flags, []cli.Flag{
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "is-autoupdated",
 			Usage:  "Signal the new process that Argo Tunnel client has been autoupdated",
@@ -791,47 +776,10 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_CACERT"},
 			Hidden:  true,
 		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "no-tls-verify",
-			Usage:   "Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted. Note: The connection from your machine to Cloudflare's Edge is still encrypted.",
-			EnvVars: []string{"NO_TLS_VERIFY"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "origincert",
-			Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
-			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
-			Value:   findDefaultOriginCertPath(),
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    tlsconfig.OriginCAPoolFlag,
-			Usage:   "Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
-			EnvVars: []string{"TUNNEL_ORIGIN_CA_POOL"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "unix-socket",
-			Usage:   "Path to unix socket to use instead of --url",
-			EnvVars: []string{"TUNNEL_UNIX_SOCKET"},
-			Hidden:  shouldHide,
-		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "hostname",
 			Usage:   "Set a hostname on a Cloudflare zone to route traffic through this tunnel.",
 			EnvVars: []string{"TUNNEL_HOSTNAME"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "http-host-header",
-			Usage:   "Sets the HTTP Host header for the local webserver.",
-			EnvVars: []string{"TUNNEL_HTTP_HOST_HEADER"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "origin-server-name",
-			Usage:   "Hostname on the origin server certificate.",
-			EnvVars: []string{"TUNNEL_ORIGIN_SERVER_NAME"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
@@ -871,13 +819,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:   "https://api.cloudflare.com/client/v4",
 			Hidden:  true,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "metrics",
-			Value:   "localhost:",
-			Usage:   "Listen address for metrics reporting.",
-			EnvVars: []string{"TUNNEL_METRICS"},
-			Hidden:  shouldHide,
-		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "metrics-update-freq",
 			Usage:   "Frequency to update tunnel metrics",
@@ -903,26 +844,104 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  5,
 			Hidden: true,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "loglevel",
-			Value:   "info",
-			Usage:   "Application logging level {fatal, error, info, debug}. " + debugLevelWarning,
-			EnvVars: []string{"TUNNEL_LOGLEVEL"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "transport-loglevel",
-			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
-			Value:   "fatal",
-			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
-			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
-			Hidden:  shouldHide,
-		}),
 		altsrc.NewUintFlag(&cli.UintFlag{
 			Name:    "retries",
 			Value:   5,
 			Usage:   "Maximum number of retries for connection/protocol errors.",
 			EnvVars: []string{"TUNNEL_RETRIES"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:   "ha-connections",
+			Value:  4,
+			Hidden: true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    "grace-period",
+			Usage:   "Duration to accept new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
+			Value:   time.Second * 30,
+			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
+			Hidden:  true,
+		}),
+		altsrc.NewUintFlag(&cli.UintFlag{
+			Name:    "compression-quality",
+			Value:   0,
+			Usage:   "(beta) Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high.",
+			EnvVars: []string{"TUNNEL_COMPRESSION_LEVEL"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "use-reconnect-token",
+			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
+			Value:   true,
+			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
+			Hidden:  true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    "dial-edge-timeout",
+			Usage:   "Maximum wait time to set up a connection with the edge",
+			Value:   time.Second * 15,
+			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
+			Hidden:  true,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "stdin-control",
+			Usage:   "Control the process using commands sent through stdin",
+			EnvVars: []string{"STDIN-CONTROL"},
+			Hidden:  true,
+			Value:   false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "name",
+			Aliases: []string{"n"},
+			EnvVars: []string{"TUNNEL_NAME"},
+			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:   uiFlag,
+			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
+			Value:  false,
+			Hidden: shouldHide,
+		}),
+	}...)
+
+	return flags
+}
+
+// Flags in tunnel command that is relevant to run subcommand
+func configureCloudflaredFlags(shouldHide bool) []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:   "config",
+			Usage:  "Specifies a config file in YAML format.",
+			Value:  config.FindDefaultConfigPath(),
+			Hidden: shouldHide,
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "origincert",
+			Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
+			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
+			Value:   findDefaultOriginCertPath(),
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:   "autoupdate-freq",
+			Usage:  fmt.Sprintf("Autoupdate frequency. Default is %v.", updater.DefaultCheckUpdateFreq),
+			Value:  updater.DefaultCheckUpdateFreq,
+			Hidden: shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "no-autoupdate",
+			Usage:   "Disable periodic check for updates, restarting the server with the new version.",
+			EnvVars: []string{"NO_AUTOUPDATE"},
+			Value:   false,
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "metrics",
+			Value:   "localhost:",
+			Usage:   "Listen address for metrics reporting.",
+			EnvVars: []string{"TUNNEL_METRICS"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
@@ -931,35 +950,30 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_PIDFILE"},
 			Hidden:  shouldHide,
 		}),
+	}
+}
+
+func configureProxyFlags(shouldHide bool) []cli.Flag {
+	flags := []cli.Flag{
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "logfile",
-			Usage:   "Save application log to this file for reporting issues.",
-			EnvVars: []string{"TUNNEL_LOGFILE"},
+			Name:    "url",
+			Value:   "http://localhost:8080",
+			Usage:   "Connect to the local webserver at `URL`.",
+			EnvVars: []string{"TUNNEL_URL"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logDirectoryFlag,
-			Usage:   "Save application log to this directory for reporting issues.",
-			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "hello-world",
+			Value:   false,
+			Usage:   "Run Hello World Server",
+			EnvVars: []string{"TUNNEL_HELLO_WORLD"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:   "ha-connections",
-			Value:  4,
-			Hidden: true,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "proxy-address",
-			Usage:   "Listen address for the proxy.",
-			Value:   "127.0.0.1",
-			EnvVars: []string{"TUNNEL_PROXY_ADDRESS"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    "proxy-port",
-			Usage:   "Listen port for the proxy.",
-			Value:   0,
-			EnvVars: []string{"TUNNEL_PROXY_PORT"},
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    socks5Flag,
+			Usage:   "specify if this tunnel is running as a SOCK5 Server",
+			EnvVars: []string{"TUNNEL_SOCKS"},
+			Value:   false,
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
@@ -1009,52 +1023,34 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  time.Second * 90,
 			Hidden: shouldHide,
 		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "proxy-dns",
-			Usage:   "Run a DNS over HTTPS proxy server.",
-			EnvVars: []string{"TUNNEL_DNS"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    "proxy-dns-port",
-			Value:   53,
-			Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
-			EnvVars: []string{"TUNNEL_DNS_PORT"},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "http-host-header",
+			Usage:   "Sets the HTTP Host header for the local webserver.",
+			EnvVars: []string{"TUNNEL_HTTP_HOST_HEADER"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "proxy-dns-address",
-			Usage:   "Listen address for the DNS over HTTPS proxy server.",
-			Value:   "localhost",
-			EnvVars: []string{"TUNNEL_DNS_ADDRESS"},
+			Name:    "origin-server-name",
+			Usage:   "Hostname on the origin server certificate.",
+			EnvVars: []string{"TUNNEL_ORIGIN_SERVER_NAME"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "proxy-dns-upstream",
-			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
-			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "unix-socket",
+			Usage:   "Path to unix socket to use instead of --url",
+			EnvVars: []string{"TUNNEL_UNIX_SOCKET"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "proxy-dns-bootstrap",
-			Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
-			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    tlsconfig.OriginCAPoolFlag,
+			Usage:   "Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
+			EnvVars: []string{"TUNNEL_ORIGIN_CA_POOL"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    "grace-period",
-			Usage:   "Duration to accept new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
-			Value:   time.Second * 30,
-			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
-			Hidden:  true,
-		}),
-		altsrc.NewUintFlag(&cli.UintFlag{
-			Name:    "compression-quality",
-			Value:   0,
-			Usage:   "(beta) Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high.",
-			EnvVars: []string{"TUNNEL_COMPRESSION_LEVEL"},
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "no-tls-verify",
+			Usage:   "Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted. Note: The connection from your machine to Cloudflare's Edge is still encrypted.",
+			EnvVars: []string{"NO_TLS_VERIFY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
@@ -1063,70 +1059,8 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "trace-output",
-			Usage:   "Name of trace output file, generated when cloudflared stops.",
-			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "use-reconnect-token",
-			Usage:   "Test reestablishing connections with the new 'reconnect token' flow.",
-			Value:   true,
-			EnvVars: []string{"TUNNEL_USE_RECONNECT_TOKEN"},
-			Hidden:  true,
-		}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    "dial-edge-timeout",
-			Usage:   "Maximum wait time to set up a connection with the edge",
-			Value:   time.Second * 15,
-			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
-			Hidden:  true,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "stdin-control",
-			Usage:   "Control the process using commands sent through stdin",
-			EnvVars: []string{"STDIN-CONTROL"},
-			Hidden:  true,
-			Value:   false,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "name",
-			Aliases: []string{"n"},
-			EnvVars: []string{"TUNNEL_NAME"},
-			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   uiFlag,
-			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
-			Value:  false,
-			Hidden: shouldHide,
-		}),
-		urlFlag(shouldHide),
-		helloWorldFlag(shouldHide),
-		createSocks5Flag(shouldHide),
 	}
 	return append(flags, sshFlags(shouldHide)...)
-}
-
-func urlFlag(shouldHide bool) cli.Flag {
-	return altsrc.NewStringFlag(&cli.StringFlag{
-		Name:    "url",
-		Value:   "http://localhost:8080",
-		Usage:   "Connect to the local webserver at `URL`.",
-		EnvVars: []string{"TUNNEL_URL"},
-		Hidden:  shouldHide,
-	})
-}
-
-func helloWorldFlag(shouldHide bool) cli.Flag {
-	return altsrc.NewBoolFlag(&cli.BoolFlag{
-		Name:    "hello-world",
-		Value:   false,
-		Usage:   "Run Hello World Server",
-		EnvVars: []string{"TUNNEL_HELLO_WORLD"},
-		Hidden:  shouldHide,
-	})
 }
 
 func sshFlags(shouldHide bool) []cli.Flag {
@@ -1206,17 +1140,98 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_BASTION"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "proxy-address",
+			Usage:   "Listen address for the proxy.",
+			Value:   "127.0.0.1",
+			EnvVars: []string{"TUNNEL_PROXY_ADDRESS"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    "proxy-port",
+			Usage:   "Listen port for the proxy.",
+			Value:   0,
+			EnvVars: []string{"TUNNEL_PROXY_PORT"},
+			Hidden:  shouldHide,
+		}),
 	}
 }
 
-func createSocks5Flag(shouldHide bool) cli.Flag {
-	return altsrc.NewBoolFlag(&cli.BoolFlag{
-		Name:    socks5Flag,
-		Usage:   "specify if this tunnel is running as a SOCK5 Server",
-		EnvVars: []string{"TUNNEL_SOCKS"},
-		Value:   false,
-		Hidden:  shouldHide,
-	})
+func configureLoggingFlags(shouldHide bool) []cli.Flag {
+	return []cli.Flag{
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "loglevel",
+			Value:   "info",
+			Usage:   "Application logging level {fatal, error, info, debug}. " + debugLevelWarning,
+			EnvVars: []string{"TUNNEL_LOGLEVEL"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "transport-loglevel",
+			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
+			Value:   "fatal",
+			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
+			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "logfile",
+			Usage:   "Save application log to this file for reporting issues.",
+			EnvVars: []string{"TUNNEL_LOGFILE"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    logDirectoryFlag,
+			Usage:   "Save application log to this directory for reporting issues.",
+			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "trace-output",
+			Usage:   "Name of trace output file, generated when cloudflared stops.",
+			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
+			Hidden:  shouldHide,
+		}),
+	}
+}
+
+func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
+	return []cli.Flag{
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "proxy-dns",
+			Usage:   "Run a DNS over HTTPS proxy server.",
+			EnvVars: []string{"TUNNEL_DNS"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    "proxy-dns-port",
+			Value:   53,
+			Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
+			EnvVars: []string{"TUNNEL_DNS_PORT"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "proxy-dns-address",
+			Usage:   "Listen address for the DNS over HTTPS proxy server.",
+			Value:   "localhost",
+			EnvVars: []string{"TUNNEL_DNS_ADDRESS"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "proxy-dns-upstream",
+			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
+			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
+			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "proxy-dns-bootstrap",
+			Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+			Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
+			Hidden:  shouldHide,
+		}),
+	}
 }
 
 func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service) {
