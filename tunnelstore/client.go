@@ -376,16 +376,12 @@ func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (
 func parseResponse(reader io.Reader, data interface{}) error {
 	// Schema for Tunnelstore responses in the v1 API.
 	// Roughly, it's a wrapper around a particular result that adds failures/errors/etc
-	var result struct {
-		Result  json.RawMessage `json:"result"`
-		Success bool            `json:"success"`
-		Errors  []string        `json:"errors"`
-	}
+	var result response
 	// First, parse the wrapper and check the API call succeeded
 	if err := json.NewDecoder(reader).Decode(&result); err != nil {
 		return errors.Wrap(err, "failed to decode response")
 	}
-	if err := checkErrors(result.Errors); err != nil {
+	if err := result.checkErrors(); err != nil {
 		return err
 	}
 	if !result.Success {
@@ -402,24 +398,43 @@ func unmarshalTunnel(reader io.Reader) (*Tunnel, error) {
 	return &tunnel, err
 }
 
-func checkErrors(errs []string) error {
-	if len(errs) == 0 {
+type response struct {
+	Success  bool            `json:"success,omitempty"`
+	Errors   []apiErr        `json:"errors,omitempty"`
+	Messages []string        `json:"messages,omitempty"`
+	Result   json.RawMessage `json:"result,omitempty"`
+}
+
+func (r *response) checkErrors() error {
+	if len(r.Errors) == 0 {
 		return nil
 	}
-	if len(errs) == 1 {
-		return fmt.Errorf("API error: %s", errs[0])
+	if len(r.Errors) == 1 {
+		return r.Errors[0]
 	}
-	allErrs := strings.Join(errs, "; ")
-	return fmt.Errorf("API errors: %s", allErrs)
+	var messages string
+	for _, e := range r.Errors {
+		messages += fmt.Sprintf("%s; ", e)
+	}
+	return fmt.Errorf("API errors: %s", messages)
+}
+
+type apiErr struct {
+	Code    json.Number `json:"code,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+func (e apiErr) Error() string {
+	return fmt.Sprintf("code: %v, reason: %s", e.Code, e.Message)
 }
 
 func (r *RESTClient) statusCodeToError(op string, resp *http.Response) error {
 	if resp.Header.Get("Content-Type") == "application/json" {
-		var errorsResp struct {
-			Error string `json:"error"`
-		}
-		if json.NewDecoder(resp.Body).Decode(&errorsResp) == nil && errorsResp.Error != "" {
-			return errors.Errorf("Failed to %s: %s", op, errorsResp.Error)
+		var errorsResp response
+		if json.NewDecoder(resp.Body).Decode(&errorsResp) == nil {
+			if err := errorsResp.checkErrors(); err != nil {
+				return errors.Errorf("Failed to %s: %s", op, err)
+			}
 		}
 	}
 

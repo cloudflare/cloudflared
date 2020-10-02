@@ -30,8 +30,8 @@ func TestDNSRouteUnmarshalResult(t *testing.T) {
 	badJSON := []string{
 		`abc`,
 		`{"success": false, "result": {"cname": "new"}}`,
-		`{"errors": ["foo"], "result": {"cname": "new"}}`,
-		`{"errors": ["foo", "bar"], "result": {"cname": "new"}}`,
+		`{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": {"cname": "new"}}`,
+		`{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}, {"code": 1004, "message":"Cannot use tunnel as origin for non-proxied load balancer"}], "result": {"cname": "new"}}`,
 		`{"result": {"cname": "new"}}`,
 		`{"result": {"cname": "new"}}`,
 	}
@@ -60,8 +60,8 @@ func TestLBRouteUnmarshalResult(t *testing.T) {
 	badJSON := []string{
 		`abc`,
 		`{"success": false, "result": {"pool": "unchanged", "load_balancer": "updated"}}`,
-		`{"errors": ["foo"], "result": {"pool": "unchanged", "load_balancer": "updated"}}`,
-		`{"errors": ["foo", "bar"], "result": {"pool": "unchanged", "load_balancer": "updated"}}`,
+		`{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": {"pool": "unchanged", "load_balancer": "updated"}}`,
+		`{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}, {"code": 1004, "message":"Cannot use tunnel as origin for non-proxied load balancer"}], "result": {"pool": "unchanged", "load_balancer": "updated"}}`,
 		`{"result": {"pool": "unchanged", "load_balancer": "updated"}}`,
 	}
 
@@ -127,7 +127,7 @@ func Test_parseListTunnels(t *testing.T) {
 		},
 		{
 			name:    "errors are present",
-			args:    args{body: `{"errors": ["foo"], "result": []}`},
+			args:    args{body: `{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": []}`},
 			wantErr: true,
 		},
 		{
@@ -197,7 +197,7 @@ func TestUnmarshalTunnelErr(t *testing.T) {
 		`abc`,
 		`{"success": true, "result": abc}`,
 		`{"success": false, "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}}`,
-		`{"errors": ["foo"], "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}}`,
+		`{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}}`,
 	}
 
 	for i, test := range tests {
