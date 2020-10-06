@@ -97,10 +97,11 @@ def main():
 
         msg = release.body
 
-        for filename in glob.glob("artifacts/*.*"):
-            pkg_hash = get_sha256(filename)
+        for filepath in glob.glob("artifacts/*"):
+            pkg_hash = get_sha256(filepath)
             # add the sha256 of the new artifact to the release message body
-            msg = update_or_add_message(msg, filename, pkg_hash)
+            name = os.path.basename(filepath)
+            msg = update_or_add_message(msg, name, pkg_hash)
 
         if args.dry_run:
             logging.info("Skipping asset upload because of dry-run")
