@@ -1,3 +1,11 @@
+2020.10.0
+- 2020-10-02 AUTH-2993 cleaned up worker service tests
+- 2020-10-02 TUN-3443: Decode as v4api response on non-200 status
+- 2020-09-24 TRAFFIC-448: allow the user to specify the proxy address and port to bind to, falling back to 127.0.0.1 and random port if not specified
+- 2020-09-28 TUN-3427: Define a struct that only implements RegistrationServer in tunnelpogs
+- 2020-09-29 TUN-3430: Copy flags to configure proxy to run subcommand, print relevant tunnel flags in help
+- 2020-08-12 AUTH-2993 added workers updater logic
+
 2020.9.3
 - 2020-09-22 TRAFFIC-448: build cloudflare for junos and publish to s3
 - 2020-09-22 TUN-3410: Request the v1 Tunnelstore API
