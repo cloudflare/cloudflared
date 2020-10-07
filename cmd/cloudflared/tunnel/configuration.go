@@ -95,7 +95,7 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 func findOriginCert(c *cli.Context, logger logger.Service) (string, error) {
 	originCertPath := c.String("origincert")
 	if originCertPath == "" {
-		logger.Infof("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigSearchDirectories())
+		logger.Infof(config.ErrNoConfigFile.Error())
 		if isRunningFromTerminal() {
 			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
 			return "", fmt.Errorf("Client didn't specify origincert path when running from terminal")

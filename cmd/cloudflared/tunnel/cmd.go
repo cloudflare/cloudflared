@@ -182,6 +182,7 @@ func Commands() []*cli.Command {
 	subcommands = append(subcommands, buildRunCommand())
 	subcommands = append(subcommands, buildCleanupCommand())
 	subcommands = append(subcommands, buildRouteCommand())
+	subcommands = append(subcommands, buildValidateCommand())
 
 	cmds = append(cmds, buildTunnelCommand(subcommands))
 
@@ -334,11 +335,7 @@ func StartServer(
 	dnsReadySignal := make(chan struct{})
 
 	if c.String("config") == "" {
-		log.Infof(
-			"Cannot determine default configuration path. No file %v in %v",
-			config.DefaultConfigFiles,
-			config.DefaultConfigSearchDirectories(),
-		)
+		log.Infof(config.ErrNoConfigFile.Error())
 	}
 
 	if c.IsSet("trace-output") {
@@ -602,7 +599,7 @@ func Before(c *cli.Context) error {
 	}
 
 	if c.String("config") == "" {
-		logger.Debugf("Cannot determine default configuration path. No file %v in %v", config.DefaultConfigFiles, config.DefaultConfigSearchDirectories())
+		logger.Debugf(config.ErrNoConfigFile.Error())
 	}
 	inputSource, err := config.FindInputSourceContext(c)
 	if err != nil {

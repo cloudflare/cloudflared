@@ -2,10 +2,16 @@ package tunnel
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"regexp"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
+
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 )
 
@@ -95,4 +101,43 @@ func parseIngress(rawYAML []byte) ([]rule, error) {
 		return nil, errNoIngressRules
 	}
 	return ing.validate()
+}
+
+func ingressContext(c *cli.Context) ([]rule, *logger.OutputWriter, error) {
+	log, err := createLogger(c, false, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	configFilePath := c.String("config")
+	if configFilePath == "" {
+		return nil, nil, config.ErrNoConfigFile
+	}
+	log.Infof("Validating %s", configFilePath)
+	configBytes, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		return nil, nil, err
+	}
+	rules, err := parseIngress(configBytes)
+	return rules, log, err
+}
+
+// Validates the ingress rules in the cloudflared config file
+func validateCommand(c *cli.Context) error {
+	_, log, err := ingressContext(c)
+	if err != nil {
+		log.Error(err.Error())
+		return errors.New("Validation failed")
+	}
+	log.Infof("OK")
+	return nil
+}
+
+func buildValidateCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "validate",
+		Action:      cliutil.ErrorHandler(validateCommand),
+		Usage:       "Validate the ingress configuration ",
+		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
+		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
+	}
 }

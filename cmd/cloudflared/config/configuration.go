@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -28,6 +29,8 @@ var (
 	// Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
 	defaultUserConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp"}
 	defaultNixConfigDirs  = []string{"/etc/cloudflared", DefaultUnixConfigLocation}
+
+	ErrNoConfigFile = fmt.Errorf("Cannot determine default configuration path. No file %v in %v", DefaultConfigFiles, DefaultConfigSearchDirectories())
 )
 
 const DefaultCredentialFile = "cert.pem"
