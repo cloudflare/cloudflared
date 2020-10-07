@@ -183,6 +183,7 @@ func Commands() []*cli.Command {
 	subcommands = append(subcommands, buildCleanupCommand())
 	subcommands = append(subcommands, buildRouteCommand())
 	subcommands = append(subcommands, buildValidateCommand())
+	subcommands = append(subcommands, buildRuleCommand())
 
 	cmds = append(cmds, buildTunnelCommand(subcommands))
 
