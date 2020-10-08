@@ -30,6 +30,7 @@ import (
 
 const (
 	credFileFlagAlias = "cred-file"
+	availableProtocol = "Available protocols: http2, Go's implementation and h2mux, Cloudflare's implementation of HTTP/2."
 )
 
 var (
@@ -82,6 +83,13 @@ var (
 		Name:    "force",
 		Aliases: []string{"f"},
 		Usage:   "Allows you to delete a tunnel, even if it has active connections.",
+	}
+	selectProtocolFlag = &cli.StringFlag{
+		Name:    "protocol",
+		Value:   "h2mux",
+		Aliases: []string{"p"},
+		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", availableProtocol),
+		Hidden:  true,
 	}
 )
 
@@ -309,6 +317,7 @@ func buildRunCommand() *cli.Command {
 	flags := []cli.Flag{
 		forceFlag,
 		credentialsFileFlag,
+		selectProtocolFlag,
 	}
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{

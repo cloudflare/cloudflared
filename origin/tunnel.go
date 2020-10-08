@@ -188,9 +188,28 @@ func (c *TunnelConfig) IsTrialTunnel() bool {
 }
 
 type NamedTunnelConfig struct {
-	Auth   pogs.TunnelAuth
-	ID     uuid.UUID
-	Client pogs.ClientInfo
+	Auth     pogs.TunnelAuth
+	ID       uuid.UUID
+	Client   pogs.ClientInfo
+	Protocol Protocol
+}
+
+type Protocol int64
+
+const (
+	h2muxProtocol Protocol = iota
+	http2Protocol
+)
+
+func ParseProtocol(s string) (Protocol, bool) {
+	switch s {
+	case "h2mux":
+		return h2muxProtocol, true
+	case "http2":
+		return http2Protocol, true
+	default:
+		return 0, false
+	}
 }
 
 func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan ReconnectSignal) error {
@@ -283,6 +302,10 @@ func ServeTunnel(
 	}
 
 	connectionTag := uint8ToString(connectionIndex)
+
+	if config.NamedTunnel != nil && config.NamedTunnel.Protocol == http2Protocol {
+		return ServeNamedTunnel(ctx, config, connectionIndex, addr, connectedFuse, reconnectCh)
+	}
 
 	// Returns error from parsing the origin URL or handshake errors
 	handler, originLocalAddr, err := NewTunnelHandler(ctx, config, addr, connectionIndex, bufferPool)
