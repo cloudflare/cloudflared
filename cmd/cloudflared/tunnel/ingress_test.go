@@ -130,6 +130,14 @@ ingress:
 `},
 			wantErr: true,
 		},
+		{
+			name: "Service must have a scheme",
+			args: args{rawYAML: `
+ingress:
+  - service: localhost:8000
+`},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

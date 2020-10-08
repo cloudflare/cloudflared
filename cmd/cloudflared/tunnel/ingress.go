@@ -9,7 +9,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -91,6 +90,9 @@ func (ing ingress) validate() ([]rule, error) {
 		if err != nil {
 			return nil, err
 		}
+		if service.Scheme == "" || service.Hostname() == "" {
+			return nil, fmt.Errorf("The service %s must have a scheme and a hostname", r.Service)
+		}
 
 		// Ensure that there are no wildcards anywhere except the first character
 		// of the hostname.
@@ -148,32 +150,28 @@ func parseIngress(rawYAML []byte) ([]rule, error) {
 	return ing.validate()
 }
 
-func ingressContext(c *cli.Context) ([]rule, *logger.OutputWriter, error) {
-	log, err := createLogger(c, false, false)
-	if err != nil {
-		return nil, nil, err
-	}
+func ingressContext(c *cli.Context) ([]rule, error) {
 	configFilePath := c.String("config")
 	if configFilePath == "" {
-		return nil, nil, config.ErrNoConfigFile
+		return nil, config.ErrNoConfigFile
 	}
-	log.Infof("Validating %s", configFilePath)
+	fmt.Printf("Reading from config file %s\n", configFilePath)
 	configBytes, err := ioutil.ReadFile(configFilePath)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	rules, err := parseIngress(configBytes)
-	return rules, log, err
+	return rules, err
 }
 
 // Validates the ingress rules in the cloudflared config file
 func validateCommand(c *cli.Context) error {
-	_, log, err := ingressContext(c)
+	_, err := ingressContext(c)
 	if err != nil {
-		log.Error(err.Error())
+		fmt.Println(err.Error())
 		return errors.New("Validation failed")
 	}
-	log.Infof("OK")
+	fmt.Println("OK")
 	return nil
 }
 
@@ -189,7 +187,7 @@ func buildValidateCommand() *cli.Command {
 
 // Checks which ingress rule matches the given URL.
 func ruleCommand(c *cli.Context) error {
-	rules, log, err := ingressContext(c)
+	rules, err := ingressContext(c)
 	if err != nil {
 		return err
 	}
@@ -206,7 +204,7 @@ func ruleCommand(c *cli.Context) error {
 	}
 	for i, r := range rules {
 		if r.matches(requestURL) {
-			log.Infof("Matched rule #%d", i+1)
+			fmt.Printf("Matched rule #%d\n", i+1)
 			fmt.Println(r.String())
 			return nil
 		}

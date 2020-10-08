@@ -182,8 +182,7 @@ func Commands() []*cli.Command {
 	subcommands = append(subcommands, buildRunCommand())
 	subcommands = append(subcommands, buildCleanupCommand())
 	subcommands = append(subcommands, buildRouteCommand())
-	subcommands = append(subcommands, buildValidateCommand())
-	subcommands = append(subcommands, buildRuleCommand())
+	subcommands = append(subcommands, buildIngressSubcommand())
 
 	cmds = append(cmds, buildTunnelCommand(subcommands))
 
@@ -217,6 +216,38 @@ func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 		If you have a web server running on port 8080 (in this example), it will be available on
 		the internet!`,
 		Subcommands: subcommands,
+		Flags:       tunnelFlags(false),
+	}
+}
+
+func buildIngressSubcommand() *cli.Command {
+	return &cli.Command{
+		Name:     "ingress",
+		Category: "Tunnel",
+		Usage:    "Validate and test cloudflared tunnel's ingress configuration",
+		Hidden:   true,
+		Description: `
+		Cloudflared lets you route traffic from the internet to multiple different addresses on your
+		origin. Multiple-origin routing is configured by a set of rules. Each rule matches traffic
+		by its hostname or path, and routes it to an address. These rules are configured under the
+		'ingress' key of your config.yaml, for example:
+
+		ingress:
+		  - hostname: www.example.com
+		    service: https://localhost:8000
+		  - hostname: *.example.xyz
+		    path: /[a-zA-Z]+.html
+		    service: https://localhost:8001
+		  - hostname: *
+		    service: https://localhost:8002
+
+		To ensure cloudflared can route all incoming requests, the last rule must be a catch-all
+		rule that matches all traffic. You can validate these rules with the 'ingress validate'
+		command, and test which rule matches a particular URL with 'ingress rule <URL>'.
+
+		Multiple-origin routing is incompatible with the --url flag.
+		`,
+		Subcommands: []*cli.Command{buildValidateCommand(), buildRuleCommand()},
 		Flags:       tunnelFlags(false),
 	}
 }
