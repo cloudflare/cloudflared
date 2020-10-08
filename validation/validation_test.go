@@ -101,7 +101,7 @@ func TestValidateUrl(t *testing.T) {
 	for i, testCase := range testCases {
 		validUrl, err := ValidateUrl(testCase.input)
 		assert.NoError(t, err, "test case %v", i)
-		assert.Equal(t, testCase.expectedOutput, validUrl, "test case %v", i)
+		assert.Equal(t, testCase.expectedOutput, validUrl.String(), "test case %v", i)
 	}
 
 	validUrl, err := ValidateUrl("")
@@ -123,7 +123,7 @@ func TestToggleProtocol(t *testing.T) {
 
 // Happy path 1: originURL is HTTP, and HTTP connections work
 func TestValidateHTTPService_HTTP2HTTP(t *testing.T) {
-	originURL := "http://127.0.0.1/"
+	originURL := mustParse(t, "http://127.0.0.1/")
 	hostname := "example.com"
 
 	assert.Nil(t, ValidateHTTPService(originURL, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -151,7 +151,7 @@ func TestValidateHTTPService_HTTP2HTTP(t *testing.T) {
 
 // Happy path 2: originURL is HTTPS, and HTTPS connections work
 func TestValidateHTTPService_HTTPS2HTTPS(t *testing.T) {
-	originURL := "https://127.0.0.1/"
+	originURL := mustParse(t, "https://127.0.0.1:1234/")
 	hostname := "example.com"
 
 	assert.Nil(t, ValidateHTTPService(originURL, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -179,7 +179,7 @@ func TestValidateHTTPService_HTTPS2HTTPS(t *testing.T) {
 
 // Error path 1: originURL is HTTPS, but HTTP connections work
 func TestValidateHTTPService_HTTPS2HTTP(t *testing.T) {
-	originURL := "https://127.0.0.1:1234/"
+	originURL := mustParse(t, "https://127.0.0.1:1234/")
 	hostname := "example.com"
 
 	assert.Error(t, ValidateHTTPService(originURL, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
@@ -207,10 +207,13 @@ func TestValidateHTTPService_HTTPS2HTTP(t *testing.T) {
 
 // Error path 2: originURL is HTTP, but HTTPS connections work
 func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
-	originURL := "http://127.0.0.1:1234/"
+	originURLWithPort := url.URL{
+		Scheme: "http",
+		Host:   "127.0.0.1:1234",
+	}
 	hostname := "example.com"
 
-	assert.Error(t, ValidateHTTPService(originURL, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
+	assert.Error(t, ValidateHTTPService(originURLWithPort, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
 		assert.Equal(t, req.Host, hostname)
 		if req.URL.Scheme == "http" {
 			return nil, assert.AnError
@@ -221,7 +224,7 @@ func TestValidateHTTPService_HTTP2HTTPS(t *testing.T) {
 		panic("Shouldn't reach here")
 	})))
 
-	assert.Error(t, ValidateHTTPService(originURL, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
+	assert.Error(t, ValidateHTTPService(originURLWithPort, hostname, testRoundTripper(func(req *http.Request) (*http.Response, error) {
 		assert.Equal(t, req.Host, hostname)
 		if req.URL.Scheme == "http" {
 			return nil, assert.AnError
@@ -250,12 +253,14 @@ func TestValidateHTTPService_NoFollowRedirects(t *testing.T) {
 	}))
 	assert.NoError(t, err)
 	defer redirectServer.Close()
-	assert.NoError(t, ValidateHTTPService(redirectServer.URL, hostname, redirectClient.Transport))
+	redirectServerURL, err := url.Parse(redirectServer.URL)
+	assert.NoError(t, err)
+	assert.NoError(t, ValidateHTTPService(*redirectServerURL, hostname, redirectClient.Transport))
 }
 
 // Ensure validation times out when origin URL is nonresponsive
 func TestValidateHTTPService_NonResponsiveOrigin(t *testing.T) {
-	originURL := "http://127.0.0.1/"
+	originURL := mustParse(t, "http://127.0.0.1/")
 	hostname := "example.com"
 	oldValidationTimeout := validationTimeout
 	defer func() {
@@ -370,4 +375,10 @@ func createSecureMockServerAndClient(handler http.Handler) (*httptest.Server, *h
 	}
 
 	return server, client, nil
+}
+
+func mustParse(t *testing.T, originURL string) url.URL {
+	parsedURL, err := url.Parse(originURL)
+	assert.NoError(t, err)
+	return *parsedURL
 }

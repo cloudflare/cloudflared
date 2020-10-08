@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -56,8 +55,7 @@ type Supervisor struct {
 	logger logger.Service
 
 	reconnectCredentialManager *reconnectCredentialManager
-
-	bufferPool *buffer.Pool
+	useReconnectToken          bool
 }
 
 type resolveResult struct {
@@ -76,12 +74,17 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor
 		err     error
 	)
 	if len(config.EdgeAddrs) > 0 {
-		edgeIPs, err = edgediscovery.StaticEdge(config.Logger, config.EdgeAddrs)
+		edgeIPs, err = edgediscovery.StaticEdge(config.Observer, config.EdgeAddrs)
 	} else {
-		edgeIPs, err = edgediscovery.ResolveEdge(config.Logger)
+		edgeIPs, err = edgediscovery.ResolveEdge(config.Observer)
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	useReconnectToken := false
+	if config.ClassicTunnel != nil {
+		useReconnectToken = config.ClassicTunnel.UseReconnectToken
 	}
 
 	return &Supervisor{
@@ -90,14 +93,14 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor
 		edgeIPs:                    edgeIPs,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
-		logger:                     config.Logger,
-		reconnectCredentialManager: newReconnectCredentialManager(metricsNamespace, tunnelSubsystem, config.HAConnections),
-		bufferPool:                 buffer.NewPool(512 * 1024),
+		logger:                     config.Observer,
+		reconnectCredentialManager: newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections),
+		useReconnectToken:          useReconnectToken,
 	}, nil
 }
 
 func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
-	logger := s.config.Logger
+	logger := s.config.Observer
 	if err := s.initialize(ctx, connectedSignal, reconnectCh); err != nil {
 		return err
 	}
@@ -110,7 +113,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 	refreshAuthBackoff := &BackoffHandler{MaxRetries: refreshAuthMaxBackoff, BaseTime: refreshAuthRetryDuration, RetryForever: true}
 	var refreshAuthBackoffTimer <-chan time.Time
 
-	if s.config.UseReconnectToken {
+	if s.useReconnectToken {
 		if timer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate); err == nil {
 			refreshAuthBackoffTimer = timer
 		} else {
@@ -227,7 +230,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		return
 	}
 
-	err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
+	err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, reconnectCh)
 	// If the first tunnel disconnects, keep restarting it.
 	edgeErrors := 0
 	for s.unusedIPs() {
@@ -239,7 +242,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 			return
 		// try the next address if it was a dialError(network problem) or
 		// dupConnRegisterTunnelError
-		case connection.DialError, dupConnRegisterTunnelError:
+		case edgediscovery.DialError, connection.DupConnRegisterTunnelError:
 			edgeErrors++
 		default:
 			return
@@ -250,7 +253,7 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 				return
 			}
 		}
-		err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
+		err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, reconnectCh)
 	}
 }
 
@@ -269,7 +272,7 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 	if err != nil {
 		return
 	}
-	err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID, s.bufferPool, reconnectCh)
+	err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID, reconnectCh)
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {
@@ -301,7 +304,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		return nil, err
 	}
 
-	edgeConn, err := connection.DialEdge(ctx, dialTimeout, s.config.TlsConfig, arbitraryEdgeIP)
+	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.TLSConfig, arbitraryEdgeIP)
 	if err != nil {
 		return nil, err
 	}
@@ -311,8 +314,8 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		// This callback is invoked by h2mux when the edge initiates a stream.
 		return nil // noop
 	})
-	muxerConfig := s.config.muxerConfig(handler)
-	muxer, err := h2mux.Handshake(edgeConn, edgeConn, muxerConfig, s.config.Metrics.activeStreams)
+	muxerConfig := s.config.MuxerConfig.H2MuxerConfig(handler, s.logger)
+	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig, h2mux.ActiveStreams)
 	if err != nil {
 		return nil, err
 	}
@@ -323,23 +326,15 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		<-muxer.Shutdown()
 	}()
 
-	rpcClient, err := newTunnelRPCClient(ctx, muxer, s.config, authenticate)
+	stream, err := muxer.OpenRPCStream(ctx)
 	if err != nil {
 		return nil, err
 	}
+	rpcClient := connection.NewTunnelServerClient(ctx, stream, s.logger)
 	defer rpcClient.Close()
 
 	const arbitraryConnectionID = uint8(0)
 	registrationOptions := s.config.RegistrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
 	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
-	authResponse, err := rpcClient.Authenticate(
-		ctx,
-		s.config.OriginCert,
-		s.config.Hostname,
-		registrationOptions,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return authResponse.Outcome(), nil
+	return rpcClient.Authenticate(ctx, s.config.ClassicTunnel, registrationOptions)
 }

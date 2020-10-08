@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
@@ -247,7 +248,7 @@ func StartServer(
 	version string,
 	shutdownC,
 	graceShutdownC chan struct{},
-	namedTunnel *origin.NamedTunnelConfig,
+	namedTunnel *connection.NamedTunnelConfig,
 	log logger.Service,
 	isUIEnabled bool,
 ) error {
@@ -366,7 +367,7 @@ func StartServer(
 		return errors.Wrap(err, "error setting up transport logger")
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, log, transportLogger, namedTunnel)
+	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, log, transportLogger, namedTunnel, isUIEnabled)
 	if err != nil {
 		return err
 	}
@@ -386,10 +387,6 @@ func StartServer(
 	}()
 
 	if isUIEnabled {
-		const tunnelEventChanBufferSize = 16
-		tunnelEventChan := make(chan ui.TunnelEvent, tunnelEventChanBufferSize)
-		tunnelConfig.TunnelEventChan = tunnelEventChan
-
 		tunnelInfo := ui.NewUIModel(
 			version,
 			hostname,
@@ -402,7 +399,7 @@ func StartServer(
 		if err != nil {
 			return err
 		}
-		tunnelInfo.LaunchUI(ctx, log, logLevels, tunnelEventChan)
+		tunnelInfo.LaunchUI(ctx, log, logLevels, tunnelConfig.TunnelEventChan)
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)
@@ -986,7 +983,7 @@ func configureLoggingFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "transport-loglevel",
 			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
-			Value:   "fatal",
+			Value:   "info",
 			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
 			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
 			Hidden:  shouldHide,

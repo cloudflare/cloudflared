@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/golang-collections/collections/queue"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // data points used to compute average receive window and send window size
@@ -294,15 +293,4 @@ func (r *rate) get() (curr, min, max uint64) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 	return r.curr, r.min, r.max
-}
-
-func NewActiveStreamsMetrics(namespace, subsystem string) prometheus.Gauge {
-	activeStreams := prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Subsystem: subsystem,
-		Name:      "active_streams",
-		Help:      "Number of active streams created by all muxers.",
-	})
-	prometheus.MustRegister(activeStreams)
-	return activeStreams
 }

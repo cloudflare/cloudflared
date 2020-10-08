@@ -9,7 +9,7 @@ import (
 
 func TestShutdown(t *testing.T) {
 	const numStreams = 1000
-	m := newActiveStreamMap(true, NewActiveStreamsMetrics("test", t.Name()))
+	m := newActiveStreamMap(true, ActiveStreams)
 
 	// Add all the streams
 	{
@@ -62,7 +62,7 @@ func TestShutdown(t *testing.T) {
 
 func TestEmptyBeforeShutdown(t *testing.T) {
 	const numStreams = 1000
-	m := newActiveStreamMap(true, NewActiveStreamsMetrics("test", t.Name()))
+	m := newActiveStreamMap(true, ActiveStreams)
 
 	// Add all the streams
 	{
@@ -138,7 +138,7 @@ func (_ *noopReadyList) Signal(streamID uint32) {}
 
 func TestAbort(t *testing.T) {
 	const numStreams = 1000
-	m := newActiveStreamMap(true, NewActiveStreamsMetrics("test", t.Name()))
+	m := newActiveStreamMap(true, ActiveStreams)
 
 	var openedStreams sync.Map
 

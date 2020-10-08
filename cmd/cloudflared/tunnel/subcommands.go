@@ -78,28 +78,31 @@ var (
 		Name:    "credentials-file",
 		Aliases: []string{credFileFlagAlias},
 		Usage:   "File path of tunnel credentials",
+		EnvVars: []string{"TUNNEL_CRED_FILE"},
 	})
 	forceDeleteFlag = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
 		Usage:   "Allows you to delete a tunnel, even if it has active connections.",
+		EnvVars: []string{"TUNNEL_RUN_FORCE_OVERWRITE"},
 	}
 	selectProtocolFlag = &cli.StringFlag{
 		Name:    "protocol",
 		Value:   "h2mux",
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", availableProtocol),
+		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
 		Hidden:  true,
 	}
 )
 
 func buildCreateCommand() *cli.Command {
 	return &cli.Command{
-		Name:               "create",
-		Action:             cliutil.ErrorHandler(createCommand),
-		Usage:              "Create a new tunnel with given name",
-		UsageText:          "cloudflared tunnel [tunnel command options] create [subcommand options] NAME",
-		Description:        `Creates a tunnel, registers it with Cloudflare edge and generates credential file used to run this tunnel.
+		Name:      "create",
+		Action:    cliutil.ErrorHandler(createCommand),
+		Usage:     "Create a new tunnel with given name",
+		UsageText: "cloudflared tunnel [tunnel command options] create [subcommand options] NAME",
+		Description: `Creates a tunnel, registers it with Cloudflare edge and generates credential file used to run this tunnel.
   Use "cloudflared tunnel route" subcommand to map a DNS name to this tunnel and "cloudflared tunnel run" to start the connection. 
 
   For example, to create a tunnel named 'my-tunnel' run:

@@ -113,11 +113,11 @@ func (p *DefaultMuxerPair) Handshake(testName string) error {
 	defer cancel()
 	errGroup, _ := errgroup.WithContext(ctx)
 	errGroup.Go(func() (err error) {
-		p.EdgeMux, err = Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig, NewActiveStreamsMetrics(testName, "edge"))
+		p.EdgeMux, err = Handshake(p.EdgeConn, p.EdgeConn, p.EdgeMuxConfig, ActiveStreams)
 		return errors.Wrap(err, "edge handshake failure")
 	})
 	errGroup.Go(func() (err error) {
-		p.OriginMux, err = Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig, NewActiveStreamsMetrics(testName, "origin"))
+		p.OriginMux, err = Handshake(p.OriginConn, p.OriginConn, p.OriginMuxConfig, ActiveStreams)
 		return errors.Wrap(err, "origin handshake failure")
 	})
 

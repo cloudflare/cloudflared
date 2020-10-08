@@ -7,11 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -137,53 +133,4 @@ func (cm *reconnectCredentialManager) RefreshAuth(
 		cm.authFail.WithLabelValues(err.Error()).Inc()
 		return nil, err
 	}
-}
-
-func ReconnectTunnel(
-	ctx context.Context,
-	muxer *h2mux.Muxer,
-	config *TunnelConfig,
-	logger logger.Service,
-	connectionID uint8,
-	originLocalAddr string,
-	uuid uuid.UUID,
-	credentialManager *reconnectCredentialManager,
-) error {
-	token, err := credentialManager.ReconnectToken()
-	if err != nil {
-		return err
-	}
-	eventDigest, err := credentialManager.EventDigest(connectionID)
-	if err != nil {
-		return err
-	}
-	connDigest, err := credentialManager.ConnDigest(connectionID)
-	if err != nil {
-		return err
-	}
-
-	config.TransportLogger.Debug("initiating RPC stream to reconnect")
-	rpcClient, err := newTunnelRPCClient(ctx, muxer, config, reconnect)
-	if err != nil {
-		return err
-	}
-	defer rpcClient.Close()
-	// Request server info without blocking tunnel registration; must use capnp library directly.
-	serverInfoPromise := tunnelrpc.TunnelServer{Client: rpcClient.Client}.GetServerInfo(ctx, func(tunnelrpc.TunnelServer_getServerInfo_Params) error {
-		return nil
-	})
-	LogServerInfo(serverInfoPromise.Result(), connectionID, config.Metrics, logger, config.TunnelEventChan)
-	registration := rpcClient.ReconnectTunnel(
-		ctx,
-		token,
-		eventDigest,
-		connDigest,
-		config.Hostname,
-		config.RegistrationOptions(connectionID, originLocalAddr, uuid),
-	)
-	if registrationErr := registration.DeserializeError(); registrationErr != nil {
-		// ReconnectTunnel RPC failure
-		return processRegisterTunnelError(registrationErr, config.Metrics, reconnect)
-	}
-	return processRegistrationSuccess(config, logger, connectionID, registration, reconnect, credentialManager)
 }

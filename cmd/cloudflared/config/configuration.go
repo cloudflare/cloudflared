@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -189,11 +190,11 @@ func ValidateUnixSocket(c *cli.Context) (string, error) {
 
 // ValidateUrl will validate url flag correctness. It can be either from --url or argument
 // Notice ValidateUnixSocket, it will enforce --unix-socket is not used with --url or argument
-func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
+func ValidateUrl(c *cli.Context, allowFromArgs bool) (*url.URL, error) {
 	var url = c.String("url")
 	if allowFromArgs && c.NArg() > 0 {
 		if c.IsSet("url") {
-			return "", errors.New("Specified origin urls using both --url and argument. Decide which one you want, I can only support one.")
+			return nil, errors.New("Specified origin urls using both --url and argument. Decide which one you want, I can only support one.")
 		}
 		url = c.Args().Get(0)
 	}

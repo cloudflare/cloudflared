@@ -14,8 +14,8 @@ import (
 
 	"github.com/cloudflare/cloudflared/certutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 )
@@ -260,7 +260,7 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		return err
 	}
 
-	protocol, ok := origin.ParseProtocol(sc.c.String("protocol"))
+	protocol, ok := connection.ParseProtocol(sc.c.String("protocol"))
 	if !ok {
 		return fmt.Errorf("%s is not valid protocol. %s", sc.c.String("protocol"), availableProtocol)
 	}
@@ -269,7 +269,7 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		version,
 		shutdownC,
 		graceShutdownC,
-		&origin.NamedTunnelConfig{Auth: *credentials, ID: tunnelID, Protocol: protocol},
+		&connection.NamedTunnelConfig{Auth: *credentials, ID: tunnelID, Protocol: protocol},
 		sc.logger,
 		sc.isUIEnabled,
 	)

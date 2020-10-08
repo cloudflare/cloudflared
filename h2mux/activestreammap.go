@@ -7,6 +7,19 @@ import (
 	"golang.org/x/net/http2"
 )
 
+var (
+	ActiveStreams = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "cloudflared",
+		Subsystem: "tunnel",
+		Name:      "active_streams",
+		Help:      "Number of active streams created by all muxers.",
+	})
+)
+
+func init() {
+	prometheus.MustRegister(ActiveStreams)
+}
+
 // activeStreamMap is used to moderate access to active streams between the read and write
 // threads, and deny access to new peer streams while shutting down.
 type activeStreamMap struct {

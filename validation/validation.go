@@ -66,7 +66,15 @@ func ValidateHostname(hostname string) (string, error) {
 // but when it does not, the path is preserved:
 //   ValidateUrl("localhost:8080/api/") => "http://localhost:8080/api/"
 // This is arguably a bug, but changing it might break some cloudflared users.
-func ValidateUrl(originUrl string) (string, error) {
+func ValidateUrl(originUrl string) (*url.URL, error) {
+	urlStr, err := validateUrlString(originUrl)
+	if err != nil {
+		return nil, err
+	}
+	return url.Parse(urlStr)
+}
+
+func validateUrlString(originUrl string) (string, error) {
 	if originUrl == "" {
 		return "", fmt.Errorf("URL should not be empty")
 	}
@@ -157,12 +165,8 @@ func validateIP(scheme, host, port string) (string, error) {
 	return fmt.Sprintf("%s://%s", scheme, host), nil
 }
 
-func ValidateHTTPService(originURL string, hostname string, transport http.RoundTripper) error {
-	parsedURL, err := url.Parse(originURL)
-	if err != nil {
-		return err
-	}
-
+// originURL shouldn't be a pointer, because this function might change the scheme
+func ValidateHTTPService(originURL url.URL, hostname string, transport http.RoundTripper) error {
 	client := &http.Client{
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -171,7 +175,7 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 		Timeout: validationTimeout,
 	}
 
-	initialRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
+	initialRequest, err := http.NewRequest("GET", originURL.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -183,10 +187,10 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 	}
 
 	// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
-	oldScheme := parsedURL.Scheme
-	parsedURL.Scheme = toggleProtocol(parsedURL.Scheme)
+	oldScheme := originURL.Scheme
+	originURL.Scheme = toggleProtocol(originURL.Scheme)
 
-	secondRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
+	secondRequest, err := http.NewRequest("GET", originURL.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -195,12 +199,12 @@ func ValidateHTTPService(originURL string, hostname string, transport http.Round
 	if secondErr == nil { // Worked this time--advise the user to switch protocols
 		resp.Body.Close()
 		return errors.Errorf(
-			"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %s",
-			parsedURL.Host,
+			"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %v",
+			originURL.Host,
 			oldScheme,
-			parsedURL.Scheme,
+			originURL.Scheme,
 			initialErr,
-			parsedURL,
+			originURL,
 		)
 	}
 
@@ -224,12 +228,12 @@ type Access struct {
 }
 
 func NewAccessValidator(ctx context.Context, domain, issuer, applicationAUD string) (*Access, error) {
-	domainURL, err := ValidateUrl(domain)
+	domainURL, err := validateUrlString(domain)
 	if err != nil {
 		return nil, err
 	}
 
-	issuerURL, err := ValidateUrl(issuer)
+	issuerURL, err := validateUrlString(issuer)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,9 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
@@ -154,10 +157,10 @@ func prepareTunnelConfig(
 	version string,
 	logger logger.Service,
 	transportLogger logger.Service,
-	namedTunnel *origin.NamedTunnelConfig,
+	namedTunnel *connection.NamedTunnelConfig,
+	uiIsEnabled bool,
 ) (*origin.TunnelConfig, error) {
 	isNamedTunnel := namedTunnel != nil
-	compatibilityMode := !isNamedTunnel
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
@@ -189,10 +192,11 @@ func prepareTunnelConfig(
 		}
 	}
 
-	tunnelMetrics := origin.NewTunnelMetrics()
-
-	var ingressRules ingress.Ingress
-	if namedTunnel != nil {
+	var (
+		ingressRules  ingress.Ingress
+		classicTunnel *connection.ClassicTunnelConfig
+	)
+	if isNamedTunnel {
 		clientUUID, err := uuid.NewRandom()
 		if err != nil {
 			return nil, errors.Wrap(err, "can't generate clientUUID")
@@ -210,6 +214,13 @@ func prepareTunnelConfig(
 		if !ingressRules.IsEmpty() && c.IsSet("url") {
 			return nil, ingress.ErrURLIncompatibleWithIngress
 		}
+	} else {
+		classicTunnel = &connection.ClassicTunnelConfig{
+			Hostname:   hostname,
+			OriginCert: originCert,
+			// turn off use of reconnect token and auth refresh when using named tunnels
+			UseReconnectToken: !isNamedTunnel && c.Bool("use-reconnect-token"),
+		}
 	}
 
 	// Convert single-origin configuration into multi-origin configuration.
@@ -220,43 +231,71 @@ func prepareTunnelConfig(
 		}
 	}
 
-	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, isNamedTunnel)
+	protocol := determineProtocol(namedTunnel)
+	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, protocol.ServerName())
 	if err != nil {
 		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
 		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
 	}
-	return &origin.TunnelConfig{
-		BuildInfo:          buildInfo,
-		ClientID:           clientID,
-		CompressionQuality: c.Uint64("compression-quality"),
-		EdgeAddrs:          c.StringSlice("edge"),
-		GracePeriod:        c.Duration("grace-period"),
-		HAConnections:      c.Int("ha-connections"),
+
+	proxyConfig := &origin.ProxyConfig{
+		Client:            httpTransport,
+		URL:               originURL,
+		TLSConfig:         httpTransport.TLSClientConfig,
+		HostHeader:        c.String("http-host-header"),
+		NoChunkedEncoding: c.Bool("no-chunked-encoding"),
+		Tags:              tags,
+	}
+	originClient := origin.NewClient(proxyConfig, logger)
+	transportConfig := &connection.Config{
+		OriginClient:    originClient,
+		GracePeriod:     c.Duration("grace-period"),
+		ReplaceExisting: c.Bool("force"),
+	}
+	muxerConfig := &connection.MuxerConfig{
 		HeartbeatInterval:  c.Duration("heartbeat-interval"),
-		Hostname:           hostname,
-		IncidentLookup:     origin.NewIncidentLookup(),
-		IsAutoupdated:      c.Bool("is-autoupdated"),
-		IsFreeTunnel:       isFreeTunnel,
-		LBPool:             c.String("lb-pool"),
-		Logger:             logger,
-		TransportLogger:    transportLogger,
 		MaxHeartbeats:      c.Uint64("heartbeat-count"),
-		Metrics:            tunnelMetrics,
+		CompressionSetting: h2mux.CompressionSetting(c.Uint64("compression-quality")),
 		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
-		OriginCert:         originCert,
-		ReportedVersion:    version,
-		Retries:            c.Uint("retries"),
-		RunFromTerminal:    isRunningFromTerminal(),
-		Tags:               tags,
-		TlsConfig:          toEdgeTLSConfig,
-		NamedTunnel:        namedTunnel,
-		ReplaceExisting:    c.Bool("force"),
-		IngressRules:       ingressRules,
-		// turn off use of reconnect token and auth refresh when using named tunnels
-		UseReconnectToken: compatibilityMode && c.Bool("use-reconnect-token"),
+	}
+
+	var tunnelEventChan chan ui.TunnelEvent
+	if uiIsEnabled {
+		tunnelEventChan = make(chan ui.TunnelEvent, 16)
+	}
+
+	return &origin.TunnelConfig{
+		ConnectionConfig: transportConfig,
+		ProxyConfig:      proxyConfig,
+		BuildInfo:        buildInfo,
+		ClientID:         clientID,
+		EdgeAddrs:        c.StringSlice("edge"),
+		HAConnections:    c.Int("ha-connections"),
+		IncidentLookup:   origin.NewIncidentLookup(),
+		IsAutoupdated:    c.Bool("is-autoupdated"),
+		IsFreeTunnel:     isFreeTunnel,
+		LBPool:           c.String("lb-pool"),
+		Logger:           logger,
+		Observer:         connection.NewObserver(transportLogger, tunnelEventChan, protocol),
+		ReportedVersion:  version,
+		Retries:          c.Uint("retries"),
+		RunFromTerminal:  isRunningFromTerminal(),
+		TLSConfig:        toEdgeTLSConfig,
+		NamedTunnel:      namedTunnel,
+		ClassicTunnel:    classicTunnel,
+		MuxerConfig:      muxerConfig,
+		TunnelEventChan:  tunnelEventChan,
+		IngressRules:     ingressRules,
 	}, nil
 }
 
 func isRunningFromTerminal() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func determineProtocol(namedTunnel *connection.NamedTunnelConfig) connection.Protocol {
+	if namedTunnel != nil {
+		return namedTunnel.Protocol
+	}
+	return connection.H2mux
 }

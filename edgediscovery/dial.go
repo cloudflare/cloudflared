@@ -1,4 +1,4 @@
-package connection
+package edgediscovery
 
 import (
 	"context"

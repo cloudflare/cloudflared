@@ -93,6 +93,11 @@ type RegistrationServer_PogsClient struct {
 	Conn   *rpc.Conn
 }
 
+func (c RegistrationServer_PogsClient) Close() error {
+	c.Client.Close()
+	return c.Conn.Close()
+}
+
 func (c RegistrationServer_PogsClient) RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.RegisterConnection(ctx, func(p tunnelrpc.RegistrationServer_registerConnection_Params) error {

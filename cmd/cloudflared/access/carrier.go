@@ -2,7 +2,6 @@ package access
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/cloudflare/cloudflared/carrier"
@@ -17,14 +16,9 @@ import (
 
 // StartForwarder starts a client side websocket forward
 func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger logger.Service) error {
-	validURLString, err := validation.ValidateUrl(forwarder.Listener)
+	validURL, err := validation.ValidateUrl(forwarder.Listener)
 	if err != nil {
 		return errors.Wrap(err, "error validating origin URL")
-	}
-
-	validURL, err := url.Parse(validURLString)
-	if err != nil {
-		return errors.Wrap(err, "error parsing origin URL")
 	}
 
 	// get the headers from the config file and add to the request
@@ -106,12 +100,7 @@ func ssh(c *cli.Context) error {
 	wsConn := carrier.NewWSConnection(logger, false)
 
 	if c.NArg() > 0 || c.IsSet(sshURLFlag) {
-		localForwarder, err := config.ValidateUrl(c, true)
-		if err != nil {
-			logger.Errorf("Error validating origin URL: %s", err)
-			return errors.Wrap(err, "error validating origin URL")
-		}
-		forwarder, err := url.Parse(localForwarder)
+		forwarder, err := config.ValidateUrl(c, true)
 		if err != nil {
 			logger.Errorf("Error validating origin URL: %s", err)
 			return errors.Wrap(err, "error validating origin URL")
