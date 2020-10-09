@@ -113,87 +113,33 @@ func Flags() []cli.Flag {
 }
 
 func Commands() []*cli.Command {
-	cmds := []*cli.Command{
-		{
-			Name:      "login",
-			Action:    cliutil.ErrorHandler(login),
-			Usage:     "Generate a configuration file with your login details",
-			ArgsUsage: " ",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:   "url",
-					Hidden: true,
-				},
-			},
-			Hidden: true,
-		},
-		{
-			Name:   "proxy-dns",
-			Action: cliutil.ErrorHandler(tunneldns.Run),
-			Usage:  "Run a DNS over HTTPS proxy server.",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "metrics",
-					Value:   "localhost:",
-					Usage:   "Listen address for metrics reporting.",
-					EnvVars: []string{"TUNNEL_METRICS"},
-				},
-				&cli.StringFlag{
-					Name:    "address",
-					Usage:   "Listen address for the DNS over HTTPS proxy server.",
-					Value:   "localhost",
-					EnvVars: []string{"TUNNEL_DNS_ADDRESS"},
-				},
-				&cli.IntFlag{
-					Name:    "port",
-					Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
-					Value:   53,
-					EnvVars: []string{"TUNNEL_DNS_PORT"},
-				},
-				&cli.StringSliceFlag{
-					Name:    "upstream",
-					Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-					Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
-					EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
-				},
-				&cli.StringSliceFlag{
-					Name:    "bootstrap",
-					Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
-					Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
-					EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
-				},
-			},
-			ArgsUsage: " ", // can't be the empty string or we get the default output
-			Hidden:    false,
-		},
+	subcommands := []*cli.Command{
+		buildLoginSubcommand(false),
+		buildCreateCommand(),
+		buildRouteCommand(),
+		buildRunCommand(),
+		buildListCommand(),
+		buildIngressSubcommand(),
+		buildDeleteCommand(),
+		buildCleanupCommand(),
+		// for compatibility, allow following as tunnel subcommands
+		tunneldns.Command(true),
 		dbConnectCmd(),
 	}
 
-	var subcommands []*cli.Command
-	for _, cmd := range cmds {
-		c := *cmd
-		c.Hidden = false
-		subcommands = append(subcommands, &c)
+	return []*cli.Command {
+		buildTunnelCommand(subcommands),
+		// for compatibility, allow following as top-level subcommands
+		buildLoginSubcommand(true),
+		dbConnectCmd(),
 	}
-
-	subcommands = append(subcommands, buildCreateCommand())
-	subcommands = append(subcommands, buildListCommand())
-	subcommands = append(subcommands, buildDeleteCommand())
-	subcommands = append(subcommands, buildRunCommand())
-	subcommands = append(subcommands, buildCleanupCommand())
-	subcommands = append(subcommands, buildRouteCommand())
-	subcommands = append(subcommands, buildIngressSubcommand())
-
-	cmds = append(cmds, buildTunnelCommand(subcommands))
-
-	return cmds
 }
 
 func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 	return &cli.Command{
 		Name:      "tunnel",
 		Action:    cliutil.ErrorHandler(TunnelCommand),
-		Before:    Before,
+		Before:    SetFlagsFromConfigFile,
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
 		ArgsUsage: " ",
@@ -245,8 +191,7 @@ func buildIngressSubcommand() *cli.Command {
 		rule that matches all traffic. You can validate these rules with the 'ingress validate'
 		command, and test which rule matches a particular URL with 'ingress rule <URL>'.
 
-		Multiple-origin routing is incompatible with the --url flag.
-		`,
+		Multiple-origin routing is incompatible with the --url flag.`,
 		Subcommands: []*cli.Command{buildValidateCommand(), buildRuleCommand()},
 		Flags:       tunnelFlags(false),
 	}
@@ -624,26 +569,34 @@ func forceSetFlag(c *cli.Context, name, value string) {
 	}
 }
 
-func Before(c *cli.Context) error {
+func SetFlagsFromConfigFile(c *cli.Context) error {
 	logger, err := createLogger(c, false, false)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
-	if c.String("config") == "" {
+	configFile := c.String("config")
+	if configFile == "" {
 		logger.Debugf(config.ErrNoConfigFile.Error())
+		return nil
 	}
-	inputSource, err := config.FindInputSourceContext(c)
+
+	inputSource, err := altsrc.NewYamlSourceFromFile(configFile)
 	if err != nil {
-		logger.Errorf("Cannot load configuration from %s: %s", c.String("config"), err)
+		logger.Errorf("Cannot load configuration from %s: %s", configFile, err)
 		return err
-	} else if inputSource != nil {
-		err := altsrc.ApplyInputSourceValues(c, inputSource, c.App.Flags)
+	}
+	if inputSource != nil {
+		targetFlags := c.Command.Flags
+		if c.Command.Name == "" {
+			targetFlags = c.App.Flags
+		}
+		err := altsrc.ApplyInputSourceValues(c, inputSource, targetFlags)
 		if err != nil {
-			logger.Errorf("Cannot apply configuration from %s: %s", c.String("config"), err)
+			logger.Errorf("Cannot apply configuration from %s: %s", configFile, err)
 			return err
 		}
-		logger.Debugf("Applied configuration from %s", c.String("config"))
+		logger.Debugf("Applied configuration from %s", configFile)
 	}
 	return nil
 }
@@ -735,7 +688,7 @@ func dbConnectCmd() *cli.Command {
 
 	// Override before to run tunnel validation before dbconnect validation.
 	cmd.Before = func(c *cli.Context) error {
-		err := Before(c)
+		err := SetFlagsFromConfigFile(c)
 		if err == nil {
 			err = dbconnect.CmdBefore(c)
 		}

@@ -27,6 +27,48 @@ type Listener struct {
 	logger logger.Service
 }
 
+func Command(hidden bool) *cli.Command {
+	return &cli.Command{
+		Name:   "proxy-dns",
+		Action: cliutil.ErrorHandler(Run),
+		Usage:  "Run a DNS over HTTPS proxy server.",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "metrics",
+				Value:   "localhost:",
+				Usage:   "Listen address for metrics reporting.",
+				EnvVars: []string{"TUNNEL_METRICS"},
+			},
+			&cli.StringFlag{
+				Name:    "address",
+				Usage:   "Listen address for the DNS over HTTPS proxy server.",
+				Value:   "localhost",
+				EnvVars: []string{"TUNNEL_DNS_ADDRESS"},
+			},
+			&cli.IntFlag{
+				Name:    "port",
+				Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
+				Value:   53,
+				EnvVars: []string{"TUNNEL_DNS_PORT"},
+			},
+			&cli.StringSliceFlag{
+				Name:    "upstream",
+				Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
+				Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
+				EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
+			},
+			&cli.StringSliceFlag{
+				Name:    "bootstrap",
+				Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+				Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+				EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
+			},
+		},
+		ArgsUsage: " ", // can't be the empty string or we get the default output
+		Hidden:    hidden,
+	}
+}
+
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
 	logDirectory, logLevel := config.FindLogSettings()

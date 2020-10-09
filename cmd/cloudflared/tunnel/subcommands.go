@@ -17,6 +17,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/net/idna"
 	"gopkg.in/yaml.v2"
 
@@ -58,24 +59,24 @@ var (
 		Aliases: []string{"rd"},
 		Usage:   "Include connections that have recently disconnected in the list",
 	}
-	outputFormatFlag = &cli.StringFlag{
+	outputFormatFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "output",
 		Aliases: []string{"o"},
 		Usage:   "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
-	}
-	forceFlag = &cli.BoolFlag{
+	})
+	forceFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
 		Usage: "By default, if a tunnel is currently being run from a cloudflared, you can't " +
 			"simultaneously rerun it again from a second cloudflared. The --force flag lets you " +
 			"overwrite the previous tunnel. If you want to use a single hostname with multiple " +
 			"tunnels, you can do so with Cloudflare's Load Balancer product.",
-	}
-	credentialsFileFlag = &cli.StringFlag{
+	})
+	credentialsFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "credentials-file",
 		Aliases: []string{credFileFlagAlias},
 		Usage:   "File path of tunnel credentials",
-	}
+	})
 	forceDeleteFlag = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
@@ -88,9 +89,13 @@ func buildCreateCommand() *cli.Command {
 		Name:               "create",
 		Action:             cliutil.ErrorHandler(createCommand),
 		Usage:              "Create a new tunnel with given name",
-		UsageText:          "cloudflared tunnel [tunnel command options] create [create command options]",
-		Description:        "cloudflared tunnel create example will create a tunnel named example, and generate a credential file to run the tunnel",
-		ArgsUsage:          "TUNNEL-NAME",
+		UsageText:          "cloudflared tunnel [tunnel command options] create [subcommand options] NAME",
+		Description:        `Creates a tunnel, registers it with Cloudflare edge and generates credential file used to run this tunnel.
+  Use "cloudflared tunnel route" subcommand to map a DNS name to this tunnel and "cloudflared tunnel run" to start the connection. 
+
+  For example, to create a tunnel named 'my-tunnel' run:
+
+  $ cloudflared tunnel create my-tunnel`,
 		Flags:              []cli.Flag{outputFormatFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
@@ -156,8 +161,7 @@ func buildListCommand() *cli.Command {
 		Action:             cliutil.ErrorHandler(listCommand),
 		Usage:              "List existing tunnels",
 		UsageText:          "cloudflared tunnel [tunnel command options] list [subcommand options]",
-		Description:        "cloudflared tunnel list will return all active tunnels, their created time and associated connections. Use -d flag to include deleted tunnels. See the list of options to filter the list",
-		ArgsUsage:          " ",
+		Description:        "cloudflared tunnel list will display all active tunnels, their created time and associated connections. Use -d flag to include deleted tunnels. See the list of options to filter the list",
 		Flags:              []cli.Flag{outputFormatFlag, showDeletedFlag, listNameFlag, listExistedAtFlag, listIDFlag, showRecentlyDisconnected},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
@@ -262,9 +266,8 @@ func buildDeleteCommand() *cli.Command {
 		Name:               "delete",
 		Action:             cliutil.ErrorHandler(deleteCommand),
 		Usage:              "Delete existing tunnel by UUID or name",
-		UsageText:          "cloudflared tunnel [tunnel command options] delete [subcommand options]",
+		UsageText:          "cloudflared tunnel [tunnel command options] delete [subcommand options] TUNNEL",
 		Description:        "cloudflared tunnel delete will delete tunnels with the given tunnel UUIDs or names. A tunnel cannot be deleted if it has active connections. To delete the tunnel unconditionally, use -f flag.",
-		ArgsUsage:          "TUNNEL",
 		Flags:              []cli.Flag{credentialsFileFlag, forceDeleteFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
@@ -310,15 +313,16 @@ func buildRunCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "run",
 		Action:    cliutil.ErrorHandler(runCommand),
+		Before:    SetFlagsFromConfigFile,
 		Usage:     "Proxy a local web server by running the given tunnel",
-		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options]",
-		ArgsUsage: "TUNNEL",
+		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] TUNNEL",
 		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections 
-   between your server and the Cloudflare edge.
+  between your server and the Cloudflare edge.
 
-   This command requires the tunnel credentials file created when "cloudflared tunnel create" was run, 
-   however it does not need access to cert.pem from "cloudflared login" if you identify the tunnel by UUID.
-   If you experience other problems running gitthe tunnel, "cloudflared tunnel cleanup" may help by removing any old connection records.
+  This command requires the tunnel credentials file created when "cloudflared tunnel create" was run, 
+  however it does not need access to cert.pem from "cloudflared login" if you identify the tunnel by UUID.
+  If you experience other problems running the tunnel, "cloudflared tunnel cleanup" may help by removing 
+  any old connection records.
 `,
 		Flags:              flags,
 		CustomHelpTemplate: commandHelpTemplate(),
@@ -347,9 +351,8 @@ func buildCleanupCommand() *cli.Command {
 		Name:               "cleanup",
 		Action:             cliutil.ErrorHandler(cleanupCommand),
 		Usage:              "Cleanup tunnel connections",
-		UsageText:          "cloudflared tunnel [tunnel command options] cleanup [subcommand options]",
+		UsageText:          "cloudflared tunnel [tunnel command options] cleanup [subcommand options] TUNNEL",
 		Description:        "Delete connections for tunnels with the given UUIDs or names.",
-		ArgsUsage:          "TUNNEL",
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -377,14 +380,13 @@ func buildRouteCommand() *cli.Command {
 		Name:      "route",
 		Action:    cliutil.ErrorHandler(routeCommand),
 		Usage:     "Define what hostname or load balancer can route to this tunnel",
-		UsageText: "cloudflared tunnel [tunnel command options] route [subcommand options]",
+		UsageText: "cloudflared tunnel [tunnel command options] route [subcommand options] dns|lb TUNNEL HOSTNAME [LB-POOL]",
 		Description: `The route defines what hostname or load balancer will proxy requests to this tunnel.
 
    To route a hostname by creating a CNAME to tunnel's address:
       cloudflared tunnel route dns <tunnel ID> <hostname>
    To use this tunnel as a load balancer origin, creating pool and load balancer if necessary:
       cloudflared tunnel route lb <tunnel ID> <load balancer name> <load balancer pool>`,
-		ArgsUsage:          "dns|lb TUNNEL HOSTNAME [LB-POOL]",
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -513,8 +515,7 @@ DESCRIPTION:
  
 TUNNEL COMMAND OPTIONS:
 	%s
- 
-SUBCOMMAND COMMAND OPTIONS:
+SUBCOMMAND OPTIONS:
 	{{range .VisibleFlags}}{{.}}
 	{{end}}
 `

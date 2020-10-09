@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
+	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/watcher"
 
 	raven "github.com/getsentry/raven-go"
@@ -76,7 +77,7 @@ func main() {
 	and configure access control.`
 	app.Flags = flags()
 	app.Action = action(Version, shutdownC, graceShutdownC)
-	app.Before = tunnel.Before
+	app.Before = tunnel.SetFlagsFromConfigFile
 	app.Commands = commands(cli.ShowVersion)
 
 	tunnel.Init(Version, shutdownC, graceShutdownC) // we need this to support the tunnel sub command...
@@ -129,6 +130,7 @@ To determine if an update happened in a script, check for error code 64.`,
 		},
 	}
 	cmds = append(cmds, tunnel.Commands()...)
+	cmds = append(cmds, tunneldns.Command(false))
 	cmds = append(cmds, access.Commands()...)
 	return cmds
 }

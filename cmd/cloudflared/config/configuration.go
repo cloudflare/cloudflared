@@ -9,7 +9,6 @@ import (
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/validation"
@@ -89,14 +88,6 @@ func FileExists(path string) (bool, error) {
 	}
 	f.Close()
 	return true, nil
-}
-
-// FindInputSourceContext pulls the input source from the config flag.
-func FindInputSourceContext(context *cli.Context) (altsrc.InputSourceContext, error) {
-	if context.String("config") != "" {
-		return altsrc.NewYamlSourceFromFile(context.String("config"))
-	}
-	return nil, nil
 }
 
 // FindDefaultConfigPath returns the first path that contains a config file.
