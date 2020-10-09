@@ -24,6 +24,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -92,6 +93,7 @@ type TunnelConfig struct {
 	NamedTunnel     *NamedTunnelConfig
 	ReplaceExisting bool
 	TunnelEventChan chan<- ui.TunnelEvent
+	IngressRules    []ingress.Rule
 }
 
 type dupConnRegisterTunnelError struct{}

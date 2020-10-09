@@ -1,30 +1,26 @@
-package tunnel
+package ingress
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"regexp"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-
 	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 )
 
 var (
-	errNoIngressRules      = errors.New("No ingress rules were specified in the config file")
-	errLastRuleNotCatchAll = errors.New("The last ingress rule must match all hostnames (i.e. it must be missing, or must be \"*\")")
-	errBadWildcard         = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
-	errNoIngressRulesMatch = errors.New("The URL didn't match any ingress rules")
+	errNoIngressRules             = errors.New("No ingress rules were specified in the config file")
+	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all hostnames (i.e. it must be missing, or must be \"*\")")
+	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
+	errNoIngressRulesMatch        = errors.New("The URL didn't match any ingress rules")
+	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
 // Each rule route traffic from a hostname/path on the public
 // internet to the service running on the given URL.
-type rule struct {
+type Rule struct {
 	// Requests for this hostname will be proxied to this rule's service.
 	Hostname string
 
@@ -37,7 +33,7 @@ type rule struct {
 	Service *url.URL
 }
 
-func (r rule) String() string {
+func (r Rule) String() string {
 	var out strings.Builder
 	if r.Hostname != "" {
 		out.WriteString("\thostname: ")
@@ -54,7 +50,7 @@ func (r rule) String() string {
 	return out.String()
 }
 
-func (r rule) matches(requestURL *url.URL) bool {
+func (r Rule) matches(requestURL *url.URL) bool {
 	hostMatch := r.Hostname == "" || r.Hostname == "*" || matchHost(r.Hostname, requestURL.Hostname())
 	pathMatch := r.Path == nil || r.Path.MatchString(requestURL.Path)
 	return hostMatch && pathMatch
@@ -81,10 +77,14 @@ type unvalidatedRule struct {
 
 type ingress struct {
 	Ingress []unvalidatedRule
+	Url     string
 }
 
-func (ing ingress) validate() ([]rule, error) {
-	rules := make([]rule, len(ing.Ingress))
+func (ing ingress) validate() ([]Rule, error) {
+	if ing.Url != "" {
+		return nil, ErrURLIncompatibleWithIngress
+	}
+	rules := make([]Rule, len(ing.Ingress))
 	for i, r := range ing.Ingress {
 		service, err := url.Parse(r.Service)
 		if err != nil {
@@ -119,7 +119,7 @@ func (ing ingress) validate() ([]rule, error) {
 			}
 		}
 
-		rules[i] = rule{
+		rules[i] = Rule{
 			Hostname: r.Hostname,
 			Service:  service,
 			Path:     pathRegex,
@@ -139,7 +139,7 @@ func (e errRuleShouldNotBeCatchAll) Error() string {
 		"will never be triggered.", e.i+1, e.hostname)
 }
 
-func parseIngress(rawYAML []byte) ([]rule, error) {
+func ParseIngress(rawYAML []byte) ([]Rule, error) {
 	var ing ingress
 	if err := yaml.Unmarshal(rawYAML, &ing); err != nil {
 		return nil, err
@@ -150,57 +150,10 @@ func parseIngress(rawYAML []byte) ([]rule, error) {
 	return ing.validate()
 }
 
-func ingressContext(c *cli.Context) ([]rule, error) {
-	configFilePath := c.String("config")
-	if configFilePath == "" {
-		return nil, config.ErrNoConfigFile
-	}
-	fmt.Printf("Reading from config file %s\n", configFilePath)
-	configBytes, err := ioutil.ReadFile(configFilePath)
-	if err != nil {
-		return nil, err
-	}
-	rules, err := parseIngress(configBytes)
-	return rules, err
-}
-
-// Validates the ingress rules in the cloudflared config file
-func validateCommand(c *cli.Context) error {
-	_, err := ingressContext(c)
-	if err != nil {
-		fmt.Println(err.Error())
-		return errors.New("Validation failed")
-	}
-	fmt.Println("OK")
-	return nil
-}
-
-func buildValidateCommand() *cli.Command {
-	return &cli.Command{
-		Name:        "validate",
-		Action:      cliutil.ErrorHandler(validateCommand),
-		Usage:       "Validate the ingress configuration ",
-		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
-		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
-	}
-}
-
-// Checks which ingress rule matches the given URL.
-func ruleCommand(c *cli.Context) error {
-	rules, err := ingressContext(c)
-	if err != nil {
-		return err
-	}
-	requestArg := c.Args().First()
-	if requestArg == "" {
-		return errors.New("cloudflared tunnel rule expects a single argument, the URL to test")
-	}
-	requestURL, err := url.Parse(requestArg)
-	if err != nil {
-		return fmt.Errorf("%s is not a valid URL", requestArg)
-	}
+// RuleCommand checks which ingress rule matches the given request URL.
+func RuleCommand(rules []Rule, requestURL *url.URL) error {
 	if requestURL.Hostname() == "" {
-		return fmt.Errorf("%s is malformed and doesn't have a hostname", requestArg)
+		return fmt.Errorf("%s is malformed and doesn't have a hostname", requestURL)
 	}
 	for i, r := range rules {
 		if r.matches(requestURL) {
@@ -210,19 +163,4 @@ func ruleCommand(c *cli.Context) error {
 		}
 	}
 	return errNoIngressRulesMatch
-}
-
-func buildRuleCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "rule",
-		Action:    cliutil.ErrorHandler(ruleCommand),
-		Usage:     "Check which ingress rule matches a given request URL",
-		UsageText: "cloudflared [--config CONFIGFILE] tunnel ingress rule URL",
-		ArgsUsage: "URL",
-		Description: "Check which ingress rule matches a given request URL. " +
-			"Ingress rules match a request's hostname and path. Hostname is " +
-			"optional and is either a full hostname like `www.example.com` or a " +
-			"hostname with a `*` for its subdomains, e.g. `*.example.com`. Path " +
-			"is optional and matches a regular expression, like `/[a-zA-Z0-9_]+.html`",
-	}
 }

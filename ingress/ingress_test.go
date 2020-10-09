@@ -1,4 +1,4 @@
-package tunnel
+package ingress
 
 import (
 	"net/url"
@@ -20,7 +20,7 @@ func Test_parseIngress(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    []rule
+		want    []Rule
 		wantErr bool
 	}{
 		{
@@ -37,7 +37,7 @@ ingress:
   - hostname: "*"
     service: https://localhost:8001
 `},
-			want: []rule{
+			want: []Rule{
 				{
 					Hostname: "tunnel1.example.com",
 					Service:  localhost8000,
@@ -56,7 +56,7 @@ ingress:
     service: https://localhost:8000
 extraKey: extraValue
 `},
-			want: []rule{
+			want: []Rule{
 				{
 					Hostname: "*",
 					Service:  localhost8000,
@@ -69,7 +69,7 @@ extraKey: extraValue
 ingress:
   - service: https://localhost:8000
 `},
-			want: []rule{
+			want: []Rule{
 				{
 					Service: localhost8000,
 				},
@@ -141,13 +141,13 @@ ingress:
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseIngress([]byte(tt.args.rawYAML))
+			got, err := ParseIngress([]byte(tt.args.rawYAML))
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseIngress() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseIngress() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseIngress() = %v, want %v", got, tt.want)
+				t.Errorf("ParseIngress() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -258,7 +258,7 @@ func Test_rule_matches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := rule{
+			r := Rule{
 				Hostname: tt.fields.Hostname,
 				Path:     tt.fields.Path,
 				Service:  tt.fields.Service,

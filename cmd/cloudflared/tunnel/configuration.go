@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -184,12 +185,6 @@ func prepareTunnelConfig(
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
 
-	originURL, err := config.ValidateUrl(c, compatibilityMode)
-	if err != nil {
-		logger.Errorf("Error validating origin URL: %s", err)
-		return nil, errors.Wrap(err, "Error validating origin URL")
-	}
-
 	var originCert []byte
 	if !isFreeTunnel {
 		originCert, err = getOriginCert(c, logger)
@@ -224,6 +219,36 @@ func prepareTunnelConfig(
 	}
 	dialContext := dialer.DialContext
 
+	var ingressRules []ingress.Rule
+	if namedTunnel != nil {
+		clientUUID, err := uuid.NewRandom()
+		if err != nil {
+			return nil, errors.Wrap(err, "can't generate clientUUID")
+		}
+		namedTunnel.Client = tunnelpogs.ClientInfo{
+			ClientID: clientUUID[:],
+			Features: []string{origin.FeatureSerializedHeaders},
+			Version:  version,
+			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
+		}
+		ingressRules, err = config.ReadRules(c)
+		if err != nil {
+			return nil, err
+		}
+		if c.IsSet("url") {
+			return nil, ingress.ErrURLIncompatibleWithIngress
+		}
+	}
+
+	var originURL string
+	if len(ingressRules) == 0 {
+		originURL, err = config.ValidateUrl(c, compatibilityMode)
+		if err != nil {
+			logger.Errorf("Error validating origin URL: %s", err)
+			return nil, errors.Wrap(err, "Error validating origin URL")
+		}
+	}
+
 	if c.IsSet("unix-socket") {
 		unixSocket, err := config.ValidateUnixSocket(c)
 		if err != nil {
@@ -256,20 +281,6 @@ func prepareTunnelConfig(
 		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
 		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
 	}
-
-	if namedTunnel != nil {
-		clientUUID, err := uuid.NewRandom()
-		if err != nil {
-			return nil, errors.Wrap(err, "can't generate clientUUID")
-		}
-		namedTunnel.Client = tunnelpogs.ClientInfo{
-			ClientID: clientUUID[:],
-			Features: []string{origin.FeatureSerializedHeaders},
-			Version:  version,
-			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
-		}
-	}
-
 	return &origin.TunnelConfig{
 		BuildInfo:          buildInfo,
 		ClientID:           clientID,
@@ -301,6 +312,7 @@ func prepareTunnelConfig(
 		TlsConfig:          toEdgeTLSConfig,
 		NamedTunnel:        namedTunnel,
 		ReplaceExisting:    c.Bool("force"),
+		IngressRules:       ingressRules,
 		// turn off use of reconnect token and auth refresh when using named tunnels
 		UseReconnectToken: compatibilityMode && c.Bool("use-reconnect-token"),
 	}, nil

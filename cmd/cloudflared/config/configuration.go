@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/validation"
 )
 
@@ -192,4 +194,18 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 	}
 	validUrl, err := validation.ValidateUrl(url)
 	return validUrl, err
+}
+
+func ReadRules(c *cli.Context) ([]ingress.Rule, error) {
+	configFilePath := c.String("config")
+	if configFilePath == "" {
+		return nil, ErrNoConfigFile
+	}
+	fmt.Printf("Reading from config file %s\n", configFilePath)
+	configBytes, err := ioutil.ReadFile(configFilePath)
+	if err != nil {
+		return nil, err
+	}
+	rules, err := ingress.ParseIngress(configBytes)
+	return rules, err
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
@@ -1247,4 +1248,65 @@ reconnect [delay]
 			}
 		}
 	}
+}
+
+func buildValidateCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "validate",
+		Action:      cliutil.ErrorHandler(ValidateCommand),
+		Usage:       "Validate the ingress configuration ",
+		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
+		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
+	}
+}
+
+func buildRuleCommand() *cli.Command {
+	return &cli.Command{
+		Name:      "rule",
+		Action:    cliutil.ErrorHandler(RuleCommand),
+		Usage:     "Check which ingress rule matches a given request URL",
+		UsageText: "cloudflared tunnel [--config FILEPATH] ingress rule URL",
+		ArgsUsage: "URL",
+		Description: "Check which ingress rule matches a given request URL. " +
+			"Ingress rules match a request's hostname and path. Hostname is " +
+			"optional and is either a full hostname like `www.example.com` or a " +
+			"hostname with a `*` for its subdomains, e.g. `*.example.com`. Path " +
+			"is optional and matches a regular expression, like `/[a-zA-Z0-9_]+.html`",
+	}
+}
+
+// Validates the ingress rules in the cloudflared config file
+func ValidateCommand(c *cli.Context) error {
+	_, err := config.ReadRules(c)
+	if err != nil {
+		return errors.Wrap(err, "Validation failed")
+	}
+	if c.IsSet("url") {
+		return ingress.ErrURLIncompatibleWithIngress
+	}
+	fmt.Println("OK")
+	return nil
+}
+
+// Checks which ingress rule matches the given URL.
+func RuleCommand(c *cli.Context) error {
+	rules, err := config.ReadRules(c)
+	if err != nil {
+		return err
+	}
+	requestArg := c.Args().First()
+	if requestArg == "" {
+		return errors.New("cloudflared tunnel rule expects a single argument, the URL to test")
+	}
+	requestURL, err := url.Parse(requestArg)
+	if err != nil {
+		return fmt.Errorf("%s is not a valid URL", requestArg)
+	}
+	if requestURL.Hostname() == "" && requestURL.Scheme == "" {
+		return fmt.Errorf("%s doesn't have a hostname, consider adding a scheme", requestArg)
+	}
+	if requestURL.Hostname() == "" {
+		return fmt.Errorf("%s doesn't have a hostname", requestArg)
+	}
+	return ingress.RuleCommand(rules, requestURL)
 }
