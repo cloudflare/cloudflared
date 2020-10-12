@@ -232,16 +232,17 @@ func prepareTunnelConfig(
 			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
 		}
 		ingressRules, err = config.ReadRules(c)
-		if err != nil {
+		if err != nil && err != ingress.ErrNoIngressRules {
 			return nil, err
 		}
-		if c.IsSet("url") {
+		if len(ingressRules) > 0 && c.IsSet("url") {
 			return nil, ingress.ErrURLIncompatibleWithIngress
 		}
 	}
 
 	var originURL string
-	if len(ingressRules) == 0 {
+	isUsingMultipleOrigins := len(ingressRules) > 0
+	if !isUsingMultipleOrigins {
 		originURL, err = config.ValidateUrl(c, compatibilityMode)
 		if err != nil {
 			logger.Errorf("Error validating origin URL: %s", err)
@@ -271,8 +272,22 @@ func prepareTunnelConfig(
 	}
 	// If tunnel running in bastion mode, a connection to origin will not exist until initiated by the client.
 	if !c.IsSet(bastionFlag) {
-		if err = validation.ValidateHTTPService(originURL, hostname, httpTransport); err != nil {
-			logger.Errorf("unable to connect to the origin: %s", err)
+
+		// List all origin URLs that require validation
+		var originURLs []string
+		if !isUsingMultipleOrigins {
+			originURLs = append(originURLs, originURL)
+		} else {
+			for _, rule := range ingressRules {
+				originURLs = append(originURLs, rule.Service.String())
+			}
+		}
+
+		// Validate each origin URL
+		for _, u := range originURLs {
+			if err = validation.ValidateHTTPService(u, hostname, httpTransport); err != nil {
+				logger.Errorf("unable to connect to the origin: %s", err)
+			}
 		}
 	}
 

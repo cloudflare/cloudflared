@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	errNoIngressRules             = errors.New("No ingress rules were specified in the config file")
+	ErrNoIngressRules             = errors.New("No ingress rules were specified in the config file")
 	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all hostnames (i.e. it must be missing, or must be \"*\")")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
 	errNoIngressRulesMatch        = errors.New("The URL didn't match any ingress rules")
@@ -50,10 +50,22 @@ func (r Rule) String() string {
 	return out.String()
 }
 
-func (r Rule) matches(requestURL *url.URL) bool {
-	hostMatch := r.Hostname == "" || r.Hostname == "*" || matchHost(r.Hostname, requestURL.Hostname())
-	pathMatch := r.Path == nil || r.Path.MatchString(requestURL.Path)
+func (r *Rule) Matches(hostname, path string) bool {
+	hostMatch := r.Hostname == "" || r.Hostname == "*" || matchHost(r.Hostname, hostname)
+	pathMatch := r.Path == nil || r.Path.MatchString(path)
 	return hostMatch && pathMatch
+}
+
+// FindMatchingRule returns the index of the Ingress Rule which matches the given
+// hostname and path. This function assumes the last rule matches everything,
+// which is the case if the rules were instantiated via the ingress#Validate method
+func FindMatchingRule(hostname, path string, rules []Rule) int {
+	for i, rule := range rules {
+		if rule.Matches(hostname, path) {
+			return i
+		}
+	}
+	return len(rules) - 1
 }
 
 func matchHost(ruleHost, reqHost string) bool {
@@ -92,6 +104,10 @@ func (ing ingress) validate() ([]Rule, error) {
 		}
 		if service.Scheme == "" || service.Hostname() == "" {
 			return nil, fmt.Errorf("The service %s must have a scheme and a hostname", r.Service)
+		}
+
+		if service.Path != "" {
+			return nil, fmt.Errorf("%s is an invalid address, ingress rules don't support proxying to a different path on the origin service. The path will be the same as the eyeball request's path.", r.Service)
 		}
 
 		// Ensure that there are no wildcards anywhere except the first character
@@ -145,7 +161,7 @@ func ParseIngress(rawYAML []byte) ([]Rule, error) {
 		return nil, err
 	}
 	if len(ing.Ingress) == 0 {
-		return nil, errNoIngressRules
+		return nil, ErrNoIngressRules
 	}
 	return ing.validate()
 }
@@ -155,12 +171,8 @@ func RuleCommand(rules []Rule, requestURL *url.URL) error {
 	if requestURL.Hostname() == "" {
 		return fmt.Errorf("%s is malformed and doesn't have a hostname", requestURL)
 	}
-	for i, r := range rules {
-		if r.matches(requestURL) {
-			fmt.Printf("Matched rule #%d\n", i+1)
-			fmt.Println(r.String())
-			return nil
-		}
-	}
-	return errNoIngressRulesMatch
+	i := FindMatchingRule(requestURL.Hostname(), requestURL.Path, rules)
+	fmt.Printf("Matched rule #%d\n", i+1)
+	fmt.Println(rules[i].String())
+	return nil
 }

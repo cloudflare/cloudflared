@@ -619,6 +619,7 @@ func LogServerInfo(
 
 type TunnelHandler struct {
 	originUrl      string
+	ingressRules   []ingress.Rule
 	httpHostHeader string
 	muxer          *h2mux.Muxer
 	httpClient     http.RoundTripper
@@ -640,12 +641,20 @@ func NewTunnelHandler(ctx context.Context,
 	connectionID uint8,
 	bufferPool *buffer.Pool,
 ) (*TunnelHandler, string, error) {
-	originURL, err := validation.ValidateUrl(config.OriginUrl)
-	if err != nil {
-		return nil, "", fmt.Errorf("unable to parse origin URL %#v", originURL)
+
+	// Check single-origin config
+	var originURL string
+	var err error
+	if len(config.IngressRules) == 0 {
+		originURL, err = validation.ValidateUrl(config.OriginUrl)
+		if err != nil {
+			return nil, "", fmt.Errorf("unable to parse origin URL %#v", originURL)
+		}
 	}
+
 	h := &TunnelHandler{
 		originUrl:         originURL,
+		ingressRules:      config.IngressRules,
 		httpHostHeader:    config.HTTPHostHeader,
 		httpClient:        config.HTTPTransport,
 		tlsConfig:         config.ClientTlsConfig,
@@ -718,6 +727,12 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 		return nil, errors.Wrap(err, "invalid request received")
 	}
 	h.AppendTagHeaders(req)
+	if len(h.ingressRules) > 0 {
+		ruleNumber := ingress.FindMatchingRule(req.Host, req.URL.Path, h.ingressRules)
+		destination := h.ingressRules[ruleNumber].Service
+		req.URL.Host = destination.Host
+		req.URL.Scheme = destination.Scheme
+	}
 	return req, nil
 }
 

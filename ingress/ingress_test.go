@@ -138,6 +138,33 @@ ingress:
 `},
 			wantErr: true,
 		},
+		{
+			name: "Wildcard not at start",
+			args: args{rawYAML: `
+ingress:
+  - hostname: "test.*.example.com"
+    service: https://localhost:8000
+`},
+			wantErr: true,
+		},
+		{
+			name: "Can't use --url",
+			args: args{rawYAML: `
+url: localhost:8080
+ingress:
+  - hostname: "*.example.com"
+    service: https://localhost:8000
+`},
+			wantErr: true,
+		},
+		{
+			name: "Service can't have a path",
+			args: args{rawYAML: `
+ingress:
+  - service: https://localhost:8000/static/
+`},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -263,9 +290,31 @@ func Test_rule_matches(t *testing.T) {
 				Path:     tt.fields.Path,
 				Service:  tt.fields.Service,
 			}
-			if got := r.matches(tt.args.requestURL); got != tt.want {
+			u := tt.args.requestURL
+			if got := r.Matches(u.Hostname(), u.Path); got != tt.want {
 				t.Errorf("rule.matches() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func BenchmarkFindMatch(b *testing.B) {
+	rulesYAML := `
+ingress:
+  - hostname: tunnel1.example.com
+    service: https://localhost:8000
+  - hostname: tunnel2.example.com
+    service: https://localhost:8001
+  - hostname: "*"
+    service: https://localhost:8002
+`
+	rules, err := ParseIngress([]byte(rulesYAML))
+	if err != nil {
+		b.Error(err)
+	}
+	for n := 0; n < b.N; n++ {
+		FindMatchingRule("tunnel1.example.com", "", rules)
+		FindMatchingRule("tunnel2.example.com", "", rules)
+		FindMatchingRule("tunnel3.example.com", "", rules)
 	}
 }

@@ -128,7 +128,7 @@ func Commands() []*cli.Command {
 		dbConnectCmd(),
 	}
 
-	return []*cli.Command {
+	return []*cli.Command{
 		buildTunnelCommand(subcommands),
 		// for compatibility, allow following as top-level subcommands
 		buildLoginSubcommand(true),
