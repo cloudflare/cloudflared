@@ -30,7 +30,7 @@ import (
 
 const (
 	credFileFlagAlias = "cred-file"
-	availableProtocol = "Available protocols: http2, Go's implementation and h2mux, Cloudflare's implementation of HTTP/2."
+	availableProtocol = "Available protocols: http2 - Go's implementation, h2mux - Cloudflare's implementation of HTTP/2, and auto - automatically select between http2 and h2mux"
 )
 
 var (
@@ -86,14 +86,14 @@ var (
 		Usage:   "Allows you to delete a tunnel, even if it has active connections.",
 		EnvVars: []string{"TUNNEL_RUN_FORCE_OVERWRITE"},
 	}
-	selectProtocolFlag = &cli.StringFlag{
+	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "protocol",
 		Value:   "h2mux",
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", availableProtocol),
 		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
 		Hidden:  true,
-	}
+	})
 )
 
 func buildCreateCommand() *cli.Command {

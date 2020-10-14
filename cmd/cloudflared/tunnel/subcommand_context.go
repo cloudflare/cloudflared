@@ -260,16 +260,12 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		return err
 	}
 
-	protocol, ok := connection.ParseProtocol(sc.c.String("protocol"))
-	if !ok {
-		return fmt.Errorf("%s is not valid protocol. %s", sc.c.String("protocol"), availableProtocol)
-	}
 	return StartServer(
 		sc.c,
 		version,
 		shutdownC,
 		graceShutdownC,
-		&connection.NamedTunnelConfig{Auth: *credentials, ID: tunnelID, Protocol: protocol},
+		&connection.NamedTunnelConfig{Auth: *credentials, ID: tunnelID},
 		sc.logger,
 		sc.isUIEnabled,
 	)

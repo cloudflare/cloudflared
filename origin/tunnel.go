@@ -238,7 +238,7 @@ func ServeTunnel(
 		fuse:    fuse,
 		backoff: backoff,
 	}
-	if config.NamedTunnel != nil && config.NamedTunnel.Protocol == connection.HTTP2 {
+	if config.Protocol == connection.HTTP2 {
 		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.retries))
 		return ServeHTTP2(ctx, config, edgeConn, connOptions, connectionIndex, connectedFuse, reconnectCh)
 	}

@@ -1,6 +1,8 @@
 package connection
 
 import (
+	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"strconv"
@@ -25,10 +27,9 @@ type Config struct {
 }
 
 type NamedTunnelConfig struct {
-	Auth     pogs.TunnelAuth
-	ID       uuid.UUID
-	Client   pogs.ClientInfo
-	Protocol Protocol
+	Auth   pogs.TunnelAuth
+	ID     uuid.UUID
+	Client pogs.ClientInfo
 }
 
 type ClassicTunnelConfig struct {
@@ -49,15 +50,26 @@ const (
 	HTTP2
 )
 
-func ParseProtocol(s string) (Protocol, bool) {
+func SelectProtocol(s string, accountTag string, http2Percentage uint32) (Protocol, bool) {
 	switch s {
 	case "h2mux":
 		return H2mux, true
 	case "http2":
 		return HTTP2, true
+	case "auto":
+		if tryHTTP2(accountTag, http2Percentage) {
+			return HTTP2, true
+		}
+		return H2mux, true
 	default:
 		return 0, false
 	}
+}
+
+func tryHTTP2(accountTag string, http2Percentage uint32) bool {
+	h := fnv.New32a()
+	h.Write([]byte(accountTag))
+	return h.Sum32()%100 < http2Percentage
 }
 
 func (p Protocol) ServerName() string {
@@ -68,6 +80,17 @@ func (p Protocol) ServerName() string {
 		return edgeH2TLSServerName
 	default:
 		return ""
+	}
+}
+
+func (p Protocol) String() string {
+	switch p {
+	case H2mux:
+		return "h2mux"
+	case HTTP2:
+		return "http2"
+	default:
+		return fmt.Sprintf("unknown protocol")
 	}
 }
 

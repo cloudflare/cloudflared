@@ -11,6 +11,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
@@ -231,7 +232,11 @@ func prepareTunnelConfig(
 		}
 	}
 
-	protocol := determineProtocol(namedTunnel)
+	protocol, err := determineProtocol(c, namedTunnel)
+	if err != nil {
+		return nil, err
+	}
+	logger.Infof("Using protocol %s", protocol)
 	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, protocol.ServerName())
 	if err != nil {
 		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
@@ -293,9 +298,17 @@ func isRunningFromTerminal() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
 }
 
-func determineProtocol(namedTunnel *connection.NamedTunnelConfig) connection.Protocol {
-	if namedTunnel != nil {
-		return namedTunnel.Protocol
+func determineProtocol(c *cli.Context, namedTunnel *connection.NamedTunnelConfig) (connection.Protocol, error) {
+	if namedTunnel == nil {
+		return connection.H2mux, nil
 	}
-	return connection.H2mux
+	http2Percentage, err := edgediscovery.HTTP2Percentage()
+	if err != nil {
+		return 0, err
+	}
+	protocol, ok := connection.SelectProtocol(c.String("protocol"), namedTunnel.Auth.AccountTag, http2Percentage)
+	if !ok {
+		return 0, fmt.Errorf("%s is not valid protocol. %s", c.String("protocol"), availableProtocol)
+	}
+	return protocol, nil
 }
