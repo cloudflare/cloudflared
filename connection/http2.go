@@ -37,7 +37,7 @@ type HTTP2Connection struct {
 	connectedFuse ConnectedFuse
 }
 
-func NewHTTP2Connection(conn net.Conn, config *Config, originURL *url.URL, namedTunnelConfig *NamedTunnelConfig, connOptions *tunnelpogs.ConnectionOptions, observer *Observer, connIndex uint8, connectedFuse ConnectedFuse) (*HTTP2Connection, error) {
+func NewHTTP2Connection(conn net.Conn, config *Config, originURL *url.URL, namedTunnelConfig *NamedTunnelConfig, connOptions *tunnelpogs.ConnectionOptions, observer *Observer, connIndex uint8, connectedFuse ConnectedFuse) *HTTP2Connection {
 	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
@@ -52,7 +52,7 @@ func NewHTTP2Connection(conn net.Conn, config *Config, originURL *url.URL, named
 		connIndex:     connIndex,
 		wg:            &sync.WaitGroup{},
 		connectedFuse: connectedFuse,
-	}, nil
+	}
 }
 
 func (c *HTTP2Connection) Serve(ctx context.Context) {

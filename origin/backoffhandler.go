@@ -97,3 +97,11 @@ func (b BackoffHandler) GetBaseTime() time.Duration {
 func (b *BackoffHandler) Retries() int {
 	return int(b.retries)
 }
+
+func (b *BackoffHandler) ReachedMaxRetries() bool {
+	return b.retries == b.MaxRetries
+}
+
+func (b *BackoffHandler) resetNow() {
+	b.resetDeadline = time.Now()
+}

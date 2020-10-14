@@ -299,7 +299,7 @@ func convertRTTMilliSec(t time.Duration) float64 {
 }
 
 // Metrics that can be collected without asking the edge
-func newTunnelMetrics(protocol Protocol) *tunnelMetrics {
+func newTunnelMetrics() *tunnelMetrics {
 	maxConcurrentRequestsPerTunnel := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: MetricsNamespace,
@@ -374,16 +374,12 @@ func newTunnelMetrics(protocol Protocol) *tunnelMetrics {
 		[]string{"rpcName"},
 	)
 	prometheus.MustRegister(registerSuccess)
-	var muxerMetrics *muxerMetrics
-	if protocol == H2mux {
-		muxerMetrics = newMuxerMetrics()
-	}
 
 	return &tunnelMetrics{
 		timerRetries:        timerRetries,
 		serverLocations:     serverLocations,
 		oldServerLocations:  make(map[string]string),
-		muxerMetrics:        muxerMetrics,
+		muxerMetrics:        newMuxerMetrics(),
 		tunnelsHA:           NewTunnelsForHA(),
 		regSuccess:          registerSuccess,
 		regFail:             registerFail,

@@ -16,10 +16,10 @@ type Observer struct {
 	tunnelEventChan chan<- ui.TunnelEvent
 }
 
-func NewObserver(logger logger.Service, tunnelEventChan chan<- ui.TunnelEvent, protocol Protocol) *Observer {
+func NewObserver(logger logger.Service, tunnelEventChan chan<- ui.TunnelEvent) *Observer {
 	return &Observer{
 		logger,
-		newTunnelMetrics(protocol),
+		newTunnelMetrics(),
 		tunnelEventChan,
 	}
 }

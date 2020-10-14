@@ -232,15 +232,19 @@ func prepareTunnelConfig(
 		}
 	}
 
-	protocol, err := determineProtocol(c, namedTunnel)
+	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, logger)
 	if err != nil {
 		return nil, err
 	}
-	logger.Infof("Using protocol %s", protocol)
-	toEdgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, protocol.ServerName())
-	if err != nil {
-		logger.Errorf("unable to create TLS config to connect with edge: %s", err)
-		return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
+	logger.Infof("Initial protocol %s", protocolSelector.Current())
+
+	edgeTLSConfigs := make(map[connection.Protocol]*tls.Config, len(connection.ProtocolList))
+	for _, p := range connection.ProtocolList {
+		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, p.ServerName())
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
+		}
+		edgeTLSConfigs[p] = edgeTLSConfig
 	}
 
 	proxyConfig := &origin.ProxyConfig{
@@ -252,7 +256,7 @@ func prepareTunnelConfig(
 		Tags:              tags,
 	}
 	originClient := origin.NewClient(proxyConfig, logger)
-	transportConfig := &connection.Config{
+	connectionConfig := &connection.Config{
 		OriginClient:    originClient,
 		GracePeriod:     c.Duration("grace-period"),
 		ReplaceExisting: c.Bool("force"),
@@ -270,7 +274,7 @@ func prepareTunnelConfig(
 	}
 
 	return &origin.TunnelConfig{
-		ConnectionConfig: transportConfig,
+		ConnectionConfig: connectionConfig,
 		ProxyConfig:      proxyConfig,
 		BuildInfo:        buildInfo,
 		ClientID:         clientID,
@@ -281,34 +285,20 @@ func prepareTunnelConfig(
 		IsFreeTunnel:     isFreeTunnel,
 		LBPool:           c.String("lb-pool"),
 		Logger:           logger,
-		Observer:         connection.NewObserver(transportLogger, tunnelEventChan, protocol),
+		Observer:         connection.NewObserver(transportLogger, tunnelEventChan),
 		ReportedVersion:  version,
 		Retries:          c.Uint("retries"),
 		RunFromTerminal:  isRunningFromTerminal(),
-		TLSConfig:        toEdgeTLSConfig,
 		NamedTunnel:      namedTunnel,
 		ClassicTunnel:    classicTunnel,
 		MuxerConfig:      muxerConfig,
 		TunnelEventChan:  tunnelEventChan,
 		IngressRules:     ingressRules,
+		ProtocolSelector: protocolSelector,
+		EdgeTLSConfigs:   edgeTLSConfigs,
 	}, nil
 }
 
 func isRunningFromTerminal() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
-}
-
-func determineProtocol(c *cli.Context, namedTunnel *connection.NamedTunnelConfig) (connection.Protocol, error) {
-	if namedTunnel == nil {
-		return connection.H2mux, nil
-	}
-	http2Percentage, err := edgediscovery.HTTP2Percentage()
-	if err != nil {
-		return 0, err
-	}
-	protocol, ok := connection.SelectProtocol(c.String("protocol"), namedTunnel.Auth.AccountTag, http2Percentage)
-	if !ok {
-		return 0, fmt.Errorf("%s is not valid protocol. %s", c.String("protocol"), availableProtocol)
-	}
-	return protocol, nil
 }

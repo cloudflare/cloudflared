@@ -17,10 +17,10 @@ import (
 )
 
 const (
+	// SRV and TXT record resolution TTL
+	ResolveTTL = time.Hour
 	// Waiting time before retrying a failed tunnel connection
 	tunnelRetryDuration = time.Second * 10
-	// SRV record resolution TTL
-	resolveTTL = time.Hour
 	// Interval between registering new tunnels
 	registrationInterval = time.Second
 
@@ -43,8 +43,6 @@ type Supervisor struct {
 	cloudflaredUUID   uuid.UUID
 	config            *TunnelConfig
 	edgeIPs           *edgediscovery.Edge
-	lastResolve       time.Time
-	resolverC         chan resolveResult
 	tunnelErrors      chan tunnelError
 	tunnelsConnecting map[int]chan struct{}
 	// nextConnectedIndex and nextConnectedSignal are used to wait for all
@@ -56,10 +54,6 @@ type Supervisor struct {
 
 	reconnectCredentialManager *reconnectCredentialManager
 	useReconnectToken          bool
-}
-
-type resolveResult struct {
-	err error
 }
 
 type tunnelError struct {
@@ -74,9 +68,9 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor
 		err     error
 	)
 	if len(config.EdgeAddrs) > 0 {
-		edgeIPs, err = edgediscovery.StaticEdge(config.Observer, config.EdgeAddrs)
+		edgeIPs, err = edgediscovery.StaticEdge(config.Logger, config.EdgeAddrs)
 	} else {
-		edgeIPs, err = edgediscovery.ResolveEdge(config.Observer)
+		edgeIPs, err = edgediscovery.ResolveEdge(config.Logger)
 	}
 	if err != nil {
 		return nil, err
@@ -93,14 +87,13 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor
 		edgeIPs:                    edgeIPs,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
-		logger:                     config.Observer,
+		logger:                     config.Logger,
 		reconnectCredentialManager: newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections),
 		useReconnectToken:          useReconnectToken,
 	}, nil
 }
 
 func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
-	logger := s.config.Observer
 	if err := s.initialize(ctx, connectedSignal, reconnectCh); err != nil {
 		return err
 	}
@@ -117,7 +110,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		if timer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate); err == nil {
 			refreshAuthBackoffTimer = timer
 		} else {
-			logger.Errorf("supervisor: initial refreshAuth failed, retrying in %v: %s", refreshAuthRetryDuration, err)
+			s.logger.Errorf("supervisor: initial refreshAuth failed, retrying in %v: %s", refreshAuthRetryDuration, err)
 			refreshAuthBackoffTimer = time.After(refreshAuthRetryDuration)
 		}
 	}
@@ -136,7 +129,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil {
-				logger.Infof("supervisor: Tunnel disconnected due to error: %s", tunnelError.err)
+				s.logger.Infof("supervisor: Tunnel disconnected due to error: %s", tunnelError.err)
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -159,7 +152,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		case <-refreshAuthBackoffTimer:
 			newTimer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate)
 			if err != nil {
-				logger.Errorf("supervisor: Authentication failed: %s", err)
+				s.logger.Errorf("supervisor: Authentication failed: %s", err)
 				// Permanent failure. Leave the `select` without setting the
 				// channel to be non-null, so we'll never hit this case of the `select` again.
 				continue
@@ -171,27 +164,15 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 				// No more tunnels outstanding, clear backoff timer
 				backoff.SetGracePeriod()
 			}
-		// DNS resolution returned
-		case result := <-s.resolverC:
-			s.lastResolve = time.Now()
-			s.resolverC = nil
-			if result.err == nil {
-				logger.Debug("supervisor: Service discovery refresh complete")
-			} else {
-				logger.Errorf("supervisor: Service discovery error: %s", result.err)
-			}
 		}
 	}
 }
 
 // Returns nil if initialization succeeded, else the initialization error.
 func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
-	logger := s.logger
-
-	s.lastResolve = time.Now()
 	availableAddrs := int(s.edgeIPs.AvailableAddrs())
 	if s.config.HAConnections > availableAddrs {
-		logger.Infof("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
+		s.logger.Infof("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
 		s.config.HAConnections = availableAddrs
 	}
 
@@ -304,7 +285,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		return nil, err
 	}
 
-	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.TLSConfig, arbitraryEdgeIP)
+	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.EdgeTLSConfigs[connection.H2mux], arbitraryEdgeIP)
 	if err != nil {
 		return nil, err
 	}

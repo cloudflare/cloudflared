@@ -9,7 +9,7 @@ import (
 )
 
 // can only be called once
-var m = newTunnelMetrics(H2mux)
+var m = newTunnelMetrics()
 
 func TestRegisterServerLocation(t *testing.T) {
 	tunnels := 20

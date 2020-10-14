@@ -23,6 +23,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
@@ -30,7 +31,6 @@ import (
 
 const (
 	credFileFlagAlias = "cred-file"
-	availableProtocol = "Available protocols: http2 - Go's implementation, h2mux - Cloudflare's implementation of HTTP/2, and auto - automatically select between http2 and h2mux"
 )
 
 var (
@@ -90,7 +90,7 @@ var (
 		Name:    "protocol",
 		Value:   "h2mux",
 		Aliases: []string{"p"},
-		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", availableProtocol),
+		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", connection.AvailableProtocolFlagMessage),
 		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
 		Hidden:  true,
 	})
