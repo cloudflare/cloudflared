@@ -10,9 +10,11 @@ import (
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
 )
 
@@ -199,7 +201,7 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 func ReadRules(c *cli.Context) (ingress.Ingress, error) {
 	configFilePath := c.String("config")
 	if configFilePath == "" {
-		return ingress.Ingress{}, ErrNoConfigFile
+		return ingress.Ingress{}, ingress.ErrNoIngressRules
 	}
 	fmt.Printf("Reading from config file %s\n", configFilePath)
 	configBytes, err := ioutil.ReadFile(configFilePath)
@@ -208,4 +210,32 @@ func ReadRules(c *cli.Context) (ingress.Ingress, error) {
 	}
 	rules, err := ingress.ParseIngress(configBytes)
 	return rules, err
+}
+
+var configFileInputSource struct {
+	lastLoadedFile string
+	context        altsrc.InputSourceContext
+}
+
+// GetConfigFileSource returns InputSourceContext initialized from the configuration file.
+// On repeat calls returns with the same file, returns without reading the file again; however,
+// if value of "config" flag changes, will read the new config file
+func GetConfigFileSource(c *cli.Context, log logger.Service) (altsrc.InputSourceContext, error) {
+	configFile := c.String("config")
+	if configFileInputSource.lastLoadedFile == configFile {
+		if configFileInputSource.context == nil {
+			return nil, ErrNoConfigFile
+		}
+		return configFileInputSource.context, nil
+	}
+
+	configFileInputSource.lastLoadedFile = configFile
+	log.Debugf("Loading configuration from %s", configFile)
+	src, err := altsrc.NewYamlSourceFromFile(configFile)
+	if err != nil {
+		return nil, err
+	}
+
+	configFileInputSource.context = src
+	return src, nil
 }

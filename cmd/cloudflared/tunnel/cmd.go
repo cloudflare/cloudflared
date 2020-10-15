@@ -199,24 +199,29 @@ func buildIngressSubcommand() *cli.Command {
 }
 
 func TunnelCommand(c *cli.Context) error {
-	if name := c.String("name"); name != "" { // Start a named tunnel
-		return adhocNamedTunnel(c, name)
-	} else { // Start a classic tunnel
-		return classicTunnel(c)
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return err
 	}
+	if name := c.String("name"); name != "" { // Start a named tunnel
+		return runAdhocNamedTunnel(sc, name)
+	}
+	if ref, err := sc.getConfigFileTunnelRef(); err != nil {
+		return err
+	} else if ref != "" {
+		return runNamedTunnel(sc, ref)
+	}
+
+	// Start a classic tunnel
+	return runClassicTunnel(sc)
 }
 
 func Init(v string, s, g chan struct{}) {
 	version, shutdownC, graceShutdownC = v, s, g
 }
 
-// adhocNamedTunnel create, route and run a named tunnel in one command
-func adhocNamedTunnel(c *cli.Context, name string) error {
-	sc, err := newSubcommandContext(c)
-	if err != nil {
-		return err
-	}
-
+// runAdhocNamedTunnel create, route and run a named tunnel in one command
+func runAdhocNamedTunnel(sc *subcommandContext, name string) error {
 	tunnel, ok, err := sc.tunnelActive(name)
 	if err != nil || !ok {
 		tunnel, err = sc.create(name)
@@ -227,7 +232,7 @@ func adhocNamedTunnel(c *cli.Context, name string) error {
 		sc.logger.Infof("Tunnel already created with ID %s", tunnel.ID)
 	}
 
-	if r, ok := routeFromFlag(c); ok {
+	if r, ok := routeFromFlag(sc.c); ok {
 		if res, err := sc.route(tunnel.ID, r); err != nil {
 			sc.logger.Errorf("failed to create route, please create it manually. err: %v.", err)
 		} else {
@@ -242,14 +247,9 @@ func adhocNamedTunnel(c *cli.Context, name string) error {
 	return nil
 }
 
-// classicTunnel creates a "classic" non-named tunnel
-func classicTunnel(c *cli.Context) error {
-	sc, err := newSubcommandContext(c)
-	if err != nil {
-		return err
-	}
-
-	return StartServer(c, version, shutdownC, graceShutdownC, nil, sc.logger, sc.isUIEnabled)
+// runClassicTunnel creates a "classic" non-named tunnel
+func runClassicTunnel(sc *subcommandContext) error {
+	return StartServer(sc.c, version, shutdownC, graceShutdownC, nil, sc.logger, sc.isUIEnabled)
 }
 
 func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
@@ -571,33 +571,25 @@ func forceSetFlag(c *cli.Context, name, value string) {
 }
 
 func SetFlagsFromConfigFile(c *cli.Context) error {
-	logger, err := createLogger(c, false, false)
+	log, err := createLogger(c, false, false)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
-	configFile := c.String("config")
-	if configFile == "" {
-		logger.Debugf(config.ErrNoConfigFile.Error())
-		return nil
-	}
-
-	inputSource, err := altsrc.NewYamlSourceFromFile(configFile)
+	inputSource, err := config.GetConfigFileSource(c, log)
 	if err != nil {
-		logger.Errorf("Cannot load configuration from %s: %s", configFile, err)
+		if err == config.ErrNoConfigFile {
+			return nil
+		}
 		return err
 	}
-	if inputSource != nil {
-		targetFlags := c.Command.Flags
-		if c.Command.Name == "" {
-			targetFlags = c.App.Flags
-		}
-		err := altsrc.ApplyInputSourceValues(c, inputSource, targetFlags)
-		if err != nil {
-			logger.Errorf("Cannot apply configuration from %s: %s", configFile, err)
-			return err
-		}
-		logger.Debugf("Applied configuration from %s", configFile)
+	targetFlags := c.Command.Flags
+	if c.Command.Name == "" {
+		targetFlags = c.App.Flags
+	}
+	if err := altsrc.ApplyInputSourceValues(c, inputSource, targetFlags); err != nil {
+		log.Errorf("Cannot load configuration from %s: %v", inputSource.Source(), err)
+		return err
 	}
 	return nil
 }

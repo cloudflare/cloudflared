@@ -8,15 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
+
 	"github.com/cloudflare/cloudflared/certutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
 )
 
 // subcommandContext carries structs shared between subcommands, to reduce number of arguments needed to
@@ -141,6 +142,18 @@ func (sc *subcommandContext) tunnelCredentialsPath(tunnelID uuid.UUID) (string, 
 		}
 	}
 	return "", fmt.Errorf("Tunnel credentials file not found")
+}
+
+// getConfigFileTunnelRef returns tunnel UUID or name set in the configuration file
+func (sc *subcommandContext) getConfigFileTunnelRef() (string, error) {
+	if src, err := config.GetConfigFileSource(sc.c, sc.logger); err == nil {
+		if tunnelRef, err := src.String("tunnel"); err != nil {
+			return "", errors.Wrapf(err, "invalid tunnel ID or name")
+		} else {
+			return tunnelRef, nil
+		}
+	}
+	return "", nil
 }
 
 func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {

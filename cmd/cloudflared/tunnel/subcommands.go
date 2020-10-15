@@ -315,9 +315,10 @@ func buildRunCommand() *cli.Command {
 		Action:    cliutil.ErrorHandler(runCommand),
 		Before:    SetFlagsFromConfigFile,
 		Usage:     "Proxy a local web server by running the given tunnel",
-		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] TUNNEL",
+		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] [TUNNEL]",
 		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections 
-  between your server and the Cloudflare edge.
+  between your server and the Cloudflare edge. You can provide name or UUID of tunnel to run either as the
+  last command line argument or in the configuration file using "tunnel: TUNNEL".
 
   This command requires the tunnel credentials file created when "cloudflared tunnel create" was run, 
   however it does not need access to cert.pem from "cloudflared login" if you identify the tunnel by UUID.
@@ -335,13 +336,31 @@ func runCommand(c *cli.Context) error {
 		return err
 	}
 
-	if c.NArg() != 1 {
-		return cliutil.UsageError(`"cloudflared tunnel run" requires exactly 1 argument, the ID or name of the tunnel to run.`)
+	if c.NArg() > 1 {
+		return cliutil.UsageError(`"cloudflared tunnel run" accepts only one argument, the ID or name of the tunnel to run.`)
 	}
-	tunnelID, err := sc.findID(c.Args().First())
+	tunnelRef := c.Args().First()
+	if tunnelRef == "" {
+		// attempt to read from the config file
+		if tunnelRef, err = sc.getConfigFileTunnelRef(); err != nil {
+			return err
+		}
+
+		if tunnelRef == "" {
+			return cliutil.UsageError(`"cloudflared tunnel run" requires the ID or name of the tunnel to run as the last command line argument or in the configuration file.`)
+		}
+	}
+
+	return runNamedTunnel(sc, tunnelRef)
+}
+
+func runNamedTunnel(sc *subcommandContext, tunnelRef string) error {
+	tunnelID, err := sc.findID(tunnelRef)
 	if err != nil {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
+
+	sc.logger.Infof("Starting tunnel %s", tunnelID.String())
 
 	return sc.run(tunnelID)
 }
