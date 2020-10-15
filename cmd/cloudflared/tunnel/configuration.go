@@ -1,16 +1,11 @@
 package tunnel
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
@@ -193,31 +188,7 @@ func prepareTunnelConfig(
 		}
 	}
 
-	originCertPool, err := tlsconfig.LoadOriginCA(c, logger)
-	if err != nil {
-		logger.Errorf("Error loading cert pool: %s", err)
-		return nil, errors.Wrap(err, "Error loading cert pool")
-	}
-
 	tunnelMetrics := origin.NewTunnelMetrics()
-	httpTransport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		MaxIdleConns:          c.Int("proxy-keepalive-connections"),
-		MaxIdleConnsPerHost:   c.Int("proxy-keepalive-connections"),
-		IdleConnTimeout:       c.Duration("proxy-keepalive-timeout"),
-		TLSHandshakeTimeout:   c.Duration("proxy-tls-timeout"),
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: c.IsSet("no-tls-verify")},
-	}
-
-	dialer := &net.Dialer{
-		Timeout:   c.Duration("proxy-connect-timeout"),
-		KeepAlive: c.Duration("proxy-tcp-keepalive"),
-	}
-	if c.Bool("proxy-no-happy-eyeballs") {
-		dialer.FallbackDelay = -1 // As of Golang 1.12, a negative delay disables "happy eyeballs"
-	}
-	dialContext := dialer.DialContext
 
 	var ingressRules ingress.Ingress
 	if namedTunnel != nil {
@@ -231,7 +202,7 @@ func prepareTunnelConfig(
 			Version:  version,
 			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
 		}
-		ingressRules, err = ingress.ParseIngress(config.GetConfiguration())
+		ingressRules, err = ingress.ParseIngress(config.GetConfiguration(), logger)
 		if err != nil && err != ingress.ErrNoIngressRules {
 			return nil, err
 		}
@@ -240,53 +211,11 @@ func prepareTunnelConfig(
 		}
 	}
 
-	var originURL string
+	// Convert single-origin configuration into multi-origin configuration.
 	if ingressRules.IsEmpty() {
-		originURL, err = config.ValidateUrl(c, compatibilityMode)
+		ingressRules, err = ingress.NewSingleOrigin(c, compatibilityMode, logger)
 		if err != nil {
-			logger.Errorf("Error validating origin URL: %s", err)
-			return nil, errors.Wrap(err, "Error validating origin URL")
-		}
-	}
-
-	if c.IsSet("unix-socket") {
-		unixSocket, err := config.ValidateUnixSocket(c)
-		if err != nil {
-			logger.Errorf("Error validating --unix-socket: %s", err)
-			return nil, errors.Wrap(err, "Error validating --unix-socket")
-		}
-
-		logger.Infof("Proxying tunnel requests to unix:%s", unixSocket)
-		httpTransport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			// if --unix-socket specified, enforce network type "unix"
-			return dialContext(ctx, "unix", unixSocket)
-		}
-	} else {
-		logger.Infof("Proxying tunnel requests to %s", originURL)
-		httpTransport.DialContext = dialContext
-	}
-
-	if !c.IsSet("hello-world") && c.IsSet("origin-server-name") {
-		httpTransport.TLSClientConfig.ServerName = c.String("origin-server-name")
-	}
-	// If tunnel running in bastion mode, a connection to origin will not exist until initiated by the client.
-	if !c.IsSet(bastionFlag) {
-
-		// List all origin URLs that require validation
-		var originURLs []string
-		if ingressRules.IsEmpty() {
-			originURLs = append(originURLs, originURL)
-		} else {
-			for _, rule := range ingressRules.Rules {
-				originURLs = append(originURLs, rule.Service.String())
-			}
-		}
-
-		// Validate each origin URL
-		for _, u := range originURLs {
-			if err = validation.ValidateHTTPService(u, hostname, httpTransport); err != nil {
-				logger.Errorf("unable to connect to the origin: %s", err)
-			}
+			return nil, err
 		}
 	}
 
@@ -298,15 +227,12 @@ func prepareTunnelConfig(
 	return &origin.TunnelConfig{
 		BuildInfo:          buildInfo,
 		ClientID:           clientID,
-		ClientTlsConfig:    httpTransport.TLSClientConfig,
 		CompressionQuality: c.Uint64("compression-quality"),
 		EdgeAddrs:          c.StringSlice("edge"),
 		GracePeriod:        c.Duration("grace-period"),
 		HAConnections:      c.Int("ha-connections"),
-		HTTPTransport:      httpTransport,
 		HeartbeatInterval:  c.Duration("heartbeat-interval"),
 		Hostname:           hostname,
-		HTTPHostHeader:     c.String("http-host-header"),
 		IncidentLookup:     origin.NewIncidentLookup(),
 		IsAutoupdated:      c.Bool("is-autoupdated"),
 		IsFreeTunnel:       isFreeTunnel,
@@ -316,9 +242,7 @@ func prepareTunnelConfig(
 		MaxHeartbeats:      c.Uint64("heartbeat-count"),
 		Metrics:            tunnelMetrics,
 		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
-		NoChunkedEncoding:  c.Bool("no-chunked-encoding"),
 		OriginCert:         originCert,
-		OriginUrl:          originURL,
 		ReportedVersion:    version,
 		Retries:            c.Uint("retries"),
 		RunFromTerminal:    isRunningFromTerminal(),

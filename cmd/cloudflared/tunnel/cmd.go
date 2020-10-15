@@ -5,43 +5,32 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"reflect"
-	"runtime"
 	"runtime/trace"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/awsuploader"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/dbconnect"
-	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/signal"
-	"github.com/cloudflare/cloudflared/socks"
-	"github.com/cloudflare/cloudflared/sshlog"
-	"github.com/cloudflare/cloudflared/sshserver"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/tunnelstore"
-	"github.com/cloudflare/cloudflared/websocket"
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/raven-go"
-	"github.com/gliderlabs/ssh"
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -83,15 +72,6 @@ const (
 
 	// hostKeyPath is the path of the dir to save SSH host keys too
 	hostKeyPath = "host-key-path"
-
-	//sshServerFlag enables cloudflared ssh proxy server
-	sshServerFlag = "ssh-server"
-
-	// socks5Flag is to enable the socks server to deframe
-	socks5Flag = "socks5"
-
-	// bastionFlag is to enable bastion, or jump host, operation
-	bastionFlag = "bastion"
 
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
@@ -373,114 +353,12 @@ func StartServer(
 		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, log)
 	}
 
-	if c.IsSet("hello-world") {
-		log.Infof("hello-world set")
-		helloListener, err := hello.CreateTLSListener("127.0.0.1:")
-		if err != nil {
-			log.Errorf("Cannot start Hello World Server: %s", err)
-			return errors.Wrap(err, "Cannot start Hello World Server")
-		}
-		defer helloListener.Close()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = hello.StartHelloWorldServer(log, helloListener, shutdownC)
-		}()
-		forceSetFlag(c, "url", "https://"+helloListener.Addr().String())
-	}
-
-	if c.IsSet(sshServerFlag) {
-		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-			msg := fmt.Sprintf("--ssh-server is not supported on %s", runtime.GOOS)
-			log.Error(msg)
-			return errors.New(msg)
-		}
-
-		log.Infof("ssh-server set")
-
-		logManager := sshlog.NewEmptyManager()
-		if c.IsSet(bucketNameFlag) && c.IsSet(regionNameFlag) && c.IsSet(accessKeyIDFlag) && c.IsSet(secretIDFlag) {
-			uploader, err := awsuploader.NewFileUploader(c.String(bucketNameFlag), c.String(regionNameFlag),
-				c.String(accessKeyIDFlag), c.String(secretIDFlag), c.String(sessionTokenIDFlag), c.String(s3URLFlag))
-			if err != nil {
-				msg := "Cannot create uploader for SSH Server"
-				log.Errorf("%s: %s", msg, err)
-				return errors.Wrap(err, msg)
-			}
-
-			if err := os.MkdirAll(sshLogFileDirectory, 0700); err != nil {
-				msg := fmt.Sprintf("Cannot create SSH log file directory %s", sshLogFileDirectory)
-				log.Errorf("%s: %s", msg, err)
-				return errors.Wrap(err, msg)
-			}
-
-			logManager = sshlog.New(sshLogFileDirectory)
-
-			uploadManager := awsuploader.NewDirectoryUploadManager(log, uploader, sshLogFileDirectory, 30*time.Minute, shutdownC)
-			uploadManager.Start()
-		}
-
-		localServerAddress := "127.0.0.1:" + c.String(sshPortFlag)
-		server, err := sshserver.New(logManager, log, version, localServerAddress, c.String("hostname"), c.Path(hostKeyPath), shutdownC, c.Duration(sshIdleTimeoutFlag), c.Duration(sshMaxTimeoutFlag))
-		if err != nil {
-			msg := "Cannot create new SSH Server"
-			log.Errorf("%s: %s", msg, err)
-			return errors.Wrap(err, msg)
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err = server.Start(); err != nil && err != ssh.ErrServerClosed {
-				log.Errorf("SSH server error: %s", err)
-				// TODO: remove when declarative tunnels are implemented.
-				close(shutdownC)
-			}
-		}()
-		forceSetFlag(c, "url", "ssh://"+localServerAddress)
-	}
-
 	url := c.String("url")
 	hostname := c.String("hostname")
 	if url == hostname && url != "" && hostname != "" {
 		errText := "hostname and url shouldn't match. See --help for more information"
 		log.Error(errText)
 		return fmt.Errorf(errText)
-	}
-
-	if staticHost := hostnameFromURI(c.String("url")); isProxyDestinationConfigured(staticHost, c) {
-		listener, err := net.Listen("tcp", net.JoinHostPort(c.String("proxy-address"), strconv.Itoa(c.Int("proxy-port"))))
-		if err != nil {
-			log.Errorf("Cannot start Websocket Proxy Server: %s", err)
-			return errors.Wrap(err, "Cannot start Websocket Proxy Server")
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			streamHandler := websocket.DefaultStreamHandler
-			if c.IsSet(socks5Flag) {
-				log.Info("SOCKS5 server started")
-				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, _ http.Header) {
-					dialer := socks.NewConnDialer(remoteConn)
-					requestHandler := socks.NewRequestHandler(dialer)
-					socksServer := socks.NewConnectionHandler(requestHandler)
-
-					socksServer.Serve(wsConn)
-				}
-			} else if c.IsSet(sshServerFlag) {
-				streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, requestHeaders http.Header) {
-					if finalDestination := requestHeaders.Get(h2mux.CFJumpDestinationHeader); finalDestination != "" {
-						token := requestHeaders.Get(h2mux.CFAccessTokenHeader)
-						if err := websocket.SendSSHPreamble(remoteConn, finalDestination, token); err != nil {
-							log.Errorf("Failed to send SSH preamble: %s", err)
-							return
-						}
-					}
-					websocket.DefaultStreamHandler(wsConn, remoteConn, requestHeaders)
-				}
-			}
-			errC <- websocket.StartProxyServer(log, listener, staticHost, shutdownC, streamHandler)
-		}()
-		forceSetFlag(c, "url", "http://"+listener.Addr().String())
 	}
 
 	transportLogger, err := createLogger(c, true, false)
@@ -492,6 +370,8 @@ func StartServer(
 	if err != nil {
 		return err
 	}
+
+	tunnelConfig.IngressRules.StartOrigins(&wg, log, shutdownC, errC)
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
@@ -514,7 +394,8 @@ func StartServer(
 			version,
 			hostname,
 			metricsListener.Addr().String(),
-			tunnelConfig.OriginUrl,
+			// TODO (TUN-3461): Update UI to show multiple origin URLs
+			tunnelConfig.IngressRules.CatchAll().Service.Address(),
 			tunnelConfig.HAConnections,
 		)
 		logLevels, err := logger.ParseLevelString(c.String("loglevel"))
@@ -557,11 +438,6 @@ func SetFlagsFromConfigFile(c *cli.Context) error {
 		return cli.Exit(err, exitCode)
 	}
 	return nil
-}
-
-// isProxyDestinationConfigured returns true if there is a static host set or if bastion mode is set.
-func isProxyDestinationConfigured(staticHost string, c *cli.Context) bool {
-	return staticHost != "" || c.IsSet(bastionFlag)
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
@@ -910,67 +786,67 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    socks5Flag,
+			Name:    ingress.Socks5Flag,
 			Usage:   "specify if this tunnel is running as a SOCK5 Server",
 			EnvVars: []string{"TUNNEL_SOCKS"},
 			Value:   false,
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   "proxy-connect-timeout",
+			Name:   ingress.ProxyConnectTimeoutFlag,
 			Usage:  "HTTP proxy timeout for establishing a new connection",
 			Value:  time.Second * 30,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   "proxy-tls-timeout",
+			Name:   ingress.ProxyTLSTimeoutFlag,
 			Usage:  "HTTP proxy timeout for completing a TLS handshake",
 			Value:  time.Second * 10,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   "proxy-tcp-keepalive",
+			Name:   ingress.ProxyTCPKeepAlive,
 			Usage:  "HTTP proxy TCP keepalive duration",
 			Value:  time.Second * 30,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   "proxy-no-happy-eyeballs",
+			Name:   ingress.ProxyNoHappyEyeballsFlag,
 			Usage:  "HTTP proxy should disable \"happy eyeballs\" for IPv4/v6 fallback",
 			Hidden: shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:   "proxy-keepalive-connections",
+			Name:   ingress.ProxyKeepAliveConnectionsFlag,
 			Usage:  "HTTP proxy maximum keepalive connection pool size",
 			Value:  100,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   "proxy-keepalive-timeout",
+			Name:   ingress.ProxyKeepAliveTimeoutFlag,
 			Usage:  "HTTP proxy timeout for closing an idle connection",
 			Value:  time.Second * 90,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   "proxy-connection-timeout",
-			Usage:  "HTTP proxy timeout for closing an idle connection",
+			Usage:  "DEPRECATED. No longer has any effect.",
 			Value:  time.Second * 90,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   "proxy-expect-continue-timeout",
-			Usage:  "HTTP proxy timeout for closing an idle connection",
+			Usage:  "DEPRECATED. No longer has any effect.",
 			Value:  time.Second * 90,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "http-host-header",
+			Name:    ingress.HTTPHostHeaderFlag,
 			Usage:   "Sets the HTTP Host header for the local webserver.",
 			EnvVars: []string{"TUNNEL_HTTP_HOST_HEADER"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "origin-server-name",
+			Name:    ingress.OriginServerNameFlag,
 			Usage:   "Hostname on the origin server certificate.",
 			EnvVars: []string{"TUNNEL_ORIGIN_SERVER_NAME"},
 			Hidden:  shouldHide,
@@ -988,13 +864,13 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "no-tls-verify",
+			Name:    ingress.NoTLSVerifyFlag,
 			Usage:   "Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted. Note: The connection from your machine to Cloudflare's Edge is still encrypted.",
 			EnvVars: []string{"NO_TLS_VERIFY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "no-chunked-encoding",
+			Name:    ingress.NoChunkedEncodingFlag,
 			Usage:   "Disables chunked transfer encoding; useful if you are running a WSGI server.",
 			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 			Hidden:  shouldHide,
@@ -1067,28 +943,28 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    sshServerFlag,
+			Name:    ingress.SSHServerFlag,
 			Value:   false,
 			Usage:   "Run an SSH Server",
 			EnvVars: []string{"TUNNEL_SSH_SERVER"},
 			Hidden:  true, // TODO: remove when feature is complete
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    bastionFlag,
+			Name:    config.BastionFlag,
 			Value:   false,
 			Usage:   "Runs as jump host",
 			EnvVars: []string{"TUNNEL_BASTION"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "proxy-address",
+			Name:    ingress.ProxyAddressFlag,
 			Usage:   "Listen address for the proxy.",
 			Value:   "127.0.0.1",
 			EnvVars: []string{"TUNNEL_PROXY_ADDRESS"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    "proxy-port",
+			Name:    ingress.ProxyPortFlag,
 			Usage:   "Listen port for the proxy.",
 			Value:   0,
 			EnvVars: []string{"TUNNEL_PROXY_PORT"},

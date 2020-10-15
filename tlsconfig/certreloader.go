@@ -65,10 +65,9 @@ func (cr *CertReloader) LoadCert() error {
 	return nil
 }
 
-func LoadOriginCA(c *cli.Context, logger logger.Service) (*x509.CertPool, error) {
+func LoadOriginCA(originCAPoolFilename string, logger logger.Service) (*x509.CertPool, error) {
 	var originCustomCAPool []byte
 
-	originCAPoolFilename := c.String(OriginCAPoolFlag)
 	if originCAPoolFilename != "" {
 		var err error
 		originCustomCAPool, err = ioutil.ReadFile(originCAPoolFilename)

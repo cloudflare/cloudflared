@@ -71,7 +71,7 @@ func buildTestURLCommand() *cli.Command {
 func validateIngressCommand(c *cli.Context) error {
 	conf := config.GetConfiguration()
 	fmt.Println("Validating rules from", conf.Source())
-	if _, err := ingress.ParseIngress(conf); err != nil {
+	if _, err := ingress.ParseIngressDryRun(conf); err != nil {
 		return errors.Wrap(err, "Validation failed")
 	}
 	if c.IsSet("url") {
@@ -98,12 +98,12 @@ func testURLCommand(c *cli.Context) error {
 
 	conf := config.GetConfiguration()
 	fmt.Println("Using rules from", conf.Source())
-	ing, err := ingress.ParseIngress(conf)
+	ing, err := ingress.ParseIngressDryRun(conf)
 	if err != nil {
 		return errors.Wrap(err, "Validation failed")
 	}
 
-	i := ing.FindMatchingRule(requestURL.Hostname(), requestURL.Path)
+	_, i := ing.FindMatchingRule(requestURL.Hostname(), requestURL.Path)
 	fmt.Printf("Matched rule #%d\n", i+1)
 	fmt.Println(ing.Rules[i].MultiLineString())
 	return nil

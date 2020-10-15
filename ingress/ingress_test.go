@@ -2,7 +2,6 @@ package ingress
 
 import (
 	"net/url"
-	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,16 +11,29 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 )
 
+func TestParseUnixSocket(t *testing.T) {
+	rawYAML := `
+ingress:
+- service: unix:/tmp/echo.sock
+`
+	ing, err := ParseIngressDryRun(MustReadIngress(rawYAML))
+	require.NoError(t, err)
+	_, ok := ing.Rules[0].Service.(UnixSocketPath)
+	require.True(t, ok)
+}
+
 func Test_parseIngress(t *testing.T) {
 	localhost8000 := MustParseURL(t, "https://localhost:8000")
 	localhost8001 := MustParseURL(t, "https://localhost:8001")
+	defaultConfig := SetConfig(OriginRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{})
+	require.Equal(t, defaultKeepAliveConnections, defaultConfig.KeepAliveConnections)
 	type args struct {
 		rawYAML string
 	}
 	tests := []struct {
 		name    string
 		args    args
-		want    Ingress
+		want    []Rule
 		wantErr bool
 	}{
 		{
@@ -38,16 +50,18 @@ ingress:
  - hostname: "*"
    service: https://localhost:8001
 `},
-			want: Ingress{Rules: []Rule{
+			want: []Rule{
 				{
 					Hostname: "tunnel1.example.com",
-					Service:  localhost8000,
+					Service:  &URL{URL: localhost8000},
+					Config:   defaultConfig,
 				},
 				{
 					Hostname: "*",
-					Service:  localhost8001,
+					Service:  &URL{URL: localhost8001},
+					Config:   defaultConfig,
 				},
-			}},
+			},
 		},
 		{
 			name: "Extra keys",
@@ -57,12 +71,13 @@ ingress:
    service: https://localhost:8000
 extraKey: extraValue
 `},
-			want: Ingress{Rules: []Rule{
+			want: []Rule{
 				{
 					Hostname: "*",
-					Service:  localhost8000,
+					Service:  &URL{URL: localhost8000},
+					Config:   defaultConfig,
 				},
-			}},
+			},
 		},
 		{
 			name: "Hostname can be omitted",
@@ -70,11 +85,12 @@ extraKey: extraValue
 ingress:
  - service: https://localhost:8000
 `},
-			want: Ingress{Rules: []Rule{
+			want: []Rule{
 				{
-					Service: localhost8000,
+					Service: &URL{URL: localhost8000},
+					Config:  defaultConfig,
 				},
-			}},
+			},
 		},
 		{
 			name: "Invalid service",
@@ -152,12 +168,12 @@ ingress:
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseIngress(MustReadIngress(tt.args.rawYAML))
+			got, err := ParseIngressDryRun(MustReadIngress(tt.args.rawYAML))
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseIngress() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseIngressDryRun() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.want, got.Rules)
 		})
 	}
 }
@@ -166,118 +182,6 @@ func MustParseURL(t *testing.T, rawURL string) *url.URL {
 	u, err := url.Parse(rawURL)
 	require.NoError(t, err)
 	return u
-}
-
-func Test_rule_matches(t *testing.T) {
-	type fields struct {
-		Hostname string
-		Path     *regexp.Regexp
-		Service  *url.URL
-	}
-	type args struct {
-		requestURL *url.URL
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   bool
-	}{
-		{
-			name: "Just hostname, pass",
-			fields: fields{
-				Hostname: "example.com",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://example.com"),
-			},
-			want: true,
-		},
-		{
-			name: "Entire hostname is wildcard, should match everything",
-			fields: fields{
-				Hostname: "*",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://example.com"),
-			},
-			want: true,
-		},
-		{
-			name: "Just hostname, fail",
-			fields: fields{
-				Hostname: "example.com",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://foo.bar"),
-			},
-			want: false,
-		},
-		{
-			name: "Just wildcard hostname, pass",
-			fields: fields{
-				Hostname: "*.example.com",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://adam.example.com"),
-			},
-			want: true,
-		},
-		{
-			name: "Just wildcard hostname, fail",
-			fields: fields{
-				Hostname: "*.example.com",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://tunnel.com"),
-			},
-			want: false,
-		},
-		{
-			name: "Just wildcard outside of subdomain in hostname, fail",
-			fields: fields{
-				Hostname: "*example.com",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://www.example.com"),
-			},
-			want: false,
-		},
-		{
-			name: "Wildcard over multiple subdomains",
-			fields: fields{
-				Hostname: "*.example.com",
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://adam.chalmers.example.com"),
-			},
-			want: true,
-		},
-		{
-			name: "Hostname and path",
-			fields: fields{
-				Hostname: "*.example.com",
-				Path:     regexp.MustCompile("/static/.*\\.html"),
-			},
-			args: args{
-				requestURL: MustParseURL(t, "https://www.example.com/static/index.html"),
-			},
-			want: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := Rule{
-				Hostname: tt.fields.Hostname,
-				Path:     tt.fields.Path,
-				Service:  tt.fields.Service,
-			}
-			u := tt.args.requestURL
-			if got := r.Matches(u.Hostname(), u.Path); got != tt.want {
-				t.Errorf("rule.matches() = %v, want %v", got, tt.want)
-			}
-		})
-	}
 }
 
 func BenchmarkFindMatch(b *testing.B) {
@@ -291,7 +195,7 @@ ingress:
    service: https://localhost:8002
 `
 
-	ing, err := ParseIngress(MustReadIngress(rulesYAML))
+	ing, err := ParseIngressDryRun(MustReadIngress(rulesYAML))
 	if err != nil {
 		b.Error(err)
 	}

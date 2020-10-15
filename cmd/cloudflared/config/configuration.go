@@ -34,7 +34,12 @@ var (
 	ErrNoConfigFile = fmt.Errorf("Cannot determine default configuration path. No file %v in %v", DefaultConfigFiles, DefaultConfigSearchDirectories())
 )
 
-const DefaultCredentialFile = "cert.pem"
+const (
+	DefaultCredentialFile = "cert.pem"
+
+	// BastionFlag is to enable bastion, or jump host, operation
+	BastionFlag = "bastion"
+)
 
 // DefaultConfigDirectory returns the default directory of the config file
 func DefaultConfigDirectory() string {
@@ -197,15 +202,59 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 }
 
 type UnvalidatedIngressRule struct {
-	Hostname string
-	Path     string
-	Service  string
+	Hostname      string
+	Path          string
+	Service       string
+	OriginRequest OriginRequestConfig `yaml:"originRequest"`
+}
+
+// OriginRequestConfig is a set of optional fields that users may set to
+// customize how cloudflared sends requests to origin services. It is used to set
+// up general config that apply to all rules, and also, specific per-rule
+// config.
+// Note: To specify a time.Duration in go-yaml, use e.g. "3s" or "24h".
+type OriginRequestConfig struct {
+	// HTTP proxy timeout for establishing a new connection
+	ConnectTimeout *time.Duration `yaml:"connectTimeout"`
+	// HTTP proxy timeout for completing a TLS handshake
+	TLSTimeout *time.Duration `yaml:"tlsTimeout"`
+	// HTTP proxy TCP keepalive duration
+	TCPKeepAlive *time.Duration `yaml:"tcpKeepAlive"`
+	// HTTP proxy should disable "happy eyeballs" for IPv4/v6 fallback
+	NoHappyEyeballs *bool `yaml:"noHappyEyeballs"`
+	// HTTP proxy maximum keepalive connection pool size
+	KeepAliveConnections *int `yaml:"keepAliveConnections"`
+	// HTTP proxy timeout for closing an idle connection
+	KeepAliveTimeout *time.Duration `yaml:"keepAliveTimeout"`
+	// Sets the HTTP Host header for the local webserver.
+	HTTPHostHeader *string `yaml:"httpHostHeader"`
+	// Hostname on the origin server certificate.
+	OriginServerName *string `yaml:"originServerName"`
+	// Path to the CA for the certificate of your origin.
+	// This option should be used only if your certificate is not signed by Cloudflare.
+	CAPool *string `yaml:"caPool"`
+	// Disables TLS verification of the certificate presented by your origin.
+	// Will allow any certificate from the origin to be accepted.
+	// Note: The connection from your machine to Cloudflare's Edge is still encrypted.
+	NoTLSVerify *bool `yaml:"noTLSVerify"`
+	// Disables chunked transfer encoding.
+	// Useful if you are running a WSGI server.
+	DisableChunkedEncoding *bool `yaml:"disableChunkedEncoding"`
+	// Runs as jump host
+	BastionMode *bool `yaml:"bastionMode"`
+	// Listen address for the proxy.
+	ProxyAddress *string `yaml:"proxyAddress"`
+	// Listen port for the proxy.
+	ProxyPort *uint `yaml:"proxyPort"`
+	// Valid options are 'socks', 'ssh' or empty.
+	ProxyType *string `yaml:"proxyType"`
 }
 
 type Configuration struct {
-	TunnelID   string `yaml:"tunnel"`
-	Ingress    []UnvalidatedIngressRule
-	sourceFile string
+	TunnelID      string `yaml:"tunnel"`
+	Ingress       []UnvalidatedIngressRule
+	OriginRequest OriginRequestConfig `yaml:"originRequest"`
+	sourceFile    string
 }
 
 type configFileSettings struct {
