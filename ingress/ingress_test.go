@@ -20,7 +20,7 @@ func Test_parseIngress(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    []Rule
+		want    Ingress
 		wantErr bool
 	}{
 		{
@@ -37,7 +37,7 @@ ingress:
   - hostname: "*"
     service: https://localhost:8001
 `},
-			want: []Rule{
+			want: Ingress{Rules: []Rule{
 				{
 					Hostname: "tunnel1.example.com",
 					Service:  localhost8000,
@@ -46,7 +46,7 @@ ingress:
 					Hostname: "*",
 					Service:  localhost8001,
 				},
-			},
+			}},
 		},
 		{
 			name: "Extra keys",
@@ -56,12 +56,12 @@ ingress:
     service: https://localhost:8000
 extraKey: extraValue
 `},
-			want: []Rule{
+			want: Ingress{Rules: []Rule{
 				{
 					Hostname: "*",
 					Service:  localhost8000,
 				},
-			},
+			}},
 		},
 		{
 			name: "Hostname can be omitted",
@@ -69,11 +69,11 @@ extraKey: extraValue
 ingress:
   - service: https://localhost:8000
 `},
-			want: []Rule{
+			want: Ingress{Rules: []Rule{
 				{
 					Service: localhost8000,
 				},
-			},
+			}},
 		},
 		{
 			name: "Invalid service",
@@ -308,13 +308,13 @@ ingress:
   - hostname: "*"
     service: https://localhost:8002
 `
-	rules, err := ParseIngress([]byte(rulesYAML))
+	ing, err := ParseIngress([]byte(rulesYAML))
 	if err != nil {
 		b.Error(err)
 	}
 	for n := 0; n < b.N; n++ {
-		FindMatchingRule("tunnel1.example.com", "", rules)
-		FindMatchingRule("tunnel2.example.com", "", rules)
-		FindMatchingRule("tunnel3.example.com", "", rules)
+		ing.FindMatchingRule("tunnel1.example.com", "")
+		ing.FindMatchingRule("tunnel2.example.com", "")
+		ing.FindMatchingRule("tunnel3.example.com", "")
 	}
 }

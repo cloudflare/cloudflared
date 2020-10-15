@@ -93,7 +93,7 @@ type TunnelConfig struct {
 	NamedTunnel     *NamedTunnelConfig
 	ReplaceExisting bool
 	TunnelEventChan chan<- ui.TunnelEvent
-	IngressRules    []ingress.Rule
+	IngressRules    ingress.Ingress
 }
 
 type dupConnRegisterTunnelError struct{}
@@ -619,7 +619,7 @@ func LogServerInfo(
 
 type TunnelHandler struct {
 	originUrl      string
-	ingressRules   []ingress.Rule
+	ingressRules   ingress.Ingress
 	httpHostHeader string
 	muxer          *h2mux.Muxer
 	httpClient     http.RoundTripper
@@ -645,7 +645,7 @@ func NewTunnelHandler(ctx context.Context,
 	// Check single-origin config
 	var originURL string
 	var err error
-	if len(config.IngressRules) == 0 {
+	if config.IngressRules.IsEmpty() {
 		originURL, err = validation.ValidateUrl(config.OriginUrl)
 		if err != nil {
 			return nil, "", fmt.Errorf("unable to parse origin URL %#v", originURL)
@@ -727,9 +727,9 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 		return nil, errors.Wrap(err, "invalid request received")
 	}
 	h.AppendTagHeaders(req)
-	if len(h.ingressRules) > 0 {
-		ruleNumber := ingress.FindMatchingRule(req.Host, req.URL.Path, h.ingressRules)
-		destination := h.ingressRules[ruleNumber].Service
+	if !h.ingressRules.IsEmpty() {
+		ruleNumber := h.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+		destination := h.ingressRules.Rules[ruleNumber].Service
 		req.URL.Host = destination.Host
 		req.URL.Scheme = destination.Scheme
 	}

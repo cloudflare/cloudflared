@@ -196,15 +196,15 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 	return validUrl, err
 }
 
-func ReadRules(c *cli.Context) ([]ingress.Rule, error) {
+func ReadRules(c *cli.Context) (ingress.Ingress, error) {
 	configFilePath := c.String("config")
 	if configFilePath == "" {
-		return nil, ErrNoConfigFile
+		return ingress.Ingress{}, ErrNoConfigFile
 	}
 	fmt.Printf("Reading from config file %s\n", configFilePath)
 	configBytes, err := ioutil.ReadFile(configFilePath)
 	if err != nil {
-		return nil, err
+		return ingress.Ingress{}, err
 	}
 	rules, err := ingress.ParseIngress(configBytes)
 	return rules, err

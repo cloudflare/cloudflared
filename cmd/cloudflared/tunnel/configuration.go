@@ -219,7 +219,7 @@ func prepareTunnelConfig(
 	}
 	dialContext := dialer.DialContext
 
-	var ingressRules []ingress.Rule
+	var ingressRules ingress.Ingress
 	if namedTunnel != nil {
 		clientUUID, err := uuid.NewRandom()
 		if err != nil {
@@ -235,14 +235,13 @@ func prepareTunnelConfig(
 		if err != nil && err != ingress.ErrNoIngressRules {
 			return nil, err
 		}
-		if len(ingressRules) > 0 && c.IsSet("url") {
+		if !ingressRules.IsEmpty() && c.IsSet("url") {
 			return nil, ingress.ErrURLIncompatibleWithIngress
 		}
 	}
 
 	var originURL string
-	isUsingMultipleOrigins := len(ingressRules) > 0
-	if !isUsingMultipleOrigins {
+	if ingressRules.IsEmpty() {
 		originURL, err = config.ValidateUrl(c, compatibilityMode)
 		if err != nil {
 			logger.Errorf("Error validating origin URL: %s", err)
@@ -275,10 +274,10 @@ func prepareTunnelConfig(
 
 		// List all origin URLs that require validation
 		var originURLs []string
-		if !isUsingMultipleOrigins {
+		if ingressRules.IsEmpty() {
 			originURLs = append(originURLs, originURL)
 		} else {
-			for _, rule := range ingressRules {
+			for _, rule := range ingressRules.Rules {
 				originURLs = append(originURLs, rule.Service.String())
 			}
 		}
