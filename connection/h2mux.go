@@ -204,13 +204,15 @@ type h2muxRespWriter struct {
 }
 
 func (rp *h2muxRespWriter) WriteRespHeaders(resp *http.Response) error {
-	return rp.WriteHeaders(h2mux.H1ResponseToH2ResponseHeaders(resp))
+	headers := h2mux.H1ResponseToH2ResponseHeaders(resp)
+	headers = append(headers, h2mux.Header{Name: responseMetaHeaderField, Value: responseSourceOrigin})
+	return rp.WriteHeaders(headers)
 }
 
 func (rp *h2muxRespWriter) WriteErrorResponse(err error) {
 	rp.WriteHeaders([]h2mux.Header{
 		{Name: ":status", Value: "502"},
-		h2mux.CreateResponseMetaHeader(h2mux.ResponseMetaHeaderField, h2mux.ResponseSourceCloudflared),
+		{Name: responseMetaHeaderField, Value: responseSourceCloudflared},
 	})
 	rp.Write([]byte("502 Bad Gateway"))
 }

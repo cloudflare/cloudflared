@@ -2,7 +2,6 @@ package h2mux
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -21,10 +20,6 @@ var headerEncoding = base64.RawStdEncoding
 const (
 	RequestUserHeadersField  = "cf-cloudflared-request-headers"
 	ResponseUserHeadersField = "cf-cloudflared-response-headers"
-
-	ResponseMetaHeaderField   = "cf-cloudflared-response-meta"
-	ResponseSourceCloudflared = "cloudflared"
-	ResponseSourceOrigin      = "origin"
 
 	CFAccessTokenHeader        = "cf-access-token"
 	CFJumpDestinationHeader    = "CF-Access-Jump-Destination"
@@ -152,7 +147,6 @@ func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
 
 	// Perform user header serialization and set them in the single header
 	h2 = append(h2, Header{ResponseUserHeadersField, SerializeHeaders(userHeaders)})
-
 	return h2
 }
 
@@ -237,20 +231,4 @@ func DeserializeHeaders(serializedHeaders string) ([]Header, error) {
 	}
 
 	return deserialized, nil
-}
-
-type ResponseMetaHeader struct {
-	Source string `json:"src"`
-}
-
-func CreateResponseMetaHeader(headerName, source string) Header {
-	jsonResponseMetaHeader, err := json.Marshal(ResponseMetaHeader{Source: source})
-	if err != nil {
-		panic(err)
-	}
-
-	return Header{
-		Name:  headerName,
-		Value: string(jsonResponseMetaHeader),
-	}
 }
