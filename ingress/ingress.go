@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -87,9 +86,8 @@ type unvalidatedRule struct {
 	Service  string
 }
 
-type unvalidatedIngress struct {
+type UnvalidatedIngress struct {
 	Ingress []unvalidatedRule
-	URL     string
 }
 
 // Ingress maps eyeball requests to origins.
@@ -102,10 +100,7 @@ func (ing Ingress) IsEmpty() bool {
 	return len(ing.Rules) == 0
 }
 
-func (ing unvalidatedIngress) validate() (Ingress, error) {
-	if ing.URL != "" {
-		return Ingress{}, ErrURLIncompatibleWithIngress
-	}
+func (ing UnvalidatedIngress) validate() (Ingress, error) {
 	rules := make([]Rule, len(ing.Ingress))
 	for i, r := range ing.Ingress {
 		service, err := url.Parse(r.Service)
@@ -165,11 +160,7 @@ func (e errRuleShouldNotBeCatchAll) Error() string {
 		"will never be triggered.", e.i+1, e.hostname)
 }
 
-func ParseIngress(rawYAML []byte) (Ingress, error) {
-	var ing unvalidatedIngress
-	if err := yaml.Unmarshal(rawYAML, &ing); err != nil {
-		return Ingress{}, err
-	}
+func ParseIngress(ing UnvalidatedIngress) (Ingress, error) {
 	if len(ing.Ingress) == 0 {
 		return Ingress{}, ErrNoIngressRules
 	}

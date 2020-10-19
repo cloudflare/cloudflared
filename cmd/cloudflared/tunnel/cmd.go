@@ -206,10 +206,8 @@ func TunnelCommand(c *cli.Context) error {
 	if name := c.String("name"); name != "" { // Start a named tunnel
 		return runAdhocNamedTunnel(sc, name)
 	}
-	if ref, err := sc.getConfigFileTunnelRef(); err != nil {
-		return err
-	} else if ref != "" {
-		return runNamedTunnel(sc, ref)
+	if ref := config.GetConfiguration().TunnelID; ref != "" {
+		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
 	}
 
 	// Start a classic tunnel
@@ -312,7 +310,7 @@ func StartServer(
 	connectedSignal := signal.New(make(chan struct{}))
 	dnsReadySignal := make(chan struct{})
 
-	if c.String("config") == "" {
+	if config.GetConfiguration().Source() == "" {
 		log.Infof(config.ErrNoConfigFile.Error())
 	}
 
@@ -576,7 +574,7 @@ func SetFlagsFromConfigFile(c *cli.Context) error {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
 
-	inputSource, err := config.GetConfigFileSource(c, log)
+	inputSource, err := config.ReadConfigFile(c, log)
 	if err != nil {
 		if err == config.ErrNoConfigFile {
 			return nil
@@ -1269,7 +1267,16 @@ func buildRuleCommand() *cli.Command {
 
 // Validates the ingress rules in the cloudflared config file
 func ValidateCommand(c *cli.Context) error {
-	_, err := config.ReadRules(c)
+	logger, err := createLogger(c, false, false)
+	if err != nil {
+		return err
+	}
+	configFile, err := config.ReadConfigFile(c, logger)
+	if err != nil {
+		return  err
+	}
+	fmt.Println("Validating rules from", configFile.Source())
+	_, err = config.ReadIngressRules(configFile)
 	if err != nil {
 		return errors.Wrap(err, "Validation failed")
 	}
@@ -1282,7 +1289,15 @@ func ValidateCommand(c *cli.Context) error {
 
 // Checks which ingress rule matches the given URL.
 func RuleCommand(c *cli.Context) error {
-	rules, err := config.ReadRules(c)
+	logger, err := createLogger(c, false, false)
+	if err != nil {
+		return err
+	}
+	configFile, err := config.ReadConfigFile(c, logger)
+	if err != nil {
+		return  err
+	}
+	rules, err := config.ReadIngressRules(configFile)
 	if err != nil {
 		return err
 	}

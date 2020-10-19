@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
@@ -341,11 +342,8 @@ func runCommand(c *cli.Context) error {
 	}
 	tunnelRef := c.Args().First()
 	if tunnelRef == "" {
-		// attempt to read from the config file
-		if tunnelRef, err = sc.getConfigFileTunnelRef(); err != nil {
-			return err
-		}
-
+		// see if tunnel id was in the config file
+		tunnelRef = config.GetConfiguration().TunnelID
 		if tunnelRef == "" {
 			return cliutil.UsageError(`"cloudflared tunnel run" requires the ID or name of the tunnel to run as the last command line argument or in the configuration file.`)
 		}

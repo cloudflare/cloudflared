@@ -3,14 +3,13 @@ package config
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/ingress"
@@ -198,44 +197,126 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 	return validUrl, err
 }
 
-func ReadRules(c *cli.Context) (ingress.Ingress, error) {
-	configFilePath := c.String("config")
-	if configFilePath == "" {
-		return ingress.Ingress{}, ingress.ErrNoIngressRules
-	}
-	fmt.Printf("Reading from config file %s\n", configFilePath)
-	configBytes, err := ioutil.ReadFile(configFilePath)
-	if err != nil {
-		return ingress.Ingress{}, err
-	}
-	rules, err := ingress.ParseIngress(configBytes)
-	return rules, err
+func ReadIngressRules(config *ConfigFileSettings) (ingress.Ingress, error) {
+	return ingress.ParseIngress(config.Ingress)
 }
 
-var configFileInputSource struct {
-	lastLoadedFile string
-	context        altsrc.InputSourceContext
+type ConfigFileSettings struct {
+	TunnelID   string                     `yaml:"tunnel"`
+	Ingress    ingress.UnvalidatedIngress `yaml:",inline"`
+	Settings   map[string]interface{}     `yaml:",inline"`
+	sourceFile string
 }
 
-// GetConfigFileSource returns InputSourceContext initialized from the configuration file.
+func (c *ConfigFileSettings) Source() string {
+	return c.sourceFile
+}
+
+func (c *ConfigFileSettings) Int(name string) (int, error) {
+	if raw, ok := c.Settings[name]; ok {
+		if v, ok := raw.(int); ok {
+			return v, nil
+		}
+		return 0, fmt.Errorf("expected int found %T for %s", raw, name)
+	}
+	return 0, nil
+}
+
+func (c *ConfigFileSettings) Duration(name string) (time.Duration, error) {
+	if raw, ok := c.Settings[name]; ok {
+		switch v := raw.(type) {
+		case time.Duration:
+			return v, nil
+		case string:
+			return time.ParseDuration(v)
+		}
+		return 0, fmt.Errorf("expected duration found %T for %s", raw, name)
+	}
+	return 0, nil
+}
+
+func (c *ConfigFileSettings) Float64(name string) (float64, error) {
+	if raw, ok := c.Settings[name]; ok {
+		if v, ok := raw.(float64); ok {
+			return v, nil
+		}
+		return 0, fmt.Errorf("expected int found %T for %s", raw, name)
+	}
+	return 0, nil
+}
+
+func (c *ConfigFileSettings) String(name string) (string, error) {
+	if raw, ok := c.Settings[name]; ok {
+		if v, ok := raw.(string); ok {
+			return v, nil
+		}
+		return "", fmt.Errorf("expected int found %T for %s", raw, name)
+	}
+	return "", nil
+}
+
+func (c *ConfigFileSettings) StringSlice(name string) ([]string, error) {
+	if raw, ok := c.Settings[name]; ok {
+		if v, ok := raw.([]string); ok {
+			return v, nil
+		}
+		return nil, fmt.Errorf("expected int found %T for %s", raw, name)
+	}
+	return nil, nil
+}
+
+func (c *ConfigFileSettings) IntSlice(name string) ([]int, error) {
+	if raw, ok := c.Settings[name]; ok {
+		if v, ok := raw.([]int); ok {
+			return v, nil
+		}
+		return nil, fmt.Errorf("expected int found %T for %s", raw, name)
+	}
+	return nil, nil
+}
+
+func (c *ConfigFileSettings) Generic(name string) (cli.Generic, error) {
+	return nil, errors.New("option type Generic not supported")
+}
+
+func (c *ConfigFileSettings) Bool(name string) (bool, error) {
+	if raw, ok := c.Settings[name]; ok {
+		if v, ok := raw.(bool); ok {
+			return v, nil
+		}
+		return false, fmt.Errorf("expected int found %T for %s", raw, name)
+	}
+	return false, nil
+}
+
+var configuration ConfigFileSettings
+
+func GetConfiguration() *ConfigFileSettings {
+	return &configuration
+}
+
+// ReadConfigFile returns InputSourceContext initialized from the configuration file.
 // On repeat calls returns with the same file, returns without reading the file again; however,
 // if value of "config" flag changes, will read the new config file
-func GetConfigFileSource(c *cli.Context, log logger.Service) (altsrc.InputSourceContext, error) {
+func ReadConfigFile(c *cli.Context, log logger.Service) (*ConfigFileSettings, error) {
 	configFile := c.String("config")
-	if configFileInputSource.lastLoadedFile == configFile {
-		if configFileInputSource.context == nil {
-			return nil, ErrNoConfigFile
-		}
-		return configFileInputSource.context, nil
+	if configuration.Source() == configFile || configFile == "" {
+		return &configuration, nil
 	}
 
-	configFileInputSource.lastLoadedFile = configFile
 	log.Debugf("Loading configuration from %s", configFile)
-	src, err := altsrc.NewYamlSourceFromFile(configFile)
+	file, err := os.Open(configFile)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = ErrNoConfigFile
+		}
+		return nil, err
+	}
+	defer file.Close()
+	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
 		return nil, err
 	}
 
-	configFileInputSource.context = src
-	return src, nil
+	configuration.sourceFile = configFile
+	return &configuration, nil
 }

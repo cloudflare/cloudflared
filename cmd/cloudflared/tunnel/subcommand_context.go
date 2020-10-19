@@ -121,6 +121,7 @@ func (sc *subcommandContext) tunnelCredentialsPath(tunnelID uuid.UUID) (string, 
 		if validFilePath(filePath) {
 			return filePath, nil
 		}
+		return "", fmt.Errorf("Tunnel credentials file %s doesn't exist or is not a file", filePath)
 	}
 
 	// Fallback to look for tunnel credentials in the origin cert directory
@@ -142,18 +143,6 @@ func (sc *subcommandContext) tunnelCredentialsPath(tunnelID uuid.UUID) (string, 
 		}
 	}
 	return "", fmt.Errorf("Tunnel credentials file not found")
-}
-
-// getConfigFileTunnelRef returns tunnel UUID or name set in the configuration file
-func (sc *subcommandContext) getConfigFileTunnelRef() (string, error) {
-	if src, err := config.GetConfigFileSource(sc.c, sc.logger); err == nil {
-		if tunnelRef, err := src.String("tunnel"); err != nil {
-			return "", errors.Wrapf(err, "invalid tunnel ID or name")
-		} else {
-			return tunnelRef, nil
-		}
-	}
-	return "", nil
 }
 
 func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {
