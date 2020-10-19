@@ -10,8 +10,9 @@ import (
 	"os/exec"
 	"text/template"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/mitchellh/go-homedir"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 )
 
 type ServiceTemplate struct {
@@ -21,7 +22,8 @@ type ServiceTemplate struct {
 }
 
 type ServiceTemplateArgs struct {
-	Path string
+	Path      string
+	ExtraArgs []string
 }
 
 func (st *ServiceTemplate) ResolvePath() (string, error) {
@@ -136,6 +138,33 @@ func copyCredential(srcCredentialPath, destCredentialPath string) error {
 		return fmt.Errorf("unable to copy %s to %s: %v", srcCredentialPath, destCredentialPath, err)
 	}
 
+	return nil
+}
+
+func copyFile(src, dest string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	ok := false
+	defer func() {
+		destFile.Close()
+		if !ok {
+			_ = os.Remove(dest)
+		}
+	}()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return err
+	}
+
+	ok = true
 	return nil
 }
 

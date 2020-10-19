@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/pkg/errors"
+	cli "github.com/urfave/cli/v2"
+
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/pkg/errors"
-	cli "github.com/urfave/cli/v2"
 )
 
 func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
@@ -23,6 +24,12 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as a system service",
 				Action: cliutil.ErrorHandler(installLinuxService),
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "legacy",
+						Usage: "Generate service file for non-named tunnels",
+					},
+				},
 			},
 			&cli.Command{
 				Name:   "uninstall",
@@ -40,6 +47,7 @@ const (
 	serviceConfigDir      = "/etc/cloudflared"
 	serviceConfigFile     = "config.yml"
 	serviceCredentialFile = "cert.pem"
+	serviceConfigPath     = serviceConfigDir + "/" + serviceConfigFile
 )
 
 var systemdTemplates = []ServiceTemplate{
@@ -52,7 +60,7 @@ After=network.target
 [Service]
 TimeoutStartSec=0
 Type=notify
-ExecStart={{ .Path }} --config /etc/cloudflared/config.yml --origincert /etc/cloudflared/cert.pem --no-autoupdate
+ExecStart={{ .Path }} --config /etc/cloudflared/config.yml --no-autoupdate{{ range .ExtraArgs }} {{ . }}{{ end }}
 Restart=on-failure
 RestartSec=5s
 
@@ -102,7 +110,7 @@ var sysvTemplate = ServiceTemplate{
 # Description:       Argo Tunnel agent
 ### END INIT INFO
 name=$(basename $(readlink -f $0))
-cmd="{{.Path}} --config /etc/cloudflared/config.yml --origincert /etc/cloudflared/cert.pem --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s"
+cmd="{{.Path}} --config /etc/cloudflared/config.yml --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s{{ range .ExtraArgs }} {{ . }}{{ end }}"
 pid_file="/var/run/$name.pid"
 stdout_log="/var/log/$name.log"
 stderr_log="/var/log/$name.err"
@@ -182,10 +190,6 @@ func isSystemd() bool {
 }
 
 func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile string, logger logger.Service) error {
-	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
-		return err
-	}
-
 	srcCredentialPath := filepath.Join(userConfigDir, userCredentialFile)
 	destCredentialPath := filepath.Join(serviceConfigDir, serviceCredentialFile)
 	if srcCredentialPath != destCredentialPath {
@@ -216,15 +220,55 @@ func installLinuxService(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("error determining executable path: %v", err)
 	}
-	templateArgs := ServiceTemplateArgs{Path: etPath}
+	templateArgs := ServiceTemplateArgs{
+		Path: etPath,
+	}
 
-	userConfigDir := filepath.Dir(c.String("config"))
-	userConfigFile := filepath.Base(c.String("config"))
-	userCredentialFile := config.DefaultCredentialFile
-	if err = copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile, logger); err != nil {
-		logger.Errorf("Failed to copy user configuration: %s. Before running the service, ensure that %s contains two files, %s and %s", err,
-			serviceConfigDir, serviceCredentialFile, serviceConfigFile)
+	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
 		return err
+	}
+	if c.Bool("legacy") {
+		userConfigDir := filepath.Dir(c.String("config"))
+		userConfigFile := filepath.Base(c.String("config"))
+		userCredentialFile := config.DefaultCredentialFile
+		if err = copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile, logger); err != nil {
+			logger.Errorf("Failed to copy user configuration: %s. Before running the service, ensure that %s contains two files, %s and %s", err,
+				serviceConfigDir, serviceCredentialFile, serviceConfigFile)
+			return err
+		}
+		templateArgs.ExtraArgs = []string{
+			"--origincert", serviceConfigDir + "/" + serviceCredentialFile,
+		}
+	} else {
+		src, err := config.ReadConfigFile(c, logger)
+		if err != nil {
+			return err
+		}
+
+		// can't use context because this command doesn't define "credentials-file" flag
+		configPresent := func(s string) bool {
+			val, err := src.String(s)
+			return err == nil && val != ""
+		}
+		if src.TunnelID == "" || !configPresent("credentials-file") {
+			return fmt.Errorf(`Configuration file %s must contain entries for the tunnel to run and its associated credentials:
+tunnel: TUNNEL-UUID
+credentials-file: CREDENTIALS-FILE
+`, src.Source())
+		}
+		if src.Source() != serviceConfigPath {
+			if exists, err := config.FileExists(serviceConfigPath); err != nil || exists {
+				return fmt.Errorf("Possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
+			}
+
+			if err := copyFile(src.Source(), serviceConfigPath); err != nil {
+				return fmt.Errorf("failed to copy %s to %s: %w", src.Source(), serviceConfigPath, err)
+			}
+		}
+
+		templateArgs.ExtraArgs = []string{
+			"tunnel", "run",
+		}
 	}
 
 	switch {
@@ -232,7 +276,7 @@ func installLinuxService(c *cli.Context) error {
 		logger.Infof("Using Systemd")
 		return installSystemd(&templateArgs, logger)
 	default:
-		logger.Infof("Using Sysv")
+		logger.Infof("Using SysV")
 		return installSysv(&templateArgs, logger)
 	}
 }
@@ -291,7 +335,7 @@ func uninstallLinuxService(c *cli.Context) error {
 		logger.Infof("Using Systemd")
 		return uninstallSystemd(logger)
 	default:
-		logger.Infof("Using Sysv")
+		logger.Infof("Using SysV")
 		return uninstallSysv(logger)
 	}
 }

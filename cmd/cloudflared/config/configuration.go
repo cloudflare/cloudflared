@@ -326,6 +326,9 @@ func GetConfiguration() *Configuration {
 func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, error) {
 	configFile := c.String("config")
 	if configuration.Source() == configFile || configFile == "" {
+		if configuration.Source() == "" {
+			return nil, ErrNoConfigFile
+		}
 		return &configuration, nil
 	}
 
