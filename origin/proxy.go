@@ -2,6 +2,7 @@ package origin
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"io"
 	"net/http"
@@ -112,12 +113,17 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request) (*htt
 
 func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request) (*http.Response, error) {
 	c.setHostHeader(req)
-
 	conn, resp, err := websocket.ClientConnect(req, c.config.TLSConfig)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+
+	serveCtx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+	go func() {
+		<-serveCtx.Done()
+		conn.Close()
+	}()
 	err = w.WriteRespHeaders(resp)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
@@ -125,7 +131,6 @@ func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request) 
 	// Copy to/from stream to the undelying connection. Use the underlying
 	// connection because cloudflared doesn't operate on the message themselves
 	websocket.Stream(conn.UnderlyingConn(), w)
-
 	return resp, nil
 }
 

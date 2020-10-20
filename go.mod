@@ -27,6 +27,9 @@ require (
 	github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
 	github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
+	github.com/gobwas/ws v1.0.4
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/google/uuid v1.1.2

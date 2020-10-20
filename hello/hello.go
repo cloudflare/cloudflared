@@ -18,6 +18,11 @@ import (
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
+const (
+	UptimeRoute = "/uptime"
+	WSRoute     = "/ws"
+)
+
 type templateData struct {
 	ServerName string
 	Request    *http.Request
@@ -104,8 +109,8 @@ func StartHelloWorldServer(logger logger.Service, listener net.Listener, shutdow
 	}
 
 	muxer := http.NewServeMux()
-	muxer.HandleFunc("/uptime", uptimeHandler(time.Now()))
-	muxer.HandleFunc("/ws", websocketHandler(logger, upgrader))
+	muxer.HandleFunc(UptimeRoute, uptimeHandler(time.Now()))
+	muxer.HandleFunc(WSRoute, websocketHandler(logger, upgrader))
 	muxer.HandleFunc("/", rootHandler(serverName))
 	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: muxer}
 	go func() {
