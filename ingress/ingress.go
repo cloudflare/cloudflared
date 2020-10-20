@@ -13,7 +13,6 @@ var (
 	ErrNoIngressRules             = errors.New("No ingress rules were specified in the config file")
 	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all hostnames (i.e. it must be missing, or must be \"*\")")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
-	errNoIngressRulesMatch        = errors.New("The URL didn't match any ingress rules")
 	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
@@ -165,15 +164,4 @@ func ParseIngress(ing UnvalidatedIngress) (Ingress, error) {
 		return Ingress{}, ErrNoIngressRules
 	}
 	return ing.validate()
-}
-
-// RuleCommand checks which ingress rule matches the given request URL.
-func RuleCommand(ing Ingress, requestURL *url.URL) error {
-	if requestURL.Hostname() == "" {
-		return fmt.Errorf("%s is malformed and doesn't have a hostname", requestURL)
-	}
-	i := ing.FindMatchingRule(requestURL.Hostname(), requestURL.Path)
-	fmt.Printf("Matched rule #%d\n", i+1)
-	fmt.Println(ing.Rules[i].MultiLineString())
-	return nil
 }

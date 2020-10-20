@@ -26,7 +26,6 @@ import (
 	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/origin"
@@ -163,37 +162,6 @@ func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 		If you have a web server running on port 8080 (in this example), it will be available on
 		the internet!`,
 		Subcommands: subcommands,
-		Flags:       tunnelFlags(false),
-	}
-}
-
-func buildIngressSubcommand() *cli.Command {
-	return &cli.Command{
-		Name:     "ingress",
-		Category: "Tunnel",
-		Usage:    "Validate and test cloudflared tunnel's ingress configuration",
-		Hidden:   true,
-		Description: `
-		Cloudflared lets you route traffic from the internet to multiple different addresses on your
-		origin. Multiple-origin routing is configured by a set of rules. Each rule matches traffic
-		by its hostname or path, and routes it to an address. These rules are configured under the
-		'ingress' key of your config.yaml, for example:
-
-		ingress:
-		  - hostname: www.example.com
-		    service: https://localhost:8000
-		  - hostname: *.example.xyz
-		    path: /[a-zA-Z]+.html
-		    service: https://localhost:8001
-		  - hostname: *
-		    service: https://localhost:8002
-
-		To ensure cloudflared can route all incoming requests, the last rule must be a catch-all
-		rule that matches all traffic. You can validate these rules with the 'ingress validate'
-		command, and test which rule matches a particular URL with 'ingress rule <URL>'.
-
-		Multiple-origin routing is incompatible with the --url flag.`,
-		Subcommands: []*cli.Command{buildValidateCommand(), buildRuleCommand()},
 		Flags:       tunnelFlags(false),
 	}
 }
@@ -1238,82 +1206,4 @@ reconnect [delay]
 			}
 		}
 	}
-}
-
-func buildValidateCommand() *cli.Command {
-	return &cli.Command{
-		Name:        "validate",
-		Action:      cliutil.ErrorHandler(ValidateCommand),
-		Usage:       "Validate the ingress configuration ",
-		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
-		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
-	}
-}
-
-func buildRuleCommand() *cli.Command {
-	return &cli.Command{
-		Name:      "rule",
-		Action:    cliutil.ErrorHandler(RuleCommand),
-		Usage:     "Check which ingress rule matches a given request URL",
-		UsageText: "cloudflared tunnel [--config FILEPATH] ingress rule URL",
-		ArgsUsage: "URL",
-		Description: "Check which ingress rule matches a given request URL. " +
-			"Ingress rules match a request's hostname and path. Hostname is " +
-			"optional and is either a full hostname like `www.example.com` or a " +
-			"hostname with a `*` for its subdomains, e.g. `*.example.com`. Path " +
-			"is optional and matches a regular expression, like `/[a-zA-Z0-9_]+.html`",
-	}
-}
-
-// Validates the ingress rules in the cloudflared config file
-func ValidateCommand(c *cli.Context) error {
-	logger, err := createLogger(c, false, false)
-	if err != nil {
-		return err
-	}
-	configFile, err := config.ReadConfigFile(c, logger)
-	if err != nil {
-		return  err
-	}
-	fmt.Println("Validating rules from", configFile.Source())
-	_, err = config.ReadIngressRules(configFile)
-	if err != nil {
-		return errors.Wrap(err, "Validation failed")
-	}
-	if c.IsSet("url") {
-		return ingress.ErrURLIncompatibleWithIngress
-	}
-	fmt.Println("OK")
-	return nil
-}
-
-// Checks which ingress rule matches the given URL.
-func RuleCommand(c *cli.Context) error {
-	logger, err := createLogger(c, false, false)
-	if err != nil {
-		return err
-	}
-	configFile, err := config.ReadConfigFile(c, logger)
-	if err != nil {
-		return  err
-	}
-	rules, err := config.ReadIngressRules(configFile)
-	if err != nil {
-		return err
-	}
-	requestArg := c.Args().First()
-	if requestArg == "" {
-		return errors.New("cloudflared tunnel rule expects a single argument, the URL to test")
-	}
-	requestURL, err := url.Parse(requestArg)
-	if err != nil {
-		return fmt.Errorf("%s is not a valid URL", requestArg)
-	}
-	if requestURL.Hostname() == "" && requestURL.Scheme == "" {
-		return fmt.Errorf("%s doesn't have a hostname, consider adding a scheme", requestArg)
-	}
-	if requestURL.Hostname() == "" {
-		return fmt.Errorf("%s doesn't have a hostname", requestArg)
-	}
-	return ingress.RuleCommand(rules, requestURL)
 }

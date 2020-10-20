@@ -197,22 +197,23 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 	return validUrl, err
 }
 
-func ReadIngressRules(config *ConfigFileSettings) (ingress.Ingress, error) {
-	return ingress.ParseIngress(config.Ingress)
-}
-
-type ConfigFileSettings struct {
+type Configuration struct {
 	TunnelID   string                     `yaml:"tunnel"`
 	Ingress    ingress.UnvalidatedIngress `yaml:",inline"`
-	Settings   map[string]interface{}     `yaml:",inline"`
 	sourceFile string
 }
 
-func (c *ConfigFileSettings) Source() string {
+type configFileSettings struct {
+	Configuration `yaml:",inline"`
+	// Existing settings will be aggregated in the generic map, should be read via cli.Context
+	Settings map[string]interface{} `yaml:",inline"`
+}
+
+func (c *Configuration) Source() string {
 	return c.sourceFile
 }
 
-func (c *ConfigFileSettings) Int(name string) (int, error) {
+func (c *configFileSettings) Int(name string) (int, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.(int); ok {
 			return v, nil
@@ -222,7 +223,7 @@ func (c *ConfigFileSettings) Int(name string) (int, error) {
 	return 0, nil
 }
 
-func (c *ConfigFileSettings) Duration(name string) (time.Duration, error) {
+func (c *configFileSettings) Duration(name string) (time.Duration, error) {
 	if raw, ok := c.Settings[name]; ok {
 		switch v := raw.(type) {
 		case time.Duration:
@@ -235,70 +236,70 @@ func (c *ConfigFileSettings) Duration(name string) (time.Duration, error) {
 	return 0, nil
 }
 
-func (c *ConfigFileSettings) Float64(name string) (float64, error) {
+func (c *configFileSettings) Float64(name string) (float64, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.(float64); ok {
 			return v, nil
 		}
-		return 0, fmt.Errorf("expected int found %T for %s", raw, name)
+		return 0, fmt.Errorf("expected float found %T for %s", raw, name)
 	}
 	return 0, nil
 }
 
-func (c *ConfigFileSettings) String(name string) (string, error) {
+func (c *configFileSettings) String(name string) (string, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.(string); ok {
 			return v, nil
 		}
-		return "", fmt.Errorf("expected int found %T for %s", raw, name)
+		return "", fmt.Errorf("expected string found %T for %s", raw, name)
 	}
 	return "", nil
 }
 
-func (c *ConfigFileSettings) StringSlice(name string) ([]string, error) {
+func (c *configFileSettings) StringSlice(name string) ([]string, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.([]string); ok {
 			return v, nil
 		}
-		return nil, fmt.Errorf("expected int found %T for %s", raw, name)
+		return nil, fmt.Errorf("expected string slice found %T for %s", raw, name)
 	}
 	return nil, nil
 }
 
-func (c *ConfigFileSettings) IntSlice(name string) ([]int, error) {
+func (c *configFileSettings) IntSlice(name string) ([]int, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.([]int); ok {
 			return v, nil
 		}
-		return nil, fmt.Errorf("expected int found %T for %s", raw, name)
+		return nil, fmt.Errorf("expected int slice found %T for %s", raw, name)
 	}
 	return nil, nil
 }
 
-func (c *ConfigFileSettings) Generic(name string) (cli.Generic, error) {
+func (c *configFileSettings) Generic(name string) (cli.Generic, error) {
 	return nil, errors.New("option type Generic not supported")
 }
 
-func (c *ConfigFileSettings) Bool(name string) (bool, error) {
+func (c *configFileSettings) Bool(name string) (bool, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.(bool); ok {
 			return v, nil
 		}
-		return false, fmt.Errorf("expected int found %T for %s", raw, name)
+		return false, fmt.Errorf("expected boolean found %T for %s", raw, name)
 	}
 	return false, nil
 }
 
-var configuration ConfigFileSettings
+var configuration configFileSettings
 
-func GetConfiguration() *ConfigFileSettings {
-	return &configuration
+func GetConfiguration() *Configuration {
+	return &configuration.Configuration
 }
 
 // ReadConfigFile returns InputSourceContext initialized from the configuration file.
 // On repeat calls returns with the same file, returns without reading the file again; however,
 // if value of "config" flag changes, will read the new config file
-func ReadConfigFile(c *cli.Context, log logger.Service) (*ConfigFileSettings, error) {
+func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, error) {
 	configFile := c.String("config")
 	if configuration.Source() == configFile || configFile == "" {
 		return &configuration, nil
