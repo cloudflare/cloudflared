@@ -231,7 +231,7 @@ func prepareTunnelConfig(
 			Version:  version,
 			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
 		}
-		ingressRules, err = ingress.ParseIngress(config.GetConfiguration().Ingress)
+		ingressRules, err = ingress.ParseIngress(config.GetConfiguration())
 		if err != nil && err != ingress.ErrNoIngressRules {
 			return nil, err
 		}

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 )
 
 var (
@@ -79,16 +81,6 @@ func matchHost(ruleHost, reqHost string) bool {
 	return false
 }
 
-type unvalidatedRule struct {
-	Hostname string
-	Path     string
-	Service  string
-}
-
-type UnvalidatedIngress struct {
-	Ingress []unvalidatedRule
-}
-
 // Ingress maps eyeball requests to origins.
 type Ingress struct {
 	Rules []Rule
@@ -99,9 +91,9 @@ func (ing Ingress) IsEmpty() bool {
 	return len(ing.Rules) == 0
 }
 
-func (ing UnvalidatedIngress) validate() (Ingress, error) {
-	rules := make([]Rule, len(ing.Ingress))
-	for i, r := range ing.Ingress {
+func validate(ingress []config.UnvalidatedIngressRule) (Ingress, error) {
+	rules := make([]Rule, len(ingress))
+	for i, r := range ingress {
 		service, err := url.Parse(r.Service)
 		if err != nil {
 			return Ingress{}, err
@@ -122,7 +114,7 @@ func (ing UnvalidatedIngress) validate() (Ingress, error) {
 
 		// The last rule should catch all hostnames.
 		isCatchAllRule := (r.Hostname == "" || r.Hostname == "*") && r.Path == ""
-		isLastRule := i == len(ing.Ingress)-1
+		isLastRule := i == len(ingress)-1
 		if isLastRule && !isCatchAllRule {
 			return Ingress{}, errLastRuleNotCatchAll
 		}
@@ -159,9 +151,9 @@ func (e errRuleShouldNotBeCatchAll) Error() string {
 		"will never be triggered.", e.i+1, e.hostname)
 }
 
-func ParseIngress(ing UnvalidatedIngress) (Ingress, error) {
-	if len(ing.Ingress) == 0 {
+func ParseIngress(conf *config.Configuration) (Ingress, error) {
+	if len(conf.Ingress) == 0 {
 		return Ingress{}, ErrNoIngressRules
 	}
-	return ing.validate()
+	return validate(conf.Ingress)
 }

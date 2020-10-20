@@ -12,7 +12,6 @@ import (
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
 )
@@ -197,15 +196,21 @@ func ValidateUrl(c *cli.Context, allowFromArgs bool) (string, error) {
 	return validUrl, err
 }
 
+type UnvalidatedIngressRule struct {
+	Hostname string
+	Path     string
+	Service  string
+}
+
 type Configuration struct {
-	TunnelID   string                     `yaml:"tunnel"`
-	Ingress    ingress.UnvalidatedIngress `yaml:",inline"`
+	TunnelID   string `yaml:"tunnel"`
+	Ingress    []UnvalidatedIngressRule
 	sourceFile string
 }
 
 type configFileSettings struct {
 	Configuration `yaml:",inline"`
-	// Existing settings will be aggregated in the generic map, should be read via cli.Context
+	// older settings will be aggregated into the generic map, should be read via cli.Context
 	Settings map[string]interface{} `yaml:",inline"`
 }
 

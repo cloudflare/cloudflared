@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 )
 
 func Test_parseIngress(t *testing.T) {
@@ -300,11 +302,11 @@ ingress:
 	}
 }
 
-func MustReadIngress(s string) UnvalidatedIngress {
-	var ing UnvalidatedIngress
-	err := yaml.Unmarshal([]byte(s), &ing)
+func MustReadIngress(s string) *config.Configuration {
+	var conf config.Configuration
+	err := yaml.Unmarshal([]byte(s), &conf)
 	if err != nil {
 		panic(err)
 	}
-	return ing
+	return &conf
 }
