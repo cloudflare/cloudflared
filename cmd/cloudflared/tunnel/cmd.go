@@ -537,25 +537,24 @@ func forceSetFlag(c *cli.Context, name, value string) {
 }
 
 func SetFlagsFromConfigFile(c *cli.Context) error {
+	const exitCode = 1
 	log, err := createLogger(c, false, false)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
-
 	inputSource, err := config.ReadConfigFile(c, log)
 	if err != nil {
 		if err == config.ErrNoConfigFile {
 			return nil
 		}
-		return err
+		return cli.Exit(err, exitCode)
 	}
 	targetFlags := c.Command.Flags
 	if c.Command.Name == "" {
 		targetFlags = c.App.Flags
 	}
 	if err := altsrc.ApplyInputSourceValues(c, inputSource, targetFlags); err != nil {
-		log.Errorf("Cannot load configuration from %s: %v", inputSource.Source(), err)
-		return err
+		return cli.Exit(err, exitCode)
 	}
 	return nil
 }

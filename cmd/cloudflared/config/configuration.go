@@ -263,8 +263,16 @@ func (c *configFileSettings) String(name string) (string, error) {
 
 func (c *configFileSettings) StringSlice(name string) ([]string, error) {
 	if raw, ok := c.Settings[name]; ok {
-		if v, ok := raw.([]string); ok {
-			return v, nil
+		if slice, ok := raw.([]interface{}); ok {
+			strSlice := make([]string, len(slice))
+			for i, v := range slice {
+				str, ok := v.(string)
+				if !ok {
+					return nil, fmt.Errorf("expected string, found %T for %v", i, v)
+				}
+				strSlice[i] = str
+			}
+			return strSlice, nil
 		}
 		return nil, fmt.Errorf("expected string slice found %T for %s", raw, name)
 	}
@@ -273,6 +281,17 @@ func (c *configFileSettings) StringSlice(name string) ([]string, error) {
 
 func (c *configFileSettings) IntSlice(name string) ([]int, error) {
 	if raw, ok := c.Settings[name]; ok {
+		if slice, ok := raw.([]interface{}); ok {
+			intSlice := make([]int, len(slice))
+			for i, v := range slice {
+				str, ok := v.(int)
+				if !ok {
+					return nil, fmt.Errorf("expected int, found %T for %v ", v, v)
+				}
+				intSlice[i] = str
+			}
+			return intSlice, nil
+		}
 		if v, ok := raw.([]int); ok {
 			return v, nil
 		}
@@ -322,7 +341,6 @@ func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, er
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
 		return nil, err
 	}
-
 	configuration.sourceFile = configFile
 	return &configuration, nil
 }
