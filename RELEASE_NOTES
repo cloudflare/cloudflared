@@ -1,3 +1,8 @@
+2020.10.2
+- 2020-10-21 Release 2020.10.1
+- 2020-10-21 AUTH-3185 fixed indention error
+- 2020-10-19 TUN-3459: Make service install on linux use named tunnels
+
 2020.10.1
 - 2020-10-20 Split out typed config from legacy command-line switches; refactor ingress commands and fix tests
 - 2020-10-20 Move raw ingress rules to config package
