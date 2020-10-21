@@ -202,7 +202,7 @@ def main():
         copy_path = os.path.join(artifact_path, args.name)
         try:
             shutil.copy(args.path, copy_path)
-       except shutil.SameFileError:
+        except shutil.SameFileError:
             pass # the macOS release copy fails with being the same file (already in the artifacts directory). Catching to ignore.
 
     except Exception as e:
