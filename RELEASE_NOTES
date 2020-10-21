@@ -1,3 +1,22 @@
+2020.10.1
+- 2020-10-20 Split out typed config from legacy command-line switches; refactor ingress commands and fix tests
+- 2020-10-20 Move raw ingress rules to config package
+- 2020-10-21 TUN-3476: Fix conversion to string and int slice
+- 2020-10-12 TUN-3441:  Multiple-origin routing via ingress rules
+- 2020-10-15 TUN-3464: Newtype to wrap []ingress.Rule
+- 2020-10-15 TUN-3465: Use Go 1.15.3
+- 2020-10-15 TUN-3463: Let users run a named tunnel via config file setting
+- 2020-10-19 TUN-3475: Unify config file handling with typed config for new fields
+- 2020-10-19 TUN-3459: Make service install on linux use named tunnels
+- 2020-10-06 AUTH-3148 fixed cloudflared copy and match all the files in the checksum upload
+- 2020-10-06 TUN-3436, TUN-3437: Parse ingress from YAML, ensure last rule catches everything
+- 2020-10-06 TUN-3446: Use go 1.15.2 and add a step to build cloudflared in the dev Dockerfile
+- 2020-10-07 TUN-3439: 'tunnel validate' command to check ingress rules
+- 2020-10-07 TUN-3440: 'tunnel rule' command to test ingress rules
+- 2020-10-08 TUN-3451: Cloudflared tunnel ingress command
+- 2020-10-09 TUN-3452: Fix loading of flags from config file for tunnel run subcommand. This change also cleans up building of tunnel subcommand list, hides deprecated subcommands and improves help.
+- 2020-10-08 TUN-3438: move ingress into own package, read into TunnelConfig
+
 2020.10.0
 - 2020-10-02 AUTH-2993 cleaned up worker service tests
 - 2020-10-02 TUN-3443: Decode as v4api response on non-200 status
