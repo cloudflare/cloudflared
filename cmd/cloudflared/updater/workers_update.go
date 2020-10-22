@@ -18,20 +18,23 @@ import (
 	"time"
 )
 
-// stop the service
-// rename cloudflared.exe to cloudflared.exe.old
-// rename cloudflared.exe.new to cloudflared.exe
-// delete cloudflared.exe.old
-// start the service
-// delete the batch file
-const windowsUpdateCommandTemplate = `@echo off
+const (
+	clientTimeout = time.Second * 60
+	// stop the service
+	// rename cloudflared.exe to cloudflared.exe.old
+	// rename cloudflared.exe.new to cloudflared.exe
+	// delete cloudflared.exe.old
+	// start the service
+	// delete the batch file
+	windowsUpdateCommandTemplate = `@echo off
 sc stop cloudflared >nul 2>&1
 rename "{{.TargetPath}}" {{.OldName}}
 rename "{{.NewPath}}" {{.BinaryName}}
 del "{{.OldPath}}"
 sc start cloudflared >nul 2>&1
 del {{.BatchName}}`
-const batchFileName = "cfd_update.bat"
+	batchFileName = "cfd_update.bat"
+)
 
 // Prepare some data to insert into the template.
 type batchData struct {
@@ -118,7 +121,7 @@ func (v *WorkersVersion) String() string {
 // download the file from the link in the json
 func download(url, filepath string, isCompressed bool) error {
 	client := &http.Client{
-		Timeout: time.Second * 5,
+		Timeout: clientTimeout,
 	}
 	resp, err := client.Get(url)
 

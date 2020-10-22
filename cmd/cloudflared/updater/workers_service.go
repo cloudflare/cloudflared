@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Options are the update options supported by the
@@ -53,7 +52,7 @@ func NewWorkersService(currentVersion, url, targetPath string, opts Options) Ser
 // Check does a check in with the Workers API to get a new version update
 func (s *WorkersService) Check() (Version, error) {
 	client := &http.Client{
-		Timeout: time.Second * 5,
+		Timeout: clientTimeout,
 	}
 
 	req, err := http.NewRequest(http.MethodGet, s.url, nil)
