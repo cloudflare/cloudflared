@@ -25,7 +25,7 @@ type responseMetaHeader struct {
 func mustInitRespMetaHeader(src string) string {
 	header, err := json.Marshal(responseMetaHeader{Source: src})
 	if err != nil {
-		panic(fmt.Sprintf("Failed to serialize response meta header = %s, err: %v", responseSourceCloudflared, err))
+		panic(fmt.Sprintf("Failed to serialize response meta header = %s, err: %v", src, err))
 	}
 	return string(header)
 }

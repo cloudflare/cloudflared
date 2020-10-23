@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
@@ -55,9 +56,9 @@ type mockWSRespWriter struct {
 	reader            io.Reader
 }
 
-func newMockWSRespWriter(httpRespWriter *mockHTTPRespWriter, reader io.Reader) *mockWSRespWriter {
+func newMockWSRespWriter(reader io.Reader) *mockWSRespWriter {
 	return &mockWSRespWriter{
-		httpRespWriter,
+		newMockHTTPRespWriter(),
 		make(chan []byte),
 		reader,
 	}
@@ -75,6 +76,27 @@ func (w *mockWSRespWriter) respBody() io.ReadWriter {
 
 func (w *mockWSRespWriter) Read(data []byte) (int, error) {
 	return w.reader.Read(data)
+}
+
+type mockSSERespWriter struct {
+	*mockHTTPRespWriter
+	writeNotification chan []byte
+}
+
+func newMockSSERespWriter() *mockSSERespWriter {
+	return &mockSSERespWriter{
+		newMockHTTPRespWriter(),
+		make(chan []byte),
+	}
+}
+
+func (w *mockSSERespWriter) Write(data []byte) (int, error) {
+	w.writeNotification <- data
+	return len(data), nil
+}
+
+func (w *mockSSERespWriter) ReadBytes() []byte {
+	return <-w.writeNotification
 }
 
 func TestProxy(t *testing.T) {
@@ -112,6 +134,7 @@ func TestProxy(t *testing.T) {
 	client := NewClient(proxyConfig, logger)
 	t.Run("testProxyHTTP", testProxyHTTP(t, client, originURL))
 	t.Run("testProxyWebsocket", testProxyWebsocket(t, client, originURL, clientTLS))
+	t.Run("testProxySSE", testProxySSE(t, client, originURL))
 	cancel()
 }
 
@@ -135,7 +158,7 @@ func testProxyWebsocket(t *testing.T, client connection.OriginClient, originURL 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s%s", originURL, hello.WSRoute), nil)
 
 		readPipe, writePipe := io.Pipe()
-		respWriter := newMockWSRespWriter(newMockHTTPRespWriter(), readPipe)
+		respWriter := newMockWSRespWriter(readPipe)
 
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -162,6 +185,41 @@ func testProxyWebsocket(t *testing.T, client connection.OriginClient, originURL 
 		returnedMsg, err = wsutil.ReadServerBinary(respWriter.respBody())
 		require.NoError(t, err)
 		require.Equal(t, msg, returnedMsg)
+
+		cancel()
+		wg.Wait()
+	}
+}
+
+func testProxySSE(t *testing.T, client connection.OriginClient, originURL *url.URL) func(t *testing.T) {
+	return func(t *testing.T) {
+		var (
+			pushCount = 50
+			pushFreq  = time.Duration(time.Millisecond * 10)
+		)
+		respWriter := newMockSSERespWriter()
+		ctx, cancel := context.WithCancel(context.Background())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s%s?freq=%s", originURL, hello.SSERoute, pushFreq), nil)
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err = client.Proxy(respWriter, req, false)
+			require.NoError(t, err)
+
+			require.Equal(t, http.StatusOK, respWriter.Code)
+		}()
+
+		for i := 0; i < pushCount; i++ {
+			line := respWriter.ReadBytes()
+			expect := fmt.Sprintf("%d\n", i)
+			require.Equal(t, []byte(expect), line, fmt.Sprintf("Expect to read %v, got %v", expect, line))
+
+			line = respWriter.ReadBytes()
+			require.Equal(t, []byte("\n"), line, fmt.Sprintf("Expect to read '\n', got %v", line))
+		}
 
 		cancel()
 		wg.Wait()

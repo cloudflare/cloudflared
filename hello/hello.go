@@ -19,8 +19,10 @@ import (
 )
 
 const (
-	UptimeRoute = "/uptime"
-	WSRoute     = "/ws"
+	UptimeRoute    = "/uptime"
+	WSRoute        = "/ws"
+	SSERoute       = "/sse"
+	defaultSSEFreq = time.Second * 10
 )
 
 type templateData struct {
@@ -111,6 +113,7 @@ func StartHelloWorldServer(logger logger.Service, listener net.Listener, shutdow
 	muxer := http.NewServeMux()
 	muxer.HandleFunc(UptimeRoute, uptimeHandler(time.Now()))
 	muxer.HandleFunc(WSRoute, websocketHandler(logger, upgrader))
+	muxer.HandleFunc(SSERoute, sseHandler(logger))
 	muxer.HandleFunc("/", rootHandler(serverName))
 	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: muxer}
 	go func() {
@@ -178,6 +181,42 @@ func websocketHandler(logger logger.Service, upgrader websocket.Upgrader) http.H
 				logger.Errorf("websocket write message error: %s", err)
 				break
 			}
+		}
+	}
+}
+
+func sseHandler(logger logger.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError)
+			logger.Errorf("Can't support SSE. ResponseWriter %T doesn't implement http.Flusher interface", w)
+			return
+		}
+
+		freq := defaultSSEFreq
+		if requestedFreq := r.URL.Query()["freq"]; len(requestedFreq) > 0 {
+			parsedFreq, err := time.ParseDuration(requestedFreq[0])
+			if err == nil {
+				freq = parsedFreq
+			}
+		}
+		logger.Infof("Server Sent Events every %s", freq)
+		ticker := time.NewTicker(freq)
+		counter := 0
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-ticker.C:
+			}
+			_, err := fmt.Fprintf(w, "%d\n\n", counter)
+			if err != nil {
+				return
+			}
+			flusher.Flush()
+			counter++
 		}
 	}
 }

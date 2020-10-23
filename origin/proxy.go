@@ -99,7 +99,7 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request) (*htt
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
 	if isEventStream(resp) {
-		//h.observer.Debug("Detected Server-Side Events from Origin")
+		c.logger.Debug("Detected Server-Side Events from Origin")
 		c.writeEventStream(w, resp.Body)
 	} else {
 		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream

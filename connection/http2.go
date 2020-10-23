@@ -2,7 +2,7 @@ package connection
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"math"
 	"net"
@@ -23,6 +23,10 @@ const (
 	controlStreamUpgrade  = "control-stream"
 )
 
+var (
+	errNotFlusher = errors.New("ResponseWriter doesn't implement http.Flusher")
+)
+
 type HTTP2Connection struct {
 	conn          net.Conn
 	server        *http2.Server
@@ -37,7 +41,16 @@ type HTTP2Connection struct {
 	connectedFuse ConnectedFuse
 }
 
-func NewHTTP2Connection(conn net.Conn, config *Config, originURL *url.URL, namedTunnelConfig *NamedTunnelConfig, connOptions *tunnelpogs.ConnectionOptions, observer *Observer, connIndex uint8, connectedFuse ConnectedFuse) *HTTP2Connection {
+func NewHTTP2Connection(
+	conn net.Conn,
+	config *Config,
+	originURL *url.URL,
+	namedTunnelConfig *NamedTunnelConfig,
+	connOptions *tunnelpogs.ConnectionOptions,
+	observer *Observer,
+	connIndex uint8,
+	connectedFuse ConnectedFuse,
+) *HTTP2Connection {
 	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
@@ -77,34 +90,33 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r: r.Body,
 		w: w,
 	}
+	flusher, isFlusher := w.(http.Flusher)
+	if !isFlusher {
+		c.observer.Errorf("%T doesn't implement http.Flusher", w)
+		respWriter.WriteErrorResponse(errNotFlusher)
+		return
+	}
+	respWriter.flusher = flusher
 	if isControlStreamUpgrade(r) {
+		respWriter.shouldFlush = true
 		err := c.serveControlStream(r.Context(), respWriter)
 		if err != nil {
 			respWriter.WriteErrorResponse(err)
 		}
 	} else if isWebsocketUpgrade(r) {
-		wsRespWriter, err := newWSRespWriter(respWriter)
-		if err != nil {
-			respWriter.WriteErrorResponse(err)
-			return
-		}
+		respWriter.shouldFlush = true
 		stripWebsocketUpgradeHeader(r)
-		c.config.OriginClient.Proxy(wsRespWriter, r, true)
+		c.config.OriginClient.Proxy(respWriter, r, true)
 	} else {
 		c.config.OriginClient.Proxy(respWriter, r, false)
 	}
 }
 
-func (c *HTTP2Connection) serveControlStream(ctx context.Context, h2RespWriter *http2RespWriter) error {
-	stream, err := newWSRespWriter(h2RespWriter)
-	if err != nil {
-		return err
-	}
-
-	rpcClient := newRegistrationRPCClient(ctx, stream, c.observer)
+func (c *HTTP2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
+	rpcClient := newRegistrationRPCClient(ctx, respWriter, c.observer)
 	defer rpcClient.close()
 
-	if err = registerConnection(ctx, rpcClient, c.namedTunnel, c.connOptions, c.connIndex, c.observer); err != nil {
+	if err := registerConnection(ctx, rpcClient, c.namedTunnel, c.connOptions, c.connIndex, c.observer); err != nil {
 		return err
 	}
 	c.connectedFuse.Connected()
@@ -146,8 +158,10 @@ func (c *HTTP2Connection) close() {
 }
 
 type http2RespWriter struct {
-	r io.Reader
-	w http.ResponseWriter
+	r           io.Reader
+	w           http.ResponseWriter
+	flusher     http.Flusher
+	shouldFlush bool
 }
 
 func (rp *http2RespWriter) WriteRespHeaders(resp *http.Response) error {
@@ -172,13 +186,19 @@ func (rp *http2RespWriter) WriteRespHeaders(resp *http.Response) error {
 
 	// Perform user header serialization and set them in the single header
 	dest.Set(canonicalResponseUserHeadersField, h2mux.SerializeHeaders(userHeaders))
-	rp.setResponseMetaHeader(responseMetaHeaderCfd)
+	rp.setResponseMetaHeader(responseMetaHeaderOrigin)
 	status := resp.StatusCode
 	// HTTP2 removes support for 101 Switching Protocols https://tools.ietf.org/html/rfc7540#section-8.1.1
 	if status == http.StatusSwitchingProtocols {
 		status = http.StatusOK
 	}
 	rp.w.WriteHeader(status)
+	if isServerSentEvent(resp.Header) {
+		rp.shouldFlush = true
+	}
+	if rp.shouldFlush {
+		rp.flusher.Flush()
+	}
 	return nil
 }
 
@@ -195,43 +215,15 @@ func (rp *http2RespWriter) Read(p []byte) (n int, err error) {
 	return rp.r.Read(p)
 }
 
-func (wr *http2RespWriter) Write(p []byte) (n int, err error) {
-	return wr.w.Write(p)
-}
-
-type wsRespWriter struct {
-	*http2RespWriter
-	flusher http.Flusher
-}
-
-func newWSRespWriter(h2 *http2RespWriter) (*wsRespWriter, error) {
-	flusher, ok := h2.w.(http.Flusher)
-	if !ok {
-		return nil, fmt.Errorf("ResponseWriter doesn't implement http.Flusher")
+func (rp *http2RespWriter) Write(p []byte) (n int, err error) {
+	n, err = rp.w.Write(p)
+	if err == nil && rp.shouldFlush {
+		rp.flusher.Flush()
 	}
-	return &wsRespWriter{
-		h2,
-		flusher,
-	}, nil
+	return n, err
 }
 
-func (rw *wsRespWriter) WriteRespHeaders(resp *http.Response) (err error) {
-	err = rw.http2RespWriter.WriteRespHeaders(resp)
-	if err == nil {
-		rw.flusher.Flush()
-	}
-	return
-}
-
-func (rw *wsRespWriter) Write(p []byte) (n int, err error) {
-	n, err = rw.http2RespWriter.Write(p)
-	if err == nil {
-		rw.flusher.Flush()
-	}
-	return
-}
-
-func (rw *wsRespWriter) Close() error {
+func (rp *http2RespWriter) Close() error {
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -54,4 +55,8 @@ type ConnectedFuse interface {
 
 func uint8ToString(input uint8) string {
 	return strconv.FormatUint(uint64(input), 10)
+}
+
+func isServerSentEvent(headers http.Header) bool {
+	return strings.ToLower(headers.Get("content-type")) == "text/event-stream"
 }
