@@ -18,7 +18,7 @@ const (
 	authFailure     = uint8(1)
 )
 
-// AuthHandler handles socks authenication requests
+// AuthHandler handles socks authentication requests
 type AuthHandler interface {
 	Handle(io.Reader, io.Writer) error
 	Register(uint8, Authenticator)
@@ -43,7 +43,7 @@ func (h *StandardAuthHandler) Register(method uint8, a Authenticator) {
 	h.authenticators[method] = a
 }
 
-// Handle gets the methods from the SOCKS5 client and authenicates with the first supported method
+// Handle gets the methods from the SOCKS5 client and authenticates with the first supported method
 func (h *StandardAuthHandler) Handle(bufConn io.Reader, conn io.Writer) error {
 	methods, err := readMethods(bufConn)
 	if err != nil {

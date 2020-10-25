@@ -79,7 +79,7 @@ func (proxy *Proxy) IsInsecure() bool {
 // IsAllowed checks whether a http.Request is allowed to receive data.
 //
 // By default, requests must pass through Cloudflare Access for authentication.
-// If the proxy is explcitly set to insecure mode, all requests will be allowed.
+// If the proxy is explicitly set to insecure mode, all requests will be allowed.
 func (proxy *Proxy) IsAllowed(r *http.Request, verbose ...bool) bool {
 	if proxy.IsInsecure() {
 		return true
@@ -104,7 +104,7 @@ func (proxy *Proxy) IsAllowed(r *http.Request, verbose ...bool) bool {
 
 // Start the Proxy at a given address and notify the listener channel when the server is online.
 func (proxy *Proxy) Start(ctx context.Context, addr string, listenerC chan<- net.Listener) error {
-	// STOR-611: use a seperate listener and consider web socket support.
+	// STOR-611: use a separate listener and consider web socket support.
 	httpListener, err := hello.CreateTLSListener(addr)
 	if err != nil {
 		return errors.Wrapf(err, "could not create listener at %s", addr)
@@ -223,7 +223,7 @@ func (proxy *Proxy) httpSubmit() http.HandlerFunc {
 func (proxy *Proxy) httpRespond(w http.ResponseWriter, r *http.Request, status int, message string) {
 	w.WriteHeader(status)
 
-	// Only expose the message detail of the reponse if the request is not HEAD
+	// Only expose the message detail of the response if the request is not HEAD
 	// and the user is authenticated. For example, this prevents an unauthenticated
 	// failed health check from accidentally leaking sensitive information about the Client.
 	if r.Method != http.MethodHead && proxy.IsAllowed(r) {

@@ -751,7 +751,7 @@ func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Requ
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
-	// Copy to/from stream to the undelying connection. Use the underlying
+	// Copy to/from stream to the underlying connection. Use the underlying
 	// connection because cloudflared doesn't operate on the message themselves
 	websocket.Stream(conn.UnderlyingConn(), stream)
 

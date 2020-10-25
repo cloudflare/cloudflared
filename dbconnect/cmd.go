@@ -157,7 +157,7 @@ func CmdAction(c *cli.Context) error {
 		}
 	}()
 
-	// Block until the the Proxy is online, retreive its address, and change the url to point to it.
+	// Block until the the Proxy is online, retrieve its address, and change the url to point to it.
 	// This is effectively "handing over" control to the tunnel package so it can run the tunnel daemon.
 	c.Set("url", "https://"+(<-listenerC).Addr().String())
 
