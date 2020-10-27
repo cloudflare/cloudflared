@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -49,6 +50,18 @@ func (tsc *tunnelServerClient) Close() {
 	tsc.transport.Close()
 }
 
+type NamedTunnelRPCClient interface {
+	RegisterConnection(
+		c context.Context,
+		config *NamedTunnelConfig,
+		options *tunnelpogs.ConnectionOptions,
+		connIndex uint8,
+		observer *Observer,
+	) error
+	GracefulShutdown(ctx context.Context, gracePeriod time.Duration)
+	Close()
+}
+
 type registrationServerClient struct {
 	client    tunnelpogs.RegistrationServer_PogsClient
 	transport rpc.Transport
@@ -58,7 +71,7 @@ func newRegistrationRPCClient(
 	ctx context.Context,
 	stream io.ReadWriteCloser,
 	logger logger.Service,
-) *registrationServerClient {
+) NamedTunnelRPCClient {
 	transport := tunnelrpc.NewTransportLogger(logger, rpc.StreamTransport(stream))
 	conn := rpc.NewConn(
 		transport,
@@ -70,31 +83,14 @@ func newRegistrationRPCClient(
 	}
 }
 
-func (rsc *registrationServerClient) close() {
-	// Closing the client will also close the connection
-	rsc.client.Close()
-	// Closing the transport also closes the stream
-	rsc.transport.Close()
-}
-
-type rpcName string
-
-const (
-	register     rpcName = "register"
-	reconnect    rpcName = "reconnect"
-	unregister   rpcName = "unregister"
-	authenticate rpcName = " authenticate"
-)
-
-func registerConnection(
+func (rsc *registrationServerClient) RegisterConnection(
 	ctx context.Context,
-	rpcClient *registrationServerClient,
 	config *NamedTunnelConfig,
 	options *tunnelpogs.ConnectionOptions,
 	connIndex uint8,
 	observer *Observer,
 ) error {
-	conn, err := rpcClient.client.RegisterConnection(
+	conn, err := rsc.client.RegisterConnection(
 		ctx,
 		config.Auth,
 		config.ID,
@@ -117,6 +113,28 @@ func registerConnection(
 
 	return nil
 }
+
+func (rsc *registrationServerClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
+	ctx, cancel := context.WithTimeout(ctx, gracePeriod)
+	defer cancel()
+	rsc.client.UnregisterConnection(ctx)
+}
+
+func (rsc *registrationServerClient) Close() {
+	// Closing the client will also close the connection
+	rsc.client.Close()
+	// Closing the transport also closes the stream
+	rsc.transport.Close()
+}
+
+type rpcName string
+
+const (
+	register     rpcName = "register"
+	reconnect    rpcName = "reconnect"
+	unregister   rpcName = "unregister"
+	authenticate rpcName = " authenticate"
+)
 
 func (h *h2muxConnection) registerTunnel(ctx context.Context, credentialSetter CredentialManager, classicTunnel *ClassicTunnelConfig, registrationOptions *tunnelpogs.RegistrationOptions) error {
 	h.observer.sendRegisteringEvent()
@@ -264,9 +282,9 @@ func (h *h2muxConnection) unregister(isNamedTunnel bool) {
 
 	if isNamedTunnel {
 		rpcClient := newRegistrationRPCClient(unregisterCtx, stream, h.observer)
-		defer rpcClient.close()
+		defer rpcClient.Close()
 
-		rpcClient.client.UnregisterConnection(unregisterCtx)
+		rpcClient.GracefulShutdown(unregisterCtx, h.config.GracePeriod)
 	} else {
 		rpcClient := NewTunnelServerClient(unregisterCtx, stream, h.observer)
 		defer rpcClient.Close()

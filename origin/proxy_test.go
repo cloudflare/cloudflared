@@ -47,7 +47,7 @@ func (w *mockHTTPRespWriter) WriteRespHeaders(resp *http.Response) error {
 	return nil
 }
 
-func (w *mockHTTPRespWriter) WriteErrorResponse(err error) {
+func (w *mockHTTPRespWriter) WriteErrorResponse() {
 	w.WriteHeader(http.StatusBadGateway)
 }
 

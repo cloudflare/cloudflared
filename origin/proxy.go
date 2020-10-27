@@ -60,7 +60,7 @@ func (c *client) Proxy(w connection.ResponseWriter, req *http.Request, isWebsock
 	}
 	if err != nil {
 		c.logRequestError(err, cfRay, ruleNum)
-		w.WriteErrorResponse(err)
+		w.WriteErrorResponse()
 		return err
 	}
 	c.logOriginResponse(resp, cfRay, lbProbe, ruleNum)

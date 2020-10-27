@@ -44,7 +44,7 @@ type OriginClient interface {
 
 type ResponseWriter interface {
 	WriteRespHeaders(*http.Response) error
-	WriteErrorResponse(error)
+	WriteErrorResponse()
 	io.ReadWriter
 }
 

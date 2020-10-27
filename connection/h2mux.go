@@ -88,9 +88,9 @@ func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *Nam
 			return err
 		}
 		rpcClient := newRegistrationRPCClient(ctx, stream, h.observer)
-		defer rpcClient.close()
+		defer rpcClient.Close()
 
-		if err = registerConnection(serveCtx, rpcClient, namedTunnel, connOptions, h.connIndex, h.observer); err != nil {
+		if err = rpcClient.RegisterConnection(serveCtx, namedTunnel, connOptions, h.connIndex, h.observer); err != nil {
 			return err
 		}
 		connectedFuse.Connected()
@@ -177,11 +177,16 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 
 	req, reqErr := h.newRequest(stream)
 	if reqErr != nil {
-		respWriter.WriteErrorResponse(reqErr)
+		respWriter.WriteErrorResponse()
 		return reqErr
 	}
 
-	return h.config.OriginClient.Proxy(respWriter, req, websocket.IsWebSocketUpgrade(req))
+	err := h.config.OriginClient.Proxy(respWriter, req, websocket.IsWebSocketUpgrade(req))
+	if err != nil {
+		respWriter.WriteErrorResponse()
+		return err
+	}
+	return nil
 }
 
 func (h *h2muxConnection) newRequest(stream *h2mux.MuxedStream) (*http.Request, error) {
@@ -206,7 +211,7 @@ func (rp *h2muxRespWriter) WriteRespHeaders(resp *http.Response) error {
 	return rp.WriteHeaders(headers)
 }
 
-func (rp *h2muxRespWriter) WriteErrorResponse(err error) {
+func (rp *h2muxRespWriter) WriteErrorResponse() {
 	rp.WriteHeaders([]h2mux.Header{
 		{Name: ":status", Value: "502"},
 		{Name: responseMetaHeaderField, Value: responseMetaHeaderCfd},
