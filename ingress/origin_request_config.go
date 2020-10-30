@@ -116,7 +116,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	}
 }
 
-func OriginRequestFromYAML(y config.OriginRequestConfig) OriginRequestConfig {
+func originRequestFromYAML(y config.OriginRequestConfig) OriginRequestConfig {
 	out := OriginRequestConfig{
 		ConnectTimeout:       defaultConnectTimeout,
 		TLSTimeout:           defaultTLSTimeout,
@@ -310,7 +310,7 @@ func (defaults *OriginRequestConfig) setProxyType(overrides config.OriginRequest
 //   3. Defaults chosen by the cloudflared team
 //   4. Golang zero values for that type
 // If an earlier option isn't set, it will try the next option down.
-func SetConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfig) OriginRequestConfig {
+func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfig) OriginRequestConfig {
 	cfg := defaults
 	cfg.setConnectTimeout(overrides)
 	cfg.setTLSTimeout(overrides)

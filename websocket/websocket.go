@@ -69,15 +69,31 @@ func IsWebSocketUpgrade(req *http.Request) bool {
 	return websocket.IsWebSocketUpgrade(req)
 }
 
+// Dialler is something that can proxy websocket requests.
+type Dialler interface {
+	Dial(url string, headers http.Header) (*websocket.Conn, *http.Response, error)
+}
+
+type defaultDialler struct {
+	tlsConfig *tls.Config
+}
+
+func (dd *defaultDialler) Dial(url string, header http.Header) (*websocket.Conn, *http.Response, error) {
+	d := &websocket.Dialer{TLSClientConfig: dd.tlsConfig}
+	return d.Dial(url, header)
+}
+
 // ClientConnect creates a WebSocket client connection for provided request. Caller is responsible for closing
 // the connection. The response body may not contain the entire response and does
 // not need to be closed by the application.
-func ClientConnect(req *http.Request, tlsClientConfig *tls.Config) (*websocket.Conn, *http.Response, error) {
+func ClientConnect(req *http.Request, dialler Dialler) (*websocket.Conn, *http.Response, error) {
 	req.URL.Scheme = changeRequestScheme(req)
 	wsHeaders := websocketHeaders(req)
 
-	d := &websocket.Dialer{TLSClientConfig: tlsClientConfig}
-	conn, response, err := d.Dial(req.URL.String(), wsHeaders)
+	if dialler == nil {
+		dialler = new(defaultDialler)
+	}
+	conn, response, err := dialler.Dial(req.URL.String(), wsHeaders)
 	if err != nil {
 		return nil, response, err
 	}

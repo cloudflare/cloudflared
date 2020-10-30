@@ -71,7 +71,7 @@ ingress:
     proxyPort: 200
     proxyType: ""
 `
-	ing, err := ParseIngressDryRun(MustReadIngress(rulesYAML))
+	ing, err := ParseIngress(MustReadIngress(rulesYAML))
 	if err != nil {
 		t.Error(err)
 	}
@@ -144,7 +144,7 @@ ingress:
     proxyPort: 200
     proxyType: ""
 `
-	ing, err := ParseIngressDryRun(MustReadIngress(rulesYAML))
+	ing, err := ParseIngress(MustReadIngress(rulesYAML))
 	if err != nil {
 		t.Error(err)
 	}

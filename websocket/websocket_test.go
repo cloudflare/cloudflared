@@ -77,7 +77,8 @@ func TestServe(t *testing.T) {
 
 	tlsConfig := websocketClientTLSConfig(t)
 	assert.NotNil(t, tlsConfig)
-	conn, resp, err := ClientConnect(req, tlsConfig)
+	d := defaultDialler{tlsConfig: tlsConfig}
+	conn, resp, err := ClientConnect(req, &d)
 	assert.NoError(t, err)
 	assert.Equal(t, testSecWebsocketAccept, resp.Header.Get("Sec-WebSocket-Accept"))
 

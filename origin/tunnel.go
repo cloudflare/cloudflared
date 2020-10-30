@@ -698,7 +698,6 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 	}
 	h.AppendTagHeaders(req)
 	rule, _ := h.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
-	rule.Service.RewriteOriginURL(req.URL)
 	return req, rule, nil
 }
 
@@ -708,7 +707,11 @@ func (h *TunnelHandler) serveWebsocket(stream *h2mux.MuxedStream, req *http.Requ
 		req.Host = hostHeader
 	}
 
-	conn, response, err := websocket.ClientConnect(req, rule.ClientTLSConfig)
+	dialler, ok := rule.Service.(websocket.Dialler)
+	if !ok {
+		return nil, fmt.Errorf("Websockets aren't supported by the origin service '%s'", rule.Service)
+	}
+	conn, response, err := websocket.ClientConnect(req, dialler)
 	if err != nil {
 		return nil, err
 	}
@@ -742,7 +745,7 @@ func (h *TunnelHandler) serveHTTP(stream *h2mux.MuxedStream, req *http.Request, 
 		req.Host = hostHeader
 	}
 
-	response, err := rule.HTTPTransport.RoundTrip(req)
+	response, err := rule.Service.RoundTrip(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error proxying request to origin")
 	}

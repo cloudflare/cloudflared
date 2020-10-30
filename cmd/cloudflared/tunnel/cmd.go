@@ -395,7 +395,7 @@ func StartServer(
 			hostname,
 			metricsListener.Addr().String(),
 			// TODO (TUN-3461): Update UI to show multiple origin URLs
-			tunnelConfig.IngressRules.CatchAll().Service.Address(),
+			tunnelConfig.IngressRules.CatchAll().Service.String(),
 			tunnelConfig.HAConnections,
 		)
 		logLevels, err := logger.ParseLevelString(c.String("loglevel"))

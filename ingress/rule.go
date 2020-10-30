@@ -1,8 +1,6 @@
 package ingress
 
 import (
-	"crypto/tls"
-	"net/http"
 	"regexp"
 	"strings"
 )
@@ -23,11 +21,6 @@ type Rule struct {
 
 	// Configure the request cloudflared sends to this specific origin.
 	Config OriginRequestConfig
-
-	// Configures TLS for the cloudflared -> origin request
-	ClientTLSConfig *tls.Config
-	// Configures HTTP for the cloudflared -> origin request
-	HTTPTransport http.RoundTripper
 }
 
 // MultiLineString is for outputting rules in a human-friendly way when Cloudflared

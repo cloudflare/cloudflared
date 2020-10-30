@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 
@@ -16,16 +15,16 @@ func TestParseUnixSocket(t *testing.T) {
 ingress:
 - service: unix:/tmp/echo.sock
 `
-	ing, err := ParseIngressDryRun(MustReadIngress(rawYAML))
+	ing, err := ParseIngress(MustReadIngress(rawYAML))
 	require.NoError(t, err)
-	_, ok := ing.Rules[0].Service.(UnixSocketPath)
+	_, ok := ing.Rules[0].Service.(*unixSocketPath)
 	require.True(t, ok)
 }
 
 func Test_parseIngress(t *testing.T) {
 	localhost8000 := MustParseURL(t, "https://localhost:8000")
 	localhost8001 := MustParseURL(t, "https://localhost:8001")
-	defaultConfig := SetConfig(OriginRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{})
+	defaultConfig := setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{})
 	require.Equal(t, defaultKeepAliveConnections, defaultConfig.KeepAliveConnections)
 	type args struct {
 		rawYAML string
@@ -53,12 +52,12 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "tunnel1.example.com",
-					Service:  &URL{URL: localhost8000},
+					Service:  &localService{URL: localhost8000},
 					Config:   defaultConfig,
 				},
 				{
 					Hostname: "*",
-					Service:  &URL{URL: localhost8001},
+					Service:  &localService{URL: localhost8001},
 					Config:   defaultConfig,
 				},
 			},
@@ -74,7 +73,7 @@ extraKey: extraValue
 			want: []Rule{
 				{
 					Hostname: "*",
-					Service:  &URL{URL: localhost8000},
+					Service:  &localService{URL: localhost8000},
 					Config:   defaultConfig,
 				},
 			},
@@ -87,7 +86,7 @@ ingress:
 `},
 			want: []Rule{
 				{
-					Service: &URL{URL: localhost8000},
+					Service: &localService{URL: localhost8000},
 					Config:  defaultConfig,
 				},
 			},
@@ -165,15 +164,37 @@ ingress:
 `},
 			wantErr: true,
 		},
+		{
+			name: "Invalid HTTP status",
+			args: args{rawYAML: `
+ingress:
+ - service: http_status:asdf
+`},
+			wantErr: true,
+		},
+		{
+			name: "Valid hello world service",
+			args: args{rawYAML: `
+ingress:
+ - service: hello_world
+`},
+			want: []Rule{
+				{
+					Hostname: "",
+					Service:  new(helloWorld),
+					Config:   defaultConfig,
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseIngressDryRun(MustReadIngress(tt.args.rawYAML))
+			got, err := ParseIngress(MustReadIngress(tt.args.rawYAML))
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseIngressDryRun() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ParseIngress() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			assert.Equal(t, tt.want, got.Rules)
+			require.Equal(t, tt.want, got.Rules)
 		})
 	}
 }
@@ -195,7 +216,7 @@ ingress:
    service: https://localhost:8002
 `
 
-	ing, err := ParseIngressDryRun(MustReadIngress(rulesYAML))
+	ing, err := ParseIngress(MustReadIngress(rulesYAML))
 	if err != nil {
 		b.Error(err)
 	}
