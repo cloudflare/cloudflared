@@ -121,15 +121,15 @@ func resolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
 }
 
 // ResolveAddrs resolves TCP address given a list of addresses. Address can be a hostname, however, it will return at most one
-// of the hostname's IP addresses
-func ResolveAddrs(addrs []string) ([]*net.TCPAddr, error) {
-	var tcpAddrs []*net.TCPAddr
+// of the hostname's IP addresses.
+func ResolveAddrs(addrs []string, logger logger.Service) (resolved []*net.TCPAddr) {
 	for _, addr := range addrs {
 		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
-			return nil, err
+			logger.Errorf("Failed to resolve %s, err: %v", addr, err)
+		} else {
+			resolved = append(resolved, tcpAddr)
 		}
-		tcpAddrs = append(tcpAddrs, tcpAddr)
 	}
-	return tcpAddrs, nil
+	return
 }

@@ -35,12 +35,12 @@ func ResolveEdge(logger logger.Service) (*Regions, error) {
 
 // StaticEdge creates a list of edge addresses from the list of hostnames.
 // Mainly used for testing connectivity.
-func StaticEdge(hostnames []string) (*Regions, error) {
-	addrs, err := ResolveAddrs(hostnames)
-	if err != nil {
-		return nil, err
+func StaticEdge(hostnames []string, logger logger.Service) (*Regions, error) {
+	resolved := ResolveAddrs(hostnames, logger)
+	if len(resolved) == 0 {
+		return nil, fmt.Errorf("failed to resolve any edge address")
 	}
-	return NewNoResolve(addrs), nil
+	return NewNoResolve(resolved), nil
 }
 
 // NewNoResolve doesn't resolve the edge. Instead it just uses the given addresses.
