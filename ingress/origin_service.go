@@ -318,3 +318,20 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig) (*http.Tra
 
 	return &httpTransport, nil
 }
+
+// MockOriginService should only be used by other packages to mock OriginService. Set Transport to configure desired RoundTripper behavior.
+type MockOriginService struct {
+	Transport http.RoundTripper
+}
+
+func (mos MockOriginService) RoundTrip(req *http.Request) (*http.Response, error) {
+	return mos.Transport.RoundTrip(req)
+}
+
+func (mos MockOriginService) String() string {
+	return "MockOriginService"
+}
+
+func (mos MockOriginService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+	return nil
+}

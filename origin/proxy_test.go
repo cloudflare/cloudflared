@@ -49,6 +49,7 @@ func (w *mockHTTPRespWriter) WriteRespHeaders(resp *http.Response) error {
 
 func (w *mockHTTPRespWriter) WriteErrorResponse() {
 	w.WriteHeader(http.StatusBadGateway)
+	w.Write([]byte("http response error"))
 }
 
 func (w *mockHTTPRespWriter) Read(data []byte) (int, error) {
@@ -314,4 +315,38 @@ type mockAPI struct{}
 func (ma mockAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte("Created"))
+}
+
+type errorOriginTransport struct{}
+
+func (errorOriginTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("Proxy error")
+}
+
+func TestProxyError(t *testing.T) {
+	ingress := ingress.Ingress{
+		Rules: []ingress.Rule{
+			{
+				Hostname: "*",
+				Path:     nil,
+				Service: ingress.MockOriginService{
+					Transport: errorOriginTransport{},
+				},
+			},
+		},
+	}
+
+	logger, err := logger.New()
+	require.NoError(t, err)
+
+	client := NewClient(ingress, testTags, logger)
+
+	respWriter := newMockHTTPRespWriter()
+	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
+	assert.NoError(t, err)
+
+	err = client.Proxy(respWriter, req, false)
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusBadGateway, respWriter.Code)
+	assert.Equal(t, "http response error", respWriter.Body.String())
 }

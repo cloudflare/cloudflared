@@ -190,6 +190,13 @@ func (rp *http2RespWriter) Read(p []byte) (n int, err error) {
 }
 
 func (rp *http2RespWriter) Write(p []byte) (n int, err error) {
+	defer func() {
+		// Implementer of OriginClient should make sure it doesn't write to the connection after Proxy returns
+		// Register a recover routine just in case.
+		if r := recover(); r != nil {
+			println("Recover from http2 response writer panic, error", r)
+		}
+	}()
 	n, err = rp.w.Write(p)
 	if err == nil && rp.shouldFlush {
 		rp.flusher.Flush()

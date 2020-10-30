@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -124,19 +125,31 @@ func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request, 
 	}
 
 	serveCtx, cancel := context.WithCancel(req.Context())
-	defer cancel()
+	connClosedChan := make(chan struct{})
 	go func() {
+		// serveCtx is done if req is cancelled, or streamWebsocket returns
 		<-serveCtx.Done()
 		conn.Close()
+		close(connClosedChan)
 	}()
-	err = w.WriteRespHeaders(resp)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error writing response header")
-	}
+
 	// Copy to/from stream to the undelying connection. Use the underlying
 	// connection because cloudflared doesn't operate on the message themselves
-	websocket.Stream(conn.UnderlyingConn(), w)
-	return resp, nil
+	err = c.streamWebsocket(w, conn.UnderlyingConn(), resp)
+	cancel()
+
+	// We need to make sure conn is closed before returning, otherwise we might write to conn after Proxy returns
+	<-connClosedChan
+	return resp, err
+}
+
+func (c *client) streamWebsocket(w connection.ResponseWriter, conn net.Conn, resp *http.Response) error {
+	err := w.WriteRespHeaders(resp)
+	if err != nil {
+		return errors.Wrap(err, "Error writing websocket response header")
+	}
+	websocket.Stream(conn, w)
+	return nil
 }
 
 func (c *client) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {
