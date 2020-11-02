@@ -3,15 +3,15 @@ package origin
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
+	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -23,26 +23,19 @@ const (
 )
 
 type client struct {
-	config     *ProxyConfig
-	logger     logger.Service
-	bufferPool *buffer.Pool
+	ingressRules ingress.Ingress
+	tags         []tunnelpogs.Tag
+	logger       logger.Service
+	bufferPool   *buffer.Pool
 }
 
-func NewClient(config *ProxyConfig, logger logger.Service) connection.OriginClient {
+func NewClient(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, logger logger.Service) connection.OriginClient {
 	return &client{
-		config:     config,
-		logger:     logger,
-		bufferPool: buffer.NewPool(512 * 1024),
+		ingressRules: ingressRules,
+		tags:         tags,
+		logger:       logger,
+		bufferPool:   buffer.NewPool(512 * 1024),
 	}
-}
-
-type ProxyConfig struct {
-	Client            http.RoundTripper
-	URL               *url.URL
-	TLSConfig         *tls.Config
-	HostHeader        string
-	NoChunkedEncoding bool
-	Tags              []tunnelpogs.Tag
 }
 
 func (c *client) Proxy(w connection.ResponseWriter, req *http.Request, isWebsocket bool) error {
@@ -53,29 +46,30 @@ func (c *client) Proxy(w connection.ResponseWriter, req *http.Request, isWebsock
 	lbProbe := isLBProbeRequest(req)
 
 	c.appendTagHeaders(req)
-	c.logRequest(req, cfRay, lbProbe)
+	rule, ruleNum := c.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+	c.logRequest(req, cfRay, lbProbe, ruleNum)
+
 	var (
 		resp *http.Response
 		err  error
 	)
 	if isWebsocket {
-		resp, err = c.proxyWebsocket(w, req)
+		resp, err = c.proxyWebsocket(w, req, rule)
 	} else {
-		resp, err = c.proxyHTTP(w, req)
+		resp, err = c.proxyHTTP(w, req, rule)
 	}
 	if err != nil {
-		c.logger.Errorf("HTTP request error: %s", err)
-		responseByCode.WithLabelValues("502").Inc()
+		c.logRequestError(err, cfRay, ruleNum)
 		w.WriteErrorResponse(err)
 		return err
 	}
-	c.logResponseOk(resp, cfRay, lbProbe)
+	c.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
 	return nil
 }
 
-func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request) (*http.Response, error) {
+func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
 	// Support for WSGI Servers by switching transfer encoding from chunked to gzip/deflate
-	if c.config.NoChunkedEncoding {
+	if rule.Config.DisableChunkedEncoding {
 		req.TransferEncoding = []string{"gzip", "deflate"}
 		cLength, err := strconv.Atoi(req.Header.Get("Content-Length"))
 		if err == nil {
@@ -86,9 +80,12 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request) (*htt
 	// Request origin to keep connection alive to improve performance
 	req.Header.Set("Connection", "keep-alive")
 
-	c.setHostHeader(req)
+	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
+		req.Header.Set("Host", hostHeader)
+		req.Host = hostHeader
+	}
 
-	resp, err := c.config.Client.RoundTrip(req)
+	resp, err := rule.Service.RoundTrip(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error proxying request to origin")
 	}
@@ -111,9 +108,17 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request) (*htt
 	return resp, nil
 }
 
-func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request) (*http.Response, error) {
-	c.setHostHeader(req)
-	conn, resp, err := websocket.ClientConnect(req, c.config.TLSConfig)
+func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
+	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
+		req.Header.Set("Host", hostHeader)
+		req.Host = hostHeader
+	}
+
+	dialler, ok := rule.Service.(websocket.Dialler)
+	if !ok {
+		return nil, fmt.Errorf("Websockets aren't supported by the origin service '%s'", rule.Service)
+	}
+	conn, resp, err := websocket.ClientConnect(req, dialler)
 	if err != nil {
 		return nil, err
 	}
@@ -145,28 +150,22 @@ func (c *client) writeEventStream(w connection.ResponseWriter, respBody io.ReadC
 	}
 }
 
-func (c *client) setHostHeader(req *http.Request) {
-	if c.config.HostHeader != "" {
-		req.Header.Set("Host", c.config.HostHeader)
-		req.Host = c.config.HostHeader
-	}
-}
-
 func (c *client) appendTagHeaders(r *http.Request) {
-	for _, tag := range c.config.Tags {
+	for _, tag := range c.tags {
 		r.Header.Add(TagHeaderNamePrefix+tag.Name, tag.Value)
 	}
 }
 
-func (c *client) logRequest(r *http.Request, cfRay string, lbProbe bool) {
+func (c *client) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum int) {
 	if cfRay != "" {
 		c.logger.Debugf("CF-RAY: %s %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else if lbProbe {
 		c.logger.Debugf("CF-RAY: %s Load Balancer health check %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else {
-		c.logger.Debugf("CF-RAY: %s All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", cfRay, r.Method, r.URL, r.Proto)
+		c.logger.Debugf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
 	}
 	c.logger.Debugf("CF-RAY: %s Request Headers %+v", cfRay, r.Header)
+	c.logger.Debugf("CF-RAY: %s Serving with ingress rule %d", cfRay, ruleNum)
 
 	if contentLen := r.ContentLength; contentLen == -1 {
 		c.logger.Debugf("CF-RAY: %s Request Content length unknown", cfRay)
@@ -175,14 +174,14 @@ func (c *client) logRequest(r *http.Request, cfRay string, lbProbe bool) {
 	}
 }
 
-func (c *client) logResponseOk(r *http.Response, cfRay string, lbProbe bool) {
-	responseByCode.WithLabelValues("200").Inc()
+func (c *client) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, ruleNum int) {
+	responseByCode.WithLabelValues(strconv.Itoa(r.StatusCode)).Inc()
 	if cfRay != "" {
-		c.logger.Debugf("CF-RAY: %s %s", cfRay, r.Status)
+		c.logger.Infof("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
 	} else if lbProbe {
 		c.logger.Debugf("Response to Load Balancer health check %s", r.Status)
 	} else {
-		c.logger.Infof("%s", r.Status)
+		c.logger.Debugf("Status: %s served by ingress %d", r.Status, ruleNum)
 	}
 	c.logger.Debugf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
 
@@ -191,6 +190,16 @@ func (c *client) logResponseOk(r *http.Response, cfRay string, lbProbe bool) {
 	} else {
 		c.logger.Debugf("CF-RAY: %s Response content length %d", cfRay, contentLen)
 	}
+}
+
+func (c *client) logRequestError(err error, cfRay string, ruleNum int) {
+	requestErrors.Inc()
+	if cfRay != "" {
+		c.logger.Errorf("CF-RAY: %s Proxying to ingress %d error: %v", cfRay, ruleNum, err)
+	} else {
+		c.logger.Errorf("Proxying to ingress %d error: %v", ruleNum, err)
+	}
+
 }
 
 func findCfRayHeader(req *http.Request) string {

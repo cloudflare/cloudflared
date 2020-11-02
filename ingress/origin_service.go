@@ -245,7 +245,7 @@ type statusCode struct {
 func newStatusCode(status int) statusCode {
 	resp := &http.Response{
 		StatusCode: status,
-		Status:     http.StatusText(status),
+		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
 		Body:       new(NopReadCloser),
 	}
 	return statusCode{resp: resp}

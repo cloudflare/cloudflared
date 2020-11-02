@@ -367,12 +367,12 @@ func StartServer(
 		return errors.Wrap(err, "error setting up transport logger")
 	}
 
-	tunnelConfig, err := prepareTunnelConfig(c, buildInfo, version, log, transportLogger, namedTunnel, isUIEnabled)
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, transportLogger, namedTunnel, isUIEnabled)
 	if err != nil {
 		return err
 	}
 
-	tunnelConfig.IngressRules.StartOrigins(&wg, log, shutdownC, errC)
+	ingressRules.StartOrigins(&wg, log, shutdownC, errC)
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
@@ -391,8 +391,7 @@ func StartServer(
 			version,
 			hostname,
 			metricsListener.Addr().String(),
-			// TODO (TUN-3461): Update UI to show multiple origin URLs
-			&tunnelConfig.IngressRules,
+			&ingressRules,
 			tunnelConfig.HAConnections,
 		)
 		logLevels, err := logger.ParseLevelString(c.String("loglevel"))

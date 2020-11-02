@@ -166,7 +166,12 @@ func validateIP(scheme, host, port string) (string, error) {
 }
 
 // originURL shouldn't be a pointer, because this function might change the scheme
-func ValidateHTTPService(originURL url.URL, hostname string, transport http.RoundTripper) error {
+func ValidateHTTPService(originURL string, hostname string, transport http.RoundTripper) error {
+	parsedURL, err := url.Parse(originURL)
+	if err != nil {
+		return err
+	}
+
 	client := &http.Client{
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -175,7 +180,7 @@ func ValidateHTTPService(originURL url.URL, hostname string, transport http.Roun
 		Timeout: validationTimeout,
 	}
 
-	initialRequest, err := http.NewRequest("GET", originURL.String(), nil)
+	initialRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -187,10 +192,10 @@ func ValidateHTTPService(originURL url.URL, hostname string, transport http.Roun
 	}
 
 	// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
-	oldScheme := originURL.Scheme
-	originURL.Scheme = toggleProtocol(originURL.Scheme)
+	oldScheme := parsedURL.Scheme
+	parsedURL.Scheme = toggleProtocol(oldScheme)
 
-	secondRequest, err := http.NewRequest("GET", originURL.String(), nil)
+	secondRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -200,9 +205,9 @@ func ValidateHTTPService(originURL url.URL, hostname string, transport http.Roun
 		resp.Body.Close()
 		return errors.Errorf(
 			"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %v",
-			originURL.Host,
+			parsedURL.Host,
 			oldScheme,
-			originURL.Scheme,
+			parsedURL.Scheme,
 			initialErr,
 			originURL,
 		)

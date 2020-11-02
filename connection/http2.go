@@ -7,7 +7,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 
@@ -31,7 +30,6 @@ type HTTP2Connection struct {
 	conn          net.Conn
 	server        *http2.Server
 	config        *Config
-	originURL     *url.URL
 	namedTunnel   *NamedTunnelConfig
 	connOptions   *tunnelpogs.ConnectionOptions
 	observer      *Observer
@@ -44,7 +42,6 @@ type HTTP2Connection struct {
 func NewHTTP2Connection(
 	conn net.Conn,
 	config *Config,
-	originURL *url.URL,
 	namedTunnelConfig *NamedTunnelConfig,
 	connOptions *tunnelpogs.ConnectionOptions,
 	observer *Observer,
@@ -57,7 +54,6 @@ func NewHTTP2Connection(
 			MaxConcurrentStreams: math.MaxUint32,
 		},
 		config:        config,
-		originURL:     originURL,
 		namedTunnel:   namedTunnelConfig,
 		connOptions:   connOptions,
 		observer:      observer,
@@ -82,9 +78,6 @@ func (c *HTTP2Connection) Serve(ctx context.Context) {
 func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.wg.Add(1)
 	defer c.wg.Done()
-
-	r.URL.Scheme = c.originURL.Scheme
-	r.URL.Host = c.originURL.Host
 
 	respWriter := &http2RespWriter{
 		r: r.Body,

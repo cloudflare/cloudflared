@@ -63,9 +63,9 @@ type Ingress struct {
 
 // NewSingleOrigin constructs an Ingress set with only one rule, constructed from
 // legacy CLI parameters like --url or --no-chunked-encoding.
-func NewSingleOrigin(c *cli.Context, compatibilityMode bool, logger logger.Service) (Ingress, error) {
+func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool, logger logger.Service) (Ingress, error) {
 
-	service, err := parseSingleOriginService(c, compatibilityMode)
+	service, err := parseSingleOriginService(c, allowURLFromArgs)
 	if err != nil {
 		return Ingress{}, err
 	}
@@ -85,18 +85,14 @@ func NewSingleOrigin(c *cli.Context, compatibilityMode bool, logger logger.Servi
 }
 
 // Get a single origin service from the CLI/config.
-func parseSingleOriginService(c *cli.Context, compatibilityMode bool) (OriginService, error) {
+func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginService, error) {
 	if c.IsSet("hello-world") {
 		return new(helloWorld), nil
 	}
 	if c.IsSet("url") {
-		originURLStr, err := config.ValidateUrl(c, compatibilityMode)
+		originURL, err := config.ValidateUrl(c, allowURLFromArgs)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error validating origin URL")
-		}
-		originURL, err := url.Parse(originURLStr)
-		if err != nil {
-			return nil, errors.Wrap(err, "couldn't parse origin URL")
 		}
 		return &localService{URL: originURL, RootURL: originURL}, nil
 	}

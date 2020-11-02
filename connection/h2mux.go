@@ -22,7 +22,6 @@ const (
 type h2muxConnection struct {
 	config      *Config
 	muxerConfig *MuxerConfig
-	originURL   string
 	muxer       *h2mux.Muxer
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connIndexStr string
@@ -54,7 +53,6 @@ func (mc *MuxerConfig) H2MuxerConfig(h h2mux.MuxedStreamHandler, logger logger.S
 func NewH2muxConnection(ctx context.Context,
 	config *Config,
 	muxerConfig *MuxerConfig,
-	originURL string,
 	edgeConn net.Conn,
 	connIndex uint8,
 	observer *Observer,
@@ -62,7 +60,6 @@ func NewH2muxConnection(ctx context.Context,
 	h := &h2muxConnection{
 		config:       config,
 		muxerConfig:  muxerConfig,
-		originURL:    originURL,
 		connIndexStr: uint8ToString(connIndex),
 		connIndex:    connIndex,
 		observer:     observer,
@@ -188,7 +185,7 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 }
 
 func (h *h2muxConnection) newRequest(stream *h2mux.MuxedStream) (*http.Request, error) {
-	req, err := http.NewRequest("GET", h.originURL, h2mux.MuxedStreamReader{MuxedStream: stream})
+	req, err := http.NewRequest("GET", "http://localhost:8080", h2mux.MuxedStreamReader{MuxedStream: stream})
 	if err != nil {
 		return nil, errors.Wrap(err, "Unexpected error from http.NewRequest")
 	}

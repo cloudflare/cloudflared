@@ -20,7 +20,6 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -47,7 +46,6 @@ const (
 
 type TunnelConfig struct {
 	ConnectionConfig *connection.Config
-	ProxyConfig      *ProxyConfig
 	BuildInfo        *buildinfo.BuildInfo
 	ClientID         string
 	CloseConnOnce    *sync.Once // Used to close connectedSignal no more than once
@@ -57,6 +55,7 @@ type TunnelConfig struct {
 	IsAutoupdated    bool
 	IsFreeTunnel     bool
 	LBPool           string
+	Tags             []tunnelpogs.Tag
 	Logger           logger.Service
 	Observer         *connection.Observer
 	ReportedVersion  string
@@ -67,7 +66,6 @@ type TunnelConfig struct {
 	ClassicTunnel    *connection.ClassicTunnelConfig
 	MuxerConfig      *connection.MuxerConfig
 	TunnelEventChan  chan ui.TunnelEvent
-	IngressRules     ingress.Ingress
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 }
@@ -113,7 +111,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 		OS:                   fmt.Sprintf("%s_%s", c.BuildInfo.GoOS, c.BuildInfo.GoArch),
 		ExistingTunnelPolicy: policy,
 		PoolName:             c.LBPool,
-		Tags:                 c.ProxyConfig.Tags,
+		Tags:                 c.Tags,
 		ConnectionID:         connectionID,
 		OriginLocalIP:        OriginLocalIP,
 		IsAutoupdated:        c.IsAutoupdated,
@@ -324,7 +322,7 @@ func ServeH2mux(
 ) (err error, recoverable bool) {
 	config.Logger.Debugf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
-	handler, err, recoverable := connection.NewH2muxConnection(ctx, config.ConnectionConfig, config.MuxerConfig, config.ProxyConfig.URL.String(), edgeConn, connectionIndex, config.Observer)
+	handler, err, recoverable := connection.NewH2muxConnection(ctx, config.ConnectionConfig, config.MuxerConfig, edgeConn, connectionIndex, config.Observer)
 	if err != nil {
 		return err, recoverable
 	}
@@ -388,7 +386,7 @@ func ServeHTTP2(
 	reconnectCh chan ReconnectSignal,
 ) (err error, recoverable bool) {
 	config.Logger.Debugf("Connecting via http2")
-	server := connection.NewHTTP2Connection(tlsServerConn, config.ConnectionConfig, config.ProxyConfig.URL, config.NamedTunnel, connOptions, config.Observer, connIndex, connectedFuse)
+	server := connection.NewHTTP2Connection(tlsServerConn, config.ConnectionConfig, config.NamedTunnel, connOptions, config.Observer, connIndex, connectedFuse)
 
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {

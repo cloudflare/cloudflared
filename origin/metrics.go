@@ -34,6 +34,14 @@ var (
 		},
 		[]string{"status_code"},
 	)
+	requestErrors = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: connection.MetricsNamespace,
+			Subsystem: connection.TunnelSubsystem,
+			Name:      "request_errors",
+			Help:      "Count of error proxying to origin",
+		},
+	)
 	haConnections = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: connection.MetricsNamespace,
@@ -49,6 +57,7 @@ func init() {
 		totalRequests,
 		concurrentRequests,
 		responseByCode,
+		requestErrors,
 		haConnections,
 	)
 }

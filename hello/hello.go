@@ -22,6 +22,7 @@ const (
 	UptimeRoute    = "/uptime"
 	WSRoute        = "/ws"
 	SSERoute       = "/sse"
+	HealthRoute    = "/_health"
 	defaultSSEFreq = time.Second * 10
 )
 
@@ -114,6 +115,7 @@ func StartHelloWorldServer(logger logger.Service, listener net.Listener, shutdow
 	muxer.HandleFunc(UptimeRoute, uptimeHandler(time.Now()))
 	muxer.HandleFunc(WSRoute, websocketHandler(logger, upgrader))
 	muxer.HandleFunc(SSERoute, sseHandler(logger))
+	muxer.HandleFunc(HealthRoute, healthHandler())
 	muxer.HandleFunc("/", rootHandler(serverName))
 	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: muxer}
 	go func() {
@@ -218,6 +220,12 @@ func sseHandler(logger logger.Service) http.HandlerFunc {
 			flusher.Flush()
 			counter++
 		}
+	}
+}
+
+func healthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
 	}
 }
 

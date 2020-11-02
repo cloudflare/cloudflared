@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -160,27 +161,27 @@ func prepareTunnelConfig(
 	transportLogger logger.Service,
 	namedTunnel *connection.NamedTunnelConfig,
 	uiIsEnabled bool,
-) (*origin.TunnelConfig, error) {
+) (*origin.TunnelConfig, ingress.Ingress, error) {
 	isNamedTunnel := namedTunnel != nil
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
 		logger.Errorf("Invalid hostname: %s", err)
-		return nil, errors.Wrap(err, "Invalid hostname")
+		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
 	}
 	isFreeTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
 		clientID, err = generateRandomClientID(logger)
 		if err != nil {
-			return nil, err
+			return nil, ingress.Ingress{}, err
 		}
 	}
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
 		logger.Errorf("Tag parse failure: %s", err)
-		return nil, errors.Wrap(err, "Tag parse failure")
+		return nil, ingress.Ingress{}, errors.Wrap(err, "Tag parse failure")
 	}
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
@@ -189,7 +190,7 @@ func prepareTunnelConfig(
 	if !isFreeTunnel {
 		originCert, err = getOriginCert(c, logger)
 		if err != nil {
-			return nil, errors.Wrap(err, "Error getting origin cert")
+			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
 		}
 	}
 
@@ -200,7 +201,7 @@ func prepareTunnelConfig(
 	if isNamedTunnel {
 		clientUUID, err := uuid.NewRandom()
 		if err != nil {
-			return nil, errors.Wrap(err, "can't generate clientUUID")
+			return nil, ingress.Ingress{}, errors.Wrap(err, "can't generate clientUUID")
 		}
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
@@ -210,10 +211,10 @@ func prepareTunnelConfig(
 		}
 		ingressRules, err = ingress.ParseIngress(config.GetConfiguration())
 		if err != nil && err != ingress.ErrNoIngressRules {
-			return nil, err
+			return nil, ingress.Ingress{}, err
 		}
 		if !ingressRules.IsEmpty() && c.IsSet("url") {
-			return nil, ingress.ErrURLIncompatibleWithIngress
+			return nil, ingress.Ingress{}, ingress.ErrURLIncompatibleWithIngress
 		}
 	} else {
 		classicTunnel = &connection.ClassicTunnelConfig{
@@ -226,15 +227,15 @@ func prepareTunnelConfig(
 
 	// Convert single-origin configuration into multi-origin configuration.
 	if ingressRules.IsEmpty() {
-		ingressRules, err = ingress.NewSingleOrigin(c, compatibilityMode, logger)
+		ingressRules, err = ingress.NewSingleOrigin(c, !isNamedTunnel, logger)
 		if err != nil {
-			return nil, err
+			return nil, ingress.Ingress{}, err
 		}
 	}
 
 	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, logger)
 	if err != nil {
-		return nil, err
+		return nil, ingress.Ingress{}, err
 	}
 	logger.Infof("Initial protocol %s", protocolSelector.Current())
 
@@ -242,20 +243,12 @@ func prepareTunnelConfig(
 	for _, p := range connection.ProtocolList {
 		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, p.ServerName())
 		if err != nil {
-			return nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
+			return nil, ingress.Ingress{}, errors.Wrap(err, "unable to create TLS config to connect with edge")
 		}
 		edgeTLSConfigs[p] = edgeTLSConfig
 	}
 
-	proxyConfig := &origin.ProxyConfig{
-		Client:            httpTransport,
-		URL:               originURL,
-		TLSConfig:         httpTransport.TLSClientConfig,
-		HostHeader:        c.String("http-host-header"),
-		NoChunkedEncoding: c.Bool("no-chunked-encoding"),
-		Tags:              tags,
-	}
-	originClient := origin.NewClient(proxyConfig, logger)
+	originClient := origin.NewClient(ingressRules, tags, logger)
 	connectionConfig := &connection.Config{
 		OriginClient:    originClient,
 		GracePeriod:     c.Duration("grace-period"),
@@ -275,7 +268,6 @@ func prepareTunnelConfig(
 
 	return &origin.TunnelConfig{
 		ConnectionConfig: connectionConfig,
-		ProxyConfig:      proxyConfig,
 		BuildInfo:        buildInfo,
 		ClientID:         clientID,
 		EdgeAddrs:        c.StringSlice("edge"),
@@ -284,6 +276,7 @@ func prepareTunnelConfig(
 		IsAutoupdated:    c.Bool("is-autoupdated"),
 		IsFreeTunnel:     isFreeTunnel,
 		LBPool:           c.String("lb-pool"),
+		Tags:             tags,
 		Logger:           logger,
 		Observer:         connection.NewObserver(transportLogger, tunnelEventChan),
 		ReportedVersion:  version,
@@ -293,10 +286,9 @@ func prepareTunnelConfig(
 		ClassicTunnel:    classicTunnel,
 		MuxerConfig:      muxerConfig,
 		TunnelEventChan:  tunnelEventChan,
-		IngressRules:     ingressRules,
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
-	}, nil
+	}, ingressRules, nil
 }
 
 func isRunningFromTerminal() bool {
