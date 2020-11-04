@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -129,6 +130,13 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			// No validation necessary for unix socket filepath services
 			path := strings.TrimPrefix(r.Service, prefix)
 			service = &unixSocketPath{path: path}
+		} else if prefix := "http_status:"; strings.HasPrefix(r.Service, prefix) {
+			status, err := strconv.Atoi(strings.TrimPrefix(r.Service, prefix))
+			if err != nil {
+				return Ingress{}, errors.Wrap(err, "invalid HTTP status")
+			}
+			srv := newStatusCode(status)
+			service = &srv
 		} else if r.Service == "hello_world" || r.Service == "hello-world" || r.Service == "helloworld" {
 			service = new(helloWorld)
 		} else {

@@ -4,6 +4,8 @@ import (
 	"net/url"
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func Test_rule_matches(t *testing.T) {
@@ -116,4 +118,20 @@ func Test_rule_matches(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStaticHTTPStatus(t *testing.T) {
+	o := newStatusCode(404)
+	buf := make([]byte, 100)
+
+	sendReq := func() {
+		resp, err := o.RoundTrip(nil)
+		require.NoError(t, err)
+		_, err = resp.Body.Read(buf)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, 404, resp.StatusCode)
+	}
+	sendReq()
+	sendReq()
 }

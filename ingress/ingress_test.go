@@ -24,6 +24,7 @@ ingress:
 func Test_parseIngress(t *testing.T) {
 	localhost8000 := MustParseURL(t, "https://localhost:8000")
 	localhost8001 := MustParseURL(t, "https://localhost:8001")
+	fourOhFour := newStatusCode(404)
 	defaultConfig := setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{})
 	require.Equal(t, defaultKeepAliveConnections, defaultConfig.KeepAliveConnections)
 	type args struct {
@@ -171,6 +172,20 @@ ingress:
  - service: http_status:asdf
 `},
 			wantErr: true,
+		},
+		{
+			name: "Valid HTTP status",
+			args: args{rawYAML: `
+ingress:
+ - service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "",
+					Service:  &fourOhFour,
+					Config:   defaultConfig,
+				},
+			},
 		},
 		{
 			name: "Valid hello world service",

@@ -223,6 +223,43 @@ func originRequiresProxy(staticHost string, cfg OriginRequestConfig) bool {
 	return staticHost != "" || cfg.BastionMode
 }
 
+// statusCode is an OriginService that just responds with a given HTTP status.
+// Typical use-case is "user wants the catch-all rule to just respond 404".
+type statusCode struct {
+	resp *http.Response
+}
+
+func newStatusCode(status int) statusCode {
+	resp := &http.Response{
+		StatusCode: status,
+		Status:     http.StatusText(status),
+		Body:       new(NopReadCloser),
+	}
+	return statusCode{resp: resp}
+}
+
+func (o *statusCode) String() string {
+	return fmt.Sprintf("HTTP %d", o.resp.StatusCode)
+}
+
+func (o *statusCode) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+	return nil
+}
+
+func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return o.resp, nil
+}
+
+type NopReadCloser struct{}
+
+func (nrc *NopReadCloser) Read(buf []byte) (int, error) {
+	return 0, nil
+}
+
+func (nrc *NopReadCloser) Close() error {
+	return nil
+}
+
 func newHTTPTransport(service OriginService, cfg OriginRequestConfig) (*http.Transport, error) {
 	originCertPool, err := tlsconfig.LoadOriginCA(cfg.CAPool, nil)
 	if err != nil {
