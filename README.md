@@ -13,7 +13,7 @@ Before you use Argo Tunnel, you'll need to complete a few steps in the Cloudflar
 
 Downloads are available as standalone binaries, a Docker image, package managers like Homebrew, or Debian and RPM packages. You can also find releases here on the `cloudflared` GitHub repository.
 
-* You can [install on macOS](https://developers.cloudflare.com/argo-tunnel/getting-started/installation#macos) via Homebrew or by downloading the latest Darwin amd64 release
+* You can [install on macOS](https://developers.cloudflare.com/argo-tunnel/getting-started/installation#macos) via Homebrew or by downloading the [latest Darwin amd64 release](https://github.com/cloudflare/cloudflared/releases)
 * Binaries, Debian, and RPM packages for Linux [can be found here](https://developers.cloudflare.com/argo-tunnel/getting-started/installation#linux)
 * A Docker image of `cloudflared` is [available on DockerHub](https://hub.docker.com/r/cloudflare/cloudflared)
 * You can install on Windows machines with the [steps here](https://developers.cloudflare.com/argo-tunnel/getting-started/installation#windows)
@@ -25,8 +25,7 @@ User documentation for Argo Tunnel can be found at https://developers.cloudflare
 Once installed, you can authenticate `cloudflared` into your Cloudflare account and begin creating Tunnels that serve traffic for hostnames in your account.
 
 * Create a Tunnel with [these instructions](https://developers.cloudflare.com/argo-tunnel/create-tunnel)
-* Route traffic to that Tunnel with [DNS records in Cloudflare](https://developers.cloudflare.com/argo-tunnel/routing-to-tunnel/dns)
-* Route traffic to that Tunnel with a [Cloudflare Load Balancer](https://developers.cloudflare.com/argo-tunnel/routing-to-tunnel/lb)
+* Route traffic to that Tunnel with [DNS records in Cloudflare](https://developers.cloudflare.com/argo-tunnel/routing-to-tunnel/dns) or with a [Cloudflare Load Balancer](https://developers.cloudflare.com/argo-tunnel/routing-to-tunnel/lb)
 
 ## TryCloudflare
 
