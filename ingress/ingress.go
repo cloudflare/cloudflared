@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -19,6 +20,7 @@ var (
 	ErrNoIngressRules             = errors.New("No ingress rules were specified in the config file")
 	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all hostnames (i.e. it must be missing, or must be \"*\")")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
+	errHostnameContainsPort       = errors.New("Hostname cannot contain port")
 	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
@@ -26,6 +28,11 @@ var (
 // hostname and path. This function assumes the last rule matches everything,
 // which is the case if the rules were instantiated via the ingress#Validate method
 func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
+	// The hostname might contain port. We only want to compare the host part with the rule
+	host, _, err := net.SplitHostPort(hostname)
+	if err == nil {
+		hostname = host
+	}
 	for i, rule := range ing.Rules {
 		if rule.Matches(hostname, path) {
 			return &rule, i
@@ -157,21 +164,8 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			service = &serviceURL
 		}
 
-		// Ensure that there are no wildcards anywhere except the first character
-		// of the hostname.
-		if strings.LastIndex(r.Hostname, "*") > 0 {
-			return Ingress{}, errBadWildcard
-		}
-
-		// The last rule should catch all hostnames.
-		isCatchAllRule := (r.Hostname == "" || r.Hostname == "*") && r.Path == ""
-		isLastRule := i == len(ingress)-1
-		if isLastRule && !isCatchAllRule {
-			return Ingress{}, errLastRuleNotCatchAll
-		}
-		// ONLY the last rule should catch all hostnames.
-		if !isLastRule && isCatchAllRule {
-			return Ingress{}, errRuleShouldNotBeCatchAll{i: i, hostname: r.Hostname}
+		if err := validateHostname(r, i, len(ingress)); err != nil {
+			return Ingress{}, err
 		}
 
 		var pathRegex *regexp.Regexp
@@ -193,15 +187,40 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 	return Ingress{Rules: rules, defaults: defaults}, nil
 }
 
+func validateHostname(r config.UnvalidatedIngressRule, ruleIndex, totalRules int) error {
+	// Ensure that the hostname doesn't contain port
+	_, _, err := net.SplitHostPort(r.Hostname)
+	if err == nil {
+		return errHostnameContainsPort
+	}
+	// Ensure that there are no wildcards anywhere except the first character
+	// of the hostname.
+	if strings.LastIndex(r.Hostname, "*") > 0 {
+		return errBadWildcard
+	}
+
+	// The last rule should catch all hostnames.
+	isCatchAllRule := (r.Hostname == "" || r.Hostname == "*") && r.Path == ""
+	isLastRule := ruleIndex == totalRules-1
+	if isLastRule && !isCatchAllRule {
+		return errLastRuleNotCatchAll
+	}
+	// ONLY the last rule should catch all hostnames.
+	if !isLastRule && isCatchAllRule {
+		return errRuleShouldNotBeCatchAll{index: ruleIndex, hostname: r.Hostname}
+	}
+	return nil
+}
+
 type errRuleShouldNotBeCatchAll struct {
-	i        int
+	index    int
 	hostname string
 }
 
 func (e errRuleShouldNotBeCatchAll) Error() string {
 	return fmt.Sprintf("Rule #%d is matching the hostname '%s', but "+
 		"this will match every hostname, meaning the rules which follow it "+
-		"will never be triggered.", e.i+1, e.hostname)
+		"will never be triggered.", e.index+1, e.hostname)
 }
 
 // ParseIngress parses ingress rules, but does not send HTTP requests to the origins.

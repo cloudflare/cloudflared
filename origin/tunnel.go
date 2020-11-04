@@ -697,6 +697,7 @@ func (h *TunnelHandler) createRequest(stream *h2mux.MuxedStream) (*http.Request,
 		return nil, nil, errors.Wrap(err, "invalid request received")
 	}
 	h.AppendTagHeaders(req)
+	// For incoming requests, the Host header is promoted to the Request.Host field and removed from the Header map.
 	rule, _ := h.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	return req, rule, nil
 }

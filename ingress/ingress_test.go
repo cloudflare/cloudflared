@@ -1,9 +1,12 @@
 package ingress
 
 import (
+	"fmt"
 	"net/url"
+	"regexp"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 
@@ -201,6 +204,17 @@ ingress:
 				},
 			},
 		},
+		{
+			name: "Hostname contains port",
+			args: args{rawYAML: `
+ingress:
+ - hostname: "test.example.com:443"
+   service: https://localhost:8000
+ - hostname: "*"
+   service: https://localhost:8001
+`},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -212,6 +226,72 @@ ingress:
 			require.Equal(t, tt.want, got.Rules)
 		})
 	}
+}
+
+func TestFindMatchingRule(t *testing.T) {
+	ingress := Ingress{
+		Rules: []Rule{
+			{
+				Hostname: "tunnel-a.example.com",
+				Path:     nil,
+			},
+			{
+				Hostname: "tunnel-b.example.com",
+				Path:     mustParsePath(t, "/health"),
+			},
+			{
+				Hostname: "*",
+			},
+		},
+	}
+
+	tests := []struct {
+		host          string
+		path          string
+		wantRuleIndex int
+	}{
+		{
+			host:          "tunnel-a.example.com",
+			path:          "/",
+			wantRuleIndex: 0,
+		},
+		{
+			host:          "tunnel-a.example.com",
+			path:          "/pages/about",
+			wantRuleIndex: 0,
+		},
+		{
+			host:          "tunnel-a.example.com:443",
+			path:          "/pages/about",
+			wantRuleIndex: 0,
+		},
+		{
+			host:          "tunnel-b.example.com",
+			path:          "/health",
+			wantRuleIndex: 1,
+		},
+		{
+			host:          "tunnel-b.example.com",
+			path:          "/index.html",
+			wantRuleIndex: 2,
+		},
+		{
+			host:          "tunnel-c.example.com",
+			path:          "/",
+			wantRuleIndex: 2,
+		},
+	}
+
+	for i, test := range tests {
+		_, ruleIndex := ingress.FindMatchingRule(test.host, test.path)
+		assert.Equal(t, test.wantRuleIndex, ruleIndex, fmt.Sprintf("Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, i))
+	}
+}
+
+func mustParsePath(t *testing.T, path string) *regexp.Regexp {
+	regexp, err := regexp.Compile(path)
+	assert.NoError(t, err)
+	return regexp
 }
 
 func MustParseURL(t *testing.T, rawURL string) *url.URL {
