@@ -1,6 +1,8 @@
 package ingress
 
 import (
+	"io"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"testing"
@@ -128,9 +130,16 @@ func TestStaticHTTPStatus(t *testing.T) {
 		resp, err := o.RoundTrip(nil)
 		require.NoError(t, err)
 		_, err = resp.Body.Read(buf)
-		require.NoError(t, err)
+		require.Equal(t, io.EOF, err)
 		require.NoError(t, resp.Body.Close())
 		require.Equal(t, 404, resp.StatusCode)
+
+		resp, err = o.RoundTrip(nil)
+		require.NoError(t, err)
+		w := httptest.NewRecorder()
+		n, err := io.Copy(w, resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), n)
 	}
 	sendReq()
 	sendReq()

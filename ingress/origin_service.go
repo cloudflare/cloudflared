@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -252,8 +253,9 @@ func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 
 type NopReadCloser struct{}
 
+// Read always returns EOF to signal end of input
 func (nrc *NopReadCloser) Read(buf []byte) (int, error) {
-	return 0, nil
+	return 0, io.EOF
 }
 
 func (nrc *NopReadCloser) Close() error {
