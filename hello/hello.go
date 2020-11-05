@@ -150,8 +150,15 @@ func uptimeHandler(startTime time.Time) http.HandlerFunc {
 // This handler will echo message
 func websocketHandler(logger logger.Service, upgrader websocket.Upgrader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// This addresses the issue of r.Host includes port but origin header doesn't
+		host, _, err := net.SplitHostPort(r.Host)
+		if err == nil {
+			r.Host = host
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
+			logger.Errorf("failed to upgrade to websocket connection, error: %s", err)
 			return
 		}
 		defer conn.Close()
