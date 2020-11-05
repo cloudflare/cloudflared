@@ -1,6 +1,6 @@
 # Argo Tunnel client
 
-Contains the command-line client and its libraries for Argo Tunnel, a tunneling daemon that proxies any local webserver through the Cloudflare network. Extensive documentation can be found in the [Argo Tunnel section](https://developers.cloudflare.com/argo-tunnel/) of the Cloudflare Docs.
+Contains the command-line client for Argo Tunnel, a tunneling daemon that proxies any local webserver through the Cloudflare network. Extensive documentation can be found in the [Argo Tunnel section](https://developers.cloudflare.com/argo-tunnel/) of the Cloudflare Docs.
 
 ## Before you get started
 
@@ -9,9 +9,9 @@ Before you use Argo Tunnel, you'll need to complete a few steps in the Cloudflar
 1. [Add a website to Cloudflare](https://support.cloudflare.com/hc/en-us/articles/201720164-Creating-a-Cloudflare-account-and-adding-a-website)
 2. [Change your domain nameservers to Cloudflare](https://support.cloudflare.com/hc/en-us/articles/205195708)
 
-## Installation
+## Installing `cloudflared`
 
-Downloads are available as standalone binaries, a Docker image, package managers like Homebrew, or Debian and RPM packages. You can also find releases here on the `cloudflared` GitHub repository.
+Downloads are available as standalone binaries, a Docker image, and Debian, RPM, and Homebrew packages. You can also find releases here on the `cloudflared` GitHub repository.
 
 * You can [install on macOS](https://developers.cloudflare.com/argo-tunnel/getting-started/installation#macos) via Homebrew or by downloading the [latest Darwin amd64 release](https://github.com/cloudflare/cloudflared/releases)
 * Binaries, Debian, and RPM packages for Linux [can be found here](https://developers.cloudflare.com/argo-tunnel/getting-started/installation#linux)
@@ -20,7 +20,7 @@ Downloads are available as standalone binaries, a Docker image, package managers
 
 User documentation for Argo Tunnel can be found at https://developers.cloudflare.com/argo-tunnel/
 
-## Create Tunnels and routing traffic
+## Creating Tunnels and routing traffic
 
 Once installed, you can authenticate `cloudflared` into your Cloudflare account and begin creating Tunnels that serve traffic for hostnames in your account.
 
