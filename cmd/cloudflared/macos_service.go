@@ -119,7 +119,7 @@ func installLaunchd(c *cli.Context) error {
 		logger.Infof("Installing Argo Tunnel client as an user launch agent. " +
 			"Note that Argo Tunnel client will only run when the user is logged in. " +
 			"If you want to run Argo Tunnel client at boot, install with root permission. " +
-			"For more information, visit https://developers.cloudflare.com/argo-tunnel/reference/service/")
+			"For more information, visit https://developers.cloudflare.com/argo-tunnel/create-tunnel/run-as-service")
 	}
 	etPath, err := os.Executable()
 	if err != nil {
