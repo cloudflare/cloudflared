@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	homedir "github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
@@ -391,7 +391,7 @@ func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, er
 	}
 	defer file.Close()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "error parsing config file at "+configFile)
 	}
 	configuration.sourceFile = configFile
 	return &configuration, nil
