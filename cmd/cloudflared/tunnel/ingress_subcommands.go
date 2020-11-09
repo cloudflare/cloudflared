@@ -70,6 +70,10 @@ func buildTestURLCommand() *cli.Command {
 // validateIngressCommand check the syntax of the ingress rules in the cloudflared config file
 func validateIngressCommand(c *cli.Context) error {
 	conf := config.GetConfiguration()
+	if conf.Source() == "" {
+		fmt.Println("No configuration file was found. Please create one, or use the --config flag to specify its filepath. You can use the help command to learn more about configuration files")
+		return nil
+	}
 	fmt.Println("Validating rules from", conf.Source())
 	if _, err := ingress.ParseIngress(conf); err != nil {
 		return errors.Wrap(err, "Validation failed")
