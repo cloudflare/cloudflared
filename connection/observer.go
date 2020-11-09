@@ -24,13 +24,13 @@ func NewObserver(logger logger.Service, tunnelEventChan chan<- ui.TunnelEvent) *
 	}
 }
 
-func (o *Observer) logServerInfo(connectionID uint8, location, msg string) {
+func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
 	// If launch-ui flag is set, send connect msg
 	if o.tunnelEventChan != nil {
-		o.tunnelEventChan <- ui.TunnelEvent{Index: connectionID, EventType: ui.Connected, Location: location}
+		o.tunnelEventChan <- ui.TunnelEvent{Index: connIndex, EventType: ui.Connected, Location: location}
 	}
 	o.Infof(msg)
-	o.metrics.registerServerLocation(uint8ToString(connectionID), location)
+	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }
 
 func (o *Observer) logTrialHostname(registration *tunnelpogs.TunnelRegistration) error {

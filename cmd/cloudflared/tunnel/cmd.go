@@ -249,7 +249,7 @@ func StartServer(
 	shutdownC,
 	graceShutdownC chan struct{},
 	namedTunnel *connection.NamedTunnelConfig,
-	log logger.Service,
+	generalLogger logger.Service,
 	isUIEnabled bool,
 ) error {
 	_ = raven.SetDSN(sentryDSN)
@@ -260,45 +260,45 @@ func StartServer(
 	dnsReadySignal := make(chan struct{})
 
 	if config.GetConfiguration().Source() == "" {
-		log.Infof(config.ErrNoConfigFile.Error())
+		generalLogger.Infof(config.ErrNoConfigFile.Error())
 	}
 
 	if c.IsSet("trace-output") {
 		tmpTraceFile, err := ioutil.TempFile("", "trace")
 		if err != nil {
-			log.Errorf("Failed to create new temporary file to save trace output: %s", err)
+			generalLogger.Errorf("Failed to create new temporary file to save trace output: %s", err)
 		}
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				log.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
+				generalLogger.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
 			}
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
-				log.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
+				generalLogger.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
 			} else {
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
-					log.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
+					generalLogger.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
 				}
 			}
 		}()
 
 		if err := trace.Start(tmpTraceFile); err != nil {
-			log.Errorf("Failed to start trace: %s", err)
+			generalLogger.Errorf("Failed to start trace: %s", err)
 			return errors.Wrap(err, "Error starting tracing")
 		}
 		defer trace.Stop()
 	}
 
 	buildInfo := buildinfo.GetBuildInfo(version)
-	buildInfo.Log(log)
-	logClientOptions(c, log)
+	buildInfo.Log(generalLogger)
+	logClientOptions(c, generalLogger)
 
 	if c.IsSet("proxy-dns") {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, log)
+			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, generalLogger)
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -309,24 +309,24 @@ func StartServer(
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		log.Errorf("Error opening metrics server listener: %s", err)
+		generalLogger.Errorf("Error opening metrics server listener: %s", err)
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC, log)
+		errC <- metrics.ServeMetrics(metricsListener, shutdownC, generalLogger)
 	}()
 
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
-		go writePidFile(connectedSignal, c.String("pidfile"), log)
+		go writePidFile(connectedSignal, c.String("pidfile"), generalLogger)
 	}
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		log.Errorf("Cannot generate cloudflared ID: %s", err)
+		generalLogger.Errorf("Cannot generate cloudflared ID: %s", err)
 		return err
 	}
 
@@ -337,12 +337,12 @@ func StartServer(
 	}()
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c, log) {
-		log.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+	if updater.IsAutoupdateEnabled(c, generalLogger) {
+		generalLogger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, log)
+			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, generalLogger)
 			errC <- autoupdater.Run(ctx)
 		}()
 	}
@@ -351,33 +351,33 @@ func StartServer(
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, log)
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, generalLogger)
 	}
 
 	url := c.String("url")
 	hostname := c.String("hostname")
 	if url == hostname && url != "" && hostname != "" {
 		errText := "hostname and url shouldn't match. See --help for more information"
-		log.Error(errText)
+		generalLogger.Error(errText)
 		return fmt.Errorf(errText)
 	}
 
-	transportLogger, err := createLogger(c, true, false)
+	transportLogger, err := createLogger(c, true, isUIEnabled)
 	if err != nil {
 		return errors.Wrap(err, "error setting up transport logger")
 	}
 
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, transportLogger, namedTunnel, isUIEnabled)
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, generalLogger, transportLogger, namedTunnel, isUIEnabled)
 	if err != nil {
 		return err
 	}
 
-	ingressRules.StartOrigins(&wg, log, shutdownC, errC)
+	ingressRules.StartOrigins(&wg, generalLogger, shutdownC, errC)
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
-		log.Info("Enabling control through stdin")
-		go stdinControl(reconnectCh, log)
+		generalLogger.Info("Enabling control through stdin")
+		go stdinControl(reconnectCh, generalLogger)
 	}
 
 	wg.Add(1)
@@ -398,10 +398,10 @@ func StartServer(
 		if err != nil {
 			return err
 		}
-		tunnelInfo.LaunchUI(ctx, log, logLevels, tunnelConfig.TunnelEventChan)
+		tunnelInfo.LaunchUI(ctx, generalLogger, transportLogger, logLevels, tunnelConfig.TunnelEventChan)
 	}
 
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), generalLogger)
 }
 
 // forceSetFlag attempts to set the given flag value in the closest context that has it defined

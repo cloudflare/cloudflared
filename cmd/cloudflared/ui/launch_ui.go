@@ -67,7 +67,7 @@ func NewUIModel(version, hostname, metricsURL string, ing *ingress.Ingress, haCo
 
 func (data *uiModel) LaunchUI(
 	ctx context.Context,
-	log logger.Service,
+	generalLogger, transportLogger logger.Service,
 	logLevels []logger.Level,
 	tunnelEventChan <-chan TunnelEvent,
 ) {
@@ -75,7 +75,8 @@ func (data *uiModel) LaunchUI(
 
 	// Add TextView as a group to write output to
 	logTextView := NewDynamicColorTextView()
-	log.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
+	generalLogger.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
+	transportLogger.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
 
 	// Construct the UI
 	palette := palette{
@@ -140,7 +141,7 @@ func (data *uiModel) LaunchUI(
 				case Connected:
 					data.setConnTableCell(event, connTable, palette)
 				case Disconnected, Reconnecting:
-					data.changeConnStatus(event, connTable, log, palette)
+					data.changeConnStatus(event, connTable, generalLogger, palette)
 				case SetUrl:
 					tunnelHostText.SetText(event.Url)
 					data.edgeURL = event.Url
@@ -156,7 +157,7 @@ func (data *uiModel) LaunchUI(
 
 	go func() {
 		if err := app.SetRoot(frame, true).Run(); err != nil {
-			log.Errorf("Error launching UI: %s", err)
+			generalLogger.Errorf("Error launching UI: %s", err)
 		}
 	}()
 }
