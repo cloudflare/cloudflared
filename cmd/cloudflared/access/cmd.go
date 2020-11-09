@@ -222,7 +222,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	cfdToken, err := token.GetTokenIfExists(appURL)
+	cfdToken, err := token.GetAppTokenIfExists(appURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Unable to find token for provided application.")
 		return err
@@ -267,7 +267,7 @@ func curl(c *cli.Context) error {
 		return err
 	}
 
-	tok, err := token.GetTokenIfExists(appURL)
+	tok, err := token.GetAppTokenIfExists(appURL)
 	if err != nil || tok == "" {
 		if allowRequest {
 			logger.Info("You don't have an Access token set. Please run access token <access application> to fetch one.")
@@ -295,7 +295,7 @@ func generateToken(c *cli.Context) error {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
 	}
-	tok, err := token.GetTokenIfExists(appURL)
+	tok, err := token.GetAppTokenIfExists(appURL)
 	if err != nil || tok == "" {
 		fmt.Fprintln(os.Stderr, "Unable to find token for provided application. Please run token command to generate token.")
 		return err

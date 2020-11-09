@@ -52,7 +52,7 @@ var mockRequest func(url, contentType string, body io.Reader) (*http.Response, e
 
 // GenerateShortLivedCertificate generates and stores a keypair for short lived certs
 func GenerateShortLivedCertificate(appURL *url.URL, token string) error {
-	fullName, err := cfpath.GenerateFilePathFromURL(appURL, keyName)
+	fullName, err := cfpath.GenerateAppTokenFilePathFromURL(appURL, keyName)
 	if err != nil {
 		return err
 	}

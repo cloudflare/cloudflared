@@ -35,7 +35,7 @@ func TestCertGenSuccess(t *testing.T) {
 	url, _ := url.Parse("https://cf-test-access.com/testpath")
 	token := tokenGenerator()
 
-	fullName, err := cfpath.GenerateFilePathFromURL(url, keyName)
+	fullName, err := cfpath.GenerateAppTokenFilePathFromURL(url, keyName)
 	assert.NoError(t, err)
 
 	pubKeyName := fullName + ".pub"

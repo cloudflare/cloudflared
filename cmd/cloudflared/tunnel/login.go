@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -58,10 +59,14 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	_, err = transfer.Run(loginURL, "cert", "callback", callbackStoreURL, path, false, false, logger)
+	resourceData, err := transfer.Run(loginURL, "cert", "callback", callbackStoreURL, false, false, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to write the certificate due to the following error:\n%v\n\nYour browser will download the certificate instead. You will have to manually\ncopy it to the following path:\n\n%s\n", err, path)
 		return err
+	}
+
+	if err := ioutil.WriteFile(path, resourceData, 0600); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error writing cert to %s", path))
 	}
 
 	fmt.Fprintf(os.Stdout, "You have successfully logged in.\nIf you wish to copy your credentials to a server, they have been saved to:\n%s\n", path)

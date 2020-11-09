@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,10 +19,12 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/coreos/go-oidc/jose"
+	"github.com/pkg/errors"
 )
 
 const (
-	keyName = "token"
+	keyName     = "token"
+	tokenHeader = "CF_Authorization"
 )
 
 type lock struct {
@@ -34,7 +38,7 @@ type signalHandler struct {
 	signals    []os.Signal
 }
 
-type jwtPayload struct {
+type appJWTPayload struct {
 	Aud   []string `json:"aud"`
 	Email string   `json:"email"`
 	Exp   int      `json:"exp"`
@@ -45,7 +49,17 @@ type jwtPayload struct {
 	Subt  string   `json:"sub"`
 }
 
-func (p jwtPayload) isExpired() bool {
+type orgJWTPayload struct {
+	appJWTPayload
+	Aud string `json:"aud"`
+}
+
+type transferServiceResponse struct {
+	AppToken string `json:"app_token"`
+	OrgToken string `json:"org_token"`
+}
+
+func (p appJWTPayload) isExpired() bool {
 	return int(time.Now().Unix()) > p.Exp
 }
 
@@ -141,55 +155,173 @@ func FetchToken(appURL *url.URL, logger logger.Service) (string, error) {
 
 // getToken will either load a stored token or generate a new one
 func getToken(appURL *url.URL, useHostOnly bool, logger logger.Service) (string, error) {
-	if token, err := GetTokenIfExists(appURL); token != "" && err == nil {
+	if token, err := GetAppTokenIfExists(appURL); token != "" && err == nil {
 		return token, nil
 	}
 
-	path, err := path.GenerateFilePathFromURL(appURL, keyName)
+	appTokenPath, err := path.GenerateAppTokenFilePathFromURL(appURL, keyName)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to generate app token file path")
 	}
 
-	fileLock := newLock(path)
-
-	err = fileLock.Acquire()
-	if err != nil {
-		return "", err
+	fileLockAppToken := newLock(appTokenPath)
+	if err = fileLockAppToken.Acquire(); err != nil {
+		return "", errors.Wrap(err, "failed to acquire app token lock")
 	}
-	defer fileLock.Release()
+	defer fileLockAppToken.Release()
 
 	// check to see if another process has gotten a token while we waited for the lock
-	if token, err := GetTokenIfExists(appURL); token != "" && err == nil {
+	if token, err := GetAppTokenIfExists(appURL); token != "" && err == nil {
 		return token, nil
 	}
+
+	// If an app token couldnt be found on disk, check for an org token and attempt to exchange it for an app token.
+	var orgTokenPath string
+	// Get auth domain to format into org token file path
+	if authDomain, err := getAuthDomain(appURL); err != nil {
+		logger.Errorf("failed to get auth domain: %s", err)
+	} else {
+		orgToken, err := GetOrgTokenIfExists(authDomain)
+		if err != nil {
+			orgTokenPath, err = path.GenerateOrgTokenFilePathFromURL(authDomain)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to generate org token file path")
+			}
+
+			fileLockOrgToken := newLock(orgTokenPath)
+			if err = fileLockOrgToken.Acquire(); err != nil {
+				return "", errors.Wrap(err, "failed to acquire org token lock")
+			}
+			defer fileLockOrgToken.Release()
+			// check if an org token has been created since the lock was acquired
+			orgToken, err = GetOrgTokenIfExists(authDomain)
+		}
+		if err == nil {
+			if appToken, err := exchangeOrgToken(appURL, orgToken); err != nil {
+				logger.Debugf("failed to exchange org token for app token: %s", err)
+			} else {
+				if err := ioutil.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
+					return "", errors.Wrap(err, "failed to write app token to disk")
+				}
+				return appToken, nil
+			}
+		}
+	}
+	return getTokensFromEdge(appURL, appTokenPath, orgTokenPath, useHostOnly, logger)
+
+}
+
+// getTokensFromEdge will attempt to use the transfer service to retrieve an app and org token, save them to disk,
+// and return the app token.
+func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHostOnly bool, logger logger.Service) (string, error) {
+	// If no org token exists or if it couldnt be exchanged for an app token, then run the transfer service flow.
 
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	token, err := transfer.Run(appURL, keyName, keyName, "", path, true, useHostOnly, logger)
+	resourceData, err := transfer.Run(appURL, keyName, keyName, "", true, useHostOnly, logger)
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "failed to run transfer service")
+	}
+	var resp transferServiceResponse
+	if err = json.Unmarshal(resourceData, &resp); err != nil {
+		return "", errors.Wrap(err, "failed to marshal transfer service response")
 	}
 
-	return string(token), nil
+	// If we were able to get the auth domain and generate an org token path, lets write it to disk.
+	if orgTokenPath != "" {
+		if err := ioutil.WriteFile(orgTokenPath, []byte(resp.OrgToken), 0600); err != nil {
+			return "", errors.Wrap(err, "failed to write org token to disk")
+		}
+	}
+
+	if err := ioutil.WriteFile(appTokenPath, []byte(resp.AppToken), 0600); err != nil {
+		return "", errors.Wrap(err, "failed to write app token to disk")
+	}
+
+	return resp.AppToken, nil
+
 }
 
-// GetTokenIfExists will return the token from local storage if it exists and not expired
-func GetTokenIfExists(url *url.URL) (string, error) {
-	path, err := path.GenerateFilePathFromURL(url, keyName)
-	if err != nil {
-		return "", err
-	}
-	content, err := ioutil.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	token, err := jose.ParseJWT(string(content))
-	if err != nil {
-		return "", err
+// getAuthDomain makes a request to the appURL and stops at the first redirect. The 302 location header will contain the
+// auth domain
+func getAuthDomain(appURL *url.URL) (string, error) {
+	client := &http.Client{
+		// do not follow redirects
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Timeout: time.Second * 7,
 	}
 
-	var payload jwtPayload
+	authDomainReq, err := http.NewRequest("HEAD", appURL.String(), nil)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create auth domain request")
+	}
+	resp, err := client.Do(authDomainReq)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get auth domain")
+	}
+	resp.Body.Close()
+	location, err := resp.Location()
+	if err != nil {
+		return "", fmt.Errorf("failed to get auth domain. Received status code %d from %s", resp.StatusCode, appURL.String())
+	}
+	return location.Hostname(), nil
+
+}
+
+// exchangeOrgToken attaches an org token to a request to the appURL and returns an app token. This uses the Access SSO
+// flow to automatically generate and return an app token without the login page.
+func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// attach org token to login request
+			if strings.Contains(req.URL.Path, "cdn-cgi/access/login") {
+				req.AddCookie(&http.Cookie{Name: tokenHeader, Value: orgToken})
+			}
+			// stop after hitting authorized endpoint since it will contain the app token
+			if strings.Contains(via[len(via)-1].URL.Path, "cdn-cgi/access/authorized") {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+		Timeout: time.Second * 7,
+	}
+
+	appTokenRequest, err := http.NewRequest("HEAD", appURL.String(), nil)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create app token request")
+	}
+	resp, err := client.Do(appTokenRequest)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get app token")
+	}
+	resp.Body.Close()
+	var appToken string
+	for _, c := range resp.Cookies() {
+		if c.Name == tokenHeader {
+			appToken = c.Value
+			break
+		}
+	}
+
+	if len(appToken) > 0 {
+		return appToken, nil
+	}
+	return "", fmt.Errorf("response from %s did not contain app token", resp.Request.URL.String())
+}
+
+func GetOrgTokenIfExists(authDomain string) (string, error) {
+	path, err := path.GenerateOrgTokenFilePathFromURL(authDomain)
+	if err != nil {
+		return "", err
+	}
+	token, err := getTokenIfExists(path)
+	if err != nil {
+		return "", err
+	}
+	var payload orgJWTPayload
 	err = json.Unmarshal(token.Payload, &payload)
 	if err != nil {
 		return "", err
@@ -199,13 +331,49 @@ func GetTokenIfExists(url *url.URL) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-
 	return token.Encode(), nil
+}
+
+func GetAppTokenIfExists(url *url.URL) (string, error) {
+	path, err := path.GenerateAppTokenFilePathFromURL(url, keyName)
+	if err != nil {
+		return "", err
+	}
+	token, err := getTokenIfExists(path)
+	if err != nil {
+		return "", err
+	}
+	var payload appJWTPayload
+	err = json.Unmarshal(token.Payload, &payload)
+	if err != nil {
+		return "", err
+	}
+
+	if payload.isExpired() {
+		err := os.Remove(path)
+		return "", err
+	}
+	return token.Encode(), nil
+
+}
+
+// GetTokenIfExists will return the token from local storage if it exists and not expired
+func getTokenIfExists(path string) (*jose.JWT, error) {
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	token, err := jose.ParseJWT(string(content))
+	if err != nil {
+		return nil, err
+	}
+
+	return &token, nil
 }
 
 // RemoveTokenIfExists removes the a token from local storage if it exists
 func RemoveTokenIfExists(url *url.URL) error {
-	path, err := path.GenerateFilePathFromURL(url, keyName)
+	path, err := path.GenerateAppTokenFilePathFromURL(url, keyName)
 	if err != nil {
 		return err
 	}

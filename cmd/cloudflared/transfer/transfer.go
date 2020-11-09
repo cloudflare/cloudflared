@@ -3,10 +3,8 @@ package transfer
 import (
 	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +13,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/encrypter"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -28,7 +27,7 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncrypt bool, useHostOnly bool, logger logger.Service) ([]byte, error) {
+func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, logger logger.Service) ([]byte, error) {
 	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -72,11 +71,8 @@ func Run(transferURL *url.URL, resourceName, key, value, path string, shouldEncr
 		resourceData = buf
 	}
 
-	if err := ioutil.WriteFile(path, resourceData, 0600); err != nil {
-		return nil, err
-	}
-
 	return resourceData, nil
+
 }
 
 // BuildRequestURL creates a request suitable for a resource transfer.
@@ -93,6 +89,7 @@ func buildRequestURL(baseURL *url.URL, key, value string, cli, useHostOnly bool)
 		return baseURL.String(), nil
 	}
 	q.Set("redirect_url", baseURL.String()) // we add the token as a query param on both the redirect_url and the main url
+	q.Set("send_org_token", "true")         // indicates that the cli endpoint should return both the org and app token
 	baseURL.RawQuery = q.Encode()           // and this actual baseURL.
 	baseURL.Path = "cdn-cgi/access/cli"
 	return baseURL.String(), nil
