@@ -27,17 +27,17 @@ func UsageError(format string, args ...interface{}) error {
 // Ensures exit with error code if actionFunc returns an error
 func ErrorHandler(actionFunc cli.ActionFunc) cli.ActionFunc {
 	return func(ctx *cli.Context) error {
+		defer logger.SharedWriteManager.Shutdown()
+
 		err := actionFunc(ctx)
 		if err != nil {
 			if _, ok := err.(usageError); ok {
 				msg := fmt.Sprintf("%s\nSee 'cloudflared %s --help'.", err.Error(), ctx.Command.FullName())
-				return cli.Exit(msg, -1)
+				err = cli.Exit(msg, -1)
+			} else if _, ok := err.(cli.ExitCoder); !ok {
+				err = cli.Exit(err.Error(), 1)
 			}
-			// os.Exits with error code if err is cli.ExitCoder or cli.MultiError
-			cli.HandleExitCoder(err)
-			err = cli.Exit(err.Error(), 1)
 		}
-		logger.SharedWriteManager.Shutdown()
 		return err
 	}
 }

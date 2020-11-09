@@ -145,7 +145,7 @@ func isEmptyInvocation(c *cli.Context) bool {
 }
 
 func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionFunc {
-	return func(c *cli.Context) (err error) {
+	return cliutil.ErrorHandler(func(c *cli.Context) (err error) {
 		if isEmptyInvocation(c) {
 			return handleServiceMode(shutdownC)
 		}
@@ -153,15 +153,11 @@ func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionF
 		tags["hostname"] = c.String("hostname")
 		raven.SetTagsContext(tags)
 		raven.CapturePanic(func() { err = tunnel.TunnelCommand(c) }, nil)
-		exitCode := 0
 		if err != nil {
-			handleError(err)
-			exitCode = 1
+			captureError(err)
 		}
-		// we already handle error printing, so we pass an empty string so we
-		// don't have to print again.
-		return cli.Exit("", exitCode)
-	}
+		return err
+	})
 }
 
 func userHomeDir() (string, error) {
@@ -177,7 +173,7 @@ func userHomeDir() (string, error) {
 }
 
 // In order to keep the amount of noise sent to Sentry low, typical network errors can be filtered out here by a substring match.
-func handleError(err error) {
+func captureError(err error) {
 	errorMessage := err.Error()
 	for _, ignoredErrorMessage := range ignoredErrors {
 		if strings.Contains(errorMessage, ignoredErrorMessage) {
