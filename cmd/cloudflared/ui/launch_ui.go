@@ -3,8 +3,10 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 
 	"github.com/gdamore/tcell"
@@ -34,11 +36,11 @@ type TunnelEvent struct {
 }
 
 type uiModel struct {
-	version     string
-	edgeURL     string
-	metricsURL  string
-	proxyURL    string
-	connections []connState
+	version       string
+	edgeURL       string
+	metricsURL    string
+	localServices []string
+	connections   []connState
 }
 
 type palette struct {
@@ -49,13 +51,17 @@ type palette struct {
 	reconnecting string
 }
 
-func NewUIModel(version, hostname, metricsURL, proxyURL string, haConnections int) *uiModel {
+func NewUIModel(version, hostname, metricsURL string, ing *ingress.Ingress, haConnections int) *uiModel {
+	localServices := make([]string, len(ing.Rules))
+	for i, rule := range ing.Rules {
+		localServices[i] = rule.Service.String()
+	}
 	return &uiModel{
-		version:     version,
-		edgeURL:     hostname,
-		metricsURL:  metricsURL,
-		proxyURL:    proxyURL,
-		connections: make([]connState, haConnections),
+		version:       version,
+		edgeURL:       hostname,
+		metricsURL:    metricsURL,
+		localServices: localServices,
+		connections:   make([]connState, haConnections),
 	}
 }
 
@@ -107,7 +113,8 @@ func (data *uiModel) LaunchUI(
 	tunnelHostText := tview.NewTextView().SetText(data.edgeURL)
 
 	grid.AddItem(tunnelHostText, 0, 1, 1, 1, 0, 0, false)
-	grid.AddItem(NewDynamicColorTextView().SetText(fmt.Sprintf("[%s]\u2022[%s] Proxying to [%s::b]%s", palette.connected, palette.defaultText, palette.url, data.proxyURL)), 1, 1, 1, 1, 0, 0, false)
+	status := fmt.Sprintf("[%s]\u2022[%s] Proxying to [%s::b]%s", palette.connected, palette.defaultText, palette.url, strings.Join(data.localServices, ", "))
+	grid.AddItem(NewDynamicColorTextView().SetText(status), 1, 1, 1, 1, 0, 0, false)
 
 	grid.AddItem(connTable, 2, 1, 1, 1, 0, 0, false)
 

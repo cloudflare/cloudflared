@@ -246,7 +246,7 @@ type OriginRequestConfig struct {
 	ProxyAddress *string `yaml:"proxyAddress"`
 	// Listen port for the proxy.
 	ProxyPort *uint `yaml:"proxyPort"`
-	// Valid options are 'socks', 'ssh' or empty.
+	// Valid options are 'socks' or empty.
 	ProxyType *string `yaml:"proxyType"`
 }
 
