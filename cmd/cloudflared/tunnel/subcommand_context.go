@@ -20,6 +20,15 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
+type errInvalidJSONCredential struct {
+	err  error
+	path string
+}
+
+func (e errInvalidJSONCredential) Error() string {
+	return "Invalid JSON when parsing tunnel credentials file"
+}
+
 // subcommandContext carries structs shared between subcommands, to reduce number of arguments needed to
 // pass between subcommands, and make sure they are only initialized once
 type subcommandContext struct {
@@ -111,7 +120,7 @@ func (sc *subcommandContext) readTunnelCredentials(tunnelID uuid.UUID) (*pogs.Tu
 
 	var auth pogs.TunnelAuth
 	if err = json.Unmarshal(body, &auth); err != nil {
-		return nil, err
+		return nil, errInvalidJSONCredential{path: filePath, err: err}
 	}
 	return &auth, nil
 }
@@ -244,6 +253,10 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 	credentials, err := sc.readTunnelCredentials(tunnelID)
 	if err != nil {
+		if e, ok := err.(errInvalidJSONCredential); ok {
+			sc.logger.Errorf("The credentials file at %s contained invalid JSON. This is probably caused by passing the wrong filepath. Reminder: the credentials file is a .json file created via `cloudflared tunnel create`.", e.path)
+			sc.logger.Errorf("Invalid JSON when parsing credentials file: %s", e.err.Error())
+		}
 		return err
 	}
 

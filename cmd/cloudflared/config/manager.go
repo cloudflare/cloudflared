@@ -1,11 +1,11 @@
 package config
 
 import (
-	"errors"
 	"os"
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/watcher"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
 
@@ -80,7 +80,7 @@ func readConfigFromPath(configPath string) (Root, error) {
 
 	var config Root
 	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
-		return Root{}, err
+		return Root{}, errors.Wrap(err, "error parsing YAML in config file at "+configPath)
 	}
 
 	return config, nil

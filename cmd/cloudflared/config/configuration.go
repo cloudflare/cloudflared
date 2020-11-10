@@ -391,7 +391,7 @@ func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, er
 	}
 	defer file.Close()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
-		return nil, errors.Wrap(err, "error parsing config file at "+configFile)
+		return nil, errors.Wrap(err, "error parsing YAML in config file at "+configFile)
 	}
 	configuration.sourceFile = configFile
 	return &configuration, nil
