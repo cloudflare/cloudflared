@@ -1,3 +1,17 @@
+2020.11.0
+- 2020-11-04 TUN-3484: OriginService that responds with configured HTTP status
+- 2020-11-05 TUN-3505: Response body for status code origin returns EOF on Read
+- 2020-11-04 TUN-3503: Matching ingress rule should not take port into account
+- 2020-11-05 TUN-3506: OriginService needs to set request host and scheme for websocket requests
+- 2020-11-09 TUN-3516: Better error message when parsing invalid YAML config
+- 2020-11-09 TUN-3522: ingress validate checks that the config file exists
+- 2020-11-09 TUN-3524: Don't ignore errors from app-level action handler (#248)
+- 2020-11-09 TUN-3461: Show all origin services in the UI
+- 2020-10-30 TUN-3494: Proceed to create tunnel if at least one edge address can be resolved
+- 2020-10-30 TUN-3492: Refactor OriginService, shrink its interface
+- 2020-10-22 TUN-3478: Increase download timeout to 60s
+- 2020-10-15 TUN-2640: Users can configure per-origin config. Unify single-rule CLI flow with multi-rule config file code.
+
 2020.10.2
 - 2020-10-21 Release 2020.10.1
 - 2020-10-21 AUTH-3185 fixed indention error
