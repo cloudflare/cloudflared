@@ -1,16 +1,21 @@
 package ingress
 
 import (
+	"flag"
 	"fmt"
 	"net/url"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
 func TestParseUnixSocket(t *testing.T) {
@@ -226,6 +231,82 @@ ingress:
 			require.Equal(t, tt.want, got.Rules)
 		})
 	}
+}
+
+func TestSingleOriginSetsConfig(t *testing.T) {
+	flagSet := flag.NewFlagSet(t.Name(), flag.PanicOnError)
+	flagSet.Bool("hello-world", true, "")
+	flagSet.Duration(ProxyConnectTimeoutFlag, time.Second, "")
+	flagSet.Duration(ProxyTLSTimeoutFlag, time.Second, "")
+	flagSet.Duration(ProxyTCPKeepAlive, time.Second, "")
+	flagSet.Bool(ProxyNoHappyEyeballsFlag, true, "")
+	flagSet.Int(ProxyKeepAliveConnectionsFlag, 10, "")
+	flagSet.Duration(ProxyKeepAliveTimeoutFlag, time.Second, "")
+	flagSet.String(HTTPHostHeaderFlag, "example.com:8080", "")
+	flagSet.String(OriginServerNameFlag, "example.com", "")
+	flagSet.String(tlsconfig.OriginCAPoolFlag, "/etc/certs/ca.pem", "")
+	flagSet.Bool(NoTLSVerifyFlag, true, "")
+	flagSet.Bool(NoChunkedEncodingFlag, true, "")
+	flagSet.Bool(config.BastionFlag, true, "")
+	flagSet.String(ProxyAddressFlag, "localhost:8080", "")
+	flagSet.Uint(ProxyPortFlag, 8080, "")
+	flagSet.Bool(Socks5Flag, true, "")
+
+	cliCtx := cli.NewContext(cli.NewApp(), flagSet, nil)
+	err := cliCtx.Set("hello-world", "true")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyConnectTimeoutFlag, "1s")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyTLSTimeoutFlag, "1s")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyTCPKeepAlive, "1s")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyNoHappyEyeballsFlag, "true")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyKeepAliveConnectionsFlag, "10")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyKeepAliveTimeoutFlag, "1s")
+	require.NoError(t, err)
+	err = cliCtx.Set(HTTPHostHeaderFlag, "example.com:8080")
+	require.NoError(t, err)
+	err = cliCtx.Set(OriginServerNameFlag, "example.com")
+	require.NoError(t, err)
+	err = cliCtx.Set(tlsconfig.OriginCAPoolFlag, "/etc/certs/ca.pem")
+	require.NoError(t, err)
+	err = cliCtx.Set(NoTLSVerifyFlag, "true")
+	require.NoError(t, err)
+	err = cliCtx.Set(NoChunkedEncodingFlag, "true")
+	require.NoError(t, err)
+	err = cliCtx.Set(config.BastionFlag, "true")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyAddressFlag, "localhost:8080")
+	require.NoError(t, err)
+	err = cliCtx.Set(ProxyPortFlag, "8080")
+	require.NoError(t, err)
+	err = cliCtx.Set(Socks5Flag, "true")
+	require.NoError(t, err)
+
+	allowURLFromArgs := false
+	logger, err := logger.New()
+	require.NoError(t, err)
+	ingress, err := NewSingleOrigin(cliCtx, allowURLFromArgs, logger)
+	require.NoError(t, err)
+
+	assert.Equal(t, time.Second, ingress.Rules[0].Config.ConnectTimeout)
+	assert.Equal(t, time.Second, ingress.Rules[0].Config.TLSTimeout)
+	assert.Equal(t, time.Second, ingress.Rules[0].Config.TCPKeepAlive)
+	assert.True(t, ingress.Rules[0].Config.NoHappyEyeballs)
+	assert.Equal(t, 10, ingress.Rules[0].Config.KeepAliveConnections)
+	assert.Equal(t, time.Second, ingress.Rules[0].Config.KeepAliveTimeout)
+	assert.Equal(t, "example.com:8080", ingress.Rules[0].Config.HTTPHostHeader)
+	assert.Equal(t, "example.com", ingress.Rules[0].Config.OriginServerName)
+	assert.Equal(t, "/etc/certs/ca.pem", ingress.Rules[0].Config.CAPool)
+	assert.True(t, ingress.Rules[0].Config.NoTLSVerify)
+	assert.True(t, ingress.Rules[0].Config.DisableChunkedEncoding)
+	assert.True(t, ingress.Rules[0].Config.BastionMode)
+	assert.Equal(t, "localhost:8080", ingress.Rules[0].Config.ProxyAddress)
+	assert.Equal(t, uint(8080), ingress.Rules[0].Config.ProxyPort)
+	assert.Equal(t, socksProxy, ingress.Rules[0].Config.ProxyType)
 }
 
 func TestFindMatchingRule(t *testing.T) {

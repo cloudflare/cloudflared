@@ -71,13 +71,15 @@ func NewSingleOrigin(c *cli.Context, compatibilityMode bool, logger logger.Servi
 	}
 
 	// Construct an Ingress with the single rule.
+	defaults := originRequestFromSingeRule(c)
 	ing := Ingress{
 		Rules: []Rule{
 			{
 				Service: service,
+				Config:  setConfig(defaults, config.OriginRequestConfig{}),
 			},
 		},
-		defaults: originRequestFromSingeRule(c),
+		defaults: defaults,
 	}
 	return ing, err
 }
