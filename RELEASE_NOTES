@@ -1,3 +1,20 @@
+2020.11.4
+- 2020-11-11 TUN-3534: Specific error message when credentials file is a .pem not .json
+- 2020-11-02 TUN-3500: Integrate replace h2mux by http2 work with multiple origin support
+- 2020-11-09 TUN-3514: Transport logger write to UI when UI is enabled
+- 2020-10-30 TUN-3490: Make sure OriginClient implementation doesn't write after Proxy return
+- 2020-10-20 TUN-3403: Unit test for origin/proxy to test serving HTTP and Websocket
+- 2020-10-23 TUN-3480: Support SSE with http2 connection, and add SSE handler to hello-world server
+- 2020-10-27 TUN-3489: Add unit tests to cover proxy logic in connection package of cloudflared
+- 2020-10-16 TUN-3467: Serialize cf-cloudflared-response-meta during package initialization using jsoniter
+- 2020-10-14 TUN-3456: New protocol option auto to automatically select between http2 and h2mux
+- 2020-10-14 TUN-3458: Upgrade to http2 when available, fallback to h2mux when we reach max retries
+- 2020-10-08 TUN-3449: Use flag to select transport protocol implementation
+- 2020-10-08 TUN-3462: Refactor cloudflared to separate origin from connection
+- 2020-09-21 TUN-3406: Proxy websocket requests over Go http2
+- 2020-09-25 TUN-3420: Establish control plane and send RPC over control plane
+- 2020-09-11 TUN-3400: Use Go HTTP2 library as transport to connect with the edge
+
 2020.11.3
 - 2020-11-11 TUN-3533: Set config for single origin ingress
 
