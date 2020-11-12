@@ -17,10 +17,10 @@ import (
 )
 
 var (
-	ErrNoIngressRules             = errors.New("No ingress rules were specified in the config file")
-	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all hostnames (i.e. it must be missing, or must be \"*\")")
+	ErrNoIngressRules             = errors.New("The config file doesn't contain any ingress rules")
+	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all URLs (i.e. it should not have a hostname or path filter)")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
-	errHostnameContainsPort       = errors.New("Hostname cannot contain port")
+	errHostnameContainsPort       = errors.New("Hostname cannot contain a port")
 	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
@@ -103,7 +103,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 		}
 		return &unixSocketPath{path: path}, nil
 	}
-	return nil, errors.New("You must either set ingress rules in your config file, or use --url or use --unix-socket")
+	return nil, errors.New("You must either set ingress rules in your config file, or use --url, or use --unix-socket")
 }
 
 // IsEmpty checks if there are any ingress rules.
@@ -151,7 +151,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			}
 
 			if u.Scheme == "" || u.Hostname() == "" {
-				return Ingress{}, fmt.Errorf("The service %s must have a scheme and a hostname", r.Service)
+				return Ingress{}, fmt.Errorf("%s is an invalid address, please make sure it has a scheme and a hostname", r.Service)
 			}
 
 			if u.Path != "" {
