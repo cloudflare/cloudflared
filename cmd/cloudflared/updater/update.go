@@ -202,7 +202,6 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 		if a.configurable.enabled {
 			updateOutcome := loggedUpdate(a.logger, updateOptions{})
 			if updateOutcome.Updated {
-				os.Args = append(os.Args, "--is-autoupdated=true")
 				if IsSysV() {
 					// SysV doesn't have a mechanism to keep service alive, we have to restart the process
 					a.logger.Info("Restarting service managed by SysV...")
