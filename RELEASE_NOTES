@@ -1,3 +1,8 @@
+2020.11.5
+- 2020-11-12 TUN-3540: Better copy in ingress rules error messages
+- 2020-11-12 DEVTOOLS-7936: Set permissions on public packages
+- 2020-11-13 TUN-3543: ProxyAddress not using default in single-origin mode
+
 2020.11.4
 - 2020-11-11 TUN-3534: Specific error message when credentials file is a .pem not .json
 - 2020-11-02 TUN-3500: Integrate replace h2mux by http2 work with multiple origin support
