@@ -1,11 +1,13 @@
 package ingress
 
 import (
+	"flag"
 	"testing"
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 )
 
@@ -181,4 +183,20 @@ ingress:
 		ProxyType:              "",
 	}
 	require.Equal(t, expected1, actual1)
+}
+
+func TestDefaultConfigFromCLI(t *testing.T) {
+	set := flag.NewFlagSet("contrive", 0)
+	c := cli.NewContext(nil, set, nil)
+
+	expected := OriginRequestConfig{
+		ConnectTimeout:       defaultConnectTimeout,
+		TLSTimeout:           defaultTLSTimeout,
+		TCPKeepAlive:         defaultTCPKeepAlive,
+		KeepAliveConnections: defaultKeepAliveConnections,
+		KeepAliveTimeout:     defaultKeepAliveTimeout,
+		ProxyAddress:         defaultProxyAddress,
+	}
+	actual := originRequestFromSingeRule(c)
+	require.Equal(t, expected, actual)
 }

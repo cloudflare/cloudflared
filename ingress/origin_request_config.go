@@ -49,7 +49,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	var noTLSVerify bool
 	var disableChunkedEncoding bool
 	var bastionMode bool
-	var proxyAddress string
+	var proxyAddress = defaultProxyAddress
 	var proxyPort uint
 	var proxyType string
 	if flag := ProxyConnectTimeoutFlag; c.IsSet(flag) {
