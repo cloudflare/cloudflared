@@ -96,8 +96,7 @@ func (o *localService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <
 	o.transport = transport
 
 	// Start a proxy if one is needed
-	staticHost := o.staticHost()
-	if originRequiresProxy(staticHost, cfg) {
+	if staticHost := o.staticHost(); originRequiresProxy(staticHost, cfg) {
 		if err := o.startProxy(staticHost, wg, log, shutdownC, errC, cfg); err != nil {
 			return err
 		}

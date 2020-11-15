@@ -89,7 +89,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 	if c.IsSet("hello-world") {
 		return new(helloWorld), nil
 	}
-	if c.IsSet("url") {
+	if c.IsSet("url") || c.IsSet(config.BastionFlag) {
 		originURL, err := config.ValidateUrl(c, allowURLFromArgs)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error validating origin URL")
@@ -128,6 +128,7 @@ func (ing Ingress) CatchAll() *Rule {
 func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestConfig) (Ingress, error) {
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
+		cfg := setConfig(defaults, r.OriginRequest)
 		var service OriginService
 
 		if prefix := "unix:"; strings.HasPrefix(r.Service, prefix) {
@@ -143,6 +144,12 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			service = &srv
 		} else if r.Service == "hello_world" || r.Service == "hello-world" || r.Service == "helloworld" {
 			service = new(helloWorld)
+		} else if r.Service == "bastion" || cfg.BastionMode {
+			// Bastion mode will always start a Websocket proxy server, which will
+			// overwrite the localService.URL field when `start` is called. So,
+			// leave the URL field empty for now.
+			cfg.BastionMode = true
+			service = new(localService)
 		} else {
 			// Validate URL services
 			u, err := url.Parse(r.Service)
@@ -178,7 +185,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			Hostname: r.Hostname,
 			Service:  service,
 			Path:     pathRegex,
-			Config:   setConfig(defaults, r.OriginRequest),
+			Config:   cfg,
 		}
 	}
 	return Ingress{Rules: rules, defaults: defaults}, nil

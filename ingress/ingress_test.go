@@ -35,6 +35,7 @@ func Test_parseIngress(t *testing.T) {
 	fourOhFour := newStatusCode(404)
 	defaultConfig := setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{})
 	require.Equal(t, defaultKeepAliveConnections, defaultConfig.KeepAliveConnections)
+	tr := true
 	type args struct {
 		rawYAML string
 	}
@@ -206,6 +207,47 @@ ingress:
 					Hostname: "",
 					Service:  new(helloWorld),
 					Config:   defaultConfig,
+				},
+			},
+		},
+		{
+			name: "URL isn't necessary if using bastion",
+			args: args{rawYAML: `
+ingress:
+- hostname: bastion.foo.com
+  originRequest:
+    bastionMode: true
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "bastion.foo.com",
+					Service:  &localService{},
+					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "Bastion service",
+			args: args{rawYAML: `
+ingress:
+- hostname: bastion.foo.com
+  service: bastion
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "bastion.foo.com",
+					Service:  &localService{},
+					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
 				},
 			},
 		},
