@@ -43,7 +43,7 @@ func (o *unixSocketPath) String() string {
 }
 
 func (o *unixSocketPath) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
-	transport, err := newHTTPTransport(o, cfg)
+	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (o *localService) address() string {
 }
 
 func (o *localService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
-	transport, err := newHTTPTransport(o, cfg)
+	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (o *helloWorld) String() string {
 
 // Start starts a HelloWorld server and stores its address in the Service receiver.
 func (o *helloWorld) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
-	transport, err := newHTTPTransport(o, cfg)
+	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
 	}
@@ -274,8 +274,8 @@ func (nrc *NopReadCloser) Close() error {
 	return nil
 }
 
-func newHTTPTransport(service OriginService, cfg OriginRequestConfig) (*http.Transport, error) {
-	originCertPool, err := tlsconfig.LoadOriginCA(cfg.CAPool, nil)
+func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log logger.Service) (*http.Transport, error) {
+	originCertPool, err := tlsconfig.LoadOriginCA(cfg.CAPool, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error loading cert pool")
 	}
