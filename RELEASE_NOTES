@@ -1,3 +1,6 @@
+2020.11.6
+- 2020-11-14 TUN-3546: Fix panic in tlsconfig.LoadOriginCA
+
 2020.11.5
 - 2020-11-12 TUN-3540: Better copy in ingress rules error messages
 - 2020-11-12 DEVTOOLS-7936: Set permissions on public packages
