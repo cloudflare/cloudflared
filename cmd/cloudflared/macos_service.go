@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli/v2"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/logger"
+
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -107,7 +107,7 @@ func stderrPath() (string, error) {
 }
 
 func installLaunchd(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -163,7 +163,7 @@ func installLaunchd(c *cli.Context) error {
 }
 
 func uninstallLaunchd(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}

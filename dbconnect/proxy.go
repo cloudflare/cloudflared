@@ -43,7 +43,7 @@ func NewInsecureProxy(ctx context.Context, origin string) (*Proxy, error) {
 		return nil, errors.Wrap(err, "could not connect to the database")
 	}
 
-	logger, err := logger.New()
+	logger, err := logger.New() // TODO: Does not obey log configuration
 	if err != nil {
 		return nil, errors.Wrap(err, "error setting up logger")
 	}

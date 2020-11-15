@@ -211,7 +211,7 @@ func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile str
 }
 
 func installLinuxService(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -325,7 +325,7 @@ func installSysv(templateArgs *ServiceTemplateArgs, logger logger.Service) error
 }
 
 func uninstallLinuxService(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}

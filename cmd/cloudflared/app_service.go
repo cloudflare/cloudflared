@@ -37,6 +37,7 @@ func (s *AppService) Run() error {
 func (s *AppService) Shutdown() error {
 	s.configManager.Shutdown()
 	s.shutdownC <- struct{}{}
+
 	return nil
 }
 

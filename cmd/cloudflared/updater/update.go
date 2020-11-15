@@ -114,7 +114,7 @@ func checkForUpdateAndApply(options updateOptions) UpdateOutcome {
 
 // Update is the handler for the update command from the command line
 func Update(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}

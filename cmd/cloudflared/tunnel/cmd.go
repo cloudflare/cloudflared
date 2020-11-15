@@ -77,8 +77,6 @@ const (
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
 
-	logDirectoryFlag = "log-directory"
-
 	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
 		"Response status, content length and header will also be logged in debug level."
 )
@@ -209,40 +207,6 @@ func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
 	return nil, false
 }
 
-func createLogger(c *cli.Context, isTransport bool, disableTerminal bool) (*logger.OutputWriter, error) {
-	var loggerOpts []logger.Option
-
-	logPath := c.String("logfile")
-	if logPath == "" {
-		logPath = c.String(logDirectoryFlag)
-	}
-
-	if logPath != "" {
-		loggerOpts = append(loggerOpts, logger.DefaultFile(logPath))
-	}
-
-	logLevel := c.String("loglevel")
-	if isTransport {
-		logLevel = c.String("transport-loglevel")
-		if logLevel == "" {
-			logLevel = "fatal"
-		}
-	}
-	loggerOpts = append(loggerOpts, logger.LogLevelString(logLevel))
-
-	if disableTerminal {
-		disableOption := logger.DisableTerminal(true)
-		loggerOpts = append(loggerOpts, disableOption)
-	}
-
-	l, err := logger.New(loggerOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return l, nil
-}
-
 func StartServer(
 	c *cli.Context,
 	version string,
@@ -362,7 +326,7 @@ func StartServer(
 		return fmt.Errorf(errText)
 	}
 
-	transportLogger, err := createLogger(c, true, isUIEnabled)
+	transportLogger, err := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
 	if err != nil {
 		return errors.Wrap(err, "error setting up transport logger")
 	}
@@ -416,7 +380,7 @@ func forceSetFlag(c *cli.Context, name, value string) {
 
 func SetFlagsFromConfigFile(c *cli.Context) error {
 	const exitCode = 1
-	log, err := createLogger(c, false, false)
+	log, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
@@ -974,14 +938,14 @@ func sshFlags(shouldHide bool) []cli.Flag {
 func configureLoggingFlags(shouldHide bool) []cli.Flag {
 	return []cli.Flag{
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "loglevel",
+			Name:    logger.LogLevelFlag,
 			Value:   "info",
 			Usage:   "Application logging level {fatal, error, info, debug}. " + debugLevelWarning,
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "transport-loglevel",
+			Name:    logger.LogTransportLevelFlag,
 			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
 			Value:   "info",
 			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
@@ -989,13 +953,13 @@ func configureLoggingFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "logfile",
+			Name:    logger.LogFileFlag,
 			Usage:   "Save application log to this file for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGFILE"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logDirectoryFlag,
+			Name:    logger.LogDirectoryFlag,
 			Usage:   "Save application log to this directory for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
 			Hidden:  shouldHide,

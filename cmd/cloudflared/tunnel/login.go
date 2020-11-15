@@ -39,7 +39,7 @@ func buildLoginSubcommand(hidden bool) *cli.Command {
 }
 
 func login(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}

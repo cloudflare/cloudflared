@@ -15,10 +15,9 @@ import (
 	"github.com/cloudflare/cloudflared/overwatch"
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/watcher"
-
-	raven "github.com/getsentry/raven-go"
-	homedir "github.com/mitchellh/go-homedir"
-	cli "github.com/urfave/cli/v2"
+	"github.com/getsentry/raven-go"
+	"github.com/mitchellh/go-homedir"
+	"github.com/urfave/cli/v2"
 
 	"github.com/pkg/errors"
 )
@@ -147,7 +146,7 @@ func isEmptyInvocation(c *cli.Context) bool {
 func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionFunc {
 	return cliutil.ErrorHandler(func(c *cli.Context) (err error) {
 		if isEmptyInvocation(c) {
-			return handleServiceMode(shutdownC)
+			return handleServiceMode(c, shutdownC)
 		}
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
@@ -184,15 +183,13 @@ func captureError(err error) {
 }
 
 // cloudflared was started without any flags
-func handleServiceMode(shutdownC chan struct{}) error {
+func handleServiceMode(c *cli.Context, shutdownC chan struct{}) error {
 	defer log.SharedWriteManager.Shutdown()
-	logDirectory, logLevel := config.FindLogSettings()
 
-	logger, err := log.New(log.DefaultFile(logDirectory), log.LogLevelString(logLevel))
+	logger, err := log.CreateLoggerFromContext(c, log.DisableTerminalLog)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}
-	logger.Infof("logging to directory: %s", logDirectory)
 
 	// start the main run loop that reads from the config file
 	f, err := watcher.NewFile()

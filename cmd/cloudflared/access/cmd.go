@@ -25,16 +25,14 @@ import (
 )
 
 const (
-	sshHostnameFlag     = "hostname"
-	sshDestinationFlag  = "destination"
-	sshURLFlag          = "url"
-	sshHeaderFlag       = "header"
-	sshTokenIDFlag      = "service-token-id"
-	sshTokenSecretFlag  = "service-token-secret"
-	sshGenCertFlag      = "short-lived-cert"
-	sshLogDirectoryFlag = "log-directory"
-	sshLogLevelFlag     = "log-level"
-	sshConfigTemplate   = `
+	sshHostnameFlag    = "hostname"
+	sshDestinationFlag = "destination"
+	sshURLFlag         = "url"
+	sshHeaderFlag      = "header"
+	sshTokenIDFlag     = "service-token-id"
+	sshTokenSecretFlag = "service-token-secret"
+	sshGenCertFlag     = "short-lived-cert"
+	sshConfigTemplate  = `
 Add to your {{.Home}}/.ssh/config:
 
 Host {{.Hostname}}
@@ -157,12 +155,12 @@ func Commands() []*cli.Command {
 							Usage:   "specify an Access service token secret you wish to use.",
 						},
 						&cli.StringFlag{
-							Name:    sshLogDirectoryFlag,
+							Name:    logger.LogSSHDirectoryFlag,
 							Aliases: []string{"logfile"}, //added to match the tunnel side
 							Usage:   "Save application log to this directory for reporting issues.",
 						},
 						&cli.StringFlag{
-							Name:    sshLogLevelFlag,
+							Name:    logger.LogSSHLevelFlag,
 							Aliases: []string{"loglevel"}, //added to match the tunnel side
 							Usage:   "Application logging level {fatal, error, info, debug}. ",
 						},
@@ -207,7 +205,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -252,7 +250,7 @@ func curl(c *cli.Context) error {
 	if err := raven.SetDSN(sentryDSN); err != nil {
 		return err
 	}
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -331,7 +329,7 @@ func sshConfig(c *cli.Context) error {
 
 // sshGen generates a short lived certificate for provided hostname
 func sshGen(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}

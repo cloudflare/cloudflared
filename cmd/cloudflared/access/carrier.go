@@ -11,7 +11,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/pkg/errors"
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 )
 
 // StartForwarder starts a client side websocket forward
@@ -52,19 +52,7 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger
 // useful for proxying other protocols (like ssh) over websockets
 // (which you can put Access in front of)
 func ssh(c *cli.Context) error {
-	logDirectory, logLevel := config.FindLogSettings()
-
-	flagLogDirectory := c.String(sshLogDirectoryFlag)
-	if flagLogDirectory != "" {
-		logDirectory = flagLogDirectory
-	}
-
-	flagLogLevel := c.String(sshLogLevelFlag)
-	if flagLogLevel != "" {
-		logLevel = flagLogLevel
-	}
-
-	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
+	logger, err := logger.CreateSSHLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}

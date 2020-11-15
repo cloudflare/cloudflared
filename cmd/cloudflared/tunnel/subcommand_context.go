@@ -46,7 +46,7 @@ func newSubcommandContext(c *cli.Context) (*subcommandContext, error) {
 	isUIEnabled := c.IsSet(uiFlag) && c.String("name") != ""
 
 	// If UI is enabled, terminal log output should be disabled -- log should be written into a UI log window instead
-	logger, err := createLogger(c, false, isUIEnabled)
+	logger, err := logger.CreateLoggerFromContext(c, isUIEnabled)
 	if err != nil {
 		return nil, errors.Wrap(err, "error setting up logger")
 	}

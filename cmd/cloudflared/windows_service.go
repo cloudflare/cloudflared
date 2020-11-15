@@ -173,7 +173,7 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 }
 
 func installWindowsService(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}
@@ -219,7 +219,7 @@ func installWindowsService(c *cli.Context) error {
 }
 
 func uninstallWindowsService(c *cli.Context) error {
-	logger, err := logger.New()
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return errors.Wrap(err, "error setting up logger")
 	}

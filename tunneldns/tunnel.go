@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 
@@ -71,8 +70,7 @@ func Command(hidden bool) *cli.Command {
 
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
-	logDirectory, logLevel := config.FindLogSettings()
-	logger, err := logger.New(logger.DefaultFile(logDirectory), logger.LogLevelString(logLevel))
+	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	if err != nil {
 		return cliutil.PrintLoggerSetupError("error setting up logger", err)
 	}

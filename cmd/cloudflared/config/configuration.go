@@ -151,35 +151,6 @@ func FindOrCreateConfigPath() string {
 	return path
 }
 
-// FindLogSettings gets the log directory and level from the config file
-func FindLogSettings() (string, string) {
-	configPath := FindOrCreateConfigPath()
-	defaultDirectory := DefaultLogDirectory()
-	defaultLevel := "info"
-
-	file, err := os.Open(configPath)
-	if err != nil {
-		return defaultDirectory, defaultLevel
-	}
-	defer file.Close()
-
-	var config Root
-	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
-		return defaultDirectory, defaultLevel
-	}
-
-	directory := defaultDirectory
-	if config.LogDirectory != "" {
-		directory = config.LogDirectory
-	}
-
-	level := defaultLevel
-	if config.LogLevel != "" {
-		level = config.LogLevel
-	}
-	return directory, level
-}
-
 // ValidateUnixSocket ensures --unix-socket param is used exclusively
 // i.e. it fails if a user specifies both --url and --unix-socket
 func ValidateUnixSocket(c *cli.Context) (string, error) {

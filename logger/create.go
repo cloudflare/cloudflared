@@ -8,6 +8,20 @@ import (
 	"time"
 
 	"github.com/alecthomas/units"
+	"github.com/urfave/cli/v2"
+)
+
+const (
+	EnableTerminalLog  = false
+	DisableTerminalLog = true
+
+	LogLevelFlag          = "loglevel"
+	LogFileFlag           = "logfile"
+	LogDirectoryFlag      = "log-directory"
+	LogTransportLevelFlag = "transport-loglevel"
+
+	LogSSHDirectoryFlag = "log-directory"
+	LogSSHLevelFlag     = "log-level"
 )
 
 // Option is to encaspulate actions that will be called by Parse and run later to build an Options struct
@@ -125,6 +139,63 @@ func New(opts ...Option) (*OutputWriter, error) {
 	}
 
 	return l, nil
+}
+
+func NewInHouse(loggerConfig *Config) (*OutputWriter, error) {
+	var loggerOpts []Option
+
+	var logPath string
+	if loggerConfig.FileConfig != nil {
+		logPath = loggerConfig.FileConfig.Filepath
+	}
+	if logPath == "" && loggerConfig.RollingConfig != nil {
+		logPath = loggerConfig.RollingConfig.Directory
+	}
+
+	if logPath != "" {
+		loggerOpts = append(loggerOpts, DefaultFile(logPath))
+	}
+
+	loggerOpts = append(loggerOpts, LogLevelString(loggerConfig.MinLevel))
+
+	if loggerConfig.ConsoleConfig == nil {
+		disableOption := DisableTerminal(true)
+		loggerOpts = append(loggerOpts, disableOption)
+	}
+
+	l, err := New(loggerOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return l, nil
+}
+
+func CreateTransportLoggerFromContext(c *cli.Context, disableTerminal bool) (*OutputWriter, error) {
+	return createFromContext(c, LogTransportLevelFlag, LogDirectoryFlag, disableTerminal)
+}
+
+func CreateLoggerFromContext(c *cli.Context, disableTerminal bool) (*OutputWriter, error) {
+	return createFromContext(c, LogLevelFlag, LogDirectoryFlag, disableTerminal)
+}
+
+func CreateSSHLoggerFromContext(c *cli.Context, disableTerminal bool) (*OutputWriter, error) {
+	return createFromContext(c, LogSSHLevelFlag, LogSSHDirectoryFlag, disableTerminal)
+}
+
+func createFromContext(
+	c *cli.Context,
+	logLevelFlagName,
+	logDirectoryFlagName string,
+	disableTerminal bool,
+) (*OutputWriter, error) {
+	logLevel := c.String(logLevelFlagName)
+	logFile := c.String(LogFileFlag)
+	logDirectory := c.String(logDirectoryFlagName)
+
+	loggerConfig := CreateConfig(logLevel, disableTerminal, logDirectory, logFile)
+
+	return NewInHouse(loggerConfig)
 }
 
 // ParseLevelString returns the expected log levels based on the cmd flag
