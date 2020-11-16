@@ -1,3 +1,8 @@
+2020.11.7
+- 2020-11-13 TUN-3514: Stop setting --is-autoupdated flag after autoupdate because it can break named tunnel running in k8s
+- 2020-11-15 TUN-3548, TUN-3547: Bastion mode can be specified as a service, doesn't require URL.
+- 2020-11-16 TUN-3549: Use a separate handler for each websocket proxy
+
 2020.11.6
 - 2020-11-14 TUN-3546: Fix panic in tlsconfig.LoadOriginCA
 
