@@ -103,7 +103,8 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 		}
 		return &unixSocketPath{path: path}, nil
 	}
-	return nil, errors.New("You must either set ingress rules in your config file, or use --url, or use --unix-socket")
+	u, err := url.Parse("http://localhost:8080")
+	return &localService{URL: u, RootURL: u}, err
 }
 
 // IsEmpty checks if there are any ingress rules.

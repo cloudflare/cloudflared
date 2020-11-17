@@ -369,6 +369,7 @@ func StartServer(
 
 	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, generalLogger, transportLogger, namedTunnel, isUIEnabled)
 	if err != nil {
+		generalLogger.Errorf("Couldn't start tunnel: %v", err)
 		return err
 	}
 
