@@ -189,7 +189,7 @@ func websocketHandler(logger logger.Service, upgrader websocket.Upgrader) http.H
 
 func sseHandler(logger logger.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			w.WriteHeader(http.StatusInternalServerError)

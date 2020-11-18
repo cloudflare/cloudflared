@@ -53,10 +53,13 @@ type ConnectedFuse interface {
 	IsConnected() bool
 }
 
-func uint8ToString(input uint8) string {
-	return strconv.FormatUint(uint64(input), 10)
+func IsServerSentEvent(headers http.Header) bool {
+	if contentType := headers.Get("content-type"); contentType != "" {
+		return strings.HasPrefix(strings.ToLower(contentType), "text/event-stream")
+	}
+	return false
 }
 
-func isServerSentEvent(headers http.Header) bool {
-	return strings.ToLower(headers.Get("content-type")) == "text/event-stream"
+func uint8ToString(input uint8) string {
+	return strconv.FormatUint(uint64(input), 10)
 }

@@ -167,7 +167,7 @@ func (rp *http2RespWriter) WriteRespHeaders(resp *http.Response) error {
 		status = http.StatusOK
 	}
 	rp.w.WriteHeader(status)
-	if isServerSentEvent(resp.Header) {
+	if IsServerSentEvent(resp.Header) {
 		rp.shouldFlush = true
 	}
 	if rp.shouldFlush {

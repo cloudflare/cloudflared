@@ -96,7 +96,7 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule 
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
-	if isEventStream(resp) {
+	if connection.IsServerSentEvent(resp.Header) {
 		c.logger.Debug("Detected Server-Side Events from Origin")
 		c.writeEventStream(w, resp.Body)
 	} else {
@@ -221,15 +221,4 @@ func findCfRayHeader(req *http.Request) string {
 
 func isLBProbeRequest(req *http.Request) bool {
 	return strings.HasPrefix(req.UserAgent(), lbProbeUserAgentPrefix)
-}
-
-func uint8ToString(input uint8) string {
-	return strconv.FormatUint(uint64(input), 10)
-}
-
-func isEventStream(response *http.Response) bool {
-	if response.Header.Get("content-type") == "text/event-stream" {
-		return true
-	}
-	return false
 }

@@ -5,11 +5,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"testing"
 	"time"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -110,4 +112,41 @@ func (mcf mockConnectedFuse) Connected() {}
 
 func (mcf mockConnectedFuse) IsConnected() bool {
 	return true
+}
+
+func TestIsEventStream(t *testing.T) {
+	tests := []struct {
+		headers       http.Header
+		isEventStream bool
+	}{
+		{
+			headers:       newHeader("Content-Type", "text/event-stream"),
+			isEventStream: true,
+		},
+		{
+			headers:       newHeader("content-type", "text/event-stream"),
+			isEventStream: true,
+		},
+		{
+			headers:       newHeader("Content-Type", "text/event-stream; charset=utf-8"),
+			isEventStream: true,
+		},
+		{
+			headers:       newHeader("Content-Type", "application/json"),
+			isEventStream: false,
+		},
+		{
+			headers:       http.Header{},
+			isEventStream: false,
+		},
+	}
+	for _, test := range tests {
+		assert.Equal(t, test.isEventStream, IsServerSentEvent(test.headers))
+	}
+}
+
+func newHeader(key, value string) http.Header {
+	header := http.Header{}
+	header.Add(key, value)
+	return header
 }
