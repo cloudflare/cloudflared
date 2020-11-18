@@ -207,14 +207,14 @@ type h2muxRespWriter struct {
 
 func (rp *h2muxRespWriter) WriteRespHeaders(resp *http.Response) error {
 	headers := h2mux.H1ResponseToH2ResponseHeaders(resp)
-	headers = append(headers, h2mux.Header{Name: responseMetaHeaderField, Value: responseMetaHeaderOrigin})
+	headers = append(headers, h2mux.Header{Name: ResponseMetaHeaderField, Value: responseMetaHeaderOrigin})
 	return rp.WriteHeaders(headers)
 }
 
 func (rp *h2muxRespWriter) WriteErrorResponse() {
 	rp.WriteHeaders([]h2mux.Header{
 		{Name: ":status", Value: "502"},
-		{Name: responseMetaHeaderField, Value: responseMetaHeaderCfd},
+		{Name: ResponseMetaHeaderField, Value: responseMetaHeaderCfd},
 	})
 	rp.Write([]byte("502 Bad Gateway"))
 }

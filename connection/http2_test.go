@@ -100,9 +100,9 @@ func TestServeHTTP(t *testing.T) {
 			require.Equal(t, test.expectedBody, respBody)
 		}
 		if test.isProxyError {
-			require.Equal(t, responseMetaHeaderCfd, resp.Header.Get(responseMetaHeaderField))
+			require.Equal(t, responseMetaHeaderCfd, resp.Header.Get(ResponseMetaHeaderField))
 		} else {
-			require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(responseMetaHeaderField))
+			require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(ResponseMetaHeaderField))
 		}
 	}
 	cancel()
@@ -202,7 +202,7 @@ func TestServeWS(t *testing.T) {
 	resp := respWriter.Result()
 	// http2RespWriter should rewrite status 101 to 200
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(responseMetaHeaderField))
+	require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(ResponseMetaHeaderField))
 
 	wg.Wait()
 }

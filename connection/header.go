@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	responseMetaHeaderField = "cf-cloudflared-response-meta"
+	ResponseMetaHeaderField = "cf-cloudflared-response-meta"
 )
 
 var (
 	canonicalResponseUserHeadersField = http.CanonicalHeaderKey(h2mux.ResponseUserHeadersField)
-	canonicalResponseMetaHeaderField  = http.CanonicalHeaderKey(responseMetaHeaderField)
+	canonicalResponseMetaHeaderField  = http.CanonicalHeaderKey(ResponseMetaHeaderField)
 	responseMetaHeaderCfd             = mustInitRespMetaHeader("cloudflared")
 	responseMetaHeaderOrigin          = mustInitRespMetaHeader("origin")
 )
