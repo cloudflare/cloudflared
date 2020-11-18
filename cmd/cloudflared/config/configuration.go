@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -392,6 +393,10 @@ func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, er
 	}
 	defer file.Close()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
+		if err == io.EOF {
+			log.Errorf("Configuration file %s was empty", configFile)
+			return &configuration, nil
+		}
 		return nil, errors.Wrap(err, "error parsing YAML in config file at "+configFile)
 	}
 	configuration.sourceFile = configFile

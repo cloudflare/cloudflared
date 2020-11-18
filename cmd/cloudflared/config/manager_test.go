@@ -57,7 +57,7 @@ func TestConfigChanged(t *testing.T) {
 			},
 		},
 	}
-	configRead := func(configPath string) (Root, error) {
+	configRead := func(configPath string, log logger.Service) (Root, error) {
 		return *c, nil
 	}
 	wait := make(chan struct{})

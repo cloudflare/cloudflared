@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io"
 	"os"
 
 	"github.com/cloudflare/cloudflared/logger"
@@ -27,7 +28,7 @@ type FileManager struct {
 	notifier   Notifier
 	configPath string
 	logger     logger.Service
-	ReadConfig func(string) (Root, error)
+	ReadConfig func(string, logger.Service) (Root, error)
 }
 
 // NewFileManager creates a config manager
@@ -59,7 +60,7 @@ func (m *FileManager) Start(notifier Notifier) error {
 
 // GetConfig reads the yaml file from the disk
 func (m *FileManager) GetConfig() (Root, error) {
-	return m.ReadConfig(m.configPath)
+	return m.ReadConfig(m.configPath, m.logger)
 }
 
 // Shutdown stops the watcher
@@ -67,7 +68,7 @@ func (m *FileManager) Shutdown() {
 	m.watcher.Shutdown()
 }
 
-func readConfigFromPath(configPath string) (Root, error) {
+func readConfigFromPath(configPath string, log logger.Service) (Root, error) {
 	if configPath == "" {
 		return Root{}, errors.New("unable to find config file")
 	}
@@ -80,6 +81,10 @@ func readConfigFromPath(configPath string) (Root, error) {
 
 	var config Root
 	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
+		if err == io.EOF {
+			log.Errorf("Configuration file %s was empty", configPath)
+			return Root{}, nil
+		}
 		return Root{}, errors.Wrap(err, "error parsing YAML in config file at "+configPath)
 	}
 
