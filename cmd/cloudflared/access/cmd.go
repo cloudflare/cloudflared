@@ -299,7 +299,7 @@ func generateToken(c *cli.Context) error {
 	}
 	tok, err := token.GetTokenIfExists(appURL)
 	if err != nil || tok == "" {
-		fmt.Fprintln(os.Stderr, "Unable to find token for provided application. Please run token command to generate token.")
+		fmt.Fprintln(os.Stderr, "Unable to find token for provided application. Please run login command to generate token.")
 		return err
 	}
 
