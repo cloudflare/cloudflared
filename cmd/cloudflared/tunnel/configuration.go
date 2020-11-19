@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -33,6 +34,11 @@ var (
 	quickStartUrl   = developerPortal + "/quickstart/quickstart/"
 	serviceUrl      = developerPortal + "/reference/service/"
 	argumentsUrl    = developerPortal + "/reference/arguments/"
+)
+
+const (
+	// name of the environment variable that contains the base64 encoded origin cert
+	encodedOriginCert = "TUNNEL_ORIGIN_CERT_CONTENT"
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -95,7 +101,7 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 
 func findOriginCert(c *cli.Context, logger logger.Service) (string, error) {
 	originCertPath := c.String("origincert")
-	if originCertPath == "" {
+	if originCertPath == "" && os.Getenv(encodedOriginCert) == "" {
 		logger.Infof("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigSearchDirectories())
 		if isRunningFromTerminal() {
 			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
@@ -146,6 +152,11 @@ func readOriginCert(originCertPath string, logger logger.Service) ([]byte, error
 }
 
 func getOriginCert(c *cli.Context, logger logger.Service) ([]byte, error) {
+	// check if cert is present as a base64 encoded ENV
+	certContent := os.Getenv(encodedOriginCert)
+	if certContent != "" {
+		return base64.StdEncoding.DecodeString(certContent)
+	}
 	if originCertPath, err := findOriginCert(c, logger); err != nil {
 		return nil, err
 	} else {
