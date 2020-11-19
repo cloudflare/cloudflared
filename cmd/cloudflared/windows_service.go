@@ -25,7 +25,7 @@ import (
 const (
 	windowsServiceName        = "Cloudflared"
 	windowsServiceDescription = "Argo Tunnel agent"
-	windowsServiceUrl         = "https://developers.cloudflare.com/argo-tunnel/reference/service/"
+	windowsServiceUrl         = "https://developers.cloudflare.com/argo-tunnel/create-tunnel/run-as-service"
 
 	recoverActionDelay      = time.Second * 20
 	failureCountResetPeriod = time.Hour * 24

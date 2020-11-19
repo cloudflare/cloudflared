@@ -20,7 +20,7 @@ import (
 const (
 	DefaultCheckUpdateFreq        = time.Hour * 24
 	appID                         = "app_idCzgxYerVD"
-	noUpdateInShellMessage        = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
+	noUpdateInShellMessage        = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/create-tunnel/run-as-service"
 	noUpdateOnWindowsMessage      = "cloudflared will not automatically update on Windows systems."
 	noUpdateManagedPackageMessage = "cloudflared will not automatically update if installed by a package manager."
 	isManagedInstallFile          = ".installedFromPackageManager"
