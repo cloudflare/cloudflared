@@ -1,3 +1,10 @@
+2020.11.9
+- 2020-11-18 TUN-3557: Detect SSE if content-type starts with text/event-stream
+- 2020-11-18 TUN-3559: Share response meta header with other packages
+- 2020-11-18 DEVTOOLS-7936: Remove redundant chgrp from publish
+- 2020-11-18 TUN-3558: cloudflared allows empty config files
+- 2020-11-18 TUN-3544: Upgrade to Go 1.15.5
+
 2020.11.8
 - 2020-11-17 TUN-3555: Single origin service should default to localhost:8080
 
