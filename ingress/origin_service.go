@@ -84,10 +84,6 @@ func (o *localService) Dial(reqURL *url.URL, headers http.Header) (*gws.Conn, *h
 	return d.Dial(reqURL.String(), headers)
 }
 
-func (o *localService) address() string {
-	return o.URL.String()
-}
-
 func (o *localService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
@@ -151,7 +147,14 @@ func (o *localService) startProxy(staticHost string, wg *sync.WaitGroup, log log
 }
 
 func (o *localService) String() string {
-	return o.address()
+	if o.isBastion() {
+		return "Bastion"
+	}
+	return o.URL.String()
+}
+
+func (o *localService) isBastion() bool {
+	return o.URL == nil
 }
 
 func (o *localService) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -162,6 +165,10 @@ func (o *localService) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (o *localService) staticHost() string {
+
+	if o.URL == nil {
+		return ""
+	}
 
 	addPortIfMissing := func(uri *url.URL, port int) string {
 		if uri.Port() != "" {
