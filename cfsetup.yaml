@@ -1,6 +1,6 @@
 pinned_go: &pinned_go go=1.15.5-1
 build_dir: &build_dir /cfsetup_build
-default-flavor: stretch
+default-flavor: buster
 stretch: &stretch
   build:
     build_dir: *build_dir
@@ -239,10 +239,8 @@ stretch: &stretch
       - export GOARCH=amd64
       - make publish-cloudflared-junos
 
-jessie: *stretch
-
 buster: *stretch
-
+bullseye: *stretch
 centos-7:
   publish-rpm:
     build_dir: *build_dir
