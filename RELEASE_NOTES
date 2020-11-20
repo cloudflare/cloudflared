@@ -1,3 +1,7 @@
+2020.11.10
+- 2020-11-20 TUN-3562: Fix panic when using bastion mode ingress rule
+- 2020-11-20 EDGEPLAT-2958 build cloudflared for Bullseye
+
 2020.11.9
 - 2020-11-18 TUN-3557: Detect SSE if content-type starts with text/event-stream
 - 2020-11-18 TUN-3559: Share response meta header with other packages
