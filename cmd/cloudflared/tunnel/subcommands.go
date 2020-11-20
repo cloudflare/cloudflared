@@ -103,7 +103,7 @@ func buildCreateCommand() *cli.Command {
 		Usage:     "Create a new tunnel with given name",
 		UsageText: "cloudflared tunnel [tunnel command options] create [subcommand options] NAME",
 		Description: `Creates a tunnel, registers it with Cloudflare edge and generates credential file used to run this tunnel.
-  Use "cloudflared tunnel route" subcommand to map a DNS name to this tunnel and "cloudflared tunnel run" to start the connection. 
+  Use "cloudflared tunnel route" subcommand to map a DNS name to this tunnel and "cloudflared tunnel run" to start the connection.
 
   For example, to create a tunnel named 'my-tunnel' run:
 
@@ -329,13 +329,13 @@ func buildRunCommand() *cli.Command {
 		Before:    SetFlagsFromConfigFile,
 		Usage:     "Proxy a local web server by running the given tunnel",
 		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] [TUNNEL]",
-		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections 
+		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections
   between your server and the Cloudflare edge. You can provide name or UUID of tunnel to run either as the
   last command line argument or in the configuration file using "tunnel: TUNNEL".
 
-  This command requires the tunnel credentials file created when "cloudflared tunnel create" was run, 
+  This command requires the tunnel credentials file created when "cloudflared tunnel create" was run,
   however it does not need access to cert.pem from "cloudflared login" if you identify the tunnel by UUID.
-  If you experience other problems running the tunnel, "cloudflared tunnel cleanup" may help by removing 
+  If you experience other problems running the tunnel, "cloudflared tunnel cleanup" may help by removing
   any old connection records.
 `,
 		Flags:              flags,
@@ -431,7 +431,7 @@ func dnsRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 	userHostname := c.Args().Get(userHostnameIndex)
 	if userHostname == "" {
 		return nil, cliutil.UsageError("The third argument should be the hostname")
-	} else if !validateHostname(userHostname) {
+	} else if !validateHostname(userHostname, true) {
 		return nil, errors.Errorf("%s is not a valid hostname", userHostname)
 	}
 	return tunnelstore.NewDNSRoute(userHostname), nil
@@ -449,14 +449,14 @@ func lbRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 	lbName := c.Args().Get(lbNameIndex)
 	if lbName == "" {
 		return nil, cliutil.UsageError("The third argument should be the load balancer name")
-	} else if !validateHostname(lbName) {
+	} else if !validateHostname(lbName, true) {
 		return nil, errors.Errorf("%s is not a valid load balancer name", lbName)
 	}
 
 	lbPool := c.Args().Get(lbPoolIndex)
 	if lbPool == "" {
 		return nil, cliutil.UsageError("The fourth argument should be the pool name")
-	} else if !validateName(lbPool) {
+	} else if !validateName(lbPool, false) {
 		return nil, errors.Errorf("%s is not a valid pool name", lbPool)
 	}
 
@@ -464,19 +464,23 @@ func lbRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 }
 
 var nameRegex = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+var hostNameRegex = regexp.MustCompile("^[*_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
 
-func validateName(s string) bool {
+func validateName(s string, allowWildcardSubdomain bool) bool {
+	if allowWildcardSubdomain {
+		return hostNameRegex.MatchString(s)
+	}
 	return nameRegex.MatchString(s)
 }
 
-func validateHostname(s string) bool {
+func validateHostname(s string, allowWildcardSubdomain bool) bool {
 	// Slightly stricter than PunyCodeProfile
 	idnaProfile := idna.New(
 		idna.ValidateLabels(true),
 		idna.VerifyDNSLength(true))
 
 	puny, err := idnaProfile.ToASCII(s)
-	return err == nil && validateName(puny)
+	return err == nil && validateName(puny, allowWildcardSubdomain)
 }
 
 func routeCommand(c *cli.Context) error {
@@ -535,13 +539,13 @@ func commandHelpTemplate() string {
 	}
 	const template = `NAME:
 	{{.HelpName}} - {{.Usage}}
-	
+
 USAGE:
 	{{.UsageText}}
- 
+
 DESCRIPTION:
 	{{.Description}}
- 
+
 TUNNEL COMMAND OPTIONS:
 	%s
 SUBCOMMAND OPTIONS:

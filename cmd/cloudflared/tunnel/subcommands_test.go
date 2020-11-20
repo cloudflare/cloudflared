@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"github.com/cloudflare/cloudflared/tunnelstore"
-	"github.com/mitchellh/go-homedir"
-
 	"github.com/google/uuid"
+	"github.com/mitchellh/go-homedir"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -117,8 +116,64 @@ func TestValidateName(t *testing.T) {
 		{name: "_ab_c.-d-ef", want: true},
 	}
 	for _, tt := range tests {
-		if got := validateName(tt.name); got != tt.want {
+		if got := validateName(tt.name, false); got != tt.want {
 			t.Errorf("validateName() = %v, want %v", got, tt.want)
 		}
+	}
+}
+
+func Test_validateHostname(t *testing.T) {
+	type args struct {
+		s                      string
+		allowWildcardSubdomain bool
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{
+			name: "Normal",
+			args: args{
+				s:                      "example.com",
+				allowWildcardSubdomain: true,
+			},
+			want: true,
+		},
+		{
+			name: "wildcard subdomain for TUN-358",
+			args: args{
+				s:                      "*.ehrig.io",
+				allowWildcardSubdomain: true,
+			},
+			want: true,
+		},
+		{
+			name: "Misplaced wildcard",
+			args: args{
+				s:                      "subdomain.*.ehrig.io",
+				allowWildcardSubdomain: true,
+			},
+		},
+		{
+			name: "Invalid domain",
+			args: args{
+				s:                      "..",
+				allowWildcardSubdomain: true,
+			},
+		},
+		{
+			name: "Invalid domain",
+			args: args{
+				s: "..",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := validateHostname(tt.args.s, tt.args.allowWildcardSubdomain); got != tt.want {
+				t.Errorf("validateHostname() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
