@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +15,7 @@ const (
 
 var (
 	testNamedTunnelConfig = &NamedTunnelConfig{
-		Auth: pogs.TunnelAuth{
+		Credentials: Credentials{
 			AccountTag: "testAccountTag",
 		},
 	}

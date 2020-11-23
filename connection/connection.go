@@ -22,9 +22,23 @@ type Config struct {
 }
 
 type NamedTunnelConfig struct {
-	Auth   pogs.TunnelAuth
-	ID     uuid.UUID
-	Client pogs.ClientInfo
+	Credentials Credentials
+	Client      pogs.ClientInfo
+}
+
+// Credentials are stored in the credentials file and contain all info needed to run a tunnel.
+type Credentials struct {
+	AccountTag   string
+	TunnelSecret []byte
+	TunnelID     uuid.UUID
+	TunnelName   string
+}
+
+func (c *Credentials) Auth() pogs.TunnelAuth {
+	return pogs.TunnelAuth{
+		AccountTag:   c.AccountTag,
+		TunnelSecret: c.TunnelSecret,
+	}
 }
 
 type ClassicTunnelConfig struct {

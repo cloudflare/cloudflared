@@ -24,13 +24,12 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 const (
-	credFileFlagAlias = "cred-file"
+	CredFileFlagAlias = "cred-file"
+	CredFileFlag      = "credentials-file"
 )
 
 var (
@@ -75,8 +74,8 @@ var (
 			"tunnels, you can do so with Cloudflare's Load Balancer product.",
 	})
 	credentialsFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
-		Name:    "credentials-file",
-		Aliases: []string{credFileFlagAlias},
+		Name:    CredFileFlag,
+		Aliases: []string{CredFileFlagAlias},
 		Usage:   "File path of tunnel credentials",
 		EnvVars: []string{"TUNNEL_CRED_FILE"},
 	})
@@ -141,30 +140,21 @@ func tunnelFilePath(tunnelID uuid.UUID, directory string) (string, error) {
 	return homedir.Expand(filePath)
 }
 
-func writeTunnelCredentials(tunnelID uuid.UUID, accountID, originCertPath string, tunnelSecret []byte, logger logger.Service) error {
+func writeTunnelCredentials(
+	originCertPath string,
+	credentials *connection.Credentials,
+) (filePath string, err error) {
 	originCertDir := filepath.Dir(originCertPath)
-	filePath, err := tunnelFilePath(tunnelID, originCertDir)
+	filePath, err = tunnelFilePath(credentials.TunnelID, originCertDir)
 	if err != nil {
-		return err
+		return "", err
 	}
-	body, err := json.Marshal(pogs.TunnelAuth{
-		AccountTag:   accountID,
-		TunnelSecret: tunnelSecret,
-	})
+	// Write the name and ID to the file too
+	body, err := json.Marshal(credentials)
 	if err != nil {
-		return errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
+		return "", errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
 	}
-	logger.Infof("Writing tunnel credentials to %v. cloudflared chose this file based on where your origin certificate was found.", filePath)
-	logger.Infof("Keep this file secret. To revoke these credentials, delete the tunnel.")
-	return ioutil.WriteFile(filePath, body, 400)
-}
-
-func validFilePath(path string) bool {
-	fileStat, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return !fileStat.IsDir()
+	return filePath, ioutil.WriteFile(filePath, body, 400)
 }
 
 func buildListCommand() *cli.Command {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/logger"
 )
 
@@ -250,7 +251,7 @@ func installLinuxService(c *cli.Context) error {
 			val, err := src.String(s)
 			return err == nil && val != ""
 		}
-		if src.TunnelID == "" || !configPresent("credentials-file") {
+		if src.TunnelID == "" || !configPresent(tunnel.CredFileFlag) {
 			return fmt.Errorf(`Configuration file %s must contain entries for the tunnel to run and its associated credentials:
 tunnel: TUNNEL-UUID
 credentials-file: CREDENTIALS-FILE

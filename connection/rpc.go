@@ -92,8 +92,8 @@ func (rsc *registrationServerClient) RegisterConnection(
 ) error {
 	conn, err := rsc.client.RegisterConnection(
 		ctx,
-		config.Auth,
-		config.ID,
+		config.Credentials.Auth(),
+		config.Credentials.TunnelID,
 		connIndex,
 		options,
 	)

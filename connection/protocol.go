@@ -165,7 +165,7 @@ func NewProtocolSelector(protocolFlag string, namedTunnel *NamedTunnelConfig, fe
 	if protocolFlag != autoSelectFlag {
 		return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
 	}
-	threshold := switchThreshold(namedTunnel.Auth.AccountTag)
+	threshold := switchThreshold(namedTunnel.Credentials.AccountTag)
 	if threshold < http2Percentage {
 		return newAutoProtocolSelector(HTTP2, threshold, fetchFunc, ttl, logger), nil
 	}

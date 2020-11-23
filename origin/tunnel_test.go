@@ -8,7 +8,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +35,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	assert.NoError(t, err)
 	resolveTTL := time.Duration(0)
 	namedTunnel := &connection.NamedTunnelConfig{
-		Auth: pogs.TunnelAuth{
+		Credentials: connection.Credentials{
 			AccountTag: "test-account",
 		},
 	}
