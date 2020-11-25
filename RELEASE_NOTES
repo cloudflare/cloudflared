@@ -1,3 +1,10 @@
+2020.11.11
+- 2020-11-20 TUN-3578: cloudflared tunnel route dns should allow wildcard subdomains
+- 2020-11-21 EDGEPLAT-2958 remove deb-compression, defaulting to gzip
+- 2020-11-23 TUN-3581: Tunnels can be run by name using only --credentials-file, no origin cert necessary.
+- 2020-11-15 TUN-3561: Unified logger configuration
+- 2020-11-08 AUTH-3221: Saves org token to disk and uses it to refresh the app token
+
 2020.11.10
 - 2020-11-20 TUN-3562: Fix panic when using bastion mode ingress rule
 - 2020-11-20 EDGEPLAT-2958 build cloudflared for Bullseye
