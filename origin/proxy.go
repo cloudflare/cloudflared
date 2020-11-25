@@ -13,10 +13,11 @@ import (
 	"github.com/cloudflare/cloudflared/buffer"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
+
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -26,15 +27,15 @@ const (
 type client struct {
 	ingressRules ingress.Ingress
 	tags         []tunnelpogs.Tag
-	logger       logger.Service
+	log          *zerolog.Logger
 	bufferPool   *buffer.Pool
 }
 
-func NewClient(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, logger logger.Service) connection.OriginClient {
+func NewClient(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, log *zerolog.Logger) connection.OriginClient {
 	return &client{
 		ingressRules: ingressRules,
 		tags:         tags,
-		logger:       logger,
+		log:          log,
 		bufferPool:   buffer.NewPool(512 * 1024),
 	}
 }
@@ -97,14 +98,14 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule 
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
 	if connection.IsServerSentEvent(resp.Header) {
-		c.logger.Debug("Detected Server-Side Events from Origin")
+		c.log.Debug().Msg("Detected Server-Side Events from Origin")
 		c.writeEventStream(w, resp.Body)
 	} else {
 		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
 		// compression generates dictionary on first write
 		buf := c.bufferPool.Get()
 		defer c.bufferPool.Put(buf)
-		io.CopyBuffer(w, resp.Body, buf)
+		_, _ = io.CopyBuffer(w, resp.Body, buf)
 	}
 	return resp, nil
 }
@@ -129,7 +130,7 @@ func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request, 
 	go func() {
 		// serveCtx is done if req is cancelled, or streamWebsocket returns
 		<-serveCtx.Done()
-		conn.Close()
+		_ = conn.Close()
 		close(connClosedChan)
 	}()
 
@@ -159,7 +160,7 @@ func (c *client) writeEventStream(w connection.ResponseWriter, respBody io.ReadC
 		if err != nil {
 			break
 		}
-		w.Write(line)
+		_, _ = w.Write(line)
 	}
 }
 
@@ -171,46 +172,46 @@ func (c *client) appendTagHeaders(r *http.Request) {
 
 func (c *client) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum int) {
 	if cfRay != "" {
-		c.logger.Debugf("CF-RAY: %s %s %s %s", cfRay, r.Method, r.URL, r.Proto)
+		c.log.Debug().Msgf("CF-RAY: %s %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else if lbProbe {
-		c.logger.Debugf("CF-RAY: %s Load Balancer health check %s %s %s", cfRay, r.Method, r.URL, r.Proto)
+		c.log.Debug().Msgf("CF-RAY: %s Load Balancer health check %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else {
-		c.logger.Debugf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
+		c.log.Debug().Msgf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
 	}
-	c.logger.Debugf("CF-RAY: %s Request Headers %+v", cfRay, r.Header)
-	c.logger.Debugf("CF-RAY: %s Serving with ingress rule %d", cfRay, ruleNum)
+	c.log.Debug().Msgf("CF-RAY: %s Request Headers %+v", cfRay, r.Header)
+	c.log.Debug().Msgf("CF-RAY: %s Serving with ingress rule %d", cfRay, ruleNum)
 
 	if contentLen := r.ContentLength; contentLen == -1 {
-		c.logger.Debugf("CF-RAY: %s Request Content length unknown", cfRay)
+		c.log.Debug().Msgf("CF-RAY: %s Request Content length unknown", cfRay)
 	} else {
-		c.logger.Debugf("CF-RAY: %s Request content length %d", cfRay, contentLen)
+		c.log.Debug().Msgf("CF-RAY: %s Request content length %d", cfRay, contentLen)
 	}
 }
 
 func (c *client) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, ruleNum int) {
 	responseByCode.WithLabelValues(strconv.Itoa(r.StatusCode)).Inc()
 	if cfRay != "" {
-		c.logger.Debugf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
+		c.log.Info().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
 	} else if lbProbe {
-		c.logger.Debugf("Response to Load Balancer health check %s", r.Status)
+		c.log.Debug().Msgf("Response to Load Balancer health check %s", r.Status)
 	} else {
-		c.logger.Debugf("Status: %s served by ingress %d", r.Status, ruleNum)
+		c.log.Debug().Msgf("Status: %s served by ingress %d", r.Status, ruleNum)
 	}
-	c.logger.Debugf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
+	c.log.Debug().Msgf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
 
 	if contentLen := r.ContentLength; contentLen == -1 {
-		c.logger.Debugf("CF-RAY: %s Response content length unknown", cfRay)
+		c.log.Debug().Msgf("CF-RAY: %s Response content length unknown", cfRay)
 	} else {
-		c.logger.Debugf("CF-RAY: %s Response content length %d", cfRay, contentLen)
+		c.log.Debug().Msgf("CF-RAY: %s Response content length %d", cfRay, contentLen)
 	}
 }
 
 func (c *client) logRequestError(err error, cfRay string, ruleNum int) {
 	requestErrors.Inc()
 	if cfRay != "" {
-		c.logger.Errorf("CF-RAY: %s Proxying to ingress %d error: %v", cfRay, ruleNum, err)
+		c.log.Error().Msgf("CF-RAY: %s Proxying to ingress %d error: %v", cfRay, ruleNum, err)
 	} else {
-		c.logger.Errorf("Proxying to ingress %d error: %v", ruleNum, err)
+		c.log.Error().Msgf("Proxying to ingress %d error: %v", ruleNum, err)
 	}
 
 }

@@ -7,13 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
-	cli "github.com/urfave/cli/v2"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/logger"
+
+	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
 )
 
 func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
@@ -21,7 +21,7 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel system service",
 		Subcommands: []*cli.Command{
-			&cli.Command{
+			{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as a system service",
 				Action: cliutil.ErrorHandler(installLinuxService),
@@ -32,7 +32,7 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 					},
 				},
 			},
-			&cli.Command{
+			{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel service",
 				Action: cliutil.ErrorHandler(uninstallLinuxService),
@@ -190,7 +190,7 @@ func isSystemd() bool {
 	return false
 }
 
-func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile string, logger logger.Service) error {
+func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile string, log *zerolog.Logger) error {
 	srcCredentialPath := filepath.Join(userConfigDir, userCredentialFile)
 	destCredentialPath := filepath.Join(serviceConfigDir, serviceCredentialFile)
 	if srcCredentialPath != destCredentialPath {
@@ -205,17 +205,14 @@ func copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile str
 		if err := copyConfig(srcConfigPath, destConfigPath); err != nil {
 			return err
 		}
-		logger.Infof("Copied %s to %s", srcConfigPath, destConfigPath)
+		log.Info().Msgf("Copied %s to %s", srcConfigPath, destConfigPath)
 	}
 
 	return nil
 }
 
 func installLinuxService(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	etPath, err := os.Executable()
 	if err != nil {
@@ -232,8 +229,8 @@ func installLinuxService(c *cli.Context) error {
 		userConfigDir := filepath.Dir(c.String("config"))
 		userConfigFile := filepath.Base(c.String("config"))
 		userCredentialFile := config.DefaultCredentialFile
-		if err = copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile, logger); err != nil {
-			logger.Errorf("Failed to copy user configuration: %s. Before running the service, ensure that %s contains two files, %s and %s", err,
+		if err = copyUserConfiguration(userConfigDir, userConfigFile, userCredentialFile, log); err != nil {
+			log.Error().Msgf("Failed to copy user configuration: %s. Before running the service, ensure that %s contains two files, %s and %s", err,
 				serviceConfigDir, serviceCredentialFile, serviceConfigFile)
 			return err
 		}
@@ -241,7 +238,7 @@ func installLinuxService(c *cli.Context) error {
 			"--origincert", serviceConfigDir + "/" + serviceCredentialFile,
 		}
 	} else {
-		src, err := config.ReadConfigFile(c, logger)
+		src, err := config.ReadConfigFile(c, log)
 		if err != nil {
 			return err
 		}
@@ -274,42 +271,42 @@ credentials-file: CREDENTIALS-FILE
 
 	switch {
 	case isSystemd():
-		logger.Infof("Using Systemd")
-		return installSystemd(&templateArgs, logger)
+		log.Info().Msgf("Using Systemd")
+		return installSystemd(&templateArgs, log)
 	default:
-		logger.Infof("Using SysV")
-		return installSysv(&templateArgs, logger)
+		log.Info().Msgf("Using SysV")
+		return installSysv(&templateArgs, log)
 	}
 }
 
-func installSystemd(templateArgs *ServiceTemplateArgs, logger logger.Service) error {
+func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
 	for _, serviceTemplate := range systemdTemplates {
 		err := serviceTemplate.Generate(templateArgs)
 		if err != nil {
-			logger.Errorf("error generating service template: %s", err)
+			log.Error().Msgf("error generating service template: %s", err)
 			return err
 		}
 	}
 	if err := runCommand("systemctl", "enable", "cloudflared.service"); err != nil {
-		logger.Errorf("systemctl enable cloudflared.service error: %s", err)
+		log.Error().Msgf("systemctl enable cloudflared.service error: %s", err)
 		return err
 	}
 	if err := runCommand("systemctl", "start", "cloudflared-update.timer"); err != nil {
-		logger.Errorf("systemctl start cloudflared-update.timer error: %s", err)
+		log.Error().Msgf("systemctl start cloudflared-update.timer error: %s", err)
 		return err
 	}
-	logger.Infof("systemctl daemon-reload")
+	log.Info().Msgf("systemctl daemon-reload")
 	return runCommand("systemctl", "daemon-reload")
 }
 
-func installSysv(templateArgs *ServiceTemplateArgs, logger logger.Service) error {
+func installSysv(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
 	confPath, err := sysvTemplate.ResolvePath()
 	if err != nil {
-		logger.Errorf("error resolving system path: %s", err)
+		log.Error().Msgf("error resolving system path: %s", err)
 		return err
 	}
 	if err := sysvTemplate.Generate(templateArgs); err != nil {
-		logger.Errorf("error generating system template: %s", err)
+		log.Error().Msgf("error generating system template: %s", err)
 		return err
 	}
 	for _, i := range [...]string{"2", "3", "4", "5"} {
@@ -326,43 +323,40 @@ func installSysv(templateArgs *ServiceTemplateArgs, logger logger.Service) error
 }
 
 func uninstallLinuxService(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	switch {
 	case isSystemd():
-		logger.Infof("Using Systemd")
-		return uninstallSystemd(logger)
+		log.Info().Msgf("Using Systemd")
+		return uninstallSystemd(log)
 	default:
-		logger.Infof("Using SysV")
-		return uninstallSysv(logger)
+		log.Info().Msgf("Using SysV")
+		return uninstallSysv(log)
 	}
 }
 
-func uninstallSystemd(logger logger.Service) error {
+func uninstallSystemd(log *zerolog.Logger) error {
 	if err := runCommand("systemctl", "disable", "cloudflared.service"); err != nil {
-		logger.Errorf("systemctl disable cloudflared.service error: %s", err)
+		log.Error().Msgf("systemctl disable cloudflared.service error: %s", err)
 		return err
 	}
 	if err := runCommand("systemctl", "stop", "cloudflared-update.timer"); err != nil {
-		logger.Errorf("systemctl stop cloudflared-update.timer error: %s", err)
+		log.Error().Msgf("systemctl stop cloudflared-update.timer error: %s", err)
 		return err
 	}
 	for _, serviceTemplate := range systemdTemplates {
 		if err := serviceTemplate.Remove(); err != nil {
-			logger.Errorf("error removing service template: %s", err)
+			log.Error().Msgf("error removing service template: %s", err)
 			return err
 		}
 	}
-	logger.Infof("Successfully uninstall cloudflared service")
+	log.Info().Msgf("Successfully uninstall cloudflared service")
 	return nil
 }
 
-func uninstallSysv(logger logger.Service) error {
+func uninstallSysv(log *zerolog.Logger) error {
 	if err := sysvTemplate.Remove(); err != nil {
-		logger.Errorf("error removing service template: %s", err)
+		log.Error().Msgf("error removing service template: %s", err)
 		return err
 	}
 	for _, i := range [...]string{"2", "3", "4", "5"} {
@@ -375,6 +369,6 @@ func uninstallSysv(logger logger.Service) error {
 			continue
 		}
 	}
-	logger.Infof("Successfully uninstall cloudflared service")
+	log.Info().Msgf("Successfully uninstall cloudflared service")
 	return nil
 }

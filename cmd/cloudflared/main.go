@@ -10,16 +10,16 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	log "github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/watcher"
+
 	"github.com/getsentry/raven-go"
 	"github.com/mitchellh/go-homedir"
-	"github.com/urfave/cli/v2"
-
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 )
 
 const (
@@ -184,38 +184,33 @@ func captureError(err error) {
 
 // cloudflared was started without any flags
 func handleServiceMode(c *cli.Context, shutdownC chan struct{}) error {
-	defer log.SharedWriteManager.Shutdown()
-
-	logger, err := log.CreateLoggerFromContext(c, log.DisableTerminalLog)
-	if err != nil {
-		return cliutil.PrintLoggerSetupError("error setting up logger", err)
-	}
+	log := logger.CreateLoggerFromContext(c, logger.DisableTerminalLog)
 
 	// start the main run loop that reads from the config file
 	f, err := watcher.NewFile()
 	if err != nil {
-		logger.Errorf("Cannot load config file: %s", err)
+		log.Error().Msgf("Cannot load config file: %s", err)
 		return err
 	}
 
 	configPath := config.FindOrCreateConfigPath()
-	configManager, err := config.NewFileManager(f, configPath, logger)
+	configManager, err := config.NewFileManager(f, configPath, log)
 	if err != nil {
-		logger.Errorf("Cannot setup config file for monitoring: %s", err)
+		log.Error().Msgf("Cannot setup config file for monitoring: %s", err)
 		return err
 	}
-	logger.Infof("monitoring config file at: %s", configPath)
+	log.Info().Msgf("monitoring config file at: %s", configPath)
 
 	serviceCallback := func(t string, name string, err error) {
 		if err != nil {
-			logger.Errorf("%s service: %s encountered an error: %s", t, name, err)
+			log.Error().Msgf("%s service: %s encountered an error: %s", t, name, err)
 		}
 	}
 	serviceManager := overwatch.NewAppManager(serviceCallback)
 
-	appService := NewAppService(configManager, serviceManager, shutdownC, logger)
+	appService := NewAppService(configManager, serviceManager, shutdownC, log)
 	if err := appService.Run(); err != nil {
-		logger.Errorf("Failed to start app service: %s", err)
+		log.Error().Msgf("Failed to start app service: %s", err)
 		return err
 	}
 	return nil

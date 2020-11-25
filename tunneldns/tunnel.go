@@ -16,6 +16,7 @@ import (
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/cache"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 )
 
@@ -23,7 +24,7 @@ import (
 type Listener struct {
 	server *dnsserver.Server
 	wg     sync.WaitGroup
-	logger logger.Service
+	log    *zerolog.Logger
 }
 
 func Command(hidden bool) *cli.Command {
@@ -70,21 +71,18 @@ func Command(hidden bool) *cli.Command {
 
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return cliutil.PrintLoggerSetupError("error setting up logger", err)
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	metricsListener, err := net.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		logger.Fatalf("Failed to open the metrics listener: %s", err)
+		log.Fatal().Msgf("Failed to open the metrics listener: %s", err)
 	}
 
-	go metrics.ServeMetrics(metricsListener, nil, nil, logger)
+	go metrics.ServeMetrics(metricsListener, nil, nil, log)
 
-	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"), logger)
+	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"), log)
 	if err != nil {
-		logger.Errorf("Failed to create the listeners: %s", err)
+		log.Error().Msgf("Failed to create the listeners: %s", err)
 		return err
 	}
 
@@ -92,7 +90,7 @@ func Run(c *cli.Context) error {
 	readySignal := make(chan struct{})
 	err = listener.Start(readySignal)
 	if err != nil {
-		logger.Errorf("Failed to start the listeners: %s", err)
+		log.Error().Msgf("Failed to start the listeners: %s", err)
 		return listener.Stop()
 	}
 	<-readySignal
@@ -106,7 +104,7 @@ func Run(c *cli.Context) error {
 	// Shut down server
 	err = listener.Stop()
 	if err != nil {
-		logger.Errorf("failed to stop: %s", err)
+		log.Error().Msgf("failed to stop: %s", err)
 	}
 	return err
 }
@@ -127,13 +125,13 @@ func createConfig(address string, port uint16, p plugin.Handler) *dnsserver.Conf
 // Start blocks for serving requests
 func (l *Listener) Start(readySignal chan struct{}) error {
 	defer close(readySignal)
-	l.logger.Infof("Starting DNS over HTTPS proxy server on: %s", l.server.Address())
+	l.log.Info().Msgf("Starting DNS over HTTPS proxy server on: %s", l.server.Address())
 
 	// Start UDP listener
 	if udp, err := l.server.ListenPacket(); err == nil {
 		l.wg.Add(1)
 		go func() {
-			l.server.ServePacket(udp)
+			_ = l.server.ServePacket(udp)
 			l.wg.Done()
 		}()
 	} else {
@@ -145,7 +143,7 @@ func (l *Listener) Start(readySignal chan struct{}) error {
 	if err == nil {
 		l.wg.Add(1)
 		go func() {
-			l.server.Serve(tcp)
+			_ = l.server.Serve(tcp)
 			l.wg.Done()
 		}()
 	}
@@ -164,12 +162,12 @@ func (l *Listener) Stop() error {
 }
 
 // CreateListener configures the server and bound sockets
-func CreateListener(address string, port uint16, upstreams []string, bootstraps []string, logger logger.Service) (*Listener, error) {
+func CreateListener(address string, port uint16, upstreams []string, bootstraps []string, log *zerolog.Logger) (*Listener, error) {
 	// Build the list of upstreams
 	upstreamList := make([]Upstream, 0)
 	for _, url := range upstreams {
-		logger.Infof("Adding DNS upstream - url: %s", url)
-		upstream, err := NewUpstreamHTTPS(url, bootstraps, logger)
+		log.Info().Msgf("Adding DNS upstream - url: %s", url)
+		upstream, err := NewUpstreamHTTPS(url, bootstraps, log)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create HTTPS upstream")
 		}
@@ -191,5 +189,5 @@ func CreateListener(address string, port uint16, upstreams []string, bootstraps 
 		return nil, err
 	}
 
-	return &Listener{server: server, logger: logger}, nil
+	return &Listener{server: server, log: log}, nil
 }

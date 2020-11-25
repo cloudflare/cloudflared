@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 )
 
 // Regions stores Cloudflare edge network IPs, partitioned into two regions.
@@ -19,8 +19,8 @@ type Regions struct {
 // ------------------------------------
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
-func ResolveEdge(logger logger.Service) (*Regions, error) {
-	addrLists, err := edgeDiscovery(logger)
+func ResolveEdge(log *zerolog.Logger) (*Regions, error) {
+	addrLists, err := edgeDiscovery(log)
 	if err != nil {
 		return nil, err
 	}
@@ -35,8 +35,8 @@ func ResolveEdge(logger logger.Service) (*Regions, error) {
 
 // StaticEdge creates a list of edge addresses from the list of hostnames.
 // Mainly used for testing connectivity.
-func StaticEdge(hostnames []string, logger logger.Service) (*Regions, error) {
-	resolved := ResolveAddrs(hostnames, logger)
+func StaticEdge(hostnames []string, log *zerolog.Logger) (*Regions, error) {
+	resolved := ResolveAddrs(hostnames, log)
 	if len(resolved) == 0 {
 		return nil, fmt.Errorf("failed to resolve any edge address")
 	}

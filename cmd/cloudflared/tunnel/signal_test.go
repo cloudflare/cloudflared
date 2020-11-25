@@ -2,11 +2,11 @@ package tunnel
 
 import (
 	"fmt"
+	"github.com/rs/zerolog"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,7 +28,7 @@ func testChannelClosed(t *testing.T, c chan struct{}) {
 }
 
 func TestWaitForSignal(t *testing.T) {
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	log := zerolog.Nop()
 
 	// Test handling server error
 	errC := make(chan error)
@@ -39,7 +39,7 @@ func TestWaitForSignal(t *testing.T) {
 	}()
 
 	// received error, shutdownC should be closed
-	err := waitForSignal(errC, shutdownC, logger)
+	err := waitForSignal(errC, shutdownC, &log)
 	assert.Equal(t, serverErr, err)
 	testChannelClosed(t, shutdownC)
 
@@ -56,10 +56,10 @@ func TestWaitForSignal(t *testing.T) {
 		go func(sig syscall.Signal) {
 			// sleep for a tick to prevent sending signal before calling waitForSignal
 			time.Sleep(tick)
-			syscall.Kill(syscall.Getpid(), sig)
+			_ = syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignal(errC, shutdownC, logger)
+		err = waitForSignal(errC, shutdownC, &log)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, shutdownErr, <-errC)
 		testChannelClosed(t, shutdownC)
@@ -76,10 +76,10 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 		errC <- serverErr
 	}()
 
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	log := zerolog.Nop()
 
 	// received error, both shutdownC and graceshutdownC should be closed
-	err := waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
+	err := waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
 	assert.Equal(t, serverErr, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
@@ -89,7 +89,7 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 	shutdownC = make(chan struct{})
 	graceshutdownC = make(chan struct{})
 	close(shutdownC)
-	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
+	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
 	assert.NoError(t, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
@@ -99,7 +99,7 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 	shutdownC = make(chan struct{})
 	graceshutdownC = make(chan struct{})
 	close(graceshutdownC)
-	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
+	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
 	assert.NoError(t, err)
 	testChannelClosed(t, shutdownC)
 	testChannelClosed(t, graceshutdownC)
@@ -119,10 +119,10 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 		go func(sig syscall.Signal) {
 			// sleep for a tick to prevent sending signal before calling waitForSignalWithGraceShutdown
 			time.Sleep(tick)
-			syscall.Kill(syscall.Getpid(), sig)
+			_ = syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, graceShutdownErr, <-errC)
 		testChannelClosed(t, shutdownC)
@@ -145,10 +145,10 @@ func TestWaitForSignalWithGraceShutdown(t *testing.T) {
 		go func(sig syscall.Signal) {
 			// sleep for a tick to prevent sending signal before calling waitForSignalWithGraceShutdown
 			time.Sleep(tick)
-			syscall.Kill(syscall.Getpid(), sig)
+			_ = syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, logger)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, shutdownErr, <-errC)
 		testChannelClosed(t, shutdownC)

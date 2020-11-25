@@ -5,17 +5,18 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/carrier"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
+
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 )
 
 // StartForwarder starts a client side websocket forward
-func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger logger.Service) error {
+func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *zerolog.Logger) error {
 	validURL, err := validation.ValidateUrl(forwarder.Listener)
 	if err != nil {
 		return errors.Wrap(err, "error validating origin URL")
@@ -41,9 +42,9 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger
 	}
 
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
-	wsConn := carrier.NewWSConnection(logger, false)
+	wsConn := carrier.NewWSConnection(log, false)
 
-	logger.Infof("Start Websocket listener on: %s", validURL.Host)
+	log.Info().Msgf("Start Websocket listener on: %s", validURL.Host)
 	return carrier.StartForwarder(wsConn, validURL.Host, shutdown, options)
 }
 
@@ -52,10 +53,7 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, logger
 // useful for proxying other protocols (like ssh) over websockets
 // (which you can put Access in front of)
 func ssh(c *cli.Context) error {
-	logger, err := logger.CreateSSHLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return cliutil.PrintLoggerSetupError("error setting up logger", err)
-	}
+	log := logger.CreateSSHLoggerFromContext(c, logger.EnableTerminalLog)
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
@@ -85,19 +83,19 @@ func ssh(c *cli.Context) error {
 	}
 
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
-	wsConn := carrier.NewWSConnection(logger, false)
+	wsConn := carrier.NewWSConnection(log, false)
 
 	if c.NArg() > 0 || c.IsSet(sshURLFlag) {
 		forwarder, err := config.ValidateUrl(c, true)
 		if err != nil {
-			logger.Errorf("Error validating origin URL: %s", err)
+			log.Error().Msgf("Error validating origin URL: %s", err)
 			return errors.Wrap(err, "error validating origin URL")
 		}
 
-		logger.Infof("Start Websocket listener on: %s", forwarder.Host)
+		log.Info().Msgf("Start Websocket listener on: %s", forwarder.Host)
 		err = carrier.StartForwarder(wsConn, forwarder.Host, shutdownC, options)
 		if err != nil {
-			logger.Errorf("Error on Websocket listener: %s", err)
+			log.Error().Msgf("Error on Websocket listener: %s", err)
 		}
 		return err
 	}

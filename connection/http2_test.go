@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+
 	"github.com/gobwas/ws/wsutil"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 )
@@ -136,7 +137,7 @@ type mockRPCClientFactory struct {
 	unregistered chan struct{}
 }
 
-func (mf *mockRPCClientFactory) newMockRPCClient(context.Context, io.ReadWriteCloser, logger.Service) NamedTunnelRPCClient {
+func (mf *mockRPCClientFactory) newMockRPCClient(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient {
 	return mockNamedTunnelRPCClient{
 		registered:   mf.registered,
 		unregistered: mf.unregistered,

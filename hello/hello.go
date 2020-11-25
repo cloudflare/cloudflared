@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
@@ -99,8 +99,8 @@ const indexTemplate = `
 </html>
 `
 
-func StartHelloWorldServer(logger logger.Service, listener net.Listener, shutdownC <-chan struct{}) error {
-	logger.Infof("Starting Hello World server at %s", listener.Addr())
+func StartHelloWorldServer(log *zerolog.Logger, listener net.Listener, shutdownC <-chan struct{}) error {
+	log.Info().Msgf("Starting Hello World server at %s", listener.Addr())
 	serverName := defaultServerName
 	if hostname, err := os.Hostname(); err == nil {
 		serverName = hostname
@@ -113,14 +113,14 @@ func StartHelloWorldServer(logger logger.Service, listener net.Listener, shutdow
 
 	muxer := http.NewServeMux()
 	muxer.HandleFunc(UptimeRoute, uptimeHandler(time.Now()))
-	muxer.HandleFunc(WSRoute, websocketHandler(logger, upgrader))
-	muxer.HandleFunc(SSERoute, sseHandler(logger))
+	muxer.HandleFunc(WSRoute, websocketHandler(log, upgrader))
+	muxer.HandleFunc(SSERoute, sseHandler(log))
 	muxer.HandleFunc(HealthRoute, healthHandler())
 	muxer.HandleFunc("/", rootHandler(serverName))
 	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: muxer}
 	go func() {
 		<-shutdownC
-		httpServer.Close()
+		_ = httpServer.Close()
 	}()
 
 	err := httpServer.Serve(listener)
@@ -152,13 +152,13 @@ func uptimeHandler(startTime time.Time) http.HandlerFunc {
 			w.WriteHeader(http.StatusInternalServerError)
 		} else {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write(respJson)
+			_, _ = w.Write(respJson)
 		}
 	}
 }
 
 // This handler will echo message
-func websocketHandler(logger logger.Service, upgrader websocket.Upgrader) http.HandlerFunc {
+func websocketHandler(log *zerolog.Logger, upgrader websocket.Upgrader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// This addresses the issue of r.Host includes port but origin header doesn't
 		host, _, err := net.SplitHostPort(r.Host)
@@ -168,32 +168,32 @@ func websocketHandler(logger logger.Service, upgrader websocket.Upgrader) http.H
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logger.Errorf("failed to upgrade to websocket connection, error: %s", err)
+			log.Error().Msgf("failed to upgrade to websocket connection, error: %s", err)
 			return
 		}
 		defer conn.Close()
 		for {
 			mt, message, err := conn.ReadMessage()
 			if err != nil {
-				logger.Errorf("websocket read message error: %s", err)
+				log.Error().Msgf("websocket read message error: %s", err)
 				break
 			}
 
 			if err := conn.WriteMessage(mt, message); err != nil {
-				logger.Errorf("websocket write message error: %s", err)
+				log.Error().Msgf("websocket write message error: %s", err)
 				break
 			}
 		}
 	}
 }
 
-func sseHandler(logger logger.Service) http.HandlerFunc {
+func sseHandler(log *zerolog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			w.WriteHeader(http.StatusInternalServerError)
-			logger.Errorf("Can't support SSE. ResponseWriter %T doesn't implement http.Flusher interface", w)
+			log.Error().Msgf("Can't support SSE. ResponseWriter %T doesn't implement http.Flusher interface", w)
 			return
 		}
 
@@ -204,7 +204,7 @@ func sseHandler(logger logger.Service) http.HandlerFunc {
 				freq = parsedFreq
 			}
 		}
-		logger.Infof("Server Sent Events every %s", freq)
+		log.Info().Msgf("Server Sent Events every %s", freq)
 		ticker := time.NewTicker(freq)
 		counter := 0
 		for {
@@ -247,9 +247,9 @@ func rootHandler(serverName string) http.HandlerFunc {
 		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "error: %v", err)
+			_, _ = fmt.Fprintf(w, "error: %v", err)
 		} else {
-			buffer.WriteTo(w)
+			_, _ = buffer.WriteTo(w)
 		}
 	}
 }

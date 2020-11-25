@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
@@ -50,7 +49,7 @@ type MuxerConfig struct {
 	// The minimum number of heartbeats to send before terminating the connection.
 	MaxHeartbeats uint64
 	// Logger to use
-	Logger             logger.Service
+	Log                *zerolog.Logger
 	CompressionQuality CompressionSetting
 	// Initial size for HTTP2 flow control windows
 	DefaultWindowSize uint32
@@ -138,10 +137,10 @@ func Handshake(
 	handshakeSetting := http2.Setting{ID: SettingMuxerMagic, Val: MuxerMagicEdge}
 	compressionSetting := http2.Setting{ID: SettingCompression, Val: config.CompressionQuality.toH2Setting()}
 	if CompressionIsSupported() {
-		config.Logger.Debug("muxer: Compression is supported")
+		config.Log.Debug().Msg("muxer: Compression is supported")
 		m.compressionQuality = config.CompressionQuality.getPreset()
 	} else {
-		config.Logger.Debug("muxer: Compression is not supported")
+		config.Log.Debug().Msg("muxer: Compression is not supported")
 		compressionSetting = http2.Setting{ID: SettingCompression, Val: 0}
 	}
 
@@ -178,12 +177,12 @@ func Handshake(
 	// Sanity check to enusre idelDuration is sane
 	if idleDuration == 0 || idleDuration < defaultTimeout {
 		idleDuration = defaultTimeout
-		config.Logger.Infof("muxer: Minimum idle time has been adjusted to %d", defaultTimeout)
+		config.Log.Info().Msgf("muxer: Minimum idle time has been adjusted to %d", defaultTimeout)
 	}
 	maxRetries := config.MaxHeartbeats
 	if maxRetries == 0 {
 		maxRetries = defaultRetries
-		config.Logger.Infof("muxer: Minimum number of unacked heartbeats to send before closing the connection has been adjusted to %d", maxRetries)
+		config.Log.Info().Msgf("muxer: Minimum number of unacked heartbeats to send before closing the connection has been adjusted to %d", maxRetries)
 	}
 
 	compBytesBefore, compBytesAfter := NewAtomicCounter(0), NewAtomicCounter(0)
@@ -325,7 +324,7 @@ func (m *Muxer) Serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		ch := make(chan error)
 		go func() {
-			err := m.muxReader.run(m.config.Logger)
+			err := m.muxReader.run(m.config.Log)
 			m.explicitShutdown.Fuse(false)
 			m.r.Close()
 			m.abort()
@@ -346,7 +345,7 @@ func (m *Muxer) Serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		ch := make(chan error)
 		go func() {
-			err := m.muxWriter.run(m.config.Logger)
+			err := m.muxWriter.run(m.config.Log)
 			m.explicitShutdown.Fuse(false)
 			m.w.Close()
 			m.abort()
@@ -367,7 +366,7 @@ func (m *Muxer) Serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		ch := make(chan error)
 		go func() {
-			err := m.muxMetricsUpdater.run(m.config.Logger)
+			err := m.muxMetricsUpdater.run(m.config.Log)
 			// don't block if parent goroutine quit early
 			select {
 			case ch <- err:

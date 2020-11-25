@@ -11,9 +11,9 @@ import (
 	"sync"
 
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 
+	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 )
 
@@ -38,7 +38,7 @@ type http2Connection struct {
 	connIndex    uint8
 	wg           *sync.WaitGroup
 	// newRPCClientFunc allows us to mock RPCs during testing
-	newRPCClientFunc func(context.Context, io.ReadWriteCloser, logger.Service) NamedTunnelRPCClient
+	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 	connectedFuse    ConnectedFuse
 }
 
@@ -89,7 +89,7 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher, isFlusher := w.(http.Flusher)
 	if !isFlusher {
-		c.observer.Errorf("%T doesn't implement http.Flusher", w)
+		c.observer.log.Error().Msgf("%T doesn't implement http.Flusher", w)
 		respWriter.WriteErrorResponse()
 		return
 	}
@@ -112,7 +112,7 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *http2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
-	rpcClient := c.newRPCClientFunc(ctx, respWriter, c.observer)
+	rpcClient := c.newRPCClientFunc(ctx, respWriter, c.observer.log)
 	defer rpcClient.Close()
 
 	if err := rpcClient.RegisterConnection(ctx, c.namedTunnel, c.connOptions, c.connIndex, c.observer); err != nil {

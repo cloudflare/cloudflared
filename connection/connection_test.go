@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,14 +22,14 @@ var (
 		OriginClient: &mockOriginClient{},
 		GracePeriod:  time.Millisecond * 100,
 	}
-	testLogger, _ = logger.New()
+	log           = zerolog.Nop()
 	testOriginURL = &url.URL{
 		Scheme: "https",
 		Host:   "connectiontest.argotunnel.com",
 	}
 	testTunnelEventChan = make(chan Event)
 	testObserver        = &Observer{
-		testLogger,
+		&log,
 		m,
 		[]chan Event{testTunnelEventChan},
 		false,
@@ -81,7 +81,7 @@ func wsEndpoint(w ResponseWriter, r *http.Request) error {
 	resp := &http.Response{
 		StatusCode: http.StatusSwitchingProtocols,
 	}
-	w.WriteRespHeaders(resp)
+	_ = w.WriteRespHeaders(resp)
 	clientReader := nowriter{r.Body}
 	go func() {
 		for {
@@ -102,8 +102,8 @@ func originRespEndpoint(w ResponseWriter, status int, data []byte) {
 	resp := &http.Response{
 		StatusCode: status,
 	}
-	w.WriteRespHeaders(resp)
-	w.Write(data)
+	_ = w.WriteRespHeaders(resp)
+	_, _ = w.Write(data)
 }
 
 type mockConnectedFuse struct{}

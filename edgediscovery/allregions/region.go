@@ -57,7 +57,6 @@ func (r Region) GetUnusedIP(excluding *net.TCPAddr) *net.TCPAddr {
 // Use the address, assigning it to a proxy connection.
 func (r Region) Use(addr *net.TCPAddr, connID int) {
 	if addr == nil {
-		//logrus.Errorf("Attempted to use nil address for connection %d", connID)
 		return
 	}
 	r.connFor[addr] = InUse(connID)

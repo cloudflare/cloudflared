@@ -283,6 +283,12 @@ github.com/prometheus/procfs/internal/util
 github.com/rivo/tview
 # github.com/rivo/uniseg v0.1.0
 github.com/rivo/uniseg
+# github.com/rs/zerolog v1.20.0
+## explicit
+github.com/rs/zerolog
+github.com/rs/zerolog/internal/cbor
+github.com/rs/zerolog/internal/json
+github.com/rs/zerolog/log
 # github.com/russross/blackfriday/v2 v2.0.1
 github.com/russross/blackfriday/v2
 # github.com/shurcooL/sanitized_anchor_name v1.0.0

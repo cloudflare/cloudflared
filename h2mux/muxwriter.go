@@ -3,10 +3,10 @@ package h2mux
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/rs/zerolog"
 	"io"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 )
@@ -72,8 +72,8 @@ func tsToPingData(ts int64) [8]byte {
 	return pingData
 }
 
-func (w *MuxWriter) run(logger logger.Service) error {
-	defer logger.Debug("mux - write: event loop finished")
+func (w *MuxWriter) run(log *zerolog.Logger) error {
+	defer log.Debug().Msg("mux - write: event loop finished")
 
 	// routine to periodically communicate bytesWrote
 	go func() {
@@ -91,17 +91,17 @@ func (w *MuxWriter) run(logger logger.Service) error {
 	for {
 		select {
 		case <-w.abortChan:
-			logger.Debug("mux - write: aborting writer thread")
+			log.Debug().Msg("mux - write: aborting writer thread")
 			return nil
 		case errCode := <-w.goAwayChan:
-			logger.Debugf("mux - write: sending GOAWAY code %v", errCode)
+			log.Debug().Msgf("mux - write: sending GOAWAY code %v", errCode)
 			err := w.f.WriteGoAway(w.streams.LastPeerStreamID(), errCode, []byte{})
 			if err != nil {
 				return err
 			}
 			w.idleTimer.MarkActive()
 		case <-w.pingTimestamp.GetUpdateChan():
-			logger.Debug("mux - write: sending PING ACK")
+			log.Debug().Msg("mux - write: sending PING ACK")
 			err := w.f.WritePing(true, tsToPingData(w.pingTimestamp.Get()))
 			if err != nil {
 				return err
@@ -111,7 +111,7 @@ func (w *MuxWriter) run(logger logger.Service) error {
 			if !w.idleTimer.Retry() {
 				return ErrConnectionDropped
 			}
-			logger.Debug("mux - write: sending PING")
+			log.Debug().Msg("mux - write: sending PING")
 			err := w.f.WritePing(false, tsToPingData(time.Now().UnixNano()))
 			if err != nil {
 				return err
@@ -121,7 +121,7 @@ func (w *MuxWriter) run(logger logger.Service) error {
 			w.idleTimer.MarkActive()
 		case <-w.streamErrors.GetSignalChan():
 			for streamID, errCode := range w.streamErrors.GetErrors() {
-				logger.Debugf("mux - write: resetting stream with code: %v streamID: %d", errCode, streamID)
+				log.Debug().Msgf("mux - write: resetting stream with code: %v streamID: %d", errCode, streamID)
 				err := w.f.WriteRSTStream(streamID, errCode)
 				if err != nil {
 					return err
@@ -141,7 +141,7 @@ func (w *MuxWriter) run(logger logger.Service) error {
 			if streamRequest.body != nil {
 				go streamRequest.flushBody()
 			}
-			err := w.writeStreamData(streamRequest.stream, logger)
+			err := w.writeStreamData(streamRequest.stream, log)
 			if err != nil {
 				return err
 			}
@@ -151,7 +151,7 @@ func (w *MuxWriter) run(logger logger.Service) error {
 			if !ok {
 				continue
 			}
-			err := w.writeStreamData(stream, logger)
+			err := w.writeStreamData(stream, log)
 			if err != nil {
 				return err
 			}
@@ -159,7 +159,7 @@ func (w *MuxWriter) run(logger logger.Service) error {
 		case useDict := <-w.useDictChan:
 			err := w.writeUseDictionary(useDict)
 			if err != nil {
-				logger.Errorf("mux - write: error writing use dictionary: %s", err)
+				log.Error().Msgf("mux - write: error writing use dictionary: %s", err)
 				return err
 			}
 			w.idleTimer.MarkActive()
@@ -167,18 +167,18 @@ func (w *MuxWriter) run(logger logger.Service) error {
 	}
 }
 
-func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger logger.Service) error {
-	logger.Debugf("mux - write: writable: streamID: %d", stream.streamID)
+func (w *MuxWriter) writeStreamData(stream *MuxedStream, log *zerolog.Logger) error {
+	log.Debug().Msgf("mux - write: writable: streamID: %d", stream.streamID)
 	chunk := stream.getChunk()
 	w.metricsUpdater.updateReceiveWindow(stream.getReceiveWindow())
 	w.metricsUpdater.updateSendWindow(stream.getSendWindow())
 	if chunk.sendHeadersFrame() {
 		err := w.writeHeaders(chunk.streamID, chunk.headers)
 		if err != nil {
-			logger.Errorf("mux - write: error writing headers: %s: streamID: %d", err, stream.streamID)
+			log.Error().Msgf("mux - write: error writing headers: %s: streamID: %d", err, stream.streamID)
 			return err
 		}
-		logger.Debugf("mux - write: output headers: streamID: %d", stream.streamID)
+		log.Debug().Msgf("mux - write: output headers: streamID: %d", stream.streamID)
 	}
 
 	if chunk.sendWindowUpdateFrame() {
@@ -189,22 +189,22 @@ func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger logger.Service) 
 		// window, unless the receiver treats this as a connection error"
 		err := w.f.WriteWindowUpdate(chunk.streamID, chunk.windowUpdate)
 		if err != nil {
-			logger.Errorf("mux - write: error writing window update: %s: streamID: %d", err, stream.streamID)
+			log.Error().Msgf("mux - write: error writing window update: %s: streamID: %d", err, stream.streamID)
 			return err
 		}
-		logger.Debugf("mux - write: increment receive window by %d streamID: %d", chunk.windowUpdate, stream.streamID)
+		log.Debug().Msgf("mux - write: increment receive window by %d streamID: %d", chunk.windowUpdate, stream.streamID)
 	}
 
 	for chunk.sendDataFrame() {
 		payload, sentEOF := chunk.nextDataFrame(int(w.maxFrameSize))
 		err := w.f.WriteData(chunk.streamID, sentEOF, payload)
 		if err != nil {
-			logger.Errorf("mux - write: error writing data: %s: streamID: %d", err, stream.streamID)
+			log.Error().Msgf("mux - write: error writing data: %s: streamID: %d", err, stream.streamID)
 			return err
 		}
 		// update the amount of data wrote
 		w.bytesWrote.IncrementBy(uint64(len(payload)))
-		logger.Debugf("mux - write: output data: %d: streamID: %d", len(payload), stream.streamID)
+		log.Debug().Msgf("mux - write: output data: %d: streamID: %d", len(payload), stream.streamID)
 
 		if sentEOF {
 			if stream.readBuffer.Closed() {
@@ -212,15 +212,15 @@ func (w *MuxWriter) writeStreamData(stream *MuxedStream, logger logger.Service) 
 				if !stream.gotReceiveEOF() {
 					// the peer may send data that we no longer want to receive. Force them into the
 					// closed state.
-					logger.Debugf("mux - write: resetting stream: streamID: %d", stream.streamID)
+					log.Debug().Msgf("mux - write: resetting stream: streamID: %d", stream.streamID)
 					w.f.WriteRSTStream(chunk.streamID, http2.ErrCodeNo)
 				} else {
 					// Half-open stream transitioned into closed
-					logger.Debugf("mux - write: closing stream: streamID: %d", stream.streamID)
+					log.Debug().Msgf("mux - write: closing stream: streamID: %d", stream.streamID)
 				}
 				w.streams.Delete(chunk.streamID)
 			} else {
-				logger.Debugf("mux - write: closing stream write side: streamID: %d", stream.streamID)
+				log.Debug().Msgf("mux - write: closing stream write side: streamID: %d", stream.streamID)
 			}
 		}
 	}

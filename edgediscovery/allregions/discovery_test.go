@@ -3,7 +3,7 @@ package allregions
 import (
 	"testing"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,8 +19,8 @@ func TestEdgeDiscovery(t *testing.T) {
 		}
 	}
 
-	l := logger.NewOutputWriter(logger.NewMockWriteManager())
-	addrLists, err := edgeDiscovery(l)
+	l := zerolog.Nop()
+	addrLists, err := edgeDiscovery(&l)
 	assert.NoError(t, err)
 	actualAddrSet := map[string]bool{}
 	for _, addrs := range addrLists {

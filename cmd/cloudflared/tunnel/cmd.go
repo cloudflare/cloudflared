@@ -35,14 +35,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 )
 
 const (
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
-
-	sshLogFileDirectory = "/usr/local/var/log/cloudflared/"
 
 	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
 	sshPortFlag = "local-ssh-port"
@@ -174,14 +173,14 @@ func runAdhocNamedTunnel(sc *subcommandContext, name string) error {
 			return errors.Wrap(err, "failed to create tunnel")
 		}
 	} else {
-		sc.logger.Infof("Tunnel already created with ID %s", tunnel.ID)
+		sc.log.Info().Msgf("Tunnel already created with ID %s", tunnel.ID)
 	}
 
 	if r, ok := routeFromFlag(sc.c); ok {
 		if res, err := sc.route(tunnel.ID, r); err != nil {
-			sc.logger.Errorf("failed to create route, please create it manually. err: %v.", err)
+			sc.log.Error().Msgf("failed to create route, please create it manually. err: %v.", err)
 		} else {
-			sc.logger.Infof(res.SuccessSummary())
+			sc.log.Info().Msgf(res.SuccessSummary())
 		}
 	}
 
@@ -194,7 +193,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name string) error {
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, version, shutdownC, graceShutdownC, nil, sc.logger, sc.isUIEnabled)
+	return StartServer(sc.c, version, shutdownC, graceShutdownC, nil, sc.log, sc.isUIEnabled)
 }
 
 func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
@@ -213,7 +212,7 @@ func StartServer(
 	shutdownC,
 	graceShutdownC chan struct{},
 	namedTunnel *connection.NamedTunnelConfig,
-	generalLogger logger.Service,
+	log *zerolog.Logger,
 	isUIEnabled bool,
 ) error {
 	_ = raven.SetDSN(sentryDSN)
@@ -224,45 +223,45 @@ func StartServer(
 	dnsReadySignal := make(chan struct{})
 
 	if config.GetConfiguration().Source() == "" {
-		generalLogger.Infof(config.ErrNoConfigFile.Error())
+		log.Info().Msg(config.ErrNoConfigFile.Error())
 	}
 
 	if c.IsSet("trace-output") {
 		tmpTraceFile, err := ioutil.TempFile("", "trace")
 		if err != nil {
-			generalLogger.Errorf("Failed to create new temporary file to save trace output: %s", err)
+			log.Error().Msgf("Failed to create new temporary file to save trace output: %s", err)
 		}
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				generalLogger.Errorf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
+				log.Error().Msgf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
 			}
 			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
-				generalLogger.Errorf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
+				log.Error().Msgf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
 			} else {
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
-					generalLogger.Errorf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
+					log.Error().Msgf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
 				}
 			}
 		}()
 
 		if err := trace.Start(tmpTraceFile); err != nil {
-			generalLogger.Errorf("Failed to start trace: %s", err)
+			log.Error().Msgf("Failed to start trace: %s", err)
 			return errors.Wrap(err, "Error starting tracing")
 		}
 		defer trace.Stop()
 	}
 
 	buildInfo := buildinfo.GetBuildInfo(version)
-	buildInfo.Log(generalLogger)
-	logClientOptions(c, generalLogger)
+	buildInfo.Log(log)
+	logClientOptions(c, log)
 
 	if c.IsSet("proxy-dns") {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, generalLogger)
+			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, log)
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -273,12 +272,12 @@ func StartServer(
 
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
-		go writePidFile(connectedSignal, c.String("pidfile"), generalLogger)
+		go writePidFile(connectedSignal, c.String("pidfile"), log)
 	}
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		generalLogger.Errorf("Cannot generate cloudflared ID: %s", err)
+		log.Error().Msgf("Cannot generate cloudflared ID: %s", err)
 		return err
 	}
 
@@ -289,12 +288,12 @@ func StartServer(
 	}()
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c, generalLogger) {
-		generalLogger.Infof("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+	if updater.IsAutoupdateEnabled(c, log) {
+		log.Info().Msgf("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, generalLogger)
+			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, log)
 			errC <- autoupdater.Run(ctx)
 		}()
 	}
@@ -303,21 +302,18 @@ func StartServer(
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, generalLogger)
+		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, log)
 	}
 
 	url := c.String("url")
 	hostname := c.String("hostname")
 	if url == hostname && url != "" && hostname != "" {
 		errText := "hostname and url shouldn't match. See --help for more information"
-		generalLogger.Error(errText)
+		log.Error().Msg(errText)
 		return fmt.Errorf(errText)
 	}
 
-	transportLogger, err := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
-	if err != nil {
-		return errors.Wrap(err, "error setting up transport logger")
-	}
+	transportLog := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
 
 	readinessCh := make(chan connection.Event, 16)
 	uiCh := make(chan connection.Event, 16)
@@ -325,30 +321,30 @@ func StartServer(
 		readinessCh,
 		uiCh,
 	}
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, generalLogger, transportLogger, namedTunnel, isUIEnabled, eventChannels)
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, transportLog, namedTunnel, isUIEnabled, eventChannels)
 	if err != nil {
-		generalLogger.Errorf("Couldn't start tunnel: %v", err)
+		log.Error().Msgf("Couldn't start tunnel: %v", err)
 		return err
 	}
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		generalLogger.Errorf("Error opening metrics server listener: %s", err)
+		log.Error().Msgf("Error opening metrics server listener: %s", err)
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessCh, generalLogger)
+		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessCh, log)
 	}()
 
-	ingressRules.StartOrigins(&wg, generalLogger, shutdownC, errC)
+	ingressRules.StartOrigins(&wg, log, shutdownC, errC)
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
-		generalLogger.Info("Enabling control through stdin")
-		go stdinControl(reconnectCh, generalLogger)
+		log.Info().Msg("Enabling control through stdin")
+		go stdinControl(reconnectCh, log)
 	}
 
 	wg.Add(1)
@@ -365,31 +361,15 @@ func StartServer(
 			&ingressRules,
 			tunnelConfig.HAConnections,
 		)
-		logLevels, err := logger.ParseLevelString(c.String("loglevel"))
-		if err != nil {
-			return err
-		}
-		tunnelInfo.LaunchUI(ctx, generalLogger, transportLogger, logLevels, uiCh)
+		tunnelInfo.LaunchUI(ctx, log, transportLog, uiCh)
 	}
 
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), generalLogger)
-}
-
-// forceSetFlag attempts to set the given flag value in the closest context that has it defined
-func forceSetFlag(c *cli.Context, name, value string) {
-	for _, ctx := range c.Lineage() {
-		if err := ctx.Set(name, value); err == nil {
-			break
-		}
-	}
+	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)
 }
 
 func SetFlagsFromConfigFile(c *cli.Context) error {
 	const exitCode = 1
-	log, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return cliutil.PrintLoggerSetupError("error setting up logger", err)
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	inputSource, err := config.ReadConfigFile(c, log)
 	if err != nil {
 		if err == config.ErrNoConfigFile {
@@ -411,20 +391,20 @@ func waitToShutdown(wg *sync.WaitGroup,
 	errC chan error,
 	shutdownC, graceShutdownC chan struct{},
 	gracePeriod time.Duration,
-	logger logger.Service,
+	log *zerolog.Logger,
 ) error {
 	var err error
 	if gracePeriod > 0 {
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod, logger)
+		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod, log)
 	} else {
-		err = waitForSignal(errC, shutdownC, logger)
+		err = waitForSignal(errC, shutdownC, log)
 		close(graceShutdownC)
 	}
 
 	if err != nil {
-		logger.Errorf("Quitting due to error: %s", err)
+		log.Error().Msgf("Quitting due to error: %s", err)
 	} else {
-		logger.Info("Quitting...")
+		log.Info().Msg("Quitting...")
 	}
 	// Wait for clean exit, discarding all errors
 	go func() {
@@ -440,16 +420,16 @@ func notifySystemd(waitForSignal *signal.Signal) {
 	daemon.SdNotify(false, "READY=1")
 }
 
-func writePidFile(waitForSignal *signal.Signal, pidFile string, logger logger.Service) {
+func writePidFile(waitForSignal *signal.Signal, pidFile string, log *zerolog.Logger) {
 	<-waitForSignal.Wait()
 	expandedPath, err := homedir.Expand(pidFile)
 	if err != nil {
-		logger.Errorf("Unable to expand %s, try to use absolute path in --pidfile: %s", pidFile, err)
+		log.Error().Msgf("Unable to expand %s, try to use absolute path in --pidfile: %s", pidFile, err)
 		return
 	}
 	file, err := os.Create(expandedPath)
 	if err != nil {
-		logger.Errorf("Unable to write pid to %s: %s", expandedPath, err)
+		log.Error().Msgf("Unable to write pid to %s: %s", expandedPath, err)
 		return
 	}
 	defer file.Close()
@@ -1018,7 +998,7 @@ func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
 	}
 }
 
-func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service) {
+func stdinControl(reconnectCh chan origin.ReconnectSignal, log *zerolog.Logger) {
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -1033,17 +1013,17 @@ func stdinControl(reconnectCh chan origin.ReconnectSignal, logger logger.Service
 				if len(parts) > 1 {
 					var err error
 					if reconnect.Delay, err = time.ParseDuration(parts[1]); err != nil {
-						logger.Error(err.Error())
+						log.Error().Msg(err.Error())
 						continue
 					}
 				}
-				logger.Infof("Sending reconnect signal %+v", reconnect)
+				log.Info().Msgf("Sending reconnect signal %+v", reconnect)
 				reconnectCh <- reconnect
 			default:
-				logger.Infof("Unknown command: %s", command)
+				log.Info().Msgf("Unknown command: %s", command)
 				fallthrough
 			case "help":
-				logger.Info(`Supported command:
+				log.Info().Msg(`Supported command:
 reconnect [delay]
 - restarts one randomly chosen connection with optional delay before reconnect`)
 			}

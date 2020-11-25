@@ -16,10 +16,11 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/path"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/transfer"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
+
 	"github.com/coreos/go-oidc/jose"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -97,7 +98,7 @@ func newLock(path string) *lock {
 func (l *lock) Acquire() error {
 	// Intercept SIGINT and SIGTERM to release lock before exiting
 	l.sigHandler.register(func() {
-		l.deleteLockFile()
+		_ = l.deleteLockFile()
 		os.Exit(0)
 	})
 
@@ -143,18 +144,18 @@ func isTokenLocked(lockFilePath string) bool {
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
 // it appends the full url as the redirect URL to the access cli request if opening the browser
-func FetchTokenWithRedirect(appURL *url.URL, logger logger.Service) (string, error) {
-	return getToken(appURL, false, logger)
+func FetchTokenWithRedirect(appURL *url.URL, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, false, log)
 }
 
 // FetchToken will either load a stored token or generate a new one
 // it appends the host of the appURL as the redirect URL to the access cli request if opening the browser
-func FetchToken(appURL *url.URL, logger logger.Service) (string, error) {
-	return getToken(appURL, true, logger)
+func FetchToken(appURL *url.URL, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, true, log)
 }
 
 // getToken will either load a stored token or generate a new one
-func getToken(appURL *url.URL, useHostOnly bool, logger logger.Service) (string, error) {
+func getToken(appURL *url.URL, useHostOnly bool, log *zerolog.Logger) (string, error) {
 	if token, err := GetAppTokenIfExists(appURL); token != "" && err == nil {
 		return token, nil
 	}
@@ -179,7 +180,7 @@ func getToken(appURL *url.URL, useHostOnly bool, logger logger.Service) (string,
 	var orgTokenPath string
 	// Get auth domain to format into org token file path
 	if authDomain, err := getAuthDomain(appURL); err != nil {
-		logger.Errorf("failed to get auth domain: %s", err)
+		log.Error().Msgf("failed to get auth domain: %s", err)
 	} else {
 		orgToken, err := GetOrgTokenIfExists(authDomain)
 		if err != nil {
@@ -198,7 +199,7 @@ func getToken(appURL *url.URL, useHostOnly bool, logger logger.Service) (string,
 		}
 		if err == nil {
 			if appToken, err := exchangeOrgToken(appURL, orgToken); err != nil {
-				logger.Debugf("failed to exchange org token for app token: %s", err)
+				log.Debug().Msgf("failed to exchange org token for app token: %s", err)
 			} else {
 				if err := ioutil.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
 					return "", errors.Wrap(err, "failed to write app token to disk")
@@ -207,19 +208,19 @@ func getToken(appURL *url.URL, useHostOnly bool, logger logger.Service) (string,
 			}
 		}
 	}
-	return getTokensFromEdge(appURL, appTokenPath, orgTokenPath, useHostOnly, logger)
+	return getTokensFromEdge(appURL, appTokenPath, orgTokenPath, useHostOnly, log)
 
 }
 
 // getTokensFromEdge will attempt to use the transfer service to retrieve an app and org token, save them to disk,
 // and return the app token.
-func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHostOnly bool, logger logger.Service) (string, error) {
+func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHostOnly bool, log *zerolog.Logger) (string, error) {
 	// If no org token exists or if it couldnt be exchanged for an app token, then run the transfer service flow.
 
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	resourceData, err := transfer.Run(appURL, keyName, keyName, "", true, useHostOnly, logger)
+	resourceData, err := transfer.Run(appURL, keyName, keyName, "", true, useHostOnly, log)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run transfer service")
 	}

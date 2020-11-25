@@ -3,6 +3,7 @@ package updater
 import (
 	"context"
 	"fmt"
+	"github.com/rs/zerolog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,12 +15,10 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/facebookgo/grace/gracenet"
-	"github.com/pkg/errors"
 )
 
 const (
 	DefaultCheckUpdateFreq        = time.Hour * 24
-	appID                         = "app_idCzgxYerVD"
 	noUpdateInShellMessage        = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/argo-tunnel/reference/service/"
 	noUpdateOnWindowsMessage      = "cloudflared will not automatically update on Windows systems."
 	noUpdateManagedPackageMessage = "cloudflared will not automatically update if installed by a package manager."
@@ -114,38 +113,35 @@ func checkForUpdateAndApply(options updateOptions) UpdateOutcome {
 
 // Update is the handler for the update command from the command line
 func Update(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	if wasInstalledFromPackageManager() {
-		logger.Error("cloudflared was installed by a package manager. Please update using the same method.")
+		log.Error().Msg("cloudflared was installed by a package manager. Please update using the same method.")
 		return nil
 	}
 
 	isBeta := c.Bool("beta")
 	if isBeta {
-		logger.Info("cloudflared is set to update to the latest beta version")
+		log.Info().Msg("cloudflared is set to update to the latest beta version")
 	}
 
 	isStaging := c.Bool("staging")
 	if isStaging {
-		logger.Info("cloudflared is set to update from staging")
+		log.Info().Msg("cloudflared is set to update from staging")
 	}
 
 	isForced := c.Bool("force")
 	if isForced {
-		logger.Info("cloudflared is set to upgrade to the latest publish version regardless of the current version")
+		log.Info().Msg("cloudflared is set to upgrade to the latest publish version regardless of the current version")
 	}
 
-	updateOutcome := loggedUpdate(logger, updateOptions{isBeta: isBeta, isStaging: isStaging, isForced: isForced, version: c.String("version")})
+	updateOutcome := loggedUpdate(log, updateOptions{isBeta: isBeta, isStaging: isStaging, isForced: isForced, version: c.String("version")})
 	if updateOutcome.Error != nil {
 		return &statusErr{updateOutcome.Error}
 	}
 
 	if updateOutcome.noUpdate() {
-		logger.Infof("cloudflared is up to date (%s)", updateOutcome.Version)
+		log.Info().Msgf("cloudflared is up to date (%s)", updateOutcome.Version)
 		return nil
 	}
 
@@ -153,13 +149,13 @@ func Update(c *cli.Context) error {
 }
 
 // Checks for an update and applies it if one is available
-func loggedUpdate(logger logger.Service, options updateOptions) UpdateOutcome {
+func loggedUpdate(log *zerolog.Logger, options updateOptions) UpdateOutcome {
 	updateOutcome := checkForUpdateAndApply(options)
 	if updateOutcome.Updated {
-		logger.Infof("cloudflared has been updated to version %s", updateOutcome.Version)
+		log.Info().Msgf("cloudflared has been updated to version %s", updateOutcome.Version)
 	}
 	if updateOutcome.Error != nil {
-		logger.Errorf("update check failed: %s", updateOutcome.Error)
+		log.Error().Msgf("update check failed: %s", updateOutcome.Error)
 	}
 
 	return updateOutcome
@@ -170,7 +166,7 @@ type AutoUpdater struct {
 	configurable     *configurable
 	listeners        *gracenet.Net
 	updateConfigChan chan *configurable
-	logger           logger.Service
+	log              *zerolog.Logger
 }
 
 // AutoUpdaterConfigurable is the attributes of AutoUpdater that can be reconfigured during runtime
@@ -179,7 +175,7 @@ type configurable struct {
 	freq    time.Duration
 }
 
-func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net, logger logger.Service) *AutoUpdater {
+func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net, log *zerolog.Logger) *AutoUpdater {
 	updaterConfigurable := &configurable{
 		enabled: true,
 		freq:    freq,
@@ -192,7 +188,7 @@ func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net, logger logger.S
 		configurable:     updaterConfigurable,
 		listeners:        listeners,
 		updateConfigChan: make(chan *configurable),
-		logger:           logger,
+		log:              log,
 	}
 }
 
@@ -200,19 +196,19 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
 	for {
 		if a.configurable.enabled {
-			updateOutcome := loggedUpdate(a.logger, updateOptions{})
+			updateOutcome := loggedUpdate(a.log, updateOptions{})
 			if updateOutcome.Updated {
 				if IsSysV() {
 					// SysV doesn't have a mechanism to keep service alive, we have to restart the process
-					a.logger.Info("Restarting service managed by SysV...")
+					a.log.Info().Msg("Restarting service managed by SysV...")
 					pid, err := a.listeners.StartProcess()
 					if err != nil {
-						a.logger.Errorf("Unable to restart server automatically: %s", err)
+						a.log.Error().Msgf("Unable to restart server automatically: %s", err)
 						return &statusErr{err: err}
 					}
 					// stop old process after autoupdate. Otherwise we create a new process
 					// after each update
-					a.logger.Infof("PID of the new process is %d", pid)
+					a.log.Info().Msgf("PID of the new process is %d", pid)
 				}
 				return &statusSuccess{newVersion: updateOutcome.Version}
 			}
@@ -244,26 +240,26 @@ func (a *AutoUpdater) Update(newFreq time.Duration) {
 	a.updateConfigChan <- newConfigurable
 }
 
-func IsAutoupdateEnabled(c *cli.Context, l logger.Service) bool {
-	if !SupportAutoUpdate(l) {
+func IsAutoupdateEnabled(c *cli.Context, log *zerolog.Logger) bool {
+	if !SupportAutoUpdate(log) {
 		return false
 	}
 	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
 }
 
-func SupportAutoUpdate(logger logger.Service) bool {
+func SupportAutoUpdate(log *zerolog.Logger) bool {
 	if runtime.GOOS == "windows" {
-		logger.Info(noUpdateOnWindowsMessage)
+		log.Info().Msg(noUpdateOnWindowsMessage)
 		return false
 	}
 
 	if wasInstalledFromPackageManager() {
-		logger.Info(noUpdateManagedPackageMessage)
+		log.Info().Msg(noUpdateManagedPackageMessage)
 		return false
 	}
 
 	if isRunningFromTerminal() {
-		logger.Info(noUpdateInShellMessage)
+		log.Info().Msg(noUpdateInShellMessage)
 		return false
 	}
 	return true

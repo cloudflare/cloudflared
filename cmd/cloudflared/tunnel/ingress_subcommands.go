@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ingress"
+
+	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 )
 
 func buildIngressSubcommand() *cli.Command {

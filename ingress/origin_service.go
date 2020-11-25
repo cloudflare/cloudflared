@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/websocket"
 	gws "github.com/gorilla/websocket"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // OriginService is something a tunnel can proxy traffic to.
@@ -29,7 +29,7 @@ type OriginService interface {
 	// Start the origin service if it's managed by cloudflared, e.g. proxy servers or Hello World.
 	// If it's not managed by cloudflared, this is a no-op because the user is responsible for
 	// starting the origin service.
-	start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error
+	start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error
 }
 
 // unixSocketPath is an OriginService representing a unix socket (which accepts HTTP)
@@ -42,7 +42,7 @@ func (o *unixSocketPath) String() string {
 	return "unix socket: " + o.path
 }
 
-func (o *unixSocketPath) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *unixSocketPath) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (o *localService) Dial(reqURL *url.URL, headers http.Header) (*gws.Conn, *h
 	return d.Dial(reqURL.String(), headers)
 }
 
-func (o *localService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *localService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
@@ -101,13 +101,13 @@ func (o *localService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <
 	return nil
 }
 
-func (o *localService) startProxy(staticHost string, wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *localService) startProxy(staticHost string, wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 
 	// Start a listener for the proxy
 	proxyAddress := net.JoinHostPort(cfg.ProxyAddress, strconv.Itoa(int(cfg.ProxyPort)))
 	listener, err := net.Listen("tcp", proxyAddress)
 	if err != nil {
-		log.Errorf("Cannot start Websocket Proxy Server: %s", err)
+		log.Error().Msgf("Cannot start Websocket Proxy Server: %s", err)
 		return errors.Wrap(err, "Cannot start Websocket Proxy Server")
 	}
 
@@ -119,18 +119,18 @@ func (o *localService) startProxy(staticHost string, wg *sync.WaitGroup, log log
 		// This origin's config specifies what type of proxy to start.
 		switch cfg.ProxyType {
 		case socksProxy:
-			log.Info("SOCKS5 server started")
+			log.Info().Msg("SOCKS5 server started")
 			streamHandler = func(wsConn *websocket.Conn, remoteConn net.Conn, _ http.Header) {
 				dialer := socks.NewConnDialer(remoteConn)
 				requestHandler := socks.NewRequestHandler(dialer)
 				socksServer := socks.NewConnectionHandler(requestHandler)
 
-				socksServer.Serve(wsConn)
+				_ = socksServer.Serve(wsConn)
 			}
 		case "":
-			log.Debug("Not starting any websocket proxy")
+			log.Debug().Msg("Not starting any websocket proxy")
 		default:
-			log.Errorf("%s isn't a valid proxy (valid options are {%s})", cfg.ProxyType, socksProxy)
+			log.Error().Msgf("%s isn't a valid proxy (valid options are {%s})", cfg.ProxyType, socksProxy)
 		}
 
 		errC <- websocket.StartProxyServer(log, listener, staticHost, shutdownC, streamHandler)
@@ -203,7 +203,13 @@ func (o *helloWorld) String() string {
 }
 
 // Start starts a HelloWorld server and stores its address in the Service receiver.
-func (o *helloWorld) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *helloWorld) start(
+	wg *sync.WaitGroup,
+	log *zerolog.Logger,
+	shutdownC <-chan struct{},
+	errC chan error,
+	cfg OriginRequestConfig,
+) error {
 	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
@@ -261,7 +267,13 @@ func (o *statusCode) String() string {
 	return fmt.Sprintf("HTTP %d", o.resp.StatusCode)
 }
 
-func (o *statusCode) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *statusCode) start(
+	wg *sync.WaitGroup,
+	log *zerolog.Logger,
+	shutdownC <-chan struct{},
+	errC chan error,
+	cfg OriginRequestConfig,
+) error {
 	return nil
 }
 
@@ -280,7 +292,7 @@ func (nrc *NopReadCloser) Close() error {
 	return nil
 }
 
-func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log logger.Service) (*http.Transport, error) {
+func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerolog.Logger) (*http.Transport, error) {
 	originCertPool, err := tlsconfig.LoadOriginCA(cfg.CAPool, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error loading cert pool")
@@ -338,6 +350,6 @@ func (mos MockOriginService) String() string {
 	return "MockOriginService"
 }
 
-func (mos MockOriginService) start(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (mos MockOriginService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 	return nil
 }

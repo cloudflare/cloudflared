@@ -7,18 +7,19 @@ import (
 	"sync"
 
 	conn "github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/logger"
+
+	"github.com/rs/zerolog"
 )
 
 // ReadyServer serves HTTP 200 if the tunnel can serve traffic. Intended for k8s readiness checks.
 type ReadyServer struct {
 	sync.RWMutex
 	isConnected map[int]bool
-	log         logger.Service
+	log         *zerolog.Logger
 }
 
 // NewReadyServer initializes a ReadyServer and starts listening for dis/connection events.
-func NewReadyServer(connectionEvents <-chan conn.Event, log logger.Service) *ReadyServer {
+func NewReadyServer(connectionEvents <-chan conn.Event, log *zerolog.Logger) *ReadyServer {
 	rs := ReadyServer{
 		isConnected: make(map[int]bool, 0),
 		log:         log,
@@ -37,7 +38,7 @@ func NewReadyServer(connectionEvents <-chan conn.Event, log logger.Service) *Rea
 			case conn.SetURL:
 				continue
 			default:
-				rs.log.Errorf("Unknown connection event case %v", c)
+				rs.log.Error().Msgf("Unknown connection event case %v", c)
 			}
 		}
 	}()
@@ -59,9 +60,9 @@ func (rs *ReadyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	msg, err := json.Marshal(body)
 	if err != nil {
-		fmt.Fprintf(w, `{"error": "%s"}`, err)
+		_, _ = fmt.Fprintf(w, `{"error": "%s"}`, err)
 	}
-	w.Write(msg)
+	_, _ = w.Write(msg)
 }
 
 // This is the bulk of the logic for ServeHTTP, broken into its own pure function

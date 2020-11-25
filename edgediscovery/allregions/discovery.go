@@ -7,8 +7,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -58,15 +58,15 @@ var friendlyDNSErrorLines = []string{
 }
 
 // EdgeDiscovery implements HA service discovery lookup.
-func edgeDiscovery(logger logger.Service) ([][]*net.TCPAddr, error) {
+func edgeDiscovery(log *zerolog.Logger) ([][]*net.TCPAddr, error) {
 	_, addrs, err := netLookupSRV(srvService, srvProto, srvName)
 	if err != nil {
 		_, fallbackAddrs, fallbackErr := fallbackLookupSRV(srvService, srvProto, srvName)
 		if fallbackErr != nil || len(fallbackAddrs) == 0 {
 			// use the original DNS error `err` in messages, not `fallbackErr`
-			logger.Errorf("Error looking up Cloudflare edge IPs: the DNS query failed: %s", err)
+			log.Error().Msgf("Error looking up Cloudflare edge IPs: the DNS query failed: %s", err)
 			for _, s := range friendlyDNSErrorLines {
-				logger.Error(s)
+				log.Error().Msg(s)
 			}
 			return nil, errors.Wrapf(err, "Could not lookup srv records on _%v._%v.%v", srvService, srvProto, srvName)
 		}
@@ -122,11 +122,11 @@ func resolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
 
 // ResolveAddrs resolves TCP address given a list of addresses. Address can be a hostname, however, it will return at most one
 // of the hostname's IP addresses.
-func ResolveAddrs(addrs []string, logger logger.Service) (resolved []*net.TCPAddr) {
+func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*net.TCPAddr) {
 	for _, addr := range addrs {
 		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
-			logger.Errorf("Failed to resolve %s, err: %v", addr, err)
+			log.Error().Msgf("Failed to resolve %s, err: %v", addr, err)
 		} else {
 			resolved = append(resolved, tcpAddr)
 		}

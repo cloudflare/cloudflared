@@ -2,8 +2,9 @@ package main
 
 import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunneldns"
+
+	"github.com/rs/zerolog"
 )
 
 // ResolverServiceType is used to identify what kind of overwatch service this is
@@ -15,14 +16,14 @@ const ResolverServiceType = "resolver"
 type ResolverService struct {
 	resolver config.DNSResolver
 	shutdown chan struct{}
-	logger   logger.Service
+	log      *zerolog.Logger
 }
 
 // NewResolverService creates a new resolver service
-func NewResolverService(r config.DNSResolver, logger logger.Service) *ResolverService {
+func NewResolverService(r config.DNSResolver, log *zerolog.Logger) *ResolverService {
 	return &ResolverService{resolver: r,
 		shutdown: make(chan struct{}),
-		logger:   logger,
+		log:      log,
 	}
 }
 
@@ -51,7 +52,7 @@ func (s *ResolverService) Shutdown() {
 func (s *ResolverService) Run() error {
 	// create a listener
 	l, err := tunneldns.CreateListener(s.resolver.AddressOrDefault(), s.resolver.PortOrDefault(),
-		s.resolver.UpstreamsOrDefault(), s.resolver.BootstrapsOrDefault(), s.logger)
+		s.resolver.UpstreamsOrDefault(), s.resolver.BootstrapsOrDefault(), s.log)
 	if err != nil {
 		return err
 	}
@@ -60,14 +61,14 @@ func (s *ResolverService) Run() error {
 	readySignal := make(chan struct{})
 	err = l.Start(readySignal)
 	if err != nil {
-		l.Stop()
+		_ = l.Stop()
 		return err
 	}
 	<-readySignal
-	s.logger.Infof("start resolver on: %s:%d", s.resolver.AddressOrDefault(), s.resolver.PortOrDefault())
+	s.log.Info().Msgf("start resolver on: %s:%d", s.resolver.AddressOrDefault(), s.resolver.PortOrDefault())
 
 	// wait for shutdown signal
 	<-s.shutdown
-	s.logger.Infof("shutdown on: %s:%d", s.resolver.AddressOrDefault(), s.resolver.PortOrDefault())
+	s.log.Info().Msgf("shutdown on: %s:%d", s.resolver.AddressOrDefault(), s.resolver.PortOrDefault())
 	return l.Stop()
 }

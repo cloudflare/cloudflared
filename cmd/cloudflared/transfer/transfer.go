@@ -12,8 +12,8 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/encrypter"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, logger logger.Service) ([]byte, error) {
+func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
 	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bo
 	var resourceData []byte
 
 	if shouldEncrypt {
-		buf, key, err := transferRequest(baseStoreURL+"transfer/"+encrypterClient.PublicKey(), logger)
+		buf, key, err := transferRequest(baseStoreURL+"transfer/"+encrypterClient.PublicKey(), log)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +64,7 @@ func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bo
 
 		resourceData = decrypted
 	} else {
-		buf, _, err := transferRequest(baseStoreURL+encrypterClient.PublicKey(), logger)
+		buf, _, err := transferRequest(baseStoreURL+encrypterClient.PublicKey(), log)
 		if err != nil {
 			return nil, err
 		}
@@ -96,17 +96,17 @@ func buildRequestURL(baseURL *url.URL, key, value string, cli, useHostOnly bool)
 }
 
 // transferRequest downloads the requested resource from the request URL
-func transferRequest(requestURL string, logger logger.Service) ([]byte, string, error) {
+func transferRequest(requestURL string, log *zerolog.Logger) ([]byte, string, error) {
 	client := &http.Client{Timeout: clientTimeout}
 	const pollAttempts = 10
 	// we do "long polling" on the endpoint to get the resource.
 	for i := 0; i < pollAttempts; i++ {
-		buf, key, err := poll(client, requestURL, logger)
+		buf, key, err := poll(client, requestURL, log)
 		if err != nil {
 			return nil, "", err
 		} else if len(buf) > 0 {
 			if err := putSuccess(client, requestURL); err != nil {
-				logger.Errorf("Failed to update resource success: %s", err)
+				log.Error().Msgf("Failed to update resource success: %s", err)
 			}
 			return buf, key, nil
 		}
@@ -115,7 +115,7 @@ func transferRequest(requestURL string, logger logger.Service) ([]byte, string, 
 }
 
 // poll the endpoint for the request resource, waiting for the user interaction
-func poll(client *http.Client, requestURL string, logger logger.Service) ([]byte, string, error) {
+func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, string, error) {
 	resp, err := client.Get(requestURL)
 	if err != nil {
 		return nil, "", err
@@ -128,7 +128,7 @@ func poll(client *http.Client, requestURL string, logger logger.Service) ([]byte
 		return nil, "", fmt.Errorf("error on request %d", resp.StatusCode)
 	}
 	if resp.StatusCode != 200 {
-		logger.Info("Waiting for login...")
+		log.Info().Msg("Waiting for login...")
 		return nil, "", nil
 	}
 

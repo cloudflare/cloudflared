@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -130,9 +129,9 @@ func TestNewProtocolSelector(t *testing.T) {
 			wantErr:           true,
 		},
 	}
-	logger, _ := logger.New()
+
 	for _, test := range tests {
-		selector, err := NewProtocolSelector(test.protocol, test.namedTunnelConfig, test.fetchFunc, testNoTTL, logger)
+		selector, err := NewProtocolSelector(test.protocol, test.namedTunnelConfig, test.fetchFunc, testNoTTL, &log)
 		if test.wantErr {
 			assert.Error(t, err, fmt.Sprintf("test %s failed", test.name))
 		} else {
@@ -148,9 +147,8 @@ func TestNewProtocolSelector(t *testing.T) {
 }
 
 func TestAutoProtocolSelectorRefresh(t *testing.T) {
-	logger, _ := logger.New()
 	fetcher := dynamicMockFetcher{}
-	selector, err := NewProtocolSelector("auto", testNamedTunnelConfig, fetcher.fetch(), testNoTTL, logger)
+	selector, err := NewProtocolSelector("auto", testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, H2mux, selector.Current())
 
@@ -178,9 +176,8 @@ func TestAutoProtocolSelectorRefresh(t *testing.T) {
 }
 
 func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
-	logger, _ := logger.New()
 	fetcher := dynamicMockFetcher{}
-	selector, err := NewProtocolSelector("http2", testNamedTunnelConfig, fetcher.fetch(), testNoTTL, logger)
+	selector, err := NewProtocolSelector("http2", testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, HTTP2, selector.Current())
 
@@ -208,9 +205,8 @@ func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 }
 
 func TestProtocolSelectorRefreshTTL(t *testing.T) {
-	logger, _ := logger.New()
 	fetcher := dynamicMockFetcher{percentage: 100}
-	selector, err := NewProtocolSelector("auto", testNamedTunnelConfig, fetcher.fetch(), time.Hour, logger)
+	selector, err := NewProtocolSelector("auto", testNamedTunnelConfig, fetcher.fetch(), time.Hour, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, HTTP2, selector.Current())
 

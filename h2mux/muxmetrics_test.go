@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,10 +91,10 @@ func TestMuxMetricsUpdater(t *testing.T) {
 	abortChan := make(chan struct{})
 	compBefore, compAfter := NewAtomicCounter(0), NewAtomicCounter(0)
 	m := newMuxMetricsUpdater(abortChan, compBefore, compAfter)
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	log := zerolog.Nop()
 
 	go func() {
-		errChan <- m.run(logger)
+		errChan <- m.run(&log)
 	}()
 
 	var wg sync.WaitGroup

@@ -13,13 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -55,7 +55,7 @@ type TunnelConfig struct {
 	IsFreeTunnel     bool
 	LBPool           string
 	Tags             []tunnelpogs.Tag
-	Logger           logger.Service
+	Log              *zerolog.Logger
 	Observer         *connection.Observer
 	ReportedVersion  string
 	Retries          uint
@@ -235,7 +235,7 @@ func waitForBackoff(
 	}
 
 	config.Observer.SendReconnect(connIndex)
-	config.Logger.Infof("Retrying connection %d in %s seconds, error %v", connIndex, duration, err)
+	config.Log.Info().Msgf("Retrying connection %d in %s seconds, error %v", connIndex, duration, err)
 	protobackoff.Backoff(ctx)
 
 	if protobackoff.ReachedMaxRetries() {
@@ -247,13 +247,13 @@ func waitForBackoff(
 		if protobackoff.protocol == fallback {
 			return err
 		}
-		config.Logger.Infof("Fallback to use %s", fallback)
+		config.Log.Info().Msgf("Fallback to use %s", fallback)
 		protobackoff.fallback(fallback)
 	} else if !protobackoff.inFallback {
 		current := config.ProtocolSelector.Current()
 		if protobackoff.protocol != current {
 			protobackoff.protocol = current
-			config.Logger.Infof("Change protocol to %s", current)
+			config.Log.Info().Msgf("Change protocol to %s", current)
 		}
 	}
 	return nil
@@ -311,9 +311,16 @@ func ServeH2mux(
 	cloudflaredUUID uuid.UUID,
 	reconnectCh chan ReconnectSignal,
 ) (err error, recoverable bool) {
-	config.Logger.Debugf("Connecting via h2mux")
+	config.Log.Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
-	handler, err, recoverable := connection.NewH2muxConnection(ctx, config.ConnectionConfig, config.MuxerConfig, edgeConn, connectionIndex, config.Observer)
+	handler, err, recoverable := connection.NewH2muxConnection(
+		ctx,
+		config.ConnectionConfig,
+		config.MuxerConfig,
+		edgeConn,
+		connectionIndex,
+		config.Observer,
+	)
 	if err != nil {
 		return err, recoverable
 	}
@@ -338,29 +345,29 @@ func ServeH2mux(
 			// don't retry this connection anymore, let supervisor pick new a address
 			return err, false
 		case *serverRegisterTunnelError:
-			config.Logger.Errorf("Register tunnel error from server side: %s", err.cause)
+			config.Log.Error().Msgf("Register tunnel error from server side: %s", err.cause)
 			// Don't send registration error return from server to Sentry. They are
 			// logged on server side
 			if incidents := config.IncidentLookup.ActiveIncidents(); len(incidents) > 0 {
-				config.Logger.Error(activeIncidentsMsg(incidents))
+				config.Log.Error().Msg(activeIncidentsMsg(incidents))
 			}
 			return err.cause, !err.permanent
 		case *clientRegisterTunnelError:
-			config.Logger.Errorf("Register tunnel error on client side: %s", err.cause)
+			config.Log.Error().Msgf("Register tunnel error on client side: %s", err.cause)
 			return err, true
 		case *muxerShutdownError:
-			config.Logger.Info("Muxer shutdown")
+			config.Log.Info().Msg("Muxer shutdown")
 			return err, true
 		case *ReconnectSignal:
-			config.Logger.Infof("Restarting connection %d due to reconnect signal in %s", connectionIndex, err.Delay)
+			config.Log.Info().Msgf("Restarting connection %d due to reconnect signal in %s", connectionIndex, err.Delay)
 			err.DelayBeforeReconnect()
 			return err, true
 		default:
 			if err == context.Canceled {
-				config.Logger.Debugf("Serve tunnel error: %s", err)
+				config.Log.Debug().Msgf("Serve tunnel error: %s", err)
 				return err, false
 			}
-			config.Logger.Errorf("Serve tunnel error: %s", err)
+			config.Log.Error().Msgf("Serve tunnel error: %s", err)
 			return err, true
 		}
 	}
@@ -376,8 +383,16 @@ func ServeHTTP2(
 	connectedFuse connection.ConnectedFuse,
 	reconnectCh chan ReconnectSignal,
 ) (err error, recoverable bool) {
-	config.Logger.Debugf("Connecting via http2")
-	server := connection.NewHTTP2Connection(tlsServerConn, config.ConnectionConfig, config.NamedTunnel, connOptions, config.Observer, connIndex, connectedFuse)
+	config.Log.Debug().Msgf("Connecting via http2")
+	server := connection.NewHTTP2Connection(
+		tlsServerConn,
+		config.ConnectionConfig,
+		config.NamedTunnel,
+		connOptions,
+		config.Observer,
+		connIndex,
+		connectedFuse,
+	)
 
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {

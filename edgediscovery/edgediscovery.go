@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -19,7 +19,7 @@ var errNoAddressesLeft = fmt.Errorf("There are no free edge addresses left")
 type Edge struct {
 	regions *allregions.Regions
 	sync.Mutex
-	logger logger.Service
+	log *zerolog.Logger
 }
 
 // ------------------------------------
@@ -28,34 +28,34 @@ type Edge struct {
 
 // ResolveEdge runs the initial discovery of the Cloudflare edge, finding Addrs that can be allocated
 // to connections.
-func ResolveEdge(l logger.Service) (*Edge, error) {
-	regions, err := allregions.ResolveEdge(l)
+func ResolveEdge(log *zerolog.Logger) (*Edge, error) {
+	regions, err := allregions.ResolveEdge(log)
 	if err != nil {
 		return new(Edge), err
 	}
 	return &Edge{
-		logger:  l,
+		log:     log,
 		regions: regions,
 	}, nil
 }
 
 // StaticEdge creates a list of edge addresses from the list of hostnames. Mainly used for testing connectivity.
-func StaticEdge(l logger.Service, hostnames []string) (*Edge, error) {
-	regions, err := allregions.StaticEdge(hostnames, l)
+func StaticEdge(log *zerolog.Logger, hostnames []string) (*Edge, error) {
+	regions, err := allregions.StaticEdge(hostnames, log)
 	if err != nil {
 		return new(Edge), err
 	}
 	return &Edge{
-		logger:  l,
+		log:     log,
 		regions: regions,
 	}, nil
 }
 
 // MockEdge creates a Cloudflare Edge from arbitrary TCP addresses. Used for testing.
-func MockEdge(l logger.Service, addrs []*net.TCPAddr) *Edge {
+func MockEdge(log *zerolog.Logger, addrs []*net.TCPAddr) *Edge {
 	regions := allregions.NewNoResolve(addrs)
 	return &Edge{
-		logger:  l,
+		log:     log,
 		regions: regions,
 	}
 }
@@ -82,17 +82,17 @@ func (ed *Edge) GetAddr(connID int) (*net.TCPAddr, error) {
 
 	// If this connection has already used an edge addr, return it.
 	if addr := ed.regions.AddrUsedBy(connID); addr != nil {
-		ed.logger.Debugf("edgediscovery - GetAddr: Returning same address back to proxy connection: connID: %d", connID)
+		ed.log.Debug().Msgf("edgediscovery - GetAddr: Returning same address back to proxy connection: connID: %d", connID)
 		return addr, nil
 	}
 
 	// Otherwise, give it an unused one
 	addr := ed.regions.GetUnusedAddr(nil, connID)
 	if addr == nil {
-		ed.logger.Debugf("edgediscovery - GetAddr: No addresses left to give proxy connection: connID: %d", connID)
+		ed.log.Debug().Msgf("edgediscovery - GetAddr: No addresses left to give proxy connection: connID: %d", connID)
 		return nil, errNoAddressesLeft
 	}
-	ed.logger.Debugf("edgediscovery - GetAddr: Giving connection its new address %s: connID: %d", addr, connID)
+	ed.log.Debug().Msgf("edgediscovery - GetAddr: Giving connection its new address %s: connID: %d", addr, connID)
 	return addr, nil
 }
 
@@ -107,11 +107,11 @@ func (ed *Edge) GetDifferentAddr(connID int) (*net.TCPAddr, error) {
 	}
 	addr := ed.regions.GetUnusedAddr(oldAddr, connID)
 	if addr == nil {
-		ed.logger.Debugf("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection: connID: %d", connID)
+		ed.log.Debug().Msgf("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection: connID: %d", connID)
 		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	ed.logger.Debugf("edgediscovery - GetDifferentAddr: Giving connection its new address %s: connID: %d", addr, connID)
+	ed.log.Debug().Msgf("edgediscovery - GetDifferentAddr: Giving connection its new address %s: connID: %d", addr, connID)
 	return addr, nil
 }
 
@@ -127,6 +127,6 @@ func (ed *Edge) AvailableAddrs() int {
 func (ed *Edge) GiveBack(addr *net.TCPAddr) bool {
 	ed.Lock()
 	defer ed.Unlock()
-	ed.logger.Debug("edgediscovery - GiveBack: Address now unused")
+	ed.log.Debug().Msg("edgediscovery - GiveBack: Address now unused")
 	return ed.regions.GiveBack(addr)
 }

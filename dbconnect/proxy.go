@@ -8,20 +8,21 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 // Proxy is an HTTP server that proxies requests to a Client.
 type Proxy struct {
 	client          Client
 	accessValidator *validation.Access
-	logger          logger.Service
+	log             *zerolog.Logger
 }
 
 // NewInsecureProxy creates a Proxy that talks to a Client at an origin.
@@ -43,12 +44,9 @@ func NewInsecureProxy(ctx context.Context, origin string) (*Proxy, error) {
 		return nil, errors.Wrap(err, "could not connect to the database")
 	}
 
-	logger, err := logger.New() // TODO: Does not obey log configuration
-	if err != nil {
-		return nil, errors.Wrap(err, "error setting up logger")
-	}
+	log := zerolog.New(os.Stderr).With().Logger() // TODO: Does not obey log configuration
 
-	return &Proxy{client, nil, logger}, nil
+	return &Proxy{client, nil, &log}, nil
 }
 
 // NewSecureProxy creates a Proxy that talks to a Client at an origin.
@@ -96,7 +94,7 @@ func (proxy *Proxy) IsAllowed(r *http.Request, verbose ...bool) bool {
 	// of either a misconfiguration of the CLI or a massive failure of upstream systems.
 	if len(verbose) > 0 {
 		cfRay := proxy.getRayHeader(r)
-		proxy.logger.Infof("dbproxy: Failed JWT authentication: cf-ray: %s %s", cfRay, err)
+		proxy.log.Info().Msgf("dbproxy: Failed JWT authentication: cf-ray: %s %s", cfRay, err)
 	}
 
 	return false
@@ -151,8 +149,8 @@ func (proxy *Proxy) httpListen(ctx context.Context, listener net.Listener) error
 
 	go func() {
 		<-ctx.Done()
-		httpServer.Close()
-		listener.Close()
+		_ = httpServer.Close()
+		_ = listener.Close()
 	}()
 
 	return httpServer.Serve(listener)
@@ -241,7 +239,7 @@ func (proxy *Proxy) httpRespondErr(w http.ResponseWriter, r *http.Request, defau
 	proxy.httpRespond(w, r, status, err.Error())
 	if len(err.Error()) > 0 {
 		cfRay := proxy.getRayHeader(r)
-		proxy.logger.Infof("dbproxy: Database proxy error: cf-ray: %s %s", cfRay, err)
+		proxy.log.Info().Msgf("dbproxy: Database proxy error: cf-ray: %s %s", cfRay, err)
 	}
 }
 

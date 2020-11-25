@@ -3,25 +3,25 @@ package tunnelrpc
 import (
 	"context"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/trace"
 	"zombiezen.com/go/capnproto2/rpc"
 )
 
-// ConnLogger wraps a logrus *log.Entry for a connection.
+// ConnLogger wraps a Zerolog Logger for a connection.
 type ConnLogger struct {
-	Entry logger.Service
+	Log *zerolog.Logger
 }
 
 func (c ConnLogger) Infof(ctx context.Context, format string, args ...interface{}) {
-	c.Entry.Infof(format, args...)
+	c.Log.Info().Msgf(format, args...)
 }
 
 func (c ConnLogger) Errorf(ctx context.Context, format string, args ...interface{}) {
-	c.Entry.Errorf(format, args...)
+	c.Log.Error().Msgf(format, args...)
 }
 
-func ConnLog(log logger.Service) rpc.ConnOption {
+func ConnLog(log *zerolog.Logger) rpc.ConnOption {
 	return rpc.ConnLog(ConnLogger{log})
 }
 

@@ -5,20 +5,21 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+
+	"github.com/rs/zerolog"
 )
 
 type Observer struct {
-	logger.Service
+	log              *zerolog.Logger
 	metrics          *tunnelMetrics
 	tunnelEventChans []chan Event
 	uiEnabled        bool
 }
 
-func NewObserver(logger logger.Service, tunnelEventChans []chan Event, uiEnabled bool) *Observer {
+func NewObserver(log *zerolog.Logger, tunnelEventChans []chan Event, uiEnabled bool) *Observer {
 	return &Observer{
-		logger,
+		log,
 		newTunnelMetrics(),
 		tunnelEventChans,
 		uiEnabled,
@@ -27,7 +28,7 @@ func NewObserver(logger logger.Service, tunnelEventChans []chan Event, uiEnabled
 
 func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
 	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
-	o.Infof(msg)
+	o.log.Info().Msgf(msg)
 	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }
 
@@ -36,10 +37,10 @@ func (o *Observer) logTrialHostname(registration *tunnelpogs.TunnelRegistration)
 	if !o.uiEnabled {
 		if registrationURL, err := url.Parse(registration.Url); err == nil {
 			for _, line := range asciiBox(trialZoneMsg(registrationURL.String()), 2) {
-				o.Info(line)
+				o.log.Info().Msg(line)
 			}
 		} else {
-			o.Error("Failed to connect tunnel, please try again.")
+			o.log.Error().Msg("Failed to connect tunnel, please try again.")
 			return fmt.Errorf("empty URL in response from Cloudflare edge")
 		}
 	}

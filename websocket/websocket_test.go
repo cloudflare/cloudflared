@@ -3,14 +3,15 @@ package websocket
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/rs/zerolog"
 	"io"
 	"math/rand"
 	"net/http"
 	"testing"
 
 	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tlsconfig"
+
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/websocket"
 )
@@ -62,7 +63,7 @@ func TestGenerateAcceptKey(t *testing.T) {
 }
 
 func TestServe(t *testing.T) {
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	log := zerolog.Nop()
 	shutdownC := make(chan struct{})
 	errC := make(chan error)
 	listener, err := hello.CreateTLSListener("localhost:1111")
@@ -70,7 +71,7 @@ func TestServe(t *testing.T) {
 	defer listener.Close()
 
 	go func() {
-		errC <- hello.StartHelloWorldServer(logger, listener, shutdownC)
+		errC <- hello.StartHelloWorldServer(&log, listener, shutdownC)
 	}()
 
 	req := testRequest(t, "https://localhost:1111/ws", nil)
@@ -96,7 +97,7 @@ func TestServe(t *testing.T) {
 		assert.Equal(t, clientMessage, message)
 	}
 
-	conn.Close()
+	_ = conn.Close()
 	close(shutdownC)
 	<-errC
 }
@@ -106,7 +107,7 @@ func TestServe(t *testing.T) {
 // 	remoteAddress := "localhost:1113"
 // 	listenerAddress := "localhost:1112"
 // 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
-// 	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+// 	logger := zerolog.Nop()
 // 	shutdownC := make(chan struct{})
 
 // 	listener, err := net.Listen("tcp", listenerAddress)

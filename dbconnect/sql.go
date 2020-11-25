@@ -46,7 +46,7 @@ func NewSQLClient(ctx context.Context, originURL *url.URL) (Client, error) {
 	// Closes the driver, will occur when the context finishes.
 	go func() {
 		<-ctx.Done()
-		driver.Close()
+		_ = driver.Close()
 	}()
 
 	return &SQLClient{driver.DriverName(), driver}, nil
@@ -260,7 +260,7 @@ func sqlRows(rows *sql.Rows) ([]map[string]interface{}, error) {
 		for i := range columns {
 			pointers[i] = &values[i]
 		}
-		rows.Scan(pointers...)
+		_ = rows.Scan(pointers...)
 
 		// Convert a row, an array of values, into an object where
 		// each key is the name of its respective column.

@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 )
 
@@ -26,16 +26,16 @@ type UpstreamHTTPS struct {
 	client     *http.Client
 	endpoint   *url.URL
 	bootstraps []string
-	logger     logger.Service
+	log        *zerolog.Logger
 }
 
 // NewUpstreamHTTPS creates a new DNS over HTTPS upstream from endpoint
-func NewUpstreamHTTPS(endpoint string, bootstraps []string, logger logger.Service) (Upstream, error) {
+func NewUpstreamHTTPS(endpoint string, bootstraps []string, log *zerolog.Logger) (Upstream, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	return &UpstreamHTTPS{client: configureClient(u.Hostname()), endpoint: u, bootstraps: bootstraps, logger: logger}, nil
+	return &UpstreamHTTPS{client: configureClient(u.Hostname()), endpoint: u, bootstraps: bootstraps, log: log}, nil
 }
 
 // Exchange provides an implementation for the Upstream interface
@@ -49,12 +49,12 @@ func (u *UpstreamHTTPS) Exchange(ctx context.Context, query *dns.Msg) (*dns.Msg,
 		for _, bootstrap := range u.bootstraps {
 			endpoint, client, err := configureBootstrap(bootstrap)
 			if err != nil {
-				u.logger.Errorf("failed to configure boostrap upstream %s: %s", bootstrap, err)
+				u.log.Error().Msgf("failed to configure boostrap upstream %s: %s", bootstrap, err)
 				continue
 			}
-			msg, err := exchange(queryBuf, query.Id, endpoint, client, u.logger)
+			msg, err := exchange(queryBuf, query.Id, endpoint, client, u.log)
 			if err != nil {
-				u.logger.Errorf("failed to connect to a boostrap upstream %s: %s", bootstrap, err)
+				u.log.Error().Msgf("failed to connect to a boostrap upstream %s: %s", bootstrap, err)
 				continue
 			}
 			return msg, nil
@@ -62,10 +62,10 @@ func (u *UpstreamHTTPS) Exchange(ctx context.Context, query *dns.Msg) (*dns.Msg,
 		return nil, fmt.Errorf("failed to reach any bootstrap upstream: %v", u.bootstraps)
 	}
 
-	return exchange(queryBuf, query.Id, u.endpoint, u.client, u.logger)
+	return exchange(queryBuf, query.Id, u.endpoint, u.client, u.log)
 }
 
-func exchange(msg []byte, queryID uint16, endpoint *url.URL, client *http.Client, logger logger.Service) (*dns.Msg, error) {
+func exchange(msg []byte, queryID uint16, endpoint *url.URL, client *http.Client, log *zerolog.Logger) (*dns.Msg, error) {
 	// No content negotiation for now, use DNS wire format
 	buf, backendErr := exchangeWireformat(msg, endpoint, client)
 	if backendErr == nil {
@@ -78,7 +78,7 @@ func exchange(msg []byte, queryID uint16, endpoint *url.URL, client *http.Client
 		return response, nil
 	}
 
-	logger.Errorf("failed to connect to an HTTPS backend %q: %s", endpoint, backendErr)
+	log.Error().Msgf("failed to connect to an HTTPS backend %q: %s", endpoint, backendErr)
 	return nil, backendErr
 }
 
@@ -128,14 +128,14 @@ func configureBootstrap(bootstrap string) (*url.URL, *http.Client, error) {
 // configureClient will configure a HTTPS client for upstream DoH requests
 func configureClient(hostname string) *http.Client {
 	// Update TLS and HTTP client configuration
-	tls := &tls.Config{ServerName: hostname}
+	tlsConfig := &tls.Config{ServerName: hostname}
 	transport := &http.Transport{
-		TLSClientConfig:    tls,
+		TLSClientConfig:    tlsConfig,
 		DisableCompression: true,
 		MaxIdleConns:       1,
 		Proxy:              http.ProxyFromEnvironment,
 	}
-	http2.ConfigureTransport(transport)
+	_ = http2.ConfigureTransport(transport)
 
 	return &http.Client{
 		Timeout:   defaultTimeout,

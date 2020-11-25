@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/watcher"
+
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 )
 
 type mockNotifier struct {
@@ -46,8 +46,8 @@ func TestConfigChanged(t *testing.T) {
 	f, err := os.Create(filePath)
 	assert.NoError(t, err)
 	defer func() {
-		f.Close()
-		os.Remove(filePath)
+		_ = f.Close()
+		_ = os.Remove(filePath)
 	}()
 	c := &Root{
 		Forwarders: []Forwarder{
@@ -57,15 +57,15 @@ func TestConfigChanged(t *testing.T) {
 			},
 		},
 	}
-	configRead := func(configPath string, log logger.Service) (Root, error) {
+	configRead := func(configPath string, log *zerolog.Logger) (Root, error) {
 		return *c, nil
 	}
 	wait := make(chan struct{})
 	w := &mockFileWatcher{path: filePath, ready: wait}
 
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	log := zerolog.Nop()
 
-	service, err := NewFileManager(w, filePath, logger)
+	service, err := NewFileManager(w, filePath, &log)
 	service.ReadConfig = configRead
 	assert.NoError(t, err)
 

@@ -13,8 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -199,7 +198,7 @@ type RESTClient struct {
 	authToken     string
 	userAgent     string
 	client        http.Client
-	logger        logger.Service
+	log           *zerolog.Logger
 }
 
 type baseEndpoints struct {
@@ -209,7 +208,7 @@ type baseEndpoints struct {
 
 var _ Client = (*RESTClient)(nil)
 
-func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, logger logger.Service) (*RESTClient, error) {
+func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, log *zerolog.Logger) (*RESTClient, error) {
 	if strings.HasSuffix(baseURL, "/") {
 		baseURL = baseURL[:len(baseURL)-1]
 	}
@@ -235,7 +234,7 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 			},
 			Timeout: defaultTimeout,
 		},
-		logger: logger,
+		log: log,
 	}, nil
 }
 

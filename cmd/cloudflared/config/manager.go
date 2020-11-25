@@ -4,9 +4,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/watcher"
+
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v2"
 )
 
@@ -27,16 +28,16 @@ type FileManager struct {
 	watcher    watcher.Notifier
 	notifier   Notifier
 	configPath string
-	logger     logger.Service
-	ReadConfig func(string, logger.Service) (Root, error)
+	log        *zerolog.Logger
+	ReadConfig func(string, *zerolog.Logger) (Root, error)
 }
 
 // NewFileManager creates a config manager
-func NewFileManager(watcher watcher.Notifier, configPath string, logger logger.Service) (*FileManager, error) {
+func NewFileManager(watcher watcher.Notifier, configPath string, log *zerolog.Logger) (*FileManager, error) {
 	m := &FileManager{
 		watcher:    watcher,
 		configPath: configPath,
-		logger:     logger,
+		log:        log,
 		ReadConfig: readConfigFromPath,
 	}
 	err := watcher.Add(configPath)
@@ -60,7 +61,7 @@ func (m *FileManager) Start(notifier Notifier) error {
 
 // GetConfig reads the yaml file from the disk
 func (m *FileManager) GetConfig() (Root, error) {
-	return m.ReadConfig(m.configPath, m.logger)
+	return m.ReadConfig(m.configPath, m.log)
 }
 
 // Shutdown stops the watcher
@@ -68,7 +69,7 @@ func (m *FileManager) Shutdown() {
 	m.watcher.Shutdown()
 }
 
-func readConfigFromPath(configPath string, log logger.Service) (Root, error) {
+func readConfigFromPath(configPath string, log *zerolog.Logger) (Root, error) {
 	if configPath == "" {
 		return Root{}, errors.New("unable to find config file")
 	}
@@ -82,7 +83,7 @@ func readConfigFromPath(configPath string, log logger.Service) (Root, error) {
 	var config Root
 	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
 		if err == io.EOF {
-			log.Errorf("Configuration file %s was empty", configPath)
+			log.Error().Msgf("Configuration file %s was empty", configPath)
 			return Root{}, nil
 		}
 		return Root{}, errors.Wrap(err, "error parsing YAML in config file at "+configPath)
@@ -98,14 +99,14 @@ func readConfigFromPath(configPath string, log logger.Service) (Root, error) {
 func (m *FileManager) WatcherItemDidChange(filepath string) {
 	config, err := m.GetConfig()
 	if err != nil {
-		m.logger.Errorf("Failed to read new config: %s", err)
+		m.log.Error().Msgf("Failed to read new config: %s", err)
 		return
 	}
-	m.logger.Info("Config file has been updated")
+	m.log.Info().Msg("Config file has been updated")
 	m.notifier.ConfigDidUpdate(config)
 }
 
 // WatcherDidError notifies of errors with the file watcher
 func (m *FileManager) WatcherDidError(err error) {
-	m.logger.Errorf("Config watcher encountered an error: %s", err)
+	m.log.Error().Msgf("Config watcher encountered an error: %s", err)
 }

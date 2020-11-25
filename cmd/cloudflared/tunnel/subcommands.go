@@ -223,7 +223,7 @@ func fmtAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnect
 	defer writer.Flush()
 
 	// Print column headers with tabbed columns
-	fmt.Fprintln(writer, "ID\tNAME\tCREATED\tCONNECTIONS\t")
+	_, _ = fmt.Fprintln(writer, "ID\tNAME\tCREATED\tCONNECTIONS\t")
 
 	// Loop through tunnels, create formatted string for each, and print using tabwriter
 	for _, t := range tunnels {
@@ -234,7 +234,7 @@ func fmtAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnect
 			t.CreatedAt.Format(time.RFC3339),
 			fmtConnections(t.Connections, showRecentlyDisconnected),
 		)
-		fmt.Fprintln(writer, formattedStr)
+		_, _ = fmt.Fprintln(writer, formattedStr)
 	}
 }
 
@@ -360,7 +360,7 @@ func runNamedTunnel(sc *subcommandContext, tunnelRef string) error {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
 
-	sc.logger.Infof("Starting tunnel %s", tunnelID.String())
+	sc.log.Info().Msgf("Starting tunnel %s", tunnelID.String())
 
 	return sc.run(tunnelID)
 }
@@ -515,7 +515,7 @@ func routeCommand(c *cli.Context) error {
 		return err
 	}
 
-	sc.logger.Infof(res.SuccessSummary())
+	sc.log.Info().Msg(res.SuccessSummary())
 	return nil
 }
 

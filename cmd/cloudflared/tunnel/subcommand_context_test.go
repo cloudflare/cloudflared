@@ -4,16 +4,15 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"github.com/rs/zerolog"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 )
 
@@ -106,7 +105,7 @@ func (fs mockFileSystem) readFile(filePath string) ([]byte, error) {
 func Test_subcommandContext_findCredentials(t *testing.T) {
 	type fields struct {
 		c                 *cli.Context
-		logger            logger.Service
+		log               *zerolog.Logger
 		isUIEnabled       bool
 		fs                fileSystem
 		tunnelstoreClient tunnelstore.Client
@@ -137,8 +136,7 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 		},
 		vfp: func(string) bool { return true },
 	}
-	logger, err := logger.New()
-	require.NoError(t, err)
+	log := zerolog.Nop()
 
 	tests := []struct {
 		name    string
@@ -150,13 +148,13 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 		{
 			name: "Filepath given leads to old credentials file",
 			fields: fields{
-				logger: logger,
-				fs:     fs,
+				log: &log,
+				fs:  fs,
 				c: func() *cli.Context {
 					flagSet := flag.NewFlagSet("test0", flag.PanicOnError)
 					flagSet.String(CredFileFlag, oldCertPath, "")
 					c := cli.NewContext(cli.NewApp(), flagSet, nil)
-					err = c.Set(CredFileFlag, oldCertPath)
+					_ = c.Set(CredFileFlag, oldCertPath)
 					return c
 				}(),
 			},
@@ -172,13 +170,13 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 		{
 			name: "Filepath given leads to new credentials file",
 			fields: fields{
-				logger: logger,
-				fs:     fs,
+				log: &log,
+				fs:  fs,
 				c: func() *cli.Context {
 					flagSet := flag.NewFlagSet("test0", flag.PanicOnError)
 					flagSet.String(CredFileFlag, newCertPath, "")
 					c := cli.NewContext(cli.NewApp(), flagSet, nil)
-					err = c.Set(CredFileFlag, newCertPath)
+					_ = c.Set(CredFileFlag, newCertPath)
 					return c
 				}(),
 			},
@@ -197,7 +195,7 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sc := &subcommandContext{
 				c:                 tt.fields.c,
-				logger:            tt.fields.logger,
+				log:               tt.fields.log,
 				isUIEnabled:       tt.fields.isUIEnabled,
 				fs:                tt.fields.fs,
 				tunnelstoreClient: tt.fields.tunnelstoreClient,

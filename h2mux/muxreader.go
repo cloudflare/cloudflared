@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 )
 
@@ -68,8 +68,8 @@ func (r *MuxReader) Shutdown() <-chan struct{} {
 	return done
 }
 
-func (r *MuxReader) run(logger logger.Service) error {
-	defer logger.Debug("mux - read: event loop finished")
+func (r *MuxReader) run(log *zerolog.Logger) error {
+	defer log.Debug().Msg("mux - read: event loop finished")
 
 	// routine to periodically update bytesRead
 	go func() {
@@ -93,7 +93,7 @@ func (r *MuxReader) run(logger logger.Service) error {
 			}
 			switch e := err.(type) {
 			case http2.StreamError:
-				logger.Infof("%s: stream error", errorString)
+				log.Info().Msgf("%s: stream error", errorString)
 				// Ideally we wouldn't return here, since that aborts the muxer.
 				// We should communicate the error to the relevant MuxedStream
 				// data structure, so that callers of MuxedStream.Read() and
@@ -101,28 +101,28 @@ func (r *MuxReader) run(logger logger.Service) error {
 				// and keep the muxer going.
 				return r.streamError(e.StreamID, e.Code)
 			case http2.ConnectionError:
-				logger.Infof("%s: stream error", errorString)
+				log.Info().Msgf("%s: stream error", errorString)
 				return r.connectionError(err)
 			default:
 				if isConnectionClosedError(err) {
 					if r.streams.Len() == 0 {
 						// don't log the error here -- that would just be extra noise
-						logger.Debug("mux - read: shutting down")
+						log.Debug().Msg("mux - read: shutting down")
 						return nil
 					}
-					logger.Infof("%s: connection closed unexpectedly", errorString)
+					log.Info().Msgf("%s: connection closed unexpectedly", errorString)
 					return err
 				} else {
-					logger.Infof("%s: frame read error", errorString)
+					log.Info().Msgf("%s: frame read error", errorString)
 					return r.connectionError(err)
 				}
 			}
 		}
 		r.connActive.Signal()
-		logger.Debugf("mux - read: read frame: data %v", frame)
+		log.Debug().Msgf("mux - read: read frame: data %v", frame)
 		switch f := frame.(type) {
 		case *http2.DataFrame:
-			err = r.receiveFrameData(f, logger)
+			err = r.receiveFrameData(f, log)
 		case *http2.MetaHeadersFrame:
 			err = r.receiveHeaderData(f)
 		case *http2.RSTStreamFrame:
@@ -155,7 +155,7 @@ func (r *MuxReader) run(logger logger.Service) error {
 			err = ErrUnexpectedFrameType
 		}
 		if err != nil {
-			logger.Debugf("mux - read: read error: data %v", frame)
+			log.Debug().Msgf("mux - read: read error: data %v", frame)
 			return r.connectionError(err)
 		}
 	}
@@ -276,7 +276,7 @@ func (r *MuxReader) handleStream(stream *MuxedStream) {
 }
 
 // Receives a data frame from a stream. A non-nil error is a connection error.
-func (r *MuxReader) receiveFrameData(frame *http2.DataFrame, logger logger.Service) error {
+func (r *MuxReader) receiveFrameData(frame *http2.DataFrame, log *zerolog.Logger) error {
 	stream, err := r.getStreamForFrame(frame)
 	if err != nil {
 		return r.defaultStreamErrorHandler(err, frame.Header())
@@ -292,9 +292,9 @@ func (r *MuxReader) receiveFrameData(frame *http2.DataFrame, logger logger.Servi
 	if frame.Header().Flags.Has(http2.FlagDataEndStream) {
 		if stream.receiveEOF() {
 			r.streams.Delete(stream.streamID)
-			logger.Debugf("mux - read: stream closed: streamID: %d", frame.Header().StreamID)
+			log.Debug().Msgf("mux - read: stream closed: streamID: %d", frame.Header().StreamID)
 		} else {
-			logger.Debugf("mux - read: shutdown receive side: streamID: %d", frame.Header().StreamID)
+			log.Debug().Msgf("mux - read: shutdown receive side: streamID: %d", frame.Header().StreamID)
 		}
 		return nil
 	}

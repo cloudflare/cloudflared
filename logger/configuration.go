@@ -29,7 +29,7 @@ type RollingConfig struct {
 }
 
 func createDefaultConfig() Config {
-	const minLevel = "fatal"
+	const minLevel = "info"
 
 	const RollingMaxSize = 1    // Mb
 	const RollingMaxBackups = 5 // files
@@ -57,7 +57,7 @@ func createDefaultConfig() Config {
 func CreateConfig(
 	minLevel string,
 	disableTerminal bool,
-	rollingLogPath, nonRollingLogFilePath string,
+	rollingLogPath, rollingLogFilename, nonRollingLogFilePath string,
 ) *Config {
 	var console *ConsoleConfig
 	if !disableTerminal {
@@ -71,7 +71,7 @@ func CreateConfig(
 
 	var rolling *RollingConfig
 	if rollingLogPath != "" {
-		rolling = createRollingConfig(rollingLogPath)
+		rolling = createRollingConfig(rollingLogPath, rollingLogFilename)
 	}
 
 	if minLevel == "" {
@@ -103,14 +103,14 @@ func createFileConfig(filepath string) *FileConfig {
 	}
 }
 
-func createRollingConfig(directory string) *RollingConfig {
+func createRollingConfig(directory, filename string) *RollingConfig {
 	if directory == "" {
 		directory = defaultConfig.RollingConfig.Directory
 	}
 
 	return &RollingConfig{
 		Directory:  directory,
-		Filename:   defaultConfig.RollingConfig.Filename,
+		Filename:   filename,
 		maxSize:    defaultConfig.RollingConfig.maxSize,
 		maxBackups: defaultConfig.RollingConfig.maxBackups,
 		maxAge:     defaultConfig.RollingConfig.maxAge,

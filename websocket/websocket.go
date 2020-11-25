@@ -1,13 +1,9 @@
 package websocket
 
 import (
-	"bufio"
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/binary"
-	"encoding/json"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -15,9 +11,9 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/sshserver"
+
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -102,31 +98,17 @@ func ClientConnect(req *http.Request, dialler Dialler) (*websocket.Conn, *http.R
 	return conn, response, err
 }
 
-// HijackConnection takes over an HTTP connection. Caller is responsible for closing connection.
-func HijackConnection(w http.ResponseWriter) (net.Conn, *bufio.ReadWriter, error) {
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		return nil, nil, errors.New("hijack error")
-	}
-
-	conn, brw, err := hj.Hijack()
-	if err != nil {
-		return nil, nil, err
-	}
-	return conn, brw, nil
-}
-
 // Stream copies copy data to & from provided io.ReadWriters.
 func Stream(conn, backendConn io.ReadWriter) {
 	proxyDone := make(chan struct{}, 2)
 
 	go func() {
-		io.Copy(conn, backendConn)
+		_, _ = io.Copy(conn, backendConn)
 		proxyDone <- struct{}{}
 	}()
 
 	go func() {
-		io.Copy(backendConn, conn)
+		_, _ = io.Copy(backendConn, conn)
 		proxyDone <- struct{}{}
 	}()
 
@@ -142,14 +124,20 @@ func DefaultStreamHandler(wsConn *Conn, remoteConn net.Conn, _ http.Header) {
 
 // StartProxyServer will start a websocket server that will decode
 // the websocket data and write the resulting data to the provided
-func StartProxyServer(logger logger.Service, listener net.Listener, staticHost string, shutdownC <-chan struct{}, streamHandler func(wsConn *Conn, remoteConn net.Conn, requestHeaders http.Header)) error {
+func StartProxyServer(
+	log *zerolog.Logger,
+	listener net.Listener,
+	staticHost string,
+	shutdownC <-chan struct{},
+	streamHandler func(wsConn *Conn, remoteConn net.Conn, requestHeaders http.Header),
+) error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
 	h := handler{
 		upgrader:      upgrader,
-		logger:        logger,
+		log:           log,
 		staticHost:    staticHost,
 		streamHandler: streamHandler,
 	}
@@ -157,7 +145,7 @@ func StartProxyServer(logger logger.Service, listener net.Listener, staticHost s
 	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: &h}
 	go func() {
 		<-shutdownC
-		httpServer.Close()
+		_ = httpServer.Close()
 	}()
 
 	return httpServer.Serve(listener)
@@ -165,7 +153,7 @@ func StartProxyServer(logger logger.Service, listener net.Listener, staticHost s
 
 // HTTP handler for the websocket proxy.
 type handler struct {
-	logger        logger.Service
+	log           *zerolog.Logger
 	staticHost    string
 	upgrader      websocket.Upgrader
 	streamHandler func(wsConn *Conn, remoteConn net.Conn, requestHeaders http.Header)
@@ -176,7 +164,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	finalDestination := h.staticHost
 	if finalDestination == "" {
 		if jumpDestination := r.Header.Get(h2mux.CFJumpDestinationHeader); jumpDestination == "" {
-			h.logger.Error("Did not receive final destination from client. The --destination flag is likely not set")
+			h.log.Error().Msg("Did not receive final destination from client. The --destination flag is likely not set")
 			return
 		} else {
 			finalDestination = jumpDestination
@@ -185,56 +173,30 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	stream, err := net.Dial("tcp", finalDestination)
 	if err != nil {
-		h.logger.Errorf("Cannot connect to remote: %s", err)
+		h.log.Error().Msgf("Cannot connect to remote: %s", err)
 		return
 	}
 	defer stream.Close()
 
 	if !websocket.IsWebSocketUpgrade(r) {
-		w.Write(nonWebSocketRequestPage())
+		_, _ = w.Write(nonWebSocketRequestPage())
 		return
 	}
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.logger.Errorf("failed to upgrade: %s", err)
+		h.log.Error().Msgf("failed to upgrade: %s", err)
 		return
 	}
-	conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error { conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
+	conn.SetPongHandler(func(string) error { _ = conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	done := make(chan struct{})
-	go pinger(h.logger, conn, done)
+	go pinger(h.log, conn, done)
 	defer func() {
 		done <- struct{}{}
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	h.streamHandler(&Conn{conn}, stream, r.Header)
-}
-
-// SendSSHPreamble sends the final SSH destination address to the cloudflared SSH proxy
-// The destination is preceded by its length
-// Not part of sshserver module to fix compilation for incompatible operating systems
-func SendSSHPreamble(stream net.Conn, destination, token string) error {
-	preamble := sshserver.SSHPreamble{Destination: destination, JWT: token}
-	payload, err := json.Marshal(preamble)
-	if err != nil {
-		return err
-	}
-
-	if uint16(len(payload)) > ^uint16(0) {
-		return errors.New("ssh preamble payload too large")
-	}
-
-	sizeBytes := make([]byte, sshserver.SSHPreambleLength)
-	binary.BigEndian.PutUint16(sizeBytes, uint16(len(payload)))
-	if _, err := stream.Write(sizeBytes); err != nil {
-		return err
-	}
-
-	if _, err := stream.Write(payload); err != nil {
-		return err
-	}
-	return nil
 }
 
 // the gorilla websocket library sets its own Upgrade, Connection, Sec-WebSocket-Key,
@@ -256,7 +218,7 @@ func websocketHeaders(req *http.Request) http.Header {
 // sha1Base64 sha1 and then base64 encodes str.
 func sha1Base64(str string) string {
 	hasher := sha1.New()
-	io.WriteString(hasher, str)
+	_, _ = io.WriteString(hasher, str)
 	hash := hasher.Sum(nil)
 	return base64.StdEncoding.EncodeToString(hash)
 }
@@ -283,14 +245,14 @@ func ChangeRequestScheme(reqURL *url.URL) string {
 }
 
 // pinger simulates the websocket connection to keep it alive
-func pinger(logger logger.Service, ws *websocket.Conn, done chan struct{}) {
+func pinger(logger *zerolog.Logger, ws *websocket.Conn, done chan struct{}) {
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(writeWait)); err != nil {
-				logger.Debugf("failed to send ping message: %s", err)
+				logger.Debug().Msgf("failed to send ping message: %s", err)
 			}
 		case <-done:
 			return

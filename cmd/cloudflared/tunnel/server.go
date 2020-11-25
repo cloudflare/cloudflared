@@ -1,20 +1,19 @@
 package tunnel
 
 import (
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunneldns"
 
-	"github.com/urfave/cli/v2"
-
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
 )
 
-func runDNSProxyServer(c *cli.Context, dnsReadySignal, shutdownC chan struct{}, logger logger.Service) error {
+func runDNSProxyServer(c *cli.Context, dnsReadySignal, shutdownC chan struct{}, log *zerolog.Logger) error {
 	port := c.Int("proxy-dns-port")
 	if port <= 0 || port > 65535 {
 		return errors.New("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
 	}
-	listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"), c.StringSlice("proxy-dns-bootstrap"), logger)
+	listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"), c.StringSlice("proxy-dns-bootstrap"), log)
 	if err != nil {
 		close(dnsReadySignal)
 		listener.Stop()
@@ -26,6 +25,6 @@ func runDNSProxyServer(c *cli.Context, dnsReadySignal, shutdownC chan struct{}, 
 		return errors.Wrap(err, "Cannot start the DNS over HTTPS proxy server")
 	}
 	<-shutdownC
-	listener.Stop()
+	_ = listener.Stop()
 	return nil
 }

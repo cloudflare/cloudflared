@@ -50,6 +50,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.13.0 // indirect
 	github.com/rivo/tview v0.0.0-20200712113419-c65badfc3d92
+	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.6.0
 	github.com/urfave/cli/v2 v2.2.0
 	github.com/xo/dburl v0.0.0-20191005012637-293c3298d6c0

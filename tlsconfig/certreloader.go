@@ -8,9 +8,9 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/getsentry/raven-go"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 )
 
@@ -63,7 +63,7 @@ func (cr *CertReloader) LoadCert() error {
 	return nil
 }
 
-func LoadOriginCA(originCAPoolFilename string, logger logger.Service) (*x509.CertPool, error) {
+func LoadOriginCA(originCAPoolFilename string, log *zerolog.Logger) (*x509.CertPool, error) {
 	var originCustomCAPool []byte
 
 	if originCAPoolFilename != "" {
@@ -74,14 +74,14 @@ func LoadOriginCA(originCAPoolFilename string, logger logger.Service) (*x509.Cer
 		}
 	}
 
-	originCertPool, err := loadOriginCertPool(originCustomCAPool, logger)
+	originCertPool, err := loadOriginCertPool(originCustomCAPool, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading the certificate pool")
 	}
 
 	// Windows users should be notified that they can use the flag
 	if runtime.GOOS == "windows" && originCAPoolFilename == "" {
-		logger.Infof("cloudflared does not support loading the system root certificate pool on Windows. Please use the --%s to specify it", OriginCAPoolFlag)
+		log.Info().Msgf("cloudflared does not support loading the system root certificate pool on Windows. Please use the --%s to specify it", OriginCAPoolFlag)
 	}
 
 	return originCertPool, nil
@@ -148,9 +148,9 @@ func CreateTunnelConfig(c *cli.Context, serverName string) (*tls.Config, error) 
 	return tlsConfig, nil
 }
 
-func loadOriginCertPool(originCAPoolPEM []byte, logger logger.Service) (*x509.CertPool, error) {
+func loadOriginCertPool(originCAPoolPEM []byte, log *zerolog.Logger) (*x509.CertPool, error) {
 	// Get the global pool
-	certPool, err := loadGlobalCertPool(logger)
+	certPool, err := loadGlobalCertPool(log)
 	if err != nil {
 		return nil, err
 	}
@@ -158,19 +158,19 @@ func loadOriginCertPool(originCAPoolPEM []byte, logger logger.Service) (*x509.Ce
 	// Then, add any custom origin CA pool the user may have passed
 	if originCAPoolPEM != nil {
 		if !certPool.AppendCertsFromPEM(originCAPoolPEM) {
-			logger.Info("could not append the provided origin CA to the cloudflared certificate pool")
+			log.Info().Msg("could not append the provided origin CA to the cloudflared certificate pool")
 		}
 	}
 
 	return certPool, nil
 }
 
-func loadGlobalCertPool(logger logger.Service) (*x509.CertPool, error) {
+func loadGlobalCertPool(log *zerolog.Logger) (*x509.CertPool, error) {
 	// First, obtain the system certificate pool
 	certPool, err := x509.SystemCertPool()
 	if err != nil {
 		if runtime.GOOS != "windows" { // See https://github.com/golang/go/issues/16736
-			logger.Infof("error obtaining the system certificates: %s", err)
+			log.Info().Msgf("error obtaining the system certificates: %s", err)
 		}
 		certPool = x509.NewCertPool()
 	}

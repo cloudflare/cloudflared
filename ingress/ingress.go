@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
+
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -63,7 +63,7 @@ type Ingress struct {
 
 // NewSingleOrigin constructs an Ingress set with only one rule, constructed from
 // legacy CLI parameters like --url or --no-chunked-encoding.
-func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool, logger logger.Service) (Ingress, error) {
+func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 
 	service, err := parseSingleOriginService(c, allowURLFromArgs)
 	if err != nil {
@@ -113,10 +113,10 @@ func (ing Ingress) IsEmpty() bool {
 }
 
 // StartOrigins will start any origin services managed by cloudflared, e.g. proxy servers or Hello World.
-func (ing Ingress) StartOrigins(wg *sync.WaitGroup, log logger.Service, shutdownC <-chan struct{}, errC chan error) {
+func (ing Ingress) StartOrigins(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error) {
 	for _, rule := range ing.Rules {
 		if err := rule.Service.start(wg, log, shutdownC, errC, rule.Config); err != nil {
-			log.Errorf("Error starting local service %s: %s", rule.Service, err)
+			log.Error().Msgf("Error starting local service %s: %s", rule.Service, err)
 		}
 	}
 }

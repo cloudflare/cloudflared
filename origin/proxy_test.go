@@ -16,11 +16,11 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/urfave/cli/v2"
 
 	"github.com/gobwas/ws/wsutil"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +49,7 @@ func (w *mockHTTPRespWriter) WriteRespHeaders(resp *http.Response) error {
 
 func (w *mockHTTPRespWriter) WriteErrorResponse() {
 	w.WriteHeader(http.StatusBadGateway)
-	w.Write([]byte("http response error"))
+	_, _ = w.Write([]byte("http response error"))
 }
 
 func (w *mockHTTPRespWriter) Read(data []byte) (int, error) {
@@ -106,8 +106,7 @@ func (w *mockSSERespWriter) ReadBytes() []byte {
 }
 
 func TestProxySingleOrigin(t *testing.T) {
-	logger, err := logger.New()
-	require.NoError(t, err)
+	log := zerolog.Nop()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -115,18 +114,18 @@ func TestProxySingleOrigin(t *testing.T) {
 	flagSet.Bool("hello-world", true, "")
 
 	cliCtx := cli.NewContext(cli.NewApp(), flagSet, nil)
-	err = cliCtx.Set("hello-world", "true")
+	err := cliCtx.Set("hello-world", "true")
 	require.NoError(t, err)
 
 	allowURLFromArgs := false
-	ingressRule, err := ingress.NewSingleOrigin(cliCtx, allowURLFromArgs, logger)
+	ingressRule, err := ingress.NewSingleOrigin(cliCtx, allowURLFromArgs)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
 	errC := make(chan error)
-	ingressRule.StartOrigins(&wg, logger, ctx.Done(), errC)
+	ingressRule.StartOrigins(&wg, &log, ctx.Done(), errC)
 
-	client := NewClient(ingressRule, testTags, logger)
+	client := NewClient(ingressRule, testTags, &log)
 	t.Run("testProxyHTTP", testProxyHTTP(t, client))
 	t.Run("testProxyWebsocket", testProxyWebsocket(t, client))
 	t.Run("testProxySSE", testProxySSE(t, client))
@@ -191,7 +190,7 @@ func testProxySSE(t *testing.T, client connection.OriginClient) func(t *testing.
 	return func(t *testing.T) {
 		var (
 			pushCount = 50
-			pushFreq  = time.Duration(time.Millisecond * 10)
+			pushFreq  = time.Millisecond * 10
 		)
 		respWriter := newMockSSERespWriter()
 		ctx, cancel := context.WithCancel(context.Background())
@@ -252,15 +251,14 @@ func TestProxyMultipleOrigins(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	logger, err := logger.New()
-	require.NoError(t, err)
+	log := zerolog.Nop()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errC := make(chan error)
 	var wg sync.WaitGroup
-	ingress.StartOrigins(&wg, logger, ctx.Done(), errC)
+	ingress.StartOrigins(&wg, &log, ctx.Done(), errC)
 
-	client := NewClient(ingress, testTags, logger)
+	client := NewClient(ingress, testTags, &log)
 
 	tests := []struct {
 		url            string
@@ -314,7 +312,7 @@ type mockAPI struct{}
 
 func (ma mockAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Created"))
+	_, _ = w.Write([]byte("Created"))
 }
 
 type errorOriginTransport struct{}
@@ -336,10 +334,9 @@ func TestProxyError(t *testing.T) {
 		},
 	}
 
-	logger, err := logger.New()
-	require.NoError(t, err)
+	log := zerolog.Nop()
 
-	client := NewClient(ingress, testTags, logger)
+	client := NewClient(ingress, testTags, &log)
 
 	respWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)

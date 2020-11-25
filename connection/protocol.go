@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -89,7 +89,7 @@ type autoProtocolSelector struct {
 	fetchFunc      PercentageFetcher
 	refreshAfter   time.Time
 	ttl            time.Duration
-	logger         logger.Service
+	log            *zerolog.Logger
 }
 
 func newAutoProtocolSelector(
@@ -97,7 +97,7 @@ func newAutoProtocolSelector(
 	switchThrehold int32,
 	fetchFunc PercentageFetcher,
 	ttl time.Duration,
-	logger logger.Service,
+	log *zerolog.Logger,
 ) *autoProtocolSelector {
 	return &autoProtocolSelector{
 		current:        current,
@@ -105,7 +105,7 @@ func newAutoProtocolSelector(
 		fetchFunc:      fetchFunc,
 		refreshAfter:   time.Now().Add(ttl),
 		ttl:            ttl,
-		logger:         logger,
+		log:            log,
 	}
 }
 
@@ -118,7 +118,7 @@ func (s *autoProtocolSelector) Current() Protocol {
 
 	percentage, err := s.fetchFunc()
 	if err != nil {
-		s.logger.Errorf("Failed to refresh protocol, err: %v", err)
+		s.log.Error().Msgf("Failed to refresh protocol, err: %v", err)
 		return s.current
 	}
 
@@ -139,7 +139,13 @@ func (s *autoProtocolSelector) Fallback() (Protocol, bool) {
 
 type PercentageFetcher func() (int32, error)
 
-func NewProtocolSelector(protocolFlag string, namedTunnel *NamedTunnelConfig, fetchFunc PercentageFetcher, ttl time.Duration, logger logger.Service) (ProtocolSelector, error) {
+func NewProtocolSelector(
+	protocolFlag string,
+	namedTunnel *NamedTunnelConfig,
+	fetchFunc PercentageFetcher,
+	ttl time.Duration,
+	log *zerolog.Logger,
+) (ProtocolSelector, error) {
 	if namedTunnel == nil {
 		return &staticProtocolSelector{
 			current: H2mux,
@@ -157,9 +163,9 @@ func NewProtocolSelector(protocolFlag string, namedTunnel *NamedTunnelConfig, fe
 	}
 	if protocolFlag == HTTP2.String() {
 		if http2Percentage < 0 {
-			return newAutoProtocolSelector(H2mux, explicitHTTP2FallbackThreshold, fetchFunc, ttl, logger), nil
+			return newAutoProtocolSelector(H2mux, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 		}
-		return newAutoProtocolSelector(HTTP2, explicitHTTP2FallbackThreshold, fetchFunc, ttl, logger), nil
+		return newAutoProtocolSelector(HTTP2, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 	}
 
 	if protocolFlag != autoSelectFlag {
@@ -167,13 +173,13 @@ func NewProtocolSelector(protocolFlag string, namedTunnel *NamedTunnelConfig, fe
 	}
 	threshold := switchThreshold(namedTunnel.Credentials.AccountTag)
 	if threshold < http2Percentage {
-		return newAutoProtocolSelector(HTTP2, threshold, fetchFunc, ttl, logger), nil
+		return newAutoProtocolSelector(HTTP2, threshold, fetchFunc, ttl, log), nil
 	}
-	return newAutoProtocolSelector(H2mux, threshold, fetchFunc, ttl, logger), nil
+	return newAutoProtocolSelector(H2mux, threshold, fetchFunc, ttl, log), nil
 }
 
 func switchThreshold(accountTag string) int32 {
 	h := fnv.New32a()
-	h.Write([]byte(accountTag))
+	_, _ = h.Write([]byte(accountTag))
 	return int32(h.Sum32() % 100)
 }

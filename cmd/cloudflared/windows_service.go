@@ -13,9 +13,8 @@ import (
 	"unsafe"
 
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/pkg/errors"
-	cli "github.com/urfave/cli/v2"
 
+	"github.com/urfave/cli/v2"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
@@ -67,15 +66,11 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	//     2. get ERROR_FAILED_SERVICE_CONTROLLER_CONNECT
 	// This involves actually trying to start the service.
 
-	logger, err := logger.New()
-	if err != nil {
-		os.Exit(1)
-		return
-	}
+	log := logger.Create(nil)
 
 	isIntSess, err := svc.IsAnInteractiveSession()
 	if err != nil {
-		logger.Fatalf("failed to determine if we are running in an interactive session: %v", err)
+		log.Fatal().Msgf("failed to determine if we are running in an interactive session: %v", err)
 	}
 	if isIntSess {
 		app.Run(os.Args)
@@ -93,7 +88,7 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 			app.Run(os.Args)
 			return
 		}
-		logger.Fatalf("%s service failed: %v", windowsServiceName, err)
+		log.Fatal().Msgf("%s service failed: %v", windowsServiceName, err)
 	}
 }
 
@@ -105,15 +100,10 @@ type windowsService struct {
 
 // called by the package code at the start of the service
 func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
-	logger, err := logger.New()
-	if err != nil {
-		os.Exit(1)
-		return
-	}
-
+	log := logger.Create(nil)
 	elog, err := eventlog.Open(windowsServiceName)
 	if err != nil {
-		logger.Errorf("Cannot open event log for %s with error: %s", windowsServiceName, err)
+		log.Error().Msgf("Cannot open event log for %s with error: %s", windowsServiceName, err)
 		return
 	}
 	defer elog.Close()
@@ -173,79 +163,73 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 }
 
 func installWindowsService(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
-	logger.Infof("Installing Argo Tunnel Windows service")
+	log.Info().Msgf("Installing Argo Tunnel Windows service")
 	exepath, err := os.Executable()
 	if err != nil {
-		logger.Errorf("Cannot find path name that start the process")
+		log.Error().Msgf("Cannot find path name that start the process")
 		return err
 	}
 	m, err := mgr.Connect()
 	if err != nil {
-		logger.Errorf("Cannot establish a connection to the service control manager: %s", err)
+		log.Error().Msgf("Cannot establish a connection to the service control manager: %s", err)
 		return err
 	}
 	defer m.Disconnect()
 	s, err := m.OpenService(windowsServiceName)
 	if err == nil {
 		s.Close()
-		logger.Errorf("service %s already exists", windowsServiceName)
+		log.Error().Msgf("service %s already exists", windowsServiceName)
 		return fmt.Errorf("service %s already exists", windowsServiceName)
 	}
 	config := mgr.Config{StartType: mgr.StartAutomatic, DisplayName: windowsServiceDescription}
 	s, err = m.CreateService(windowsServiceName, exepath, config)
 	if err != nil {
-		logger.Errorf("Cannot install service %s", windowsServiceName)
+		log.Error().Msgf("Cannot install service %s", windowsServiceName)
 		return err
 	}
 	defer s.Close()
-	logger.Infof("Argo Tunnel agent service is installed")
+	log.Info().Msgf("Argo Tunnel agent service is installed")
 	err = eventlog.InstallAsEventCreate(windowsServiceName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	if err != nil {
 		s.Delete()
-		logger.Errorf("Cannot install event logger: %s", err)
+		log.Error().Msgf("Cannot install event logger: %s", err)
 		return fmt.Errorf("SetupEventLogSource() failed: %s", err)
 	}
 	err = configRecoveryOption(s.Handle)
 	if err != nil {
-		logger.Errorf("Cannot set service recovery actions: %s", err)
-		logger.Infof("See %s to manually configure service recovery actions", windowsServiceUrl)
+		log.Error().Msgf("Cannot set service recovery actions: %s", err)
+		log.Info().Msgf("See %s to manually configure service recovery actions", windowsServiceUrl)
 	}
 	return nil
 }
 
 func uninstallWindowsService(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
-	logger.Infof("Uninstalling Argo Tunnel Windows Service")
+	log.Info().Msgf("Uninstalling Argo Tunnel Windows Service")
 	m, err := mgr.Connect()
 	if err != nil {
-		logger.Errorf("Cannot establish a connection to the service control manager")
+		log.Error().Msgf("Cannot establish a connection to the service control manager")
 		return err
 	}
 	defer m.Disconnect()
 	s, err := m.OpenService(windowsServiceName)
 	if err != nil {
-		logger.Errorf("service %s is not installed", windowsServiceName)
+		log.Error().Msgf("service %s is not installed", windowsServiceName)
 		return fmt.Errorf("service %s is not installed", windowsServiceName)
 	}
 	defer s.Close()
 	err = s.Delete()
 	if err != nil {
-		logger.Errorf("Cannot delete service %s", windowsServiceName)
+		log.Error().Msgf("Cannot delete service %s", windowsServiceName)
 		return err
 	}
-	logger.Infof("Argo Tunnel agent service is uninstalled")
+	log.Info().Msgf("Argo Tunnel agent service is uninstalled")
 	err = eventlog.Remove(windowsServiceName)
 	if err != nil {
-		logger.Errorf("Cannot remove event logger")
+		log.Error().Msgf("Cannot remove event logger")
 		return fmt.Errorf("RemoveEventLogSource() failed: %s", err)
 	}
 	return nil

@@ -65,11 +65,11 @@ func (e muxerShutdownError) Error() string {
 func isHandshakeErrRecoverable(err error, connIndex uint8, observer *Observer) bool {
 	switch err.(type) {
 	case edgediscovery.DialError:
-		observer.Errorf("Connection %d unable to dial edge: %s", connIndex, err)
+		observer.log.Error().Msgf("Connection %d unable to dial edge: %s", connIndex, err)
 	case h2mux.MuxerHandshakeError:
-		observer.Errorf("Connection %d handshake with edge server failed: %s", connIndex, err)
+		observer.log.Error().Msgf("Connection %d handshake with edge server failed: %s", connIndex, err)
 	default:
-		observer.Errorf("Connection %d failed: %s", connIndex, err)
+		observer.log.Error().Msgf("Connection %d failed: %s", connIndex, err)
 		return false
 	}
 	return true

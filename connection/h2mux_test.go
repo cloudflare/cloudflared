@@ -31,7 +31,7 @@ func newH2MuxConnection(ctx context.Context, t require.TestingT) (*h2muxConnecti
 	edgeMuxChan := make(chan *h2mux.Muxer)
 	go func() {
 		edgeMuxConfig := h2mux.MuxerConfig{
-			Logger: testObserver,
+			Log: testObserver.log,
 		}
 		edgeMux, err := h2mux.Handshake(edgeConn, edgeConn, edgeMuxConfig, h2mux.ActiveStreams)
 		require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestServeStreamHTTP(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		edgeMux.Serve(ctx)
+		_ = edgeMux.Serve(ctx)
 	}()
 	go func() {
 		defer wg.Done()

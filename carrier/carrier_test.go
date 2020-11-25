@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/logger"
 	ws "github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,8 +43,8 @@ func (s *testStreamer) Write(p []byte) (int, error) {
 
 func TestStartClient(t *testing.T) {
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
-	wsConn := NewWSConnection(logger, false)
+	log := zerolog.Nop()
+	wsConn := NewWSConnection(&log, false)
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 
@@ -55,10 +55,10 @@ func TestStartClient(t *testing.T) {
 	}
 	err := StartClient(wsConn, buf, options)
 	assert.NoError(t, err)
-	buf.Write([]byte(message))
+	_, _ = buf.Write([]byte(message))
 
 	readBuffer := make([]byte, len(message))
-	buf.Read(readBuffer)
+	_, _ = buf.Read(readBuffer)
 	assert.Equal(t, message, string(readBuffer))
 }
 
@@ -68,9 +68,9 @@ func TestStartServer(t *testing.T) {
 		t.Fatalf("Error starting listener: %v", err)
 	}
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
-	logger := logger.NewOutputWriter(logger.NewMockWriteManager())
+	log := zerolog.Nop()
 	shutdownC := make(chan struct{})
-	wsConn := NewWSConnection(logger, false)
+	wsConn := NewWSConnection(&log, false)
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 	options := &StartOptions{
@@ -86,10 +86,10 @@ func TestStartServer(t *testing.T) {
 	}()
 
 	conn, err := net.Dial("tcp", listener.Addr().String())
-	conn.Write([]byte(message))
+	_, _ = conn.Write([]byte(message))
 
 	readBuffer := make([]byte, len(message))
-	conn.Read(readBuffer)
+	_, _ = conn.Read(readBuffer)
 	assert.Equal(t, string(readBuffer), message)
 }
 

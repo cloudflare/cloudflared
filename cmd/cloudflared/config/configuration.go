@@ -9,13 +9,13 @@ import (
 	"runtime"
 	"time"
 
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -95,7 +95,7 @@ func FileExists(path string) (bool, error) {
 		}
 		return false, err
 	}
-	f.Close()
+	_ = f.Close()
 	return true, nil
 }
 
@@ -138,7 +138,7 @@ func FindOrCreateConfigPath() string {
 		defer file.Close()
 
 		logDir := DefaultLogDirectory()
-		os.MkdirAll(logDir, os.ModePerm) //try and create it. Doesn't matter if it succeed or not, only byproduct will be no logs
+		_ = os.MkdirAll(logDir, os.ModePerm) //try and create it. Doesn't matter if it succeed or not, only byproduct will be no logs
 
 		c := Root{
 			LogDirectory: logDir,
@@ -345,7 +345,7 @@ func GetConfiguration() *Configuration {
 // ReadConfigFile returns InputSourceContext initialized from the configuration file.
 // On repeat calls returns with the same file, returns without reading the file again; however,
 // if value of "config" flag changes, will read the new config file
-func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, error) {
+func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (*configFileSettings, error) {
 	configFile := c.String("config")
 	if configuration.Source() == configFile || configFile == "" {
 		if configuration.Source() == "" {
@@ -354,7 +354,7 @@ func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, er
 		return &configuration, nil
 	}
 
-	log.Debugf("Loading configuration from %s", configFile)
+	log.Debug().Msgf("Loading configuration from %s", configFile)
 	file, err := os.Open(configFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -365,7 +365,7 @@ func ReadConfigFile(c *cli.Context, log logger.Service) (*configFileSettings, er
 	defer file.Close()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
 		if err == io.EOF {
-			log.Errorf("Configuration file %s was empty", configFile)
+			log.Error().Msgf("Configuration file %s was empty", configFile)
 			return &configuration, nil
 		}
 		return nil, errors.Wrap(err, "error parsing YAML in config file at "+configFile)

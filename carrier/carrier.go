@@ -12,8 +12,9 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
+
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 type StartOptions struct {
@@ -49,7 +50,7 @@ func (c *StdinoutStream) Write(p []byte) (int, error) {
 // Helper to allow defering the response close with a check that the resp is not nil
 func closeRespBody(resp *http.Response) {
 	if resp != nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -103,7 +104,7 @@ func Serve(remoteConn Connection, listener net.Listener, shutdownC <-chan struct
 // serveConnection handles connections for the Serve() call
 func serveConnection(remoteConn Connection, c net.Conn, options *StartOptions) {
 	defer c.Close()
-	remoteConn.ServeStream(options, c)
+	_ = remoteConn.ServeStream(options, c)
 }
 
 // IsAccessResponse checks the http Response to see if the url location
@@ -125,13 +126,13 @@ func IsAccessResponse(resp *http.Response) bool {
 }
 
 // BuildAccessRequest builds an HTTP request with the Access token set
-func BuildAccessRequest(options *StartOptions, logger logger.Service) (*http.Request, error) {
+func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	token, err := token.FetchTokenWithRedirect(req.URL, logger)
+	token, err := token.FetchTokenWithRedirect(req.URL, log)
 	if err != nil {
 		return nil, err
 	}

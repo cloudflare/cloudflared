@@ -14,7 +14,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
@@ -329,9 +328,8 @@ func TestSingleOriginSetsConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	allowURLFromArgs := false
-	logger, err := logger.New()
 	require.NoError(t, err)
-	ingress, err := NewSingleOrigin(cliCtx, allowURLFromArgs, logger)
+	ingress, err := NewSingleOrigin(cliCtx, allowURLFromArgs)
 	require.NoError(t, err)
 
 	assert.Equal(t, time.Second, ingress.Rules[0].Config.ConnectTimeout)

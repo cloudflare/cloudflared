@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/trace"
-
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/logger"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
+	"golang.org/x/net/trace"
 )
 
 const (
@@ -23,12 +23,12 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func newMetricsHandler(connectionEvents <-chan connection.Event, log logger.Service) *http.ServeMux {
+func newMetricsHandler(connectionEvents <-chan connection.Event, log *zerolog.Logger) *http.ServeMux {
 	readyServer := NewReadyServer(connectionEvents, log)
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "OK\n")
+		_, _ = fmt.Fprintf(w, "OK\n")
 	})
 	mux.Handle("/ready", readyServer)
 	return mux
@@ -38,14 +38,14 @@ func ServeMetrics(
 	l net.Listener,
 	shutdownC <-chan struct{},
 	connectionEvents <-chan connection.Event,
-	logger logger.Service,
+	log *zerolog.Logger,
 ) (err error) {
 	var wg sync.WaitGroup
 	// Metrics port is privileged, so no need for further access control
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
 	// profile CPU usage depends on WriteTimeout
-	h := newMetricsHandler(connectionEvents, logger)
+	h := newMetricsHandler(connectionEvents, log)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -57,22 +57,22 @@ func ServeMetrics(
 		defer wg.Done()
 		err = server.Serve(l)
 	}()
-	logger.Infof("Starting metrics server on %s", fmt.Sprintf("%v/metrics", l.Addr()))
+	log.Info().Msgf("Starting metrics server on %s", fmt.Sprintf("%v/metrics", l.Addr()))
 	// server.Serve will hang if server.Shutdown is called before the server is
 	// fully started up. So add artificial delay.
 	time.Sleep(startupTime)
 
 	<-shutdownC
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	server.Shutdown(ctx)
+	_ = server.Shutdown(ctx)
 	cancel()
 
 	wg.Wait()
 	if err == http.ErrServerClosed {
-		logger.Info("Metrics server stopped")
+		log.Info().Msg("Metrics server stopped")
 		return nil
 	}
-	logger.Errorf("Metrics server quit with error: %s", err)
+	log.Error().Msgf("Metrics server quit with error: %s", err)
 	return err
 }
 

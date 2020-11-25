@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/certutil"
@@ -29,7 +30,7 @@ func (e errInvalidJSONCredential) Error() string {
 // pass between subcommands, and make sure they are only initialized once
 type subcommandContext struct {
 	c           *cli.Context
-	logger      logger.Service
+	log         *zerolog.Logger
 	isUIEnabled bool
 	fs          fileSystem
 
@@ -42,14 +43,11 @@ func newSubcommandContext(c *cli.Context) (*subcommandContext, error) {
 	isUIEnabled := c.IsSet(uiFlag) && c.String("name") != ""
 
 	// If UI is enabled, terminal log output should be disabled -- log should be written into a UI log window instead
-	logger, err := logger.CreateLoggerFromContext(c, isUIEnabled)
-	if err != nil {
-		return nil, errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, isUIEnabled)
 
 	return &subcommandContext{
 		c:           c,
-		logger:      logger,
+		log:         log,
 		isUIEnabled: isUIEnabled,
 		fs:          realFileSystem{},
 	}, nil
@@ -60,7 +58,7 @@ func (sc *subcommandContext) credentialFinder(tunnelID uuid.UUID) CredFinder {
 	if path := sc.c.String(CredFileFlag); path != "" {
 		return newStaticPath(path, sc.fs)
 	}
-	return newSearchByID(tunnelID, sc.c, sc.logger, sc.fs)
+	return newSearchByID(tunnelID, sc.c, sc.log, sc.fs)
 }
 
 type userCredential struct {
@@ -77,7 +75,15 @@ func (sc *subcommandContext) client() (tunnelstore.Client, error) {
 		return nil, err
 	}
 	userAgent := fmt.Sprintf("cloudflared/%s", version)
-	client, err := tunnelstore.NewRESTClient(sc.c.String("api-url"), credential.cert.AccountID, credential.cert.ZoneID, credential.cert.ServiceKey, userAgent, sc.logger)
+	client, err := tunnelstore.NewRESTClient(
+		sc.c.String("api-url"),
+		credential.cert.AccountID,
+		credential.cert.ZoneID,
+		credential.cert.ServiceKey,
+		userAgent,
+		sc.log,
+	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +93,11 @@ func (sc *subcommandContext) client() (tunnelstore.Client, error) {
 
 func (sc *subcommandContext) credential() (*userCredential, error) {
 	if sc.userCredential == nil {
-		originCertPath, err := findOriginCert(sc.c, sc.logger)
+		originCertPath, err := findOriginCert(sc.c, sc.log)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error locating origin cert")
 		}
-		blocks, err := readOriginCert(originCertPath, sc.logger)
+		blocks, err := readOriginCert(originCertPath, sc.log)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Can't read origin cert from %s", originCertPath)
 		}
@@ -163,7 +169,7 @@ func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {
 		TunnelName:   name,
 	}
 	filePath, writeFileErr := writeTunnelCredentials(credential.certPath, &tunnelCredentials)
-	if err != nil {
+	if writeFileErr != nil {
 		var errorLines []string
 		errorLines = append(errorLines, fmt.Sprintf("Your tunnel '%v' was created with ID %v. However, cloudflared couldn't write to the tunnel credentials file at %v.json.", tunnel.Name, tunnel.ID, tunnel.ID))
 		errorLines = append(errorLines, fmt.Sprintf("The file-writing error is: %v", writeFileErr))
@@ -176,13 +182,13 @@ func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {
 		errorMsg := strings.Join(errorLines, "\n")
 		return nil, errors.New(errorMsg)
 	}
-	sc.logger.Infof("Tunnel credentials written to %v. cloudflared chose this file based on where your origin certificate was found. Keep this file secret. To revoke these credentials, delete the tunnel.", filePath)
+	sc.log.Info().Msgf("Tunnel credentials written to %v. cloudflared chose this file based on where your origin certificate was found. Keep this file secret. To revoke these credentials, delete the tunnel.", filePath)
 
 	if outputFormat := sc.c.String(outputFormatFlag.Name); outputFormat != "" {
 		return nil, renderOutput(outputFormat, &tunnel)
 	}
 
-	sc.logger.Infof("Created tunnel %s with id %s", tunnel.Name, tunnel.ID)
+	sc.log.Info().Msgf("Created tunnel %s with id %s", tunnel.Name, tunnel.ID)
 	return tunnel, nil
 }
 
@@ -230,7 +236,7 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 		credFinder := sc.credentialFinder(id)
 		if tunnelCredentialsPath, err := credFinder.Path(); err == nil {
 			if err = os.Remove(tunnelCredentialsPath); err != nil {
-				sc.logger.Infof("Tunnel %v was deleted, but we could not remove its credentials file  %s: %s. Consider deleting this file manually.", id, tunnelCredentialsPath, err)
+				sc.log.Info().Msgf("Tunnel %v was deleted, but we could not remove its credentials file  %s: %s. Consider deleting this file manually.", id, tunnelCredentialsPath, err)
 			}
 		}
 	}
@@ -254,18 +260,19 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 	credentials, err := sc.findCredentials(tunnelID)
 	if err != nil {
 		if e, ok := err.(errInvalidJSONCredential); ok {
-			sc.logger.Errorf("The credentials file at %s contained invalid JSON. This is probably caused by passing the wrong filepath. Reminder: the credentials file is a .json file created via `cloudflared tunnel create`.", e.path)
-			sc.logger.Errorf("Invalid JSON when parsing credentials file: %s", e.err.Error())
+			sc.log.Error().Msgf("The credentials file at %s contained invalid JSON. This is probably caused by passing the wrong filepath. Reminder: the credentials file is a .json file created via `cloudflared tunnel create`.", e.path)
+			sc.log.Error().Msgf("Invalid JSON when parsing credentials file: %s", e.err.Error())
 		}
 		return err
 	}
+
 	return StartServer(
 		sc.c,
 		version,
 		shutdownC,
 		graceShutdownC,
 		&connection.NamedTunnelConfig{Credentials: credentials},
-		sc.logger,
+		sc.log,
 		sc.isUIEnabled,
 	)
 }
@@ -276,9 +283,9 @@ func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
 		return err
 	}
 	for _, tunnelID := range tunnelIDs {
-		sc.logger.Infof("Cleanup connection for tunnel %s", tunnelID)
+		sc.log.Info().Msgf("Cleanup connection for tunnel %s", tunnelID)
 		if err := client.CleanupConnections(tunnelID); err != nil {
-			sc.logger.Errorf("Error cleaning up connections for tunnel %v, error :%v", tunnelID, err)
+			sc.log.Error().Msgf("Error cleaning up connections for tunnel %v, error :%v", tunnelID, err)
 		}
 	}
 	return nil

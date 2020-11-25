@@ -34,7 +34,7 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 			},
 		},
 	})
-	app.Run(os.Args)
+	_ = app.Run(os.Args)
 }
 
 func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemplate {
@@ -107,71 +107,61 @@ func stderrPath() (string, error) {
 }
 
 func installLaunchd(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	if isRootUser() {
-		logger.Infof("Installing Argo Tunnel client as a system launch daemon. " +
+		log.Info().Msgf("Installing Argo Tunnel client as a system launch daemon. " +
 			"Argo Tunnel client will run at boot")
 	} else {
-		logger.Infof("Installing Argo Tunnel client as an user launch agent. " +
+		log.Info().Msgf("Installing Argo Tunnel client as an user launch agent. " +
 			"Note that Argo Tunnel client will only run when the user is logged in. " +
 			"If you want to run Argo Tunnel client at boot, install with root permission. " +
 			"For more information, visit https://developers.cloudflare.com/argo-tunnel/reference/service/")
 	}
 	etPath, err := os.Executable()
 	if err != nil {
-		logger.Errorf("Error determining executable path: %s", err)
+		log.Error().Msgf("Error determining executable path: %s", err)
 		return fmt.Errorf("Error determining executable path: %v", err)
 	}
 	installPath, err := installPath()
 	if err != nil {
-		logger.Errorf("Error determining install path: %s", err)
+		log.Error().Msgf("Error determining install path: %s", err)
 		return errors.Wrap(err, "Error determining install path")
 	}
 	stdoutPath, err := stdoutPath()
 	if err != nil {
-		logger.Errorf("error determining stdout path: %s", err)
+		log.Error().Msgf("error determining stdout path: %s", err)
 		return errors.Wrap(err, "error determining stdout path")
 	}
 	stderrPath, err := stderrPath()
 	if err != nil {
-		logger.Errorf("error determining stderr path: %s", err)
+		log.Error().Msgf("error determining stderr path: %s", err)
 		return errors.Wrap(err, "error determining stderr path")
 	}
 	launchdTemplate := newLaunchdTemplate(installPath, stdoutPath, stderrPath)
-	if err != nil {
-		logger.Errorf("error creating launchd template: %s", err)
-		return errors.Wrap(err, "error creating launchd template")
-	}
 	templateArgs := ServiceTemplateArgs{Path: etPath}
 	err = launchdTemplate.Generate(&templateArgs)
 	if err != nil {
-		logger.Errorf("error generating launchd template: %s", err)
+		log.Error().Msgf("error generating launchd template: %s", err)
 		return err
 	}
 	plistPath, err := launchdTemplate.ResolvePath()
 	if err != nil {
-		logger.Errorf("error resolving launchd template path: %s", err)
+		log.Error().Msgf("error resolving launchd template path: %s", err)
 		return err
 	}
 
-	logger.Infof("Outputs are logged to %s and %s", stderrPath, stdoutPath)
+	log.Info().Msgf("Outputs are logged to %s and %s", stderrPath, stdoutPath)
 	return runCommand("launchctl", "load", plistPath)
 }
 
 func uninstallLaunchd(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	if isRootUser() {
-		logger.Infof("Uninstalling Argo Tunnel as a system launch daemon")
+		log.Info().Msgf("Uninstalling Argo Tunnel as a system launch daemon")
 	} else {
-		logger.Infof("Uninstalling Argo Tunnel as an user launch agent")
+		log.Info().Msgf("Uninstalling Argo Tunnel as an user launch agent")
 	}
 	installPath, err := installPath()
 	if err != nil {
@@ -186,20 +176,17 @@ func uninstallLaunchd(c *cli.Context) error {
 		return errors.Wrap(err, "error determining stderr path")
 	}
 	launchdTemplate := newLaunchdTemplate(installPath, stdoutPath, stderrPath)
-	if err != nil {
-		return errors.Wrap(err, "error creating launchd template")
-	}
 	plistPath, err := launchdTemplate.ResolvePath()
 	if err != nil {
-		logger.Errorf("error resolving launchd template path: %s", err)
+		log.Error().Msgf("error resolving launchd template path: %s", err)
 		return err
 	}
 	err = runCommand("launchctl", "unload", plistPath)
 	if err != nil {
-		logger.Errorf("error unloading: %s", err)
+		log.Error().Msgf("error unloading: %s", err)
 		return err
 	}
 
-	logger.Infof("Outputs are logged to %s and %s", stderrPath, stdoutPath)
+	log.Info().Msgf("Outputs are logged to %s and %s", stderrPath, stdoutPath)
 	return launchdTemplate.Remove()
 }

@@ -1,13 +1,11 @@
 package logger
 
 import (
-	"fmt"
+	"io"
 	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/alecthomas/units"
+	"github.com/rs/zerolog"
+	fallbacklog "github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -24,162 +22,40 @@ const (
 	LogSSHLevelFlag     = "log-level"
 )
 
-// Option is to encaspulate actions that will be called by Parse and run later to build an Options struct
-type Option func(*Options) error
+func newZerolog(loggerConfig *Config) *zerolog.Logger {
+	var writers []io.Writer
 
-// Options is use to set logging configuration data
-type Options struct {
-	logFileDirectory        string
-	maxFileSize             units.Base2Bytes
-	maxFileCount            uint
-	terminalOutputDisabled  bool
-	supportedFileLevels     []Level
-	supportedTerminalLevels []Level
-}
-
-// DisableTerminal stops terminal output for the logger
-func DisableTerminal(disable bool) Option {
-	return func(c *Options) error {
-		c.terminalOutputDisabled = disable
-		return nil
+	if loggerConfig.ConsoleConfig != nil {
+		writers = append(writers, zerolog.ConsoleWriter{
+			Out:     os.Stderr,
+			NoColor: loggerConfig.ConsoleConfig.noColor,
+		})
 	}
-}
 
-// File sets a custom file to log events
-func File(path string, size units.Base2Bytes, count uint) Option {
-	return func(c *Options) error {
-		c.logFileDirectory = path
-		c.maxFileSize = size
-		c.maxFileCount = count
-		return nil
-	}
-}
+	// TODO TUN-3472: Support file writer and log rotation
 
-// DefaultFile configures the log options will the defaults
-func DefaultFile(directoryPath string) Option {
-	return func(c *Options) error {
-		size, err := units.ParseBase2Bytes("1MB")
-		if err != nil {
-			return err
-		}
+	multi := zerolog.MultiLevelWriter(writers...)
 
-		c.logFileDirectory = directoryPath
-		c.maxFileSize = size
-		c.maxFileCount = 5
-		return nil
-	}
-}
-
-// SupportedFileLevels sets the supported logging levels for the log file
-func SupportedFileLevels(supported []Level) Option {
-	return func(c *Options) error {
-		c.supportedFileLevels = supported
-		return nil
-	}
-}
-
-// SupportedTerminalevels sets the supported logging levels for the terminal output
-func SupportedTerminalevels(supported []Level) Option {
-	return func(c *Options) error {
-		c.supportedTerminalLevels = supported
-		return nil
-	}
-}
-
-// LogLevelString sets the supported logging levels from a command line flag
-func LogLevelString(level string) Option {
-	return func(c *Options) error {
-		supported, err := ParseLevelString(level)
-		if err != nil {
-			return err
-		}
-		c.supportedFileLevels = supported
-		c.supportedTerminalLevels = supported
-		return nil
-	}
-}
-
-// Parse builds the Options struct so the caller knows what actions should be run
-func Parse(opts ...Option) (*Options, error) {
-	options := &Options{}
-	for _, opt := range opts {
-		if err := opt(options); err != nil {
-			return nil, err
-		}
-	}
-	return options, nil
-}
-
-// New setups a new logger based on the options.
-// The default behavior is to write to standard out
-func New(opts ...Option) (*OutputWriter, error) {
-	options, err := Parse(opts...)
-
+	level, err := zerolog.ParseLevel(loggerConfig.MinLevel)
 	if err != nil {
-		return nil, err
+		failLog := fallbacklog.With().Logger()
+		fallbacklog.Error().Msgf("Falling back to a default logger due to logger setup failure: %s", err)
+		return &failLog
 	}
+	log := zerolog.New(multi).With().Timestamp().Logger().Level(level)
 
-	l := NewOutputWriter(SharedWriteManager)
-	if options.logFileDirectory != "" {
-		l.Add(NewFileRollingWriter(SanitizeLogPath(options.logFileDirectory),
-			"cloudflared",
-			int64(options.maxFileSize),
-			options.maxFileCount),
-			NewDefaultFormatter(time.RFC3339Nano), options.supportedFileLevels...)
-	}
-
-	if !options.terminalOutputDisabled {
-		terminalFormatter := NewTerminalFormatter(time.RFC3339)
-
-		if len(options.supportedTerminalLevels) == 0 {
-			l.Add(os.Stderr, terminalFormatter, InfoLevel, ErrorLevel, FatalLevel)
-		} else {
-			l.Add(os.Stderr, terminalFormatter, options.supportedTerminalLevels...)
-		}
-	}
-
-	return l, nil
+	return &log
 }
 
-func NewInHouse(loggerConfig *Config) (*OutputWriter, error) {
-	var loggerOpts []Option
-
-	var logPath string
-	if loggerConfig.FileConfig != nil {
-		logPath = loggerConfig.FileConfig.Filepath
-	}
-	if logPath == "" && loggerConfig.RollingConfig != nil {
-		logPath = loggerConfig.RollingConfig.Directory
-	}
-
-	if logPath != "" {
-		loggerOpts = append(loggerOpts, DefaultFile(logPath))
-	}
-
-	loggerOpts = append(loggerOpts, LogLevelString(loggerConfig.MinLevel))
-
-	if loggerConfig.ConsoleConfig == nil {
-		disableOption := DisableTerminal(true)
-		loggerOpts = append(loggerOpts, disableOption)
-	}
-
-	l, err := New(loggerOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return l, nil
-}
-
-func CreateTransportLoggerFromContext(c *cli.Context, disableTerminal bool) (*OutputWriter, error) {
+func CreateTransportLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
 	return createFromContext(c, LogTransportLevelFlag, LogDirectoryFlag, disableTerminal)
 }
 
-func CreateLoggerFromContext(c *cli.Context, disableTerminal bool) (*OutputWriter, error) {
+func CreateLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
 	return createFromContext(c, LogLevelFlag, LogDirectoryFlag, disableTerminal)
 }
 
-func CreateSSHLoggerFromContext(c *cli.Context, disableTerminal bool) (*OutputWriter, error) {
+func CreateSSHLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
 	return createFromContext(c, LogSSHLevelFlag, LogSSHDirectoryFlag, disableTerminal)
 }
 
@@ -188,37 +64,26 @@ func createFromContext(
 	logLevelFlagName,
 	logDirectoryFlagName string,
 	disableTerminal bool,
-) (*OutputWriter, error) {
+) *zerolog.Logger {
 	logLevel := c.String(logLevelFlagName)
 	logFile := c.String(LogFileFlag)
 	logDirectory := c.String(logDirectoryFlagName)
 
-	loggerConfig := CreateConfig(logLevel, disableTerminal, logDirectory, logFile)
+	loggerConfig := CreateConfig(
+		logLevel,
+		disableTerminal,
+		logDirectory,
+		defaultConfig.RollingConfig.Filename,
+		logFile,
+	)
 
-	return NewInHouse(loggerConfig)
+	return newZerolog(loggerConfig)
 }
 
-// ParseLevelString returns the expected log levels based on the cmd flag
-func ParseLevelString(lvl string) ([]Level, error) {
-	switch strings.ToLower(lvl) {
-	case "fatal":
-		return []Level{FatalLevel}, nil
-	case "error":
-		return []Level{FatalLevel, ErrorLevel}, nil
-	case "info", "warn":
-		return []Level{FatalLevel, ErrorLevel, InfoLevel}, nil
-	case "debug":
-		return []Level{FatalLevel, ErrorLevel, InfoLevel, DebugLevel}, nil
+func Create(loggerConfig *Config) *zerolog.Logger {
+	if loggerConfig == nil {
+		loggerConfig = &defaultConfig
 	}
-	return []Level{}, fmt.Errorf("not a valid log level: %q", lvl)
-}
 
-// SanitizeLogPath checks that the logger log path
-func SanitizeLogPath(path string) string {
-	newPath := strings.TrimSpace(path)
-	// make sure it has a log file extension and is not a directory
-	if filepath.Ext(newPath) != ".log" && !(isDirectory(newPath) || strings.HasSuffix(newPath, "/")) {
-		newPath = newPath + ".log"
-	}
-	return newPath
+	return newZerolog(loggerConfig)
 }

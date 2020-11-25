@@ -6,9 +6,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+
+	"github.com/rs/zerolog"
 	"zombiezen.com/go/capnproto2/rpc"
 )
 
@@ -22,12 +23,12 @@ type tunnelServerClient struct {
 func NewTunnelServerClient(
 	ctx context.Context,
 	stream io.ReadWriteCloser,
-	logger logger.Service,
+	log *zerolog.Logger,
 ) *tunnelServerClient {
-	transport := tunnelrpc.NewTransportLogger(logger, rpc.StreamTransport(stream))
+	transport := tunnelrpc.NewTransportLogger(log, rpc.StreamTransport(stream))
 	conn := rpc.NewConn(
 		transport,
-		tunnelrpc.ConnLog(logger),
+		tunnelrpc.ConnLog(log),
 	)
 	registrationClient := tunnelpogs.RegistrationServer_PogsClient{Client: conn.Bootstrap(ctx), Conn: conn}
 	return &tunnelServerClient{
@@ -46,8 +47,8 @@ func (tsc *tunnelServerClient) Authenticate(ctx context.Context, classicTunnel *
 
 func (tsc *tunnelServerClient) Close() {
 	// Closing the client will also close the connection
-	tsc.client.Close()
-	tsc.transport.Close()
+	_ = tsc.client.Close()
+	_ = tsc.transport.Close()
 }
 
 type NamedTunnelRPCClient interface {
@@ -70,12 +71,12 @@ type registrationServerClient struct {
 func newRegistrationRPCClient(
 	ctx context.Context,
 	stream io.ReadWriteCloser,
-	logger logger.Service,
+	log *zerolog.Logger,
 ) NamedTunnelRPCClient {
-	transport := tunnelrpc.NewTransportLogger(logger, rpc.StreamTransport(stream))
+	transport := tunnelrpc.NewTransportLogger(log, rpc.StreamTransport(stream))
 	conn := rpc.NewConn(
 		transport,
-		tunnelrpc.ConnLog(logger),
+		tunnelrpc.ConnLog(log),
 	)
 	return &registrationServerClient{
 		client:    tunnelpogs.RegistrationServer_PogsClient{Client: conn.Bootstrap(ctx), Conn: conn},
@@ -117,14 +118,14 @@ func (rsc *registrationServerClient) RegisterConnection(
 func (rsc *registrationServerClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
 	ctx, cancel := context.WithTimeout(ctx, gracePeriod)
 	defer cancel()
-	rsc.client.UnregisterConnection(ctx)
+	_ = rsc.client.UnregisterConnection(ctx)
 }
 
 func (rsc *registrationServerClient) Close() {
 	// Closing the client will also close the connection
-	rsc.client.Close()
+	_ = rsc.client.Close()
 	// Closing the transport also closes the stream
-	rsc.transport.Close()
+	_ = rsc.transport.Close()
 }
 
 type rpcName string
@@ -143,10 +144,10 @@ func (h *h2muxConnection) registerTunnel(ctx context.Context, credentialSetter C
 	if err != nil {
 		return err
 	}
-	rpcClient := NewTunnelServerClient(ctx, stream, h.observer)
+	rpcClient := NewTunnelServerClient(ctx, stream, h.observer.log)
 	defer rpcClient.Close()
 
-	h.logServerInfo(ctx, rpcClient)
+	_ = h.logServerInfo(ctx, rpcClient)
 	registration := rpcClient.client.RegisterTunnel(
 		ctx,
 		classicTunnel.OriginCert,
@@ -178,12 +179,12 @@ func (h *h2muxConnection) processRegistrationSuccess(
 	credentialManager CredentialManager, classicTunnel *ClassicTunnelConfig,
 ) error {
 	for _, logLine := range registration.LogLines {
-		h.observer.Info(logLine)
+		h.observer.log.Info().Msg(logLine)
 	}
 
 	if registration.TunnelID != "" {
 		h.observer.metrics.tunnelsHA.AddTunnelID(h.connIndex, registration.TunnelID)
-		h.observer.Infof("Each HA connection's tunnel IDs: %v", h.observer.metrics.tunnelsHA.String())
+		h.observer.log.Info().Msgf("Each HA connection's tunnel IDs: %v", h.observer.metrics.tunnelsHA.String())
 	}
 
 	// Print out the user's trial zone URL in a nice box (if they requested and got one and UI flag is not set)
@@ -197,7 +198,7 @@ func (h *h2muxConnection) processRegistrationSuccess(
 	credentialManager.SetConnDigest(h.connIndex, registration.ConnDigest)
 	h.observer.metrics.userHostnamesCounts.WithLabelValues(registration.Url).Inc()
 
-	h.observer.Infof("Route propagating, it may take up to 1 minute for your new route to become functional")
+	h.observer.log.Info().Msgf("Route propagating, it may take up to 1 minute for your new route to become functional")
 	h.observer.metrics.regSuccess.WithLabelValues(string(name)).Inc()
 	return nil
 }
@@ -228,15 +229,15 @@ func (h *h2muxConnection) reconnectTunnel(ctx context.Context, credentialManager
 		return err
 	}
 
-	h.observer.Debug("initiating RPC stream to reconnect")
+	h.observer.log.Debug().Msg("initiating RPC stream to reconnect")
 	stream, err := h.newRPCStream(ctx, register)
 	if err != nil {
 		return err
 	}
-	rpcClient := NewTunnelServerClient(ctx, stream, h.observer)
+	rpcClient := NewTunnelServerClient(ctx, stream, h.observer.log)
 	defer rpcClient.Close()
 
-	h.logServerInfo(ctx, rpcClient)
+	_ = h.logServerInfo(ctx, rpcClient)
 	registration := rpcClient.client.ReconnectTunnel(
 		ctx,
 		token,
@@ -259,15 +260,15 @@ func (h *h2muxConnection) logServerInfo(ctx context.Context, rpcClient *tunnelSe
 	})
 	serverInfoMessage, err := serverInfoPromise.Result().Struct()
 	if err != nil {
-		h.observer.Errorf("Failed to retrieve server information: %s", err)
+		h.observer.log.Error().Msgf("Failed to retrieve server information: %s", err)
 		return err
 	}
 	serverInfo, err := tunnelpogs.UnmarshalServerInfo(serverInfoMessage)
 	if err != nil {
-		h.observer.Errorf("Failed to retrieve server information: %s", err)
+		h.observer.log.Error().Msgf("Failed to retrieve server information: %s", err)
 		return err
 	}
-	h.observer.logServerInfo(h.connIndex, serverInfo.LocationName, fmt.Sprintf("Connnection %d connected to %s", h.connIndex, serverInfo.LocationName))
+	h.observer.logServerInfo(h.connIndex, serverInfo.LocationName, fmt.Sprintf("Connection %d connected to %s", h.connIndex, serverInfo.LocationName))
 	return nil
 }
 
@@ -281,15 +282,15 @@ func (h *h2muxConnection) unregister(isNamedTunnel bool) {
 	}
 
 	if isNamedTunnel {
-		rpcClient := newRegistrationRPCClient(unregisterCtx, stream, h.observer)
+		rpcClient := newRegistrationRPCClient(unregisterCtx, stream, h.observer.log)
 		defer rpcClient.Close()
 
 		rpcClient.GracefulShutdown(unregisterCtx, h.config.GracePeriod)
 	} else {
-		rpcClient := NewTunnelServerClient(unregisterCtx, stream, h.observer)
+		rpcClient := NewTunnelServerClient(unregisterCtx, stream, h.observer.log)
 		defer rpcClient.Close()
 
 		// gracePeriod is encoded in int64 using capnproto
-		rpcClient.client.UnregisterTunnel(unregisterCtx, h.config.GracePeriod.Nanoseconds())
+		_ = rpcClient.client.UnregisterTunnel(unregisterCtx, h.config.GracePeriod.Nanoseconds())
 	}
 }

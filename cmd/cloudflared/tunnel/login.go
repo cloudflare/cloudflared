@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"syscall"
 
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	cli "github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
@@ -40,10 +40,7 @@ func buildLoginSubcommand(hidden bool) *cli.Command {
 }
 
 func login(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	path, ok, err := checkForExistingCert()
 	if ok {
@@ -59,7 +56,15 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	resourceData, err := transfer.Run(loginURL, "cert", "callback", callbackStoreURL, false, false, logger)
+	resourceData, err := transfer.Run(
+		loginURL,
+		"cert",
+		"callback",
+		callbackStoreURL,
+		false,
+		false,
+		log,
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to write the certificate due to the following error:\n%v\n\nYour browser will download the certificate instead. You will have to manually\ncopy it to the following path:\n\n%s\n", err, path)
 		return err

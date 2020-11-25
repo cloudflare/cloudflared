@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
+
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,14 +38,14 @@ type MuxerConfig struct {
 	MetricsUpdateFreq  time.Duration
 }
 
-func (mc *MuxerConfig) H2MuxerConfig(h h2mux.MuxedStreamHandler, logger logger.Service) *h2mux.MuxerConfig {
+func (mc *MuxerConfig) H2MuxerConfig(h h2mux.MuxedStreamHandler, log *zerolog.Logger) *h2mux.MuxerConfig {
 	return &h2mux.MuxerConfig{
 		Timeout:            muxerTimeout,
 		Handler:            h,
 		IsClient:           true,
 		HeartbeatInterval:  mc.HeartbeatInterval,
 		MaxHeartbeats:      mc.MaxHeartbeats,
-		Logger:             logger,
+		Log:                log,
 		CompressionQuality: mc.CompressionSetting,
 	}
 }
@@ -67,7 +68,7 @@ func NewH2muxConnection(ctx context.Context,
 
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
-	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig.H2MuxerConfig(h, observer), h2mux.ActiveStreams)
+	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig.H2MuxerConfig(h, observer.log), h2mux.ActiveStreams)
 	if err != nil {
 		recoverable := isHandshakeErrRecoverable(err, connIndex, observer)
 		return nil, err, recoverable
@@ -87,7 +88,7 @@ func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *Nam
 		if err != nil {
 			return err
 		}
-		rpcClient := newRegistrationRPCClient(ctx, stream, h.observer)
+		rpcClient := newRegistrationRPCClient(ctx, stream, h.observer.log)
 		defer rpcClient.Close()
 
 		if err = rpcClient.RegisterConnection(serveCtx, namedTunnel, connOptions, h.connIndex, h.observer); err != nil {
@@ -122,7 +123,7 @@ func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel 
 				return nil
 			}
 			// log errors and proceed to RegisterTunnel
-			h.observer.Errorf("Couldn't reconnect connection %d. Reregistering it instead. Error was: %v", h.connIndex, err)
+			h.observer.log.Error().Msgf("Couldn't reconnect connection %d. Reregistering it instead. Error was: %v", h.connIndex, err)
 		}
 		return h.registerTunnel(ctx, credentialManager, classicTunnel, registrationOptions)
 	})
@@ -212,9 +213,9 @@ func (rp *h2muxRespWriter) WriteRespHeaders(resp *http.Response) error {
 }
 
 func (rp *h2muxRespWriter) WriteErrorResponse() {
-	rp.WriteHeaders([]h2mux.Header{
+	_ = rp.WriteHeaders([]h2mux.Header{
 		{Name: ":status", Value: "502"},
 		{Name: ResponseMetaHeaderField, Value: responseMetaHeaderCfd},
 	})
-	rp.Write([]byte("502 Bad Gateway"))
+	_, _ = rp.Write([]byte("502 Bad Gateway"))
 }

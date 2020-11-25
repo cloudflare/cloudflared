@@ -17,11 +17,12 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/validation"
-	"github.com/pkg/errors"
-	"golang.org/x/net/idna"
 
 	"github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/net/idna"
 )
 
 const (
@@ -205,20 +206,17 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	args := c.Args()
 	rawURL := ensureURLScheme(args.First())
 	appURL, err := url.Parse(rawURL)
 	if args.Len() < 1 || err != nil {
-		logger.Errorf("Please provide the url of the Access application\n")
+		log.Error().Msgf("Please provide the url of the Access application\n")
 		return err
 	}
-	if err := verifyTokenAtEdge(appURL, c, logger); err != nil {
-		logger.Errorf("Could not verify token: %s", err)
+	if err := verifyTokenAtEdge(appURL, c, log); err != nil {
+		log.Error().Msgf("Could not verify token: %s", err)
 		return err
 	}
 
@@ -250,19 +248,16 @@ func curl(c *cli.Context) error {
 	if err := raven.SetDSN(sentryDSN); err != nil {
 		return err
 	}
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	args := c.Args()
 	if args.Len() < 1 {
-		logger.Error("Please provide the access app and command you wish to run.")
+		log.Error().Msg("Please provide the access app and command you wish to run.")
 		return errors.New("incorrect args")
 	}
 
 	cmdArgs, allowRequest := parseAllowRequest(args.Slice())
-	appURL, err := getAppURL(cmdArgs, logger)
+	appURL, err := getAppURL(cmdArgs, log)
 	if err != nil {
 		return err
 	}
@@ -270,12 +265,12 @@ func curl(c *cli.Context) error {
 	tok, err := token.GetAppTokenIfExists(appURL)
 	if err != nil || tok == "" {
 		if allowRequest {
-			logger.Info("You don't have an Access token set. Please run access token <access application> to fetch one.")
+			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return shell.Run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL, logger)
+		tok, err = token.FetchToken(appURL, log)
 		if err != nil {
-			logger.Errorf("Failed to refresh token: %s", err)
+			log.Error().Msgf("Failed to refresh token: %s", err)
 			return err
 		}
 	}
@@ -329,10 +324,7 @@ func sshConfig(c *cli.Context) error {
 
 // sshGen generates a short lived certificate for provided hostname
 func sshGen(c *cli.Context) error {
-	logger, err := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	if err != nil {
-		return errors.Wrap(err, "error setting up logger")
-	}
+	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
@@ -349,7 +341,7 @@ func sshGen(c *cli.Context) error {
 	// this fetchToken function mutates the appURL param. We should refactor that
 	fetchTokenURL := &url.URL{}
 	*fetchTokenURL = *originURL
-	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, logger)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, log)
 	if err != nil {
 		return err
 	}
@@ -362,15 +354,15 @@ func sshGen(c *cli.Context) error {
 }
 
 // getAppURL will pull the appURL needed for fetching a user's Access token
-func getAppURL(cmdArgs []string, logger logger.Service) (*url.URL, error) {
+func getAppURL(cmdArgs []string, log *zerolog.Logger) (*url.URL, error) {
 	if len(cmdArgs) < 1 {
-		logger.Error("Please provide a valid URL as the first argument to curl.")
+		log.Error().Msg("Please provide a valid URL as the first argument to curl.")
 		return nil, errors.New("not a valid url")
 	}
 
 	u, err := processURL(cmdArgs[0])
 	if err != nil {
-		logger.Error("Please provide a valid URL as the first argument to curl.")
+		log.Error().Msg("Please provide a valid URL as the first argument to curl.")
 		return nil, err
 	}
 
@@ -436,7 +428,7 @@ func isFileThere(candidate string) bool {
 // verifyTokenAtEdge checks for a token on disk, or generates a new one.
 // Then makes a request to to the origin with the token to ensure it is valid.
 // Returns nil if token is valid.
-func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, logger logger.Service) error {
+func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, log *zerolog.Logger) error {
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
 		headers.Add(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
@@ -446,7 +438,7 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, logger logger.Service) e
 	}
 	options := &carrier.StartOptions{OriginURL: appUrl.String(), Headers: headers}
 
-	if valid, err := isTokenValid(options, logger); err != nil {
+	if valid, err := isTokenValid(options, log); err != nil {
 		return err
 	} else if valid {
 		return nil
@@ -456,7 +448,7 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, logger logger.Service) e
 		return err
 	}
 
-	if valid, err := isTokenValid(options, logger); err != nil {
+	if valid, err := isTokenValid(options, log); err != nil {
 		return err
 	} else if !valid {
 		return errors.New("failed to verify token")
@@ -466,8 +458,8 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, logger logger.Service) e
 }
 
 // isTokenValid makes a request to the origin and returns true if the response was not a 302.
-func isTokenValid(options *carrier.StartOptions, logger logger.Service) (bool, error) {
-	req, err := carrier.BuildAccessRequest(options, logger)
+func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, error) {
+	req, err := carrier.BuildAccessRequest(options, log)
 	if err != nil {
 		return false, errors.Wrap(err, "Could not create access request")
 	}

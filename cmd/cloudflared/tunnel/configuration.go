@@ -14,7 +14,6 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/origin"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -23,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -46,16 +46,16 @@ func findDefaultOriginCertPath() string {
 	return ""
 }
 
-func generateRandomClientID(logger logger.Service) (string, error) {
+func generateRandomClientID(log *zerolog.Logger) (string, error) {
 	u, err := uuid.NewRandom()
 	if err != nil {
-		logger.Errorf("couldn't create UUID for client ID %s", err)
+		log.Error().Msgf("couldn't create UUID for client ID %s", err)
 		return "", err
 	}
 	return u.String(), nil
 }
 
-func logClientOptions(c *cli.Context, logger logger.Service) {
+func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 	flags := make(map[string]interface{})
 	for _, flag := range c.LocalFlagNames() {
 		flags[flag] = c.Generic(flag)
@@ -69,7 +69,7 @@ func logClientOptions(c *cli.Context, logger logger.Service) {
 	}
 
 	if len(flags) > 0 {
-		logger.Infof("Environment variables %v", flags)
+		log.Info().Msgf("Environment variables %v", flags)
 	}
 
 	envs := make(map[string]string)
@@ -84,7 +84,7 @@ func logClientOptions(c *cli.Context, logger logger.Service) {
 		}
 	}
 	if len(envs) > 0 {
-		logger.Infof("Environmental variables %v", envs)
+		log.Info().Msgf("Environmental variables %v", envs)
 	}
 }
 
@@ -92,32 +92,32 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world"))
 }
 
-func findOriginCert(c *cli.Context, logger logger.Service) (string, error) {
+func findOriginCert(c *cli.Context, log *zerolog.Logger) (string, error) {
 	originCertPath := c.String("origincert")
 	if originCertPath == "" {
-		logger.Infof("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigSearchDirectories())
+		log.Info().Msgf("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigSearchDirectories())
 		if isRunningFromTerminal() {
-			logger.Errorf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
+			log.Error().Msgf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
 			return "", fmt.Errorf("Client didn't specify origincert path when running from terminal")
 		} else {
-			logger.Errorf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
+			log.Error().Msgf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
 			return "", fmt.Errorf("Client didn't specify origincert path")
 		}
 	}
 	var err error
 	originCertPath, err = homedir.Expand(originCertPath)
 	if err != nil {
-		logger.Errorf("Cannot resolve path %s: %s", originCertPath, err)
+		log.Error().Msgf("Cannot resolve path %s: %s", originCertPath, err)
 		return "", fmt.Errorf("Cannot resolve path %s", originCertPath)
 	}
 	// Check that the user has acquired a certificate using the login command
 	ok, err := config.FileExists(originCertPath)
 	if err != nil {
-		logger.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
+		log.Error().Msgf("Cannot check if origin cert exists at path %s", originCertPath)
 		return "", fmt.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
 	}
 	if !ok {
-		logger.Errorf(`Cannot find a valid certificate for your origin at the path:
+		log.Error().Msgf(`Cannot find a valid certificate for your origin at the path:
 
     %s
 
@@ -132,23 +132,23 @@ If you don't have a certificate signed by Cloudflare, run the command:
 	return originCertPath, nil
 }
 
-func readOriginCert(originCertPath string, logger logger.Service) ([]byte, error) {
-	logger.Debugf("Reading origin cert from %s", originCertPath)
+func readOriginCert(originCertPath string, log *zerolog.Logger) ([]byte, error) {
+	log.Debug().Msgf("Reading origin cert from %s", originCertPath)
 
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
-		logger.Errorf("Cannot read %s to load origin certificate: %s", originCertPath, err)
+		log.Error().Msgf("Cannot read %s to load origin certificate: %s", originCertPath, err)
 		return nil, fmt.Errorf("Cannot read %s to load origin certificate", originCertPath)
 	}
 	return originCert, nil
 }
 
-func getOriginCert(c *cli.Context, logger logger.Service) ([]byte, error) {
-	if originCertPath, err := findOriginCert(c, logger); err != nil {
+func getOriginCert(c *cli.Context, log *zerolog.Logger) ([]byte, error) {
+	if originCertPath, err := findOriginCert(c, log); err != nil {
 		return nil, err
 	} else {
-		return readOriginCert(originCertPath, logger)
+		return readOriginCert(originCertPath, log)
 	}
 }
 
@@ -156,8 +156,8 @@ func prepareTunnelConfig(
 	c *cli.Context,
 	buildInfo *buildinfo.BuildInfo,
 	version string,
-	logger logger.Service,
-	transportLogger logger.Service,
+	log *zerolog.Logger,
+	transportLogger *zerolog.Logger,
 	namedTunnel *connection.NamedTunnelConfig,
 	isUIEnabled bool,
 	eventChans []chan connection.Event,
@@ -166,13 +166,13 @@ func prepareTunnelConfig(
 
 	hostname, err := validation.ValidateHostname(c.String("hostname"))
 	if err != nil {
-		logger.Errorf("Invalid hostname: %s", err)
+		log.Error().Msgf("Invalid hostname: %s", err)
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
 	}
 	isFreeTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
-		clientID, err = generateRandomClientID(logger)
+		clientID, err = generateRandomClientID(log)
 		if err != nil {
 			return nil, ingress.Ingress{}, err
 		}
@@ -180,7 +180,7 @@ func prepareTunnelConfig(
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		logger.Errorf("Tag parse failure: %s", err)
+		log.Error().Msgf("Tag parse failure: %s", err)
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Tag parse failure")
 	}
 
@@ -188,7 +188,7 @@ func prepareTunnelConfig(
 
 	var originCert []byte
 	if !isFreeTunnel {
-		originCert, err = getOriginCert(c, logger)
+		originCert, err = getOriginCert(c, log)
 		if err != nil {
 			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
 		}
@@ -227,17 +227,17 @@ func prepareTunnelConfig(
 
 	// Convert single-origin configuration into multi-origin configuration.
 	if ingressRules.IsEmpty() {
-		ingressRules, err = ingress.NewSingleOrigin(c, !isNamedTunnel, logger)
+		ingressRules, err = ingress.NewSingleOrigin(c, !isNamedTunnel)
 		if err != nil {
 			return nil, ingress.Ingress{}, err
 		}
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, logger)
+	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, log)
 	if err != nil {
 		return nil, ingress.Ingress{}, err
 	}
-	logger.Infof("Initial protocol %s", protocolSelector.Current())
+	log.Info().Msgf("Initial protocol %s", protocolSelector.Current())
 
 	edgeTLSConfigs := make(map[connection.Protocol]*tls.Config, len(connection.ProtocolList))
 	for _, p := range connection.ProtocolList {
@@ -248,7 +248,7 @@ func prepareTunnelConfig(
 		edgeTLSConfigs[p] = edgeTLSConfig
 	}
 
-	originClient := origin.NewClient(ingressRules, tags, logger)
+	originClient := origin.NewClient(ingressRules, tags, log)
 	connectionConfig := &connection.Config{
 		OriginClient:    originClient,
 		GracePeriod:     c.Duration("grace-period"),
@@ -272,7 +272,7 @@ func prepareTunnelConfig(
 		IsFreeTunnel:     isFreeTunnel,
 		LBPool:           c.String("lb-pool"),
 		Tags:             tags,
-		Logger:           logger,
+		Log:              log,
 		Observer:         connection.NewObserver(transportLogger, eventChans, isUIEnabled),
 		ReportedVersion:  version,
 		Retries:          c.Uint("retries"),

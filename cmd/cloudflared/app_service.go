@@ -2,8 +2,9 @@ package main
 
 import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/overwatch"
+
+	"github.com/rs/zerolog"
 )
 
 // AppService is the main service that runs when no command lines flags are passed to cloudflared
@@ -13,17 +14,17 @@ type AppService struct {
 	serviceManager   overwatch.Manager
 	shutdownC        chan struct{}
 	configUpdateChan chan config.Root
-	logger           logger.Service
+	log              *zerolog.Logger
 }
 
 // NewAppService creates a new AppService with needed supporting services
-func NewAppService(configManager config.Manager, serviceManager overwatch.Manager, shutdownC chan struct{}, logger logger.Service) *AppService {
+func NewAppService(configManager config.Manager, serviceManager overwatch.Manager, shutdownC chan struct{}, log *zerolog.Logger) *AppService {
 	return &AppService{
 		configManager:    configManager,
 		serviceManager:   serviceManager,
 		shutdownC:        shutdownC,
 		configUpdateChan: make(chan config.Root),
-		logger:           logger,
+		log:              log,
 	}
 }
 
@@ -67,14 +68,14 @@ func (s *AppService) handleConfigUpdate(c config.Root) {
 	// handle the client forward listeners
 	activeServices := map[string]struct{}{}
 	for _, f := range c.Forwarders {
-		service := NewForwardService(f, s.logger)
+		service := NewForwardService(f, s.log)
 		s.serviceManager.Add(service)
 		activeServices[service.Name()] = struct{}{}
 	}
 
 	// handle resolver changes
 	if c.Resolver.Enabled {
-		service := NewResolverService(c.Resolver, s.logger)
+		service := NewResolverService(c.Resolver, s.log)
 		s.serviceManager.Add(service)
 		activeServices[service.Name()] = struct{}{}
 

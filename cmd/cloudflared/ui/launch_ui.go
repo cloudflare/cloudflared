@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/logger"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
+	"github.com/rs/zerolog"
 )
 
 type connState struct {
@@ -51,16 +50,16 @@ func NewUIModel(version, hostname, metricsURL string, ing *ingress.Ingress, haCo
 
 func (data *uiModel) LaunchUI(
 	ctx context.Context,
-	generalLogger, transportLogger logger.Service,
-	logLevels []logger.Level,
+	log, transportLog *zerolog.Logger,
 	tunnelEventChan <-chan connection.Event,
 ) {
 	// Configure the logger to stream logs into the textview
 
 	// Add TextView as a group to write output to
 	logTextView := NewDynamicColorTextView()
-	generalLogger.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
-	transportLogger.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
+	// TODO: Format log for UI
+	//log.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
+	//transportLog.Add(logTextView, logger.NewUIFormatter(time.RFC3339), logLevels...)
 
 	// Construct the UI
 	palette := palette{
@@ -125,7 +124,7 @@ func (data *uiModel) LaunchUI(
 				case connection.Connected:
 					data.setConnTableCell(event, connTable, palette)
 				case connection.Disconnected, connection.Reconnecting:
-					data.changeConnStatus(event, connTable, generalLogger, palette)
+					data.changeConnStatus(event, connTable, log, palette)
 				case connection.SetURL:
 					tunnelHostText.SetText(event.URL)
 					data.edgeURL = event.URL
@@ -141,7 +140,7 @@ func (data *uiModel) LaunchUI(
 
 	go func() {
 		if err := app.SetRoot(frame, true).Run(); err != nil {
-			generalLogger.Errorf("Error launching UI: %s", err)
+			log.Error().Msgf("Error launching UI: %s", err)
 		}
 	}()
 }
@@ -159,13 +158,13 @@ func handleNewText(app *tview.Application, logTextView *tview.TextView) func() {
 	}
 }
 
-func (data *uiModel) changeConnStatus(event connection.Event, table *tview.Table, logger logger.Service, palette palette) {
+func (data *uiModel) changeConnStatus(event connection.Event, table *tview.Table, log *zerolog.Logger, palette palette) {
 	index := int(event.Index)
 	// Get connection location and state
 	connState := data.getConnState(index)
 	// Check if connection is already displayed in UI
 	if connState == nil {
-		logger.Info("Connection is not in the UI table")
+		log.Info().Msg("Connection is not in the UI table")
 		return
 	}
 

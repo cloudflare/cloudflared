@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/logger"
+
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,8 +32,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 		BaseTime:   time.Millisecond * 10,
 	}
 	ctx := context.Background()
-	logger, err := logger.New()
-	assert.NoError(t, err)
+	log := zerolog.Nop()
 	resolveTTL := time.Duration(0)
 	namedTunnel := &connection.NamedTunnelConfig{
 		Credentials: connection.Credentials{
@@ -42,10 +42,16 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	mockFetcher := dynamicMockFetcher{
 		percentage: 0,
 	}
-	protocolSelector, err := connection.NewProtocolSelector(connection.HTTP2.String(), namedTunnel, mockFetcher.fetch(), resolveTTL, logger)
+	protocolSelector, err := connection.NewProtocolSelector(
+		connection.HTTP2.String(),
+		namedTunnel,
+		mockFetcher.fetch(),
+		resolveTTL,
+		&log,
+	)
 	assert.NoError(t, err)
 	config := &TunnelConfig{
-		Logger:           logger,
+		Log:              &log,
 		ProtocolSelector: protocolSelector,
 		Observer:         connection.NewObserver(nil, nil, false),
 	}

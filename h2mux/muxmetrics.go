@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/golang-collections/collections/queue"
+	"github.com/rs/zerolog"
 )
 
 // data points used to compute average receive window and send window size
@@ -20,7 +20,7 @@ type muxMetricsUpdater interface {
 	// metrics returns the latest metrics
 	metrics() *MuxerMetrics
 	// run is a blocking call to start the event loop
-	run(logger logger.Service) error
+	run(log *zerolog.Logger) error
 	// updateRTTChan is called by muxReader to report new RTT measurements
 	updateRTT(rtt *roundTripMeasurement)
 	//updateReceiveWindowChan is called by muxReader and muxWriter when receiveWindow size is updated
@@ -137,30 +137,30 @@ func (updater *muxMetricsUpdaterImpl) metrics() *MuxerMetrics {
 	return m
 }
 
-func (updater *muxMetricsUpdaterImpl) run(logger logger.Service) error {
-	defer logger.Debug("mux - metrics: event loop finished")
+func (updater *muxMetricsUpdaterImpl) run(log *zerolog.Logger) error {
+	defer log.Debug().Msg("mux - metrics: event loop finished")
 	for {
 		select {
 		case <-updater.abortChan:
-			logger.Infof("mux - metrics: Stopping mux metrics updater")
+			log.Info().Msgf("mux - metrics: Stopping mux metrics updater")
 			return nil
 		case roundTripMeasurement := <-updater.updateRTTChan:
 			go updater.rttData.update(roundTripMeasurement)
-			logger.Debug("mux - metrics: Update rtt")
+			log.Debug().Msg("mux - metrics: Update rtt")
 		case receiveWindow := <-updater.updateReceiveWindowChan:
 			go updater.receiveWindowData.update(receiveWindow)
-			logger.Debug("mux - metrics: Update receive window")
+			log.Debug().Msg("mux - metrics: Update receive window")
 		case sendWindow := <-updater.updateSendWindowChan:
 			go updater.sendWindowData.update(sendWindow)
-			logger.Debug("mux - metrics: Update send window")
+			log.Debug().Msg("mux - metrics: Update send window")
 		case inBoundBytes := <-updater.updateInBoundBytesChan:
 			// inBoundBytes is bytes/sec because the update interval is 1 sec
 			go updater.inBoundRate.update(inBoundBytes)
-			logger.Debugf("mux - metrics: Inbound bytes %d", inBoundBytes)
+			log.Debug().Msgf("mux - metrics: Inbound bytes %d", inBoundBytes)
 		case outBoundBytes := <-updater.updateOutBoundBytesChan:
 			// outBoundBytes is bytes/sec because the update interval is 1 sec
 			go updater.outBoundRate.update(outBoundBytes)
-			logger.Debugf("mux - metrics: Outbound bytes %d", outBoundBytes)
+			log.Debug().Msgf("mux - metrics: Outbound bytes %d", outBoundBytes)
 		}
 	}
 }

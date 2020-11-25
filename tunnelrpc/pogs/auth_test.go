@@ -102,14 +102,14 @@ func TestWhenToRefresh(t *testing.T) {
 func TestSerializeAuthenticationResponse(t *testing.T) {
 
 	tests := []*AuthenticateResponse{
-		&AuthenticateResponse{
+		{
 			Jwt:               []byte("\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98"),
 			HoursUntilRefresh: 24,
 		},
-		&AuthenticateResponse{
+		{
 			PermanentErr: "bad auth",
 		},
-		&AuthenticateResponse{
+		{
 			RetryableErr:      "bad connection",
 			HoursUntilRefresh: 24,
 		},
