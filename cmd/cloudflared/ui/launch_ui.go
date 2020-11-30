@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 
@@ -15,24 +16,7 @@ import (
 
 type connState struct {
 	location string
-	state    status
-}
-
-type status int
-
-const (
-	Disconnected status = iota
-	Connected
-	Reconnecting
-	SetUrl
-	RegisteringTunnel
-)
-
-type TunnelEvent struct {
-	Index     uint8
-	EventType status
-	Location  string
-	Url       string
+	state    connection.Status
 }
 
 type uiModel struct {
@@ -69,7 +53,7 @@ func (data *uiModel) LaunchUI(
 	ctx context.Context,
 	generalLogger, transportLogger logger.Service,
 	logLevels []logger.Level,
-	tunnelEventChan <-chan TunnelEvent,
+	tunnelEventChan <-chan connection.Event,
 ) {
 	// Configure the logger to stream logs into the textview
 
@@ -138,14 +122,14 @@ func (data *uiModel) LaunchUI(
 				return
 			case event := <-tunnelEventChan:
 				switch event.EventType {
-				case Connected:
+				case connection.Connected:
 					data.setConnTableCell(event, connTable, palette)
-				case Disconnected, Reconnecting:
+				case connection.Disconnected, connection.Reconnecting:
 					data.changeConnStatus(event, connTable, generalLogger, palette)
-				case SetUrl:
-					tunnelHostText.SetText(event.Url)
-					data.edgeURL = event.Url
-				case RegisteringTunnel:
+				case connection.SetURL:
+					tunnelHostText.SetText(event.URL)
+					data.edgeURL = event.URL
+				case connection.RegisteringTunnel:
 					if data.edgeURL == "" {
 						tunnelHostText.SetText("Registering tunnel...")
 					}
@@ -175,7 +159,7 @@ func handleNewText(app *tview.Application, logTextView *tview.TextView) func() {
 	}
 }
 
-func (data *uiModel) changeConnStatus(event TunnelEvent, table *tview.Table, logger logger.Service, palette palette) {
+func (data *uiModel) changeConnStatus(event connection.Event, table *tview.Table, logger logger.Service, palette palette) {
 	index := int(event.Index)
 	// Get connection location and state
 	connState := data.getConnState(index)
@@ -187,10 +171,10 @@ func (data *uiModel) changeConnStatus(event TunnelEvent, table *tview.Table, log
 
 	locationState := event.Location
 
-	if event.EventType == Disconnected {
-		connState.state = Disconnected
-	} else if event.EventType == Reconnecting {
-		connState.state = Reconnecting
+	if event.EventType == connection.Disconnected {
+		connState.state = connection.Disconnected
+	} else if event.EventType == connection.Reconnecting {
+		connState.state = connection.Reconnecting
 		locationState = "Reconnecting..."
 	}
 
@@ -211,12 +195,12 @@ func (data *uiModel) getConnState(connID int) *connState {
 	return nil
 }
 
-func (data *uiModel) setConnTableCell(event TunnelEvent, table *tview.Table, palette palette) {
+func (data *uiModel) setConnTableCell(event connection.Event, table *tview.Table, palette palette) {
 	index := int(event.Index)
 	connectionNum := index + 1
 
 	// Update slice to keep track of connection location and state in UI table
-	data.connections[index].state = Connected
+	data.connections[index].state = connection.Connected
 	data.connections[index].location = event.Location
 
 	// Update text in table cell to show disconnected state
@@ -225,18 +209,18 @@ func (data *uiModel) setConnTableCell(event TunnelEvent, table *tview.Table, pal
 	table.SetCell(index, 0, cell)
 }
 
-func newCellText(palette palette, connectionNum int, location string, connectedStatus status) string {
+func newCellText(palette palette, connectionNum int, location string, connectedStatus connection.Status) string {
 	// HA connection indicator formatted as: "• #<CONNECTION_INDEX>: <COLO>",
 	//  where the left middle dot's color depends on the status of the connection
 	const connFmtString = "[%s]\u2022[%s] #%d: %s"
 
 	var dotColor string
 	switch connectedStatus {
-	case Connected:
+	case connection.Connected:
 		dotColor = palette.connected
-	case Disconnected:
+	case connection.Disconnected:
 		dotColor = palette.disconnected
-	case Reconnecting:
+	case connection.Reconnecting:
 		dotColor = palette.reconnecting
 	}
 

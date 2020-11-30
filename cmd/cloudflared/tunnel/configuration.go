@@ -10,7 +10,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -160,7 +159,8 @@ func prepareTunnelConfig(
 	logger logger.Service,
 	transportLogger logger.Service,
 	namedTunnel *connection.NamedTunnelConfig,
-	uiIsEnabled bool,
+	isUIEnabled bool,
+	eventChans []chan connection.Event,
 ) (*origin.TunnelConfig, ingress.Ingress, error) {
 	isNamedTunnel := namedTunnel != nil
 
@@ -261,11 +261,6 @@ func prepareTunnelConfig(
 		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
 	}
 
-	var tunnelEventChan chan ui.TunnelEvent
-	if uiIsEnabled {
-		tunnelEventChan = make(chan ui.TunnelEvent, 16)
-	}
-
 	return &origin.TunnelConfig{
 		ConnectionConfig: connectionConfig,
 		BuildInfo:        buildInfo,
@@ -278,14 +273,14 @@ func prepareTunnelConfig(
 		LBPool:           c.String("lb-pool"),
 		Tags:             tags,
 		Logger:           logger,
-		Observer:         connection.NewObserver(transportLogger, tunnelEventChan),
+		Observer:         connection.NewObserver(transportLogger, eventChans, isUIEnabled),
 		ReportedVersion:  version,
 		Retries:          c.Uint("retries"),
 		RunFromTerminal:  isRunningFromTerminal(),
 		NamedTunnel:      namedTunnel,
 		ClassicTunnel:    classicTunnel,
 		MuxerConfig:      muxerConfig,
-		TunnelEventChan:  tunnelEventChan,
+		TunnelEventChans: eventChans,
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}, ingressRules, nil

@@ -271,18 +271,6 @@ func StartServer(
 	// Wait for proxy-dns to come up (if used)
 	<-dnsReadySignal
 
-	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
-	if err != nil {
-		generalLogger.Errorf("Error opening metrics server listener: %s", err)
-		return errors.Wrap(err, "Error opening metrics server listener")
-	}
-	defer metricsListener.Close()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC, generalLogger)
-	}()
-
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
 		go writePidFile(connectedSignal, c.String("pidfile"), generalLogger)
@@ -331,11 +319,29 @@ func StartServer(
 		return errors.Wrap(err, "error setting up transport logger")
 	}
 
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, generalLogger, transportLogger, namedTunnel, isUIEnabled)
+	readinessCh := make(chan connection.Event, 16)
+	uiCh := make(chan connection.Event, 16)
+	eventChannels := []chan connection.Event{
+		readinessCh,
+		uiCh,
+	}
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, generalLogger, transportLogger, namedTunnel, isUIEnabled, eventChannels)
 	if err != nil {
 		generalLogger.Errorf("Couldn't start tunnel: %v", err)
 		return err
 	}
+
+	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
+	if err != nil {
+		generalLogger.Errorf("Error opening metrics server listener: %s", err)
+		return errors.Wrap(err, "Error opening metrics server listener")
+	}
+	defer metricsListener.Close()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessCh, generalLogger)
+	}()
 
 	ingressRules.StartOrigins(&wg, generalLogger, shutdownC, errC)
 
@@ -363,7 +369,7 @@ func StartServer(
 		if err != nil {
 			return err
 		}
-		tunnelInfo.LaunchUI(ctx, generalLogger, transportLogger, logLevels, tunnelConfig.TunnelEventChan)
+		tunnelInfo.LaunchUI(ctx, generalLogger, transportLogger, logLevels, uiCh)
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), generalLogger)

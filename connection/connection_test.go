@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/assert"
@@ -28,11 +27,12 @@ var (
 		Scheme: "https",
 		Host:   "connectiontest.argotunnel.com",
 	}
-	testTunnelEventChan = make(chan ui.TunnelEvent)
+	testTunnelEventChan = make(chan Event)
 	testObserver        = &Observer{
 		testLogger,
 		m,
-		testTunnelEventChan,
+		[]chan Event{testTunnelEventChan},
+		false,
 	}
 	testLargeResp = make([]byte, largeFileSize)
 )

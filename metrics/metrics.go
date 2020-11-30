@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/net/trace"
 
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,21 +23,34 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func ServeMetrics(l net.Listener, shutdownC <-chan struct{}, logger logger.Service) (err error) {
+func newMetricsHandler(connectionEvents <-chan connection.Event, log logger.Service) *http.ServeMux {
+	readyServer := NewReadyServer(connectionEvents, log)
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "OK\n")
+	})
+	mux.Handle("/ready", readyServer)
+	return mux
+}
+
+func ServeMetrics(
+	l net.Listener,
+	shutdownC <-chan struct{},
+	connectionEvents <-chan connection.Event,
+	logger logger.Service,
+) (err error) {
 	var wg sync.WaitGroup
 	// Metrics port is privileged, so no need for further access control
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
 	// profile CPU usage depends on WriteTimeout
+	h := newMetricsHandler(connectionEvents, logger)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
+		Handler:      h,
 	}
-
-	http.Handle("/metrics", promhttp.Handler())
-	http.Handle("/healthcheck", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "OK\n")
-	}))
 
 	wg.Add(1)
 	go func() {

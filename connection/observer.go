@@ -5,37 +5,35 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/logger"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 type Observer struct {
 	logger.Service
-	metrics         *tunnelMetrics
-	tunnelEventChan chan<- ui.TunnelEvent
+	metrics          *tunnelMetrics
+	tunnelEventChans []chan Event
+	uiEnabled        bool
 }
 
-func NewObserver(logger logger.Service, tunnelEventChan chan<- ui.TunnelEvent) *Observer {
+func NewObserver(logger logger.Service, tunnelEventChans []chan Event, uiEnabled bool) *Observer {
 	return &Observer{
 		logger,
 		newTunnelMetrics(),
-		tunnelEventChan,
+		tunnelEventChans,
+		uiEnabled,
 	}
 }
 
 func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
-	// If launch-ui flag is set, send connect msg
-	if o.tunnelEventChan != nil {
-		o.tunnelEventChan <- ui.TunnelEvent{Index: connIndex, EventType: ui.Connected, Location: location}
-	}
+	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
 	o.Infof(msg)
 	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }
 
 func (o *Observer) logTrialHostname(registration *tunnelpogs.TunnelRegistration) error {
 	// Print out the user's trial zone URL in a nice box (if they requested and got one and UI flag is not set)
-	if o.tunnelEventChan == nil {
+	if !o.uiEnabled {
 		if registrationURL, err := url.Parse(registration.Url); err == nil {
 			for _, line := range asciiBox(trialZoneMsg(registrationURL.String()), 2) {
 				o.Info(line)
@@ -81,19 +79,27 @@ func trialZoneMsg(url string) []string {
 }
 
 func (o *Observer) sendRegisteringEvent() {
-	if o.tunnelEventChan != nil {
-		o.tunnelEventChan <- ui.TunnelEvent{EventType: ui.RegisteringTunnel}
-	}
+	o.sendEvent(Event{EventType: RegisteringTunnel})
 }
 
 func (o *Observer) sendConnectedEvent(connIndex uint8, location string) {
-	if o.tunnelEventChan != nil {
-		o.tunnelEventChan <- ui.TunnelEvent{Index: connIndex, EventType: ui.Connected, Location: location}
-	}
+	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
 }
 
 func (o *Observer) sendURL(url string) {
-	if o.tunnelEventChan != nil {
-		o.tunnelEventChan <- ui.TunnelEvent{EventType: ui.SetUrl, Url: url}
+	o.sendEvent(Event{EventType: SetURL, URL: url})
+}
+
+func (o *Observer) SendReconnect(connIndex uint8) {
+	o.sendEvent(Event{Index: connIndex, EventType: Reconnecting})
+}
+
+func (o *Observer) SendDisconnect(connIndex uint8) {
+	o.sendEvent(Event{Index: connIndex, EventType: Disconnected})
+}
+
+func (o *Observer) sendEvent(e Event) {
+	for _, ch := range o.tunnelEventChans {
+		ch <- e
 	}
 }

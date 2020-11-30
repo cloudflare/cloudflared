@@ -16,7 +16,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -65,7 +64,7 @@ type TunnelConfig struct {
 	NamedTunnel      *connection.NamedTunnelConfig
 	ClassicTunnel    *connection.ClassicTunnelConfig
 	MuxerConfig      *connection.MuxerConfig
-	TunnelEventChan  chan ui.TunnelEvent
+	TunnelEventChans []chan connection.Event
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 }
@@ -235,10 +234,7 @@ func waitForBackoff(
 		return err
 	}
 
-	if config.TunnelEventChan != nil {
-		config.TunnelEventChan <- ui.TunnelEvent{Index: connIndex, EventType: ui.Reconnecting}
-	}
-
+	config.Observer.SendReconnect(connIndex)
 	config.Logger.Infof("Retrying connection %d in %s seconds, error %v", connIndex, duration, err)
 	protobackoff.Backoff(ctx)
 
@@ -288,12 +284,7 @@ func ServeTunnel(
 		}
 	}()
 
-	// If launch-ui flag is set, send disconnect msg
-	if config.TunnelEventChan != nil {
-		defer func() {
-			config.TunnelEventChan <- ui.TunnelEvent{Index: connIndex, EventType: ui.Disconnected}
-		}()
-	}
+	defer config.Observer.SendDisconnect(connIndex)
 
 	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr)
 	if err != nil {

@@ -80,7 +80,7 @@ func Run(c *cli.Context) error {
 		logger.Fatalf("Failed to open the metrics listener: %s", err)
 	}
 
-	go metrics.ServeMetrics(metricsListener, nil, logger)
+	go metrics.ServeMetrics(metricsListener, nil, nil, logger)
 
 	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"), logger)
 	if err != nil {
