@@ -5,13 +5,12 @@ github.com/BurntSushi/toml
 github.com/DATA-DOG/go-sqlmock
 # github.com/acmacalister/skittles v0.0.0-20160609003031-7423546701e1
 ## explicit
-github.com/acmacalister/skittles
 # github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
 ## explicit
-github.com/alecthomas/units
 # github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239
 ## explicit
-github.com/anmitsu/go-shlex
+# github.com/aws/aws-sdk-go v1.34.19
+## explicit
 # github.com/beorn7/perks v1.0.1
 github.com/beorn7/perks/quantile
 # github.com/caddyserver/caddy v1.0.5
@@ -156,7 +155,6 @@ github.com/gdamore/tcell/terminfo/x/xterm_kitty
 github.com/getsentry/raven-go
 # github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
 ## explicit
-github.com/gliderlabs/ssh
 # github.com/go-sql-driver/mysql v1.5.0
 ## explicit
 github.com/go-sql-driver/mysql
@@ -452,6 +450,9 @@ google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/coreos/go-oidc.v2 v2.1.0
 ## explicit
 gopkg.in/coreos/go-oidc.v2
+# gopkg.in/natefinch/lumberjack.v2 v2.0.0
+## explicit
+gopkg.in/natefinch/lumberjack.v2
 # gopkg.in/square/go-jose.v2 v2.4.0
 ## explicit
 gopkg.in/square/go-jose.v2

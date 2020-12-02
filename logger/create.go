@@ -3,10 +3,12 @@ package logger
 import (
 	"io"
 	"os"
+	"path"
 
 	"github.com/rs/zerolog"
 	fallbacklog "github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -22,25 +24,34 @@ const (
 	LogSSHLevelFlag     = "log-level"
 )
 
+func fallbackLogger(err error) *zerolog.Logger {
+	failLog := fallbacklog.With().Logger()
+	fallbacklog.Error().Msgf("Falling back to a default logger due to logger setup failure: %s", err)
+
+	return &failLog
+}
+
 func newZerolog(loggerConfig *Config) *zerolog.Logger {
 	var writers []io.Writer
 
 	if loggerConfig.ConsoleConfig != nil {
-		writers = append(writers, zerolog.ConsoleWriter{
-			Out:     os.Stderr,
-			NoColor: loggerConfig.ConsoleConfig.noColor,
-		})
+		writers = append(writers, createConsoleLogger(*loggerConfig.ConsoleConfig))
 	}
 
-	// TODO TUN-3472: Support file writer and log rotation
+	if loggerConfig.RollingConfig != nil {
+		rollingLogger, err := createRollingLogger(*loggerConfig.RollingConfig)
+		if err != nil {
+			return fallbackLogger(err)
+		}
+
+		writers = append(writers, rollingLogger)
+	}
 
 	multi := zerolog.MultiLevelWriter(writers...)
 
 	level, err := zerolog.ParseLevel(loggerConfig.MinLevel)
 	if err != nil {
-		failLog := fallbacklog.With().Logger()
-		fallbacklog.Error().Msgf("Falling back to a default logger due to logger setup failure: %s", err)
-		return &failLog
+		return fallbackLogger(err)
 	}
 	log := zerolog.New(multi).With().Timestamp().Logger().Level(level)
 
@@ -86,4 +97,24 @@ func Create(loggerConfig *Config) *zerolog.Logger {
 	}
 
 	return newZerolog(loggerConfig)
+}
+
+func createConsoleLogger(config ConsoleConfig) io.Writer {
+	return zerolog.ConsoleWriter{
+		Out:     os.Stderr,
+		NoColor: config.noColor,
+	}
+}
+
+func createRollingLogger(config RollingConfig) (io.Writer, error) {
+	if err := os.MkdirAll(config.Directory, 0744); err != nil {
+		return nil, err
+	}
+
+	return &lumberjack.Logger{
+		Filename:   path.Join(config.Directory, config.Filename),
+		MaxBackups: config.maxBackups,
+		MaxSize:    config.maxSize,
+		MaxAge:     config.maxAge,
+	}, nil
 }

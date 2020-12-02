@@ -4,9 +4,10 @@ go 1.15
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
-	github.com/acmacalister/skittles v0.0.0-20160609003031-7423546701e1
-	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
+	github.com/acmacalister/skittles v0.0.0-20160609003031-7423546701e1 // indirect
+	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
+	github.com/aws/aws-sdk-go v1.34.19 // indirect
 	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
 	github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93
 	github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
@@ -23,7 +24,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gdamore/tcell v1.3.0
 	github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
-	github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0
+	github.com/gliderlabs/ssh v0.0.0-20191009160644-63518b5243e0 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
@@ -63,6 +64,7 @@ require (
 	google.golang.org/grpc v1.32.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/coreos/go-oidc.v2 v2.1.0
+	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
