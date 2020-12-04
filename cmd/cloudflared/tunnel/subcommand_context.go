@@ -228,14 +228,10 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 		}
 
 		credFinder := sc.credentialFinder(id)
-		tunnelCredentialsPath, err := credFinder.Path()
-		if err != nil {
-			sc.logger.Infof("Cannot locate tunnel credentials to delete, error: %v. Please delete the file manually", err)
-			return nil
-		}
-
-		if err = os.Remove(tunnelCredentialsPath); err != nil {
-			sc.logger.Infof("Cannot delete tunnel credentials, error: %v. Please delete the file manually", err)
+		if tunnelCredentialsPath, err := credFinder.Path(); err == nil {
+			if err = os.Remove(tunnelCredentialsPath); err != nil {
+				sc.logger.Infof("Tunnel %v was deleted, but we could not remove its credentials file  %s: %s. Consider deleting this file manually.", id, tunnelCredentialsPath, err)
+			}
 		}
 	}
 	return nil

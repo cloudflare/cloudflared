@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
@@ -209,6 +210,144 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("subcommandContext.findCredentials() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+type deleteMockTunnelStore struct {
+	tunnelstore.Client
+	mockTunnels      map[uuid.UUID]mockTunnelBehaviour
+	deletedTunnelIDs []uuid.UUID
+}
+
+type mockTunnelBehaviour struct {
+	tunnel     tunnelstore.Tunnel
+	deleteErr  error
+	cleanupErr error
+}
+
+func newDeleteMockTunnelStore(tunnels ...mockTunnelBehaviour) *deleteMockTunnelStore {
+	mockTunnels := make(map[uuid.UUID]mockTunnelBehaviour)
+	for _, tunnel := range tunnels {
+		mockTunnels[tunnel.tunnel.ID] = tunnel
+	}
+	return &deleteMockTunnelStore{
+		mockTunnels:      mockTunnels,
+		deletedTunnelIDs: make([]uuid.UUID, 0),
+	}
+}
+
+func (d *deleteMockTunnelStore) GetTunnel(tunnelID uuid.UUID) (*tunnelstore.Tunnel, error) {
+	tunnel, ok := d.mockTunnels[tunnelID]
+	if !ok {
+		return nil, fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
+	}
+	return &tunnel.tunnel, nil
+}
+
+func (d *deleteMockTunnelStore) DeleteTunnel(tunnelID uuid.UUID) error {
+	tunnel, ok := d.mockTunnels[tunnelID]
+	if !ok {
+		return fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
+	}
+
+	if tunnel.deleteErr != nil {
+		return tunnel.deleteErr
+	}
+
+	d.deletedTunnelIDs = append(d.deletedTunnelIDs, tunnelID)
+	tunnel.tunnel.DeletedAt = time.Now()
+	delete(d.mockTunnels, tunnelID)
+	return nil
+}
+
+func (d *deleteMockTunnelStore) CleanupConnections(tunnelID uuid.UUID) error {
+	tunnel, ok := d.mockTunnels[tunnelID]
+	if !ok {
+		return fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
+	}
+	return tunnel.cleanupErr
+}
+
+func Test_subcommandContext_Delete(t *testing.T) {
+	type fields struct {
+		c                 *cli.Context
+		logger            logger.Service
+		isUIEnabled       bool
+		fs                fileSystem
+		tunnelstoreClient *deleteMockTunnelStore
+		userCredential    *userCredential
+	}
+	type args struct {
+		tunnelIDs []uuid.UUID
+	}
+	newCertPath := "new_cert.json"
+	tunnelID1 := uuid.MustParse("df5ed608-b8b4-4109-89f3-9f2cf199df64")
+	tunnelID2 := uuid.MustParse("af5ed608-b8b4-4109-89f3-9f2cf199df64")
+	logger, err := logger.New()
+	require.NoError(t, err)
+
+	var tests = []struct {
+		name    string
+		fields  fields
+		args    args
+		want    []uuid.UUID
+		wantErr bool
+	}{
+		{
+			name: "clean up continues if credentials are not found",
+			fields: fields{
+				logger: logger,
+				fs: mockFileSystem{
+					rf: func(filePath string) ([]byte, error) {
+						return nil, errors.New("file not found")
+					},
+					vfp: func(string) bool { return true },
+				},
+				c: func() *cli.Context {
+					flagSet := flag.NewFlagSet("test0", flag.PanicOnError)
+					flagSet.String(CredFileFlag, newCertPath, "")
+					c := cli.NewContext(cli.NewApp(), flagSet, nil)
+					err = c.Set(CredFileFlag, newCertPath)
+					return c
+				}(),
+				tunnelstoreClient: newDeleteMockTunnelStore(
+					mockTunnelBehaviour{
+						tunnel: tunnelstore.Tunnel{ID: tunnelID1},
+					},
+					mockTunnelBehaviour{
+						tunnel: tunnelstore.Tunnel{ID: tunnelID2},
+					},
+				),
+			},
+
+			args: args{
+				tunnelIDs: []uuid.UUID{tunnelID1, tunnelID2},
+			},
+			want: []uuid.UUID{tunnelID1, tunnelID2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sc := &subcommandContext{
+				c:                 tt.fields.c,
+				logger:            tt.fields.logger,
+				isUIEnabled:       tt.fields.isUIEnabled,
+				fs:                tt.fields.fs,
+				tunnelstoreClient: tt.fields.tunnelstoreClient,
+				userCredential:    tt.fields.userCredential,
+			}
+			err := sc.delete(tt.args.tunnelIDs)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("subcommandContext.findCredentials() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			got := tt.fields.tunnelstoreClient.deletedTunnelIDs
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("subcommandContext.findCredentials() = %v, want %v", got, tt.want)
+				return
 			}
 		})
 	}
