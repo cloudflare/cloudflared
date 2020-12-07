@@ -78,7 +78,15 @@ type response struct {
 	writer         Writer            // writer to output the raw DNS bits
 }
 
+// handleRefused returns a HandlerFunc that returns REFUSED for every request it gets.
+func handleRefused(w ResponseWriter, r *Msg) {
+	m := new(Msg)
+	m.SetRcode(r, RcodeRefused)
+	w.WriteMsg(m)
+}
+
 // HandleFailed returns a HandlerFunc that returns SERVFAIL for every request it gets.
+// Deprecated: This function is going away.
 func HandleFailed(w ResponseWriter, r *Msg) {
 	m := new(Msg)
 	m.SetRcode(r, RcodeServerFailure)

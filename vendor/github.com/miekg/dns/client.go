@@ -34,7 +34,7 @@ type Client struct {
 	Dialer    *net.Dialer // a net.Dialer used to set local address, timeouts and more
 	// Timeout is a cumulative timeout for dial, write and read, defaults to 0 (disabled) - overrides DialTimeout, ReadTimeout,
 	// WriteTimeout when non-zero. Can be overridden with net.Dialer.Timeout (see Client.ExchangeWithDialer and
-	// Client.Dialer) or context.Context.Deadline (see the deprecated ExchangeContext)
+	// Client.Dialer) or context.Context.Deadline (see ExchangeContext)
 	Timeout        time.Duration
 	DialTimeout    time.Duration     // net.DialTimeout, defaults to 2 seconds, or net.Dialer.Timeout if expiring earlier - overridden by Timeout when that value is non-zero
 	ReadTimeout    time.Duration     // net.Conn.SetReadTimeout value for connections, defaults to 2 seconds - overridden by Timeout when that value is non-zero
@@ -106,7 +106,7 @@ func (c *Client) Dial(address string) (conn *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-
+	conn.UDPSize = c.UDPSize
 	return conn, nil
 }
 

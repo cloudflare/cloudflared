@@ -262,7 +262,11 @@ func StartServer(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, generalLogger)
+			if c.IsSet("proxy-dns-odoh") {
+				errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, generalLogger, true)
+			} else {
+				errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, generalLogger, false)
+			}
 		}()
 	} else {
 		close(dnsReadySignal)
@@ -1014,6 +1018,30 @@ func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
 			Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
 			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
 			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "proxy-dns-odoh",
+			Usage:   "Runs an Oblivious DNS over HTTPS client.",
+			EnvVars: []string{"TUNNEL_DNS_ODOH"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "proxy-dns-odoh-target",
+			Usage:   "ODoH target URL",
+			Value:   "https://1.1.1.1/dns-query",
+			EnvVars: []string{"TUNNEL_DNS_ODOH_TARGET"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "proxy-dns-odoh-proxy",
+			Usage:   "ODoH proxy URL",
+			Value:   "https://odoh1.surfdomeinen.nl/proxy",
+			EnvVars: []string{"TUNNEL_DNS_ODOH_PROXY"},
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "proxy-dns-odoh-useproxy",
+			Usage:   "Set flag to enable proxy usage",
+			Value:   false,
+			EnvVars: []string{"TUNNEL_DNS_ODOH_USE_PROXY"},
 		}),
 	}
 }
