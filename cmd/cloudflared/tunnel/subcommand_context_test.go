@@ -271,7 +271,7 @@ func (d *deleteMockTunnelStore) CleanupConnections(tunnelID uuid.UUID) error {
 func Test_subcommandContext_Delete(t *testing.T) {
 	type fields struct {
 		c                 *cli.Context
-		logger            logger.Service
+		log               *zerolog.Logger
 		isUIEnabled       bool
 		fs                fileSystem
 		tunnelstoreClient *deleteMockTunnelStore
@@ -283,8 +283,7 @@ func Test_subcommandContext_Delete(t *testing.T) {
 	newCertPath := "new_cert.json"
 	tunnelID1 := uuid.MustParse("df5ed608-b8b4-4109-89f3-9f2cf199df64")
 	tunnelID2 := uuid.MustParse("af5ed608-b8b4-4109-89f3-9f2cf199df64")
-	logger, err := logger.New()
-	require.NoError(t, err)
+	log := zerolog.Nop()
 
 	var tests = []struct {
 		name    string
@@ -296,7 +295,7 @@ func Test_subcommandContext_Delete(t *testing.T) {
 		{
 			name: "clean up continues if credentials are not found",
 			fields: fields{
-				logger: logger,
+				log: &log,
 				fs: mockFileSystem{
 					rf: func(filePath string) ([]byte, error) {
 						return nil, errors.New("file not found")
@@ -307,7 +306,7 @@ func Test_subcommandContext_Delete(t *testing.T) {
 					flagSet := flag.NewFlagSet("test0", flag.PanicOnError)
 					flagSet.String(CredFileFlag, newCertPath, "")
 					c := cli.NewContext(cli.NewApp(), flagSet, nil)
-					err = c.Set(CredFileFlag, newCertPath)
+					_ = c.Set(CredFileFlag, newCertPath)
 					return c
 				}(),
 				tunnelstoreClient: newDeleteMockTunnelStore(
@@ -331,7 +330,7 @@ func Test_subcommandContext_Delete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sc := &subcommandContext{
 				c:                 tt.fields.c,
-				logger:            tt.fields.logger,
+				log:               tt.fields.log,
 				isUIEnabled:       tt.fields.isUIEnabled,
 				fs:                tt.fields.fs,
 				tunnelstoreClient: tt.fields.tunnelstoreClient,

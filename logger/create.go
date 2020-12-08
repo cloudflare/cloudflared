@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -22,6 +23,9 @@ const (
 
 	LogSSHDirectoryFlag = "log-directory"
 	LogSSHLevelFlag     = "log-level"
+
+	dirPermMode  = 0744 // rwxr--r--
+	filePermMode = 0644 // rw-r--r--
 )
 
 func fallbackLogger(err error) *zerolog.Logger {
@@ -36,6 +40,15 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 
 	if loggerConfig.ConsoleConfig != nil {
 		writers = append(writers, createConsoleLogger(*loggerConfig.ConsoleConfig))
+	}
+
+	if loggerConfig.FileConfig != nil {
+		fileLogger, err := createFileLogger(*loggerConfig.FileConfig)
+		if err != nil {
+			return fallbackLogger(err)
+		}
+
+		writers = append(writers, fileLogger)
 	}
 
 	if loggerConfig.RollingConfig != nil {
@@ -84,11 +97,14 @@ func createFromContext(
 		logLevel,
 		disableTerminal,
 		logDirectory,
-		defaultConfig.RollingConfig.Filename,
 		logFile,
 	)
 
-	return newZerolog(loggerConfig)
+	log := newZerolog(loggerConfig)
+	if incompatibleFlagsSet := logFile != "" && logDirectory != ""; incompatibleFlagsSet {
+		log.Error().Msgf("Your config includes values for both %s and %s, but they are incompatible. %s takes precedence.", LogFileFlag, logDirectoryFlagName, LogFileFlag)
+	}
+	return log
 }
 
 func Create(loggerConfig *Config) *zerolog.Logger {
@@ -106,13 +122,53 @@ func createConsoleLogger(config ConsoleConfig) io.Writer {
 	}
 }
 
+func createFileLogger(config FileConfig) (io.Writer, error) {
+	var logFile io.Writer
+	fullpath := config.Fullpath()
+
+	// Try to open the existing file
+	logFile, err := os.OpenFile(fullpath, os.O_APPEND|os.O_WRONLY, filePermMode)
+	if err != nil {
+		// If the existing file wasn't found, or couldn't be opened, just ignore
+		// it and recreate a new one.
+		logFile, err = createLogFile(config)
+		// If creating a new logfile fails, then we have no choice but to error out.
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fileLogger := zerolog.New(logFile).With().Logger()
+
+	return fileLogger, nil
+}
+
+func createLogFile(config FileConfig) (io.Writer, error) {
+	if config.Dirname != "" {
+		err := os.MkdirAll(config.Dirname, dirPermMode)
+
+		if err != nil {
+			return nil, fmt.Errorf("unable to create directories for new logfile: %s", err)
+		}
+	}
+
+	mode := os.FileMode(filePermMode)
+
+	logFile, err := os.OpenFile(config.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create a new logfile: %s", err)
+	}
+
+	return logFile, nil
+}
+
 func createRollingLogger(config RollingConfig) (io.Writer, error) {
-	if err := os.MkdirAll(config.Directory, 0744); err != nil {
+	if err := os.MkdirAll(config.Dirname, dirPermMode); err != nil {
 		return nil, err
 	}
 
 	return &lumberjack.Logger{
-		Filename:   path.Join(config.Directory, config.Filename),
+		Filename:   path.Join(config.Dirname, config.Filename),
 		MaxBackups: config.maxBackups,
 		MaxSize:    config.maxSize,
 		MaxAge:     config.maxAge,

@@ -1,5 +1,7 @@
 package logger
 
+import "path/filepath"
+
 var defaultConfig = createDefaultConfig()
 
 // Logging configuration
@@ -16,12 +18,17 @@ type ConsoleConfig struct {
 }
 
 type FileConfig struct {
-	Filepath string
+	Dirname  string
+	Filename string
+}
+
+func (fc *FileConfig) Fullpath() string {
+	return filepath.Join(fc.Dirname, fc.Filename)
 }
 
 type RollingConfig struct {
-	Directory string
-	Filename  string
+	Dirname  string
+	Filename string
 
 	maxSize    int // megabytes
 	maxBackups int // files
@@ -34,18 +41,19 @@ func createDefaultConfig() Config {
 	const RollingMaxSize = 1    // Mb
 	const RollingMaxBackups = 5 // files
 	const RollingMaxAge = 0     // Keep forever
-	const rollingLogFilename = "cloudflared.log"
+	const defaultLogFilename = "cloudflared.log"
 
 	return Config{
 		ConsoleConfig: &ConsoleConfig{
 			noColor: false,
 		},
 		FileConfig: &FileConfig{
-			Filepath: "",
+			Dirname:  "",
+			Filename: defaultLogFilename,
 		},
 		RollingConfig: &RollingConfig{
-			Directory:  "",
-			Filename:   rollingLogFilename,
+			Dirname:    "",
+			Filename:   defaultLogFilename,
 			maxSize:    RollingMaxSize,
 			maxBackups: RollingMaxBackups,
 			maxAge:     RollingMaxAge,
@@ -57,7 +65,7 @@ func createDefaultConfig() Config {
 func CreateConfig(
 	minLevel string,
 	disableTerminal bool,
-	rollingLogPath, rollingLogFilename, nonRollingLogFilePath string,
+	rollingLogPath, nonRollingLogFilePath string,
 ) *Config {
 	var console *ConsoleConfig
 	if !disableTerminal {
@@ -65,13 +73,11 @@ func CreateConfig(
 	}
 
 	var file *FileConfig
-	if nonRollingLogFilePath != "" {
-		file = createFileConfig(nonRollingLogFilePath)
-	}
-
 	var rolling *RollingConfig
 	if rollingLogPath != "" {
-		rolling = createRollingConfig(rollingLogPath, rollingLogFilename)
+		rolling = createRollingConfig(rollingLogPath)
+	} else if nonRollingLogFilePath != "" {
+		file = createFileConfig(nonRollingLogFilePath)
 	}
 
 	if minLevel == "" {
@@ -93,24 +99,27 @@ func createConsoleConfig() *ConsoleConfig {
 	}
 }
 
-func createFileConfig(filepath string) *FileConfig {
-	if filepath == "" {
-		filepath = defaultConfig.FileConfig.Filepath
+func createFileConfig(fullpath string) *FileConfig {
+	if fullpath == "" {
+		return defaultConfig.FileConfig
 	}
 
+	dirname, filename := filepath.Split(fullpath)
+
 	return &FileConfig{
-		Filepath: filepath,
+		Dirname:  dirname,
+		Filename: filename,
 	}
 }
 
-func createRollingConfig(directory, filename string) *RollingConfig {
+func createRollingConfig(directory string) *RollingConfig {
 	if directory == "" {
-		directory = defaultConfig.RollingConfig.Directory
+		directory = defaultConfig.RollingConfig.Dirname
 	}
 
 	return &RollingConfig{
-		Directory:  directory,
-		Filename:   filename,
+		Dirname:    directory,
+		Filename:   defaultConfig.RollingConfig.Filename,
 		maxSize:    defaultConfig.RollingConfig.maxSize,
 		maxBackups: defaultConfig.RollingConfig.maxBackups,
 		maxAge:     defaultConfig.RollingConfig.maxAge,
