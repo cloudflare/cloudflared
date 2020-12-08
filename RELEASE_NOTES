@@ -1,3 +1,9 @@
+2020.12.0
+- 2020-12-04 TUN-3599: improved delete if credentials isnt found.
+- 2020-12-04 TUN-3612: Upgrade to Go 1.15.6
+- 2020-11-30 TUN-3593: /ready endpoint for k8s readiness. Move tunnel events out of UI package, into connection package.
+- 2020-11-27 TUN-3594: Log response status at debug level
+
 2020.11.11
 - 2020-11-20 TUN-3578: cloudflared tunnel route dns should allow wildcard subdomains
 - 2020-11-21 EDGEPLAT-2958 remove deb-compression, defaulting to gzip
