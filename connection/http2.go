@@ -115,9 +115,9 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if isWebsocketUpgrade(r) {
 		respWriter.shouldFlush = true
 		stripWebsocketUpgradeHeader(r)
-		err = c.config.OriginClient.Proxy(respWriter, r, true)
+		err = c.config.OriginProxy.Proxy(respWriter, r, true)
 	} else {
-		err = c.config.OriginClient.Proxy(respWriter, r, false)
+		err = c.config.OriginProxy.Proxy(respWriter, r, false)
 	}
 
 	if err != nil {
@@ -161,10 +161,10 @@ type http2RespWriter struct {
 	shouldFlush bool
 }
 
-func (rp *http2RespWriter) WriteRespHeaders(resp *http.Response) error {
+func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) error {
 	dest := rp.w.Header()
-	userHeaders := make(http.Header, len(resp.Header))
-	for header, values := range resp.Header {
+	userHeaders := make(http.Header, len(header))
+	for header, values := range header {
 		// Since these are http2 headers, they're required to be lowercase
 		h2name := strings.ToLower(header)
 		for _, v := range values {
@@ -184,13 +184,12 @@ func (rp *http2RespWriter) WriteRespHeaders(resp *http.Response) error {
 	// Perform user header serialization and set them in the single header
 	dest.Set(canonicalResponseUserHeadersField, h2mux.SerializeHeaders(userHeaders))
 	rp.setResponseMetaHeader(responseMetaHeaderOrigin)
-	status := resp.StatusCode
 	// HTTP2 removes support for 101 Switching Protocols https://tools.ietf.org/html/rfc7540#section-8.1.1
 	if status == http.StatusSwitchingProtocols {
 		status = http.StatusOK
 	}
 	rp.w.WriteHeader(status)
-	if IsServerSentEvent(resp.Header) {
+	if IsServerSentEvent(header) {
 		rp.shouldFlush = true
 	}
 	if rp.shouldFlush {

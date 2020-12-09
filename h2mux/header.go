@@ -125,12 +125,12 @@ func IsWebsocketClientHeader(headerName string) bool {
 		headerName == "upgrade"
 }
 
-func H1ResponseToH2ResponseHeaders(h1 *http.Response) (h2 []Header) {
+func H1ResponseToH2ResponseHeaders(status int, h1 http.Header) (h2 []Header) {
 	h2 = []Header{
-		{Name: ":status", Value: strconv.Itoa(h1.StatusCode)},
+		{Name: ":status", Value: strconv.Itoa(status)},
 	}
-	userHeaders := make(http.Header, len(h1.Header))
-	for header, values := range h1.Header {
+	userHeaders := make(http.Header, len(h1))
+	for header, values := range h1 {
 		h2name := strings.ToLower(header)
 		if h2name == "content-length" {
 			// This header has meaning in HTTP/2 and will be used by the edge,

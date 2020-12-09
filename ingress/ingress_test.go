@@ -61,12 +61,12 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "tunnel1.example.com",
-					Service:  &localService{URL: localhost8000},
+					Service:  &httpService{url: localhost8000},
 					Config:   defaultConfig,
 				},
 				{
 					Hostname: "*",
-					Service:  &localService{URL: localhost8001},
+					Service:  &httpService{url: localhost8001},
 					Config:   defaultConfig,
 				},
 			},
@@ -82,7 +82,22 @@ extraKey: extraValue
 			want: []Rule{
 				{
 					Hostname: "*",
-					Service:  &localService{URL: localhost8000},
+					Service:  &httpService{url: localhost8000},
+					Config:   defaultConfig,
+				},
+			},
+		},
+		{
+			name: "ws service",
+			args: args{rawYAML: `
+ingress:
+ - hostname: "*"
+   service: wss://localhost:8000
+`},
+			want: []Rule{
+				{
+					Hostname: "*",
+					Service:  &httpService{url: MustParseURL(t, "wss://localhost:8000")},
 					Config:   defaultConfig,
 				},
 			},
@@ -95,7 +110,7 @@ ingress:
 `},
 			want: []Rule{
 				{
-					Service: &localService{URL: localhost8000},
+					Service: &httpService{url: localhost8000},
 					Config:  defaultConfig,
 				},
 			},
@@ -210,6 +225,85 @@ ingress:
 			},
 		},
 		{
+			name: "TCP services",
+			args: args{rawYAML: `
+ingress:
+- hostname: tcp.foo.com
+  service: tcp://127.0.0.1
+- hostname: tcp2.foo.com
+  service: tcp://localhost:8000
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "tcp.foo.com",
+					Service:  newSingleTCPService(MustParseURL(t, "tcp://127.0.0.1:7864")),
+					Config:   defaultConfig,
+				},
+				{
+					Hostname: "tcp2.foo.com",
+					Service:  newSingleTCPService(MustParseURL(t, "tcp://localhost:8000")),
+					Config:   defaultConfig,
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "SSH services",
+			args: args{rawYAML: `
+ingress:
+- service: ssh://127.0.0.1
+`},
+			want: []Rule{
+				{
+					Service: newSingleTCPService(MustParseURL(t, "ssh://127.0.0.1:22")),
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "RDP services",
+			args: args{rawYAML: `
+ingress:
+- service: rdp://127.0.0.1
+`},
+			want: []Rule{
+				{
+					Service: newSingleTCPService(MustParseURL(t, "rdp://127.0.0.1:3389")),
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "SMB services",
+			args: args{rawYAML: `
+ingress:
+- service: smb://127.0.0.1
+`},
+			want: []Rule{
+				{
+					Service: newSingleTCPService(MustParseURL(t, "smb://127.0.0.1:445")),
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "Other TCP services",
+			args: args{rawYAML: `
+ingress:
+- service: ftp://127.0.0.1
+`},
+			want: []Rule{
+				{
+					Service: newSingleTCPService(MustParseURL(t, "ftp://127.0.0.1")),
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
 			name: "URL isn't necessary if using bastion",
 			args: args{rawYAML: `
 ingress:
@@ -221,7 +315,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  &localService{},
+					Service:  newBridgeService(),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
@@ -241,7 +335,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  &localService{},
+					Service:  newBridgeService(),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
@@ -406,6 +500,37 @@ func TestFindMatchingRule(t *testing.T) {
 	for i, test := range tests {
 		_, ruleIndex := ingress.FindMatchingRule(test.host, test.path)
 		assert.Equal(t, test.wantRuleIndex, ruleIndex, fmt.Sprintf("Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, i))
+	}
+}
+
+func TestIsHTTPService(t *testing.T) {
+	tests := []struct {
+		url    *url.URL
+		isHTTP bool
+	}{
+		{
+			url:    MustParseURL(t, "http://localhost"),
+			isHTTP: true,
+		},
+		{
+			url:    MustParseURL(t, "https://127.0.0.1:8000"),
+			isHTTP: true,
+		},
+		{
+			url:    MustParseURL(t, "ws://localhost"),
+			isHTTP: true,
+		},
+		{
+			url:    MustParseURL(t, "wss://localhost:8000"),
+			isHTTP: true,
+		},
+		{
+			url:    MustParseURL(t, "tcp://localhost:9000"),
+			isHTTP: false,
+		},
+	}
+	for _, test := range tests {
+		assert.Equal(t, test.isHTTP, isHTTPService(test.url))
 	}
 }
 

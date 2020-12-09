@@ -23,7 +23,7 @@ type Websocket struct {
 }
 
 type wsdialer struct {
-	conn *cfwebsocket.Conn
+	conn *cfwebsocket.GorillaConn
 }
 
 func (d *wsdialer) Dial(address string) (io.ReadWriteCloser, *socks.AddrSpec, error) {
@@ -75,7 +75,7 @@ func (ws *Websocket) StartServer(listener net.Listener, remote string, shutdownC
 // createWebsocketStream will create a WebSocket connection to stream data over
 // It also handles redirects from Access and will present that flow if
 // the token is not present on the request
-func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebsocket.Conn, error) {
+func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebsocket.GorillaConn, error) {
 	req, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 		return nil, err
 	}
 
-	return &cfwebsocket.Conn{Conn: wsConn}, nil
+	return &cfwebsocket.GorillaConn{Conn: wsConn}, nil
 }
 
 // createAccessAuthenticatedStream will try load a token from storage and make

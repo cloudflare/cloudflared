@@ -14,7 +14,7 @@ func Test_rule_matches(t *testing.T) {
 	type fields struct {
 		Hostname string
 		Path     *regexp.Regexp
-		Service  OriginService
+		Service  originService
 	}
 	type args struct {
 		requestURL *url.URL

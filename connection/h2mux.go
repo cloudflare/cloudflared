@@ -216,7 +216,7 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		return reqErr
 	}
 
-	err := h.config.OriginClient.Proxy(respWriter, req, websocket.IsWebSocketUpgrade(req))
+	err := h.config.OriginProxy.Proxy(respWriter, req, websocket.IsWebSocketUpgrade(req))
 	if err != nil {
 		respWriter.WriteErrorResponse()
 		return err
@@ -240,8 +240,8 @@ type h2muxRespWriter struct {
 	*h2mux.MuxedStream
 }
 
-func (rp *h2muxRespWriter) WriteRespHeaders(resp *http.Response) error {
-	headers := h2mux.H1ResponseToH2ResponseHeaders(resp)
+func (rp *h2muxRespWriter) WriteRespHeaders(status int, header http.Header) error {
+	headers := h2mux.H1ResponseToH2ResponseHeaders(status, header)
 	headers = append(headers, h2mux.Header{Name: ResponseMetaHeaderField, Value: responseMetaHeaderOrigin})
 	return rp.WriteHeaders(headers)
 }

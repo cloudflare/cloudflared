@@ -14,7 +14,7 @@ import (
 const LogFieldConnIndex = "connIndex"
 
 type Config struct {
-	OriginClient    OriginClient
+	OriginProxy     OriginProxy
 	GracePeriod     time.Duration
 	ReplaceExisting bool
 }
@@ -50,12 +50,12 @@ func (c *ClassicTunnelConfig) IsTrialZone() bool {
 	return c.Hostname == ""
 }
 
-type OriginClient interface {
+type OriginProxy interface {
 	Proxy(w ResponseWriter, req *http.Request, isWebsocket bool) error
 }
 
 type ResponseWriter interface {
-	WriteRespHeaders(*http.Response) error
+	WriteRespHeaders(status int, header http.Header) error
 	WriteErrorResponse()
 	io.ReadWriter
 }

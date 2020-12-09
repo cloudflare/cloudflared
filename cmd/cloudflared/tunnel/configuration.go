@@ -245,9 +245,9 @@ func prepareTunnelConfig(
 		edgeTLSConfigs[p] = edgeTLSConfig
 	}
 
-	originClient := origin.NewClient(ingressRules, tags, log)
+	originProxy := origin.NewOriginProxy(ingressRules, tags, log)
 	connectionConfig := &connection.Config{
-		OriginClient:    originClient,
+		OriginProxy:     originProxy,
 		GracePeriod:     c.Duration("grace-period"),
 		ReplaceExisting: c.Bool("force"),
 	}

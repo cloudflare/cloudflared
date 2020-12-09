@@ -11,7 +11,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/tlsconfig"
-
+	gws "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/websocket"
 )
@@ -78,7 +78,7 @@ func TestServe(t *testing.T) {
 
 	tlsConfig := websocketClientTLSConfig(t)
 	assert.NotNil(t, tlsConfig)
-	d := defaultDialler{tlsConfig: tlsConfig}
+	d := gws.Dialer{TLSClientConfig: tlsConfig}
 	conn, resp, err := ClientConnect(req, &d)
 	assert.NoError(t, err)
 	assert.Equal(t, testSecWebsocketAccept, resp.Header.Get("Sec-WebSocket-Accept"))

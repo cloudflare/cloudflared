@@ -3,6 +3,7 @@ package socks
 import (
 	"fmt"
 	"io"
+	"net"
 	"strings"
 )
 
@@ -103,4 +104,12 @@ func (h *StandardRequestHandler) handleAssociate(conn io.ReadWriter, req *Reques
 		return fmt.Errorf("Failed to send reply: %v", err)
 	}
 	return nil
+}
+
+func StreamHandler(tunnelConn io.ReadWriter, originConn net.Conn) {
+	dialer := NewConnDialer(originConn)
+	requestHandler := NewRequestHandler(dialer)
+	socksServer := NewConnectionHandler(requestHandler)
+
+	socksServer.Serve(tunnelConn)
 }

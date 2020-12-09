@@ -85,16 +85,24 @@ func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 }
 
 // Get a single origin service from the CLI/config.
-func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginService, error) {
+func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (originService, error) {
 	if c.IsSet("hello-world") {
 		return new(helloWorld), nil
 	}
-	if c.IsSet("url") || c.IsSet(config.BastionFlag) {
+	if c.IsSet(config.BastionFlag) {
+		return newBridgeService(), nil
+	}
+	if c.IsSet("url") {
 		originURL, err := config.ValidateUrl(c, allowURLFromArgs)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error validating origin URL")
 		}
-		return &localService{URL: originURL, RootURL: originURL}, nil
+		if isHTTPService(originURL) {
+			return &httpService{
+				url: originURL,
+			}, nil
+		}
+		return newSingleTCPService(originURL), nil
 	}
 	if c.IsSet("unix-socket") {
 		path, err := config.ValidateUnixSocket(c)
@@ -104,7 +112,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 		return &unixSocketPath{path: path}, nil
 	}
 	u, err := url.Parse("http://localhost:8080")
-	return &localService{URL: u, RootURL: u}, err
+	return &httpService{url: u}, err
 }
 
 // IsEmpty checks if there are any ingress rules.
@@ -136,7 +144,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
 		cfg := setConfig(defaults, r.OriginRequest)
-		var service OriginService
+		var service originService
 
 		if prefix := "unix:"; strings.HasPrefix(r.Service, prefix) {
 			// No validation necessary for unix socket filepath services
@@ -156,7 +164,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			// overwrite the localService.URL field when `start` is called. So,
 			// leave the URL field empty for now.
 			cfg.BastionMode = true
-			service = new(localService)
+			service = newBridgeService()
 		} else {
 			// Validate URL services
 			u, err := url.Parse(r.Service)
@@ -171,8 +179,11 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			if u.Path != "" {
 				return Ingress{}, fmt.Errorf("%s is an invalid address, ingress rules don't support proxying to a different path on the origin service. The path will be the same as the eyeball request's path", r.Service)
 			}
-			serviceURL := localService{URL: u}
-			service = &serviceURL
+			if isHTTPService(u) {
+				service = &httpService{url: u}
+			} else {
+				service = newSingleTCPService(u)
+			}
 		}
 
 		if err := validateHostname(r, i, len(ingress)); err != nil {
@@ -240,4 +251,8 @@ func ParseIngress(conf *config.Configuration) (Ingress, error) {
 		return Ingress{}, ErrNoIngressRules
 	}
 	return validate(conf.Ingress, originRequestFromYAML(conf.OriginRequest))
+}
+
+func isHTTPService(url *url.URL) bool {
+	return url.Scheme == "http" || url.Scheme == "https" || url.Scheme == "ws" || url.Scheme == "wss"
 }

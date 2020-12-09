@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,7 +14,6 @@ import (
 	"github.com/cloudflare/cloudflared/ingress"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
-
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
@@ -24,15 +22,15 @@ const (
 	TagHeaderNamePrefix = "Cf-Warp-Tag-"
 )
 
-type client struct {
+type proxy struct {
 	ingressRules ingress.Ingress
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
 	bufferPool   *buffer.Pool
 }
 
-func NewClient(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, log *zerolog.Logger) connection.OriginClient {
-	return &client{
+func NewOriginProxy(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, log *zerolog.Logger) connection.OriginProxy {
+	return &proxy{
 		ingressRules: ingressRules,
 		tags:         tags,
 		log:          log,
@@ -40,36 +38,55 @@ func NewClient(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, log *zerolog
 	}
 }
 
-func (c *client) Proxy(w connection.ResponseWriter, req *http.Request, isWebsocket bool) error {
+func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, isWebsocket bool) error {
 	incrementRequests()
 	defer decrementConcurrentRequests()
 
 	cfRay := findCfRayHeader(req)
 	lbProbe := isLBProbeRequest(req)
 
-	c.appendTagHeaders(req)
-	rule, ruleNum := c.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
-	c.logRequest(req, cfRay, lbProbe, ruleNum)
+	p.appendTagHeaders(req)
+	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+	p.logRequest(req, cfRay, lbProbe, ruleNum)
 
 	var (
 		resp *http.Response
 		err  error
 	)
+
 	if isWebsocket {
-		resp, err = c.proxyWebsocket(w, req, rule)
+		go websocket.NewConn(w, p.log).Pinger(req.Context())
+
+		connClosedChan := make(chan struct{})
+		err = p.proxyConnection(connClosedChan, w, req, rule)
+		if err == nil {
+			respHeader := websocket.NewResponseHeader(req)
+			status := http.StatusSwitchingProtocols
+			resp = &http.Response{
+				Status:        http.StatusText(status),
+				StatusCode:    status,
+				Header:        respHeader,
+				ContentLength: -1,
+			}
+
+			w.WriteRespHeaders(http.StatusSwitchingProtocols, respHeader)
+			<-connClosedChan
+		}
 	} else {
-		resp, err = c.proxyHTTP(w, req, rule)
+		resp, err = p.proxyHTTP(w, req, rule)
 	}
 	if err != nil {
-		c.logRequestError(err, cfRay, ruleNum)
+		p.logRequestError(err, cfRay, ruleNum)
 		w.WriteErrorResponse()
 		return err
 	}
-	c.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
+
+	p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
+
 	return nil
 }
 
-func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
+func (p *proxy) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
 	// Support for WSGI Servers by switching transfer encoding from chunked to gzip/deflate
 	if rule.Config.DisableChunkedEncoding {
 		req.TransferEncoding = []string{"gzip", "deflate"}
@@ -87,73 +104,69 @@ func (c *client) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule 
 		req.Host = hostHeader
 	}
 
-	resp, err := rule.Service.RoundTrip(req)
+	httpService, ok := rule.Service.(ingress.HTTPOriginProxy)
+	if !ok {
+		p.log.Error().Msgf("%s is not a http service", rule.Service)
+		return nil, fmt.Errorf("Not a http service")
+	}
+
+	resp, err := httpService.RoundTrip(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error proxying request to origin")
 	}
 	defer resp.Body.Close()
 
-	err = w.WriteRespHeaders(resp)
+	err = w.WriteRespHeaders(resp.StatusCode, resp.Header)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error writing response header")
 	}
 	if connection.IsServerSentEvent(resp.Header) {
-		c.log.Debug().Msg("Detected Server-Side Events from Origin")
-		c.writeEventStream(w, resp.Body)
+		p.log.Debug().Msg("Detected Server-Side Events from Origin")
+		p.writeEventStream(w, resp.Body)
 	} else {
 		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
 		// compression generates dictionary on first write
-		buf := c.bufferPool.Get()
-		defer c.bufferPool.Put(buf)
+		buf := p.bufferPool.Get()
+		defer p.bufferPool.Put(buf)
 		_, _ = io.CopyBuffer(w, resp.Body, buf)
 	}
 	return resp, nil
 }
 
-func (c *client) proxyWebsocket(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule) (*http.Response, error) {
+func (p *proxy) proxyConnection(connClosedChan chan struct{},
+	conn io.ReadWriter, req *http.Request, rule *ingress.Rule) error {
 	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
 		req.Header.Set("Host", hostHeader)
 		req.Host = hostHeader
 	}
 
-	dialler, ok := rule.Service.(websocket.Dialler)
+	connectionService, ok := rule.Service.(ingress.StreamBasedOriginProxy)
 	if !ok {
-		return nil, fmt.Errorf("Websockets aren't supported by the origin service '%s'", rule.Service)
+		p.log.Error().Msgf("%s is not a connection-oriented service", rule.Service)
+		return fmt.Errorf("Not a connection-oriented service")
 	}
-	conn, resp, err := websocket.ClientConnect(req, dialler)
+	originConn, err := connectionService.EstablishConnection(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	serveCtx, cancel := context.WithCancel(req.Context())
-	connClosedChan := make(chan struct{})
 	go func() {
 		// serveCtx is done if req is cancelled, or streamWebsocket returns
 		<-serveCtx.Done()
-		_ = conn.Close()
+		originConn.Close()
 		close(connClosedChan)
 	}()
 
-	// Copy to/from stream to the undelying connection. Use the underlying
-	// connection because cloudflared doesn't operate on the message themselves
-	err = c.streamWebsocket(w, conn.UnderlyingConn(), resp)
-	cancel()
+	go func() {
+		originConn.Stream(conn)
+		cancel()
+	}()
 
-	// We need to make sure conn is closed before returning, otherwise we might write to conn after Proxy returns
-	<-connClosedChan
-	return resp, err
-}
-
-func (c *client) streamWebsocket(w connection.ResponseWriter, conn net.Conn, resp *http.Response) error {
-	err := w.WriteRespHeaders(resp)
-	if err != nil {
-		return errors.Wrap(err, "Error writing websocket response header")
-	}
-	websocket.Stream(conn, w)
 	return nil
 }
 
-func (c *client) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {
+func (p *proxy) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {
 	reader := bufio.NewReader(respBody)
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -164,54 +177,54 @@ func (c *client) writeEventStream(w connection.ResponseWriter, respBody io.ReadC
 	}
 }
 
-func (c *client) appendTagHeaders(r *http.Request) {
-	for _, tag := range c.tags {
+func (p *proxy) appendTagHeaders(r *http.Request) {
+	for _, tag := range p.tags {
 		r.Header.Add(TagHeaderNamePrefix+tag.Name, tag.Value)
 	}
 }
 
-func (c *client) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum int) {
+func (p *proxy) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum int) {
 	if cfRay != "" {
-		c.log.Debug().Msgf("CF-RAY: %s %s %s %s", cfRay, r.Method, r.URL, r.Proto)
+		p.log.Debug().Msgf("CF-RAY: %s %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else if lbProbe {
-		c.log.Debug().Msgf("CF-RAY: %s Load Balancer health check %s %s %s", cfRay, r.Method, r.URL, r.Proto)
+		p.log.Debug().Msgf("CF-RAY: %s Load Balancer health check %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else {
-		c.log.Debug().Msgf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
+		p.log.Debug().Msgf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
 	}
-	c.log.Debug().Msgf("CF-RAY: %s Request Headers %+v", cfRay, r.Header)
-	c.log.Debug().Msgf("CF-RAY: %s Serving with ingress rule %d", cfRay, ruleNum)
+	p.log.Debug().Msgf("CF-RAY: %s Request Headers %+v", cfRay, r.Header)
+	p.log.Debug().Msgf("CF-RAY: %s Serving with ingress rule %d", cfRay, ruleNum)
 
 	if contentLen := r.ContentLength; contentLen == -1 {
-		c.log.Debug().Msgf("CF-RAY: %s Request Content length unknown", cfRay)
+		p.log.Debug().Msgf("CF-RAY: %s Request Content length unknown", cfRay)
 	} else {
-		c.log.Debug().Msgf("CF-RAY: %s Request content length %d", cfRay, contentLen)
+		p.log.Debug().Msgf("CF-RAY: %s Request content length %d", cfRay, contentLen)
 	}
 }
 
-func (c *client) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, ruleNum int) {
+func (p *proxy) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, ruleNum int) {
 	responseByCode.WithLabelValues(strconv.Itoa(r.StatusCode)).Inc()
 	if cfRay != "" {
-		c.log.Debug().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
+		p.log.Debug().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
 	} else if lbProbe {
-		c.log.Debug().Msgf("Response to Load Balancer health check %s", r.Status)
+		p.log.Debug().Msgf("Response to Load Balancer health check %s", r.Status)
 	} else {
-		c.log.Debug().Msgf("Status: %s served by ingress %d", r.Status, ruleNum)
+		p.log.Debug().Msgf("Status: %s served by ingress %d", r.Status, ruleNum)
 	}
-	c.log.Debug().Msgf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
+	p.log.Debug().Msgf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
 
 	if contentLen := r.ContentLength; contentLen == -1 {
-		c.log.Debug().Msgf("CF-RAY: %s Response content length unknown", cfRay)
+		p.log.Debug().Msgf("CF-RAY: %s Response content length unknown", cfRay)
 	} else {
-		c.log.Debug().Msgf("CF-RAY: %s Response content length %d", cfRay, contentLen)
+		p.log.Debug().Msgf("CF-RAY: %s Response content length %d", cfRay, contentLen)
 	}
 }
 
-func (c *client) logRequestError(err error, cfRay string, ruleNum int) {
+func (p *proxy) logRequestError(err error, cfRay string, ruleNum int) {
 	requestErrors.Inc()
 	if cfRay != "" {
-		c.log.Error().Msgf("CF-RAY: %s Proxying to ingress %d error: %v", cfRay, ruleNum, err)
+		p.log.Error().Msgf("CF-RAY: %s Proxying to ingress %d error: %v", cfRay, ruleNum, err)
 	} else {
-		c.log.Error().Msgf("Proxying to ingress %d error: %v", ruleNum, err)
+		p.log.Error().Msgf("Proxying to ingress %d error: %v", ruleNum, err)
 	}
 
 }

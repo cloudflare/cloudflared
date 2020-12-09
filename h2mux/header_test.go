@@ -579,7 +579,7 @@ func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 		Header:     mockHeaders,
 	}
 
-	headers := H1ResponseToH2ResponseHeaders(&mockResponse)
+	headers := H1ResponseToH2ResponseHeaders(mockResponse.StatusCode, mockResponse.Header)
 
 	serializedHeadersIndex := -1
 	for i, header := range headers {
@@ -622,7 +622,7 @@ func TestHeaderSize(t *testing.T) {
 		Header:     largeHeaders,
 	}
 
-	serializedHeaders := H1ResponseToH2ResponseHeaders(&mockResponse)
+	serializedHeaders := H1ResponseToH2ResponseHeaders(mockResponse.StatusCode, mockResponse.Header)
 	request, err := http.NewRequest(http.MethodGet, "https://example.com/", nil)
 	assert.NoError(t, err)
 	for _, header := range serializedHeaders {
@@ -669,6 +669,6 @@ func BenchmarkH1ResponseToH2ResponseHeaders(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = H1ResponseToH2ResponseHeaders(h1resp)
+		_ = H1ResponseToH2ResponseHeaders(h1resp.StatusCode, h1resp.Header)
 	}
 }

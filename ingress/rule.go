@@ -17,7 +17,7 @@ type Rule struct {
 	// A (probably local) address. Requests for a hostname which matches this
 	// rule's hostname pattern will be proxied to the service running on this
 	// address.
-	Service OriginService
+	Service originService
 
 	// Configure the request cloudflared sends to this specific origin.
 	Config OriginRequestConfig
