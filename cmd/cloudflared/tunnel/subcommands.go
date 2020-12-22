@@ -203,14 +203,14 @@ func listCommand(c *cli.Context) error {
 	}
 
 	if len(tunnels) > 0 {
-		fmtAndPrintTunnelList(tunnels, c.Bool("show-recently-disconnected"))
+		formatAndPrintTunnelList(tunnels, c.Bool("show-recently-disconnected"))
 	} else {
 		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
 	}
 	return nil
 }
 
-func fmtAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnected bool) {
+func formatAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnected bool) {
 	const (
 		minWidth = 0
 		tabWidth = 8
@@ -407,6 +407,9 @@ func buildRouteCommand() *cli.Command {
    To use this tunnel as a load balancer origin, creating pool and load balancer if necessary:
       cloudflared tunnel route lb <tunnel ID> <load balancer name> <load balancer pool>`,
 		CustomHelpTemplate: commandHelpTemplate(),
+		Subcommands: []*cli.Command{
+			buildRouteIPSubcommand(),
+		},
 	}
 }
 

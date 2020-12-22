@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudflare/cloudflared/teamnet"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -185,12 +186,17 @@ func (res *LBRouteResult) SuccessSummary() string {
 }
 
 type Client interface {
+	// Named Tunnels endpoints
 	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	DeleteTunnel(tunnelID uuid.UUID) error
 	ListTunnels(filter *Filter) ([]*Tunnel, error)
 	CleanupConnections(tunnelID uuid.UUID) error
 	RouteTunnel(tunnelID uuid.UUID, route Route) (RouteResult, error)
+
+	// Teamnet endpoints
+	ListRoutes(filter *teamnet.Filter) ([]*teamnet.Route, error)
+	AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error)
 }
 
 type RESTClient struct {
@@ -202,8 +208,9 @@ type RESTClient struct {
 }
 
 type baseEndpoints struct {
-	accountLevel url.URL
-	zoneLevel    url.URL
+	accountLevel  url.URL
+	zoneLevel     url.URL
+	accountRoutes url.URL
 }
 
 var _ Client = (*RESTClient)(nil)
@@ -216,14 +223,19 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create account level endpoint")
 	}
+	accountRoutesEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/routes", baseURL, accountTag))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create route account-level endpoint")
+	}
 	zoneLevelEndpoint, err := url.Parse(fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneTag))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create account level endpoint")
 	}
 	return &RESTClient{
 		baseEndpoints: &baseEndpoints{
-			accountLevel: *accountLevelEndpoint,
-			zoneLevel:    *zoneLevelEndpoint,
+			accountLevel:  *accountLevelEndpoint,
+			zoneLevel:     *zoneLevelEndpoint,
+			accountRoutes: *accountRoutesEndpoint,
 		},
 		authToken: authToken,
 		userAgent: userAgent,
@@ -388,7 +400,10 @@ func parseResponse(reader io.Reader, data interface{}) error {
 	}
 	// At this point we know the API call succeeded, so, parse out the inner
 	// result into the datatype provided as a parameter.
-	return json.Unmarshal(result.Result, &data)
+	if err := json.Unmarshal(result.Result, &data); err != nil {
+		return errors.Wrap(err, "the Cloudflare API response was an unexpected type")
+	}
+	return nil
 }
 
 func unmarshalTunnel(reader io.Reader) (*Tunnel, error) {
