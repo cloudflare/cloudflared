@@ -109,7 +109,7 @@ func (rsc *registrationServerClient) RegisterConnection(
 
 	observer.metrics.regSuccess.WithLabelValues("registerConnection").Inc()
 
-	observer.logServerInfo(connIndex, conn.Location, fmt.Sprintf("Connection %d registered with %s using ID %s", connIndex, conn.Location, conn.UUID))
+	observer.logServerInfo(connIndex, conn.Location, fmt.Sprintf("Connection %s registered", conn.UUID))
 	observer.sendConnectedEvent(connIndex, conn.Location)
 
 	return nil
@@ -260,15 +260,15 @@ func (h *h2muxConnection) logServerInfo(ctx context.Context, rpcClient *tunnelSe
 	})
 	serverInfoMessage, err := serverInfoPromise.Result().Struct()
 	if err != nil {
-		h.observer.log.Error().Msgf("Failed to retrieve server information: %s", err)
+		h.observer.log.Err(err).Msg("Failed to retrieve server information")
 		return err
 	}
 	serverInfo, err := tunnelpogs.UnmarshalServerInfo(serverInfoMessage)
 	if err != nil {
-		h.observer.log.Error().Msgf("Failed to retrieve server information: %s", err)
+		h.observer.log.Err(err).Msg("Failed to retrieve server information")
 		return err
 	}
-	h.observer.logServerInfo(h.connIndex, serverInfo.LocationName, fmt.Sprintf("Connection %d connected to %s", h.connIndex, serverInfo.LocationName))
+	h.observer.logServerInfo(h.connIndex, serverInfo.LocationName, "Connection established")
 	return nil
 }
 

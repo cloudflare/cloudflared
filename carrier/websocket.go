@@ -49,7 +49,7 @@ func NewWSConnection(log *zerolog.Logger, isSocks bool) Connection {
 func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) error {
 	wsConn, err := createWebsocketStream(options, ws.log)
 	if err != nil {
-		ws.log.Error().Msgf("failed to connect to %s with error: %s", options.OriginURL, err)
+		ws.log.Err(err).Str(LogFieldOriginURL, options.OriginURL).Msg("failed to connect to origin")
 		return err
 	}
 	defer wsConn.Close()

@@ -106,7 +106,7 @@ func transferRequest(requestURL string, log *zerolog.Logger) ([]byte, string, er
 			return nil, "", err
 		} else if len(buf) > 0 {
 			if err := putSuccess(client, requestURL); err != nil {
-				log.Error().Msgf("Failed to update resource success: %s", err)
+				log.Err(err).Msg("Failed to update resource success")
 			}
 			return buf, key, nil
 		}

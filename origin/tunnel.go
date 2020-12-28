@@ -151,7 +151,8 @@ func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSigna
 	return s.Run(ctx, connectedSignal, reconnectCh)
 }
 
-func ServeTunnelLoop(ctx context.Context,
+func ServeTunnelLoop(
+	ctx context.Context,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	addr *net.TCPAddr,
@@ -162,6 +163,8 @@ func ServeTunnelLoop(ctx context.Context,
 ) error {
 	haConnections.Inc()
 	defer haConnections.Dec()
+
+	connLog := config.Log.With().Uint8(connection.LogFieldConnIndex, connIndex).Logger()
 
 	protocallFallback := &protocallFallback{
 		BackoffHandler{MaxRetries: config.Retries},
@@ -181,6 +184,7 @@ func ServeTunnelLoop(ctx context.Context,
 	for {
 		err, recoverable := ServeTunnel(
 			ctx,
+			&connLog,
 			credentialManager,
 			config,
 			addr,
@@ -195,7 +199,7 @@ func ServeTunnelLoop(ctx context.Context,
 			return err
 		}
 
-		err = waitForBackoff(ctx, protocallFallback, config, connIndex, err)
+		err = waitForBackoff(ctx, &connLog, protocallFallback, config, connIndex, err)
 		if err != nil {
 			return err
 		}
@@ -224,6 +228,7 @@ func (pf *protocallFallback) fallback(fallback connection.Protocol) {
 // Expect err to always be non nil
 func waitForBackoff(
 	ctx context.Context,
+	log *zerolog.Logger,
 	protobackoff *protocallFallback,
 	config *TunnelConfig,
 	connIndex uint8,
@@ -235,7 +240,9 @@ func waitForBackoff(
 	}
 
 	config.Observer.SendReconnect(connIndex)
-	config.Log.Info().Msgf("Retrying connection %d in %s seconds, error %v", connIndex, duration, err)
+	log.Info().
+		Err(err).
+		Msgf("Retrying connection in %s seconds", duration)
 	protobackoff.Backoff(ctx)
 
 	if protobackoff.ReachedMaxRetries() {
@@ -247,7 +254,7 @@ func waitForBackoff(
 		if protobackoff.protocol == fallback {
 			return err
 		}
-		config.Log.Info().Msgf("Fallback to use %s", fallback)
+		log.Info().Msgf("Fallback to use %s", fallback)
 		protobackoff.fallback(fallback)
 	} else if !protobackoff.inFallback {
 		current := config.ProtocolSelector.Current()
@@ -261,6 +268,7 @@ func waitForBackoff(
 
 func ServeTunnel(
 	ctx context.Context,
+	log *zerolog.Logger,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	addr *net.TCPAddr,
@@ -296,17 +304,28 @@ func ServeTunnel(
 	}
 	if protocol == connection.HTTP2 {
 		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.retries))
-		return ServeHTTP2(ctx, config, edgeConn, connOptions, connIndex, connectedFuse, reconnectCh)
+		return ServeHTTP2(ctx, log, config, edgeConn, connOptions, connIndex, connectedFuse, reconnectCh)
 	}
-	return ServeH2mux(ctx, credentialManager, config, edgeConn, connIndex, connectedFuse, cloudflaredUUID, reconnectCh)
+	return ServeH2mux(
+		ctx,
+		log,
+		credentialManager,
+		config,
+		edgeConn,
+		connIndex,
+		connectedFuse,
+		cloudflaredUUID,
+		reconnectCh,
+	)
 }
 
 func ServeH2mux(
 	ctx context.Context,
+	log *zerolog.Logger,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	edgeConn net.Conn,
-	connectionIndex uint8,
+	connIndex uint8,
 	connectedFuse *connectedFuse,
 	cloudflaredUUID uuid.UUID,
 	reconnectCh chan ReconnectSignal,
@@ -314,11 +333,10 @@ func ServeH2mux(
 	config.Log.Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
 	handler, err, recoverable := connection.NewH2muxConnection(
-		ctx,
 		config.ConnectionConfig,
 		config.MuxerConfig,
 		edgeConn,
-		connectionIndex,
+		connIndex,
 		config.Observer,
 	)
 	if err != nil {
@@ -332,7 +350,7 @@ func ServeH2mux(
 			connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.retries))
 			return handler.ServeNamedTunnel(serveCtx, config.NamedTunnel, credentialManager, connOptions, connectedFuse)
 		}
-		registrationOptions := config.RegistrationOptions(connectionIndex, edgeConn.LocalAddr().String(), cloudflaredUUID)
+		registrationOptions := config.RegistrationOptions(connIndex, edgeConn.LocalAddr().String(), cloudflaredUUID)
 		return handler.ServeClassicTunnel(serveCtx, config.ClassicTunnel, credentialManager, registrationOptions, connectedFuse)
 	})
 
@@ -345,29 +363,31 @@ func ServeH2mux(
 			// don't retry this connection anymore, let supervisor pick new a address
 			return err, false
 		case *serverRegisterTunnelError:
-			config.Log.Error().Msgf("Register tunnel error from server side: %s", err.cause)
+			log.Err(err).Msg("Register tunnel error from server side")
 			// Don't send registration error return from server to Sentry. They are
 			// logged on server side
 			if incidents := config.IncidentLookup.ActiveIncidents(); len(incidents) > 0 {
-				config.Log.Error().Msg(activeIncidentsMsg(incidents))
+				log.Error().Msg(activeIncidentsMsg(incidents))
 			}
 			return err.cause, !err.permanent
 		case *clientRegisterTunnelError:
-			config.Log.Error().Msgf("Register tunnel error on client side: %s", err.cause)
+			log.Err(err).Msg("Register tunnel error on client side")
 			return err, true
 		case *muxerShutdownError:
-			config.Log.Info().Msg("Muxer shutdown")
+			log.Info().Msg("Muxer shutdown")
 			return err, true
 		case *ReconnectSignal:
-			config.Log.Info().Msgf("Restarting connection %d due to reconnect signal in %s", connectionIndex, err.Delay)
+			log.Info().
+				Uint8(connection.LogFieldConnIndex, connIndex).
+				Msgf("Restarting connection due to reconnect signal in %s", err.Delay)
 			err.DelayBeforeReconnect()
 			return err, true
 		default:
 			if err == context.Canceled {
-				config.Log.Debug().Msgf("Serve tunnel error: %s", err)
+				log.Debug().Err(err).Msgf("Serve tunnel error")
 				return err, false
 			}
-			config.Log.Error().Msgf("Serve tunnel error: %s", err)
+			log.Err(err).Msgf("Serve tunnel error")
 			return err, true
 		}
 	}
@@ -376,6 +396,7 @@ func ServeH2mux(
 
 func ServeHTTP2(
 	ctx context.Context,
+	log *zerolog.Logger,
 	config *TunnelConfig,
 	tlsServerConn net.Conn,
 	connOptions *tunnelpogs.ConnectionOptions,
@@ -383,7 +404,7 @@ func ServeHTTP2(
 	connectedFuse connection.ConnectedFuse,
 	reconnectCh chan ReconnectSignal,
 ) (err error, recoverable bool) {
-	config.Log.Debug().Msgf("Connecting via http2")
+	log.Debug().Msgf("Connecting via http2")
 	server := connection.NewHTTP2Connection(
 		tlsServerConn,
 		config.ConnectionConfig,
@@ -397,7 +418,7 @@ func ServeHTTP2(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		server.Serve(serveCtx)
-		return fmt.Errorf("Connection with edge closed")
+		return fmt.Errorf("connection with edge closed")
 	})
 
 	errGroup.Go(listenReconnect(serveCtx, reconnectCh))

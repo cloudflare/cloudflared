@@ -118,7 +118,7 @@ func (s *autoProtocolSelector) Current() Protocol {
 
 	percentage, err := s.fetchFunc()
 	if err != nil {
-		s.log.Error().Msgf("Failed to refresh protocol, err: %v", err)
+		s.log.Err(err).Msg("Failed to refresh protocol")
 		return s.current
 	}
 

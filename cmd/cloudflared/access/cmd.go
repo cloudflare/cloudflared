@@ -212,11 +212,11 @@ func login(c *cli.Context) error {
 	rawURL := ensureURLScheme(args.First())
 	appURL, err := url.Parse(rawURL)
 	if args.Len() < 1 || err != nil {
-		log.Error().Msgf("Please provide the url of the Access application\n")
+		log.Error().Msg("Please provide the url of the Access application")
 		return err
 	}
 	if err := verifyTokenAtEdge(appURL, c, log); err != nil {
-		log.Error().Msgf("Could not verify token: %s", err)
+		log.Err(err).Msg("Could not verify token")
 		return err
 	}
 
@@ -270,7 +270,7 @@ func curl(c *cli.Context) error {
 		}
 		tok, err = token.FetchToken(appURL, log)
 		if err != nil {
-			log.Error().Msgf("Failed to refresh token: %s", err)
+			log.Err(err).Msg("Failed to refresh token")
 			return err
 		}
 	}

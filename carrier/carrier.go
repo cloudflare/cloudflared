@@ -17,6 +17,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const LogFieldOriginURL = "originURL"
+
 type StartOptions struct {
 	OriginURL string
 	Headers   http.Header

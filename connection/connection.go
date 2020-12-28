@@ -11,9 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	lbProbeUserAgentPrefix = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
-)
+const LogFieldConnIndex = "connIndex"
 
 type Config struct {
 	OriginClient    OriginClient

@@ -20,6 +20,11 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	LogFieldAddress = "address"
+	LogFieldURL     = "url"
+)
+
 // Listener is an adapter between CoreDNS server and Warp runnable
 type Listener struct {
 	server *dnsserver.Server
@@ -75,14 +80,20 @@ func Run(c *cli.Context) error {
 
 	metricsListener, err := net.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		log.Fatal().Msgf("Failed to open the metrics listener: %s", err)
+		log.Fatal().Err(err).Msg("Failed to open the metrics listener")
 	}
 
 	go metrics.ServeMetrics(metricsListener, nil, nil, log)
 
-	listener, err := CreateListener(c.String("address"), uint16(c.Uint("port")), c.StringSlice("upstream"), c.StringSlice("bootstrap"), log)
+	listener, err := CreateListener(
+		c.String("address"),
+		uint16(c.Uint("port")),
+		c.StringSlice("upstream"),
+		c.StringSlice("bootstrap"),
+		log,
+	)
 	if err != nil {
-		log.Error().Msgf("Failed to create the listeners: %s", err)
+		log.Err(err).Msg("Failed to create the listeners")
 		return err
 	}
 
@@ -90,7 +101,7 @@ func Run(c *cli.Context) error {
 	readySignal := make(chan struct{})
 	err = listener.Start(readySignal)
 	if err != nil {
-		log.Error().Msgf("Failed to start the listeners: %s", err)
+		log.Err(err).Msg("Failed to start the listeners")
 		return listener.Stop()
 	}
 	<-readySignal
@@ -104,7 +115,7 @@ func Run(c *cli.Context) error {
 	// Shut down server
 	err = listener.Stop()
 	if err != nil {
-		log.Error().Msgf("failed to stop: %s", err)
+		log.Err(err).Msg("failed to stop")
 	}
 	return err
 }
@@ -125,7 +136,7 @@ func createConfig(address string, port uint16, p plugin.Handler) *dnsserver.Conf
 // Start blocks for serving requests
 func (l *Listener) Start(readySignal chan struct{}) error {
 	defer close(readySignal)
-	l.log.Info().Msgf("Starting DNS over HTTPS proxy server on: %s", l.server.Address())
+	l.log.Info().Str(LogFieldAddress, l.server.Address()).Msg("Starting DNS over HTTPS proxy server")
 
 	// Start UDP listener
 	if udp, err := l.server.ListenPacket(); err == nil {
@@ -166,7 +177,7 @@ func CreateListener(address string, port uint16, upstreams []string, bootstraps 
 	// Build the list of upstreams
 	upstreamList := make([]Upstream, 0)
 	for _, url := range upstreams {
-		log.Info().Msgf("Adding DNS upstream - url: %s", url)
+		log.Info().Str(LogFieldURL, url).Msg("Adding DNS upstream")
 		upstream, err := NewUpstreamHTTPS(url, bootstraps, log)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create HTTPS upstream")

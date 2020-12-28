@@ -170,7 +170,7 @@ func loadGlobalCertPool(log *zerolog.Logger) (*x509.CertPool, error) {
 	certPool, err := x509.SystemCertPool()
 	if err != nil {
 		if runtime.GOOS != "windows" { // See https://github.com/golang/go/issues/16736
-			log.Info().Msgf("error obtaining the system certificates: %s", err)
+			log.Err(err).Msg("error obtaining the system certificates")
 		}
 		certPool = x509.NewCertPool()
 	}

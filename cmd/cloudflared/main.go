@@ -189,28 +189,28 @@ func handleServiceMode(c *cli.Context, shutdownC chan struct{}) error {
 	// start the main run loop that reads from the config file
 	f, err := watcher.NewFile()
 	if err != nil {
-		log.Error().Msgf("Cannot load config file: %s", err)
+		log.Err(err).Msg("Cannot load config file")
 		return err
 	}
 
 	configPath := config.FindOrCreateConfigPath()
 	configManager, err := config.NewFileManager(f, configPath, log)
 	if err != nil {
-		log.Error().Msgf("Cannot setup config file for monitoring: %s", err)
+		log.Err(err).Msg("Cannot setup config file for monitoring")
 		return err
 	}
 	log.Info().Msgf("monitoring config file at: %s", configPath)
 
 	serviceCallback := func(t string, name string, err error) {
 		if err != nil {
-			log.Error().Msgf("%s service: %s encountered an error: %s", t, name, err)
+			log.Err(err).Msgf("%s service: %s encountered an error", t, name)
 		}
 	}
 	serviceManager := overwatch.NewAppManager(serviceCallback)
 
 	appService := NewAppService(configManager, serviceManager, shutdownC, log)
 	if err := appService.Run(); err != nil {
-		log.Error().Msgf("Failed to start app service: %s", err)
+		log.Err(err).Msg("Failed to start app service")
 		return err
 	}
 	return nil

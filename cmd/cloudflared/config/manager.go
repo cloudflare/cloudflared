@@ -99,7 +99,7 @@ func readConfigFromPath(configPath string, log *zerolog.Logger) (Root, error) {
 func (m *FileManager) WatcherItemDidChange(filepath string) {
 	config, err := m.GetConfig()
 	if err != nil {
-		m.log.Error().Msgf("Failed to read new config: %s", err)
+		m.log.Err(err).Msg("Failed to read new config")
 		return
 	}
 	m.log.Info().Msg("Config file has been updated")
@@ -108,5 +108,5 @@ func (m *FileManager) WatcherItemDidChange(filepath string) {
 
 // WatcherDidError notifies of errors with the file watcher
 func (m *FileManager) WatcherDidError(err error) {
-	m.log.Error().Msgf("Config watcher encountered an error: %s", err)
+	m.log.Err(err).Msg("Config watcher encountered an error")
 }

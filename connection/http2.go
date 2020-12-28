@@ -2,7 +2,6 @@ package connection
 
 import (
 	"context"
-	"errors"
 	"io"
 	"math"
 	"net"
@@ -21,10 +20,6 @@ const (
 	internalUpgradeHeader = "Cf-Cloudflared-Proxy-Connection-Upgrade"
 	websocketUpgrade      = "websocket"
 	controlStreamUpgrade  = "control-stream"
-)
-
-var (
-	errNotFlusher = errors.New("ResponseWriter doesn't implement http.Flusher")
 )
 
 type http2Connection struct {

@@ -15,7 +15,7 @@ type tunnelsForHA struct {
 }
 
 // NewTunnelsForHA initializes the Prometheus metrics etc for a tunnelsForHA.
-func NewTunnelsForHA() tunnelsForHA {
+func newTunnelsForHA() tunnelsForHA {
 	metrics := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "tunnel_ids",

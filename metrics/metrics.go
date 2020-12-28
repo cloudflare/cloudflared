@@ -72,7 +72,7 @@ func ServeMetrics(
 		log.Info().Msg("Metrics server stopped")
 		return nil
 	}
-	log.Error().Msgf("Metrics server quit with error: %s", err)
+	log.Err(err).Msg("Metrics server failed")
 	return err
 }
 

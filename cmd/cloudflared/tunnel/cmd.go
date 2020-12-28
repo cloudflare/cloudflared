@@ -78,6 +78,12 @@ const (
 
 	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
 		"Response status, content length and header will also be logged in debug level."
+
+	LogFieldCommand             = "command"
+	LogFieldExpandedPath        = "expandedPath"
+	LogFieldPIDPathname         = "pidPathname"
+	LogFieldTmpTraceFilename    = "tmpTraceFilename"
+	LogFieldTraceOutputFilepath = "traceOutputFilepath"
 )
 
 var (
@@ -173,14 +179,14 @@ func runAdhocNamedTunnel(sc *subcommandContext, name string) error {
 			return errors.Wrap(err, "failed to create tunnel")
 		}
 	} else {
-		sc.log.Info().Msgf("Tunnel already created with ID %s", tunnel.ID)
+		sc.log.Info().Str(LogFieldTunnelID, tunnel.ID.String()).Msg("Reusing existing tunnel with this name")
 	}
 
 	if r, ok := routeFromFlag(sc.c); ok {
 		if res, err := sc.route(tunnel.ID, r); err != nil {
-			sc.log.Error().Msgf("failed to create route, please create it manually. err: %v.", err)
+			sc.log.Err(err).Msg("failed to create route, please create it manually")
 		} else {
-			sc.log.Info().Msgf(res.SuccessSummary())
+			sc.log.Info().Msg(res.SuccessSummary())
 		}
 	}
 
@@ -229,25 +235,31 @@ func StartServer(
 	if c.IsSet("trace-output") {
 		tmpTraceFile, err := ioutil.TempFile("", "trace")
 		if err != nil {
-			log.Error().Msgf("Failed to create new temporary file to save trace output: %s", err)
+			log.Err(err).Msg("Failed to create new temporary file to save trace output")
 		}
+
+		traceLog := log.With().Str(LogFieldTmpTraceFilename, tmpTraceFile.Name()).Logger()
 
 		defer func() {
 			if err := tmpTraceFile.Close(); err != nil {
-				log.Error().Msgf("Failed to close trace output file %s with error: %s", tmpTraceFile.Name(), err)
+				traceLog.Err(err).Msg("Failed to close temporary trace output file")
 			}
-			if err := os.Rename(tmpTraceFile.Name(), c.String("trace-output")); err != nil {
-				log.Error().Msgf("Failed to rename temporary trace output file %s to %s with error: %s", tmpTraceFile.Name(), c.String("trace-output"), err)
+			traceOutputFilepath := c.String("trace-output")
+			if err := os.Rename(tmpTraceFile.Name(), traceOutputFilepath); err != nil {
+				traceLog.
+					Err(err).
+					Str(LogFieldTraceOutputFilepath, traceOutputFilepath).
+					Msg("Failed to rename temporary trace output file")
 			} else {
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
-					log.Error().Msgf("Failed to remove the temporary trace file %s with error: %s", tmpTraceFile.Name(), err)
+					traceLog.Err(err).Msg("Failed to remove the temporary trace file")
 				}
 			}
 		}()
 
 		if err := trace.Start(tmpTraceFile); err != nil {
-			log.Error().Msgf("Failed to start trace: %s", err)
+			traceLog.Err(err).Msg("Failed to start trace")
 			return errors.Wrap(err, "Error starting tracing")
 		}
 		defer trace.Stop()
@@ -277,7 +289,7 @@ func StartServer(
 
 	cloudflaredID, err := uuid.NewRandom()
 	if err != nil {
-		log.Error().Msgf("Cannot generate cloudflared ID: %s", err)
+		log.Err(err).Msg("Cannot generate cloudflared ID")
 		return err
 	}
 
@@ -289,7 +301,8 @@ func StartServer(
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
 	if updater.IsAutoupdateEnabled(c, log) {
-		log.Info().Msgf("Autoupdate frequency is set to %v", c.Duration("autoupdate-freq"))
+		autoupdateFreq := c.Duration("autoupdate-freq")
+		log.Info().Dur("autoupdateFreq", autoupdateFreq).Msg("Autoupdate frequency is set")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -323,13 +336,13 @@ func StartServer(
 	}
 	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, transportLog, namedTunnel, isUIEnabled, eventChannels)
 	if err != nil {
-		log.Error().Msgf("Couldn't start tunnel: %v", err)
+		log.Err(err).Msg("Couldn't start tunnel")
 		return err
 	}
 
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
-		log.Error().Msgf("Error opening metrics server listener: %s", err)
+		log.Err(err).Msg("Error opening metrics server listener")
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 	defer metricsListener.Close()
@@ -404,7 +417,7 @@ func waitToShutdown(wg *sync.WaitGroup,
 	}
 
 	if err != nil {
-		log.Error().Msgf("Quitting due to error: %s", err)
+		log.Err(err).Msg("Quitting due to error")
 	} else {
 		log.Info().Msg("Quitting...")
 	}
@@ -422,16 +435,16 @@ func notifySystemd(waitForSignal *signal.Signal) {
 	daemon.SdNotify(false, "READY=1")
 }
 
-func writePidFile(waitForSignal *signal.Signal, pidFile string, log *zerolog.Logger) {
+func writePidFile(waitForSignal *signal.Signal, pidPathname string, log *zerolog.Logger) {
 	<-waitForSignal.Wait()
-	expandedPath, err := homedir.Expand(pidFile)
+	expandedPath, err := homedir.Expand(pidPathname)
 	if err != nil {
-		log.Error().Msgf("Unable to expand %s, try to use absolute path in --pidfile: %s", pidFile, err)
+		log.Err(err).Str(LogFieldPIDPathname, pidPathname).Msg("Unable to expand the path, try to use absolute path in --pidfile")
 		return
 	}
 	file, err := os.Create(expandedPath)
 	if err != nil {
-		log.Error().Msgf("Unable to write pid to %s: %s", expandedPath, err)
+		log.Err(err).Str(LogFieldExpandedPath, expandedPath).Msg("Unable to write pid")
 		return
 	}
 	defer file.Close()
@@ -991,9 +1004,14 @@ func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "proxy-dns-bootstrap",
-			Usage:   "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
+			Name:  "proxy-dns-bootstrap",
+			Usage: "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
+			Value: cli.NewStringSlice(
+				"https://162.159.36.1/dns-query",
+				"https://162.159.46.1/dns-query",
+				"https://[2606:4700:4700::1111]/dns-query",
+				"https://[2606:4700:4700::1001]/dns-query",
+			),
 			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
 			Hidden:  shouldHide,
 		}),
@@ -1022,7 +1040,7 @@ func stdinControl(reconnectCh chan origin.ReconnectSignal, log *zerolog.Logger) 
 				log.Info().Msgf("Sending reconnect signal %+v", reconnect)
 				reconnectCh <- reconnect
 			default:
-				log.Info().Msgf("Unknown command: %s", command)
+				log.Info().Str(LogFieldCommand, command).Msg("Unknown command")
 				fallthrough
 			case "help":
 				log.Info().Msg(`Supported command:

@@ -26,7 +26,7 @@ var (
 	}
 )
 
-func newH2MuxConnection(ctx context.Context, t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
+func newH2MuxConnection(t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
 	edgeConn, originConn := net.Pipe()
 	edgeMuxChan := make(chan *h2mux.Muxer)
 	go func() {
@@ -38,7 +38,7 @@ func newH2MuxConnection(ctx context.Context, t require.TestingT) (*h2muxConnecti
 		edgeMuxChan <- edgeMux
 	}()
 	var connIndex = uint8(0)
-	h2muxConn, err, _ := NewH2muxConnection(ctx, testConfig, testMuxerConfig, originConn, connIndex, testObserver)
+	h2muxConn, err, _ := NewH2muxConnection(testConfig, testMuxerConfig, originConn, connIndex, testObserver)
 	require.NoError(t, err)
 	return h2muxConn, <-edgeMuxChan
 }
@@ -79,7 +79,7 @@ func TestServeStreamHTTP(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	h2muxConn, edgeMux := newH2MuxConnection(ctx, t)
+	h2muxConn, edgeMux := newH2MuxConnection(t)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -120,7 +120,7 @@ func TestServeStreamHTTP(t *testing.T) {
 
 func TestServeStreamWS(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	h2muxConn, edgeMux := newH2MuxConnection(ctx, t)
+	h2muxConn, edgeMux := newH2MuxConnection(t)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -179,7 +179,7 @@ func hasHeader(stream *h2mux.MuxedStream, name, val string) bool {
 
 func benchmarkServeStreamHTTPSimple(b *testing.B, test testRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
-	h2muxConn, edgeMux := newH2MuxConnection(ctx, b)
+	h2muxConn, edgeMux := newH2MuxConnection(b)
 
 	var wg sync.WaitGroup
 	wg.Add(2)

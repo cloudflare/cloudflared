@@ -21,12 +21,7 @@ const (
 	// discover HA origintunneld servers (GitHub issue #75).
 	dotServerName = "cloudflare-dns.com"
 	dotServerAddr = "1.1.1.1:853"
-	dotTimeout    = time.Duration(15 * time.Second)
-
-	// SRV record resolution TTL
-	resolveEdgeAddrTTL = 1 * time.Hour
-
-	subsystemEdgeAddrResolver = "edgeAddrResolver"
+	dotTimeout    = 15 * time.Second
 )
 
 // Redeclare network functions so they can be overridden in tests.
@@ -64,7 +59,7 @@ func edgeDiscovery(log *zerolog.Logger) ([][]*net.TCPAddr, error) {
 		_, fallbackAddrs, fallbackErr := fallbackLookupSRV(srvService, srvProto, srvName)
 		if fallbackErr != nil || len(fallbackAddrs) == 0 {
 			// use the original DNS error `err` in messages, not `fallbackErr`
-			log.Error().Msgf("Error looking up Cloudflare edge IPs: the DNS query failed: %s", err)
+			log.Err(err).Msg("Error looking up Cloudflare edge IPs: the DNS query failed")
 			for _, s := range friendlyDNSErrorLines {
 				log.Error().Msg(s)
 			}
@@ -126,7 +121,7 @@ func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*net.TCPAddr)
 	for _, addr := range addrs {
 		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
-			log.Error().Msgf("Failed to resolve %s, err: %v", addr, err)
+			log.Err(err).Msgf("Failed to resolve %s", addr)
 		} else {
 			resolved = append(resolved, tcpAddr)
 		}

@@ -18,6 +18,10 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const (
+	LogFieldCFRay = "cfRay"
+)
+
 // Proxy is an HTTP server that proxies requests to a Client.
 type Proxy struct {
 	client          Client
@@ -93,8 +97,7 @@ func (proxy *Proxy) IsAllowed(r *http.Request, verbose ...bool) bool {
 	// Warn administrators that invalid JWTs are being rejected. This is indicative
 	// of either a misconfiguration of the CLI or a massive failure of upstream systems.
 	if len(verbose) > 0 {
-		cfRay := proxy.getRayHeader(r)
-		proxy.log.Info().Msgf("dbproxy: Failed JWT authentication: cf-ray: %s %s", cfRay, err)
+		proxy.log.Err(err).Str(LogFieldCFRay, proxy.getRayHeader(r)).Msg("dbproxy: Failed JWT authentication")
 	}
 
 	return false
@@ -239,7 +242,7 @@ func (proxy *Proxy) httpRespondErr(w http.ResponseWriter, r *http.Request, defau
 	proxy.httpRespond(w, r, status, err.Error())
 	if len(err.Error()) > 0 {
 		cfRay := proxy.getRayHeader(r)
-		proxy.log.Info().Msgf("dbproxy: Database proxy error: cf-ray: %s %s", cfRay, err)
+		proxy.log.Err(err).Str(LogFieldCFRay, cfRay).Msg("dbproxy: Database proxy error")
 	}
 }
 

@@ -49,12 +49,12 @@ func (u *UpstreamHTTPS) Exchange(ctx context.Context, query *dns.Msg) (*dns.Msg,
 		for _, bootstrap := range u.bootstraps {
 			endpoint, client, err := configureBootstrap(bootstrap)
 			if err != nil {
-				u.log.Error().Msgf("failed to configure boostrap upstream %s: %s", bootstrap, err)
+				u.log.Err(err).Msgf("failed to configure boostrap upstream %s", bootstrap)
 				continue
 			}
 			msg, err := exchange(queryBuf, query.Id, endpoint, client, u.log)
 			if err != nil {
-				u.log.Error().Msgf("failed to connect to a boostrap upstream %s: %s", bootstrap, err)
+				u.log.Err(err).Msgf("failed to connect to a boostrap upstream %s", bootstrap)
 				continue
 			}
 			return msg, nil
@@ -78,7 +78,7 @@ func exchange(msg []byte, queryID uint16, endpoint *url.URL, client *http.Client
 		return response, nil
 	}
 
-	log.Error().Msgf("failed to connect to an HTTPS backend %q: %s", endpoint, backendErr)
+	log.Err(backendErr).Msgf("failed to connect to an HTTPS backend %q", endpoint)
 	return nil, backendErr
 }
 

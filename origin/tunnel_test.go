@@ -68,14 +68,14 @@ func TestWaitForBackoffFallback(t *testing.T) {
 
 	// Retry #0 and #1. At retry #2, we switch protocol, so the fallback loop has one more retry than this
 	for i := 0; i < int(maxRetries-1); i++ {
-		err := waitForBackoff(ctx, protocallFallback, config, connIndex, fmt.Errorf("Some error"))
+		err := waitForBackoff(ctx, &log, protocallFallback, config, connIndex, fmt.Errorf("some error"))
 		assert.NoError(t, err)
 		assert.Equal(t, initProtocol, protocallFallback.protocol)
 	}
 
 	// Retry fallback protocol
 	for i := 0; i < int(maxRetries); i++ {
-		err := waitForBackoff(ctx, protocallFallback, config, connIndex, fmt.Errorf("Some error"))
+		err := waitForBackoff(ctx, &log, protocallFallback, config, connIndex, fmt.Errorf("some error"))
 		assert.NoError(t, err)
 		fallback, ok := protocolSelector.Fallback()
 		assert.True(t, ok)
@@ -86,11 +86,11 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	assert.Equal(t, initProtocol, currentGlobalProtocol)
 
 	// No protocol to fallback, return error
-	err = waitForBackoff(ctx, protocallFallback, config, connIndex, fmt.Errorf("Some error"))
+	err = waitForBackoff(ctx, &log, protocallFallback, config, connIndex, fmt.Errorf("some error"))
 	assert.Error(t, err)
 
 	protocallFallback.reset()
-	err = waitForBackoff(ctx, protocallFallback, config, connIndex, fmt.Errorf("New error"))
+	err = waitForBackoff(ctx, &log, protocallFallback, config, connIndex, fmt.Errorf("new error"))
 	assert.NoError(t, err)
 	assert.Equal(t, initProtocol, protocallFallback.protocol)
 }

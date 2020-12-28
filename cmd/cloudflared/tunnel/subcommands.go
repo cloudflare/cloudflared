@@ -30,6 +30,8 @@ import (
 const (
 	CredFileFlagAlias = "cred-file"
 	CredFileFlag      = "credentials-file"
+
+	LogFieldTunnelID = "tunnelID"
 )
 
 var (
@@ -360,7 +362,7 @@ func runNamedTunnel(sc *subcommandContext, tunnelRef string) error {
 		return errors.Wrap(err, "error parsing tunnel ID")
 	}
 
-	sc.log.Info().Msgf("Starting tunnel %s", tunnelID.String())
+	sc.log.Info().Str(LogFieldTunnelID, tunnelID.String()).Msg("Starting tunnel")
 
 	return sc.run(tunnelID)
 }
@@ -518,7 +520,7 @@ func routeCommand(c *cli.Context) error {
 		return err
 	}
 
-	sc.log.Info().Msg(res.SuccessSummary())
+	sc.log.Info().Str(LogFieldTunnelID, tunnelID.String()).Msg(res.SuccessSummary())
 	return nil
 }
 

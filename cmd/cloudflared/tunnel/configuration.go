@@ -27,11 +27,15 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+const LogFieldOriginCertPath = "originCertPath"
+
 var (
 	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
 	quickStartUrl   = developerPortal + "/quickstart/quickstart/"
 	serviceUrl      = developerPortal + "/reference/service/"
 	argumentsUrl    = developerPortal + "/reference/arguments/"
+
+	LogFieldHostname = "hostname"
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -92,29 +96,28 @@ func dnsProxyStandAlone(c *cli.Context) bool {
 	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world"))
 }
 
-func findOriginCert(c *cli.Context, log *zerolog.Logger) (string, error) {
-	originCertPath := c.String("origincert")
+func findOriginCert(originCertPath string, log *zerolog.Logger) (string, error) {
 	if originCertPath == "" {
 		log.Info().Msgf("Cannot determine default origin certificate path. No file %s in %v", config.DefaultCredentialFile, config.DefaultConfigSearchDirectories())
 		if isRunningFromTerminal() {
 			log.Error().Msgf("You need to specify the origin certificate path with --origincert option, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", argumentsUrl)
-			return "", fmt.Errorf("Client didn't specify origincert path when running from terminal")
+			return "", fmt.Errorf("client didn't specify origincert path when running from terminal")
 		} else {
 			log.Error().Msgf("You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable. See %s for more information.", serviceUrl)
-			return "", fmt.Errorf("Client didn't specify origincert path")
+			return "", fmt.Errorf("client didn't specify origincert path")
 		}
 	}
 	var err error
 	originCertPath, err = homedir.Expand(originCertPath)
 	if err != nil {
-		log.Error().Msgf("Cannot resolve path %s: %s", originCertPath, err)
-		return "", fmt.Errorf("Cannot resolve path %s", originCertPath)
+		log.Err(err).Msgf("Cannot resolve origin certificate path")
+		return "", fmt.Errorf("cannot resolve path %s", originCertPath)
 	}
 	// Check that the user has acquired a certificate using the login command
 	ok, err := config.FileExists(originCertPath)
 	if err != nil {
 		log.Error().Msgf("Cannot check if origin cert exists at path %s", originCertPath)
-		return "", fmt.Errorf("Cannot check if origin cert exists at path %s", originCertPath)
+		return "", fmt.Errorf("cannot check if origin cert exists at path %s", originCertPath)
 	}
 	if !ok {
 		log.Error().Msgf(`Cannot find a valid certificate for your origin at the path:
@@ -126,29 +129,26 @@ If you don't have a certificate signed by Cloudflare, run the command:
 
 	%s login
 `, originCertPath, os.Args[0])
-		return "", fmt.Errorf("Cannot find a valid certificate at the path %s", originCertPath)
+		return "", fmt.Errorf("cannot find a valid certificate at the path %s", originCertPath)
 	}
 
 	return originCertPath, nil
 }
 
-func readOriginCert(originCertPath string, log *zerolog.Logger) ([]byte, error) {
-	log.Debug().Msgf("Reading origin cert from %s", originCertPath)
-
+func readOriginCert(originCertPath string) ([]byte, error) {
 	// Easier to send the certificate as []byte via RPC than decoding it at this point
 	originCert, err := ioutil.ReadFile(originCertPath)
 	if err != nil {
-		log.Error().Msgf("Cannot read %s to load origin certificate: %s", originCertPath, err)
-		return nil, fmt.Errorf("Cannot read %s to load origin certificate", originCertPath)
+		return nil, fmt.Errorf("cannot read %s to load origin certificate", originCertPath)
 	}
 	return originCert, nil
 }
 
-func getOriginCert(c *cli.Context, log *zerolog.Logger) ([]byte, error) {
-	if originCertPath, err := findOriginCert(c, log); err != nil {
+func getOriginCert(originCertPath string, log *zerolog.Logger) ([]byte, error) {
+	if originCertPath, err := findOriginCert(originCertPath, log); err != nil {
 		return nil, err
 	} else {
-		return readOriginCert(originCertPath, log)
+		return readOriginCert(originCertPath)
 	}
 }
 
@@ -164,9 +164,10 @@ func prepareTunnelConfig(
 ) (*origin.TunnelConfig, ingress.Ingress, error) {
 	isNamedTunnel := namedTunnel != nil
 
-	hostname, err := validation.ValidateHostname(c.String("hostname"))
+	configHostname := c.String("hostname")
+	hostname, err := validation.ValidateHostname(configHostname)
 	if err != nil {
-		log.Error().Msgf("Invalid hostname: %s", err)
+		log.Err(err).Str(LogFieldHostname, configHostname).Msg("Invalid hostname")
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
 	}
 	isFreeTunnel := hostname == ""
@@ -180,7 +181,7 @@ func prepareTunnelConfig(
 
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
-		log.Error().Msgf("Tag parse failure: %s", err)
+		log.Err(err).Msg("Tag parse failure")
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Tag parse failure")
 	}
 
@@ -188,7 +189,12 @@ func prepareTunnelConfig(
 
 	var originCert []byte
 	if !isFreeTunnel {
-		originCert, err = getOriginCert(c, log)
+		originCertPath := c.String("origincert")
+		originCertLog := log.With().
+			Str(LogFieldOriginCertPath, originCertPath).
+			Logger()
+
+		originCert, err = getOriginCert(originCertPath, &originCertLog)
 		if err != nil {
 			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
 		}

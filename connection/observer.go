@@ -10,6 +10,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const LogFieldLocation = "location"
+
 type Observer struct {
 	log              *zerolog.Logger
 	metrics          *tunnelMetrics
@@ -28,7 +30,10 @@ func NewObserver(log *zerolog.Logger, tunnelEventChans []chan Event, uiEnabled b
 
 func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
 	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
-	o.log.Info().Msgf(msg)
+	o.log.Info().
+		Uint8(LogFieldConnIndex, connIndex).
+		Str(LogFieldLocation, location).
+		Msg(msg)
 	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }
 

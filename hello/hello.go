@@ -168,19 +168,19 @@ func websocketHandler(log *zerolog.Logger, upgrader websocket.Upgrader) http.Han
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Error().Msgf("failed to upgrade to websocket connection, error: %s", err)
+			log.Err(err).Msg("failed to upgrade to websocket connection")
 			return
 		}
 		defer conn.Close()
 		for {
 			mt, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Error().Msgf("websocket read message error: %s", err)
+				log.Err(err).Msg("websocket read message error")
 				break
 			}
 
 			if err := conn.WriteMessage(mt, message); err != nil {
-				log.Error().Msgf("websocket write message error: %s", err)
+				log.Err(err).Msg("websocket write message error")
 				break
 			}
 		}

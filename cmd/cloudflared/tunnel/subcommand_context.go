@@ -93,11 +93,16 @@ func (sc *subcommandContext) client() (tunnelstore.Client, error) {
 
 func (sc *subcommandContext) credential() (*userCredential, error) {
 	if sc.userCredential == nil {
-		originCertPath, err := findOriginCert(sc.c, sc.log)
+		originCertPath := sc.c.String("origincert")
+		originCertLog := sc.log.With().
+			Str(LogFieldOriginCertPath, originCertPath).
+			Logger()
+
+		originCertPath, err := findOriginCert(originCertPath, &originCertLog)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error locating origin cert")
 		}
-		blocks, err := readOriginCert(originCertPath, sc.log)
+		blocks, err := readOriginCert(originCertPath)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Can't read origin cert from %s", originCertPath)
 		}

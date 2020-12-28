@@ -110,7 +110,9 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		if timer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate); err == nil {
 			refreshAuthBackoffTimer = timer
 		} else {
-			s.log.Error().Msgf("supervisor: initial refreshAuth failed, retrying in %v: %s", refreshAuthRetryDuration, err)
+			s.log.Err(err).
+				Dur("refreshAuthRetryDuration", refreshAuthRetryDuration).
+				Msgf("supervisor: initial refreshAuth failed, retrying in %v", refreshAuthRetryDuration)
 			refreshAuthBackoffTimer = time.After(refreshAuthRetryDuration)
 		}
 	}
@@ -129,7 +131,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil {
-				s.log.Info().Msgf("supervisor: Tunnel disconnected due to error: %s", tunnelError.err)
+				s.log.Err(tunnelError.err).Msg("supervisor: Tunnel disconnected")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -152,7 +154,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		case <-refreshAuthBackoffTimer:
 			newTimer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate)
 			if err != nil {
-				s.log.Error().Msgf("supervisor: Authentication failed: %s", err)
+				s.log.Err(err).Msg("supervisor: Authentication failed")
 				// Permanent failure. Leave the `select` without setting the
 				// channel to be non-null, so we'll never hit this case of the `select` again.
 				continue
@@ -211,7 +213,16 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		return
 	}
 
-	err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, reconnectCh)
+	err = ServeTunnelLoop(
+		ctx,
+		s.reconnectCredentialManager,
+		s.config,
+		addr,
+		firstConnIndex,
+		connectedSignal,
+		s.cloudflaredUUID,
+		reconnectCh,
+	)
 	// If the first tunnel disconnects, keep restarting it.
 	edgeErrors := 0
 	for s.unusedIPs() {
@@ -234,7 +245,16 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 				return
 			}
 		}
-		err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, firstConnIndex, connectedSignal, s.cloudflaredUUID, reconnectCh)
+		err = ServeTunnelLoop(
+			ctx,
+			s.reconnectCredentialManager,
+			s.config,
+			addr,
+			firstConnIndex,
+			connectedSignal,
+			s.cloudflaredUUID,
+			reconnectCh,
+		)
 	}
 }
 
@@ -253,7 +273,16 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 	if err != nil {
 		return
 	}
-	err = ServeTunnelLoop(ctx, s.reconnectCredentialManager, s.config, addr, uint8(index), connectedSignal, s.cloudflaredUUID, reconnectCh)
+	err = ServeTunnelLoop(
+		ctx,
+		s.reconnectCredentialManager,
+		s.config,
+		addr,
+		uint8(index),
+		connectedSignal,
+		s.cloudflaredUUID,
+		reconnectCh,
+	)
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {

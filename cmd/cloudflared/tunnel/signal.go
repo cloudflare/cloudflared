@@ -9,6 +9,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const LogFieldSignal = "signal"
+
 // waitForSignal notifies all routines to shutdownC immediately by closing the
 // shutdownC when one of the routines in main exits, or when this process receives
 // SIGTERM/SIGINT
@@ -19,11 +21,11 @@ func waitForSignal(errC chan error, shutdownC chan struct{}, log *zerolog.Logger
 
 	select {
 	case err := <-errC:
-		log.Info().Msgf("terminating due to error: %v", err)
+		log.Err(err).Msg("terminating due to error")
 		close(shutdownC)
 		return err
 	case s := <-signals:
-		log.Info().Msgf("terminating due to signal %s", s)
+		log.Info().Str(LogFieldSignal, s.String()).Msg("terminating due to signal")
 		close(shutdownC)
 	case <-shutdownC:
 	}

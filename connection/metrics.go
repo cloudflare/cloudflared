@@ -380,7 +380,7 @@ func newTunnelMetrics() *tunnelMetrics {
 		serverLocations:     serverLocations,
 		oldServerLocations:  make(map[string]string),
 		muxerMetrics:        newMuxerMetrics(),
-		tunnelsHA:           NewTunnelsForHA(),
+		tunnelsHA:           newTunnelsForHA(),
 		regSuccess:          registerSuccess,
 		regFail:             registerFail,
 		rpcFail:             rpcFail,

@@ -173,7 +173,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	stream, err := net.Dial("tcp", finalDestination)
 	if err != nil {
-		h.log.Error().Msgf("Cannot connect to remote: %s", err)
+		h.log.Err(err).Msg("Cannot connect to remote")
 		return
 	}
 	defer stream.Close()
@@ -184,7 +184,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.log.Error().Msgf("failed to upgrade: %s", err)
+		h.log.Err(err).Msg("failed to upgrade")
 		return
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))

@@ -15,6 +15,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+const (
+	LogFieldHost = "host"
+)
+
 // StartForwarder starts a client side websocket forward
 func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *zerolog.Logger) error {
 	validURL, err := validation.ValidateUrl(forwarder.Listener)
@@ -44,7 +48,7 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *z
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
 	wsConn := carrier.NewWSConnection(log, false)
 
-	log.Info().Msgf("Start Websocket listener on: %s", validURL.Host)
+	log.Info().Str(LogFieldHost, validURL.Host).Msg("Start Websocket listener")
 	return carrier.StartForwarder(wsConn, validURL.Host, shutdown, options)
 }
 
@@ -88,14 +92,14 @@ func ssh(c *cli.Context) error {
 	if c.NArg() > 0 || c.IsSet(sshURLFlag) {
 		forwarder, err := config.ValidateUrl(c, true)
 		if err != nil {
-			log.Error().Msgf("Error validating origin URL: %s", err)
+			log.Err(err).Msg("Error validating origin URL")
 			return errors.Wrap(err, "error validating origin URL")
 		}
 
-		log.Info().Msgf("Start Websocket listener on: %s", forwarder.Host)
+		log.Info().Str(LogFieldHost, forwarder.Host).Msg("Start Websocket listener")
 		err = carrier.StartForwarder(wsConn, forwarder.Host, shutdownC, options)
 		if err != nil {
-			log.Error().Msgf("Error on Websocket listener: %s", err)
+			log.Err(err).Msg("Error on Websocket listener")
 		}
 		return err
 	}

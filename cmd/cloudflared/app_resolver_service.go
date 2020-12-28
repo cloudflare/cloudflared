@@ -7,8 +7,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// ResolverServiceType is used to identify what kind of overwatch service this is
-const ResolverServiceType = "resolver"
+const (
+	// ResolverServiceType is used to identify what kind of overwatch service this is
+	ResolverServiceType = "resolver"
+
+	LogFieldResolverAddress = "resolverAddress"
+	LogFieldResolverPort    = "resolverPort"
+)
 
 // ResolverService is used to wrap the tunneldns package's DNS over HTTP
 // into a service model for the overwatch package.
@@ -65,10 +70,16 @@ func (s *ResolverService) Run() error {
 		return err
 	}
 	<-readySignal
-	s.log.Info().Msgf("start resolver on: %s:%d", s.resolver.AddressOrDefault(), s.resolver.PortOrDefault())
+
+	resolverLog := s.log.With().
+		Str(LogFieldResolverAddress, s.resolver.AddressOrDefault()).
+		Uint16(LogFieldResolverPort, s.resolver.PortOrDefault()).
+		Logger()
+
+	resolverLog.Info().Msg("Starting resolver")
 
 	// wait for shutdown signal
 	<-s.shutdown
-	s.log.Info().Msgf("shutdown on: %s:%d", s.resolver.AddressOrDefault(), s.resolver.PortOrDefault())
+	resolverLog.Info().Msg("Shutting down resolver")
 	return l.Stop()
 }

@@ -25,6 +25,8 @@ const (
 	isManagedInstallFile          = ".installedFromPackageManager"
 	UpdateURL                     = "https://update.argotunnel.com"
 	StagingUpdateURL              = "https://staging-update.argotunnel.com"
+
+	LogFieldVersion = "version"
 )
 
 var (
@@ -141,7 +143,7 @@ func Update(c *cli.Context) error {
 	}
 
 	if updateOutcome.noUpdate() {
-		log.Info().Msgf("cloudflared is up to date (%s)", updateOutcome.Version)
+		log.Info().Str(LogFieldVersion, updateOutcome.Version).Msg("cloudflared is up to date")
 		return nil
 	}
 
@@ -152,10 +154,10 @@ func Update(c *cli.Context) error {
 func loggedUpdate(log *zerolog.Logger, options updateOptions) UpdateOutcome {
 	updateOutcome := checkForUpdateAndApply(options)
 	if updateOutcome.Updated {
-		log.Info().Msgf("cloudflared has been updated to version %s", updateOutcome.Version)
+		log.Info().Str(LogFieldVersion, updateOutcome.Version).Msg("cloudflared has been updated")
 	}
 	if updateOutcome.Error != nil {
-		log.Error().Msgf("update check failed: %s", updateOutcome.Error)
+		log.Err(updateOutcome.Error).Msg("update check failed: %s")
 	}
 
 	return updateOutcome
@@ -203,7 +205,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 					a.log.Info().Msg("Restarting service managed by SysV...")
 					pid, err := a.listeners.StartProcess()
 					if err != nil {
-						a.log.Error().Msgf("Unable to restart server automatically: %s", err)
+						a.log.Err(err).Msg("Unable to restart server automatically")
 						return &statusErr{err: err}
 					}
 					// stop old process after autoupdate. Otherwise we create a new process

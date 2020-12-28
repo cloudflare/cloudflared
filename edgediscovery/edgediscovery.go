@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	subsystem = "edgediscovery"
+	LogFieldAddress   = "address"
+	LogFieldConnIndex = "connIndex"
 )
 
-var errNoAddressesLeft = fmt.Errorf("There are no free edge addresses left")
+var errNoAddressesLeft = fmt.Errorf("there are no free edge addresses left")
 
 // Edge finds addresses on the Cloudflare edge and hands them out to connections.
 type Edge struct {
@@ -76,42 +77,46 @@ func (ed *Edge) GetAddrForRPC() (*net.TCPAddr, error) {
 }
 
 // GetAddr gives this proxy connection an edge Addr. Prefer Addrs this connection has already used.
-func (ed *Edge) GetAddr(connID int) (*net.TCPAddr, error) {
+func (ed *Edge) GetAddr(connIndex int) (*net.TCPAddr, error) {
+	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
+
 	ed.Lock()
 	defer ed.Unlock()
 
 	// If this connection has already used an edge addr, return it.
-	if addr := ed.regions.AddrUsedBy(connID); addr != nil {
-		ed.log.Debug().Msgf("edgediscovery - GetAddr: Returning same address back to proxy connection: connID: %d", connID)
+	if addr := ed.regions.AddrUsedBy(connIndex); addr != nil {
+		log.Debug().Msg("edgediscovery - GetAddr: Returning same address back to proxy connection")
 		return addr, nil
 	}
 
 	// Otherwise, give it an unused one
-	addr := ed.regions.GetUnusedAddr(nil, connID)
+	addr := ed.regions.GetUnusedAddr(nil, connIndex)
 	if addr == nil {
-		ed.log.Debug().Msgf("edgediscovery - GetAddr: No addresses left to give proxy connection: connID: %d", connID)
+		log.Debug().Msg("edgediscovery - GetAddr: No addresses left to give proxy connection")
 		return nil, errNoAddressesLeft
 	}
-	ed.log.Debug().Msgf("edgediscovery - GetAddr: Giving connection its new address %s: connID: %d", addr, connID)
+	log.Debug().Str(LogFieldAddress, addr.String()).Msg("edgediscovery - GetAddr: Giving connection its new address")
 	return addr, nil
 }
 
 // GetDifferentAddr gives back the proxy connection's edge Addr and uses a new one.
-func (ed *Edge) GetDifferentAddr(connID int) (*net.TCPAddr, error) {
+func (ed *Edge) GetDifferentAddr(connIndex int) (*net.TCPAddr, error) {
+	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
+
 	ed.Lock()
 	defer ed.Unlock()
 
-	oldAddr := ed.regions.AddrUsedBy(connID)
+	oldAddr := ed.regions.AddrUsedBy(connIndex)
 	if oldAddr != nil {
 		ed.regions.GiveBack(oldAddr)
 	}
-	addr := ed.regions.GetUnusedAddr(oldAddr, connID)
+	addr := ed.regions.GetUnusedAddr(oldAddr, connIndex)
 	if addr == nil {
-		ed.log.Debug().Msgf("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection: connID: %d", connID)
+		log.Debug().Msg("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection")
 		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	ed.log.Debug().Msgf("edgediscovery - GetDifferentAddr: Giving connection its new address %s: connID: %d", addr, connID)
+	log.Debug().Str(LogFieldAddress, addr.String()).Msg("edgediscovery - GetDifferentAddr: Giving connection its new address")
 	return addr, nil
 }
 

@@ -51,7 +51,7 @@ func (mc *MuxerConfig) H2MuxerConfig(h h2mux.MuxedStreamHandler, log *zerolog.Lo
 }
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
-func NewH2muxConnection(ctx context.Context,
+func NewH2muxConnection(
 	config *Config,
 	muxerConfig *MuxerConfig,
 	edgeConn net.Conn,
@@ -123,7 +123,9 @@ func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel 
 				return nil
 			}
 			// log errors and proceed to RegisterTunnel
-			h.observer.log.Error().Msgf("Couldn't reconnect connection %d. Reregistering it instead. Error was: %v", h.connIndex, err)
+			h.observer.log.Err(err).
+				Uint8(LogFieldConnIndex, h.connIndex).
+				Msg("Couldn't reconnect connection. Re-registering it instead.")
 		}
 		return h.registerTunnel(ctx, credentialManager, classicTunnel, registrationOptions)
 	})
