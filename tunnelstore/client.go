@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -197,6 +198,7 @@ type Client interface {
 	// Teamnet endpoints
 	ListRoutes(filter *teamnet.Filter) ([]*teamnet.Route, error)
 	AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error)
+	DeleteRoute(network net.IPNet) error
 }
 
 type RESTClient struct {

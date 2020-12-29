@@ -40,7 +40,14 @@ func buildRouteIPSubcommand() *cli.Command {
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
 				Description: `Shows all Cloudflare for Teams private routes. Using flags to specify filters means that
 				only routes which match that filter get shown.`,
-				Flags: teamnet.Flags,
+				Flags: teamnet.FilterFlags,
+			},
+			{
+				Name:        "delete",
+				Action:      cliutil.ErrorHandler(deleteRouteCommand),
+				Usage:       "Delete a row of the routing table",
+				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip delete [CIDR]",
+				Description: `Deletes the Cloudflare for Teams private route for a given CIDR`,
 			},
 		},
 	}
@@ -80,7 +87,7 @@ func addRouteCommand(c *cli.Context) error {
 		return err
 	}
 	if c.NArg() < 2 {
-		return fmt.Errorf("You must supply at least 2 arguments, first the network you wish to route (in CIDR form e.g. 1.2.3.4/32) and then the tunnel ID to proxy with")
+		return errors.New("You must supply at least 2 arguments, first the network you wish to route (in CIDR form e.g. 1.2.3.4/32) and then the tunnel ID to proxy with")
 	}
 	args := c.Args()
 	_, network, err := net.ParseCIDR(args.Get(0))
@@ -108,6 +115,28 @@ func addRouteCommand(c *cli.Context) error {
 		return errors.Wrap(err, "API error")
 	}
 	fmt.Printf("Successfully added route for %s over tunnel %s\n", network, tunnelID)
+	return nil
+}
+
+func deleteRouteCommand(c *cli.Context) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return err
+	}
+	if c.NArg() != 1 {
+		return errors.New("You must supply exactly one argument, the network whose route you want to delete (in CIDR form e.g. 1.2.3.4/32)")
+	}
+	_, network, err := net.ParseCIDR(c.Args().First())
+	if err != nil {
+		return errors.Wrap(err, "Invalid network CIDR")
+	}
+	if network == nil {
+		return errors.New("Invalid network CIDR")
+	}
+	if err := sc.deleteRoute(*network); err != nil {
+		return errors.Wrap(err, "API error")
+	}
+	fmt.Printf("Successfully deleted route for %s\n", network)
 	return nil
 }
 

@@ -35,7 +35,7 @@ var (
 		Usage: "Show only routes with this comment.",
 	}
 	// Flags contains all filter flags.
-	Flags = []cli.Flag{
+	FilterFlags = []cli.Flag{
 		&filterDeleted,
 		&filterTunnelID,
 		&filterSubset,
