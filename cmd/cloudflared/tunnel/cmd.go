@@ -339,7 +339,9 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessCh, log)
 	}()
 
-	ingressRules.StartOrigins(&wg, log, shutdownC, errC)
+	if err := ingressRules.StartOrigins(&wg, log, shutdownC, errC); err != nil {
+		return err
+	}
 
 	reconnectCh := make(chan origin.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {

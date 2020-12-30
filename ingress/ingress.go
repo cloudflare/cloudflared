@@ -113,12 +113,18 @@ func (ing Ingress) IsEmpty() bool {
 }
 
 // StartOrigins will start any origin services managed by cloudflared, e.g. proxy servers or Hello World.
-func (ing Ingress) StartOrigins(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error) {
+func (ing Ingress) StartOrigins(
+	wg *sync.WaitGroup,
+	log *zerolog.Logger,
+	shutdownC <-chan struct{},
+	errC chan error,
+) error {
 	for _, rule := range ing.Rules {
 		if err := rule.Service.start(wg, log, shutdownC, errC, rule.Config); err != nil {
-			log.Error().Msgf("Error starting local service %s: %s", rule.Service, err)
+			return errors.Wrapf(err, "Error starting local service %s", rule.Service)
 		}
 	}
+	return nil
 }
 
 // CatchAll returns the catch-all rule (i.e. the last rule)

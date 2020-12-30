@@ -123,7 +123,7 @@ func TestProxySingleOrigin(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errC := make(chan error)
-	ingressRule.StartOrigins(&wg, &log, ctx.Done(), errC)
+	require.NoError(t, ingressRule.StartOrigins(&wg, &log, ctx.Done(), errC))
 
 	client := NewClient(ingressRule, testTags, &log)
 	t.Run("testProxyHTTP", testProxyHTTP(t, client))
@@ -256,7 +256,7 @@ func TestProxyMultipleOrigins(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errC := make(chan error)
 	var wg sync.WaitGroup
-	ingress.StartOrigins(&wg, &log, ctx.Done(), errC)
+	require.NoError(t, ingress.StartOrigins(&wg, &log, ctx.Done(), errC))
 
 	client := NewClient(ingress, testTags, &log)
 
