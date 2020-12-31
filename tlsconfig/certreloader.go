@@ -81,7 +81,7 @@ func LoadOriginCA(originCAPoolFilename string, log *zerolog.Logger) (*x509.CertP
 
 	// Windows users should be notified that they can use the flag
 	if runtime.GOOS == "windows" && originCAPoolFilename == "" {
-		log.Info().Msgf("cloudflared does not support loading the system root certificate pool on Windows. Please use the --%s to specify it", OriginCAPoolFlag)
+		log.Info().Msgf("cloudflared does not support loading the system root certificate pool on Windows. Please use --%s <PATH> to specify the path to the certificate pool", OriginCAPoolFlag)
 	}
 
 	return originCertPool, nil
