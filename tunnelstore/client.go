@@ -196,9 +196,10 @@ type Client interface {
 	RouteTunnel(tunnelID uuid.UUID, route Route) (RouteResult, error)
 
 	// Teamnet endpoints
-	ListRoutes(filter *teamnet.Filter) ([]*teamnet.Route, error)
+	ListRoutes(filter *teamnet.Filter) ([]*teamnet.DetailedRoute, error)
 	AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error)
 	DeleteRoute(network net.IPNet) error
+	GetByIP(ip net.IP) (teamnet.DetailedRoute, error)
 }
 
 type RESTClient struct {

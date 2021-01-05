@@ -9,7 +9,7 @@ import (
 
 const noClientMsg = "error while creating backend client"
 
-func (sc *subcommandContext) listRoutes(filter *teamnet.Filter) ([]*teamnet.Route, error) {
+func (sc *subcommandContext) listRoutes(filter *teamnet.Filter) ([]*teamnet.DetailedRoute, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, errors.Wrap(err, noClientMsg)
@@ -31,4 +31,12 @@ func (sc *subcommandContext) deleteRoute(network net.IPNet) error {
 		return errors.Wrap(err, noClientMsg)
 	}
 	return client.DeleteRoute(network)
+}
+
+func (sc *subcommandContext) getRouteByIP(ip net.IP) (teamnet.DetailedRoute, error) {
+	client, err := sc.client()
+	if err != nil {
+		return teamnet.DetailedRoute{}, errors.Wrap(err, noClientMsg)
+	}
+	return client.GetByIP(ip)
 }

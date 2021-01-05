@@ -49,6 +49,13 @@ func buildRouteIPSubcommand() *cli.Command {
 				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip delete [CIDR]",
 				Description: `Deletes the Cloudflare for Teams private route for a given CIDR`,
 			},
+			{
+				Name:        "get",
+				Action:      cliutil.ErrorHandler(getRouteByIPCommand),
+				Usage:       "Check which row of the routing table matches a given IP",
+				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip get [IP]",
+				Description: `Checks which row of the routing table matches a given IP. This helps check and validate your config.`,
+			},
 		},
 	}
 }
@@ -140,7 +147,33 @@ func deleteRouteCommand(c *cli.Context) error {
 	return nil
 }
 
-func formatAndPrintRouteList(routes []*teamnet.Route) {
+func getRouteByIPCommand(c *cli.Context) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return err
+	}
+	if c.NArg() != 1 {
+		return errors.New("You must supply exactly one argument, an IP whose route will be queried (e.g. 1.2.3.4 or 2001:0db8:::7334)")
+	}
+
+	ipInput := c.Args().First()
+	ip := net.ParseIP(ipInput)
+	if ip == nil {
+		return fmt.Errorf("Invalid IP %s", ipInput)
+	}
+	route, err := sc.getRouteByIP(ip)
+	if err != nil {
+		return errors.Wrap(err, "API error")
+	}
+	if route.IsZero() {
+		fmt.Printf("No route matches the IP %s\n", ip)
+	} else {
+		formatAndPrintRouteList([]*teamnet.DetailedRoute{&route})
+	}
+	return nil
+}
+
+func formatAndPrintRouteList(routes []*teamnet.DetailedRoute) {
 	const (
 		minWidth = 0
 		tabWidth = 8
@@ -153,7 +186,7 @@ func formatAndPrintRouteList(routes []*teamnet.Route) {
 	defer writer.Flush()
 
 	// Print column headers with tabbed columns
-	_, _ = fmt.Fprintln(writer, "NETWORK\tCOMMENT\tTUNNEL ID\tCREATED\tDELETED\t")
+	_, _ = fmt.Fprintln(writer, "NETWORK\tCOMMENT\tTUNNEL ID\tTUNNEL NAME\tCREATED\tDELETED\t")
 
 	// Loop through routes, create formatted string for each, and print using tabwriter
 	for _, route := range routes {
