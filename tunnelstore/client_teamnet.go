@@ -31,7 +31,7 @@ func (r *RESTClient) ListRoutes(filter *teamnet.Filter) ([]*teamnet.Route, error
 // AddRoute calls the Tunnelstore POST endpoint for a given route.
 func (r *RESTClient) AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error) {
 	endpoint := r.baseEndpoints.accountRoutes
-	endpoint.Path = path.Join(endpoint.Path, url.PathEscape(newRoute.Network.String()))
+	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(newRoute.Network.String()))
 	resp, err := r.sendRequest("POST", endpoint, newRoute)
 	if err != nil {
 		return teamnet.Route{}, errors.Wrap(err, "REST request failed")
@@ -48,7 +48,7 @@ func (r *RESTClient) AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error) 
 // DeleteRoute calls the Tunnelstore DELETE endpoint for a given route.
 func (r *RESTClient) DeleteRoute(network net.IPNet) error {
 	endpoint := r.baseEndpoints.accountRoutes
-	endpoint.Path = path.Join(endpoint.Path, url.PathEscape(network.String()))
+	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(network.String()))
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
