@@ -20,9 +20,10 @@ func buildRouteIPSubcommand() *cli.Command {
 		Usage:     "Configure and query private routes",
 		UsageText: "cloudflared tunnel [--config FILEPATH] route COMMAND [arguments...]",
 		Hidden:    true,
-		Description: `cloudflared can provision private routes from Cloudflare to origins in your corporate
-		network. Users enrolled in your Cloudflare for Teams organization can reach those routes through the
-		Cloudflare WARP client. You can also build rules to determine who can reach certain routes.
+		Description: `cloudflared can provision private routes from your private IP space to origins
+		in your corporate network. Users enrolled in your Cloudflare for Teams organization can reach
+		those routes through the Cloudflare Warp client. You can also build rules to determine who
+		can reach certain routes.
 		`,
 		Subcommands: []*cli.Command{
 			{
@@ -30,16 +31,17 @@ func buildRouteIPSubcommand() *cli.Command {
 				Action:    cliutil.ErrorHandler(addRouteCommand),
 				Usage:     "Add a new Teamnet route to the table",
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip add [CIDR] [TUNNEL] [COMMENT?]",
-				Description: `Adds a private route from a given Tunnel (identified by name or
-				UUID) to a given CIDR in your private IP space.`,
+				Description: `Adds a private route to a CIDR in your private IP space. Requests will
+				be sent through the Cloudflare Warp client running on a user's machine, proxied
+				through the specified tunnel, and reach an IP in the given CIDR.`,
 			},
 			{
-				Name:      "show",
-				Action:    cliutil.ErrorHandler(showRoutesCommand),
-				Usage:     "Show the routing table",
-				UsageText: "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
+				Name:        "show",
+				Action:      cliutil.ErrorHandler(showRoutesCommand),
+				Usage:       "Show the routing table",
+				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
 				Description: `Shows your organization's private route table. You can use flags to filter the results.`,
-				Flags: teamnet.FilterFlags,
+				Flags:       teamnet.FilterFlags,
 			},
 			{
 				Name:        "delete",
@@ -49,11 +51,12 @@ func buildRouteIPSubcommand() *cli.Command {
 				Description: `Deletes the row for a given CIDR from your routing table`,
 			},
 			{
-				Name:        "get",
-				Action:      cliutil.ErrorHandler(getRouteByIPCommand),
-				Usage:       "Check which row of the routing table matches a given IP",
-				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip get [IP]",
-				Description: `Checks which row of the routing table matches a given IP. This helps check and validate your config.`,
+				Name:      "get",
+				Action:    cliutil.ErrorHandler(getRouteByIPCommand),
+				Usage:     "Check which row of the routing table matches a given IP",
+				UsageText: "cloudflared tunnel [--config FILEPATH] route ip get [IP]",
+				Description: `Checks which row of the routing table will be used to proxy a given IP.
+				This helps check and validate your config.`,
 			},
 		},
 	}
