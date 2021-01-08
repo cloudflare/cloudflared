@@ -17,12 +17,12 @@ func buildRouteIPSubcommand() *cli.Command {
 	return &cli.Command{
 		Name:      "ip",
 		Category:  "Tunnel",
-		Usage:     "Configure and query Cloudflare for Teams private routes",
+		Usage:     "Configure and query private routes",
 		UsageText: "cloudflared tunnel [--config FILEPATH] route COMMAND [arguments...]",
 		Hidden:    true,
-		Description: `cloudflared lets you provision private Cloudflare for Teams routes to origins in your corporate
-		network, so that you can ensure the only people who can access your private IP subnets are people using a
-		corporate device enrolled in Cloudflare for Teams.
+		Description: `cloudflared can provision private routes from Cloudflare to origins in your corporate
+		network. Users enrolled in your Cloudflare for Teams organization can reach those routes through the
+		Cloudflare WARP client. You can also build rules to determine who can reach certain routes.
 		`,
 		Subcommands: []*cli.Command{
 			{
@@ -30,16 +30,15 @@ func buildRouteIPSubcommand() *cli.Command {
 				Action:    cliutil.ErrorHandler(addRouteCommand),
 				Usage:     "Add a new Teamnet route to the table",
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip add [CIDR] [TUNNEL] [COMMENT?]",
-				Description: `Add a new Cloudflare for Teams private route from a given tunnel (identified by name or
-				UUID) to a given IP network in your private IP space. This route will go through your Gateway rules.`,
+				Description: `Adds a private route from a given Tunnel (identified by name or
+				UUID) to a given CIDR in your private IP space.`,
 			},
 			{
 				Name:      "show",
 				Action:    cliutil.ErrorHandler(showRoutesCommand),
 				Usage:     "Show the routing table",
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
-				Description: `Shows all Cloudflare for Teams private routes. Using flags to specify filters means that
-				only routes which match that filter get shown.`,
+				Description: `Shows all private routes in your organization. You can use flags to filter the results.`,
 				Flags: teamnet.FilterFlags,
 			},
 			{
@@ -47,7 +46,7 @@ func buildRouteIPSubcommand() *cli.Command {
 				Action:      cliutil.ErrorHandler(deleteRouteCommand),
 				Usage:       "Delete a row of the routing table",
 				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip delete [CIDR]",
-				Description: `Deletes the Cloudflare for Teams private route for a given CIDR`,
+				Description: `Deletes the private route for a given CIDR`,
 			},
 			{
 				Name:        "get",
