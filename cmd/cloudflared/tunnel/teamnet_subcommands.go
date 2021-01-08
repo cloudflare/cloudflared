@@ -38,15 +38,15 @@ func buildRouteIPSubcommand() *cli.Command {
 				Action:    cliutil.ErrorHandler(showRoutesCommand),
 				Usage:     "Show the routing table",
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
-				Description: `Shows all private routes in your organization. You can use flags to filter the results.`,
+				Description: `Shows your organization's private route table. You can use flags to filter the results.`,
 				Flags: teamnet.FilterFlags,
 			},
 			{
 				Name:        "delete",
 				Action:      cliutil.ErrorHandler(deleteRouteCommand),
-				Usage:       "Delete a row of the routing table",
+				Usage:       "Delete a row from your organization's private routing table",
 				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip delete [CIDR]",
-				Description: `Deletes the private route for a given CIDR`,
+				Description: `Deletes the row for a given CIDR from your routing table`,
 			},
 			{
 				Name:        "get",
