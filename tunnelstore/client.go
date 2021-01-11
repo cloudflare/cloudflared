@@ -226,7 +226,7 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create account level endpoint")
 	}
-	accountRoutesEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/routes", baseURL, accountTag))
+	accountRoutesEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/teamnet/routes", baseURL, accountTag))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create route account-level endpoint")
 	}
