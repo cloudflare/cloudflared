@@ -19,6 +19,7 @@ import (
 
 const (
 	internalUpgradeHeader = "Cf-Cloudflared-Proxy-Connection-Upgrade"
+	tcpStreamHeader       = "Cf-Cloudflared-Proxy-Src"
 	websocketUpgrade      = "websocket"
 	controlStreamUpgrade  = "control-stream"
 )
@@ -107,21 +108,33 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respWriter.flusher = flusher
-	var err error
-	if isControlStreamUpgrade(r) {
+
+	switch {
+	case isControlStreamUpgrade(r):
 		respWriter.shouldFlush = true
-		err = c.serveControlStream(r.Context(), respWriter)
-		c.controlStreamErr = err
-	} else if isWebsocketUpgrade(r) {
+		if err := c.serveControlStream(r.Context(), respWriter); err != nil {
+			respWriter.WriteErrorResponse()
+		}
+		return
+
+	case isWebsocketUpgrade(r):
 		respWriter.shouldFlush = true
 		stripWebsocketUpgradeHeader(r)
-		err = c.config.OriginProxy.Proxy(respWriter, r, true)
-	} else {
-		err = c.config.OriginProxy.Proxy(respWriter, r, false)
-	}
+		if err := c.config.OriginProxy.Proxy(respWriter, r, TypeWebsocket); err != nil {
+			respWriter.WriteErrorResponse()
+		}
+		return
 
-	if err != nil {
-		respWriter.WriteErrorResponse()
+	case IsTCPStream(r):
+		if err := c.config.OriginProxy.Proxy(respWriter, r, TypeTCP); err != nil {
+			respWriter.WriteErrorResponse()
+		}
+		return
+
+	default:
+		if err := c.config.OriginProxy.Proxy(respWriter, r, TypeHTTP); err != nil {
+			respWriter.WriteErrorResponse()
+		}
 	}
 }
 
@@ -231,11 +244,16 @@ func (rp *http2RespWriter) Close() error {
 }
 
 func isControlStreamUpgrade(r *http.Request) bool {
-	return strings.ToLower(r.Header.Get(internalUpgradeHeader)) == controlStreamUpgrade
+	return r.Header.Get(internalUpgradeHeader) == controlStreamUpgrade
 }
 
 func isWebsocketUpgrade(r *http.Request) bool {
-	return strings.ToLower(r.Header.Get(internalUpgradeHeader)) == websocketUpgrade
+	return r.Header.Get(internalUpgradeHeader) == websocketUpgrade
+}
+
+// IsTCPStream discerns if the connection request needs a tcp stream proxy.
+func IsTCPStream(r *http.Request) bool {
+	return r.Header.Get(tcpStreamHeader) != ""
 }
 
 func stripWebsocketUpgradeHeader(r *http.Request) {

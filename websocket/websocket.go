@@ -47,30 +47,6 @@ func ClientConnect(req *http.Request, dialler *websocket.Dialer) (*websocket.Con
 	return conn, response, nil
 }
 
-// Stream copies copy data to & from provided io.ReadWriters.
-func Stream(conn, backendConn io.ReadWriter) {
-	proxyDone := make(chan struct{}, 2)
-
-	go func() {
-		_, _ = io.Copy(conn, backendConn)
-		proxyDone <- struct{}{}
-	}()
-
-	go func() {
-		_, _ = io.Copy(backendConn, conn)
-		proxyDone <- struct{}{}
-	}()
-
-	// If one side is done, we are done.
-	<-proxyDone
-}
-
-// DefaultStreamHandler is provided to the the standard websocket to origin stream
-// This exist to allow SOCKS to deframe data before it gets to the origin
-func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn) {
-	Stream(originConn, remoteConn)
-}
-
 // StartProxyServer will start a websocket server that will decode
 // the websocket data and write the resulting data to the provided
 func StartProxyServer(

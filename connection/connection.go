@@ -50,8 +50,17 @@ func (c *ClassicTunnelConfig) IsTrialZone() bool {
 	return c.Hostname == ""
 }
 
+// Type indicates the connection type of the  connection.
+type Type int
+
+const (
+	TypeWebsocket Type = iota
+	TypeTCP
+	TypeHTTP
+)
+
 type OriginProxy interface {
-	Proxy(w ResponseWriter, req *http.Request, isWebsocket bool) error
+	Proxy(w ResponseWriter, req *http.Request, sourceConnectionType Type) error
 }
 
 type ResponseWriter interface {

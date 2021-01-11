@@ -91,7 +91,7 @@ func TestBridgeServiceDestination(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	s := newBridgeService()
+	s := newBridgeService(nil)
 	for _, test := range tests {
 		r := &http.Request{
 			Header: test.header,

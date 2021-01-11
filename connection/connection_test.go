@@ -41,8 +41,8 @@ type testRequest struct {
 type mockOriginProxy struct {
 }
 
-func (moc *mockOriginProxy) Proxy(w ResponseWriter, r *http.Request, isWebsocket bool) error {
-	if isWebsocket {
+func (moc *mockOriginProxy) Proxy(w ResponseWriter, r *http.Request, sourceConnectionType Type) error {
+	if sourceConnectionType == TypeWebsocket {
 		return wsEndpoint(w, r)
 	}
 	switch r.URL.Path {

@@ -315,7 +315,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  newBridgeService(),
+					Service:  newBridgeService(nil),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
@@ -335,7 +335,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  newBridgeService(),
+					Service:  newBridgeService(nil),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{

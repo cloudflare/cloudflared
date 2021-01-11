@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/socks"
 	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
 
@@ -61,7 +62,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 
 		_ = socksServer.Serve(conn)
 	} else {
-		cfwebsocket.Stream(wsConn, conn)
+		ingress.Stream(wsConn, conn)
 	}
 	return nil
 }
@@ -69,7 +70,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 // StartServer creates a Websocket server to listen for connections.
 // This is used on the origin (tunnel) side to take data from the muxer and send it to the origin
 func (ws *Websocket) StartServer(listener net.Listener, remote string, shutdownC <-chan struct{}) error {
-	return cfwebsocket.StartProxyServer(ws.log, listener, remote, shutdownC, cfwebsocket.DefaultStreamHandler)
+	return cfwebsocket.StartProxyServer(ws.log, listener, remote, shutdownC, ingress.DefaultStreamHandler)
 }
 
 // createWebsocketStream will create a WebSocket connection to stream data over

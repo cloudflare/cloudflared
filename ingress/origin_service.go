@@ -81,9 +81,12 @@ type bridgeService struct {
 	client *tcpClient
 }
 
-func newBridgeService() *bridgeService {
+// if streamHandler is nil, a default one is set.
+func newBridgeService(streamHandler streamHandlerFunc) *bridgeService {
 	return &bridgeService{
-		client: &tcpClient{},
+		client: &tcpClient{
+			streamHandler: streamHandler,
+		},
 	}
 }
 
@@ -92,10 +95,15 @@ func (o *bridgeService) String() string {
 }
 
 func (o *bridgeService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+	// streamHandler is already set by the constructor.
+	if o.client.streamHandler != nil {
+		return nil
+	}
+
 	if cfg.ProxyType == socksProxy {
 		o.client.streamHandler = socks.StreamHandler
 	} else {
-		o.client.streamHandler = websocket.DefaultStreamHandler
+		o.client.streamHandler = DefaultStreamHandler
 	}
 	return nil
 }
@@ -136,7 +144,7 @@ func (o *singleTCPService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdo
 	if cfg.ProxyType == socksProxy {
 		o.client.streamHandler = socks.StreamHandler
 	} else {
-		o.client.streamHandler = websocket.DefaultStreamHandler
+		o.client.streamHandler = DefaultStreamHandler
 	}
 	return nil
 }

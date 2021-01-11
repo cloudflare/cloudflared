@@ -216,7 +216,12 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		return reqErr
 	}
 
-	err := h.config.OriginProxy.Proxy(respWriter, req, websocket.IsWebSocketUpgrade(req))
+	var sourceConnectionType = TypeHTTP
+	if websocket.IsWebSocketUpgrade(req) {
+		sourceConnectionType = TypeWebsocket
+	}
+
+	err := h.config.OriginProxy.Proxy(respWriter, req, sourceConnectionType)
 	if err != nil {
 		respWriter.WriteErrorResponse()
 		return err

@@ -2,13 +2,14 @@ package ingress
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/pkg/errors"
 )
 
 // HTTPOriginProxy can be implemented by origin services that want to proxy http requests.
@@ -63,7 +64,21 @@ func (o *bridgeService) EstablishConnection(r *http.Request) (OriginConnection, 
 	return o.client.connect(r, dest)
 }
 
+// getRequestHost returns the host of the http.Request.
+func getRequestHost(r *http.Request) (string, error) {
+	if r.Host != "" {
+		return r.Host, nil
+	}
+	if r.URL != nil {
+		return r.URL.Host, nil
+	}
+	return "", errors.New("host not found")
+}
+
 func (o *bridgeService) destination(r *http.Request) (string, error) {
+	if connection.IsTCPStream(r) {
+		return getRequestHost(r)
+	}
 	jumpDestination := r.Header.Get(h2mux.CFJumpDestinationHeader)
 	if jumpDestination == "" {
 		return "", fmt.Errorf("Did not receive final destination from client. The --destination flag is likely not set on the client side")
@@ -85,7 +100,7 @@ func (o *singleTCPService) EstablishConnection(r *http.Request) (OriginConnectio
 }
 
 type tcpClient struct {
-	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn)
+	streamHandler streamHandlerFunc
 }
 
 func (c *tcpClient) connect(r *http.Request, addr string) (OriginConnection, error) {

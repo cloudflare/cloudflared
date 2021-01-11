@@ -24,6 +24,11 @@ var (
 	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
+const (
+	ServiceBastion = "bastion"
+	ServiceTeamnet = "teamnet-proxy"
+)
+
 // FindMatchingRule returns the index of the Ingress Rule which matches the given
 // hostname and path. This function assumes the last rule matches everything,
 // which is the case if the rules were instantiated via the ingress#Validate method
@@ -90,7 +95,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (originServ
 		return new(helloWorld), nil
 	}
 	if c.IsSet(config.BastionFlag) {
-		return newBridgeService(), nil
+		return newBridgeService(nil), nil
 	}
 	if c.IsSet("url") {
 		originURL, err := config.ValidateUrl(c, allowURLFromArgs)
@@ -159,12 +164,14 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			service = &srv
 		} else if r.Service == "hello_world" || r.Service == "hello-world" || r.Service == "helloworld" {
 			service = new(helloWorld)
-		} else if r.Service == "bastion" || cfg.BastionMode {
+		} else if r.Service == ServiceBastion || cfg.BastionMode {
 			// Bastion mode will always start a Websocket proxy server, which will
 			// overwrite the localService.URL field when `start` is called. So,
 			// leave the URL field empty for now.
 			cfg.BastionMode = true
-			service = newBridgeService()
+			service = newBridgeService(nil)
+		} else if r.Service == ServiceTeamnet {
+			service = newBridgeService(DefaultStreamHandler)
 		} else {
 			// Validate URL services
 			u, err := url.Parse(r.Service)

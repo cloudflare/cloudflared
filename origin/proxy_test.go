@@ -143,7 +143,7 @@ func testProxyHTTP(t *testing.T, proxy connection.OriginProxy) func(t *testing.T
 		req, err := http.NewRequest(http.MethodGet, "http://localhost:8080", nil)
 		require.NoError(t, err)
 
-		err = proxy.Proxy(respWriter, req, false)
+		err = proxy.Proxy(respWriter, req, connection.TypeHTTP)
 		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusOK, respWriter.Code)
@@ -163,7 +163,7 @@ func testProxyWebsocket(t *testing.T, proxy connection.OriginProxy) func(t *test
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = proxy.Proxy(respWriter, req, true)
+			err = proxy.Proxy(respWriter, req, connection.TypeWebsocket)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusSwitchingProtocols, respWriter.Code)
@@ -205,7 +205,7 @@ func testProxySSE(t *testing.T, proxy connection.OriginProxy) func(t *testing.T)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = proxy.Proxy(respWriter, req, false)
+			err = proxy.Proxy(respWriter, req, connection.TypeHTTP)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusOK, respWriter.Code)
@@ -298,7 +298,7 @@ func TestProxyMultipleOrigins(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, test.url, nil)
 		require.NoError(t, err)
 
-		err = proxy.Proxy(respWriter, req, false)
+		err = proxy.Proxy(respWriter, req, connection.TypeHTTP)
 		require.NoError(t, err)
 
 		assert.Equal(t, test.expectedStatus, respWriter.Code)
@@ -346,7 +346,7 @@ func TestProxyError(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
 	assert.NoError(t, err)
 
-	err = proxy.Proxy(respWriter, req, false)
+	err = proxy.Proxy(respWriter, req, connection.TypeHTTP)
 	assert.Error(t, err)
 	assert.Equal(t, http.StatusBadGateway, respWriter.Code)
 	assert.Equal(t, "http response error", respWriter.Body.String())
@@ -376,12 +376,10 @@ func TestProxyBastionMode(t *testing.T) {
 
 	t.Run("testBastionWebsocket", testBastionWebsocket(proxy))
 	cancel()
-
 }
 
 func testBastionWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 	return func(t *testing.T) {
-		// WSRoute is a websocket echo handler
 		ctx, cancel := context.WithCancel(context.Background())
 		readPipe, _ := io.Pipe()
 		respWriter := newMockWSRespWriter(readPipe)
@@ -389,14 +387,15 @@ func testBastionWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 		var wg sync.WaitGroup
 		msgFromConn := []byte("data from websocket proxy")
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer ln.Close()
-			server, err := ln.Accept()
+			conn, err := ln.Accept()
 			require.NoError(t, err)
-			conn := websocket.NewConn(server, nil)
-			conn.Write(msgFromConn)
+			wsConn := websocket.NewConn(conn, nil)
+			wsConn.Write(msgFromConn)
 		}()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://dummy", nil)
@@ -405,7 +404,7 @@ func testBastionWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = proxy.Proxy(respWriter, req, true)
+			err = proxy.Proxy(respWriter, req, connection.TypeWebsocket)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusSwitchingProtocols, respWriter.Code)
@@ -420,5 +419,94 @@ func testBastionWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 
 		cancel()
 		wg.Wait()
+	}
+}
+
+func TestTCPStream(t *testing.T) {
+	logger := logger.Create(nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ingressConfig := &config.Configuration{
+		Ingress: []config.UnvalidatedIngressRule{
+			config.UnvalidatedIngressRule{
+				Hostname: "*",
+				Service:  ingress.ServiceTeamnet,
+			},
+		},
+	}
+	ingressRule, err := ingress.ParseIngress(ingressConfig)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	errC := make(chan error)
+	ingressRule.StartOrigins(&wg, logger, ctx.Done(), errC)
+
+	proxy := NewOriginProxy(ingressRule, testTags, logger)
+
+	t.Run("testTCPStream", testTCPStreamProxy(proxy))
+	cancel()
+	wg.Wait()
+}
+
+type mockTCPRespWriter struct {
+	w    io.Writer
+	code int
+}
+
+func (m *mockTCPRespWriter) Read(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (m *mockTCPRespWriter) Write(p []byte) (n int, err error) {
+	return m.w.Write(p)
+}
+
+func (m *mockTCPRespWriter) WriteErrorResponse() {
+}
+
+func (m *mockTCPRespWriter) WriteRespHeaders(status int, header http.Header) error {
+	m.code = status
+	return nil
+}
+
+func testTCPStreamProxy(proxy connection.OriginProxy) func(t *testing.T) {
+	return func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		readPipe, writePipe := io.Pipe()
+		respWriter := &mockTCPRespWriter{
+			w: writePipe,
+		}
+		msgFromConn := []byte("data from tcp proxy")
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		go func() {
+			defer ln.Close()
+			conn, err := ln.Accept()
+			require.NoError(t, err)
+			defer conn.Close()
+			_, err = conn.Write(msgFromConn)
+			require.NoError(t, err)
+		}()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://dummy", nil)
+		require.NoError(t, err)
+
+		req.Header.Set("Cf-Cloudflared-Proxy-Src", "non-blank-value")
+		req.Host = ln.Addr().String()
+		err = proxy.Proxy(respWriter, req, connection.TypeTCP)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusSwitchingProtocols, respWriter.code)
+
+		returnedMsg := make([]byte, len(msgFromConn))
+
+		_, err = readPipe.Read(returnedMsg)
+
+		require.NoError(t, err)
+		require.Equal(t, msgFromConn, returnedMsg)
+
+		cancel()
 	}
 }

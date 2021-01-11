@@ -38,7 +38,7 @@ func NewOriginProxy(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, log *ze
 	}
 }
 
-func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, isWebsocket bool) error {
+func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConnectionType connection.Type) error {
 	incrementRequests()
 	defer decrementConcurrentRequests()
 
@@ -49,41 +49,48 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, isWebsocke
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	p.logRequest(req, cfRay, lbProbe, ruleNum)
 
-	var (
-		resp *http.Response
-		err  error
-	)
-
-	if isWebsocket {
-		go websocket.NewConn(w, p.log).Pinger(req.Context())
-
-		connClosedChan := make(chan struct{})
-		err = p.proxyConnection(connClosedChan, w, req, rule)
-		if err == nil {
-			respHeader := websocket.NewResponseHeader(req)
-			status := http.StatusSwitchingProtocols
-			resp = &http.Response{
-				Status:        http.StatusText(status),
-				StatusCode:    status,
-				Header:        respHeader,
-				ContentLength: -1,
-			}
-
-			w.WriteRespHeaders(http.StatusSwitchingProtocols, respHeader)
-			<-connClosedChan
+	if sourceConnectionType == connection.TypeHTTP {
+		resp, err := p.proxyHTTP(w, req, rule)
+		if err != nil {
+			p.logErrorAndWriteResponse(w, err, cfRay, ruleNum)
+			return err
 		}
-	} else {
-		resp, err = p.proxyHTTP(w, req, rule)
+
+		p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
+		return nil
 	}
+
+	respHeader := http.Header{}
+	if sourceConnectionType == connection.TypeWebsocket {
+		go websocket.NewConn(w, p.log).Pinger(req.Context())
+		respHeader = websocket.NewResponseHeader(req)
+	}
+
+	connClosedChan := make(chan struct{})
+	err := p.proxyConnection(connClosedChan, w, req, rule)
 	if err != nil {
-		p.logRequestError(err, cfRay, ruleNum)
-		w.WriteErrorResponse()
+		p.logErrorAndWriteResponse(w, err, cfRay, ruleNum)
 		return err
 	}
 
-	p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
+	status := http.StatusSwitchingProtocols
+	resp := &http.Response{
+		Status:        http.StatusText(status),
+		StatusCode:    status,
+		Header:        respHeader,
+		ContentLength: -1,
+	}
+	w.WriteRespHeaders(http.StatusSwitchingProtocols, nil)
 
+	<-connClosedChan
+
+	p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
 	return nil
+}
+
+func (p *proxy) logErrorAndWriteResponse(w connection.ResponseWriter, err error, cfRay string, ruleNum int) {
+	p.logRequestError(err, cfRay, ruleNum)
+	w.WriteErrorResponse()
 }
 
 func (p *proxy) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule) (*http.Response, error) {

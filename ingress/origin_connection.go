@@ -17,10 +17,36 @@ type OriginConnection interface {
 	Close()
 }
 
+type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn)
+
+// Stream copies copy data to & from provided io.ReadWriters.
+func Stream(conn, backendConn io.ReadWriter) {
+	proxyDone := make(chan struct{}, 2)
+
+	go func() {
+		io.Copy(conn, backendConn)
+		proxyDone <- struct{}{}
+	}()
+
+	go func() {
+		io.Copy(backendConn, conn)
+		proxyDone <- struct{}{}
+	}()
+
+	// If one side is done, we are done.
+	<-proxyDone
+}
+
+// DefaultStreamHandler is an implementation of streamHandlerFunc that
+// performs a two way io.Copy between originConn and remoteConn.
+func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn) {
+	Stream(originConn, remoteConn)
+}
+
 // tcpConnection is an OriginConnection that directly streams to raw TCP.
 type tcpConnection struct {
 	conn          net.Conn
-	streamHandler func(tunnelConn io.ReadWriter, originConn net.Conn)
+	streamHandler streamHandlerFunc
 }
 
 func (tc *tcpConnection) Stream(tunnelConn io.ReadWriter) {
@@ -39,7 +65,7 @@ type wsConnection struct {
 }
 
 func (wsc *wsConnection) Stream(tunnelConn io.ReadWriter) {
-	websocket.Stream(tunnelConn, wsc.wsConn.UnderlyingConn())
+	Stream(tunnelConn, wsc.wsConn.UnderlyingConn())
 }
 
 func (wsc *wsConnection) Close() {
