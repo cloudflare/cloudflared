@@ -377,6 +377,12 @@ func StartServer(
 			tunnelConfig.HAConnections,
 		)
 		tunnelInfo.LaunchUI(ctx, log, transportLog, uiCh)
+	} else {
+		go func() {
+			for range uiCh {
+				// Consume UI events into a noop
+			}
+		}()
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)
