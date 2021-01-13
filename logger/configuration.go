@@ -1,6 +1,8 @@
 package logger
 
-import "path/filepath"
+import (
+	"path/filepath"
+)
 
 var defaultConfig = createDefaultConfig()
 

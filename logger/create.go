@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
 	fallbacklog "github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
@@ -109,15 +110,19 @@ func createFromContext(
 
 func Create(loggerConfig *Config) *zerolog.Logger {
 	if loggerConfig == nil {
-		loggerConfig = &defaultConfig
+		loggerConfig = &Config{
+			defaultConfig.ConsoleConfig,
+			nil,
+			nil,
+			defaultConfig.MinLevel,
+		}
 	}
-
 	return newZerolog(loggerConfig)
 }
 
 func createConsoleLogger(config ConsoleConfig) io.Writer {
 	return zerolog.ConsoleWriter{
-		Out:     os.Stderr,
+		Out:     colorable.NewColorableStderr(),
 		NoColor: config.noColor,
 	}
 }

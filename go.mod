@@ -40,6 +40,7 @@ require (
 	github.com/kshvakov/clickhouse v1.3.11
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lib/pq v1.2.0
+	github.com/mattn/go-colorable v0.1.8
 	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/miekg/dns v1.1.31
 	github.com/mitchellh/go-homedir v1.1.0
