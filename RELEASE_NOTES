@@ -1,3 +1,21 @@
+2021.1.0
+- 2021-01-11 TUN-3670: Update Teamnet API gateway prefixes
+- 2021-01-13 TUN-3738: Consume UI events even when UI is disabled
+- 2021-01-06 TUN-3722: Teamnet API paths include /network
+- 2021-01-05 TUN-3688: Subcommand for users to check which route an IP proxies through
+- 2021-01-08 TUN-3691: Edit Teamnet help text
+- 2020-12-30 TUN-3706: Quit if any origin service fails to start
+- 2020-12-31 TUN-3708: Better info message about system root certpool on Windows
+- 2020-12-21 TUN-3669: Teamnet commands to add/show Teamnet routes.
+- 2020-12-29 TUN-3689: Delete routes via cloudflared CLI
+- 2020-12-28 TUN-3471: Add structured log context to logs
+- 2020-12-15 TUN-3650: Remove unused awsuploader package
+- 2020-12-03 Update to add deprecated version note (#271)
+- 2020-12-02 TUN-3472: Set up rolling logger with zerolog and lumberjack
+- 2020-12-08 TUN-3607: Set up single-file logger with zerolog
+- 2020-12-03 Update to add deprecated version note (#271)
+- 2020-11-25 TUN-3470: Replace in-house logger calls with zerolog
+
 2020.12.0
 - 2020-12-04 TUN-3599: improved delete if credentials isnt found.
 - 2020-12-04 TUN-3612: Upgrade to Go 1.15.6
