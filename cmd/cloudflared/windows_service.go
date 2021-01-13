@@ -165,22 +165,22 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 }
 
 func installWindowsService(c *cli.Context) error {
-	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
+	zeroLogger := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
-	log.Info().Msg("Installing Argo Tunnel Windows service")
+	zeroLogger.Info().Msg("Installing Argo Tunnel Windows service")
 	exepath, err := os.Executable()
 	if err != nil {
-		log.Err(err).Msg("Cannot find path name that start the process")
+		zeroLogger.Err(err).Msg("Cannot find path name that start the process")
 		return err
 	}
 	m, err := mgr.Connect()
 	if err != nil {
-		log.Err(err).Msg("Cannot establish a connection to the service control manager")
+		zeroLogger.Err(err).Msg("Cannot establish a connection to the service control manager")
 		return err
 	}
 	defer m.Disconnect()
 	s, err := m.OpenService(windowsServiceName)
-	log = log.With().Str(LogFieldWindowsServiceName, windowsServiceName).Logger()
+	log := zeroLogger.With().Str(LogFieldWindowsServiceName, windowsServiceName).Logger()
 	if err == nil {
 		s.Close()
 		log.Err(err).Msg("service already exists")
