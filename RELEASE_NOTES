@@ -1,3 +1,6 @@
+2021.1.1
+- 2021-01-13 TUN-3744: Fix compilation error in windows service
+
 2021.1.0
 - 2021-01-11 TUN-3670: Update Teamnet API gateway prefixes
 - 2021-01-13 TUN-3738: Consume UI events even when UI is disabled
