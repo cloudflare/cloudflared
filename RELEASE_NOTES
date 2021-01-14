@@ -1,3 +1,6 @@
+2021.1.2
+- 2021-01-13 TUN-3747: Fix logging in Windows
+
 2021.1.1
 - 2021-01-13 TUN-3744: Fix compilation error in windows service
 
