@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
@@ -159,7 +160,8 @@ func createLogFile(config FileConfig) (io.Writer, error) {
 
 	mode := os.FileMode(filePermMode)
 
-	logFile, err := os.OpenFile(config.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	fullPath := filepath.Join(config.Dirname, config.Filename)
+	logFile, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a new logfile: %s", err)
 	}
