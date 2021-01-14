@@ -161,7 +161,7 @@ func createLogFile(config FileConfig) (io.Writer, error) {
 	mode := os.FileMode(filePermMode)
 
 	fullPath := filepath.Join(config.Dirname, config.Filename)
-	logFile, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	logFile, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, mode)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a new logfile: %s", err)
 	}
