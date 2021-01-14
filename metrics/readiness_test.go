@@ -3,6 +3,11 @@ package metrics
 import (
 	"net/http"
 	"testing"
+
+	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/connection"
 )
 
 func TestReadyServer_makeResponse(t *testing.T) {
@@ -55,4 +60,50 @@ func TestReadyServer_makeResponse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReadinessEventHandling(t *testing.T) {
+	nopLogger := zerolog.Nop()
+	rs := NewReadyServer(&nopLogger)
+
+	// start not ok
+	code, ready := rs.makeResponse()
+	assert.NotEqualValues(t, http.StatusOK, code)
+	assert.Zero(t, ready)
+
+	// one connected => ok
+	rs.OnTunnelEvent(connection.Event{
+		Index:     1,
+		EventType: connection.Connected,
+	})
+	code, ready = rs.makeResponse()
+	assert.EqualValues(t, http.StatusOK, code)
+	assert.EqualValues(t, 1, ready)
+
+	// another connected => still ok
+	rs.OnTunnelEvent(connection.Event{
+		Index:     2,
+		EventType: connection.Connected,
+	})
+	code, ready = rs.makeResponse()
+	assert.EqualValues(t, http.StatusOK, code)
+	assert.EqualValues(t, 2,  ready)
+
+	// one reconnecting => still ok
+	rs.OnTunnelEvent(connection.Event{
+		Index:     2,
+		EventType: connection.Reconnecting,
+	})
+	code, ready = rs.makeResponse()
+	assert.EqualValues(t, http.StatusOK, code)
+	assert.EqualValues(t, 1, ready)
+
+	// other disconnected => not ok
+	rs.OnTunnelEvent(connection.Event{
+		Index:     1,
+		EventType: connection.Disconnected,
+	})
+	code, ready = rs.makeResponse()
+	assert.NotEqualValues(t, http.StatusOK, code)
+	assert.Zero(t, ready)
 }

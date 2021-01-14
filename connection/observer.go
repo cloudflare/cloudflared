@@ -10,22 +10,37 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const LogFieldLocation = "location"
+const (
+	LogFieldLocation          = "location"
+	observerChannelBufferSize = 16
+)
 
 type Observer struct {
-	log              *zerolog.Logger
-	metrics          *tunnelMetrics
-	tunnelEventChans []chan Event
-	uiEnabled        bool
+	log             *zerolog.Logger
+	metrics         *tunnelMetrics
+	tunnelEventChan chan Event
+	uiEnabled       bool
+	addSinkChan     chan EventSink
 }
 
-func NewObserver(log *zerolog.Logger, tunnelEventChans []chan Event, uiEnabled bool) *Observer {
-	return &Observer{
-		log,
-		newTunnelMetrics(),
-		tunnelEventChans,
-		uiEnabled,
+type EventSink interface {
+	OnTunnelEvent(event Event)
+}
+
+func NewObserver(log *zerolog.Logger, uiEnabled bool) *Observer {
+	o := &Observer{
+		log:             log,
+		metrics:         newTunnelMetrics(),
+		uiEnabled:       uiEnabled,
+		tunnelEventChan: make(chan Event, observerChannelBufferSize),
+		addSinkChan:     make(chan EventSink, observerChannelBufferSize),
 	}
+	go o.dispatchEvents()
+	return o
+}
+
+func (o *Observer) RegisterSink(sink EventSink) {
+	o.addSinkChan <- sink
 }
 
 func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
@@ -105,7 +120,30 @@ func (o *Observer) SendDisconnect(connIndex uint8) {
 }
 
 func (o *Observer) sendEvent(e Event) {
-	for _, ch := range o.tunnelEventChans {
-		ch <- e
+	select {
+	case o.tunnelEventChan <- e:
+		break
+	default:
+		o.log.Warn().Msg("observer channel buffer is full")
 	}
+}
+
+func (o *Observer) dispatchEvents() {
+	var sinks []EventSink
+	for {
+		select {
+		case sink := <-o.addSinkChan:
+			sinks = append(sinks, sink)
+		case evt := <-o.tunnelEventChan:
+			for _, sink := range sinks {
+				sink.OnTunnelEvent(evt)
+			}
+		}
+	}
+}
+
+type EventSinkFunc func(event Event)
+
+func (f EventSinkFunc) OnTunnelEvent(event Event) {
+	f(event)
 }

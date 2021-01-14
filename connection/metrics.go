@@ -299,7 +299,7 @@ func convertRTTMilliSec(t time.Duration) float64 {
 }
 
 // Metrics that can be collected without asking the edge
-func newTunnelMetrics() *tunnelMetrics {
+func initTunnelMetrics() *tunnelMetrics {
 	maxConcurrentRequestsPerTunnel := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: MetricsNamespace,
@@ -402,4 +402,16 @@ func (t *tunnelMetrics) registerServerLocation(connectionID, loc string) {
 	}
 	t.serverLocations.WithLabelValues(connectionID, loc).Inc()
 	t.oldServerLocations[connectionID] = loc
+}
+
+var tunnelMetricsInternal struct {
+	sync.Once
+	metrics *tunnelMetrics
+}
+
+func newTunnelMetrics() *tunnelMetrics {
+	tunnelMetricsInternal.Do(func() {
+		tunnelMetricsInternal.metrics = initTunnelMetrics()
+	})
+	return tunnelMetricsInternal.metrics
 }

@@ -328,13 +328,9 @@ func StartServer(
 
 	transportLog := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
 
-	readinessCh := make(chan connection.Event, 16)
-	uiCh := make(chan connection.Event, 16)
-	eventChannels := []chan connection.Event{
-		readinessCh,
-		uiCh,
-	}
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, transportLog, namedTunnel, isUIEnabled, eventChannels)
+	observer := connection.NewObserver(log, isUIEnabled)
+
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
@@ -349,7 +345,9 @@ func StartServer(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessCh, log)
+		readinessServer := metrics.NewReadyServer(log)
+		observer.RegisterSink(readinessServer)
+		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessServer, log)
 	}()
 
 	if err := ingressRules.StartOrigins(&wg, log, shutdownC, errC); err != nil {
@@ -369,20 +367,15 @@ func StartServer(
 	}()
 
 	if isUIEnabled {
-		tunnelInfo := ui.NewUIModel(
+		tunnelUI := ui.NewUIModel(
 			version,
 			hostname,
 			metricsListener.Addr().String(),
 			&ingressRules,
 			tunnelConfig.HAConnections,
 		)
-		tunnelInfo.LaunchUI(ctx, log, transportLog, uiCh)
-	} else {
-		go func() {
-			for range uiCh {
-				// Consume UI events into a noop
-			}
-		}()
+		app := tunnelUI.Launch(ctx, log, transportLog)
+		observer.RegisterSink(app)
 	}
 
 	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)

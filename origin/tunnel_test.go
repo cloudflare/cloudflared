@@ -53,7 +53,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	config := &TunnelConfig{
 		Log:              &log,
 		ProtocolSelector: protocolSelector,
-		Observer:         connection.NewObserver(nil, nil, false),
+		Observer:         connection.NewObserver(nil, false),
 	}
 	connIndex := uint8(1)
 

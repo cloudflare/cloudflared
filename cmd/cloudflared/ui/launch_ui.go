@@ -48,11 +48,10 @@ func NewUIModel(version, hostname, metricsURL string, ing *ingress.Ingress, haCo
 	}
 }
 
-func (data *uiModel) LaunchUI(
+func (data *uiModel) Launch(
 	ctx context.Context,
 	log, transportLog *zerolog.Logger,
-	tunnelEventChan <-chan connection.Event,
-) {
+) connection.EventSink {
 	// Configure the logger to stream logs into the textview
 
 	// Add TextView as a group to write output to
@@ -114,28 +113,9 @@ func (data *uiModel) LaunchUI(
 	grid.AddItem(logFrame, 4, 0, 5, 2, 0, 0, false)
 
 	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				app.Stop()
-				return
-			case event := <-tunnelEventChan:
-				switch event.EventType {
-				case connection.Connected:
-					data.setConnTableCell(event, connTable, palette)
-				case connection.Disconnected, connection.Reconnecting:
-					data.changeConnStatus(event, connTable, log, palette)
-				case connection.SetURL:
-					tunnelHostText.SetText(event.URL)
-					data.edgeURL = event.URL
-				case connection.RegisteringTunnel:
-					if data.edgeURL == "" {
-						tunnelHostText.SetText("Registering tunnel...")
-					}
-				}
-			}
-			app.Draw()
-		}
+		<-ctx.Done()
+		app.Stop()
+		return
 	}()
 
 	go func() {
@@ -143,6 +123,23 @@ func (data *uiModel) LaunchUI(
 			log.Error().Msgf("Error launching UI: %s", err)
 		}
 	}()
+
+	return connection.EventSinkFunc(func(event connection.Event) {
+		switch event.EventType {
+		case connection.Connected:
+			data.setConnTableCell(event, connTable, palette)
+		case connection.Disconnected, connection.Reconnecting:
+			data.changeConnStatus(event, connTable, log, palette)
+		case connection.SetURL:
+			tunnelHostText.SetText(event.URL)
+			data.edgeURL = event.URL
+		case connection.RegisteringTunnel:
+			if data.edgeURL == "" {
+				tunnelHostText.SetText("Registering tunnel...")
+			}
+		}
+		app.Draw()
+	})
 }
 
 func NewDynamicColorTextView() *tview.TextView {

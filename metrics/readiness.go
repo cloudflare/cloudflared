@@ -19,30 +19,28 @@ type ReadyServer struct {
 }
 
 // NewReadyServer initializes a ReadyServer and starts listening for dis/connection events.
-func NewReadyServer(connectionEvents <-chan conn.Event, log *zerolog.Logger) *ReadyServer {
-	rs := ReadyServer{
+func NewReadyServer(log *zerolog.Logger) *ReadyServer {
+	return &ReadyServer{
 		isConnected: make(map[int]bool, 0),
 		log:         log,
 	}
-	go func() {
-		for c := range connectionEvents {
-			switch c.EventType {
-			case conn.Connected:
-				rs.Lock()
-				rs.isConnected[int(c.Index)] = true
-				rs.Unlock()
-			case conn.Disconnected, conn.Reconnecting, conn.RegisteringTunnel:
-				rs.Lock()
-				rs.isConnected[int(c.Index)] = false
-				rs.Unlock()
-			case conn.SetURL:
-				continue
-			default:
-				rs.log.Error().Msgf("Unknown connection event case %v", c)
-			}
-		}
-	}()
-	return &rs
+}
+
+func (rs *ReadyServer) OnTunnelEvent(c conn.Event) {
+	switch c.EventType {
+	case conn.Connected:
+		rs.Lock()
+		rs.isConnected[int(c.Index)] = true
+		rs.Unlock()
+	case conn.Disconnected, conn.Reconnecting, conn.RegisteringTunnel:
+		rs.Lock()
+		rs.isConnected[int(c.Index)] = false
+		rs.Unlock()
+	case conn.SetURL:
+		break
+	default:
+		rs.log.Error().Msgf("Unknown connection event case %v", c)
+	}
 }
 
 type body struct {

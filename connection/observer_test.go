@@ -4,14 +4,13 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// can only be called once
-var m = newTunnelMetrics()
-
 func TestRegisterServerLocation(t *testing.T) {
+	m := newTunnelMetrics()
 	tunnels := 20
 	var wg sync.WaitGroup
 	wg.Add(tunnels)
@@ -42,4 +41,28 @@ func TestRegisterServerLocation(t *testing.T) {
 		assert.Equal(t, "AUS", m.oldServerLocations[id])
 	}
 
+}
+
+func TestObserverEventsDontBlock(t *testing.T) {
+	observer := NewObserver(&log, false)
+	var mu sync.Mutex
+	observer.RegisterSink(EventSinkFunc(func(_ Event) {
+		// callback will block if lock is already held
+		mu.Lock()
+		mu.Unlock()
+	}))
+
+	timeout := time.AfterFunc(5*time.Second, func() {
+		mu.Unlock()  // release the callback on timer expiration
+		t.Fatal("observer is blocked")
+	})
+
+	mu.Lock()  // block the callback
+	for i := 0; i < 2 * observerChannelBufferSize; i++ {
+		observer.sendRegisteringEvent()
+	}
+	if pending := timeout.Stop(); pending {
+		// release the callback if timer hasn't expired yet
+		mu.Unlock()
+	}
 }

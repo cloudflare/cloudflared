@@ -157,10 +157,8 @@ func prepareTunnelConfig(
 	buildInfo *buildinfo.BuildInfo,
 	version string,
 	log *zerolog.Logger,
-	transportLogger *zerolog.Logger,
+	observer *connection.Observer,
 	namedTunnel *connection.NamedTunnelConfig,
-	isUIEnabled bool,
-	eventChans []chan connection.Event,
 ) (*origin.TunnelConfig, ingress.Ingress, error) {
 	isNamedTunnel := namedTunnel != nil
 
@@ -281,7 +279,7 @@ func prepareTunnelConfig(
 		LBPool:           c.String("lb-pool"),
 		Tags:             tags,
 		Log:              log,
-		Observer:         connection.NewObserver(transportLogger, eventChans, isUIEnabled),
+		Observer:         observer,
 		ReportedVersion:  version,
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		Retries:          uint(c.Int("retries")),
@@ -289,7 +287,6 @@ func prepareTunnelConfig(
 		NamedTunnel:      namedTunnel,
 		ClassicTunnel:    classicTunnel,
 		MuxerConfig:      muxerConfig,
-		TunnelEventChans: eventChans,
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}, ingressRules, nil

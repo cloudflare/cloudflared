@@ -27,13 +27,7 @@ var (
 		Scheme: "https",
 		Host:   "connectiontest.argotunnel.com",
 	}
-	testTunnelEventChan = make(chan Event)
-	testObserver        = &Observer{
-		&log,
-		m,
-		[]chan Event{testTunnelEventChan},
-		false,
-	}
+	testObserver        = NewObserver(&log, false)
 	testLargeResp = make([]byte, largeFileSize)
 )
 

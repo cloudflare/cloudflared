@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
@@ -27,9 +26,7 @@ import (
 
 const (
 	dialTimeout              = 15 * time.Second
-	muxerTimeout             = 5 * time.Second
 	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
-	DuplicateConnectionError = "EDUPCONN"
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
 )
@@ -37,9 +34,7 @@ const (
 type rpcName string
 
 const (
-	register     rpcName = "register"
 	reconnect    rpcName = "reconnect"
-	unregister   rpcName = "unregister"
 	authenticate rpcName = " authenticate"
 )
 
@@ -64,7 +59,6 @@ type TunnelConfig struct {
 	NamedTunnel      *connection.NamedTunnelConfig
 	ClassicTunnel    *connection.ClassicTunnelConfig
 	MuxerConfig      *connection.MuxerConfig
-	TunnelEventChans []chan connection.Event
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 }
@@ -88,11 +82,6 @@ func (e serverRegisterTunnelError) Error() string {
 // RegisterTunnel error from client
 type clientRegisterTunnelError struct {
 	cause error
-}
-
-func newRPCError(cause error, counter *prometheus.CounterVec, name rpcName) clientRegisterTunnelError {
-	counter.WithLabelValues(cause.Error(), string(name)).Inc()
-	return clientRegisterTunnelError{cause: cause}
 }
 
 func (e clientRegisterTunnelError) Error() string {
@@ -466,5 +455,4 @@ func activeIncidentsMsg(incidents []Incident) string {
 		incidentStrings = append(incidentStrings, incidentString)
 	}
 	return preamble + " " + strings.Join(incidentStrings, "; ")
-
 }

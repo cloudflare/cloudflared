@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/connection"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -23,21 +21,22 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func newMetricsHandler(connectionEvents <-chan connection.Event, log *zerolog.Logger) *http.ServeMux {
-	readyServer := NewReadyServer(connectionEvents, log)
+func newMetricsHandler(readyServer *ReadyServer) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "OK\n")
 	})
-	mux.Handle("/ready", readyServer)
+	if readyServer != nil {
+		mux.Handle("/ready", readyServer)
+	}
 	return mux
 }
 
 func ServeMetrics(
 	l net.Listener,
 	shutdownC <-chan struct{},
-	connectionEvents <-chan connection.Event,
+	readyServer *ReadyServer,
 	log *zerolog.Logger,
 ) (err error) {
 	var wg sync.WaitGroup
@@ -45,7 +44,7 @@ func ServeMetrics(
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
 	// profile CPU usage depends on WriteTimeout
-	h := newMetricsHandler(connectionEvents, log)
+	h := newMetricsHandler(readyServer)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
