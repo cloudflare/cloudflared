@@ -262,8 +262,10 @@ func prepareTunnelConfig(
 	}
 	muxerConfig := &connection.MuxerConfig{
 		HeartbeatInterval:  c.Duration("heartbeat-interval"),
-		MaxHeartbeats:      c.Uint64("heartbeat-count"),
-		CompressionSetting: h2mux.CompressionSetting(c.Uint64("compression-quality")),
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		MaxHeartbeats:      uint64(c.Int("heartbeat-count")),
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		CompressionSetting: h2mux.CompressionSetting(uint64(c.Int("compression-quality"))),
 		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
 	}
 
@@ -281,7 +283,8 @@ func prepareTunnelConfig(
 		Log:              log,
 		Observer:         connection.NewObserver(transportLogger, eventChans, isUIEnabled),
 		ReportedVersion:  version,
-		Retries:          c.Uint("retries"),
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		Retries:          uint(c.Int("retries")),
 		RunFromTerminal:  isRunningFromTerminal(),
 		NamedTunnel:      namedTunnel,
 		ClassicTunnel:    classicTunnel,

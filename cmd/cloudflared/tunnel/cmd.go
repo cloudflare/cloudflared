@@ -622,13 +622,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  time.Second * 5,
 			Hidden: true,
 		}),
-		altsrc.NewUint64Flag(&cli.Uint64Flag{
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:   "heartbeat-count",
 			Usage:  "Minimum number of unacked heartbeats to send before closing the connection.",
 			Value:  5,
 			Hidden: true,
 		}),
-		altsrc.NewUintFlag(&cli.UintFlag{
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "retries",
 			Value:   5,
 			Usage:   "Maximum number of retries for connection/protocol errors.",
@@ -647,7 +649,8 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
 			Hidden:  true,
 		}),
-		altsrc.NewUintFlag(&cli.UintFlag{
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "compression-quality",
 			Value:   0,
 			Usage:   "(beta) Use cross-stream compression instead HTTP compression. 0-off, 1-low, 2-medium, >=3-high.",
@@ -932,6 +935,7 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_PROXY_ADDRESS"},
 			Hidden:  shouldHide,
 		}),
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    ingress.ProxyPortFlag,
 			Usage:   "Listen port for the proxy.",

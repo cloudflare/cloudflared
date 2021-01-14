@@ -92,7 +92,8 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 		proxyAddress = c.String(flag)
 	}
 	if flag := ProxyPortFlag; c.IsSet(flag) {
-		proxyPort = c.Uint(flag)
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		proxyPort = uint(c.Int(flag))
 	}
 	if c.IsSet(Socks5Flag) {
 		proxyType = socksProxy

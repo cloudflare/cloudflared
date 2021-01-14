@@ -50,6 +50,7 @@ func Command(hidden bool) *cli.Command {
 				Value:   "localhost",
 				EnvVars: []string{"TUNNEL_DNS_ADDRESS"},
 			},
+			// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 			&cli.IntFlag{
 				Name:    "port",
 				Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
@@ -87,7 +88,8 @@ func Run(c *cli.Context) error {
 
 	listener, err := CreateListener(
 		c.String("address"),
-		uint16(c.Uint("port")),
+		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		uint16(c.Int("port")),
 		c.StringSlice("upstream"),
 		c.StringSlice("bootstrap"),
 		log,
