@@ -97,44 +97,25 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.activeRequestsWG.Add(1)
 	defer c.activeRequestsWG.Done()
 
-	respWriter := &http2RespWriter{
-		r: r.Body,
-		w: w,
-	}
-	flusher, isFlusher := w.(http.Flusher)
-	if !isFlusher {
-		c.observer.log.Error().Msgf("%T doesn't implement http.Flusher", w)
-		respWriter.WriteErrorResponse()
+	connType := determineHTTP2Type(r)
+	respWriter, err := newHTTP2RespWriter(r, w, connType)
+	if err != nil {
+		c.observer.log.Error().Msg(err.Error())
 		return
 	}
-	respWriter.flusher = flusher
 
-	switch {
-	case isControlStreamUpgrade(r):
-		respWriter.shouldFlush = true
-		if err := c.serveControlStream(r.Context(), respWriter); err != nil {
-			respWriter.WriteErrorResponse()
-		}
-		return
-
-	case isWebsocketUpgrade(r):
-		respWriter.shouldFlush = true
+	var proxyErr error
+	switch connType {
+	case TypeControlStream:
+		proxyErr = c.serveControlStream(r.Context(), respWriter)
+	case TypeWebsocket:
 		stripWebsocketUpgradeHeader(r)
-		if err := c.config.OriginProxy.Proxy(respWriter, r, TypeWebsocket); err != nil {
-			respWriter.WriteErrorResponse()
-		}
-		return
-
-	case IsTCPStream(r):
-		if err := c.config.OriginProxy.Proxy(respWriter, r, TypeTCP); err != nil {
-			respWriter.WriteErrorResponse()
-		}
-		return
-
+		proxyErr = c.config.OriginProxy.Proxy(respWriter, r, TypeWebsocket)
 	default:
-		if err := c.config.OriginProxy.Proxy(respWriter, r, TypeHTTP); err != nil {
-			respWriter.WriteErrorResponse()
-		}
+		proxyErr = c.config.OriginProxy.Proxy(respWriter, r, connType)
+	}
+	if proxyErr != nil {
+		respWriter.WriteErrorResponse()
 	}
 }
 
@@ -172,6 +153,25 @@ type http2RespWriter struct {
 	w           http.ResponseWriter
 	flusher     http.Flusher
 	shouldFlush bool
+}
+
+func newHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (*http2RespWriter, error) {
+	flusher, isFlusher := w.(http.Flusher)
+	if !isFlusher {
+		respWriter := &http2RespWriter{
+			r: r.Body,
+			w: w,
+		}
+		respWriter.WriteErrorResponse()
+		return nil, fmt.Errorf("%T doesn't implement http.Flusher", w)
+	}
+
+	return &http2RespWriter{
+		r:           r.Body,
+		w:           w,
+		flusher:     flusher,
+		shouldFlush: connType.shouldFlush(),
+	}, nil
 }
 
 func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) error {
@@ -241,6 +241,19 @@ func (rp *http2RespWriter) Write(p []byte) (n int, err error) {
 
 func (rp *http2RespWriter) Close() error {
 	return nil
+}
+
+func determineHTTP2Type(r *http.Request) Type {
+	switch {
+	case isWebsocketUpgrade(r):
+		return TypeWebsocket
+	case IsTCPStream(r):
+		return TypeTCP
+	case isControlStreamUpgrade(r):
+		return TypeControlStream
+	default:
+		return TypeHTTP
+	}
 }
 
 func isControlStreamUpgrade(r *http.Request) bool {
