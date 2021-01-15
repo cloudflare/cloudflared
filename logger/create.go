@@ -45,7 +45,7 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 	}
 
 	if loggerConfig.FileConfig != nil {
-		fileLogger, err := createFileLogger(*loggerConfig.FileConfig)
+		fileLogger, err := createFileWriter(*loggerConfig.FileConfig)
 		if err != nil {
 			return fallbackLogger(err)
 		}
@@ -128,7 +128,7 @@ func createConsoleLogger(config ConsoleConfig) io.Writer {
 	}
 }
 
-func createFileLogger(config FileConfig) (io.Writer, error) {
+func createFileWriter(config FileConfig) (io.Writer, error) {
 	var logFile io.Writer
 	fullpath := config.Fullpath()
 
@@ -137,19 +137,17 @@ func createFileLogger(config FileConfig) (io.Writer, error) {
 	if err != nil {
 		// If the existing file wasn't found, or couldn't be opened, just ignore
 		// it and recreate a new one.
-		logFile, err = createLogFile(config)
+		logFile, err = createDirFile(config)
 		// If creating a new logfile fails, then we have no choice but to error out.
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	fileLogger := zerolog.New(logFile).With().Logger()
-
-	return fileLogger, nil
+	return logFile, nil
 }
 
-func createLogFile(config FileConfig) (io.Writer, error) {
+func createDirFile(config FileConfig) (io.Writer, error) {
 	if config.Dirname != "" {
 		err := os.MkdirAll(config.Dirname, dirPermMode)
 
