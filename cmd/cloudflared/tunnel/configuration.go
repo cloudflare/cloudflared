@@ -61,19 +61,12 @@ func generateRandomClientID(log *zerolog.Logger) (string, error) {
 
 func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 	flags := make(map[string]interface{})
-	for _, flag := range c.LocalFlagNames() {
+	for _, flag := range c.FlagNames() {
 		flags[flag] = c.Generic(flag)
 	}
 
-	sliceFlags := []string{"header", "tag", "proxy-dns-upstream", "upstream", "edge"}
-	for _, sliceFlag := range sliceFlags {
-		if len(c.StringSlice(sliceFlag)) > 0 {
-			flags[sliceFlag] = strings.Join(c.StringSlice(sliceFlag), ", ")
-		}
-	}
-
 	if len(flags) > 0 {
-		log.Info().Msgf("Environment variables %v", flags)
+		log.Info().Msgf("Settings: %v", flags)
 	}
 
 	envs := make(map[string]string)
