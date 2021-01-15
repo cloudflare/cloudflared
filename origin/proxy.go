@@ -191,7 +191,7 @@ func (c *client) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum
 func (c *client) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, ruleNum int) {
 	responseByCode.WithLabelValues(strconv.Itoa(r.StatusCode)).Inc()
 	if cfRay != "" {
-		c.log.Info().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
+		c.log.Debug().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
 	} else if lbProbe {
 		c.log.Debug().Msgf("Response to Load Balancer health check %s", r.Status)
 	} else {
