@@ -37,6 +37,21 @@ func fallbackLogger(err error) *zerolog.Logger {
 	return &failLog
 }
 
+type resilientMultiWriter struct {
+	writers []io.Writer
+}
+
+// This custom resilientMultiWriter is an alternative to zerolog's so that we can make it resilient to individual
+// writer's errors. E.g., when running as a Windows service, the console writer fails, but we don't want to
+// allow that to prevent all logging to fail due to breaking the for loop upon an error.
+func (t resilientMultiWriter) Write(p []byte) (n int, err error) {
+	for _, w := range t.writers {
+		_, _ = w.Write(p)
+	}
+	return len(p), nil
+}
+
+
 func newZerolog(loggerConfig *Config) *zerolog.Logger {
 	var writers []io.Writer
 
@@ -62,7 +77,7 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 		writers = append(writers, rollingLogger)
 	}
 
-	multi := zerolog.MultiLevelWriter(writers...)
+	multi := resilientMultiWriter{writers}
 
 	level, err := zerolog.ParseLevel(loggerConfig.MinLevel)
 	if err != nil {
