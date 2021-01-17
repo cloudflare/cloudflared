@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sync"
 
 	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
@@ -143,23 +144,40 @@ func createConsoleLogger(config ConsoleConfig) io.Writer {
 	}
 }
 
+type fileInitializer struct {
+	once          sync.Once
+	writer        io.Writer
+	creationError error
+}
+
+var (
+	singleFileInit   fileInitializer
+	rotatingFileInit fileInitializer
+)
+
 func createFileWriter(config FileConfig) (io.Writer, error) {
-	var logFile io.Writer
-	fullpath := config.Fullpath()
+	singleFileInit.once.Do(func() {
 
-	// Try to open the existing file
-	logFile, err := os.OpenFile(fullpath, os.O_APPEND|os.O_WRONLY, filePermMode)
-	if err != nil {
-		// If the existing file wasn't found, or couldn't be opened, just ignore
-		// it and recreate a new one.
-		logFile, err = createDirFile(config)
-		// If creating a new logfile fails, then we have no choice but to error out.
+		var logFile io.Writer
+		fullpath := config.Fullpath()
+
+		// Try to open the existing file
+		logFile, err := os.OpenFile(fullpath, os.O_APPEND|os.O_WRONLY, filePermMode)
 		if err != nil {
-			return nil, err
+			// If the existing file wasn't found, or couldn't be opened, just ignore
+			// it and recreate a new one.
+			logFile, err = createDirFile(config)
+			// If creating a new logfile fails, then we have no choice but to error out.
+			if err != nil {
+				singleFileInit.creationError = err
+				return
+			}
 		}
-	}
 
-	return logFile, nil
+		singleFileInit.writer = logFile
+	})
+
+	return singleFileInit.writer, singleFileInit.creationError
 }
 
 func createDirFile(config FileConfig) (io.Writer, error) {
@@ -183,14 +201,19 @@ func createDirFile(config FileConfig) (io.Writer, error) {
 }
 
 func createRollingLogger(config RollingConfig) (io.Writer, error) {
-	if err := os.MkdirAll(config.Dirname, dirPermMode); err != nil {
-		return nil, err
-	}
+	rotatingFileInit.once.Do(func() {
+		if err := os.MkdirAll(config.Dirname, dirPermMode); err != nil {
+			rotatingFileInit.creationError = err
+			return
+		}
 
-	return &lumberjack.Logger{
-		Filename:   path.Join(config.Dirname, config.Filename),
-		MaxBackups: config.maxBackups,
-		MaxSize:    config.maxSize,
-		MaxAge:     config.maxAge,
-	}, nil
+		rotatingFileInit.writer = &lumberjack.Logger{
+			Filename:   path.Join(config.Dirname, config.Filename),
+			MaxBackups: config.maxBackups,
+			MaxSize:    config.maxSize,
+			MaxAge:     config.maxAge,
+		}
+	})
+
+	return rotatingFileInit.writer, rotatingFileInit.creationError
 }
