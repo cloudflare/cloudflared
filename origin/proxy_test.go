@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/cloudflare/cloudflared/logger"
 	"io"
 	"net"
 	"net/http"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/cloudflare/cloudflared/logger"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -30,7 +31,8 @@ import (
 )
 
 var (
-	testTags = []tunnelpogs.Tag(nil)
+	testTags                 = []tunnelpogs.Tag(nil)
+	unusedWarpRoutingService = (*ingress.WarpRoutingService)(nil)
 )
 
 type mockHTTPRespWriter struct {
@@ -129,7 +131,7 @@ func TestProxySingleOrigin(t *testing.T) {
 	errC := make(chan error)
 	require.NoError(t, ingressRule.StartOrigins(&wg, &log, ctx.Done(), errC))
 
-	proxy := NewOriginProxy(ingressRule, testTags, &log)
+	proxy := NewOriginProxy(ingressRule, unusedWarpRoutingService, testTags, &log)
 	t.Run("testProxyHTTP", testProxyHTTP(t, proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(t, proxy))
 	t.Run("testProxySSE", testProxySSE(t, proxy))
@@ -262,7 +264,7 @@ func TestProxyMultipleOrigins(t *testing.T) {
 	var wg sync.WaitGroup
 	require.NoError(t, ingress.StartOrigins(&wg, &log, ctx.Done(), errC))
 
-	proxy := NewOriginProxy(ingress, testTags, &log)
+	proxy := NewOriginProxy(ingress, unusedWarpRoutingService, testTags, &log)
 
 	tests := []struct {
 		url            string
@@ -340,7 +342,7 @@ func TestProxyError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	proxy := NewOriginProxy(ingress, testTags, &log)
+	proxy := NewOriginProxy(ingress, unusedWarpRoutingService, testTags, &log)
 
 	respWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
@@ -372,7 +374,7 @@ func TestProxyBastionMode(t *testing.T) {
 
 	ingressRule.StartOrigins(&wg, log, ctx.Done(), errC)
 
-	proxy := NewOriginProxy(ingressRule, testTags, log)
+	proxy := NewOriginProxy(ingressRule, unusedWarpRoutingService, testTags, log)
 
 	t.Run("testBastionWebsocket", testBastionWebsocket(proxy))
 	cancel()
@@ -429,9 +431,9 @@ func TestTCPStream(t *testing.T) {
 
 	ingressConfig := &config.Configuration{
 		Ingress: []config.UnvalidatedIngressRule{
-			config.UnvalidatedIngressRule{
+			{
 				Hostname: "*",
-				Service:  ingress.ServiceTeamnet,
+				Service:  "bastion",
 			},
 		},
 	}
@@ -442,11 +444,10 @@ func TestTCPStream(t *testing.T) {
 	errC := make(chan error)
 	ingressRule.StartOrigins(&wg, logger, ctx.Done(), errC)
 
-	proxy := NewOriginProxy(ingressRule, testTags, logger)
+	proxy := NewOriginProxy(ingressRule, ingress.NewWarpRoutingService(), testTags, logger)
 
 	t.Run("testTCPStream", testTCPStreamProxy(proxy))
 	cancel()
-	wg.Wait()
 }
 
 type mockTCPRespWriter struct {

@@ -1,5 +1,7 @@
 module github.com/rs/zerolog
 
+go 1.15
+
 require (
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 	github.com/pkg/errors v0.8.1

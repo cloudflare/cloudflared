@@ -2,9 +2,10 @@ package websocket
 
 import (
 	"context"
-	"github.com/rs/zerolog"
 	"io"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	gobwas "github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"

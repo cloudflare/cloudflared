@@ -25,8 +25,9 @@ var (
 )
 
 const (
-	ServiceBastion = "bastion"
-	ServiceTeamnet = "teamnet-proxy"
+	ServiceBridge      = "bridge service"
+	ServiceBastion     = "bastion"
+	ServiceWarpRouting = "warp-routing"
 )
 
 // FindMatchingRule returns the index of the Ingress Rule which matches the given
@@ -43,6 +44,7 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 			return &rule, i
 		}
 	}
+
 	i := len(ing.Rules) - 1
 	return &ing.Rules[i], i
 }
@@ -89,13 +91,24 @@ func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 	return ing, err
 }
 
+// WarpRoutingService starts a tcp stream between the origin and requests from
+// warp clients.
+type WarpRoutingService struct {
+	Proxy StreamBasedOriginProxy
+}
+
+func NewWarpRoutingService() *WarpRoutingService {
+	warpRoutingService := newBridgeService(DefaultStreamHandler, ServiceWarpRouting)
+	return &WarpRoutingService{Proxy: warpRoutingService}
+}
+
 // Get a single origin service from the CLI/config.
 func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (originService, error) {
 	if c.IsSet("hello-world") {
 		return new(helloWorld), nil
 	}
 	if c.IsSet(config.BastionFlag) {
-		return newBridgeService(nil), nil
+		return newBridgeService(nil, ServiceBastion), nil
 	}
 	if c.IsSet("url") {
 		originURL, err := config.ValidateUrl(c, allowURLFromArgs)
@@ -169,9 +182,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			// overwrite the localService.URL field when `start` is called. So,
 			// leave the URL field empty for now.
 			cfg.BastionMode = true
-			service = newBridgeService(nil)
-		} else if r.Service == ServiceTeamnet {
-			service = newBridgeService(DefaultStreamHandler)
+			service = newBridgeService(nil, ServiceBastion)
 		} else {
 			// Validate URL services
 			u, err := url.Parse(r.Service)

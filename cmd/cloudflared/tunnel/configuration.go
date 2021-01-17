@@ -195,6 +195,7 @@ func prepareTunnelConfig(
 		ingressRules  ingress.Ingress
 		classicTunnel *connection.ClassicTunnelConfig
 	)
+	cfg := config.GetConfiguration()
 	if isNamedTunnel {
 		clientUUID, err := uuid.NewRandom()
 		if err != nil {
@@ -206,7 +207,7 @@ func prepareTunnelConfig(
 			Version:  version,
 			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
 		}
-		ingressRules, err = ingress.ParseIngress(config.GetConfiguration())
+		ingressRules, err = ingress.ParseIngress(cfg)
 		if err != nil && err != ingress.ErrNoIngressRules {
 			return nil, ingress.Ingress{}, err
 		}
@@ -245,7 +246,12 @@ func prepareTunnelConfig(
 		edgeTLSConfigs[p] = edgeTLSConfig
 	}
 
-	originProxy := origin.NewOriginProxy(ingressRules, tags, log)
+	var warpRoutingService *ingress.WarpRoutingService
+	if isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel, protocolSelector.Current()) {
+		warpRoutingService = ingress.NewWarpRoutingService()
+	}
+
+	originProxy := origin.NewOriginProxy(ingressRules, warpRoutingService, tags, log)
 	connectionConfig := &connection.Config{
 		OriginProxy:     originProxy,
 		GracePeriod:     c.Duration("grace-period"),
@@ -284,6 +290,10 @@ func prepareTunnelConfig(
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}, ingressRules, nil
+}
+
+func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel bool, protocol connection.Protocol) bool {
+	return warpConfig.Enabled && isNamedTunnel && protocol == connection.HTTP2
 }
 
 func isRunningFromTerminal() bool {

@@ -78,20 +78,22 @@ func (o *httpService) String() string {
 
 // bridgeService is like a jump host, the destination is specified by the client
 type bridgeService struct {
-	client *tcpClient
+	client      *tcpClient
+	serviceName string
 }
 
 // if streamHandler is nil, a default one is set.
-func newBridgeService(streamHandler streamHandlerFunc) *bridgeService {
+func newBridgeService(streamHandler streamHandlerFunc, serviceName string) *bridgeService {
 	return &bridgeService{
 		client: &tcpClient{
 			streamHandler: streamHandler,
 		},
+		serviceName: serviceName,
 	}
 }
 
 func (o *bridgeService) String() string {
-	return "bridge service"
+	return ServiceBridge + ":" + o.serviceName
 }
 
 func (o *bridgeService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {

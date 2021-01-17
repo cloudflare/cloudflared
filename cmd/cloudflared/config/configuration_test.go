@@ -20,6 +20,9 @@ func TestConfigFileSettings(t *testing.T) {
 			Path:     "",
 			Service:  "https://localhost:8001",
 		}
+		warpRouting = WarpRoutingConfig{
+			Enabled: true,
+		}
 	)
 	rawYAML := `
 tunnel: config-file-test
@@ -29,6 +32,8 @@ ingress:
    service: https://localhost:8000
  - hostname: "*"
    service: https://localhost:8001
+warp-routing: 
+  enabled: true
 retries: 5
 grace-period: 30s
 percentage: 3.14
@@ -47,6 +52,7 @@ counters:
 	assert.Equal(t, "config-file-test", config.TunnelID)
 	assert.Equal(t, firstIngress, config.Ingress[0])
 	assert.Equal(t, secondIngress, config.Ingress[1])
+	assert.Equal(t, warpRouting, config.WarpRouting)
 
 	retries, err := config.Int("retries")
 	assert.NoError(t, err)
@@ -73,4 +79,5 @@ counters:
 	assert.NoError(t, err)
 	assert.Equal(t, 123, counters[0])
 	assert.Equal(t, 456, counters[1])
+
 }

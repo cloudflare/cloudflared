@@ -3,6 +3,7 @@ package ingress
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"testing"
@@ -315,7 +316,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  newBridgeService(nil),
+					Service:  newBridgeService(nil, ServiceBastion),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
@@ -335,7 +336,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  newBridgeService(nil),
+					Service:  newBridgeService(nil, ServiceBastion),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
@@ -463,6 +464,7 @@ func TestFindMatchingRule(t *testing.T) {
 	tests := []struct {
 		host          string
 		path          string
+		req           *http.Request
 		wantRuleIndex int
 	}{
 		{
@@ -497,9 +499,9 @@ func TestFindMatchingRule(t *testing.T) {
 		},
 	}
 
-	for i, test := range tests {
+	for _, test := range tests {
 		_, ruleIndex := ingress.FindMatchingRule(test.host, test.path)
-		assert.Equal(t, test.wantRuleIndex, ruleIndex, fmt.Sprintf("Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, i))
+		assert.Equal(t, test.wantRuleIndex, ruleIndex, fmt.Sprintf("Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, ruleIndex))
 	}
 }
 
@@ -561,6 +563,7 @@ ingress:
 	if err != nil {
 		b.Error(err)
 	}
+
 	for n := 0; n < b.N; n++ {
 		ing.FindMatchingRule("tunnel1.example.com", "")
 		ing.FindMatchingRule("tunnel2.example.com", "")

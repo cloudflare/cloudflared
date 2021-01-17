@@ -24,14 +24,21 @@ const (
 
 type proxy struct {
 	ingressRules ingress.Ingress
+	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
 	bufferPool   *buffer.Pool
 }
 
-func NewOriginProxy(ingressRules ingress.Ingress, tags []tunnelpogs.Tag, log *zerolog.Logger) connection.OriginProxy {
+func NewOriginProxy(
+	ingressRules ingress.Ingress,
+	warpRouting *ingress.WarpRoutingService,
+	tags []tunnelpogs.Tag,
+	log *zerolog.Logger) connection.OriginProxy {
+
 	return &proxy{
 		ingressRules: ingressRules,
+		warpRouting:  warpRouting,
 		tags:         tags,
 		log:          log,
 		bufferPool:   buffer.NewPool(512 * 1024),
@@ -46,6 +53,22 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 	lbProbe := isLBProbeRequest(req)
 
 	p.appendTagHeaders(req)
+	if sourceConnectionType == connection.TypeTCP {
+		if p.warpRouting == nil {
+			err := errors.New(`cloudflared received a request from Warp client, but your configuration has disabled ingress from Warp clients. To enable this, set "warp-routing:\n\t enabled: true" in your config.yaml`)
+			p.log.Error().Msg(err.Error())
+			return err
+		}
+		resp, err := p.handleProxyConn(w, req, nil, p.warpRouting.Proxy)
+		if err != nil {
+			p.logRequestError(err, cfRay, ingress.ServiceWarpRouting)
+			w.WriteErrorResponse()
+			return err
+		}
+		p.logOriginResponse(resp, cfRay, lbProbe, ingress.ServiceWarpRouting)
+		return nil
+	}
+
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	p.logRequest(req, cfRay, lbProbe, ruleNum)
 
@@ -66,11 +89,35 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		respHeader = websocket.NewResponseHeader(req)
 	}
 
-	connClosedChan := make(chan struct{})
-	err := p.proxyConnection(connClosedChan, w, req, rule)
+	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
+		req.Header.Set("Host", hostHeader)
+		req.Host = hostHeader
+	}
+
+	connectionProxy, ok := rule.Service.(ingress.StreamBasedOriginProxy)
+	if !ok {
+		p.log.Error().Msgf("%s is not a connection-oriented service", rule.Service)
+		return fmt.Errorf("Not a connection-oriented service")
+	}
+	resp, err := p.handleProxyConn(w, req, respHeader, connectionProxy)
 	if err != nil {
 		p.logErrorAndWriteResponse(w, err, cfRay, ruleNum)
 		return err
+	}
+
+	p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
+	return nil
+}
+
+func (p *proxy) handleProxyConn(
+	w connection.ResponseWriter,
+	req *http.Request,
+	respHeader http.Header,
+	connectionProxy ingress.StreamBasedOriginProxy) (*http.Response, error) {
+	connClosedChan := make(chan struct{})
+	err := p.proxyConnection(connClosedChan, w, req, connectionProxy)
+	if err != nil {
+		return nil, err
 	}
 
 	status := http.StatusSwitchingProtocols
@@ -83,9 +130,8 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 	w.WriteRespHeaders(http.StatusSwitchingProtocols, nil)
 
 	<-connClosedChan
+	return resp, nil
 
-	p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
-	return nil
 }
 
 func (p *proxy) logErrorAndWriteResponse(w connection.ResponseWriter, err error, cfRay string, ruleNum int) {
@@ -141,18 +187,8 @@ func (p *proxy) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *
 }
 
 func (p *proxy) proxyConnection(connClosedChan chan struct{},
-	conn io.ReadWriter, req *http.Request, rule *ingress.Rule) error {
-	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
-		req.Header.Set("Host", hostHeader)
-		req.Host = hostHeader
-	}
-
-	connectionService, ok := rule.Service.(ingress.StreamBasedOriginProxy)
-	if !ok {
-		p.log.Error().Msgf("%s is not a connection-oriented service", rule.Service)
-		return fmt.Errorf("Not a connection-oriented service")
-	}
-	originConn, err := connectionService.EstablishConnection(req)
+	conn io.ReadWriter, req *http.Request, connectionProxy ingress.StreamBasedOriginProxy) error {
+	originConn, err := connectionProxy.EstablishConnection(req)
 	if err != nil {
 		return err
 	}
@@ -190,7 +226,7 @@ func (p *proxy) appendTagHeaders(r *http.Request) {
 	}
 }
 
-func (p *proxy) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum int) {
+func (p *proxy) logRequest(r *http.Request, cfRay string, lbProbe bool, rule interface{}) {
 	if cfRay != "" {
 		p.log.Debug().Msgf("CF-RAY: %s %s %s %s", cfRay, r.Method, r.URL, r.Proto)
 	} else if lbProbe {
@@ -199,7 +235,7 @@ func (p *proxy) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum 
 		p.log.Debug().Msgf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
 	}
 	p.log.Debug().Msgf("CF-RAY: %s Request Headers %+v", cfRay, r.Header)
-	p.log.Debug().Msgf("CF-RAY: %s Serving with ingress rule %d", cfRay, ruleNum)
+	p.log.Debug().Msgf("CF-RAY: %s Serving with ingress rule %v", cfRay, rule)
 
 	if contentLen := r.ContentLength; contentLen == -1 {
 		p.log.Debug().Msgf("CF-RAY: %s Request Content length unknown", cfRay)
@@ -208,14 +244,14 @@ func (p *proxy) logRequest(r *http.Request, cfRay string, lbProbe bool, ruleNum 
 	}
 }
 
-func (p *proxy) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, ruleNum int) {
+func (p *proxy) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, rule interface{}) {
 	responseByCode.WithLabelValues(strconv.Itoa(r.StatusCode)).Inc()
 	if cfRay != "" {
-		p.log.Debug().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, ruleNum)
+		p.log.Debug().Msgf("CF-RAY: %s Status: %s served by ingress %d", cfRay, r.Status, rule)
 	} else if lbProbe {
 		p.log.Debug().Msgf("Response to Load Balancer health check %s", r.Status)
 	} else {
-		p.log.Debug().Msgf("Status: %s served by ingress %d", r.Status, ruleNum)
+		p.log.Debug().Msgf("Status: %s served by ingress %v", r.Status, rule)
 	}
 	p.log.Debug().Msgf("CF-RAY: %s Response Headers %+v", cfRay, r.Header)
 
@@ -226,14 +262,13 @@ func (p *proxy) logOriginResponse(r *http.Response, cfRay string, lbProbe bool, 
 	}
 }
 
-func (p *proxy) logRequestError(err error, cfRay string, ruleNum int) {
+func (p *proxy) logRequestError(err error, cfRay string, rule interface{}) {
 	requestErrors.Inc()
 	if cfRay != "" {
-		p.log.Error().Msgf("CF-RAY: %s Proxying to ingress %d error: %v", cfRay, ruleNum, err)
+		p.log.Error().Msgf("CF-RAY: %s Proxying to ingress %v error: %v", cfRay, rule, err)
 	} else {
-		p.log.Error().Msgf("Proxying to ingress %d error: %v", ruleNum, err)
+		p.log.Error().Msgf("Proxying to ingress %v error: %v", rule, err)
 	}
-
 }
 
 func findCfRayHeader(req *http.Request) string {

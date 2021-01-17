@@ -226,8 +226,13 @@ type OriginRequestConfig struct {
 type Configuration struct {
 	TunnelID      string `yaml:"tunnel"`
 	Ingress       []UnvalidatedIngressRule
+	WarpRouting   WarpRoutingConfig   `yaml:"warp-routing"`
 	OriginRequest OriginRequestConfig `yaml:"originRequest"`
 	sourceFile    string
+}
+
+type WarpRoutingConfig struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 type configFileSettings struct {
