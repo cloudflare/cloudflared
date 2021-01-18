@@ -1,3 +1,11 @@
+2021.1.5
+- 2021-01-15 TUN-3594: Log ingress response at debug level
+- 2021-01-15 TUN-3765: Fix doubly nested log output by `logfile` option
+- 2021-01-16 TUN-3767: Tolerate logging errors
+- 2021-01-17 TUN-3768: Reuse file loggers
+- 2021-01-14 TUN-3738: Refactor observer to avoid potential of blocking on tunnel notifications
+- 2021-01-15 TUN-3766: Print flags defined at all levels of command hierarchy, not just locally defined flags for a command. This fixes output of overriden settings for  subcommand.
+
 2021.1.4
 - 2021-01-14 TUN-3759: Single file logging output should always append
 
