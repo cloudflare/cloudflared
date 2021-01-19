@@ -138,7 +138,7 @@ const (
 )
 
 func (h *h2muxConnection) registerTunnel(ctx context.Context, credentialSetter CredentialManager, classicTunnel *ClassicTunnelConfig, registrationOptions *tunnelpogs.RegistrationOptions) error {
-	h.observer.sendRegisteringEvent()
+	h.observer.sendRegisteringEvent(registrationOptions.ConnectionID)
 
 	stream, err := h.newRPCStream(ctx, register)
 	if err != nil {

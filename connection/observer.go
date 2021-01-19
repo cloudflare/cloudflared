@@ -99,8 +99,8 @@ func trialZoneMsg(url string) []string {
 	}
 }
 
-func (o *Observer) sendRegisteringEvent() {
-	o.sendEvent(Event{EventType: RegisteringTunnel})
+func (o *Observer) sendRegisteringEvent(connIndex uint8) {
+	o.sendEvent(Event{Index: connIndex, EventType: RegisteringTunnel})
 }
 
 func (o *Observer) sendConnectedEvent(connIndex uint8, location string) {

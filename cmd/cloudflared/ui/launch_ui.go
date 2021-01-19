@@ -135,7 +135,7 @@ func (data *uiModel) Launch(
 			data.edgeURL = event.URL
 		case connection.RegisteringTunnel:
 			if data.edgeURL == "" {
-				tunnelHostText.SetText("Registering tunnel...")
+				tunnelHostText.SetText(fmt.Sprintf("Registering tunnel connection %d...", event.Index))
 			}
 		}
 		app.Draw()

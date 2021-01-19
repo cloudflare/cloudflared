@@ -87,7 +87,7 @@ func TestReadinessEventHandling(t *testing.T) {
 	})
 	code, ready = rs.makeResponse()
 	assert.EqualValues(t, http.StatusOK, code)
-	assert.EqualValues(t, 2,  ready)
+	assert.EqualValues(t, 2, ready)
 
 	// one reconnecting => still ok
 	rs.OnTunnelEvent(connection.Event{
@@ -97,6 +97,15 @@ func TestReadinessEventHandling(t *testing.T) {
 	code, ready = rs.makeResponse()
 	assert.EqualValues(t, http.StatusOK, code)
 	assert.EqualValues(t, 1, ready)
+
+	// Regression test for TUN-3777
+	rs.OnTunnelEvent(connection.Event{
+		Index:     1,
+		EventType: connection.RegisteringTunnel,
+	})
+	code, ready = rs.makeResponse()
+	assert.NotEqualValues(t, http.StatusOK, code)
+	assert.Zero(t, ready)
 
 	// other disconnected => not ok
 	rs.OnTunnelEvent(connection.Event{

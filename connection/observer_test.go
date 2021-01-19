@@ -53,13 +53,13 @@ func TestObserverEventsDontBlock(t *testing.T) {
 	}))
 
 	timeout := time.AfterFunc(5*time.Second, func() {
-		mu.Unlock()  // release the callback on timer expiration
+		mu.Unlock() // release the callback on timer expiration
 		t.Fatal("observer is blocked")
 	})
 
-	mu.Lock()  // block the callback
-	for i := 0; i < 2 * observerChannelBufferSize; i++ {
-		observer.sendRegisteringEvent()
+	mu.Lock() // block the callback
+	for i := 0; i < 2*observerChannelBufferSize; i++ {
+		observer.sendRegisteringEvent(0)
 	}
 	if pending := timeout.Stop(); pending {
 		// release the callback if timer hasn't expired yet
