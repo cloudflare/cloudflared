@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -21,16 +22,19 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func newMetricsHandler(readyServer *ReadyServer) *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
+func newMetricsHandler(readyServer *ReadyServer) *mux.Router {
+	router := mux.NewRouter()
+	router.PathPrefix("/debug/").Handler(http.DefaultServeMux)
+
+	router.Handle("/metrics", promhttp.Handler())
+	router.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "OK\n")
 	})
 	if readyServer != nil {
-		mux.Handle("/ready", readyServer)
+		router.Handle("/ready", readyServer)
 	}
-	return mux
+
+	return router
 }
 
 func ServeMetrics(
