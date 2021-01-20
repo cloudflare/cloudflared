@@ -63,31 +63,6 @@ type TunnelConfig struct {
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 }
 
-type muxerShutdownError struct{}
-
-func (e muxerShutdownError) Error() string {
-	return "muxer shutdown"
-}
-
-// RegisterTunnel error from server
-type serverRegisterTunnelError struct {
-	cause     error
-	permanent bool
-}
-
-func (e serverRegisterTunnelError) Error() string {
-	return e.cause.Error()
-}
-
-// RegisterTunnel error from client
-type clientRegisterTunnelError struct {
-	cause error
-}
-
-func (e clientRegisterTunnelError) Error() string {
-	return e.cause.Error()
-}
-
 func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
 	policy := tunnelrpc.ExistingTunnelPolicy_balance
 	if c.HAConnections <= 1 && c.LBPool == "" {
@@ -348,24 +323,24 @@ func ServeH2mux(
 	err = errGroup.Wait()
 	if err != nil {
 		switch err := err.(type) {
-		case *connection.DupConnRegisterTunnelError:
-			// don't retry this connection anymore, let supervisor pick new a address
+		case connection.DupConnRegisterTunnelError:
+			// don't retry this connection anymore, let supervisor pick a new address
 			return err, false
-		case *serverRegisterTunnelError:
+		case connection.ServerRegisterTunnelError:
 			log.Err(err).Msg("Register tunnel error from server side")
 			// Don't send registration error return from server to Sentry. They are
 			// logged on server side
 			if incidents := config.IncidentLookup.ActiveIncidents(); len(incidents) > 0 {
 				log.Error().Msg(activeIncidentsMsg(incidents))
 			}
-			return err.cause, !err.permanent
-		case *clientRegisterTunnelError:
-			log.Err(err).Msg("Register tunnel error on client side")
+			return err.Cause, !err.Permanent
+		case connection.MuxerShutdownError:
+			if handler.StoppedGracefully() {
+				return nil, false
+			}
+			log.Info().Msg("Unexpected muxer shutdown")
 			return err, true
-		case *muxerShutdownError:
-			log.Info().Msg("Muxer shutdown")
-			return err, true
-		case *ReconnectSignal:
+		case ReconnectSignal:
 			log.Info().
 				Uint8(connection.LogFieldConnIndex, connIndex).
 				Msgf("Restarting connection due to reconnect signal in %s", err.Delay)

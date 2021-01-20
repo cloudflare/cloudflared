@@ -142,7 +142,7 @@ func (updater *muxMetricsUpdaterImpl) run(log *zerolog.Logger) error {
 	for {
 		select {
 		case <-updater.abortChan:
-			log.Info().Msgf("mux - metrics: Stopping mux metrics updater")
+			log.Debug().Msgf("mux - metrics: Stopping mux metrics updater")
 			return nil
 		case roundTripMeasurement := <-updater.updateRTTChan:
 			go updater.rttData.update(roundTripMeasurement)

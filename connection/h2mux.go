@@ -143,7 +143,7 @@ func (h *h2muxConnection) serveMuxer(ctx context.Context) error {
 	// here to notify other routines to stop
 	err := h.muxer.Serve(ctx)
 	if err == nil {
-		return muxerShutdownError{}
+		return errMuxerStopped
 	}
 	return err
 }

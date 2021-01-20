@@ -209,9 +209,9 @@ func (h *h2muxConnection) processRegisterTunnelError(err tunnelpogs.TunnelRegist
 		return errDuplicationConnection
 	}
 	h.observer.metrics.regFail.WithLabelValues("server_error", string(name)).Inc()
-	return serverRegisterTunnelError{
-		cause:     err,
-		permanent: err.IsPermanent(),
+	return ServerRegisterTunnelError{
+		Cause:     err,
+		Permanent: err.IsPermanent(),
 	}
 }
 
