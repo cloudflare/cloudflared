@@ -107,12 +107,18 @@ func (c *TunnelConfig) SupportedFeatures() []string {
 	return features
 }
 
-func StartTunnelDaemon(ctx context.Context, config *TunnelConfig, connectedSignal *signal.Signal, cloudflaredID uuid.UUID, reconnectCh chan ReconnectSignal) error {
-	s, err := NewSupervisor(config, cloudflaredID)
+func StartTunnelDaemon(
+	ctx context.Context,
+	config *TunnelConfig,
+	connectedSignal *signal.Signal,
+	reconnectCh chan ReconnectSignal,
+	graceShutdownC chan struct{},
+) error {
+	s, err := NewSupervisor(config, reconnectCh, graceShutdownC)
 	if err != nil {
 		return err
 	}
-	return s.Run(ctx, connectedSignal, reconnectCh)
+	return s.Run(ctx, connectedSignal)
 }
 
 func ServeTunnelLoop(
@@ -124,6 +130,7 @@ func ServeTunnelLoop(
 	connectedSignal *signal.Signal,
 	cloudflaredUUID uuid.UUID,
 	reconnectCh chan ReconnectSignal,
+	gracefulShutdownC chan struct{},
 ) error {
 	haConnections.Inc()
 	defer haConnections.Dec()
@@ -158,6 +165,7 @@ func ServeTunnelLoop(
 			cloudflaredUUID,
 			reconnectCh,
 			protocallFallback.protocol,
+			gracefulShutdownC,
 		)
 		if !recoverable {
 			return err
@@ -242,6 +250,7 @@ func ServeTunnel(
 	cloudflaredUUID uuid.UUID,
 	reconnectCh chan ReconnectSignal,
 	protocol connection.Protocol,
+	gracefulShutdownC chan struct{},
 ) (err error, recoverable bool) {
 	// Treat panics as recoverable errors
 	defer func() {
@@ -268,7 +277,17 @@ func ServeTunnel(
 	}
 	if protocol == connection.HTTP2 {
 		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.retries))
-		return ServeHTTP2(ctx, log, config, edgeConn, connOptions, connIndex, connectedFuse, reconnectCh)
+		return ServeHTTP2(
+			ctx,
+			log,
+			config,
+			edgeConn,
+			connOptions,
+			connIndex,
+			connectedFuse,
+			reconnectCh,
+			gracefulShutdownC,
+		)
 	}
 	return ServeH2mux(
 		ctx,
@@ -280,6 +299,7 @@ func ServeTunnel(
 		connectedFuse,
 		cloudflaredUUID,
 		reconnectCh,
+		gracefulShutdownC,
 	)
 }
 
@@ -293,6 +313,7 @@ func ServeH2mux(
 	connectedFuse *connectedFuse,
 	cloudflaredUUID uuid.UUID,
 	reconnectCh chan ReconnectSignal,
+	gracefulShutdownC chan struct{},
 ) (err error, recoverable bool) {
 	config.Log.Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
@@ -302,6 +323,7 @@ func ServeH2mux(
 		edgeConn,
 		connIndex,
 		config.Observer,
+		gracefulShutdownC,
 	)
 	if err != nil {
 		return err, recoverable
@@ -312,13 +334,13 @@ func ServeH2mux(
 	errGroup.Go(func() (err error) {
 		if config.NamedTunnel != nil {
 			connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.retries))
-			return handler.ServeNamedTunnel(serveCtx, config.NamedTunnel, credentialManager, connOptions, connectedFuse)
+			return handler.ServeNamedTunnel(serveCtx, config.NamedTunnel, connOptions, connectedFuse)
 		}
 		registrationOptions := config.RegistrationOptions(connIndex, edgeConn.LocalAddr().String(), cloudflaredUUID)
 		return handler.ServeClassicTunnel(serveCtx, config.ClassicTunnel, credentialManager, registrationOptions, connectedFuse)
 	})
 
-	errGroup.Go(listenReconnect(serveCtx, reconnectCh))
+	errGroup.Go(listenReconnect(serveCtx, reconnectCh, gracefulShutdownC))
 
 	err = errGroup.Wait()
 	if err != nil {
@@ -367,9 +389,10 @@ func ServeHTTP2(
 	connIndex uint8,
 	connectedFuse connection.ConnectedFuse,
 	reconnectCh chan ReconnectSignal,
+	gracefulShutdownC chan struct{},
 ) (err error, recoverable bool) {
 	log.Debug().Msgf("Connecting via http2")
-	server := connection.NewHTTP2Connection(
+	h2conn := connection.NewHTTP2Connection(
 		tlsServerConn,
 		config.ConnectionConfig,
 		config.NamedTunnel,
@@ -377,15 +400,15 @@ func ServeHTTP2(
 		config.Observer,
 		connIndex,
 		connectedFuse,
+		gracefulShutdownC,
 	)
 
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		server.Serve(serveCtx)
-		return fmt.Errorf("connection with edge closed")
+		return h2conn.Serve(serveCtx)
 	})
 
-	errGroup.Go(listenReconnect(serveCtx, reconnectCh))
+	errGroup.Go(listenReconnect(serveCtx, reconnectCh, gracefulShutdownC))
 
 	err = errGroup.Wait()
 	if err != nil {
@@ -394,11 +417,13 @@ func ServeHTTP2(
 	return nil, false
 }
 
-func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal) func() error {
+func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh chan struct{}) func() error {
 	return func() error {
 		select {
 		case reconnect := <-reconnectCh:
-			return &reconnect
+			return reconnect
+		case <-gracefulShutdownCh:
+			return nil
 		case <-ctx.Done():
 			return nil
 		}

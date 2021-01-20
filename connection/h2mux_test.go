@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/h2mux"
 )
 
 var (
@@ -32,13 +34,20 @@ func newH2MuxConnection(t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
 	go func() {
 		edgeMuxConfig := h2mux.MuxerConfig{
 			Log: testObserver.log,
+			Handler: h2mux.MuxedStreamFunc(func(stream *h2mux.MuxedStream) error {
+				// we only expect RPC traffic in client->edge direction, provide minimal support for mocking
+				require.True(t, stream.IsRPCStream())
+				return stream.WriteHeaders([]h2mux.Header{
+					{Name:  ":status", Value: "200"},
+				})
+			}),
 		}
 		edgeMux, err := h2mux.Handshake(edgeConn, edgeConn, edgeMuxConfig, h2mux.ActiveStreams)
 		require.NoError(t, err)
 		edgeMuxChan <- edgeMux
 	}()
 	var connIndex = uint8(0)
-	h2muxConn, err, _ := NewH2muxConnection(testConfig, testMuxerConfig, originConn, connIndex, testObserver)
+	h2muxConn, err, _ := NewH2muxConnection(testConfig, testMuxerConfig, originConn, connIndex, testObserver, nil)
 	require.NoError(t, err)
 	return h2muxConn, <-edgeMuxChan
 }
@@ -166,6 +175,55 @@ func TestServeStreamWS(t *testing.T) {
 
 	cancel()
 	wg.Wait()
+}
+
+func TestGracefulShutdownH2Mux(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h2muxConn, edgeMux := newH2MuxConnection(t)
+
+	shutdownC := make(chan struct{})
+	unregisteredC := make(chan struct{})
+	h2muxConn.gracefulShutdownC = shutdownC
+	h2muxConn.newRPCClientFunc = func(_ context.Context, _ io.ReadWriteCloser, _ *zerolog.Logger) NamedTunnelRPCClient {
+		return &mockNamedTunnelRPCClient{
+			registered:   nil,
+			unregistered: unregisteredC,
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		_ = edgeMux.Serve(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		_ = h2muxConn.serveMuxer(ctx)
+	}()
+
+	go func() {
+		defer wg.Done()
+		h2muxConn.controlLoop(ctx, &mockConnectedFuse{}, true)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	close(shutdownC)
+
+	select {
+	case <-unregisteredC:
+		break // ok
+	case <-time.Tick(time.Second):
+		assert.Fail(t, "timed out waiting for control loop to unregister")
+	}
+
+	cancel()
+	wg.Wait()
+
+	assert.True(t, h2muxConn.stoppedGracefully)
+	assert.Nil(t, h2muxConn.gracefulShutdownC)
 }
 
 func hasHeader(stream *h2mux.MuxedStream, name, val string) bool {

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 
@@ -36,6 +38,7 @@ func newTestHTTP2Connection() (*http2Connection, net.Conn) {
 		testObserver,
 		connIndex,
 		mockConnectedFuse{},
+		nil,
 	), edgeConn
 }
 
@@ -241,7 +244,61 @@ func TestServeControlStream(t *testing.T) {
 	<-rpcClientFactory.registered
 	cancel()
 	<-rpcClientFactory.unregistered
+	assert.False(t, http2Conn.stoppedGracefully)
 
+	wg.Wait()
+}
+
+func TestGracefulShutdownHTTP2(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+
+	rpcClientFactory := mockRPCClientFactory{
+		registered:   make(chan struct{}),
+		unregistered: make(chan struct{}),
+	}
+	http2Conn.newRPCClientFunc = rpcClientFactory.newMockRPCClient
+	http2Conn.gracefulShutdownC = make(chan struct{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		http2Conn.Serve(ctx)
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/", nil)
+	require.NoError(t, err)
+	req.Header.Set(internalUpgradeHeader, controlStreamUpgrade)
+
+	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	require.NoError(t, err)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, _ = edgeHTTP2Conn.RoundTrip(req)
+	}()
+
+	select {
+	case <-rpcClientFactory.registered:
+		break //ok
+	case <-time.Tick(time.Second):
+		t.Fatal("timeout out waiting for registration")
+	}
+
+	// signal graceful shutdown
+	close(http2Conn.gracefulShutdownC)
+
+	select {
+	case <-rpcClientFactory.unregistered:
+		break //ok
+	case <-time.Tick(time.Second):
+		t.Fatal("timeout out waiting for unregistered signal")
+	}
+	assert.True(t, http2Conn.stoppedGracefully)
+
+	cancel()
 	wg.Wait()
 }
 
@@ -281,6 +338,7 @@ func benchmarkServeHTTP(b *testing.B, test testRequest) {
 	cancel()
 	wg.Wait()
 }
+
 func BenchmarkServeHTTPSimple(b *testing.B) {
 	test := testRequest{
 		name:           "ok",

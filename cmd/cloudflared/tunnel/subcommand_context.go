@@ -274,8 +274,6 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 	return StartServer(
 		sc.c,
 		version,
-		shutdownC,
-		graceShutdownC,
 		&connection.NamedTunnelConfig{Credentials: credentials},
 		sc.log,
 		sc.isUIEnabled,

@@ -272,17 +272,36 @@ func (h *h2muxConnection) logServerInfo(ctx context.Context, rpcClient *tunnelSe
 	return nil
 }
 
+func (h *h2muxConnection) registerNamedTunnel(
+	ctx context.Context,
+	namedTunnel *NamedTunnelConfig,
+	connOptions *tunnelpogs.ConnectionOptions,
+) error {
+	stream, err := h.newRPCStream(ctx, register)
+	if err != nil {
+		return err
+	}
+	rpcClient := h.newRPCClientFunc(ctx, stream, h.observer.log)
+	defer rpcClient.Close()
+
+	if err = rpcClient.RegisterConnection(ctx, namedTunnel, connOptions, h.connIndex, h.observer); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (h *h2muxConnection) unregister(isNamedTunnel bool) {
 	unregisterCtx, cancel := context.WithTimeout(context.Background(), h.config.GracePeriod)
 	defer cancel()
 
-	stream, err := h.newRPCStream(unregisterCtx, register)
+	stream, err := h.newRPCStream(unregisterCtx, unregister)
 	if err != nil {
 		return
 	}
+	defer stream.Close()
 
 	if isNamedTunnel {
-		rpcClient := newRegistrationRPCClient(unregisterCtx, stream, h.observer.log)
+		rpcClient := h.newRPCClientFunc(unregisterCtx, stream, h.observer.log)
 		defer rpcClient.Close()
 
 		rpcClient.GracefulShutdown(unregisterCtx, h.config.GracePeriod)
@@ -293,4 +312,6 @@ func (h *h2muxConnection) unregister(isNamedTunnel bool) {
 		// gracePeriod is encoded in int64 using capnproto
 		_ = rpcClient.client.UnregisterTunnel(unregisterCtx, h.config.GracePeriod.Nanoseconds())
 	}
+
+	h.observer.log.Info().Uint8(LogFieldConnIndex, h.connIndex).Msg("Unregistered tunnel connection")
 }

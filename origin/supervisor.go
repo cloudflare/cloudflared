@@ -3,6 +3,7 @@ package origin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -54,6 +55,9 @@ type Supervisor struct {
 
 	reconnectCredentialManager *reconnectCredentialManager
 	useReconnectToken          bool
+
+	reconnectCh       chan ReconnectSignal
+	gracefulShutdownC chan struct{}
 }
 
 type tunnelError struct {
@@ -62,11 +66,13 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor, error) {
-	var (
-		edgeIPs *edgediscovery.Edge
-		err     error
-	)
+func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, gracefulShutdownC chan struct{}) (*Supervisor, error) {
+	cloudflaredUUID, err := uuid.NewRandom()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
+	}
+
+	var edgeIPs *edgediscovery.Edge
 	if len(config.EdgeAddrs) > 0 {
 		edgeIPs, err = edgediscovery.StaticEdge(config.Log, config.EdgeAddrs)
 	} else {
@@ -90,11 +96,16 @@ func NewSupervisor(config *TunnelConfig, cloudflaredUUID uuid.UUID) (*Supervisor
 		log:                        config.Log,
 		reconnectCredentialManager: newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections),
 		useReconnectToken:          useReconnectToken,
+		reconnectCh:                reconnectCh,
+		gracefulShutdownC:          gracefulShutdownC,
 	}, nil
 }
 
-func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
-	if err := s.initialize(ctx, connectedSignal, reconnectCh); err != nil {
+func (s *Supervisor) Run(
+	ctx context.Context,
+	connectedSignal *signal.Signal,
+) error {
+	if err := s.initialize(ctx, connectedSignal); err != nil {
 		return err
 	}
 	var tunnelsWaiting []int
@@ -131,7 +142,7 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil {
-				s.log.Err(tunnelError.err).Msg("supervisor: Tunnel disconnected")
+				s.log.Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -139,14 +150,16 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 					backoffTimer = backoff.BackoffTimer()
 				}
 
-				// Previously we'd mark the edge address as bad here, but now we'll just silently use
-				// another.
+				// Previously we'd mark the edge address as bad here, but now we'll just silently use another.
+			} else if tunnelsActive == 0 {
+				// all connected tunnels exited gracefully, no more work to do
+				return nil
 			}
 		// Backoff was set and its timer expired
 		case <-backoffTimer:
 			backoffTimer = nil
 			for _, index := range tunnelsWaiting {
-				go s.startTunnel(ctx, index, s.newConnectedTunnelSignal(index), reconnectCh)
+				go s.startTunnel(ctx, index, s.newConnectedTunnelSignal(index))
 			}
 			tunnelsActive += len(tunnelsWaiting)
 			tunnelsWaiting = nil
@@ -171,14 +184,17 @@ func (s *Supervisor) Run(ctx context.Context, connectedSignal *signal.Signal, re
 }
 
 // Returns nil if initialization succeeded, else the initialization error.
-func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) error {
-	availableAddrs := int(s.edgeIPs.AvailableAddrs())
+func (s *Supervisor) initialize(
+	ctx context.Context,
+	connectedSignal *signal.Signal,
+) error {
+	availableAddrs := s.edgeIPs.AvailableAddrs()
 	if s.config.HAConnections > availableAddrs {
 		s.log.Info().Msgf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
 		s.config.HAConnections = availableAddrs
 	}
 
-	go s.startFirstTunnel(ctx, connectedSignal, reconnectCh)
+	go s.startFirstTunnel(ctx, connectedSignal)
 	select {
 	case <-ctx.Done():
 		<-s.tunnelErrors
@@ -190,7 +206,7 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Sig
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
 		ch := signal.New(make(chan struct{}))
-		go s.startTunnel(ctx, i, ch, reconnectCh)
+		go s.startTunnel(ctx, i, ch)
 		time.Sleep(registrationInterval)
 	}
 	return nil
@@ -198,7 +214,10 @@ func (s *Supervisor) initialize(ctx context.Context, connectedSignal *signal.Sig
 
 // startTunnel starts the first tunnel connection. The resulting error will be sent on
 // s.tunnelErrors. It will send a signal via connectedSignal if registration succeed
-func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) {
+func (s *Supervisor) startFirstTunnel(
+	ctx context.Context,
+	connectedSignal *signal.Signal,
+) {
 	var (
 		addr *net.TCPAddr
 		err  error
@@ -221,7 +240,8 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 		firstConnIndex,
 		connectedSignal,
 		s.cloudflaredUUID,
-		reconnectCh,
+		s.reconnectCh,
+		s.gracefulShutdownC,
 	)
 	// If the first tunnel disconnects, keep restarting it.
 	edgeErrors := 0
@@ -253,14 +273,19 @@ func (s *Supervisor) startFirstTunnel(ctx context.Context, connectedSignal *sign
 			firstConnIndex,
 			connectedSignal,
 			s.cloudflaredUUID,
-			reconnectCh,
+			s.reconnectCh,
+			s.gracefulShutdownC,
 		)
 	}
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
 // s.tunnelErrors.
-func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal *signal.Signal, reconnectCh chan ReconnectSignal) {
+func (s *Supervisor) startTunnel(
+	ctx context.Context,
+	index int,
+	connectedSignal *signal.Signal,
+) {
 	var (
 		addr *net.TCPAddr
 		err  error
@@ -281,7 +306,8 @@ func (s *Supervisor) startTunnel(ctx context.Context, index int, connectedSignal
 		uint8(index),
 		connectedSignal,
 		s.cloudflaredUUID,
-		reconnectCh,
+		s.reconnectCh,
+		s.gracefulShutdownC,
 	)
 }
 

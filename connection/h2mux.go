@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -28,7 +29,12 @@ type h2muxConnection struct {
 	connIndexStr string
 	connIndex    uint8
 
-	observer *Observer
+	observer          *Observer
+	gracefulShutdownC chan struct{}
+	stoppedGracefully bool
+
+	// newRPCClientFunc allows us to mock RPCs during testing
+	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 }
 
 type MuxerConfig struct {
@@ -57,13 +63,16 @@ func NewH2muxConnection(
 	edgeConn net.Conn,
 	connIndex uint8,
 	observer *Observer,
+	gracefulShutdownC chan struct{},
 ) (*h2muxConnection, error, bool) {
 	h := &h2muxConnection{
-		config:       config,
-		muxerConfig:  muxerConfig,
-		connIndexStr: uint8ToString(connIndex),
-		connIndex:    connIndex,
-		observer:     observer,
+		config:            config,
+		muxerConfig:       muxerConfig,
+		connIndexStr:      uint8ToString(connIndex),
+		connIndex:         connIndex,
+		observer:          observer,
+		gracefulShutdownC: gracefulShutdownC,
+		newRPCClientFunc:  newRegistrationRPCClient,
 	}
 
 	// Establish a muxed connection with the edge
@@ -77,21 +86,14 @@ func NewH2muxConnection(
 	return h, nil, false
 }
 
-func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *NamedTunnelConfig, credentialManager CredentialManager, connOptions *tunnelpogs.ConnectionOptions, connectedFuse ConnectedFuse) error {
+func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *NamedTunnelConfig, connOptions *tunnelpogs.ConnectionOptions, connectedFuse ConnectedFuse) error {
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		return h.serveMuxer(serveCtx)
 	})
 
 	errGroup.Go(func() error {
-		stream, err := h.newRPCStream(serveCtx, register)
-		if err != nil {
-			return err
-		}
-		rpcClient := newRegistrationRPCClient(ctx, stream, h.observer.log)
-		defer rpcClient.Close()
-
-		if err = rpcClient.RegisterConnection(serveCtx, namedTunnel, connOptions, h.connIndex, h.observer); err != nil {
+		if err := h.registerNamedTunnel(serveCtx, namedTunnel, connOptions); err != nil {
 			return err
 		}
 		connectedFuse.Connected()
@@ -137,6 +139,10 @@ func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel 
 	return errGroup.Wait()
 }
 
+func (h *h2muxConnection) StoppedGracefully() bool {
+	return h.stoppedGracefully
+}
+
 func (h *h2muxConnection) serveMuxer(ctx context.Context) error {
 	// All routines should stop when muxer finish serving. When muxer is shutdown
 	// gracefully, it doesn't return an error, so we need to return errMuxerShutdown
@@ -152,13 +158,21 @@ func (h *h2muxConnection) controlLoop(ctx context.Context, connectedFuse Connect
 	updateMetricsTickC := time.Tick(h.muxerConfig.MetricsUpdateFreq)
 	for {
 		select {
+		case <-h.gracefulShutdownC:
+			if connectedFuse.IsConnected() {
+				h.unregister(isNamedTunnel)
+			}
+			h.stoppedGracefully = true
+			h.gracefulShutdownC = nil
+
 		case <-ctx.Done():
 			// UnregisterTunnel blocks until the RPC call returns
-			if connectedFuse.IsConnected() {
+			if !h.stoppedGracefully && connectedFuse.IsConnected() {
 				h.unregister(isNamedTunnel)
 			}
 			h.muxer.Shutdown()
 			return
+
 		case <-updateMetricsTickC:
 			h.observer.metrics.updateMuxerMetrics(h.connIndexStr, h.muxer.Metrics())
 		}

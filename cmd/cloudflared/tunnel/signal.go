@@ -51,7 +51,7 @@ func waitForSignalWithGraceShutdown(errC chan error,
 
 	select {
 	case err := <-errC:
-		logger.Info().Msgf("Initiating graceful shutdown due to %v ...", err)
+		logger.Info().Msgf("Initiating shutdown due to %v ...", err)
 		close(graceShutdownC)
 		close(shutdownC)
 		return err

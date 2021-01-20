@@ -32,7 +32,6 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/raven-go"
-	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -199,7 +198,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name string) error {
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, version, shutdownC, graceShutdownC, nil, sc.log, sc.isUIEnabled)
+	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled)
 }
 
 func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
@@ -215,8 +214,6 @@ func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
 func StartServer(
 	c *cli.Context,
 	version string,
-	shutdownC,
-	graceShutdownC chan struct{},
 	namedTunnel *connection.NamedTunnelConfig,
 	log *zerolog.Logger,
 	isUIEnabled bool,
@@ -285,12 +282,6 @@ func StartServer(
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
 		go writePidFile(connectedSignal, c.String("pidfile"), log)
-	}
-
-	cloudflaredID, err := uuid.NewRandom()
-	if err != nil {
-		log.Err(err).Msg("Cannot generate cloudflared ID")
-		return err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -363,7 +354,7 @@ func StartServer(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, cloudflaredID, reconnectCh)
+		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, reconnectCh, graceShutdownC)
 	}()
 
 	if isUIEnabled {
@@ -1040,7 +1031,7 @@ func stdinControl(reconnectCh chan origin.ReconnectSignal, log *zerolog.Logger) 
 						continue
 					}
 				}
-				log.Info().Msgf("Sending reconnect signal %+v", reconnect)
+				log.Info().Msgf("Sending %+v", reconnect)
 				reconnectCh <- reconnect
 			default:
 				log.Info().Str(LogFieldCommand, command).Msg("Unknown command")
