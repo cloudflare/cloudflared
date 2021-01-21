@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
@@ -30,7 +31,17 @@ const (
 
 	dirPermMode  = 0744 // rwxr--r--
 	filePermMode = 0644 // rw-r--r--
+
+	consoleTimeFormat = time.RFC3339
 )
+
+func init() {
+	zerolog.TimestampFunc = utcNow
+}
+
+func utcNow() time.Time {
+	return time.Now().UTC()
+}
 
 func fallbackLogger(err error) *zerolog.Logger {
 	failLog := fallbacklog.With().Logger()
@@ -52,7 +63,6 @@ func (t resilientMultiWriter) Write(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
-
 
 func newZerolog(loggerConfig *Config) *zerolog.Logger {
 	var writers []io.Writer
@@ -143,6 +153,7 @@ func createConsoleLogger(config ConsoleConfig) io.Writer {
 	return zerolog.ConsoleWriter{
 		Out:     colorable.NewColorable(consoleOut),
 		NoColor: config.noColor || !term.IsTerminal(int(consoleOut.Fd())),
+		TimeFormat: consoleTimeFormat,
 	}
 }
 
