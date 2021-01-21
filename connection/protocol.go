@@ -141,16 +141,29 @@ type PercentageFetcher func() (int32, error)
 
 func NewProtocolSelector(
 	protocolFlag string,
+	warpRoutingEnabled bool,
 	namedTunnel *NamedTunnelConfig,
 	fetchFunc PercentageFetcher,
 	ttl time.Duration,
 	log *zerolog.Logger,
 ) (ProtocolSelector, error) {
+	// Classic tunnel is only supported with h2mux
 	if namedTunnel == nil {
 		return &staticProtocolSelector{
 			current: H2mux,
 		}, nil
 	}
+
+	// warp routing can only be served over http2 connections
+	if warpRoutingEnabled {
+		if protocolFlag == H2mux.String() {
+			log.Warn().Msg("Warp routing is only supported by http2 protocol. Upgrading protocol to http2")
+		}
+		return &staticProtocolSelector{
+			current: HTTP2,
+		}, nil
+	}
+
 	if protocolFlag == H2mux.String() {
 		return &staticProtocolSelector{
 			current: H2mux,

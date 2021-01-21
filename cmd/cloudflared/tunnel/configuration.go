@@ -231,7 +231,13 @@ func prepareTunnelConfig(
 		}
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, log)
+	var warpRoutingService *ingress.WarpRoutingService
+	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
+	if warpRoutingEnabled {
+		warpRoutingService = ingress.NewWarpRoutingService()
+	}
+
+	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), warpRoutingEnabled, namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, log)
 	if err != nil {
 		return nil, ingress.Ingress{}, err
 	}
@@ -244,11 +250,6 @@ func prepareTunnelConfig(
 			return nil, ingress.Ingress{}, errors.Wrap(err, "unable to create TLS config to connect with edge")
 		}
 		edgeTLSConfigs[p] = edgeTLSConfig
-	}
-
-	var warpRoutingService *ingress.WarpRoutingService
-	if isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel, protocolSelector.Current()) {
-		warpRoutingService = ingress.NewWarpRoutingService()
 	}
 
 	originProxy := origin.NewOriginProxy(ingressRules, warpRoutingService, tags, log)
@@ -292,8 +293,8 @@ func prepareTunnelConfig(
 	}, ingressRules, nil
 }
 
-func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel bool, protocol connection.Protocol) bool {
-	return warpConfig.Enabled && isNamedTunnel && protocol == connection.HTTP2
+func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel bool) bool {
+	return warpConfig.Enabled && isNamedTunnel
 }
 
 func isRunningFromTerminal() bool {

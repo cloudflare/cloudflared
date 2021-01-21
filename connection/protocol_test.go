@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	testNoTTL = 0
+	testNoTTL            = 0
+	noWarpRoutingEnabled = false
 )
 
 var (
@@ -48,14 +49,15 @@ func (dmf *dynamicMockFetcher) fetch() PercentageFetcher {
 
 func TestNewProtocolSelector(t *testing.T) {
 	tests := []struct {
-		name              string
-		protocol          string
-		expectedProtocol  Protocol
-		hasFallback       bool
-		expectedFallback  Protocol
-		namedTunnelConfig *NamedTunnelConfig
-		fetchFunc         PercentageFetcher
-		wantErr           bool
+		name               string
+		protocol           string
+		expectedProtocol   Protocol
+		hasFallback        bool
+		expectedFallback   Protocol
+		warpRoutingEnabled bool
+		namedTunnelConfig  *NamedTunnelConfig
+		fetchFunc          PercentageFetcher
+		wantErr            bool
 	}{
 		{
 			name:              "classic tunnel",
@@ -109,6 +111,36 @@ func TestNewProtocolSelector(t *testing.T) {
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
+			name:               "warp routing requesting h2mux",
+			protocol:           "h2mux",
+			expectedProtocol:   HTTP2,
+			hasFallback:        false,
+			expectedFallback:   H2mux,
+			fetchFunc:          mockFetcher(100),
+			warpRoutingEnabled: true,
+			namedTunnelConfig:  testNamedTunnelConfig,
+		},
+		{
+			name:               "warp routing http2",
+			protocol:           "http2",
+			expectedProtocol:   HTTP2,
+			hasFallback:        false,
+			expectedFallback:   H2mux,
+			fetchFunc:          mockFetcher(100),
+			warpRoutingEnabled: true,
+			namedTunnelConfig:  testNamedTunnelConfig,
+		},
+		{
+			name:               "warp routing auto",
+			protocol:           "auto",
+			expectedProtocol:   HTTP2,
+			hasFallback:        false,
+			expectedFallback:   H2mux,
+			fetchFunc:          mockFetcher(100),
+			warpRoutingEnabled: true,
+			namedTunnelConfig:  testNamedTunnelConfig,
+		},
+		{
 			// None named tunnel can only use h2mux, so specifying an unknown protocol is not an error
 			name:             "classic tunnel unknown protocol",
 			protocol:         "unknown",
@@ -131,7 +163,7 @@ func TestNewProtocolSelector(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		selector, err := NewProtocolSelector(test.protocol, test.namedTunnelConfig, test.fetchFunc, testNoTTL, &log)
+		selector, err := NewProtocolSelector(test.protocol, test.warpRoutingEnabled, test.namedTunnelConfig, test.fetchFunc, testNoTTL, &log)
 		if test.wantErr {
 			assert.Error(t, err, fmt.Sprintf("test %s failed", test.name))
 		} else {
@@ -148,7 +180,7 @@ func TestNewProtocolSelector(t *testing.T) {
 
 func TestAutoProtocolSelectorRefresh(t *testing.T) {
 	fetcher := dynamicMockFetcher{}
-	selector, err := NewProtocolSelector("auto", testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
+	selector, err := NewProtocolSelector("auto", noWarpRoutingEnabled, testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, H2mux, selector.Current())
 
@@ -177,7 +209,7 @@ func TestAutoProtocolSelectorRefresh(t *testing.T) {
 
 func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 	fetcher := dynamicMockFetcher{}
-	selector, err := NewProtocolSelector("http2", testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
+	selector, err := NewProtocolSelector("http2", noWarpRoutingEnabled, testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, HTTP2, selector.Current())
 
@@ -206,7 +238,7 @@ func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 
 func TestProtocolSelectorRefreshTTL(t *testing.T) {
 	fetcher := dynamicMockFetcher{percentage: 100}
-	selector, err := NewProtocolSelector("auto", testNamedTunnelConfig, fetcher.fetch(), time.Hour, &log)
+	selector, err := NewProtocolSelector("auto", noWarpRoutingEnabled, testNamedTunnelConfig, fetcher.fetch(), time.Hour, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, HTTP2, selector.Current())
 
