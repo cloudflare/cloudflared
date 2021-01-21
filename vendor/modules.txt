@@ -350,16 +350,20 @@ golang.org/x/oauth2/internal
 # golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 ## explicit
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20200909081042-eff7692f9009
+# golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
+golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
 golang.org/x/sys/windows/svc
 golang.org/x/sys/windows/svc/eventlog
 golang.org/x/sys/windows/svc/mgr
+# golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf
+## explicit
+golang.org/x/term
 # golang.org/x/text v0.3.3
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal/identifier

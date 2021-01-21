@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	fallbacklog "github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -138,9 +139,10 @@ func Create(loggerConfig *Config) *zerolog.Logger {
 }
 
 func createConsoleLogger(config ConsoleConfig) io.Writer {
+	consoleOut := os.Stderr
 	return zerolog.ConsoleWriter{
-		Out:     colorable.NewColorableStderr(),
-		NoColor: config.noColor,
+		Out:     colorable.NewColorable(consoleOut),
+		NoColor: config.noColor || !term.IsTerminal(int(consoleOut.Fd())),
 	}
 }
 
