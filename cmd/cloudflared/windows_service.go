@@ -40,21 +40,21 @@ const (
 	LogFieldWindowsServiceName = "windowsServiceName"
 )
 
-func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
+func runApp(app *cli.App, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the Argo Tunnel Windows service",
 		Subcommands: []*cli.Command{
-			&cli.Command{
+			{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as a Windows service",
 				Action: installWindowsService,
-			},
-			&cli.Command{
+						},
+			{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel service",
 				Action: uninstallWindowsService,
-			},
+						},
 		},
 	})
 
@@ -82,7 +82,7 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 	// Run executes service name by calling windowsService which is a Handler
 	// interface that implements Execute method.
 	// It will set service status to stop after Execute returns
-	err = svc.Run(windowsServiceName, &windowsService{app: app, shutdownC: shutdownC, graceShutdownC: graceShutdownC})
+	err = svc.Run(windowsServiceName, &windowsService{app: app, graceShutdownC: graceShutdownC})
 	if err != nil {
 		if errno, ok := err.(syscall.Errno); ok && int(errno) == serviceControllerConnectionFailure {
 			// Hack: assume this is a false negative from the IsAnInteractiveSession() check above.
@@ -96,11 +96,11 @@ func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
 
 type windowsService struct {
 	app            *cli.App
-	shutdownC      chan struct{}
 	graceShutdownC chan struct{}
 }
 
-// called by the package code at the start of the service
+// Execute is called by the service manager when service starts, the state
+// of the service will be set to Stopped when this function returns.
 func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeRequest, statusChan chan<- svc.Status) (ssec bool, errno uint32) {
 	log := logger.Create(nil)
 	elog, err := eventlog.Open(windowsServiceName)
@@ -128,13 +128,12 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 	}
 	elog.Info(1, fmt.Sprintf("%s service arguments: %v", windowsServiceName, args))
 
-	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	statusChan <- svc.Status{State: svc.StartPending}
 	errC := make(chan error)
 	go func() {
 		errC <- s.app.Run(args)
 	}()
-	statusChan <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
+	statusChan <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
 	for {
 		select {
@@ -143,17 +142,25 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 			case svc.Interrogate:
 				statusChan <- c.CurrentStatus
 			case svc.Stop, svc.Shutdown:
-				close(s.graceShutdownC)
-				statusChan <- svc.Status{State: svc.Stopped, Accepts: cmdsAccepted}
+				if s.graceShutdownC != nil {
+					// start graceful shutdown
+					elog.Info(1, "cloudflared starting graceful shutdown")
+					close(s.graceShutdownC)
+					s.graceShutdownC = nil
+					statusChan <- svc.Status{State: svc.StopPending}
+					continue
+				}
+				// repeated attempts at graceful shutdown forces immediate stop
+				elog.Info(1, "cloudflared terminating immediately")
 				statusChan <- svc.Status{State: svc.StopPending}
-				return
+				return false, 0
 			default:
 				elog.Error(1, fmt.Sprintf("unexpected control request #%d", c))
 			}
 		case err := <-errC:
-			ssec = true
 			if err != nil {
 				elog.Error(1, fmt.Sprintf("cloudflared terminated with error %v", err))
+				ssec = true
 				errno = 1
 			} else {
 				elog.Info(1, "cloudflared terminated without error")

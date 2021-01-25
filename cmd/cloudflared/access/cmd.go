@@ -55,12 +55,11 @@ const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
 
 var (
 	shutdownC      chan struct{}
-	graceShutdownC chan struct{}
 )
 
 // Init will initialize and store vars from the main program
-func Init(s, g chan struct{}) {
-	shutdownC, graceShutdownC = s, g
+func Init(shutdown chan struct{}) {
+	shutdownC = shutdown
 }
 
 // Flags return the global flags for Access related commands (hopefully none)

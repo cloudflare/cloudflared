@@ -2,11 +2,12 @@ package tunnel
 
 import (
 	"fmt"
-	"github.com/rs/zerolog"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,40 +19,21 @@ var (
 	graceShutdownErr = fmt.Errorf("receive grace shutdown")
 )
 
-func testChannelClosed(t *testing.T, c chan struct{}) {
+func channelClosed(c chan struct{}) bool {
 	select {
 	case <-c:
-		return
+		return true
 	default:
-		t.Fatal("Channel should be closed")
+		return false
 	}
 }
 
-func TestWaitForSignal(t *testing.T) {
+func TestSignalShutdown(t *testing.T) {
 	log := zerolog.Nop()
-
-	// Test handling server error
-	errC := make(chan error)
-	shutdownC := make(chan struct{})
-
-	go func() {
-		errC <- serverErr
-	}()
-
-	// received error, shutdownC should be closed
-	err := waitForSignal(errC, shutdownC, &log)
-	assert.Equal(t, serverErr, err)
-	testChannelClosed(t, shutdownC)
 
 	// Test handling SIGTERM & SIGINT
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		errC = make(chan error)
-		shutdownC = make(chan struct{})
-
-		go func(shutdownC chan struct{}) {
-			<-shutdownC
-			errC <- shutdownErr
-		}(shutdownC)
+		graceShutdownC := make(chan struct{})
 
 		go func(sig syscall.Signal) {
 			// sleep for a tick to prevent sending signal before calling waitForSignal
@@ -59,99 +41,64 @@ func TestWaitForSignal(t *testing.T) {
 			_ = syscall.Kill(syscall.Getpid(), sig)
 		}(sig)
 
-		err = waitForSignal(errC, shutdownC, &log)
-		assert.Equal(t, nil, err)
-		assert.Equal(t, shutdownErr, <-errC)
-		testChannelClosed(t, shutdownC)
+		time.AfterFunc(time.Second, func() {
+			select {
+			case <-graceShutdownC:
+			default:
+				close(graceShutdownC)
+				t.Fatal("waitForSignal timed out")
+			}
+		})
+
+		waitForSignal(graceShutdownC, &log)
+		assert.True(t, channelClosed(graceShutdownC))
 	}
 }
 
-func TestWaitForSignalWithGraceShutdown(t *testing.T) {
-	// Test server returning error
-	errC := make(chan error)
-	shutdownC := make(chan struct{})
-	graceshutdownC := make(chan struct{})
+func TestWaitForShutdown(t *testing.T) {
+	log := zerolog.Nop()
 
+	errC := make(chan error)
+	graceShutdownC := make(chan struct{})
+	const gracePeriod = 5 * time.Second
+
+	contextCancelled := false
+	cancel := func() {
+		contextCancelled = true
+	}
+	var wg sync.WaitGroup
+
+	// on, error stop immediately
+	contextCancelled = false
+	startTime := time.Now()
 	go func() {
 		errC <- serverErr
 	}()
-
-	log := zerolog.Nop()
-
-	// received error, both shutdownC and graceshutdownC should be closed
-	err := waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
+	err := waitToShutdown(&wg, cancel, errC, graceShutdownC, gracePeriod, &log)
 	assert.Equal(t, serverErr, err)
-	testChannelClosed(t, shutdownC)
-	testChannelClosed(t, graceshutdownC)
+	assert.True(t, contextCancelled)
+	assert.False(t, channelClosed(graceShutdownC))
+	assert.True(t, time.Now().Sub(startTime) < time.Second) // check that wait ended early
 
-	// shutdownC closed, graceshutdownC should also be closed and no error
-	errC = make(chan error)
-	shutdownC = make(chan struct{})
-	graceshutdownC = make(chan struct{})
-	close(shutdownC)
-	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
-	assert.NoError(t, err)
-	testChannelClosed(t, shutdownC)
-	testChannelClosed(t, graceshutdownC)
+	// on graceful shutdown, ignore error but stop as soon as an error arrives
+	contextCancelled = false
+	startTime = time.Now()
+	go func() {
+		close(graceShutdownC)
+		time.Sleep(tick)
+		errC <- serverErr
+	}()
+	err = waitToShutdown(&wg, cancel, errC, graceShutdownC, gracePeriod, &log)
+	assert.Nil(t, err)
+	assert.True(t, contextCancelled)
+	assert.True(t, time.Now().Sub(startTime) < time.Second) // check that wait ended early
 
-	// graceshutdownC closed, shutdownC should also be closed and no error
-	errC = make(chan error)
-	shutdownC = make(chan struct{})
-	graceshutdownC = make(chan struct{})
-	close(graceshutdownC)
-	err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
-	assert.NoError(t, err)
-	testChannelClosed(t, shutdownC)
-	testChannelClosed(t, graceshutdownC)
-
-	// Test handling SIGTERM & SIGINT
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		errC := make(chan error)
-		shutdownC = make(chan struct{})
-		graceshutdownC = make(chan struct{})
-
-		go func(shutdownC, graceshutdownC chan struct{}) {
-			<-graceshutdownC
-			<-shutdownC
-			errC <- graceShutdownErr
-		}(shutdownC, graceshutdownC)
-
-		go func(sig syscall.Signal) {
-			// sleep for a tick to prevent sending signal before calling waitForSignalWithGraceShutdown
-			time.Sleep(tick)
-			_ = syscall.Kill(syscall.Getpid(), sig)
-		}(sig)
-
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
-		assert.Equal(t, nil, err)
-		assert.Equal(t, graceShutdownErr, <-errC)
-		testChannelClosed(t, shutdownC)
-		testChannelClosed(t, graceshutdownC)
-	}
-
-	// Test handling SIGTERM & SIGINT, server send error before end of grace period
-	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
-		errC := make(chan error)
-		shutdownC = make(chan struct{})
-		graceshutdownC = make(chan struct{})
-
-		go func(shutdownC, graceshutdownC chan struct{}) {
-			<-graceshutdownC
-			errC <- graceShutdownErr
-			<-shutdownC
-			errC <- shutdownErr
-		}(shutdownC, graceshutdownC)
-
-		go func(sig syscall.Signal) {
-			// sleep for a tick to prevent sending signal before calling waitForSignalWithGraceShutdown
-			time.Sleep(tick)
-			_ = syscall.Kill(syscall.Getpid(), sig)
-		}(sig)
-
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceshutdownC, tick, &log)
-		assert.Equal(t, nil, err)
-		assert.Equal(t, shutdownErr, <-errC)
-		testChannelClosed(t, shutdownC)
-		testChannelClosed(t, graceshutdownC)
-	}
+	// with graceShutdownC closed stop right away without grace period
+	contextCancelled = false
+	startTime = time.Now()
+	err = waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, &log)
+	assert.Nil(t, err)
+	assert.True(t, contextCancelled)
+	assert.True(t, time.Now().Sub(startTime) < time.Second) // check that wait ended early
 }
+

@@ -86,7 +86,6 @@ const (
 )
 
 var (
-	shutdownC      chan struct{}
 	graceShutdownC chan struct{}
 	version        string
 )
@@ -165,8 +164,8 @@ func TunnelCommand(c *cli.Context) error {
 	return runClassicTunnel(sc)
 }
 
-func Init(v string, s, g chan struct{}) {
-	version, shutdownC, graceShutdownC = v, s, g
+func Init(ver string, gracefulShutdown chan struct{}) {
+	version, graceShutdownC = ver, gracefulShutdown
 }
 
 // runAdhocNamedTunnel create, route and run a named tunnel in one command
@@ -222,8 +221,6 @@ func StartServer(
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
-	connectedSignal := signal.New(make(chan struct{}))
-	dnsReadySignal := make(chan struct{})
 
 	if config.GetConfiguration().Source() == "" {
 		log.Info().Msg(config.ErrNoConfigFile.Error())
@@ -266,29 +263,28 @@ func StartServer(
 	buildInfo.Log(log)
 	logClientOptions(c, log)
 
+	// this context drives the server, when it's cancelled tunnel and all other components (origins, dns, etc...) should stop
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go waitForSignal(graceShutdownC, log)
+
 	if c.IsSet("proxy-dns") {
+		dnsReadySignal := make(chan struct{})
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, shutdownC, log)
+			errC <- runDNSProxyServer(c, dnsReadySignal, ctx.Done(), log)
 		}()
-	} else {
-		close(dnsReadySignal)
+		// Wait for proxy-dns to come up (if used)
+		<-dnsReadySignal
 	}
 
-	// Wait for proxy-dns to come up (if used)
-	<-dnsReadySignal
-
+	connectedSignal := signal.New(make(chan struct{}))
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
 		go writePidFile(connectedSignal, c.String("pidfile"), log)
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-shutdownC
-		cancel()
-	}()
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
 	if updater.IsAutoupdateEnabled(c, log) {
@@ -306,7 +302,7 @@ func StartServer(
 	if dnsProxyStandAlone(c) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, 0, log)
+		return waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, log)
 	}
 
 	url := c.String("url")
@@ -338,10 +334,10 @@ func StartServer(
 		defer wg.Done()
 		readinessServer := metrics.NewReadyServer(log)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, shutdownC, readinessServer, log)
+		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, log)
 	}()
 
-	if err := ingressRules.StartOrigins(&wg, log, shutdownC, errC); err != nil {
+	if err := ingressRules.StartOrigins(&wg, log, ctx.Done(), errC); err != nil {
 		return err
 	}
 
@@ -353,7 +349,10 @@ func StartServer(
 
 	wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer func() {
+			wg.Done()
+			log.Info().Msg("Tunnel server stopped")
+		}()
 		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, reconnectCh, graceShutdownC)
 	}()
 
@@ -369,7 +368,7 @@ func StartServer(
 		observer.RegisterSink(app)
 	}
 
-	return waitToShutdown(&wg, errC, shutdownC, graceShutdownC, c.Duration("grace-period"), log)
+	return waitToShutdown(&wg, cancel, errC, graceShutdownC, c.Duration("grace-period"), log)
 }
 
 func SetFlagsFromConfigFile(c *cli.Context) error {
@@ -393,30 +392,44 @@ func SetFlagsFromConfigFile(c *cli.Context) error {
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
-	errC chan error,
-	shutdownC, graceShutdownC chan struct{},
+	cancelServerContext func(),
+	errC <-chan error,
+	graceShutdownC <-chan struct{},
 	gracePeriod time.Duration,
 	log *zerolog.Logger,
 ) error {
 	var err error
-	if gracePeriod > 0 {
-		err = waitForSignalWithGraceShutdown(errC, shutdownC, graceShutdownC, gracePeriod, log)
-	} else {
-		err = waitForSignal(errC, shutdownC, log)
-		close(graceShutdownC)
+	select {
+	case err = <-errC:
+		log.Error().Err(err).Msg("Initiating shutdown")
+	case <-graceShutdownC:
+		log.Debug().Msg("Graceful shutdown signalled")
+		if gracePeriod > 0 {
+			// wait for either grace period or service termination
+			select {
+			case <-time.Tick(gracePeriod):
+			case <-errC:
+			}
+		}
 	}
 
-	if err != nil {
-		log.Err(err).Msg("Quitting due to error")
-	} else {
-		log.Info().Msg("Quitting...")
-	}
-	// Wait for clean exit, discarding all errors
+	// stop server context
+	cancelServerContext()
+
+	// Wait for clean exit, discarding all errors while we wait
+	stopDiscarding := make(chan struct{})
 	go func() {
-		for range errC {
+		for {
+			select {
+			case <-errC: // ignore
+			case <-stopDiscarding:
+				return
+			}
 		}
 	}()
 	wg.Wait()
+	close(stopDiscarding)
+
 	return err
 }
 

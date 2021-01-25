@@ -46,10 +46,7 @@ func main() {
 	metrics.RegisterBuildInfo(BuildTime, Version)
 	raven.SetRelease(Version)
 
-	// Force shutdown channel used by the app. When closed, app must terminate.
-	// Windows service manager closes this channel when it receives shutdown command.
-	shutdownC := make(chan struct{})
-	// Graceful shutdown channel used by the app. When closed, app must terminate.
+	// Graceful shutdown channel used by the app. When closed, app must terminate gracefully.
 	// Windows service manager closes this channel when it receives stop command.
 	graceShutdownC := make(chan struct{})
 
@@ -77,14 +74,14 @@ func main() {
 
 	See https://developers.cloudflare.com/argo-tunnel/ for more in-depth documentation.`
 	app.Flags = flags()
-	app.Action = action(Version, shutdownC, graceShutdownC)
+	app.Action = action(graceShutdownC)
 	app.Before = tunnel.SetFlagsFromConfigFile
 	app.Commands = commands(cli.ShowVersion)
 
-	tunnel.Init(Version, shutdownC, graceShutdownC) // we need this to support the tunnel sub command...
-	access.Init(shutdownC, graceShutdownC)
+	tunnel.Init(Version, graceShutdownC) // we need this to support the tunnel sub command...
+	access.Init(graceShutdownC)
 	updater.Init(Version)
-	runApp(app, shutdownC, graceShutdownC)
+	runApp(app, graceShutdownC)
 }
 
 func commands(version func(c *cli.Context)) []*cli.Command {
@@ -145,10 +142,10 @@ func isEmptyInvocation(c *cli.Context) bool {
 	return c.NArg() == 0 && c.NumFlags() == 0
 }
 
-func action(version string, shutdownC, graceShutdownC chan struct{}) cli.ActionFunc {
+func action(graceShutdownC chan struct{}) cli.ActionFunc {
 	return cliutil.ErrorHandler(func(c *cli.Context) (err error) {
 		if isEmptyInvocation(c) {
-			return handleServiceMode(c, shutdownC)
+			return handleServiceMode(c, graceShutdownC)
 		}
 		tags := make(map[string]string)
 		tags["hostname"] = c.String("hostname")
