@@ -73,7 +73,9 @@ func main() {
 	app.Version = fmt.Sprintf("%s (built %s)", Version, BuildTime)
 	app.Description = `cloudflared connects your machine or user identity to Cloudflare's global network.
 	You can use it to authenticate a session to reach an API behind Access, route web traffic to this machine,
-	and configure access control.`
+	and configure access control.
+
+	See https://developers.cloudflare.com/argo-tunnel/ for more in-depth documentation.`
 	app.Flags = flags()
 	app.Action = action(Version, shutdownC, graceShutdownC)
 	app.Before = tunnel.SetFlagsFromConfigFile
