@@ -41,7 +41,7 @@ func buildRouteIPSubcommand() *cli.Command {
 				Usage:       "Show the routing table",
 				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
 				Description: `Shows your organization's private route table. You can use flags to filter the results.`,
-				Flags:       teamnet.FilterFlags,
+				Flags:       showRoutesFlags(),
 			},
 			{
 				Name:        "delete",
@@ -60,6 +60,13 @@ func buildRouteIPSubcommand() *cli.Command {
 			},
 		},
 	}
+}
+
+func showRoutesFlags() []cli.Flag {
+	flags := make([]cli.Flag, 0)
+	flags = append(flags, teamnet.FilterFlags...)
+	flags = append(flags, outputFormatFlag)
+	return flags
 }
 
 func showRoutesCommand(c *cli.Context) error {

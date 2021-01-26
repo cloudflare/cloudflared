@@ -33,15 +33,15 @@ func TestUnmarshalRoute(t *testing.T) {
 	require.Equal(t, "test", r.Comment)
 }
 
-func TestUnmarshalDetailedRoute(t *testing.T) {
+func TestDetailedRouteJsonRoundtrip(t *testing.T) {
 	// Response from the teamnet route backend
 	data := `{
 		"network":"10.1.2.40/29",
 		"tunnel_id":"fba6ffea-807f-4e7a-a740-4184ee1b82c8",
-		"tunnel_name":"Mr. Tun",
 		"comment":"test",
 		"created_at":"2020-12-22T02:00:15.587008Z",
-		"deleted_at":null
+		"deleted_at":"2021-01-14T05:01:42.183002Z",
+		"tunnel_name":"Mr. Tun"
 	}`
 	var r DetailedRoute
 	err := json.Unmarshal([]byte(data), &r)
@@ -55,6 +55,13 @@ func TestUnmarshalDetailedRoute(t *testing.T) {
 	require.Equal(t, CIDR(*cidr), r.Network)
 	require.Equal(t, "test", r.Comment)
 	require.Equal(t, "Mr. Tun", r.TunnelName)
+
+	bytes, err := json.Marshal(r)
+	require.NoError(t, err)
+	obtainedJson := string(bytes)
+	data = strings.Replace(data, "\t", "", -1)
+	data = strings.Replace(data, "\n", "", -1)
+	require.Equal(t, data, obtainedJson)
 }
 
 func TestMarshalNewRoute(t *testing.T) {

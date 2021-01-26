@@ -16,9 +16,9 @@ import (
 // network, and says that eyeballs can reach that route using the corresponding
 // tunnel.
 type Route struct {
-	Network   CIDR
+	Network   CIDR      `json:"network"`
 	TunnelID  uuid.UUID `json:"tunnel_id"`
-	Comment   string
+	Comment   string    `json:"comment"`
 	CreatedAt time.Time `json:"created_at"`
 	DeletedAt time.Time `json:"deleted_at"`
 }
@@ -26,9 +26,18 @@ type Route struct {
 // CIDR is just a newtype wrapper around net.IPNet. It adds JSON unmarshalling.
 type CIDR net.IPNet
 
-func (c *CIDR) String() string {
-	n := net.IPNet(*c)
+func (c CIDR) String() string {
+	n := net.IPNet(c)
 	return n.String()
+}
+
+func (c CIDR) MarshalJSON() ([]byte, error) {
+	str := c.String()
+	json, err := json.Marshal(str)
+	if err != nil {
+		return nil, errors.Wrap(err, "error serializing CIDR into JSON")
+	}
+	return json, nil
 }
 
 // UnmarshalJSON parses a JSON string into net.IPNet
@@ -68,9 +77,9 @@ func (r NewRoute) MarshalJSON() ([]byte, error) {
 
 // DetailedRoute is just a Route with some extra fields, e.g. TunnelName.
 type DetailedRoute struct {
-	Network    CIDR
+	Network    CIDR      `json:"network"`
 	TunnelID   uuid.UUID `json:"tunnel_id"`
-	Comment    string
+	Comment    string    `json:"comment"`
 	CreatedAt  time.Time `json:"created_at"`
 	DeletedAt  time.Time `json:"deleted_at"`
 	TunnelName string    `json:"tunnel_name"`
