@@ -2,7 +2,6 @@ package origin
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 )
@@ -145,17 +144,4 @@ func TestBackoffRetryForever(t *testing.T) {
 	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*8 {
 		t.Fatalf("backoff returned %v instead of 8 seconds on fifth retry", duration)
 	}
-}
-
-func TestPrint(t *testing.T) {
-	local := time.Now()
-	fmt.Printf("Local = %s\n", local)
-	fmt.Printf("Local (kitchen) = %s\n", local.Format(time.Kitchen))
-	fmt.Printf("Local (RFC3339) = %s\n", local.Format(time.RFC3339))
-	fmt.Println()
-	utc := local.UTC()
-	fmt.Printf("UTC = %s\n", utc)
-	fmt.Printf("UTC (kitchen) = %s\n", utc.Format(time.Kitchen))
-	fmt.Printf("UTC (RFC3339) = %s\n", utc.Format(time.RFC3339))
-
 }
