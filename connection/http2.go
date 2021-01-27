@@ -34,12 +34,14 @@ type http2Connection struct {
 	observer     *Observer
 	connIndexStr string
 	connIndex    uint8
-	wg           *sync.WaitGroup
 	// newRPCClientFunc allows us to mock RPCs during testing
-	newRPCClientFunc  func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
+	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
+
+	activeRequestsWG  sync.WaitGroup
 	connectedFuse     ConnectedFuse
 	gracefulShutdownC chan struct{}
 	stoppedGracefully bool
+	controlStreamErr  error // result of running control stream handler
 }
 
 func NewHTTP2Connection(
@@ -63,7 +65,6 @@ func NewHTTP2Connection(
 		observer:          observer,
 		connIndexStr:      uint8ToString(connIndex),
 		connIndex:         connIndex,
-		wg:                &sync.WaitGroup{},
 		newRPCClientFunc:  newRegistrationRPCClient,
 		connectedFuse:     connectedFuse,
 		gracefulShutdownC: gracefulShutdownC,
@@ -80,15 +81,20 @@ func (c *http2Connection) Serve(ctx context.Context) error {
 		Handler: c,
 	})
 
-	if !c.stoppedGracefully {
+	switch {
+	case c.stoppedGracefully:
+		return nil
+	case c.controlStreamErr != nil:
+		return c.controlStreamErr
+	default:
+		c.observer.log.Info().Uint8(LogFieldConnIndex, c.connIndex).Msg("Lost connection with the edge")
 		return errEdgeConnectionClosed
 	}
-	return nil
 }
 
 func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c.wg.Add(1)
-	defer c.wg.Done()
+	c.activeRequestsWG.Add(1)
+	defer c.activeRequestsWG.Done()
 
 	respWriter := &http2RespWriter{
 		r: r.Body,
@@ -105,6 +111,7 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if isControlStreamUpgrade(r) {
 		respWriter.shouldFlush = true
 		err = c.serveControlStream(r.Context(), respWriter)
+		c.controlStreamErr = err
 	} else if isWebsocketUpgrade(r) {
 		respWriter.shouldFlush = true
 		stripWebsocketUpgradeHeader(r)
@@ -116,10 +123,6 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respWriter.WriteErrorResponse()
 	}
-}
-
-func (c *http2Connection) StoppedGracefully() bool {
-	return c.stoppedGracefully
 }
 
 func (c *http2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
@@ -146,7 +149,7 @@ func (c *http2Connection) serveControlStream(ctx context.Context, respWriter *ht
 
 func (c *http2Connection) close() {
 	// Wait for all serve HTTP handlers to return
-	c.wg.Wait()
+	c.activeRequestsWG.Wait()
 	c.conn.Close()
 }
 

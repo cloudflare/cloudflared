@@ -41,13 +41,13 @@ func serverRegistrationErrorFromRPC(err error) ServerRegisterTunnelError {
 	}
 }
 
-type MuxerShutdownError struct{}
+type muxerShutdownError struct{}
 
-func (e MuxerShutdownError) Error() string {
+func (e muxerShutdownError) Error() string {
 	return "muxer shutdown"
 }
 
-var errMuxerStopped = MuxerShutdownError{}
+var errMuxerStopped = muxerShutdownError{}
 
 func isHandshakeErrRecoverable(err error, connIndex uint8, observer *Observer) bool {
 	log := observer.log.With().

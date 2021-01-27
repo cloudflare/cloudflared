@@ -104,7 +104,15 @@ func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *Nam
 		h.controlLoop(serveCtx, connectedFuse, true)
 		return nil
 	})
-	return errGroup.Wait()
+
+	err := errGroup.Wait()
+	if err == errMuxerStopped {
+		if h.stoppedGracefully {
+			return nil
+		}
+		h.observer.log.Info().Uint8(LogFieldConnIndex, h.connIndex).Msg("Unexpected muxer shutdown")
+	}
+	return err
 }
 
 func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel *ClassicTunnelConfig, credentialManager CredentialManager, registrationOptions *tunnelpogs.RegistrationOptions, connectedFuse ConnectedFuse) error {
@@ -136,11 +144,15 @@ func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel 
 		h.controlLoop(serveCtx, connectedFuse, false)
 		return nil
 	})
-	return errGroup.Wait()
-}
 
-func (h *h2muxConnection) StoppedGracefully() bool {
-	return h.stoppedGracefully
+	err := errGroup.Wait()
+	if err == errMuxerStopped {
+		if h.stoppedGracefully {
+			return nil
+		}
+		h.observer.log.Info().Uint8(LogFieldConnIndex, h.connIndex).Msg("Unexpected muxer shutdown")
+	}
+	return err
 }
 
 func (h *h2muxConnection) serveMuxer(ctx context.Context) error {
