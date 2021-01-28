@@ -1,26 +1,30 @@
 pinned_go: &pinned_go go=1.15.7-1
+pinned_go_fips: &pinned_go_fips go-fips=1.15.5-3
+
 build_dir: &build_dir /cfsetup_build
 default-flavor: buster
 stretch: &stretch
   build:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go
+      - *pinned_go_fips
       - build-essential
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
+      - export FIPS=true
       - make cloudflared
   build-deb:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go
+      - *pinned_go_fips
       - build-essential
       - fakeroot
       - rubygem-fpm
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
+      - export FIPS=true
       - make cloudflared-deb
   build-deb-arm64:
     build_dir: *build_dir
@@ -36,7 +40,7 @@ stretch: &stretch
   publish-deb:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go
+      - *pinned_go_fips
       - build-essential
       - fakeroot
       - rubygem-fpm
@@ -44,20 +48,22 @@ stretch: &stretch
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
+      - export FIPS=true
       - make publish-deb
   release-linux-amd64:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go
+      - *pinned_go_fips
       - build-essential
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
+      - export FIPS=true
       - make release
   github-release-linux-amd64:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go
+      - *pinned_go_fips
       - build-essential
       - python3-setuptools
       - python3-pip
@@ -66,6 +72,7 @@ stretch: &stretch
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
+      - export FIPS=true
       - make github-release
   release-linux-armv6:
     build_dir: *build_dir
@@ -185,11 +192,12 @@ stretch: &stretch
   test:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go
+      - *pinned_go_fips
       - build-essential
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
+      - export FIPS=true
       # cd to a non-module directory: https://github.com/golang/go/issues/24250
       - (cd / && go get github.com/BurntSushi/go-sumtype)
       - export PATH="$HOME/go/bin:$PATH"

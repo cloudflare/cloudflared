@@ -1,9 +1,16 @@
 VERSION       := $(shell git describe --tags --always --dirty="-dev" --match "[0-9][0-9][0-9][0-9].*.*")
-DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
-VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
+
+ifeq ($(FIPS), true)
+	GO_BUILD_TAGS := "$(GO_BUILD_TAGS) fips"
+	VERSION := $(VERSION)-fips
+	MSI_VERSION := $(MSI_VERSION)-fips
+endif
+
+DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
+VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 
 IMPORT_PATH   := github.com/cloudflare/cloudflared
 PACKAGE_DIR   := $(CURDIR)/packaging
@@ -71,7 +78,7 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor -tags $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: container
 container:
