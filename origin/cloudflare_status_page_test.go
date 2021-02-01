@@ -137,8 +137,7 @@ func TestParseStatusPage(t *testing.T) {
 								"page_id": "yh6f0r4529hb",
 								"group_id": "1km35smx8p41",
 								"group": false,
-								"only_show_if_degraded": false,
-								"automation_email": "component+g4tb35rs9yw7@notifications.statuspage.io"
+								"only_show_if_degraded": false
 							}
 						],
 						"impact": "minor"
@@ -208,8 +207,7 @@ func TestParseStatusPage(t *testing.T) {
 								"page_id": "yh6f0r4529hb",
 								"group_id": "1km35smx8p41",
 								"group": false,
-								"only_show_if_degraded": false,
-								"automation_email": "component+4c231tkdlpcl@notifications.statuspage.io"
+								"only_show_if_degraded": false
 							}
 						],
 						"impact": "minor"
