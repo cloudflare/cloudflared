@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/pkg/errors"
 )
 
@@ -37,6 +38,12 @@ func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.URL.Host = o.url.Host
 	req.URL.Scheme = o.url.Scheme
 	return o.transport.RoundTrip(req)
+}
+
+func (o *httpService) EstablishConnection(req *http.Request) (OriginConnection, error) {
+	req.URL.Host = o.url.Host
+	req.URL.Scheme = websocket.ChangeRequestScheme(o.url)
+	return newWSConnection(o.transport, req)
 }
 
 func (o *helloWorld) RoundTrip(req *http.Request) (*http.Response, error) {

@@ -36,7 +36,6 @@ func (c *GorillaConn) Read(p []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-
 	return copy(p, message), nil
 
 }
@@ -71,11 +70,13 @@ type Conn struct {
 	log *zerolog.Logger
 }
 
-func NewConn(rw io.ReadWriter, log *zerolog.Logger) *Conn {
-	return &Conn{
+func NewConn(ctx context.Context, rw io.ReadWriter, log *zerolog.Logger) *Conn {
+	c := &Conn{
 		rw:  rw,
 		log: log,
 	}
+	go c.pinger(ctx)
+	return c
 }
 
 // Read will read messages from the websocket connection
@@ -92,11 +93,10 @@ func (c *Conn) Write(p []byte) (int, error) {
 	if err := wsutil.WriteServerBinary(c.rw, p); err != nil {
 		return 0, err
 	}
-
 	return len(p), nil
 }
 
-func (c *Conn) Pinger(ctx context.Context) {
+func (c *Conn) pinger(ctx context.Context) {
 	pongMessge := wsutil.Message{
 		OpCode:  gobwas.OpPong,
 		Payload: []byte{},

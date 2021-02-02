@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/websocket"
 	gws "github.com/gorilla/websocket"
 )
@@ -15,6 +16,7 @@ type OriginConnection interface {
 	// Stream should generally be implemented as a bidirectional io.Copy.
 	Stream(tunnelConn io.ReadWriter)
 	Close()
+	Type() connection.Type
 }
 
 type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn)
@@ -57,6 +59,10 @@ func (tc *tcpConnection) Close() {
 	tc.conn.Close()
 }
 
+func (*tcpConnection) Type() connection.Type {
+	return connection.TypeTCP
+}
+
 // wsConnection is an OriginConnection that streams to TCP packets by encapsulating them in Websockets.
 // TODO: TUN-3710 Remove wsConnection and have helloworld service reuse tcpConnection like bridgeService does.
 type wsConnection struct {
@@ -71,6 +77,10 @@ func (wsc *wsConnection) Stream(tunnelConn io.ReadWriter) {
 func (wsc *wsConnection) Close() {
 	wsc.resp.Body.Close()
 	wsc.wsConn.Close()
+}
+
+func (wsc *wsConnection) Type() connection.Type {
+	return connection.TypeWebsocket
 }
 
 func newWSConnection(transport *http.Transport, r *http.Request) (OriginConnection, error) {

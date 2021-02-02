@@ -52,6 +52,9 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 	cfRay := findCfRayHeader(req)
 	lbProbe := isLBProbeRequest(req)
 
+	serveCtx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+
 	p.appendTagHeaders(req)
 	if sourceConnectionType == connection.TypeTCP {
 		if p.warpRouting == nil {
@@ -59,7 +62,7 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 			p.log.Error().Msg(err.Error())
 			return err
 		}
-		resp, err := p.handleProxyConn(w, req, nil, p.warpRouting.Proxy)
+		resp, err := p.proxyConnection(serveCtx, w, req, sourceConnectionType, p.warpRouting.Proxy)
 		if err != nil {
 			p.logRequestError(err, cfRay, ingress.ServiceWarpRouting)
 			w.WriteErrorResponse()
@@ -83,12 +86,6 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		return nil
 	}
 
-	respHeader := http.Header{}
-	if sourceConnectionType == connection.TypeWebsocket {
-		go websocket.NewConn(w, p.log).Pinger(req.Context())
-		respHeader = websocket.NewResponseHeader(req)
-	}
-
 	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
 		req.Header.Set("Host", hostHeader)
 		req.Host = hostHeader
@@ -99,7 +96,8 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		p.log.Error().Msgf("%s is not a connection-oriented service", rule.Service)
 		return fmt.Errorf("Not a connection-oriented service")
 	}
-	resp, err := p.handleProxyConn(w, req, respHeader, connectionProxy)
+
+	resp, err := p.proxyConnection(serveCtx, w, req, sourceConnectionType, connectionProxy)
 	if err != nil {
 		p.logErrorAndWriteResponse(w, err, cfRay, ruleNum)
 		return err
@@ -107,31 +105,6 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 
 	p.logOriginResponse(resp, cfRay, lbProbe, ruleNum)
 	return nil
-}
-
-func (p *proxy) handleProxyConn(
-	w connection.ResponseWriter,
-	req *http.Request,
-	respHeader http.Header,
-	connectionProxy ingress.StreamBasedOriginProxy) (*http.Response, error) {
-	connClosedChan := make(chan struct{})
-	err := p.proxyConnection(connClosedChan, w, req, connectionProxy)
-	if err != nil {
-		return nil, err
-	}
-
-	status := http.StatusSwitchingProtocols
-	resp := &http.Response{
-		Status:        http.StatusText(status),
-		StatusCode:    status,
-		Header:        respHeader,
-		ContentLength: -1,
-	}
-	w.WriteRespHeaders(http.StatusSwitchingProtocols, nil)
-
-	<-connClosedChan
-	return resp, nil
-
 }
 
 func (p *proxy) logErrorAndWriteResponse(w connection.ResponseWriter, err error, cfRay string, ruleNum int) {
@@ -186,27 +159,51 @@ func (p *proxy) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *
 	return resp, nil
 }
 
-func (p *proxy) proxyConnection(connClosedChan chan struct{},
-	conn io.ReadWriter, req *http.Request, connectionProxy ingress.StreamBasedOriginProxy) error {
+func (p *proxy) proxyConnection(
+	serveCtx context.Context,
+	w connection.ResponseWriter,
+	req *http.Request,
+	sourceConnectionType connection.Type,
+	connectionProxy ingress.StreamBasedOriginProxy,
+) (*http.Response, error) {
 	originConn, err := connectionProxy.EstablishConnection(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	serveCtx, cancel := context.WithCancel(req.Context())
+	var eyeballConn io.ReadWriter = w
+	respHeader := http.Header{}
+	if sourceConnectionType == connection.TypeWebsocket {
+		wsReadWriter := websocket.NewConn(serveCtx, w, p.log)
+		// If cloudflared <-> origin is not websocket, we need to decode TCP data out of WS frames
+		if originConn.Type() != sourceConnectionType {
+			eyeballConn = wsReadWriter
+		}
+		respHeader = websocket.NewResponseHeader(req)
+	}
+	status := http.StatusSwitchingProtocols
+	resp := &http.Response{
+		Status:        http.StatusText(status),
+		StatusCode:    status,
+		Header:        respHeader,
+		ContentLength: -1,
+	}
+	w.WriteRespHeaders(http.StatusSwitchingProtocols, respHeader)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error writing response header")
+	}
+
+	streamCtx, cancel := context.WithCancel(serveCtx)
+	defer cancel()
+
 	go func() {
-		// serveCtx is done if req is cancelled, or streamWebsocket returns
-		<-serveCtx.Done()
+		// streamCtx is done if req is cancelled or if Stream returns
+		<-streamCtx.Done()
 		originConn.Close()
-		close(connClosedChan)
 	}()
 
-	go func() {
-		originConn.Stream(conn)
-		cancel()
-	}()
-
-	return nil
+	originConn.Stream(eyeballConn)
+	return resp, nil
 }
 
 func (p *proxy) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {
