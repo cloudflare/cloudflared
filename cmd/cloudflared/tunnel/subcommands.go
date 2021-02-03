@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	allSortByOptions  = "name, id, createdAt, deletedAt, numConnections"
 	CredFileFlagAlias = "cred-file"
 	CredFileFlag      = "credentials-file"
 
@@ -67,6 +68,17 @@ var (
 		Aliases: []string{"o"},
 		Usage:   "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
 	})
+	sortByFlag = &cli.StringFlag{
+		Name:    "sort-by",
+		Value:   "name",
+		Usage:   fmt.Sprintf("Sorts the list of tunnels by the given field. Valid options are {%s}", allSortByOptions),
+		EnvVars: []string{"TUNNEL_LIST_SORT_BY"},
+	}
+	invertSortFlag = &cli.BoolFlag{
+		Name:    "invert-sort",
+		Usage:   "Inverts the sort order of the tunnel list.",
+		EnvVars: []string{"TUNNEL_LIST_INVERT_SORT"},
+	}
 	forceFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
@@ -161,12 +173,21 @@ func writeTunnelCredentials(
 
 func buildListCommand() *cli.Command {
 	return &cli.Command{
-		Name:               "list",
-		Action:             cliutil.ErrorHandler(listCommand),
-		Usage:              "List existing tunnels",
-		UsageText:          "cloudflared tunnel [tunnel command options] list [subcommand options]",
-		Description:        "cloudflared tunnel list will display all active tunnels, their created time and associated connections. Use -d flag to include deleted tunnels. See the list of options to filter the list",
-		Flags:              []cli.Flag{outputFormatFlag, showDeletedFlag, listNameFlag, listExistedAtFlag, listIDFlag, showRecentlyDisconnected},
+		Name:        "list",
+		Action:      cliutil.ErrorHandler(listCommand),
+		Usage:       "List existing tunnels",
+		UsageText:   "cloudflared tunnel [tunnel command options] list [subcommand options]",
+		Description: "cloudflared tunnel list will display all active tunnels, their created time and associated connections. Use -d flag to include deleted tunnels. See the list of options to filter the list",
+		Flags: []cli.Flag{
+			outputFormatFlag,
+			showDeletedFlag,
+			listNameFlag,
+			listExistedAtFlag,
+			listIDFlag,
+			showRecentlyDisconnected,
+			sortByFlag,
+			invertSortFlag,
+		},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -198,6 +219,36 @@ func listCommand(c *cli.Context) error {
 	tunnels, err := sc.list(filter)
 	if err != nil {
 		return err
+	}
+
+	// Sort the tunnels
+	sortBy := c.String("sort-by")
+	invalidSortField := false
+	sort.Slice(tunnels, func(i, j int) bool {
+		cmp := func() bool {
+			switch sortBy {
+			case "name":
+				return tunnels[i].Name < tunnels[j].Name
+			case "id":
+				return tunnels[i].ID.String() < tunnels[j].ID.String()
+			case "createdAt":
+				return tunnels[i].CreatedAt.Unix() < tunnels[j].CreatedAt.Unix()
+			case "deletedAt":
+				return tunnels[i].DeletedAt.Unix() < tunnels[j].DeletedAt.Unix()
+			case "numConnections":
+				return len(tunnels[i].Connections) < len(tunnels[j].Connections)
+			default:
+				invalidSortField = true
+				return tunnels[i].Name < tunnels[j].Name
+			}
+		}()
+		if c.Bool("invert-sort") {
+			return !cmp
+		}
+		return cmp
+	})
+	if invalidSortField {
+		sc.log.Error().Msgf("%s is not a valid sort field. Valid sort fields are %s. Defaulting to 'name'.", sortBy, allSortByOptions)
 	}
 
 	if outputFormat := c.String(outputFormatFlag.Name); outputFormat != "" {
