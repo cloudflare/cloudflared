@@ -52,8 +52,9 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	assert.NoError(t, err)
 	config := &TunnelConfig{
 		Log:              &log,
+		LogTransport:     &log,
 		ProtocolSelector: protocolSelector,
-		Observer:         connection.NewObserver(nil, false),
+		Observer:         connection.NewObserver(&log, &log, false),
 	}
 	connIndex := uint8(1)
 

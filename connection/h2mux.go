@@ -77,7 +77,7 @@ func NewH2muxConnection(
 
 	// Establish a muxed connection with the edge
 	// Client mux handshake with agent server
-	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig.H2MuxerConfig(h, observer.log), h2mux.ActiveStreams)
+	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig.H2MuxerConfig(h, observer.logTransport), h2mux.ActiveStreams)
 	if err != nil {
 		recoverable := isHandshakeErrRecoverable(err, connIndex, observer)
 		return nil, err, recoverable

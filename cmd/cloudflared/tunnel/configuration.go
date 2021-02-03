@@ -149,7 +149,7 @@ func prepareTunnelConfig(
 	c *cli.Context,
 	buildInfo *buildinfo.BuildInfo,
 	version string,
-	log *zerolog.Logger,
+	log, logTransport *zerolog.Logger,
 	observer *connection.Observer,
 	namedTunnel *connection.NamedTunnelConfig,
 ) (*origin.TunnelConfig, ingress.Ingress, error) {
@@ -252,9 +252,9 @@ func prepareTunnelConfig(
 		ReplaceExisting: c.Bool("force"),
 	}
 	muxerConfig := &connection.MuxerConfig{
-		HeartbeatInterval:  c.Duration("heartbeat-interval"),
+		HeartbeatInterval: c.Duration("heartbeat-interval"),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
-		MaxHeartbeats:      uint64(c.Int("heartbeat-count")),
+		MaxHeartbeats: uint64(c.Int("heartbeat-count")),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		CompressionSetting: h2mux.CompressionSetting(uint64(c.Int("compression-quality"))),
 		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
@@ -272,6 +272,7 @@ func prepareTunnelConfig(
 		LBPool:           c.String("lb-pool"),
 		Tags:             tags,
 		Log:              log,
+		LogTransport:     logTransport,
 		Observer:         observer,
 		ReportedVersion:  version,
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc

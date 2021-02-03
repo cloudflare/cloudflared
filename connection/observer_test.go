@@ -44,7 +44,7 @@ func TestRegisterServerLocation(t *testing.T) {
 }
 
 func TestObserverEventsDontBlock(t *testing.T) {
-	observer := NewObserver(&log, false)
+	observer := NewObserver(&log, &log, false)
 	var mu sync.Mutex
 	observer.RegisterSink(EventSinkFunc(func(_ Event) {
 		// callback will block if lock is already held

@@ -313,11 +313,11 @@ func StartServer(
 		return fmt.Errorf(errText)
 	}
 
-	transportLog := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
+	logTransport := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
 
-	observer := connection.NewObserver(log, isUIEnabled)
+	observer := connection.NewObserver(log, logTransport, isUIEnabled)
 
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, observer, namedTunnel)
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
@@ -364,7 +364,7 @@ func StartServer(
 			&ingressRules,
 			tunnelConfig.HAConnections,
 		)
-		app := tunnelUI.Launch(ctx, log, transportLog)
+		app := tunnelUI.Launch(ctx, log, logTransport)
 		observer.RegisterSink(app)
 	}
 

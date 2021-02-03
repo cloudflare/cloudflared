@@ -51,7 +51,8 @@ type Supervisor struct {
 	nextConnectedIndex  int
 	nextConnectedSignal chan struct{}
 
-	log *zerolog.Logger
+	log          *zerolog.Logger
+	logTransport *zerolog.Logger
 
 	reconnectCredentialManager *reconnectCredentialManager
 	useReconnectToken          bool
@@ -94,6 +95,7 @@ func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, grace
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
 		log:                        config.Log,
+		logTransport:               config.LogTransport,
 		reconnectCredentialManager: newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections),
 		useReconnectToken:          useReconnectToken,
 		reconnectCh:                reconnectCh,
@@ -350,7 +352,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		// This callback is invoked by h2mux when the edge initiates a stream.
 		return nil // noop
 	})
-	muxerConfig := s.config.MuxerConfig.H2MuxerConfig(handler, s.log)
+	muxerConfig := s.config.MuxerConfig.H2MuxerConfig(handler, s.logTransport)
 	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig, h2mux.ActiveStreams)
 	if err != nil {
 		return nil, err

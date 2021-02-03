@@ -51,6 +51,7 @@ type TunnelConfig struct {
 	LBPool           string
 	Tags             []tunnelpogs.Tag
 	Log              *zerolog.Logger
+	LogTransport     *zerolog.Logger
 	Observer         *connection.Observer
 	ReportedVersion  string
 	Retries          uint
