@@ -33,6 +33,7 @@ const (
 	sshTokenIDFlag     = "service-token-id"
 	sshTokenSecretFlag = "service-token-secret"
 	sshGenCertFlag     = "short-lived-cert"
+	sshConnectTo       = "connect-to"
 	sshConfigTemplate  = `
 Add to your {{.Home}}/.ssh/config:
 
@@ -54,7 +55,7 @@ Host cfpipe-{{.Hostname}}
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
 
 var (
-	shutdownC      chan struct{}
+	shutdownC chan struct{}
 )
 
 // Init will initialize and store vars from the main program
@@ -163,6 +164,11 @@ func Commands() []*cli.Command {
 							Name:    logger.LogSSHLevelFlag,
 							Aliases: []string{"loglevel"}, //added to match the tunnel side
 							Usage:   "Application logging level {fatal, error, info, debug}. ",
+						},
+						&cli.StringFlag{
+							Name:  sshConnectTo,
+							Hidden: true,
+							Usage: "Connect to alternate location for testing, value is host, host:port, or sni:port:host",
 						},
 					},
 				},

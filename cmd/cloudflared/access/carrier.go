@@ -1,6 +1,8 @@
 package access
 
 import (
+	"crypto/tls"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -84,6 +86,26 @@ func ssh(c *cli.Context) error {
 	options := &carrier.StartOptions{
 		OriginURL: originURL,
 		Headers:   headers,
+		Host:      hostname,
+	}
+
+	if connectTo := c.String(sshConnectTo); connectTo != "" {
+		parts := strings.Split(connectTo, ":")
+		switch len(parts) {
+		case 1:
+			options.OriginURL = fmt.Sprintf("https://%s", parts[0])
+		case 2:
+			options.OriginURL = fmt.Sprintf("https://%s:%s", parts[0], parts[1])
+		case 3:
+			options.OriginURL = fmt.Sprintf("https://%s:%s", parts[2], parts[1])
+			options.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName: parts[0],
+			}
+			log.Warn().Msgf("Using insecure SSL connection because SNI overridden to %s", parts[0])
+		default:
+			return fmt.Errorf("invalid connection override: %s", connectTo)
+		}
 	}
 
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side

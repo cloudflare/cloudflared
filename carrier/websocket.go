@@ -82,11 +82,17 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 		return nil, err
 	}
 	req.Header = options.Headers
+	if options.Host != "" {
+		req.Host = options.Host
+	}
 
 	dump, err := httputil.DumpRequest(req, false)
 	log.Debug().Msgf("Websocket request: %s", string(dump))
 
-	wsConn, resp, err := cfwebsocket.ClientConnect(req, nil)
+	dialer := &websocket.Dialer{
+		TLSClientConfig: options.TLSClientConfig,
+	}
+	wsConn, resp, err := cfwebsocket.ClientConnect(req, dialer)
 	defer closeRespBody(resp)
 
 	if err != nil && IsAccessResponse(resp) {

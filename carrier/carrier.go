@@ -4,6 +4,7 @@
 package carrier
 
 import (
+	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
@@ -20,8 +21,10 @@ import (
 const LogFieldOriginURL = "originURL"
 
 type StartOptions struct {
-	OriginURL string
-	Headers   http.Header
+	OriginURL       string
+	Headers         http.Header
+	Host            string
+	TLSClientConfig *tls.Config
 }
 
 // Connection wraps up all the needed functions to forward over the tunnel
