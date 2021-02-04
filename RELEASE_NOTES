@@ -1,3 +1,6 @@
+2021.2.1
+- 2021-02-04 TUN-3858: Do not suffix cloudflared version with -fips
+
 2021.2.0
 - 2021-02-01 TUN-3837: Remove automation_email from cloudflared status page test
 - 2021-02-03 TUN-3848: Use transport logger for h2mux
