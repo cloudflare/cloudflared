@@ -33,7 +33,7 @@ func newH2MuxConnection(t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
 	edgeMuxChan := make(chan *h2mux.Muxer)
 	go func() {
 		edgeMuxConfig := h2mux.MuxerConfig{
-			Log: testObserver.log,
+			Log: &log,
 			Handler: h2mux.MuxedStreamFunc(func(stream *h2mux.MuxedStream) error {
 				// we only expect RPC traffic in client->edge direction, provide minimal support for mocking
 				require.True(t, stream.IsRPCStream())
@@ -47,6 +47,7 @@ func newH2MuxConnection(t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
 		edgeMuxChan <- edgeMux
 	}()
 	var connIndex = uint8(0)
+	testObserver := NewObserver(&log, &log, false)
 	h2muxConn, err, _ := NewH2muxConnection(testConfig, testMuxerConfig, originConn, connIndex, testObserver, nil)
 	require.NoError(t, err)
 	return h2muxConn, <-edgeMuxChan

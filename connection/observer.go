@@ -117,6 +117,10 @@ func (o *Observer) SendReconnect(connIndex uint8) {
 	o.sendEvent(Event{Index: connIndex, EventType: Reconnecting})
 }
 
+func (o *Observer) sendUnregisteringEvent(connIndex uint8) {
+	o.sendEvent(Event{Index: connIndex, EventType: Unregistering})
+}
+
 func (o *Observer) SendDisconnect(connIndex uint8) {
 	o.sendEvent(Event{Index: connIndex, EventType: Disconnected})
 }

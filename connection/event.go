@@ -22,4 +22,6 @@ const (
 	SetURL
 	// RegisteringTunnel means the non-named tunnel is registering its connection.
 	RegisteringTunnel
+	// We're unregistering tunnel from the edge in preparation for a disconnect
+	Unregistering
 )

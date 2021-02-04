@@ -66,3 +66,21 @@ func TestObserverEventsDontBlock(t *testing.T) {
 		mu.Unlock()
 	}
 }
+
+
+type eventCollectorSink struct {
+	observedEvents []Event
+	mu sync.Mutex
+}
+
+func (s *eventCollectorSink) OnTunnelEvent(event Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.observedEvents = append(s.observedEvents, event)
+}
+
+func (s *eventCollectorSink) assertSawEvent(t *testing.T, event Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assert.Contains(t, s.observedEvents, event)
+}

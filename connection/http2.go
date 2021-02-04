@@ -142,6 +142,7 @@ func (c *http2Connection) serveControlStream(ctx context.Context, respWriter *ht
 		c.stoppedGracefully = true
 	}
 
+	c.observer.sendUnregisteringEvent(c.connIndex)
 	rpcClient.GracefulShutdown(ctx, c.config.GracePeriod)
 	c.observer.log.Info().Uint8(LogFieldConnIndex, c.connIndex).Msg("Unregistered tunnel connection")
 	return nil

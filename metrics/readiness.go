@@ -32,7 +32,7 @@ func (rs *ReadyServer) OnTunnelEvent(c conn.Event) {
 		rs.Lock()
 		rs.isConnected[int(c.Index)] = true
 		rs.Unlock()
-	case conn.Disconnected, conn.Reconnecting, conn.RegisteringTunnel:
+	case conn.Disconnected, conn.Reconnecting, conn.RegisteringTunnel, conn.Unregistering:
 		rs.Lock()
 		rs.isConnected[int(c.Index)] = false
 		rs.Unlock()

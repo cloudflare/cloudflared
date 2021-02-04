@@ -27,7 +27,6 @@ var (
 		Scheme: "https",
 		Host:   "connectiontest.argotunnel.com",
 	}
-	testObserver  = NewObserver(&log, &log, false)
 	testLargeResp = make([]byte, largeFileSize)
 )
 

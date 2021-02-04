@@ -107,6 +107,22 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.NotEqualValues(t, http.StatusOK, code)
 	assert.Zero(t, ready)
 
+	// other connected then unregistered  => not ok
+	rs.OnTunnelEvent(connection.Event{
+		Index:     1,
+		EventType: connection.Connected,
+	})
+	code, ready = rs.makeResponse()
+	assert.EqualValues(t, http.StatusOK, code)
+	assert.EqualValues(t, 1, ready)
+	rs.OnTunnelEvent(connection.Event{
+		Index:     1,
+		EventType: connection.Unregistering,
+	})
+	code, ready = rs.makeResponse()
+	assert.NotEqualValues(t, http.StatusOK, code)
+	assert.Zero(t, ready)
+
 	// other disconnected => not ok
 	rs.OnTunnelEvent(connection.Event{
 		Index:     1,

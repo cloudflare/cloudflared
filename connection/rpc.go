@@ -291,6 +291,8 @@ func (h *h2muxConnection) registerNamedTunnel(
 }
 
 func (h *h2muxConnection) unregister(isNamedTunnel bool) {
+	h.observer.sendUnregisteringEvent(h.connIndex)
+
 	unregisterCtx, cancel := context.WithTimeout(context.Background(), h.config.GracePeriod)
 	defer cancel()
 

@@ -15,7 +15,6 @@ import (
 
 type connState struct {
 	location string
-	state    connection.Status
 }
 
 type uiModel struct {
@@ -32,6 +31,7 @@ type palette struct {
 	defaultText  string
 	disconnected string
 	reconnecting string
+	unregistered string
 }
 
 func NewUIModel(version, hostname, metricsURL string, ing *ingress.Ingress, haConnections int) *uiModel {
@@ -67,6 +67,7 @@ func (data *uiModel) Launch(
 		defaultText:  "white",
 		disconnected: "red",
 		reconnecting: "orange",
+		unregistered: "orange",
 	}
 
 	app := tview.NewApplication()
@@ -128,7 +129,7 @@ func (data *uiModel) Launch(
 		switch event.EventType {
 		case connection.Connected:
 			data.setConnTableCell(event, connTable, palette)
-		case connection.Disconnected, connection.Reconnecting:
+		case connection.Disconnected, connection.Reconnecting, connection.Unregistering:
 			data.changeConnStatus(event, connTable, log, palette)
 		case connection.SetURL:
 			tunnelHostText.SetText(event.URL)
@@ -167,10 +168,7 @@ func (data *uiModel) changeConnStatus(event connection.Event, table *tview.Table
 
 	locationState := event.Location
 
-	if event.EventType == connection.Disconnected {
-		connState.state = connection.Disconnected
-	} else if event.EventType == connection.Reconnecting {
-		connState.state = connection.Reconnecting
+	if event.EventType == connection.Reconnecting {
 		locationState = "Reconnecting..."
 	}
 
@@ -196,7 +194,6 @@ func (data *uiModel) setConnTableCell(event connection.Event, table *tview.Table
 	connectionNum := index + 1
 
 	// Update slice to keep track of connection location and state in UI table
-	data.connections[index].state = connection.Connected
 	data.connections[index].location = event.Location
 
 	// Update text in table cell to show disconnected state
@@ -218,6 +215,8 @@ func newCellText(palette palette, connectionNum int, location string, connectedS
 		dotColor = palette.disconnected
 	case connection.Reconnecting:
 		dotColor = palette.reconnecting
+	case connection.Unregistering:
+		dotColor = palette.unregistered
 	}
 
 	return fmt.Sprintf(connFmtString, dotColor, palette.defaultText, connectionNum, location)
