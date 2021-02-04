@@ -8,30 +8,37 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/websocket"
 	gws "github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 )
 
 // OriginConnection is a way to stream to a service running on the user's origin.
 // Different concrete implementations will stream different protocols as long as they are io.ReadWriters.
 type OriginConnection interface {
 	// Stream should generally be implemented as a bidirectional io.Copy.
-	Stream(tunnelConn io.ReadWriter)
+	Stream(tunnelConn io.ReadWriter, log *zerolog.Logger)
 	Close()
 	Type() connection.Type
 }
 
-type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn)
+type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
 
 // Stream copies copy data to & from provided io.ReadWriters.
-func Stream(conn, backendConn io.ReadWriter) {
+func Stream(conn, backendConn io.ReadWriter, log *zerolog.Logger) {
 	proxyDone := make(chan struct{}, 2)
 
 	go func() {
-		io.Copy(conn, backendConn)
+		_, err := io.Copy(conn, backendConn)
+		if err != nil {
+			log.Debug().Msgf("conn to backendConn copy: %v", err)
+		}
 		proxyDone <- struct{}{}
 	}()
 
 	go func() {
-		io.Copy(backendConn, conn)
+		_, err := io.Copy(backendConn, conn)
+		if err != nil {
+			log.Debug().Msgf("backendConn to conn copy: %v", err)
+		}
 		proxyDone <- struct{}{}
 	}()
 
@@ -41,8 +48,8 @@ func Stream(conn, backendConn io.ReadWriter) {
 
 // DefaultStreamHandler is an implementation of streamHandlerFunc that
 // performs a two way io.Copy between originConn and remoteConn.
-func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn) {
-	Stream(originConn, remoteConn)
+func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger) {
+	Stream(originConn, remoteConn, log)
 }
 
 // tcpConnection is an OriginConnection that directly streams to raw TCP.
@@ -51,8 +58,8 @@ type tcpConnection struct {
 	streamHandler streamHandlerFunc
 }
 
-func (tc *tcpConnection) Stream(tunnelConn io.ReadWriter) {
-	tc.streamHandler(tunnelConn, tc.conn)
+func (tc *tcpConnection) Stream(tunnelConn io.ReadWriter, log *zerolog.Logger) {
+	tc.streamHandler(tunnelConn, tc.conn, log)
 }
 
 func (tc *tcpConnection) Close() {
@@ -70,8 +77,8 @@ type wsConnection struct {
 	resp   *http.Response
 }
 
-func (wsc *wsConnection) Stream(tunnelConn io.ReadWriter) {
-	Stream(tunnelConn, wsc.wsConn.UnderlyingConn())
+func (wsc *wsConnection) Stream(tunnelConn io.ReadWriter, log *zerolog.Logger) {
+	Stream(tunnelConn, wsc.wsConn.UnderlyingConn(), log)
 }
 
 func (wsc *wsConnection) Close() {

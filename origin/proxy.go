@@ -202,7 +202,7 @@ func (p *proxy) proxyConnection(
 		originConn.Close()
 	}()
 
-	originConn.Stream(eyeballConn)
+	originConn.Stream(eyeballConn, p.log)
 	return resp, nil
 }
 

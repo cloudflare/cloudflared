@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"strings"
+
+	"github.com/rs/zerolog"
 )
 
 // RequestHandler is the functions needed to handle a SOCKS5 command
@@ -106,7 +108,7 @@ func (h *StandardRequestHandler) handleAssociate(conn io.ReadWriter, req *Reques
 	return nil
 }
 
-func StreamHandler(tunnelConn io.ReadWriter, originConn net.Conn) {
+func StreamHandler(tunnelConn io.ReadWriter, originConn net.Conn, log *zerolog.Logger) {
 	dialer := NewConnDialer(originConn)
 	requestHandler := NewRequestHandler(dialer)
 	socksServer := NewConnectionHandler(requestHandler)

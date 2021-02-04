@@ -62,7 +62,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 
 		_ = socksServer.Serve(conn)
 	} else {
-		ingress.Stream(wsConn, conn)
+		ingress.Stream(wsConn, conn, ws.log)
 	}
 	return nil
 }

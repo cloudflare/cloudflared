@@ -54,7 +54,7 @@ func StartProxyServer(
 	listener net.Listener,
 	staticHost string,
 	shutdownC <-chan struct{},
-	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn),
+	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger),
 ) error {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -81,7 +81,7 @@ type handler struct {
 	log           *zerolog.Logger
 	staticHost    string
 	upgrader      websocket.Upgrader
-	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn)
+	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +118,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go gorillaConn.pinger(r.Context())
 	defer conn.Close()
 
-	h.streamHandler(gorillaConn, stream)
+	h.streamHandler(gorillaConn, stream, h.log)
 }
 
 // NewResponseHeader returns headers needed to return to origin for completing handshake
