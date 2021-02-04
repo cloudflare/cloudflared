@@ -411,7 +411,9 @@ func TestConnections(t *testing.T) {
 		originService  func(*testing.T, net.Listener)
 		eyeballService connection.ResponseWriter
 		connectionType connection.Type
+		requestHeaders http.Header
 		wantMessage    []byte
+		wantHeaders    http.Header
 	}{
 		{
 			name:                 "ws-ws proxy",
@@ -419,7 +421,16 @@ func TestConnections(t *testing.T) {
 			originService:        runEchoWSService,
 			eyeballService:       newWSRespWriter([]byte("test1"), replayer),
 			connectionType:       connection.TypeWebsocket,
-			wantMessage:          []byte("test1"),
+			requestHeaders: map[string][]string{
+				"Test-Cloudflared-Echo": []string{"Echo"},
+			},
+			wantMessage: []byte("echo-test1"),
+			wantHeaders: map[string][]string{
+				"Connection":            []string{"Upgrade"},
+				"Sec-Websocket-Accept":  []string{"Kfh9QIsMVZcl6xEPYxPHzW8SZ8w="},
+				"Upgrade":               []string{"websocket"},
+				"Test-Cloudflared-Echo": []string{"Echo"},
+			},
 		},
 		{
 			name:                 "tcp-tcp proxy",
@@ -430,15 +441,25 @@ func TestConnections(t *testing.T) {
 				replayer,
 			),
 			connectionType: connection.TypeTCP,
-			wantMessage:    []byte("echo-test2"),
+			requestHeaders: map[string][]string{
+				"Cf-Cloudflared-Proxy-Src": []string{"non-blank-value"},
+			},
+			wantMessage: []byte("echo-test2"),
+			wantHeaders: http.Header{},
 		},
 		{
 			name:                 "tcp-ws proxy",
 			ingressServicePrefix: "ws://",
 			originService:        runEchoWSService,
 			eyeballService:       newPipedWSWriter(&mockTCPRespWriter{}, []byte("test3")),
-			connectionType:       connection.TypeTCP,
-			wantMessage:          []byte("test3"),
+			requestHeaders: map[string][]string{
+				"Cf-Cloudflared-Proxy-Src": []string{"non-blank-value"},
+			},
+			connectionType: connection.TypeTCP,
+			wantMessage:    []byte("echo-test3"),
+			// We expect no headers here because they are sent back via
+			// the stream.
+			wantHeaders: http.Header{},
 		},
 		{
 			name:                 "ws-tcp proxy",
@@ -447,14 +468,12 @@ func TestConnections(t *testing.T) {
 			eyeballService:       newWSRespWriter([]byte("test4"), replayer),
 			connectionType:       connection.TypeWebsocket,
 			wantMessage:          []byte("echo-test4"),
+			wantHeaders:          http.Header{},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.skip {
-				t.Skip("todo: skipping a failing test. THis should be fixed before merge")
-			}
 			ctx, cancel := context.WithCancel(context.Background())
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)
@@ -466,7 +485,11 @@ func TestConnections(t *testing.T) {
 			proxy := NewOriginProxy(ingressRule, ingress.NewWarpRoutingService(), testTags, logger)
 			req, err := http.NewRequest(http.MethodGet, test.ingressServicePrefix+ln.Addr().String(), nil)
 			require.NoError(t, err)
-			req.Header.Set("Cf-Cloudflared-Proxy-Src", "non-blank-value")
+			reqHeaders := make(http.Header)
+			for k, vs := range test.requestHeaders {
+				reqHeaders[k] = vs
+			}
+			req.Header = reqHeaders
 
 			if pipedWS, ok := test.eyeballService.(*pipedWSWriter); ok {
 				go func() {
@@ -474,14 +497,21 @@ func TestConnections(t *testing.T) {
 					replayer.Write(resp)
 				}()
 			}
+
 			err = proxy.Proxy(test.eyeballService, req, test.connectionType)
 			require.NoError(t, err)
 
 			cancel()
 			assert.Equal(t, test.wantMessage, replayer.Bytes())
+			respPrinter := test.eyeballService.(responsePrinter)
+			assert.Equal(t, test.wantHeaders, respPrinter.printRespHeaders())
 			replayer.rw.Reset()
 		})
 	}
+}
+
+type responsePrinter interface {
+	printRespHeaders() http.Header
 }
 
 type pipedWSWriter struct {
@@ -489,6 +519,7 @@ type pipedWSWriter struct {
 	wsConn         net.Conn
 	pipedConn      net.Conn
 	respWriter     connection.ResponseWriter
+	respHeaders    http.Header
 	messageToWrite []byte
 }
 
@@ -547,14 +578,21 @@ func (p *pipedWSWriter) WriteErrorResponse() {
 }
 
 func (p *pipedWSWriter) WriteRespHeaders(status int, header http.Header) error {
+	p.respHeaders = header
 	return nil
 }
 
+// printRespHeaders is a test function to read respHeaders
+func (p *pipedWSWriter) printRespHeaders() http.Header {
+	return p.respHeaders
+}
+
 type wsRespWriter struct {
-	w    io.Writer
-	pr   *io.PipeReader
-	pw   *io.PipeWriter
-	code int
+	w           io.Writer
+	pr          *io.PipeReader
+	pw          *io.PipeWriter
+	respHeaders http.Header
+	code        int
 }
 
 // newWSRespWriter uses wsutil.WriteClientText to generate websocket frames.
@@ -589,11 +627,17 @@ func (w *wsRespWriter) Write(p []byte) (int, error) {
 }
 
 func (w *wsRespWriter) WriteRespHeaders(status int, header http.Header) error {
+	w.respHeaders = header
 	w.code = status
 	return nil
 }
 
 func (w *wsRespWriter) WriteErrorResponse() {
+}
+
+// printRespHeaders is a test function to read respHeaders
+func (w *wsRespWriter) printRespHeaders() http.Header {
+	return w.respHeaders
 }
 
 func runEchoTCPService(t *testing.T, l net.Listener) {
@@ -628,7 +672,13 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 	}
 
 	var ws = func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		header := make(http.Header)
+		for k, vs := range r.Header {
+			if k == "Test-Cloudflared-Echo" {
+				header[k] = vs
+			}
+		}
+		conn, err := upgrader.Upgrade(w, r, header)
 		require.NoError(t, err)
 		defer conn.Close()
 
@@ -637,8 +687,9 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			if err != nil {
 				return
 			}
-
-			if err := conn.WriteMessage(messageType, p); err != nil {
+			data := []byte("echo-")
+			data = append(data, p...)
+			if err := conn.WriteMessage(messageType, data); err != nil {
 				return
 			}
 		}
@@ -672,10 +723,11 @@ type tcpWrappedWs struct {
 }
 
 type mockTCPRespWriter struct {
-	w    io.Writer
-	pr   io.Reader
-	pw   *io.PipeWriter
-	code int
+	w           io.Writer
+	pr          io.Reader
+	pw          *io.PipeWriter
+	respHeaders http.Header
+	code        int
 }
 
 func newTCPRespWriter(data []byte, w io.Writer) *mockTCPRespWriter {
@@ -701,6 +753,12 @@ func (m *mockTCPRespWriter) WriteErrorResponse() {
 }
 
 func (m *mockTCPRespWriter) WriteRespHeaders(status int, header http.Header) error {
+	m.respHeaders = header
 	m.code = status
 	return nil
+}
+
+// printRespHeaders is a test function to read respHeaders
+func (m *mockTCPRespWriter) printRespHeaders() http.Header {
+	return m.respHeaders
 }

@@ -90,16 +90,16 @@ func (wsc *wsConnection) Type() connection.Type {
 	return connection.TypeWebsocket
 }
 
-func newWSConnection(transport *http.Transport, r *http.Request) (OriginConnection, error) {
+func newWSConnection(transport *http.Transport, r *http.Request) (OriginConnection, *http.Response, error) {
 	d := &gws.Dialer{
 		TLSClientConfig: transport.TLSClientConfig,
 	}
 	wsConn, resp, err := websocket.ClientConnect(r, d)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return &wsConnection{
 		wsConn,
 		resp,
-	}, nil
+	}, resp, nil
 }

@@ -166,20 +166,22 @@ func (p *proxy) proxyConnection(
 	sourceConnectionType connection.Type,
 	connectionProxy ingress.StreamBasedOriginProxy,
 ) (*http.Response, error) {
-	originConn, err := connectionProxy.EstablishConnection(req)
+	originConn, connectionResp, err := connectionProxy.EstablishConnection(req)
 	if err != nil {
 		return nil, err
 	}
 
 	var eyeballConn io.ReadWriter = w
 	respHeader := http.Header{}
+	if connectionResp != nil {
+		respHeader = connectionResp.Header
+	}
 	if sourceConnectionType == connection.TypeWebsocket {
 		wsReadWriter := websocket.NewConn(serveCtx, w, p.log)
 		// If cloudflared <-> origin is not websocket, we need to decode TCP data out of WS frames
 		if originConn.Type() != sourceConnectionType {
 			eyeballConn = wsReadWriter
 		}
-		respHeader = websocket.NewResponseHeader(req)
 	}
 	status := http.StatusSwitchingProtocols
 	resp := &http.Response{

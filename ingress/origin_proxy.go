@@ -21,7 +21,7 @@ type HTTPOriginProxy interface {
 
 // StreamBasedOriginProxy can be implemented by origin services that want to proxy at the L4 level.
 type StreamBasedOriginProxy interface {
-	EstablishConnection(r *http.Request) (OriginConnection, error)
+	EstablishConnection(r *http.Request) (OriginConnection, *http.Response, error)
 }
 
 func (o *unixSocketPath) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -29,8 +29,8 @@ func (o *unixSocketPath) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // TODO: TUN-3636: establish connection to origins over UDS
-func (*unixSocketPath) EstablishConnection(r *http.Request) (OriginConnection, error) {
-	return nil, fmt.Errorf("Unix socket service currently doesn't support proxying connections")
+func (*unixSocketPath) EstablishConnection(r *http.Request) (OriginConnection, *http.Response, error) {
+	return nil, nil, fmt.Errorf("Unix socket service currently doesn't support proxying connections")
 }
 
 func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -40,7 +40,7 @@ func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
 	return o.transport.RoundTrip(req)
 }
 
-func (o *httpService) EstablishConnection(req *http.Request) (OriginConnection, error) {
+func (o *httpService) EstablishConnection(req *http.Request) (OriginConnection, *http.Response, error) {
 	req.URL.Host = o.url.Host
 	req.URL.Scheme = websocket.ChangeRequestScheme(o.url)
 	return newWSConnection(o.transport, req)
@@ -53,7 +53,7 @@ func (o *helloWorld) RoundTrip(req *http.Request) (*http.Response, error) {
 	return o.transport.RoundTrip(req)
 }
 
-func (o *helloWorld) EstablishConnection(req *http.Request) (OriginConnection, error) {
+func (o *helloWorld) EstablishConnection(req *http.Request) (OriginConnection, *http.Response, error) {
 	req.URL.Host = o.server.Addr().String()
 	req.URL.Scheme = "wss"
 	return newWSConnection(o.transport, req)
@@ -63,12 +63,13 @@ func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return o.resp, nil
 }
 
-func (o *bridgeService) EstablishConnection(r *http.Request) (OriginConnection, error) {
+func (o *bridgeService) EstablishConnection(r *http.Request) (OriginConnection, *http.Response, error) {
 	dest, err := o.destination(r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return o.client.connect(r, dest)
+	conn, err := o.client.connect(r, dest)
+	return conn, nil, err
 }
 
 // getRequestHost returns the host of the http.Request.
@@ -102,8 +103,10 @@ func removePath(dest string) string {
 	return strings.SplitN(dest, "/", 2)[0]
 }
 
-func (o *singleTCPService) EstablishConnection(r *http.Request) (OriginConnection, error) {
-	return o.client.connect(r, o.dest)
+func (o *singleTCPService) EstablishConnection(r *http.Request) (OriginConnection, *http.Response, error) {
+	conn, err := o.client.connect(r, o.dest)
+	return conn, nil, err
+
 }
 
 type tcpClient struct {
