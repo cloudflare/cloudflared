@@ -5,8 +5,6 @@ MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut 
 
 ifeq ($(FIPS), true)
 	GO_BUILD_TAGS := "$(GO_BUILD_TAGS) fips"
-	VERSION := $(VERSION)-fips
-	MSI_VERSION := $(MSI_VERSION)-fips
 endif
 
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
