@@ -1,3 +1,21 @@
+2021.2.0
+- 2021-02-01 TUN-3837: Remove automation_email from cloudflared status page test
+- 2021-02-03 TUN-3848: Use transport logger for h2mux
+- 2021-02-03 TUN-3854: cloudflared tunnel list flags to sort output
+- 2021-01-21 TUN-3195: Don't colorize console logs when stderr is not a terminal
+- 2021-01-20 Fixed connection error handling by removing duplicated errors, standardizing on non-pointer error types
+- 2021-01-20 TUN-3118: Changed graceful shutdown to immediately unregister tunnel from the edge, keep the connection open until the edge drops it or grace period expires
+- 2021-01-25 TUN-3165: Add reference to Argo Tunnel documentation in the help output
+- 2021-01-25 TUN-3806: Use a .dockerignore
+- 2021-01-21 TUN-3795: Use RFC-3339 style date format for logs, produce timestamp in UTC
+- 2021-01-26 TUN-3795: Removed errant test
+- 2021-01-25 TUN-3792: Handle graceful shutdown correctly when running as a windows service. Only expose one shutdown channel globally, which now triggers the graceful shutdown sequence across all modes. Removed separate handling of zero-duration grace period, instead it's checked only when we need to wait for exit.
+- 2021-01-27 TUN-3811: Better error reporting on http2 connection termination. Registration errors from control loop are now propagated out of the connection server code. Unified error handling between h2mux and http2 connections so we log and retry errors the same way, regardless of underlying transport.
+- 2021-01-28 TUN-3830: Use Go 1.15.7
+- 2021-01-28 TUN-3826: Use go-fips when building cloudflared for linux/amd64
+- 2021-01-19 TUN-3777: Fix /ready endpoint for classic tunnels
+- 2021-01-19 TUN-3773: Add back pprof endpoints
+
 2021.1.5
 - 2021-01-15 TUN-3594: Log ingress response at debug level
 - 2021-01-15 TUN-3765: Fix doubly nested log output by `logfile` option
