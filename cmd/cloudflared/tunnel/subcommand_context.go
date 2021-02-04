@@ -147,7 +147,7 @@ func (sc *subcommandContext) readTunnelCredentials(credFinder CredFinder) (conne
 	return credentials, nil
 }
 
-func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {
+func (sc *subcommandContext) create(name string, credentialsOutputPath string) (*tunnelstore.Tunnel, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create client to talk to Argo Tunnel backend")
@@ -173,7 +173,7 @@ func (sc *subcommandContext) create(name string) (*tunnelstore.Tunnel, error) {
 		TunnelID:     tunnel.ID,
 		TunnelName:   name,
 	}
-	filePath, writeFileErr := writeTunnelCredentials(credential.certPath, &tunnelCredentials)
+	filePath, writeFileErr := writeTunnelCredentials(credential.certPath, credentialsOutputPath, &tunnelCredentials)
 	if writeFileErr != nil {
 		var errorLines []string
 		errorLines = append(errorLines, fmt.Sprintf("Your tunnel '%v' was created with ID %v. However, cloudflared couldn't write to the tunnel credentials file at %v.json.", tunnel.Name, tunnel.ID, tunnel.ID))

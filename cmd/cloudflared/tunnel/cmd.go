@@ -154,7 +154,7 @@ func TunnelCommand(c *cli.Context) error {
 		return err
 	}
 	if name := c.String("name"); name != "" { // Start a named tunnel
-		return runAdhocNamedTunnel(sc, name)
+		return runAdhocNamedTunnel(sc, name, c.String(CredFileFlag))
 	}
 	if ref := config.GetConfiguration().TunnelID; ref != "" {
 		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
@@ -169,10 +169,10 @@ func Init(ver string, gracefulShutdown chan struct{}) {
 }
 
 // runAdhocNamedTunnel create, route and run a named tunnel in one command
-func runAdhocNamedTunnel(sc *subcommandContext, name string) error {
+func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath string) error {
 	tunnel, ok, err := sc.tunnelActive(name)
 	if err != nil || !ok {
-		tunnel, err = sc.create(name)
+		tunnel, err = sc.create(name, credentialsOutputPath)
 		if err != nil {
 			return errors.Wrap(err, "failed to create tunnel")
 		}
@@ -539,6 +539,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 	flags = append(flags, configureLoggingFlags(shouldHide)...)
 	flags = append(flags, configureProxyDNSFlags(shouldHide)...)
 	flags = append(flags, []cli.Flag{
+		credentialsFileFlag,
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "is-autoupdated",
 			Usage:  "Signal the new process that Argo Tunnel client has been autoupdated",

@@ -90,7 +90,7 @@ var (
 	credentialsFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    CredFileFlag,
 		Aliases: []string{CredFileFlagAlias},
-		Usage:   "File path of tunnel credentials",
+		Usage:   "Filepath at which to read/write the tunnel credentials",
 		EnvVars: []string{"TUNNEL_CRED_FILE"},
 	})
 	forceDeleteFlag = &cli.BoolFlag{
@@ -121,7 +121,7 @@ func buildCreateCommand() *cli.Command {
   For example, to create a tunnel named 'my-tunnel' run:
 
   $ cloudflared tunnel create my-tunnel`,
-		Flags:              []cli.Flag{outputFormatFlag},
+		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -144,7 +144,7 @@ func createCommand(c *cli.Context) error {
 	}
 	name := c.Args().First()
 
-	_, err = sc.create(name)
+	_, err = sc.create(name, c.String(CredFileFlag))
 	return errors.Wrap(err, "failed to create tunnel")
 }
 
@@ -154,12 +154,18 @@ func tunnelFilePath(tunnelID uuid.UUID, directory string) (string, error) {
 	return homedir.Expand(filePath)
 }
 
+// If an `outputFile` is given, write the credentials there.
+// Otherwise, write it to the same directory as the originCert,
+// with the filename `<tunnel id>.json`.
 func writeTunnelCredentials(
-	originCertPath string,
+	originCertPath, outputFile string,
 	credentials *connection.Credentials,
 ) (filePath string, err error) {
-	originCertDir := filepath.Dir(originCertPath)
-	filePath, err = tunnelFilePath(credentials.TunnelID, originCertDir)
+	filePath = outputFile
+	if outputFile == "" {
+		originCertDir := filepath.Dir(originCertPath)
+		filePath, err = tunnelFilePath(credentials.TunnelID, originCertDir)
+	}
 	if err != nil {
 		return "", err
 	}
