@@ -25,7 +25,6 @@ var (
 )
 
 const (
-	ServiceBridge      = "bridge service"
 	ServiceBastion     = "bastion"
 	ServiceWarpRouting = "warp-routing"
 )
@@ -98,8 +97,7 @@ type WarpRoutingService struct {
 }
 
 func NewWarpRoutingService() *WarpRoutingService {
-	warpRoutingService := newBridgeService(DefaultStreamHandler, ServiceWarpRouting)
-	return &WarpRoutingService{Proxy: warpRoutingService}
+	return &WarpRoutingService{Proxy: &rawTCPService{name: ServiceWarpRouting}}
 }
 
 // Get a single origin service from the CLI/config.
@@ -108,7 +106,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (originServ
 		return new(helloWorld), nil
 	}
 	if c.IsSet(config.BastionFlag) {
-		return newBridgeService(nil, ServiceBastion), nil
+		return newBastionService(), nil
 	}
 	if c.IsSet("url") {
 		originURL, err := config.ValidateUrl(c, allowURLFromArgs)
@@ -120,7 +118,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (originServ
 				url: originURL,
 			}, nil
 		}
-		return newSingleTCPService(originURL), nil
+		return newTCPOverWSService(originURL), nil
 	}
 	if c.IsSet("unix-socket") {
 		path, err := config.ValidateUnixSocket(c)
@@ -182,7 +180,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			// overwrite the localService.URL field when `start` is called. So,
 			// leave the URL field empty for now.
 			cfg.BastionMode = true
-			service = newBridgeService(nil, ServiceBastion)
+			service = newBastionService()
 		} else {
 			// Validate URL services
 			u, err := url.Parse(r.Service)
@@ -200,7 +198,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			if isHTTPService(u) {
 				service = &httpService{url: u}
 			} else {
-				service = newSingleTCPService(u)
+				service = newTCPOverWSService(u)
 			}
 		}
 

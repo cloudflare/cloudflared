@@ -78,46 +78,29 @@ func (o *httpService) String() string {
 	return o.url.String()
 }
 
-// bridgeService is like a jump host, the destination is specified by the client
-type bridgeService struct {
-	client      *tcpClient
-	serviceName string
+// rawTCPService dials TCP to the destination specified by the client
+// It's used by warp routing
+type rawTCPService struct {
+	name string
 }
 
-// if streamHandler is nil, a default one is set.
-func newBridgeService(streamHandler streamHandlerFunc, serviceName string) *bridgeService {
-	return &bridgeService{
-		client: &tcpClient{
-			streamHandler: streamHandler,
-		},
-		serviceName: serviceName,
-	}
+func (o *rawTCPService) String() string {
+	return o.name
 }
 
-func (o *bridgeService) String() string {
-	return ServiceBridge + ":" + o.serviceName
-}
-
-func (o *bridgeService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
-	// streamHandler is already set by the constructor.
-	if o.client.streamHandler != nil {
-		return nil
-	}
-
-	if cfg.ProxyType == socksProxy {
-		o.client.streamHandler = socks.StreamHandler
-	} else {
-		o.client.streamHandler = DefaultStreamHandler
-	}
+func (o *rawTCPService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 	return nil
 }
 
-type singleTCPService struct {
-	dest   string
-	client *tcpClient
+// tcpOverWSService models TCP origins serving eyeballs connecting over websocket, such as
+// cloudflared access commands.
+type tcpOverWSService struct {
+	dest          string
+	isBastion     bool
+	streamHandler streamHandlerFunc
 }
 
-func newSingleTCPService(url *url.URL) *singleTCPService {
+func newTCPOverWSService(url *url.URL) *tcpOverWSService {
 	switch url.Scheme {
 	case "ssh":
 		addPortIfMissing(url, 22)
@@ -128,9 +111,14 @@ func newSingleTCPService(url *url.URL) *singleTCPService {
 	case "tcp":
 		addPortIfMissing(url, 7864) // just a random port since there isn't a default in this case
 	}
-	return &singleTCPService{
-		dest:   url.Host,
-		client: &tcpClient{},
+	return &tcpOverWSService{
+		dest: url.Host,
+	}
+}
+
+func newBastionService() *tcpOverWSService {
+	return &tcpOverWSService{
+		isBastion: true,
 	}
 }
 
@@ -140,15 +128,18 @@ func addPortIfMissing(uri *url.URL, port int) {
 	}
 }
 
-func (o *singleTCPService) String() string {
+func (o *tcpOverWSService) String() string {
+	if o.isBastion {
+		return ServiceBastion
+	}
 	return o.dest
 }
 
-func (o *singleTCPService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *tcpOverWSService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
 	if cfg.ProxyType == socksProxy {
-		o.client.streamHandler = socks.StreamHandler
+		o.streamHandler = socks.StreamHandler
 	} else {
-		o.client.streamHandler = DefaultStreamHandler
+		o.streamHandler = DefaultStreamHandler
 	}
 	return nil
 }

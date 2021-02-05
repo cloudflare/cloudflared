@@ -87,6 +87,7 @@ func (t Type) String() string {
 }
 
 type OriginProxy interface {
+	// If Proxy returns an error, the caller is responsible for writing the error status to ResponseWriter
 	Proxy(w ResponseWriter, req *http.Request, sourceConnectionType Type) error
 }
 

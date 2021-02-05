@@ -238,12 +238,12 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "tcp.foo.com",
-					Service:  newSingleTCPService(MustParseURL(t, "tcp://127.0.0.1:7864")),
+					Service:  newTCPOverWSService(MustParseURL(t, "tcp://127.0.0.1:7864")),
 					Config:   defaultConfig,
 				},
 				{
 					Hostname: "tcp2.foo.com",
-					Service:  newSingleTCPService(MustParseURL(t, "tcp://localhost:8000")),
+					Service:  newTCPOverWSService(MustParseURL(t, "tcp://localhost:8000")),
 					Config:   defaultConfig,
 				},
 				{
@@ -260,7 +260,7 @@ ingress:
 `},
 			want: []Rule{
 				{
-					Service: newSingleTCPService(MustParseURL(t, "ssh://127.0.0.1:22")),
+					Service: newTCPOverWSService(MustParseURL(t, "ssh://127.0.0.1:22")),
 					Config:  defaultConfig,
 				},
 			},
@@ -273,7 +273,7 @@ ingress:
 `},
 			want: []Rule{
 				{
-					Service: newSingleTCPService(MustParseURL(t, "rdp://127.0.0.1:3389")),
+					Service: newTCPOverWSService(MustParseURL(t, "rdp://127.0.0.1:3389")),
 					Config:  defaultConfig,
 				},
 			},
@@ -286,7 +286,7 @@ ingress:
 `},
 			want: []Rule{
 				{
-					Service: newSingleTCPService(MustParseURL(t, "smb://127.0.0.1:445")),
+					Service: newTCPOverWSService(MustParseURL(t, "smb://127.0.0.1:445")),
 					Config:  defaultConfig,
 				},
 			},
@@ -299,7 +299,7 @@ ingress:
 `},
 			want: []Rule{
 				{
-					Service: newSingleTCPService(MustParseURL(t, "ftp://127.0.0.1")),
+					Service: newTCPOverWSService(MustParseURL(t, "ftp://127.0.0.1")),
 					Config:  defaultConfig,
 				},
 			},
@@ -316,7 +316,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  newBridgeService(nil, ServiceBastion),
+					Service:  newBastionService(),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
@@ -336,7 +336,7 @@ ingress:
 			want: []Rule{
 				{
 					Hostname: "bastion.foo.com",
-					Service:  newBridgeService(nil, ServiceBastion),
+					Service:  newBastionService(),
 					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{

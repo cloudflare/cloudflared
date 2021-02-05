@@ -347,10 +347,7 @@ func TestProxyError(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
 	assert.NoError(t, err)
 
-	err = proxy.Proxy(respWriter, req, connection.TypeHTTP)
-	assert.Error(t, err)
-	assert.Equal(t, http.StatusBadGateway, respWriter.Code)
-	assert.Equal(t, "http response error", respWriter.Body.String())
+	assert.Error(t, proxy.Proxy(respWriter, req, connection.TypeHTTP))
 }
 
 type replayer struct {
@@ -421,15 +418,17 @@ func TestConnections(t *testing.T) {
 			originService:        runEchoWSService,
 			eyeballService:       newWSRespWriter([]byte("test1"), replayer),
 			connectionType:       connection.TypeWebsocket,
-			requestHeaders: map[string][]string{
-				"Test-Cloudflared-Echo": []string{"Echo"},
+			requestHeaders: http.Header{
+				// Example key from https://tools.ietf.org/html/rfc6455#section-1.2
+				"Sec-Websocket-Key":     {"dGhlIHNhbXBsZSBub25jZQ=="},
+				"Test-Cloudflared-Echo": {"Echo"},
 			},
 			wantMessage: []byte("echo-test1"),
-			wantHeaders: map[string][]string{
-				"Connection":            []string{"Upgrade"},
-				"Sec-Websocket-Accept":  []string{"Kfh9QIsMVZcl6xEPYxPHzW8SZ8w="},
-				"Upgrade":               []string{"websocket"},
-				"Test-Cloudflared-Echo": []string{"Echo"},
+			wantHeaders: http.Header{
+				"Connection":            {"Upgrade"},
+				"Sec-Websocket-Accept":  {"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="},
+				"Upgrade":               {"websocket"},
+				"Test-Cloudflared-Echo": {"Echo"},
 			},
 		},
 		{
@@ -441,25 +440,23 @@ func TestConnections(t *testing.T) {
 				replayer,
 			),
 			connectionType: connection.TypeTCP,
-			requestHeaders: map[string][]string{
-				"Cf-Cloudflared-Proxy-Src": []string{"non-blank-value"},
+			requestHeaders: http.Header{
+				"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
 			},
 			wantMessage: []byte("echo-test2"),
-			wantHeaders: http.Header{},
 		},
 		{
 			name:                 "tcp-ws proxy",
 			ingressServicePrefix: "ws://",
 			originService:        runEchoWSService,
 			eyeballService:       newPipedWSWriter(&mockTCPRespWriter{}, []byte("test3")),
-			requestHeaders: map[string][]string{
-				"Cf-Cloudflared-Proxy-Src": []string{"non-blank-value"},
+			requestHeaders: http.Header{
+				"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
 			},
 			connectionType: connection.TypeTCP,
 			wantMessage:    []byte("echo-test3"),
 			// We expect no headers here because they are sent back via
 			// the stream.
-			wantHeaders: http.Header{},
 		},
 		{
 			name:                 "ws-tcp proxy",
@@ -467,8 +464,16 @@ func TestConnections(t *testing.T) {
 			originService:        runEchoTCPService,
 			eyeballService:       newWSRespWriter([]byte("test4"), replayer),
 			connectionType:       connection.TypeWebsocket,
-			wantMessage:          []byte("echo-test4"),
-			wantHeaders:          http.Header{},
+			requestHeaders: http.Header{
+				// Example key from https://tools.ietf.org/html/rfc6455#section-1.2
+				"Sec-Websocket-Key": {"dGhlIHNhbXBsZSBub25jZQ=="},
+			},
+			wantMessage: []byte("echo-test4"),
+			wantHeaders: http.Header{
+				"Connection":           {"Upgrade"},
+				"Sec-Websocket-Accept": {"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="},
+				"Upgrade":              {"websocket"},
+			},
 		},
 	}
 
@@ -477,19 +482,18 @@ func TestConnections(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)
+			// Starts origin service
 			test.originService(t, ln)
+
 			ingressRule := createSingleIngressConfig(t, test.ingressServicePrefix+ln.Addr().String())
 			var wg sync.WaitGroup
 			errC := make(chan error)
 			ingressRule.StartOrigins(&wg, logger, ctx.Done(), errC)
 			proxy := NewOriginProxy(ingressRule, ingress.NewWarpRoutingService(), testTags, logger)
+
 			req, err := http.NewRequest(http.MethodGet, test.ingressServicePrefix+ln.Addr().String(), nil)
 			require.NoError(t, err)
-			reqHeaders := make(http.Header)
-			for k, vs := range test.requestHeaders {
-				reqHeaders[k] = vs
-			}
-			req.Header = reqHeaders
+			req.Header = test.requestHeaders
 
 			if pipedWS, ok := test.eyeballService.(*pipedWSWriter); ok {
 				go func() {

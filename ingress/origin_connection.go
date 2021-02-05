@@ -1,11 +1,12 @@
 package ingress
 
 import (
+	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
 
-	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/websocket"
 	gws "github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -15,9 +16,8 @@ import (
 // Different concrete implementations will stream different protocols as long as they are io.ReadWriters.
 type OriginConnection interface {
 	// Stream should generally be implemented as a bidirectional io.Copy.
-	Stream(tunnelConn io.ReadWriter, log *zerolog.Logger)
+	Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger)
 	Close()
-	Type() connection.Type
 }
 
 type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
@@ -54,30 +54,38 @@ func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn, log *ze
 
 // tcpConnection is an OriginConnection that directly streams to raw TCP.
 type tcpConnection struct {
-	conn          net.Conn
-	streamHandler streamHandlerFunc
+	conn net.Conn
 }
 
-func (tc *tcpConnection) Stream(tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	tc.streamHandler(tunnelConn, tc.conn, log)
+func (tc *tcpConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
+	Stream(tunnelConn, tc.conn, log)
 }
 
 func (tc *tcpConnection) Close() {
 	tc.conn.Close()
 }
 
-func (*tcpConnection) Type() connection.Type {
-	return connection.TypeTCP
+// tcpOverWSConnection is an OriginConnection that streams to TCP over WS.
+type tcpOverWSConnection struct {
+	conn          net.Conn
+	streamHandler streamHandlerFunc
 }
 
-// wsConnection is an OriginConnection that streams to TCP packets by encapsulating them in Websockets.
-// TODO: TUN-3710 Remove wsConnection and have helloworld service reuse tcpConnection like bridgeService does.
+func (wc *tcpOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
+	wc.streamHandler(websocket.NewConn(ctx, tunnelConn, log), wc.conn, log)
+}
+
+func (wc *tcpOverWSConnection) Close() {
+	wc.conn.Close()
+}
+
+// wsConnection is an OriginConnection that streams WS between eyeball and origin.
 type wsConnection struct {
 	wsConn *gws.Conn
 	resp   *http.Response
 }
 
-func (wsc *wsConnection) Stream(tunnelConn io.ReadWriter, log *zerolog.Logger) {
+func (wsc *wsConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
 	Stream(tunnelConn, wsc.wsConn.UnderlyingConn(), log)
 }
 
@@ -86,13 +94,9 @@ func (wsc *wsConnection) Close() {
 	wsc.wsConn.Close()
 }
 
-func (wsc *wsConnection) Type() connection.Type {
-	return connection.TypeWebsocket
-}
-
-func newWSConnection(transport *http.Transport, r *http.Request) (OriginConnection, *http.Response, error) {
+func newWSConnection(clientTLSConfig *tls.Config, r *http.Request) (OriginConnection, *http.Response, error) {
 	d := &gws.Dialer{
-		TLSClientConfig: transport.TLSClientConfig,
+		TLSClientConfig: clientTLSConfig,
 	}
 	wsConn, resp, err := websocket.ClientConnect(r, d)
 	if err != nil {
