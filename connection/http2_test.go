@@ -257,7 +257,8 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 		unregistered: make(chan struct{}),
 	}
 	http2Conn.newRPCClientFunc = rpcClientFactory.newMockRPCClient
-	http2Conn.gracefulShutdownC = make(chan struct{})
+	shutdownC := make(chan struct{})
+	http2Conn.gracefulShutdownC = shutdownC
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -288,7 +289,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	}
 
 	// signal graceful shutdown
-	close(http2Conn.gracefulShutdownC)
+	close(shutdownC)
 
 	select {
 	case <-rpcClientFactory.unregistered:

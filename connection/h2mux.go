@@ -30,7 +30,7 @@ type h2muxConnection struct {
 	connIndex    uint8
 
 	observer          *Observer
-	gracefulShutdownC chan struct{}
+	gracefulShutdownC <-chan struct{}
 	stoppedGracefully bool
 
 	// newRPCClientFunc allows us to mock RPCs during testing
@@ -63,7 +63,7 @@ func NewH2muxConnection(
 	edgeConn net.Conn,
 	connIndex uint8,
 	observer *Observer,
-	gracefulShutdownC chan struct{},
+	gracefulShutdownC <-chan struct{},
 ) (*h2muxConnection, error, bool) {
 	h := &h2muxConnection{
 		config:            config,
@@ -168,6 +168,7 @@ func (h *h2muxConnection) serveMuxer(ctx context.Context) error {
 
 func (h *h2muxConnection) controlLoop(ctx context.Context, connectedFuse ConnectedFuse, isNamedTunnel bool) {
 	updateMetricsTickC := time.Tick(h.muxerConfig.MetricsUpdateFreq)
+	var shutdownCompleted <-chan struct{}
 	for {
 		select {
 		case <-h.gracefulShutdownC:
@@ -176,6 +177,10 @@ func (h *h2muxConnection) controlLoop(ctx context.Context, connectedFuse Connect
 			}
 			h.stoppedGracefully = true
 			h.gracefulShutdownC = nil
+			shutdownCompleted = h.muxer.Shutdown()
+
+		case <-shutdownCompleted:
+			return
 
 		case <-ctx.Done():
 			// UnregisterTunnel blocks until the RPC call returns
@@ -183,6 +188,7 @@ func (h *h2muxConnection) controlLoop(ctx context.Context, connectedFuse Connect
 				h.unregister(isNamedTunnel)
 			}
 			h.muxer.Shutdown()
+			// don't wait for shutdown to finish when context is closed, this is the hard termination path
 			return
 
 		case <-updateMetricsTickC:
