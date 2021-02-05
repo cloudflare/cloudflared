@@ -2,6 +2,7 @@ package cliutil
 
 import (
 	"fmt"
+
 	"github.com/urfave/cli/v2"
 )
 
@@ -21,7 +22,7 @@ func UsageError(format string, args ...interface{}) error {
 }
 
 // Ensures exit with error code if actionFunc returns an error
-func ErrorHandler(actionFunc cli.ActionFunc) cli.ActionFunc {
+func WithErrorHandler(actionFunc cli.ActionFunc) cli.ActionFunc {
 	return func(ctx *cli.Context) error {
 		err := actionFunc(ctx)
 		if err != nil {

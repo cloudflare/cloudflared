@@ -77,7 +77,6 @@ func main() {
 	See https://developers.cloudflare.com/argo-tunnel/ for more in-depth documentation.`
 	app.Flags = flags()
 	app.Action = action(graceShutdownC)
-	app.Before = tunnel.SetFlagsFromConfigFile
 	app.Commands = commands(cli.ShowVersion)
 
 	tunnel.Init(Version, graceShutdownC) // we need this to support the tunnel sub command...
@@ -90,7 +89,7 @@ func commands(version func(c *cli.Context)) []*cli.Command {
 	cmds := []*cli.Command{
 		{
 			Name:   "update",
-			Action: cliutil.ErrorHandler(updater.Update),
+			Action: cliutil.Action(updater.Update),
 			Usage:  "Update the agent if a new version exists",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
@@ -145,7 +144,7 @@ func isEmptyInvocation(c *cli.Context) bool {
 }
 
 func action(graceShutdownC chan struct{}) cli.ActionFunc {
-	return cliutil.ErrorHandler(func(c *cli.Context) (err error) {
+	return cliutil.Action(func(c *cli.Context) (err error) {
 		if isEmptyInvocation(c) {
 			return handleServiceMode(c, graceShutdownC)
 		}

@@ -18,7 +18,6 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
-
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"
 )

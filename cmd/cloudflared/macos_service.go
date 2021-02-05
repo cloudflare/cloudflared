@@ -25,12 +25,12 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 			{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as an user launch agent",
-				Action: cliutil.ErrorHandler(installLaunchd),
+				Action: cliutil.Action(installLaunchd),
 			},
 			{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel launch agent",
-				Action: cliutil.ErrorHandler(uninstallLaunchd),
+				Action: cliutil.Action(uninstallLaunchd),
 			},
 		},
 	})

@@ -1,5 +1,24 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## UNRELEASED
+
+### Backward Incompatible Changes
+
+- none
+
+### New Features
+
+- none
+
+### Improvements
+
+- nonw
+
+### Bug Fixes
+
+- Don't look for configuration file in default paths when `--config FILE` flag is present after `tunnel` subcommand.
+
+
 ## 2021.3.0
 
 ### New Features

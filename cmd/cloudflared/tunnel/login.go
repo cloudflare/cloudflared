@@ -26,7 +26,7 @@ const (
 func buildLoginSubcommand(hidden bool) *cli.Command {
 	return &cli.Command{
 		Name:      "login",
-		Action:    cliutil.ErrorHandler(login),
+		Action:    cliutil.Action(login),
 		Usage:     "Generate a configuration file with your login details",
 		ArgsUsage: " ",
 		Flags: []cli.Flag{

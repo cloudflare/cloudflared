@@ -84,7 +84,7 @@ func Commands() []*cli.Command {
 			Subcommands: []*cli.Command{
 				{
 					Name:   "login",
-					Action: cliutil.ErrorHandler(login),
+					Action: cliutil.Action(login),
 					Usage:  "login <url of access application>",
 					Description: `The login subcommand initiates an authentication flow with your identity provider.
 					The subcommand will launch a browser. For headless systems, a url is provided.
@@ -100,7 +100,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:   "curl",
-					Action: cliutil.ErrorHandler(curl),
+					Action: cliutil.Action(curl),
 					Usage:  "curl [--allow-request, -ar] <url> [<curl args>...]",
 					Description: `The curl subcommand wraps curl and automatically injects the JWT into a cf-access-token
 					header when using curl to reach an application behind Access.`,
@@ -109,7 +109,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "token",
-					Action:      cliutil.ErrorHandler(generateToken),
+					Action:      cliutil.Action(generateToken),
 					Usage:       "token -app=<url of access application>",
 					ArgsUsage:   "url of Access application",
 					Description: `The token subcommand produces a JWT which can be used to authenticate requests.`,
@@ -121,7 +121,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "tcp",
-					Action:      cliutil.ErrorHandler(ssh),
+					Action:      cliutil.Action(ssh),
 					Aliases:     []string{"rdp", "ssh", "smb"},
 					Usage:       "",
 					ArgsUsage:   "",
@@ -175,7 +175,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "ssh-config",
-					Action:      cliutil.ErrorHandler(sshConfig),
+					Action:      cliutil.Action(sshConfig),
 					Usage:       "",
 					Description: `Prints an example configuration ~/.ssh/config`,
 					Flags: []cli.Flag{
@@ -191,7 +191,7 @@ func Commands() []*cli.Command {
 				},
 				{
 					Name:        "ssh-gen",
-					Action:      cliutil.ErrorHandler(sshGen),
+					Action:      cliutil.Action(sshGen),
 					Usage:       "",
 					Description: `Generates a short lived certificate for given hostname`,
 					Flags: []cli.Flag{

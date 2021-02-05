@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"reflect"
 	"runtime/trace"
 	"strings"
 	"sync"
@@ -120,8 +119,7 @@ func Commands() []*cli.Command {
 func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 	return &cli.Command{
 		Name:      "tunnel",
-		Action:    cliutil.ErrorHandler(TunnelCommand),
-		Before:    SetFlagsFromConfigFile,
+		Action:    cliutil.Action(TunnelCommand),
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
 		ArgsUsage: " ",
@@ -369,26 +367,6 @@ func StartServer(
 	return waitToShutdown(&wg, cancel, errC, graceShutdownC, c.Duration("grace-period"), log)
 }
 
-func SetFlagsFromConfigFile(c *cli.Context) error {
-	const exitCode = 1
-	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	inputSource, err := config.ReadConfigFile(c, log)
-	if err != nil {
-		if err == config.ErrNoConfigFile {
-			return nil
-		}
-		return cli.Exit(err, exitCode)
-	}
-	targetFlags := c.Command.Flags
-	if c.Command.Name == "" {
-		targetFlags = c.App.Flags
-	}
-	if err := altsrc.ApplyInputSourceValues(c, inputSource, targetFlags); err != nil {
-		return cli.Exit(err, exitCode)
-	}
-	return nil
-}
-
 func waitToShutdown(wg *sync.WaitGroup,
 	cancelServerContext func(),
 	errC <-chan error,
@@ -475,33 +453,6 @@ func addPortIfMissing(uri *url.URL, port int) string {
 		return uri.Host
 	}
 	return fmt.Sprintf("%s:%d", uri.Hostname(), port)
-}
-
-// appendFlags will append extra flags to a slice of flags.
-//
-// The cli package will panic if two flags exist with the same name,
-// so if extraFlags contains a flag that was already defined, modify the
-// original flags to use the extra version.
-func appendFlags(flags []cli.Flag, extraFlags ...cli.Flag) []cli.Flag {
-	for _, extra := range extraFlags {
-		var found bool
-
-		// Check if an extra flag overrides an existing flag.
-		for i, flag := range flags {
-			if reflect.DeepEqual(extra.Names(), flag.Names()) {
-				flags[i] = extra
-				found = true
-				break
-			}
-		}
-
-		// Append the extra flag if it has nothing to override.
-		if !found {
-			flags = append(flags, extra)
-		}
-	}
-
-	return flags
 }
 
 func tunnelFlags(shouldHide bool) []cli.Flag {
@@ -652,6 +603,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Aliases: []string{"n"},
 			EnvVars: []string{"TUNNEL_NAME"},
 			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
+			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   uiFlag,

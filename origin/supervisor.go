@@ -30,12 +30,6 @@ const (
 	refreshAuthMaxBackoff = 10
 	// Waiting time before retrying a failed 'Authenticate' connection
 	refreshAuthRetryDuration = time.Second * 10
-	// Maximum time to make an Authenticate RPC
-	authTokenTimeout = time.Second * 30
-)
-
-var (
-	errEventDigestUnset = errors.New("event digest unset")
 )
 
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
