@@ -4,7 +4,11 @@ MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut 
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
 
 ifeq ($(FIPS), true)
-	GO_BUILD_TAGS := "$(GO_BUILD_TAGS) fips"
+	GO_BUILD_TAGS := $(GO_BUILD_TAGS) fips
+endif
+
+ifneq ($(GO_BUILD_TAGS),)
+	GO_BUILD_TAGS := -tags $(GO_BUILD_TAGS)
 endif
 
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
@@ -76,7 +80,7 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor -tags $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 .PHONY: container
 container:
