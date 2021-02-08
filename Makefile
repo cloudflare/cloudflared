@@ -88,7 +88,13 @@ container:
 
 .PHONY: test
 test: vet
+ifndef CI
 	go test -v -mod=vendor -race $(VERSION_FLAGS) ./...
+else
+	@mkdir -p .cover
+	go test -v -mod=vendor -race $(VERSION_FLAGS) -coverprofile=".cover/c.out" ./...
+	go tool cover -html ".cover/c.out" -o .cover/all.html
+endif
 
 .PHONY: test-ssh-server
 test-ssh-server:

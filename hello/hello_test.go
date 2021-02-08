@@ -27,7 +27,7 @@ func TestCreateTLSListenerOnlyHostSuccess(t *testing.T) {
 }
 
 func TestCreateTLSListenerOnlyPortSuccess(t *testing.T) {
-	listener, err := CreateTLSListener(":8888")
+	listener, err := CreateTLSListener("localhost:8888")
 	if err != nil {
 		t.Fatal(err)
 	}

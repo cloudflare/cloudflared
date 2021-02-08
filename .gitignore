@@ -18,3 +18,4 @@ cloudflared-x86-64*
 .DS_Store
 *-session.log
 ssh_server_tests/.env
+.cover
