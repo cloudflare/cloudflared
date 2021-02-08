@@ -86,11 +86,6 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		return nil
 	}
 
-	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
-		req.Header.Set("Host", hostHeader)
-		req.Host = hostHeader
-	}
-
 	connectionProxy, ok := rule.Service.(ingress.StreamBasedOriginProxy)
 	if !ok {
 		p.log.Error().Msgf("%s is not a connection-oriented service", rule.Service)
@@ -124,11 +119,6 @@ func (p *proxy) proxyHTTP(w connection.ResponseWriter, req *http.Request, rule *
 
 	// Request origin to keep connection alive to improve performance
 	req.Header.Set("Connection", "keep-alive")
-
-	if hostHeader := rule.Config.HTTPHostHeader; hostHeader != "" {
-		req.Header.Set("Host", hostHeader)
-		req.Host = hostHeader
-	}
 
 	httpService, ok := rule.Service.(ingress.HTTPOriginProxy)
 	if !ok {

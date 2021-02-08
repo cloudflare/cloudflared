@@ -37,12 +37,20 @@ func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Rewrite the request URL so that it goes to the origin service.
 	req.URL.Host = o.url.Host
 	req.URL.Scheme = o.url.Scheme
+	if o.hostHeader != "" {
+		// For incoming requests, the Host header is promoted to the Request.Host field and removed from the Header map.
+		req.Host = o.hostHeader
+	}
 	return o.transport.RoundTrip(req)
 }
 
 func (o *httpService) EstablishConnection(req *http.Request) (OriginConnection, *http.Response, error) {
 	req.URL.Host = o.url.Host
 	req.URL.Scheme = websocket.ChangeRequestScheme(o.url)
+	if o.hostHeader != "" {
+		// For incoming requests, the Host header is promoted to the Request.Host field and removed from the Header map.
+		req.Host = o.hostHeader
+	}
 	return newWSConnection(o.transport, req)
 }
 

@@ -1,11 +1,18 @@
 package ingress
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/websocket"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBridgeServiceDestination(t *testing.T) {
@@ -104,4 +111,48 @@ func TestBridgeServiceDestination(t *testing.T) {
 			assert.Equal(t, test.expectedDest, dest, "Test %s expect dest %s, got %s", test.name, test.expectedDest, dest)
 		}
 	}
+}
+
+func TestHTTPServiceHostHeaderOverride(t *testing.T) {
+	cfg := OriginRequestConfig{
+		HTTPHostHeader: t.Name(),
+	}
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, r.Host, t.Name())
+		if websocket.IsWebSocketUpgrade(r) {
+			respHeaders := websocket.NewResponseHeader(r)
+			for k, v := range respHeaders {
+				w.Header().Set(k, v[0])
+			}
+			w.WriteHeader(http.StatusSwitchingProtocols)
+			return
+		}
+		w.Write([]byte("ok"))
+	}
+	origin := httptest.NewServer(http.HandlerFunc(handler))
+	defer origin.Close()
+
+	originURL, err := url.Parse(origin.URL)
+	require.NoError(t, err)
+
+	httpService := &httpService{
+		url: originURL,
+	}
+	var wg sync.WaitGroup
+	log := zerolog.Nop()
+	shutdownC := make(chan struct{})
+	errC := make(chan error)
+	require.NoError(t, httpService.start(&wg, &log, shutdownC, errC, cfg))
+
+	req, err := http.NewRequest(http.MethodGet, originURL.String(), nil)
+	require.NoError(t, err)
+
+	resp, err := httpService.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	req = req.Clone(context.Background())
+	_, resp, err = httpService.EstablishConnection(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 }

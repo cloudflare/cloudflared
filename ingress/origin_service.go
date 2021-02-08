@@ -59,8 +59,9 @@ func (o *unixSocketPath) Dial(reqURL *url.URL, headers http.Header) (*gws.Conn, 
 }
 
 type httpService struct {
-	url       *url.URL
-	transport *http.Transport
+	url        *url.URL
+	hostHeader string
+	transport  *http.Transport
 }
 
 func (o *httpService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
@@ -68,6 +69,7 @@ func (o *httpService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <
 	if err != nil {
 		return err
 	}
+	o.hostHeader = cfg.HTTPHostHeader
 	o.transport = transport
 	return nil
 }
