@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	LogFieldAddress = "address"
-	LogFieldURL     = "url"
+	LogFieldAddress         = "address"
+	LogFieldURL             = "url"
+	MaxUpstreamConnsFlag    = "max-upstream-conns"
+	MaxUpstreamConnsDefault = 10
 )
 
 // Listener is an adapter between CoreDNS server and Warp runnable
@@ -69,9 +71,9 @@ func Command(hidden bool) *cli.Command {
 				EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
 			},
 			&cli.IntFlag{
-				Name:    "max-upstream-conns",
-				Usage:   "Maximum concurrent connections to upstream, unlimited by default",
-				Value:   0,
+				Name:    MaxUpstreamConnsFlag,
+				Usage:   "Maximum concurrent connections to upstream. Setting to 0 means unlimited.",
+				Value:   MaxUpstreamConnsDefault,
 				EnvVars: []string{"TUNNEL_DNS_MAX_UPSTREAM_CONNS"},
 			},
 		},
@@ -96,7 +98,7 @@ func Run(c *cli.Context) error {
 		uint16(c.Uint("port")),
 		c.StringSlice("upstream"),
 		c.StringSlice("bootstrap"),
-		c.Int("max-upstream-conns"),
+		c.Int(MaxUpstreamConnsFlag),
 		log,
 	)
 

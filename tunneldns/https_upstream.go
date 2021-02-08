@@ -23,11 +23,10 @@ const (
 
 // UpstreamHTTPS is the upstream implementation for DNS over HTTPS service
 type UpstreamHTTPS struct {
-	client         *http.Client
-	endpoint       *url.URL
-	bootstraps     []string
-	maxConnections int
-	log            *zerolog.Logger
+	client     *http.Client
+	endpoint   *url.URL
+	bootstraps []string
+	log        *zerolog.Logger
 }
 
 // NewUpstreamHTTPS creates a new DNS over HTTPS upstream from endpoint
@@ -123,7 +122,7 @@ func configureBootstrap(bootstrap string) (*url.URL, *http.Client, error) {
 		return nil, nil, fmt.Errorf("bootstrap address of %s must be an IP address", b.Hostname())
 	}
 
-	return b, configureClient(b.Hostname(), 0), nil
+	return b, configureClient(b.Hostname(), MaxUpstreamConnsDefault), nil
 }
 
 // configureClient will configure a HTTPS client for upstream DoH requests

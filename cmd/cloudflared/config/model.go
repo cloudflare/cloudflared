@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/cloudflare/cloudflared/tunneldns"
 )
 
 // Forwarder represents a client side listener to forward traffic to the edge
@@ -25,12 +27,12 @@ type Tunnel struct {
 
 // DNSResolver represents a client side DNS resolver
 type DNSResolver struct {
-	Enabled    bool     `json:"enabled"`
-	Address    string   `json:"address,omitempty"`
-	Port       uint16   `json:"port,omitempty"`
-	Upstreams  []string `json:"upstreams,omitempty"`
-	Bootstraps []string `json:"bootstraps,omitempty"`
-	MaxUpstreamConnections int `json:"max_upstream_connections,omitempty"`
+	Enabled                bool     `json:"enabled"`
+	Address                string   `json:"address,omitempty"`
+	Port                   uint16   `json:"port,omitempty"`
+	Upstreams              []string `json:"upstreams,omitempty"`
+	Bootstraps             []string `json:"bootstraps,omitempty"`
+	MaxUpstreamConnections int      `json:"max_upstream_connections,omitempty"`
 }
 
 // Root is the base options to configure the service
@@ -102,10 +104,10 @@ func (r *DNSResolver) BootstrapsOrDefault() []string {
 	return []string{"https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"}
 }
 
-// MaxUpstreamConnectionsOrDefault return the max upstream connections or returns the default if 0
+// MaxUpstreamConnectionsOrDefault return the max upstream connections or returns the default if negative
 func (r *DNSResolver) MaxUpstreamConnectionsOrDefault() int {
-    if r.MaxUpstreamConnections >= 0 {
-        return r.MaxUpstreamConnections
-    }
-    return 0
+	if r.MaxUpstreamConnections >= 0 {
+		return r.MaxUpstreamConnections
+	}
+	return tunneldns.MaxUpstreamConnsDefault
 }
