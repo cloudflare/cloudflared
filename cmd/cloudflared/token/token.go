@@ -301,7 +301,9 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	resp.Body.Close()
 	var appToken string
 	for _, c := range resp.Cookies() {
-		if c.Name == tokenHeader {
+		//if Org token revoked on exchange, getTokensFromEdge instead
+		validAppToken := c.Name == tokenHeader && time.Now().Before(c.Expires)
+		if validAppToken {
 			appToken = c.Value
 			break
 		}
