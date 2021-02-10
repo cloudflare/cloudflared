@@ -108,7 +108,7 @@ func (cm *reconnectCredentialManager) RefreshAuth(
 	authOutcome, err := authenticate(ctx, backoff.Retries())
 	if err != nil {
 		cm.authFail.WithLabelValues(err.Error()).Inc()
-		if _, ok := backoff.GetBackoffDuration(ctx); ok {
+		if _, ok := backoff.GetMaxBackoffDuration(ctx); ok {
 			return backoff.BackoffTimer(), nil
 		}
 		return nil, err

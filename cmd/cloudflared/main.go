@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -43,6 +44,7 @@ var (
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
 	metrics.RegisterBuildInfo(BuildTime, Version)
 	raven.SetRelease(Version)
 

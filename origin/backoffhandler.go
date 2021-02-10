@@ -2,6 +2,7 @@ package origin
 
 import (
 	"context"
+	"math/rand"
 	"time"
 )
 
@@ -30,7 +31,7 @@ type BackoffHandler struct {
 	resetDeadline time.Time
 }
 
-func (b BackoffHandler) GetBackoffDuration(ctx context.Context) (time.Duration, bool) {
+func (b BackoffHandler) GetMaxBackoffDuration(ctx context.Context) (time.Duration, bool) {
 	// Follows the same logic as Backoff, but without mutating the receiver.
 	// This select has to happen first to reflect the actual behaviour of the Backoff function.
 	select {
@@ -45,7 +46,8 @@ func (b BackoffHandler) GetBackoffDuration(ctx context.Context) (time.Duration, 
 	if b.retries >= b.MaxRetries && !b.RetryForever {
 		return time.Duration(0), false
 	}
-	return time.Duration(b.GetBaseTime() * 1 << b.retries), true
+	maxTimeToWait := b.GetBaseTime() * 1 << (b.retries + 1)
+	return maxTimeToWait, true
 }
 
 // BackoffTimer returns a channel that sends the current time when the exponential backoff timeout expires.
@@ -62,7 +64,9 @@ func (b *BackoffHandler) BackoffTimer() <-chan time.Time {
 	} else {
 		b.retries++
 	}
-	return timeAfter(time.Duration(b.GetBaseTime() * 1 << (b.retries - 1)))
+	maxTimeToWait := time.Duration(b.GetBaseTime() * 1 << (b.retries))
+	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
+	return timeAfter(timeToWait)
 }
 
 // Backoff is used to wait according to exponential backoff. Returns false if the
@@ -83,7 +87,9 @@ func (b *BackoffHandler) Backoff(ctx context.Context) bool {
 // Sets a grace period within which the the backoff timer is maintained. After the grace
 // period expires, the number of retries & backoff duration is reset.
 func (b *BackoffHandler) SetGracePeriod() {
-	b.resetDeadline = timeNow().Add(time.Duration(b.GetBaseTime() * 2 << b.retries))
+	maxTimeToWait := b.GetBaseTime() * 2 << (b.retries + 1)
+	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
+	b.resetDeadline = timeNow().Add(timeToWait)
 }
 
 func (b BackoffHandler) GetBaseTime() time.Duration {

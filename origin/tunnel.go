@@ -174,11 +174,11 @@ func ServeTunnelLoop(
 
 		config.Observer.SendReconnect(connIndex)
 
-		duration, ok := protocolFallback.GetBackoffDuration(ctx)
+		duration, ok := protocolFallback.GetMaxBackoffDuration(ctx)
 		if !ok {
 			return err
 		}
-		connLog.Info().Msgf("Retrying connection in %s seconds", duration)
+		connLog.Info().Msgf("Retrying connection in up to %s seconds", duration)
 
 		select {
 		case <-ctx.Done():

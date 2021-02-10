@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -28,13 +29,14 @@ func TestRefreshAuthBackoff(t *testing.T) {
 	// authentication failures should consume the backoff
 	for i := uint(0); i < backoff.MaxRetries; i++ {
 		retryChan, err := rcm.RefreshAuth(context.Background(), backoff, auth)
-		assert.NoError(t, err)
-		assert.NotNil(t, retryChan)
-		assert.Equal(t, (1<<i)*time.Second, wait)
+		require.NoError(t, err)
+		require.NotNil(t, retryChan)
+		require.Greater(t, wait.Seconds(), 0.0)
+		require.Less(t, wait.Seconds(), float64((1<<(i+1))*time.Second))
 	}
 	retryChan, err := rcm.RefreshAuth(context.Background(), backoff, auth)
-	assert.Error(t, err)
-	assert.Nil(t, retryChan)
+	require.Error(t, err)
+	require.Nil(t, retryChan)
 
 	// now we actually make contact with the remote server
 	_, _ = rcm.RefreshAuth(context.Background(), backoff, func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
@@ -47,8 +49,8 @@ func TestRefreshAuthBackoff(t *testing.T) {
 		expectedGracePeriod := time.Duration(time.Second * 2 << backoff.MaxRetries)
 		return time.Now().Add(expectedGracePeriod * 2)
 	}
-	_, ok := backoff.GetBackoffDuration(context.Background())
-	assert.True(t, ok)
+	_, ok := backoff.GetMaxBackoffDuration(context.Background())
+	require.True(t, ok)
 }
 
 func TestRefreshAuthSuccess(t *testing.T) {

@@ -194,6 +194,7 @@ stretch: &stretch
     builddeps:
       - *pinned_go_fips
       - build-essential
+      - gotest-to-teamcity
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
@@ -201,7 +202,7 @@ stretch: &stretch
       # cd to a non-module directory: https://github.com/golang/go/issues/24250
       - (cd / && go get github.com/BurntSushi/go-sumtype)
       - export PATH="$HOME/go/bin:$PATH"
-      - make test
+      - make test | gotest-to-teamcity
   update-homebrew:
     builddeps:
       - openssh-client

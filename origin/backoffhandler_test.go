@@ -40,7 +40,7 @@ func TestBackoffCancel(t *testing.T) {
 	if backoff.Backoff(ctx) {
 		t.Fatalf("backoff allowed after cancel")
 	}
-	if _, ok := backoff.GetBackoffDuration(ctx); ok {
+	if _, ok := backoff.GetMaxBackoffDuration(ctx); ok {
 		t.Fatalf("backoff allowed after cancel")
 	}
 }
@@ -69,24 +69,24 @@ func TestBackoffGracePeriod(t *testing.T) {
 	}
 }
 
-func TestGetBackoffDurationRetries(t *testing.T) {
+func TestGetMaxBackoffDurationRetries(t *testing.T) {
 	// make backoff return immediately
 	timeAfter = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3}
-	if _, ok := backoff.GetBackoffDuration(ctx); !ok {
+	if _, ok := backoff.GetMaxBackoffDuration(ctx); !ok {
 		t.Fatalf("backoff failed immediately")
 	}
 	backoff.Backoff(ctx) // noop
-	if _, ok := backoff.GetBackoffDuration(ctx); !ok {
+	if _, ok := backoff.GetMaxBackoffDuration(ctx); !ok {
 		t.Fatalf("backoff failed after 1 retry")
 	}
 	backoff.Backoff(ctx) // noop
-	if _, ok := backoff.GetBackoffDuration(ctx); !ok {
+	if _, ok := backoff.GetMaxBackoffDuration(ctx); !ok {
 		t.Fatalf("backoff failed after 2 retry")
 	}
 	backoff.Backoff(ctx) // noop
-	if _, ok := backoff.GetBackoffDuration(ctx); ok {
+	if _, ok := backoff.GetMaxBackoffDuration(ctx); ok {
 		t.Fatalf("backoff allowed after 3 (max) retries")
 	}
 	if backoff.Backoff(ctx) {
@@ -94,25 +94,25 @@ func TestGetBackoffDurationRetries(t *testing.T) {
 	}
 }
 
-func TestGetBackoffDuration(t *testing.T) {
+func TestGetMaxBackoffDuration(t *testing.T) {
 	// make backoff return immediately
 	timeAfter = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3}
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second {
-		t.Fatalf("backoff didn't return 1 second on first retry")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*2 {
+		t.Fatalf("backoff (%s) didn't return < 2 seconds on first retry", duration)
 	}
 	backoff.Backoff(ctx) // noop
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*2 {
-		t.Fatalf("backoff didn't return 2 seconds on second retry")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*4 {
+		t.Fatalf("backoff (%s) didn't return < 4 seconds on second retry", duration)
 	}
 	backoff.Backoff(ctx) // noop
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*4 {
-		t.Fatalf("backoff didn't return 4 seconds on third retry")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*8 {
+		t.Fatalf("backoff (%s) didn't return < 8 seconds on third retry", duration)
 	}
 	backoff.Backoff(ctx) // noop
-	if duration, ok := backoff.GetBackoffDuration(ctx); ok || duration != 0 {
-		t.Fatalf("backoff didn't return 0 seconds on fourth retry (exceeding limit)")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); ok || duration != 0 {
+		t.Fatalf("backoff (%s) didn't return 0 seconds on fourth retry (exceeding limit)", duration)
 	}
 }
 
@@ -121,27 +121,27 @@ func TestBackoffRetryForever(t *testing.T) {
 	timeAfter = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3, RetryForever: true}
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second {
-		t.Fatalf("backoff didn't return 1 second on first retry")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*2 {
+		t.Fatalf("backoff (%s) didn't return < 2 seconds on first retry", duration)
 	}
 	backoff.Backoff(ctx) // noop
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*2 {
-		t.Fatalf("backoff didn't return 2 seconds on second retry")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*4 {
+		t.Fatalf("backoff (%s) didn't return < 4 seconds on second retry", duration)
 	}
 	backoff.Backoff(ctx) // noop
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*4 {
-		t.Fatalf("backoff didn't return 4 seconds on third retry")
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*8 {
+		t.Fatalf("backoff (%s) didn't return < 8 seconds on third retry", duration)
 	}
 	if !backoff.Backoff(ctx) {
 		t.Fatalf("backoff refused on fourth retry despire RetryForever")
 	}
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*8 {
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*16 {
 		t.Fatalf("backoff returned %v instead of 8 seconds on fourth retry", duration)
 	}
 	if !backoff.Backoff(ctx) {
 		t.Fatalf("backoff refused on fifth retry despire RetryForever")
 	}
-	if duration, ok := backoff.GetBackoffDuration(ctx); !ok || duration != time.Second*8 {
+	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*16 {
 		t.Fatalf("backoff returned %v instead of 8 seconds on fifth retry", duration)
 	}
 }
