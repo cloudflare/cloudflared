@@ -1,3 +1,12 @@
+2021.2.2
+- 2021-02-04 TUN-3864: Users can choose where credentials file is written after creating a tunnel
+- 2021-02-04 TUN-3869: Improve reliability of graceful shutdown.
+- 2021-02-07 TUN-3878: Do not supply -tags when none are specified
+- 2021-02-04 TUN-3635: Send event when unregistering tunnel for gracful shutdown so /ready endpoint reports down status befoe connections finish handling pending requests.
+- 2021-02-08 TUN-3890: Code coverage for cloudflared in CI
+- 2021-02-09 AUTH-3375 exchangeOrgToken deleted cookie fix
+- 2020-11-18 Update error message to use login command
+
 2021.2.1
 - 2021-02-04 TUN-3858: Do not suffix cloudflared version with -fips
 
