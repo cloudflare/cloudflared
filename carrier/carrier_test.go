@@ -44,7 +44,7 @@ func (s *testStreamer) Write(p []byte) (int, error) {
 func TestStartClient(t *testing.T) {
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
 	log := zerolog.Nop()
-	wsConn := NewWSConnection(&log, false)
+	wsConn := NewWSConnection(&log)
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 
@@ -70,7 +70,7 @@ func TestStartServer(t *testing.T) {
 	message := "Good morning Austin! Time for another sunny day in the great state of Texas."
 	log := zerolog.Nop()
 	shutdownC := make(chan struct{})
-	wsConn := NewWSConnection(&log, false)
+	wsConn := NewWSConnection(&log)
 	ts := newTestWebSocketServer()
 	defer ts.Close()
 	options := &StartOptions{

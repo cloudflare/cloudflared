@@ -38,10 +38,9 @@ func (d *wsdialer) Dial(address string) (io.ReadWriteCloser, *socks.AddrSpec, er
 }
 
 // NewWSConnection returns a new connection object
-func NewWSConnection(log *zerolog.Logger, isSocks bool) Connection {
+func NewWSConnection(log *zerolog.Logger) Connection {
 	return &Websocket{
-		log:     log,
-		isSocks: isSocks,
+		log: log,
 	}
 }
 
@@ -55,15 +54,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 	}
 	defer wsConn.Close()
 
-	if ws.isSocks {
-		dialer := &wsdialer{conn: wsConn}
-		requestHandler := socks.NewRequestHandler(dialer)
-		socksServer := socks.NewConnectionHandler(requestHandler)
-
-		_ = socksServer.Serve(conn)
-	} else {
-		ingress.Stream(wsConn, conn, ws.log)
-	}
+	ingress.Stream(wsConn, conn, ws.log)
 	return nil
 }
 

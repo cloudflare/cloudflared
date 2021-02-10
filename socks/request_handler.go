@@ -113,5 +113,7 @@ func StreamHandler(tunnelConn io.ReadWriter, originConn net.Conn, log *zerolog.L
 	requestHandler := NewRequestHandler(dialer)
 	socksServer := NewConnectionHandler(requestHandler)
 
-	socksServer.Serve(tunnelConn)
+	if err := socksServer.Serve(tunnelConn); err != nil {
+		log.Debug().Err(err).Msg("Socks stream handler error")
+	}
 }
