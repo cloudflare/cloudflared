@@ -24,7 +24,7 @@ const (
 	LogFieldAddress         = "address"
 	LogFieldURL             = "url"
 	MaxUpstreamConnsFlag    = "max-upstream-conns"
-	MaxUpstreamConnsDefault = 10
+	MaxUpstreamConnsDefault = 5
 )
 
 // Listener is an adapter between CoreDNS server and Warp runnable
