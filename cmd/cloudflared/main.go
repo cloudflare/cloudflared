@@ -117,7 +117,7 @@ func commands(version func(c *cli.Context)) []*cli.Command {
 If a new version exists, updates the agent binary and quits.
 Otherwise, does nothing.
 
-To determine if an update happened in a script, check for error code 64.`,
+To determine if an update happened in a script, check for error code 11.`,
 		},
 		{
 			Name: "version",
