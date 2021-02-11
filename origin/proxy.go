@@ -177,9 +177,26 @@ func (p *proxy) proxyStreamRequest(
 		originConn.Close()
 	}()
 
-	originConn.Stream(serveCtx, w, p.log)
+	eyeballStream := &bidirectionalStream{
+		writer: w,
+		reader: req.Body,
+	}
+	originConn.Stream(serveCtx, eyeballStream, p.log)
 	p.logOriginResponse(resp, fields)
 	return nil
+}
+
+type bidirectionalStream struct {
+	reader io.Reader
+	writer io.Writer
+}
+
+func (wr *bidirectionalStream) Read(p []byte) (n int, err error) {
+	return wr.reader.Read(p)
+}
+
+func (wr *bidirectionalStream) Write(p []byte) (n int, err error) {
+	return wr.writer.Write(p)
 }
 
 func (p *proxy) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {

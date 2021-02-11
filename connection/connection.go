@@ -93,8 +93,7 @@ type OriginProxy interface {
 
 type ResponseWriter interface {
 	WriteRespHeaders(status int, header http.Header) error
-	WriteErrorResponse()
-	io.ReadWriter
+	io.Writer
 }
 
 type ConnectedFuse interface {
