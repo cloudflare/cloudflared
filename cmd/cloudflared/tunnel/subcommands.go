@@ -102,7 +102,8 @@ var (
 	forceDeleteFlag = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
-		Usage:   "Allows you to delete a tunnel, even if it has active connections.",
+		Usage: "Cleans up any stale connections before the tunnel is deleted. cloudflared will not " +
+			"delete a tunnel with connections without this flag.",
 		EnvVars: []string{"TUNNEL_RUN_FORCE_OVERWRITE"},
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{

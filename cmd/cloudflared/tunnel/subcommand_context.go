@@ -223,12 +223,7 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 		if !tunnel.DeletedAt.IsZero() {
 			return fmt.Errorf("Tunnel %s has already been deleted", tunnel.ID)
 		}
-		// Check if tunnel has existing connections and if force flag is set, cleanup connections
-		if len(tunnel.Connections) > 0 {
-			if !forceFlagSet {
-				return fmt.Errorf("You can not delete tunnel %s because it has active connections. To see connections run the 'list' command. If you believe the tunnel is not active, you can use a -f / --force flag with this command.", id)
-			}
-
+		if forceFlagSet {
 			if err := client.CleanupConnections(tunnel.ID); err != nil {
 				return errors.Wrapf(err, "Error cleaning up connections for tunnel %s", tunnel.ID)
 			}
