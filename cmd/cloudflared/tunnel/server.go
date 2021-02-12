@@ -15,9 +15,9 @@ func runDNSProxyServer(c *cli.Context, dnsReadySignal, shutdownC chan struct{}, 
 	if port <= 0 || port > 65535 {
 		return errors.New("The 'proxy-dns-port' must be a valid port number in <1, 65535> range.")
 	}
-	maxUpstreamConnections := c.Int(tunneldns.MaxUpstreamConnsFlag)
+	maxUpstreamConnections := c.Int("proxy-dns-max-upstream-conns")
 	if maxUpstreamConnections < 0 {
-		return fmt.Errorf("'%s' must be 0 or higher", tunneldns.MaxUpstreamConnsFlag)
+		return fmt.Errorf("'%s' must be 0 or higher", "proxy-dns-max-upstream-conns")
 	}
 	listener, err := tunneldns.CreateListener(c.String("proxy-dns-address"), uint16(port), c.StringSlice("proxy-dns-upstream"), c.StringSlice("proxy-dns-bootstrap"), maxUpstreamConnections, log)
 	if err != nil {
