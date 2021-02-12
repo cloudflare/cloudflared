@@ -1011,6 +1011,13 @@ func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    "proxy-dns-max-upstream-conns",
+			Usage:   "Maximum concurrent connections to upstream. Setting to 0 means unlimited.",
+			Value:   tunneldns.MaxUpstreamConnsDefault,
+			Hidden:  shouldHide,
+			EnvVars: []string{"TUNNEL_DNS_MAX_UPSTREAM_CONNS"},
+		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:  "proxy-dns-bootstrap",
 			Usage: "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",

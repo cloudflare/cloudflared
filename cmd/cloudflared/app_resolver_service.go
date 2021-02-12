@@ -11,8 +11,9 @@ const (
 	// ResolverServiceType is used to identify what kind of overwatch service this is
 	ResolverServiceType = "resolver"
 
-	LogFieldResolverAddress = "resolverAddress"
-	LogFieldResolverPort    = "resolverPort"
+	LogFieldResolverAddress          = "resolverAddress"
+	LogFieldResolverPort             = "resolverPort"
+	LogFieldResolverMaxUpstreamConns = "resolverMaxUpstreamConns"
 )
 
 // ResolverService is used to wrap the tunneldns package's DNS over HTTP
@@ -57,7 +58,7 @@ func (s *ResolverService) Shutdown() {
 func (s *ResolverService) Run() error {
 	// create a listener
 	l, err := tunneldns.CreateListener(s.resolver.AddressOrDefault(), s.resolver.PortOrDefault(),
-		s.resolver.UpstreamsOrDefault(), s.resolver.BootstrapsOrDefault(), s.log)
+		s.resolver.UpstreamsOrDefault(), s.resolver.BootstrapsOrDefault(), s.resolver.MaxUpstreamConnectionsOrDefault(), s.log)
 	if err != nil {
 		return err
 	}
@@ -74,6 +75,7 @@ func (s *ResolverService) Run() error {
 	resolverLog := s.log.With().
 		Str(LogFieldResolverAddress, s.resolver.AddressOrDefault()).
 		Uint16(LogFieldResolverPort, s.resolver.PortOrDefault()).
+		Int(LogFieldResolverMaxUpstreamConns, s.resolver.MaxUpstreamConnectionsOrDefault()).
 		Logger()
 
 	resolverLog.Info().Msg("Starting resolver")

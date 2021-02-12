@@ -30,12 +30,12 @@ type UpstreamHTTPS struct {
 }
 
 // NewUpstreamHTTPS creates a new DNS over HTTPS upstream from endpoint
-func NewUpstreamHTTPS(endpoint string, bootstraps []string, log *zerolog.Logger) (Upstream, error) {
+func NewUpstreamHTTPS(endpoint string, bootstraps []string, maxConnections int, log *zerolog.Logger) (Upstream, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	return &UpstreamHTTPS{client: configureClient(u.Hostname()), endpoint: u, bootstraps: bootstraps, log: log}, nil
+	return &UpstreamHTTPS{client: configureClient(u.Hostname(), maxConnections), endpoint: u, bootstraps: bootstraps, log: log}, nil
 }
 
 // Exchange provides an implementation for the Upstream interface
@@ -122,17 +122,18 @@ func configureBootstrap(bootstrap string) (*url.URL, *http.Client, error) {
 		return nil, nil, fmt.Errorf("bootstrap address of %s must be an IP address", b.Hostname())
 	}
 
-	return b, configureClient(b.Hostname()), nil
+	return b, configureClient(b.Hostname(), MaxUpstreamConnsDefault), nil
 }
 
 // configureClient will configure a HTTPS client for upstream DoH requests
-func configureClient(hostname string) *http.Client {
+func configureClient(hostname string, maxUpstreamConnections int) *http.Client {
 	// Update TLS and HTTP client configuration
 	tlsConfig := &tls.Config{ServerName: hostname}
 	transport := &http.Transport{
 		TLSClientConfig:    tlsConfig,
 		DisableCompression: true,
 		MaxIdleConns:       1,
+		MaxConnsPerHost:    maxUpstreamConnections,
 		Proxy:              http.ProxyFromEnvironment,
 	}
 	_ = http2.ConfigureTransport(transport)

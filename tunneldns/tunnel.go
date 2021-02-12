@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	LogFieldAddress = "address"
-	LogFieldURL     = "url"
+	LogFieldAddress         = "address"
+	LogFieldURL             = "url"
+	MaxUpstreamConnsDefault = 5
 )
 
 // Listener is an adapter between CoreDNS server and Warp runnable
@@ -69,6 +70,12 @@ func Command(hidden bool) *cli.Command {
 				Value:   cli.NewStringSlice("https://162.159.36.1/dns-query", "https://162.159.46.1/dns-query", "https://[2606:4700:4700::1111]/dns-query", "https://[2606:4700:4700::1001]/dns-query"),
 				EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
 			},
+			&cli.IntFlag{
+				Name:    "max-upstream-conns",
+				Usage:   "Maximum concurrent connections to upstream. Setting to 0 means unlimited.",
+				Value:   MaxUpstreamConnsDefault,
+				EnvVars: []string{"TUNNEL_DNS_MAX_UPSTREAM_CONNS"},
+			},
 		},
 		ArgsUsage: " ", // can't be the empty string or we get the default output
 		Hidden:    hidden,
@@ -92,8 +99,10 @@ func Run(c *cli.Context) error {
 		uint16(c.Int("port")),
 		c.StringSlice("upstream"),
 		c.StringSlice("bootstrap"),
+		c.Int("max-upstream-conns"),
 		log,
 	)
+
 	if err != nil {
 		log.Err(err).Msg("Failed to create the listeners")
 		return err
@@ -175,12 +184,12 @@ func (l *Listener) Stop() error {
 }
 
 // CreateListener configures the server and bound sockets
-func CreateListener(address string, port uint16, upstreams []string, bootstraps []string, log *zerolog.Logger) (*Listener, error) {
+func CreateListener(address string, port uint16, upstreams []string, bootstraps []string, maxUpstreamConnections int, log *zerolog.Logger) (*Listener, error) {
 	// Build the list of upstreams
 	upstreamList := make([]Upstream, 0)
 	for _, url := range upstreams {
 		log.Info().Str(LogFieldURL, url).Msg("Adding DNS upstream")
-		upstream, err := NewUpstreamHTTPS(url, bootstraps, log)
+		upstream, err := NewUpstreamHTTPS(url, bootstraps, maxUpstreamConnections, log)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create HTTPS upstream")
 		}
