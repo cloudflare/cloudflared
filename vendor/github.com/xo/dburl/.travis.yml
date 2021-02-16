@@ -1,9 +1,0 @@
-language: go
-go:
-  - 1.12.x
-  - tip
-services:
-  - mysql
-  - postgresql
-script:
-  - go test -v -coverprofile=coverage.out

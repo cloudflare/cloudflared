@@ -19,7 +19,6 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/dbconnect"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
@@ -106,14 +105,14 @@ func Commands() []*cli.Command {
 		buildCleanupCommand(),
 		// for compatibility, allow following as tunnel subcommands
 		tunneldns.Command(true),
-		dbConnectCmd(),
+		cliutil.RemovedCommand("db-connect"),
 	}
 
 	return []*cli.Command{
 		buildTunnelCommand(subcommands),
 		// for compatibility, allow following as top-level subcommands
 		buildLoginSubcommand(true),
-		dbConnectCmd(),
+		cliutil.RemovedCommand("db-connect"),
 	}
 }
 
@@ -477,33 +476,6 @@ func addPortIfMissing(uri *url.URL, port int) string {
 		return uri.Host
 	}
 	return fmt.Sprintf("%s:%d", uri.Hostname(), port)
-}
-
-func dbConnectCmd() *cli.Command {
-	cmd := dbconnect.Cmd()
-
-	// Append the tunnel commands so users can customize the daemon settings.
-	cmd.Flags = appendFlags(Flags(), cmd.Flags...)
-
-	// Override before to run tunnel validation before dbconnect validation.
-	cmd.Before = func(c *cli.Context) error {
-		err := SetFlagsFromConfigFile(c)
-		if err == nil {
-			err = dbconnect.CmdBefore(c)
-		}
-		return err
-	}
-
-	// Override action to setup the Proxy, then if successful, start the tunnel daemon.
-	cmd.Action = cliutil.ErrorHandler(func(c *cli.Context) error {
-		err := dbconnect.CmdAction(c)
-		if err == nil {
-			err = TunnelCommand(c)
-		}
-		return err
-	})
-
-	return cmd
 }
 
 // appendFlags will append extra flags to a slice of flags.
