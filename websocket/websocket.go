@@ -76,7 +76,10 @@ type defaultDialler struct {
 }
 
 func (dd *defaultDialler) Dial(url *url.URL, header http.Header) (*websocket.Conn, *http.Response, error) {
-	d := &websocket.Dialer{TLSClientConfig: dd.tlsConfig}
+	d := &websocket.Dialer{
+		TLSClientConfig: dd.tlsConfig,
+		Proxy:           http.ProxyFromEnvironment,
+	}
 	return d.Dial(url.String(), header)
 }
 
