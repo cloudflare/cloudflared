@@ -235,6 +235,7 @@ func prepareTunnelConfig(
 	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
 	if warpRoutingEnabled {
 		warpRoutingService = ingress.NewWarpRoutingService()
+		log.Info().Msgf("Warp-routing is enabled")
 	}
 
 	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), warpRoutingEnabled, namedTunnel, edgediscovery.HTTP2Percentage, origin.ResolveTTL, log)
