@@ -8,6 +8,6 @@ import (
 	cli "github.com/urfave/cli/v2"
 )
 
-func runApp(app *cli.App, shutdownC, graceShutdownC chan struct{}) {
+func runApp(app *cli.App, graceShutdownC chan struct{}) {
 	app.Run(os.Args)
 }
