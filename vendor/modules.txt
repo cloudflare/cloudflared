@@ -246,7 +246,7 @@ github.com/shurcooL/sanitized_anchor_name
 ## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/urfave/cli/v2 v2.2.0 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210212191405-2b6ed1f5ef69
+# github.com/urfave/cli/v2 v2.2.0
 ## explicit
 github.com/urfave/cli/v2
 github.com/urfave/cli/v2/altsrc
@@ -431,4 +431,3 @@ zombiezen.com/go/capnproto2/rpc/internal/refcount
 zombiezen.com/go/capnproto2/schemas
 zombiezen.com/go/capnproto2/server
 zombiezen.com/go/capnproto2/std/capnp/rpc
-# github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210212191405-2b6ed1f5ef69

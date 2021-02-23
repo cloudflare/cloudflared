@@ -87,12 +87,8 @@ func NewTomlSourceFromFile(file string) (InputSourceContext, error) {
 // NewTomlSourceFromFlagFunc creates a new TOML InputSourceContext from a provided flag name and source context.
 func NewTomlSourceFromFlagFunc(flagFileName string) func(context *cli.Context) (InputSourceContext, error) {
 	return func(context *cli.Context) (InputSourceContext, error) {
-		if context.IsSet(flagFileName) {
-			filePath := context.String(flagFileName)
-			return NewTomlSourceFromFile(filePath)
-		}
-
-		return defaultInputSource()
+		filePath := context.String(flagFileName)
+		return NewTomlSourceFromFile(filePath)
 	}
 }
 

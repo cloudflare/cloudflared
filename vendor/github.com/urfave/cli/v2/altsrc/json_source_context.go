@@ -17,11 +17,7 @@ import (
 // by the given flag.
 func NewJSONSourceFromFlagFunc(flag string) func(c *cli.Context) (InputSourceContext, error) {
 	return func(context *cli.Context) (InputSourceContext, error) {
-		if context.IsSet(flag) {
-			return NewJSONSourceFromFile(context.String(flag))
-		}
-
-		return defaultInputSource()
+		return NewJSONSourceFromFile(context.String(flag))
 	}
 }
 

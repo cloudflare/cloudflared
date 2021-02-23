@@ -87,10 +87,14 @@ func (f *IntFlag) Apply(set *flag.FlagSet) error {
 // Int looks up the value of a local IntFlag, returns
 // 0 if not found
 func (c *Context) Int(name string) int {
-	return lookupInt(c.resolveFlagDeep(name))
+	if fs := lookupFlagSet(name, c); fs != nil {
+		return lookupInt(name, fs)
+	}
+	return 0
 }
 
-func lookupInt(f *flag.Flag) int {
+func lookupInt(name string, set *flag.FlagSet) int {
+	f := set.Lookup(name)
 	if f != nil {
 		parsed, err := strconv.ParseInt(f.Value.String(), 0, 64)
 		if err != nil {

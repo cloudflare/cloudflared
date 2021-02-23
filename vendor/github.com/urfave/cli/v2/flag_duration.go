@@ -86,10 +86,14 @@ func (f *DurationFlag) Apply(set *flag.FlagSet) error {
 // Duration looks up the value of a local DurationFlag, returns
 // 0 if not found
 func (c *Context) Duration(name string) time.Duration {
-	return lookupDuration(c.resolveFlagDeep(name))
+	if fs := lookupFlagSet(name, c); fs != nil {
+		return lookupDuration(name, fs)
+	}
+	return 0
 }
 
-func lookupDuration(f *flag.Flag) time.Duration {
+func lookupDuration(name string, set *flag.FlagSet) time.Duration {
+	f := set.Lookup(name)
 	if f != nil {
 		parsed, err := time.ParseDuration(f.Value.String())
 		if err != nil {

@@ -64,7 +64,7 @@ type App struct {
 	Action ActionFunc
 	// Execute this function if the proper command cannot be found
 	CommandNotFound CommandNotFoundFunc
-	// Execute this function if a usage error occurs
+	// Execute this function if an usage error occurs
 	OnUsageError OnUsageErrorFunc
 	// Compilation date
 	Compiled time.Time
@@ -72,15 +72,12 @@ type App struct {
 	Authors []*Author
 	// Copyright of the binary if any
 	Copyright string
-	// Reader reader to write input to (useful for tests)
-	Reader io.Reader
 	// Writer writer to write output to
 	Writer io.Writer
 	// ErrWriter writes error output
 	ErrWriter io.Writer
-	// ExitErrHandler processes any error encountered while running an App before
-	// it is returned to the caller. If no function is provided, HandleExitCoder
-	// is used as the default behavior.
+	// Execute this function to handle ExitErrors. If not provided, HandleExitCoder is provided to
+	// function as a default, so this is optional.
 	ExitErrHandler ExitErrHandlerFunc
 	// Other custom info
 	Metadata map[string]interface{}
@@ -119,9 +116,7 @@ func NewApp() *App {
 		BashComplete: DefaultAppComplete,
 		Action:       helpCommand.Action,
 		Compiled:     compileTime(),
-		Reader:       os.Stdin,
 		Writer:       os.Stdout,
-		ErrWriter:    os.Stderr,
 	}
 }
 
@@ -140,7 +135,7 @@ func (a *App) Setup() {
 	}
 
 	if a.HelpName == "" {
-		a.HelpName = a.Name
+		a.HelpName = filepath.Base(os.Args[0])
 	}
 
 	if a.Usage == "" {
@@ -163,16 +158,8 @@ func (a *App) Setup() {
 		a.Compiled = compileTime()
 	}
 
-	if a.Reader == nil {
-		a.Reader = os.Stdin
-	}
-
 	if a.Writer == nil {
 		a.Writer = os.Stdout
-	}
-
-	if a.ErrWriter == nil {
-		a.ErrWriter = os.Stderr
 	}
 
 	var newCommands []*Command
@@ -207,6 +194,10 @@ func (a *App) Setup() {
 
 	if a.Metadata == nil {
 		a.Metadata = make(map[string]interface{})
+	}
+
+	if a.Writer == nil {
+		a.Writer = os.Stdout
 	}
 }
 
@@ -299,6 +290,8 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 	if a.Before != nil {
 		beforeErr := a.Before(context)
 		if beforeErr != nil {
+			_, _ = fmt.Fprintf(a.Writer, "%v\n\n", beforeErr)
+			_ = ShowAppHelp(context)
 			a.handleExitCoder(context, beforeErr)
 			err = beforeErr
 			return err
@@ -328,11 +321,11 @@ func (a *App) RunContext(ctx context.Context, arguments []string) (err error) {
 // RunAndExitOnError calls .Run() and exits non-zero if an error was returned
 //
 // Deprecated: instead you should return an error that fulfills cli.ExitCoder
-// to cli.App.Run. This will cause the application to exit with the given error
+// to cli.App.Run. This will cause the application to exit with the given eror
 // code in the cli.ExitCoder
 func (a *App) RunAndExitOnError() {
 	if err := a.Run(os.Args); err != nil {
-		_, _ = fmt.Fprintln(a.ErrWriter, err)
+		_, _ = fmt.Fprintln(a.errWriter(), err)
 		OsExiter(1)
 	}
 }
@@ -484,6 +477,15 @@ func (a *App) VisibleCommands() []*Command {
 // VisibleFlags returns a slice of the Flags with Hidden=false
 func (a *App) VisibleFlags() []Flag {
 	return visibleFlags(a.Flags)
+}
+
+func (a *App) errWriter() io.Writer {
+	// When the app ErrWriter is nil use the package level one.
+	if a.ErrWriter == nil {
+		return ErrWriter
+	}
+
+	return a.ErrWriter
 }
 
 func (a *App) appendFlag(fl Flag) {
