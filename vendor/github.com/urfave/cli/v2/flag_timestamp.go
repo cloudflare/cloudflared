@@ -118,7 +118,9 @@ func (f *TimestampFlag) Apply(set *flag.FlagSet) error {
 	if f.Layout == "" {
 		return fmt.Errorf("timestamp Layout is required")
 	}
-	f.Value = &Timestamp{}
+	if f.Value == nil {
+		f.Value = &Timestamp{}
+	}
 	f.Value.SetLayout(f.Layout)
 
 	if val, ok := flagFromEnvOrFile(f.EnvVars, f.FilePath); ok {
@@ -136,15 +138,11 @@ func (f *TimestampFlag) Apply(set *flag.FlagSet) error {
 
 // Timestamp gets the timestamp from a flag name
 func (c *Context) Timestamp(name string) *time.Time {
-	if fs := lookupFlagSet(name, c); fs != nil {
-		return lookupTimestamp(name, fs)
-	}
-	return nil
+	return lookupTimestamp(c.resolveFlagDeep(name))
 }
 
 // Fetches the timestamp value from the local timestampWrap
-func lookupTimestamp(name string, set *flag.FlagSet) *time.Time {
-	f := set.Lookup(name)
+func lookupTimestamp(f *flag.Flag) *time.Time {
 	if f != nil {
 		return (f.Value.(*Timestamp)).Value()
 	}

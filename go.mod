@@ -57,3 +57,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 	zombiezen.com/go/capnproto2 v2.18.0+incompatible
 )
+
+replace github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210223162147-c8b4f97735e4
