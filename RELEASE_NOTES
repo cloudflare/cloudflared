@@ -1,3 +1,21 @@
+2021.2.5
+- 2021-02-23 Publish change notes for 2021.2.5
+- 2021-02-11 TUN-3838: ResponseWriter no longer reads and origin error tests
+- 2021-02-10 TUN-3895: Tests for socks stream handler
+- 2021-02-19 TUN-3939: Add logging that shows that Warp-routing is enabled
+- 2021-02-02 TUN-3817: Adds tests for websocket based streaming regression
+- 2021-02-04 TUN-3799: extended the Stream interface to take a logger and added debug logs for io.Copy errors
+- 2021-02-03 TUN-3855: Add ability to override target of 'access ssh' command to a different host for testing
+- 2021-02-04 TUN-3853: Respond with ws headers from the origin service rather than generating our own
+- 2021-02-08 TUN-3889: Move host header override logic to httpService
+- 2021-02-05 TUN-3868: Refactor singleTCPService and bridgeService to tcpOverWSService and rawTCPService
+- 2021-01-21 TUN-3753: Select http2 protocol when warp routing is enabled
+- 2021-01-26 TUN-3809: Allow routes ip show to output as JSON or YAML
+- 2021-01-11 TUN-3615: added support to  proxy tcp streams
+- 2021-01-17 TUN-3725: Warp-routing is independent of ingress
+- 2021-01-15 TUN-3764: Actively flush data for TCP streams
+- 2020-12-09 TUN-3617: Separate service from client, and implement different client for http vs. tcp origins
+
 2021.2.4
 - 2021-02-22 TUN-3948: Log error when retrying connection
 - 2021-02-23 TUN-3964: Revert "TUN-3922: Repoint urfave/cli/v2 library at patched branch at github.com/ipostelnik/cli/v2@fixed which correctly handles reading flags declared at multiple levels of subcommands."
