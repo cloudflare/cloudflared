@@ -1,3 +1,8 @@
+2021.2.4
+- 2021-02-22 TUN-3948: Log error when retrying connection
+- 2021-02-23 TUN-3964: Revert "TUN-3922: Repoint urfave/cli/v2 library at patched branch at github.com/ipostelnik/cli/v2@fixed which correctly handles reading flags declared at multiple levels of subcommands."
+- 2021-02-23 Publish release notes for 2021.2.4
+
 2021.2.3
 - 2021-02-23 Publish release notes for 2021.2.3
 - 2021-02-10 TUN-3902: Add jitter to backoffhandler
