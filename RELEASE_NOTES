@@ -1,3 +1,15 @@
+2021.2.3
+- 2021-02-23 Publish release notes for 2021.2.3
+- 2021-02-10 TUN-3902: Add jitter to backoffhandler
+- 2021-02-11 TUN-3913: Help gives wrong exit code for autoupdate
+- 2021-02-12 Add max upstream connections dns-proxy option (#290)
+- 2021-02-16 TUN-3924: Removed db-connect command. Added a placeholder handler for this command that informs users that command is no longer supported.
+- 2021-02-12 TUN-3922: Repoint urfave/cli/v2 library at patched branch at github.com/ipostelnik/cli/v2@fixed which correctly handles reading flags declared at multiple levels of subcommands.
+- 2021-02-19 Added support for proxy (#318)
+- 2021-02-19 TUN-3945: Fix runApp signature for generic service
+- 2021-02-09 Update README.md
+- 2021-02-09 Update the TryCloudflare link
+
 2021.2.2
 - 2021-02-04 TUN-3864: Users can choose where credentials file is written after creating a tunnel
 - 2021-02-04 TUN-3869: Improve reliability of graceful shutdown.
