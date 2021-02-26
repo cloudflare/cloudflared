@@ -16,24 +16,23 @@ import (
 func buildRouteIPSubcommand() *cli.Command {
 	return &cli.Command{
 		Name:      "ip",
-		Category:  "Tunnel",
-		Usage:     "Configure and query private routes",
+		Usage:     "Configure and query Cloudflare WARP routing to services or private networks available through this tunnel.",
 		UsageText: "cloudflared tunnel [--config FILEPATH] route COMMAND [arguments...]",
-		Hidden:    true,
-		Description: `cloudflared can provision private routes from your private IP space to origins
-		in your corporate network. Users enrolled in your Cloudflare for Teams organization can reach
-		those routes through the Cloudflare Warp client. You can also build rules to determine who
-		can reach certain routes.
-		`,
+		Description: `cloudflared can provision private routes from any IP space to origins in your corporate network.
+Users enrolled in your Cloudflare for Teams organization can reach those routes through the
+Cloudflare WARP client. You can also build rules to determine who can reach certain routes.`,
 		Subcommands: []*cli.Command{
 			{
 				Name:      "add",
 				Action:    cliutil.ErrorHandler(addRouteCommand),
-				Usage:     "Add a new Teamnet route to the table",
+				Usage:     "Add any new network to the routing table reachable via the tunnel",
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip add [CIDR] [TUNNEL] [COMMENT?]",
-				Description: `Adds a private route to a CIDR in your private IP space. Requests will
-				be sent through the Cloudflare Warp client running on a user's machine, proxied
-				through the specified tunnel, and reach an IP in the given CIDR.`,
+				Description: `Adds any network route space (represented as a CIDR) to your routing table.
+That network space becomes reachable for requests egressing from a user's machine
+as long as it is using Cloudflare WARP client and is enrolled in the same account
+that is running the tunnel chosen here. Further, those requests will be proxied to
+the specified tunnel, and reach an IP in the given CIDR, as long as that IP is
+reachable from the tunnel.`,
 			},
 			{
 				Name:        "show",
@@ -41,20 +40,21 @@ func buildRouteIPSubcommand() *cli.Command {
 				Action:      cliutil.ErrorHandler(showRoutesCommand),
 				Usage:       "Show the routing table",
 				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
-				Description: `Shows your organization's private route table. You can use flags to filter the results.`,
+				Description: `Shows your organization private routing table. You can use flags to filter the results.`,
 				Flags:       showRoutesFlags(),
 			},
 			{
-				Name:        "delete",
-				Action:      cliutil.ErrorHandler(deleteRouteCommand),
-				Usage:       "Delete a row from your organization's private routing table",
-				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip delete [CIDR]",
-				Description: `Deletes the row for a given CIDR from your routing table`,
+				Name:      "delete",
+				Action:    cliutil.ErrorHandler(deleteRouteCommand),
+				Usage:     "Delete a row from your organization's private routing table",
+				UsageText: "cloudflared tunnel [--config FILEPATH] route ip delete [CIDR]",
+				Description: `Deletes the row for a given CIDR from your routing table. That portion
+of your network will no longer be reachable by the WARP clients.`,
 			},
 			{
 				Name:      "get",
 				Action:    cliutil.ErrorHandler(getRouteByIPCommand),
-				Usage:     "Check which row of the routing table matches a given IP",
+				Usage:     "Check which row of the routing table matches a given IP.",
 				UsageText: "cloudflared tunnel [--config FILEPATH] route ip get [IP]",
 				Description: `Checks which row of the routing table will be used to proxy a given IP.
 				This helps check and validate your config.`,

@@ -457,14 +457,23 @@ func buildRouteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "route",
 		Action:    cliutil.ErrorHandler(routeCommand),
-		Usage:     "Define what hostname or load balancer can route to this tunnel",
-		UsageText: "cloudflared tunnel [tunnel command options] route [subcommand options] dns|lb TUNNEL HOSTNAME [LB-POOL]",
-		Description: `The route defines what hostname or load balancer will proxy requests to this tunnel.
+		Usage:     "Define which traffic routed from Cloudflare edge to this tunnel: requests to a DNS hostname, to a Cloudflare Load Balancer, or traffic originating from Cloudflare WARP clients",
+		UsageText: "cloudflared tunnel [tunnel command options] route [subcommand options] [dns TUNNEL HOSTNAME]|[lb TUNNEL HOSTNAME LB-POOL]|[ip NETWORK TUNNEL]",
+		Description: `The route command defines how Cloudflare will proxy requests to this tunnel.
 
-   To route a hostname by creating a CNAME to tunnel's address:
-      cloudflared tunnel route dns <tunnel ID> <hostname>
-   To use this tunnel as a load balancer origin, creating pool and load balancer if necessary:
-      cloudflared tunnel route lb <tunnel ID> <load balancer name> <load balancer pool>`,
+To route a hostname by creating a DNS CNAME record to a tunnel:
+   cloudflared tunnel route dns <tunnel ID or name> <hostname>
+You can read more at: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/routing-to-tunnel/dns
+
+To use this tunnel as a load balancer origin, creating pool and load balancer if necessary:
+   cloudflared tunnel route lb <tunnel ID or name> <hostname> <load balancer pool>
+You can read more at: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/routing-to-tunnel/lb
+
+For Cloudflare WARP traffic to be routed to your private network, reachable from this tunnel as origins, use:
+   cloudflared tunnel route ip <network CIDR> <tunnel ID or name>
+Further information about managing Cloudflare WARP traffic to your tunnel is available at:
+   cloudflared tunnel route ip --help
+`,
 		CustomHelpTemplate: commandHelpTemplate(),
 		Subcommands: []*cli.Command{
 			buildRouteIPSubcommand(),

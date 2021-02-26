@@ -8,7 +8,8 @@
 
 ### New Features
 
-- none
+- [Cloudflare One Routing](https://developers.cloudflare.com/cloudflare-one/tutorials/warp-to-tunnel) specific commands
+  now show up in the `cloudflared tunnel route --help` output.
 
 ### Improvements
 

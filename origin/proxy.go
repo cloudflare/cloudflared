@@ -58,7 +58,7 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 	p.appendTagHeaders(req)
 	if sourceConnectionType == connection.TypeTCP {
 		if p.warpRouting == nil {
-			err := errors.New(`cloudflared received a request from Warp client, but your configuration has disabled ingress from Warp clients. To enable this, set "warp-routing:\n\t enabled: true" in your config.yaml`)
+			err := errors.New(`cloudflared received a request from WARP client, but your configuration has disabled ingress from WARP clients. To enable this, set "warp-routing:\n\t enabled: true" in your config.yaml`)
 			p.log.Error().Msg(err.Error())
 			return err
 		}
