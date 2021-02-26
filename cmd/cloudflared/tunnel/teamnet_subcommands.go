@@ -37,6 +37,7 @@ func buildRouteIPSubcommand() *cli.Command {
 			},
 			{
 				Name:        "show",
+				Aliases:     []string{"list"},
 				Action:      cliutil.ErrorHandler(showRoutesCommand),
 				Usage:       "Show the routing table",
 				UsageText:   "cloudflared tunnel [--config FILEPATH] route ip show [flags]",
