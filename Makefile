@@ -34,6 +34,8 @@ ifneq ($(GOARCH),)
     TARGET_ARCH ?= $(GOARCH)
 else ifeq ($(LOCAL_ARCH),x86_64)
     TARGET_ARCH ?= amd64
+else ifeq ($(LOCAL_ARCH),amd64)
+    TARGET_ARCH ?= amd64
 else ifeq ($(LOCAL_ARCH),i686)
     TARGET_ARCH ?= amd64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
