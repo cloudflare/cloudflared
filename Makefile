@@ -238,7 +238,7 @@ tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
 .PHONY: vet
 vet:
 	go vet -mod=vendor ./...
-	which go-sumtype  # go get github.com/BurntSushi/go-sumtype
+	which go-sumtype  # go get github.com/BurntSushi/go-sumtype (don't do this in build directory or this will cause vendor issues)
 	go-sumtype $$(go list -mod=vendor ./...)
 
 .PHONY: msi
