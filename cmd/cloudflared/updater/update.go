@@ -3,18 +3,17 @@ package updater
 import (
 	"context"
 	"fmt"
-	"github.com/rs/zerolog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"time"
 
-	"github.com/urfave/cli/v2"
-	"golang.org/x/crypto/ssh/terminal"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/facebookgo/grace/gracenet"
+	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
@@ -61,16 +60,18 @@ func (e *statusErr) ExitCode() int {
 }
 
 type updateOptions struct {
-	isBeta    bool
-	isStaging bool
-	isForced  bool
-	version   string
+	updateDisabled  bool
+	isBeta          bool
+	isStaging       bool
+	isForced        bool
+	intendedVersion string
 }
 
 type UpdateOutcome struct {
-	Updated bool
-	Version string
-	Error   error
+	Updated     bool
+	Version     string
+	UserMessage string
+	Error       error
 }
 
 func (uo *UpdateOutcome) noUpdate() bool {
@@ -81,10 +82,10 @@ func Init(v string) {
 	version = v
 }
 
-func checkForUpdateAndApply(options updateOptions) UpdateOutcome {
+func CheckForUpdate(options updateOptions) (CheckResult, error) {
 	cfdPath, err := os.Executable()
 	if err != nil {
-		return UpdateOutcome{Error: err}
+		return nil, err
 	}
 
 	url := UpdateURL
@@ -93,24 +94,22 @@ func checkForUpdateAndApply(options updateOptions) UpdateOutcome {
 	}
 
 	s := NewWorkersService(version, url, cfdPath, Options{IsBeta: options.isBeta,
-		IsForced: options.isForced, RequestedVersion: options.version})
+		IsForced: options.isForced, RequestedVersion: options.intendedVersion})
 
-	v, err := s.Check()
+	return s.Check()
+}
+
+func applyUpdate(options updateOptions, update CheckResult) UpdateOutcome {
+	if update.Version() == "" || options.updateDisabled {
+		return UpdateOutcome{UserMessage: update.UserMessage()}
+	}
+
+	err := update.Apply()
 	if err != nil {
 		return UpdateOutcome{Error: err}
 	}
 
-	//already on the latest version
-	if v == nil {
-		return UpdateOutcome{}
-	}
-
-	err = v.Apply()
-	if err != nil {
-		return UpdateOutcome{Error: err}
-	}
-
-	return UpdateOutcome{Updated: true, Version: v.String()}
+	return UpdateOutcome{Updated: true, Version: update.Version(), UserMessage: update.UserMessage()}
 }
 
 // Update is the handler for the update command from the command line
@@ -137,7 +136,13 @@ func Update(c *cli.Context) error {
 		log.Info().Msg("cloudflared is set to upgrade to the latest publish version regardless of the current version")
 	}
 
-	updateOutcome := loggedUpdate(log, updateOptions{isBeta: isBeta, isStaging: isStaging, isForced: isForced, version: c.String("version")})
+	updateOutcome := loggedUpdate(log, updateOptions{
+		updateDisabled:  false,
+		isBeta:          isBeta,
+		isStaging:       isStaging,
+		isForced:        isForced,
+		intendedVersion: c.String("version"),
+	})
 	if updateOutcome.Error != nil {
 		return &statusErr{updateOutcome.Error}
 	}
@@ -152,12 +157,18 @@ func Update(c *cli.Context) error {
 
 // Checks for an update and applies it if one is available
 func loggedUpdate(log *zerolog.Logger, options updateOptions) UpdateOutcome {
-	updateOutcome := checkForUpdateAndApply(options)
+	checkResult, err := CheckForUpdate(options)
+	if err != nil {
+		log.Err(err).Msg("update check failed")
+		return UpdateOutcome{Error: err}
+	}
+
+	updateOutcome := applyUpdate(options, checkResult)
 	if updateOutcome.Updated {
 		log.Info().Str(LogFieldVersion, updateOutcome.Version).Msg("cloudflared has been updated")
 	}
 	if updateOutcome.Error != nil {
-		log.Err(updateOutcome.Error).Msg("update check failed: %s")
+		log.Err(updateOutcome.Error).Msg("update failed to apply")
 	}
 
 	return updateOutcome
@@ -177,44 +188,53 @@ type configurable struct {
 	freq    time.Duration
 }
 
-func NewAutoUpdater(freq time.Duration, listeners *gracenet.Net, log *zerolog.Logger) *AutoUpdater {
-	updaterConfigurable := &configurable{
-		enabled: true,
-		freq:    freq,
-	}
-	if freq == 0 {
-		updaterConfigurable.enabled = false
-		updaterConfigurable.freq = DefaultCheckUpdateFreq
-	}
+func NewAutoUpdater(updateDisabled bool, freq time.Duration, listeners *gracenet.Net, log *zerolog.Logger) *AutoUpdater {
 	return &AutoUpdater{
-		configurable:     updaterConfigurable,
+		configurable:     createUpdateConfig(updateDisabled, freq, log),
 		listeners:        listeners,
 		updateConfigChan: make(chan *configurable),
 		log:              log,
 	}
 }
 
+func createUpdateConfig(updateDisabled bool, freq time.Duration, log *zerolog.Logger) *configurable {
+	if isAutoupdateEnabled(log, updateDisabled, freq) {
+		log.Info().Dur("autoupdateFreq", freq).Msg("Autoupdate frequency is set")
+		return &configurable{
+			enabled: true,
+			freq:    freq,
+		}
+	} else {
+		return &configurable{
+			enabled: false,
+			freq:    DefaultCheckUpdateFreq,
+		}
+	}
+}
+
 func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
 	for {
-		if a.configurable.enabled {
-			updateOutcome := loggedUpdate(a.log, updateOptions{})
-			if updateOutcome.Updated {
-				if IsSysV() {
-					// SysV doesn't have a mechanism to keep service alive, we have to restart the process
-					a.log.Info().Msg("Restarting service managed by SysV...")
-					pid, err := a.listeners.StartProcess()
-					if err != nil {
-						a.log.Err(err).Msg("Unable to restart server automatically")
-						return &statusErr{err: err}
-					}
-					// stop old process after autoupdate. Otherwise we create a new process
-					// after each update
-					a.log.Info().Msgf("PID of the new process is %d", pid)
+		updateOutcome := loggedUpdate(a.log, updateOptions{updateDisabled: !a.configurable.enabled})
+		if updateOutcome.Updated {
+			Init(updateOutcome.Version)
+			if IsSysV() {
+				// SysV doesn't have a mechanism to keep service alive, we have to restart the process
+				a.log.Info().Msg("Restarting service managed by SysV...")
+				pid, err := a.listeners.StartProcess()
+				if err != nil {
+					a.log.Err(err).Msg("Unable to restart server automatically")
+					return &statusErr{err: err}
 				}
-				return &statusSuccess{newVersion: updateOutcome.Version}
+				// stop old process after autoupdate. Otherwise we create a new process
+				// after each update
+				a.log.Info().Msgf("PID of the new process is %d", pid)
 			}
+			return &statusSuccess{newVersion: updateOutcome.Version}
+		} else if updateOutcome.UserMessage != "" {
+			a.log.Warn().Msg(updateOutcome.UserMessage)
 		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -229,27 +249,18 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 }
 
 // Update is the method to pass new AutoUpdaterConfigurable to a running AutoUpdater. It is safe to be called concurrently
-func (a *AutoUpdater) Update(newFreq time.Duration) {
-	newConfigurable := &configurable{
-		enabled: true,
-		freq:    newFreq,
-	}
-	// A ero duration means autoupdate is disabled
-	if newFreq == 0 {
-		newConfigurable.enabled = false
-		newConfigurable.freq = DefaultCheckUpdateFreq
-	}
-	a.updateConfigChan <- newConfigurable
+func (a *AutoUpdater) Update(updateDisabled bool, newFreq time.Duration) {
+	a.updateConfigChan <- createUpdateConfig(updateDisabled, newFreq, a.log)
 }
 
-func IsAutoupdateEnabled(c *cli.Context, log *zerolog.Logger) bool {
-	if !SupportAutoUpdate(log) {
+func isAutoupdateEnabled(log *zerolog.Logger, updateDisabled bool, updateFreq time.Duration) bool {
+	if !supportAutoUpdate(log) {
 		return false
 	}
-	return !c.Bool("no-autoupdate") && c.Duration("autoupdate-freq") != 0
+	return !updateDisabled && updateFreq != 0
 }
 
-func SupportAutoUpdate(log *zerolog.Logger) bool {
+func supportAutoUpdate(log *zerolog.Logger) bool {
 	if runtime.GOOS == "windows" {
 		log.Info().Msg(noUpdateOnWindowsMessage)
 		return false

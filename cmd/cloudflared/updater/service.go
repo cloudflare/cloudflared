@@ -1,14 +1,15 @@
 package updater
 
-// Version is the functions needed to perform an update
-type Version interface {
+// CheckResult is the behaviour resulting from checking in with the Update Service
+type CheckResult interface {
 	Apply() error
-	String() string
+	Version() string
+	UserMessage() string
 }
 
 // Service is the functions to get check for new updates
 type Service interface {
-	Check() (Version, error)
+	Check() (CheckResult, error)
 }
 
 const (
@@ -23,4 +24,7 @@ const (
 
 	// VersionKeyName is the url parameter key to send to the checkin API to specific what version to upgrade or downgrade to
 	VersionKeyName = "version"
+
+	// ClientVersionName is the url parameter key to send the version that this cloudflared is currently running with
+	ClientVersionName = "clientVersion"
 )

@@ -27,6 +27,7 @@ type VersionResponse struct {
 	Version      string `json:"version"`
 	Checksum     string `json:"checksum"`
 	IsCompressed bool   `json:"compressed"`
+	UserMessage  string `json:"userMessage"`
 	Error        string `json:"error"`
 }
 
@@ -50,7 +51,7 @@ func NewWorkersService(currentVersion, url, targetPath string, opts Options) Ser
 }
 
 // Check does a check in with the Workers API to get a new version update
-func (s *WorkersService) Check() (Version, error) {
+func (s *WorkersService) Check() (CheckResult, error) {
 	client := &http.Client{
 		Timeout: clientTimeout,
 	}
@@ -59,6 +60,7 @@ func (s *WorkersService) Check() (Version, error) {
 	q := req.URL.Query()
 	q.Add(OSKeyName, runtime.GOOS)
 	q.Add(ArchitectureKeyName, runtime.GOARCH)
+	q.Add(ClientVersionName, s.currentVersion)
 
 	if s.opts.IsBeta {
 		q.Add(BetaKeyName, "true")
@@ -84,11 +86,12 @@ func (s *WorkersService) Check() (Version, error) {
 		return nil, errors.New(v.Error)
 	}
 
-	if !s.opts.IsForced && !IsNewerVersion(s.currentVersion, v.Version) {
-		return nil, nil
+	var versionToUpdate = ""
+	if s.opts.IsForced || IsNewerVersion(s.currentVersion, v.Version) {
+		versionToUpdate = v.Version
 	}
 
-	return NewWorkersVersion(v.URL, v.Version, v.Checksum, s.targetPath, v.IsCompressed), nil
+	return NewWorkersVersion(v.URL, versionToUpdate, v.Checksum, s.targetPath, v.UserMessage, v.IsCompressed), nil
 }
 
 // IsNewerVersion checks semantic versioning for the latest version

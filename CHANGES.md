@@ -16,6 +16,9 @@
 - Nested commands, such as `cloudflared tunnel run`, now consider CLI arguments even if they appear earlier on the
   command. For instance, `cloudflared --config config.yaml tunnel run` will now behave the same as
   `cloudflared tunnel --config config.yaml run`
+- Warnings are now shown in the output logs whenever cloudflared is running without the most recent version and
+  `no-autoupdate` is `true`.
+
 
 ### Bug Fixes
 

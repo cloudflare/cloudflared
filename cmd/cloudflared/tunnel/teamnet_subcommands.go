@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/teamnet"
 	"github.com/pkg/errors"
 
@@ -81,6 +82,9 @@ func showRoutesCommand(c *cli.Context) error {
 		return errors.Wrap(err, "invalid config for routing filters")
 	}
 
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
 	routes, err := sc.listRoutes(filter)
 	if err != nil {
 		return err
@@ -95,6 +99,7 @@ func showRoutesCommand(c *cli.Context) error {
 	} else {
 		fmt.Println("You have no routes, use 'cloudflared tunnel route ip add' to add a route")
 	}
+
 	return nil
 }
 

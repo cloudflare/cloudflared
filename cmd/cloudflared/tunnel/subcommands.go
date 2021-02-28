@@ -13,6 +13,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -149,6 +150,9 @@ func createCommand(c *cli.Context) error {
 	}
 	name := c.Args().First()
 
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
 	_, err = sc.create(name, c.String(CredFileFlag))
 	return errors.Wrap(err, "failed to create tunnel")
 }
@@ -227,6 +231,9 @@ func listCommand(c *cli.Context) error {
 		filter.ByTunnelID(tunnelID)
 	}
 
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
 	tunnels, err := sc.list(filter)
 	if err != nil {
 		return err
@@ -271,6 +278,7 @@ func listCommand(c *cli.Context) error {
 	} else {
 		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
 	}
+
 	return nil
 }
 
@@ -348,6 +356,9 @@ func deleteCommand(c *cli.Context) error {
 	if c.NArg() < 1 {
 		return cliutil.UsageError(`"cloudflared tunnel delete" requires at least 1 argument, the ID or name of the tunnel to delete.`)
 	}
+
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
 
 	tunnelIDs, err := sc.findIDs(c.Args().Slice())
 	if err != nil {

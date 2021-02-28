@@ -286,16 +286,14 @@ func StartServer(
 	}
 
 	// update needs to be after DNS proxy is up to resolve equinox server address
-	if updater.IsAutoupdateEnabled(c, log) {
-		autoupdateFreq := c.Duration("autoupdate-freq")
-		log.Info().Dur("autoupdateFreq", autoupdateFreq).Msg("Autoupdate frequency is set")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			autoupdater := updater.NewAutoUpdater(c.Duration("autoupdate-freq"), &listeners, log)
-			errC <- autoupdater.Run(ctx)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		autoupdater := updater.NewAutoUpdater(
+			c.Bool("no-autoupdate"), c.Duration("autoupdate-freq"), &listeners, log,
+		)
+		errC <- autoupdater.Run(ctx)
+	}()
 
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
 	if dnsProxyStandAlone(c) {

@@ -32,15 +32,20 @@ func respondWithData(w http.ResponseWriter, b []byte, status int) {
 	w.Write(b)
 }
 
+const mostRecentVersion = "2021.2.5"
+const mostRecentBetaVersion = "2021.3.0"
+const knownBuggyVersion = "2020.12.0"
+const expectedUserMsg = "This message is expected when running a known buggy version"
+
 func updateHandler(w http.ResponseWriter, r *http.Request) {
-	version := "2020.08.05"
+	version := mostRecentVersion
 	host := fmt.Sprintf("http://%s", r.Host)
 	url := host + "/download"
 
 	query := r.URL.Query()
 
 	if query.Get(BetaKeyName) == "true" {
-		version = "2020.08.06"
+		version = mostRecentBetaVersion
 		url = host + "/beta"
 	}
 
@@ -59,7 +64,12 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(h, version)
 	checksum := fmt.Sprintf("%x", h.Sum(nil))
 
-	v := VersionResponse{URL: url, Version: version, Checksum: checksum}
+	var userMessage = ""
+	if query.Get(ClientVersionName) == knownBuggyVersion {
+		userMessage = expectedUserMsg
+	}
+
+	v := VersionResponse{URL: url, Version: version, Checksum: checksum, UserMessage: userMessage}
 	respondWithJSON(w, v, http.StatusOK)
 }
 
@@ -96,7 +106,7 @@ func compressedDownloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func downloadHandler(w http.ResponseWriter, r *http.Request) {
-	version := "2020.08.05"
+	version := mostRecentVersion
 	requestedVersion := r.URL.Query().Get(VersionKeyName)
 	if requestedVersion != "" {
 		version = requestedVersion
@@ -105,7 +115,7 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func betaHandler(w http.ResponseWriter, r *http.Request) {
-	respondWithData(w, []byte("2020.08.06"), http.StatusOK)
+	respondWithData(w, []byte(mostRecentBetaVersion), http.StatusOK)
 }
 
 func failureHandler(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +134,7 @@ func createServer() *httptest.Server {
 }
 
 func createTestFile(t *testing.T, path string) {
-	f, err := os.Create("tmpfile")
+	f, err := os.Create(path)
 	require.NoError(t, err)
 	fmt.Fprint(f, "2020.08.04")
 	f.Close()
@@ -142,13 +152,13 @@ func TestUpdateService(t *testing.T) {
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
 	require.NoError(t, err)
-	require.Equal(t, v.String(), "2020.08.05")
+	require.Equal(t, v.Version(), mostRecentVersion)
 
 	require.NoError(t, v.Apply())
 	dat, err := ioutil.ReadFile(testFilePath)
 	require.NoError(t, err)
 
-	require.Equal(t, string(dat), "2020.08.05")
+	require.Equal(t, string(dat), mostRecentVersion)
 }
 
 func TestBetaUpdateService(t *testing.T) {
@@ -162,13 +172,13 @@ func TestBetaUpdateService(t *testing.T) {
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{IsBeta: true})
 	v, err := s.Check()
 	require.NoError(t, err)
-	require.Equal(t, v.String(), "2020.08.06")
+	require.Equal(t, v.Version(), mostRecentBetaVersion)
 
 	require.NoError(t, v.Apply())
 	dat, err := ioutil.ReadFile(testFilePath)
 	require.NoError(t, err)
 
-	require.Equal(t, string(dat), "2020.08.06")
+	require.Equal(t, string(dat), mostRecentBetaVersion)
 }
 
 func TestFailUpdateService(t *testing.T) {
@@ -193,10 +203,11 @@ func TestNoUpdateService(t *testing.T) {
 	createTestFile(t, testFilePath)
 	defer os.Remove(testFilePath)
 
-	s := NewWorkersService("2020.8.5", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
+	s := NewWorkersService(mostRecentVersion, fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
 	require.NoError(t, err)
-	require.Nil(t, v)
+	require.NotNil(t, v)
+	require.Empty(t, v.Version())
 }
 
 func TestForcedUpdateService(t *testing.T) {
@@ -210,13 +221,13 @@ func TestForcedUpdateService(t *testing.T) {
 	s := NewWorkersService("2020.8.5", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{IsForced: true})
 	v, err := s.Check()
 	require.NoError(t, err)
-	require.Equal(t, v.String(), "2020.08.05")
+	require.Equal(t, v.Version(), mostRecentVersion)
 
 	require.NoError(t, v.Apply())
 	dat, err := ioutil.ReadFile(testFilePath)
 	require.NoError(t, err)
 
-	require.Equal(t, string(dat), "2020.08.05")
+	require.Equal(t, string(dat), mostRecentVersion)
 }
 
 func TestUpdateSpecificVersionService(t *testing.T) {
@@ -231,7 +242,7 @@ func TestUpdateSpecificVersionService(t *testing.T) {
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{RequestedVersion: reqVersion})
 	v, err := s.Check()
 	require.NoError(t, err)
-	require.Equal(t, reqVersion, v.String())
+	require.Equal(t, reqVersion, v.Version())
 
 	require.NoError(t, v.Apply())
 	dat, err := ioutil.ReadFile(testFilePath)
@@ -251,13 +262,28 @@ func TestCompressedUpdateService(t *testing.T) {
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/compressed", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
 	require.NoError(t, err)
-	require.Equal(t, "2020.09.02", v.String())
+	require.Equal(t, "2020.09.02", v.Version())
 
 	require.NoError(t, v.Apply())
 	dat, err := ioutil.ReadFile(testFilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, "2020.09.02", string(dat))
+}
+
+func TestUpdateWhenRunningKnownBuggyVersion(t *testing.T) {
+	ts := createServer()
+	defer ts.Close()
+
+	testFilePath := "tmpfile"
+	createTestFile(t, testFilePath)
+	defer os.Remove(testFilePath)
+
+	s := NewWorkersService(knownBuggyVersion, fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
+	v, err := s.Check()
+	require.NoError(t, err)
+	require.Equal(t, v.Version(), mostRecentVersion)
+	require.Equal(t, v.UserMessage(), expectedUserMsg)
 }
 
 func TestVersionParsing(t *testing.T) {

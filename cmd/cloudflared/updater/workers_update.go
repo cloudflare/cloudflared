@@ -54,6 +54,7 @@ type WorkersVersion struct {
 	version      string
 	targetPath   string
 	isCompressed bool
+	userMessage  string
 }
 
 // NewWorkersVersion creates a new Version object. This is normally created by a WorkersService JSON checkin response
@@ -61,8 +62,17 @@ type WorkersVersion struct {
 // version is the version of this update
 // checksum is the expected checksum of the downloaded file
 // target path is where the file should be replace. Normally this the running cloudflared's path
-func NewWorkersVersion(url, version, checksum, targetPath string, isCompressed bool) Version {
-	return &WorkersVersion{downloadURL: url, version: version, checksum: checksum, targetPath: targetPath, isCompressed: isCompressed}
+// userMessage is a possible message to convey back to the user after having checked in with the Updater Service
+// isCompressed tells whether the asset to update cloudflared is compressed or not
+func NewWorkersVersion(url, version, checksum, targetPath, userMessage string, isCompressed bool) CheckResult {
+	return &WorkersVersion{
+		downloadURL:  url,
+		version:      version,
+		checksum:     checksum,
+		targetPath:   targetPath,
+		isCompressed: isCompressed,
+		userMessage:  userMessage,
+	}
 }
 
 // Apply does the actual verification and update logic.
@@ -114,8 +124,14 @@ func (v *WorkersVersion) Apply() error {
 }
 
 // String returns the version number of this update/release (e.g. 2020.08.05)
-func (v *WorkersVersion) String() string {
+func (v *WorkersVersion) Version() string {
 	return v.version
+}
+
+// String returns a possible message to convey back to user after having checked in with the Updater Service. E.g.
+// it can warn about the need to update the version currently running.
+func (v *WorkersVersion) UserMessage() string {
+	return v.userMessage
 }
 
 // download the file from the link in the json
