@@ -109,7 +109,7 @@ func findOriginCert(originCertPath string, log *zerolog.Logger) (string, error) 
 	// Check that the user has acquired a certificate using the login command
 	ok, err := config.FileExists(originCertPath)
 	if err != nil {
-		log.Error().Msgf("Cannot check if origin cert exists at path %s", originCertPath)
+		log.Error().Err(err).Msgf("Cannot check if origin cert exists at path %s", originCertPath)
 		return "", fmt.Errorf("cannot check if origin cert exists at path %s", originCertPath)
 	}
 	if !ok {
