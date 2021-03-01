@@ -34,6 +34,8 @@ ifneq ($(GOARCH),)
     TARGET_ARCH ?= $(GOARCH)
 else ifeq ($(LOCAL_ARCH),x86_64)
     TARGET_ARCH ?= amd64
+else ifeq ($(LOCAL_ARCH),amd64)
+    TARGET_ARCH ?= amd64
 else ifeq ($(LOCAL_ARCH),i686)
     TARGET_ARCH ?= amd64
 else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 5),armv8)
@@ -236,7 +238,7 @@ tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
 .PHONY: vet
 vet:
 	go vet -mod=vendor ./...
-	which go-sumtype  # go get github.com/BurntSushi/go-sumtype
+	which go-sumtype  # go get github.com/BurntSushi/go-sumtype (don't do this in build directory or this will cause vendor issues)
 	go-sumtype $$(go list -mod=vendor ./...)
 
 .PHONY: msi
