@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ipaccess"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -26,6 +27,7 @@ var (
 
 const (
 	ServiceBastion     = "bastion"
+	ServiceSocksProxy  = "socks-proxy"
 	ServiceWarpRouting = "warp-routing"
 )
 
@@ -175,6 +177,23 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 			service = &srv
 		} else if r.Service == "hello_world" || r.Service == "hello-world" || r.Service == "helloworld" {
 			service = new(helloWorld)
+		} else if r.Service == ServiceSocksProxy {
+			rules := make([]ipaccess.Rule, len(r.OriginRequest.IPRules))
+
+			for i, ipRule := range r.OriginRequest.IPRules {
+				rule, err := ipaccess.NewRuleByCIDR(ipRule.Prefix, ipRule.Ports, ipRule.Allow)
+				if err != nil {
+					return Ingress{}, fmt.Errorf("unable to create ip rule for %s: %s", r.Service, err)
+				}
+				rules[i] = rule
+			}
+
+			accessPolicy, err := ipaccess.NewPolicy(false, rules)
+			if err != nil {
+				return Ingress{}, fmt.Errorf("unable to create ip access policy for %s: %s", r.Service, err)
+			}
+
+			service = newSocksProxyOverWSService(accessPolicy)
 		} else if r.Service == ServiceBastion || cfg.BastionMode {
 			// Bastion mode will always start a Websocket proxy server, which will
 			// overwrite the localService.URL field when `start` is called. So,

@@ -145,3 +145,14 @@ func (o *tcpOverWSService) bastionDest(r *http.Request) (string, error) {
 func removePath(dest string) string {
 	return strings.SplitN(dest, "/", 2)[0]
 }
+
+func (o *socksProxyOverWSService) EstablishConnection(r *http.Request) (OriginConnection, *http.Response, error) {
+	originConn := o.conn
+	resp := &http.Response{
+		Status:        switchingProtocolText,
+		StatusCode:    http.StatusSwitchingProtocols,
+		Header:        websocket.NewResponseHeader(r),
+		ContentLength: -1,
+	}
+	return originConn, resp, nil
+}

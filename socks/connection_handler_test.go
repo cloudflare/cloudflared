@@ -40,7 +40,7 @@ func sendSocksRequest(t *testing.T) []byte {
 
 func startTestServer(t *testing.T, httpHandler func(w http.ResponseWriter, r *http.Request)) {
 	// create a socks server
-	requestHandler := NewRequestHandler(NewNetDialer())
+	requestHandler := NewRequestHandler(NewNetDialer(), nil)
 	socksServer := NewConnectionHandler(requestHandler)
 	listener, err := net.Listen("tcp", "localhost:8086")
 	assert.NoError(t, err)

@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
@@ -305,6 +306,33 @@ ingress:
 			},
 		},
 		{
+			name: "SOCKS services",
+			args: args{rawYAML: `
+ingress:
+- hostname: socks.foo.com
+  service: socks-proxy
+  originRequest:
+    ipRules:
+      - prefix: 1.1.1.0/24
+        ports: [80, 443]
+        allow: true
+      - prefix: 0.0.0.0/0
+        allow: false
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "socks.foo.com",
+					Service:  newSocksProxyOverWSService(accessPolicy()),
+					Config:   defaultConfig,
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
 			name: "URL isn't necessary if using bastion",
 			args: args{rawYAML: `
 ingress:
@@ -546,6 +574,16 @@ func MustParseURL(t *testing.T, rawURL string) *url.URL {
 	u, err := url.Parse(rawURL)
 	require.NoError(t, err)
 	return u
+}
+
+func accessPolicy() *ipaccess.Policy {
+	cidr1 := "1.1.1.0/24"
+	cidr2 := "0.0.0.0/0"
+	rule1, _ := ipaccess.NewRuleByCIDR(&cidr1, []int{80, 443}, true)
+	rule2, _ := ipaccess.NewRuleByCIDR(&cidr2, nil, false)
+	rules := []ipaccess.Rule{rule1, rule2}
+	accessPolicy, _ := ipaccess.NewPolicy(false, rules)
+	return accessPolicy
 }
 
 func BenchmarkFindMatch(b *testing.B) {

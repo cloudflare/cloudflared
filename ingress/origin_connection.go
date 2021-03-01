@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/cloudflare/cloudflared/ipaccess"
+	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/websocket"
 	gws "github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -106,4 +108,18 @@ func newWSConnection(clientTLSConfig *tls.Config, r *http.Request) (OriginConnec
 		wsConn,
 		resp,
 	}, resp, nil
+}
+
+// socksProxyOverWSConnection is an OriginConnection that streams SOCKS connections over WS.
+// The connection to the origin happens inside the SOCKS code as the client specifies the origin
+// details in the packet.
+type socksProxyOverWSConnection struct {
+	accessPolicy *ipaccess.Policy
+}
+
+func (sp *socksProxyOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
+	socks.StreamNetHandler(websocket.NewConn(ctx, tunnelConn, log), sp.accessPolicy, log)
+}
+
+func (sp *socksProxyOverWSConnection) Close() {
 }

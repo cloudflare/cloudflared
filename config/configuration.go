@@ -221,6 +221,14 @@ type OriginRequestConfig struct {
 	ProxyPort *uint `yaml:"proxyPort"`
 	// Valid options are 'socks' or empty.
 	ProxyType *string `yaml:"proxyType"`
+	// IP rules for the proxy service
+	IPRules []IngressIPRule `yaml:"ipRules"`
+}
+
+type IngressIPRule struct {
+	Prefix *string `yaml:"prefix"`
+	Ports  []int   `yaml:"ports"`
+	Allow  bool    `yaml:"allow"`
 }
 
 type Configuration struct {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -100,6 +101,10 @@ type tcpOverWSService struct {
 	streamHandler streamHandlerFunc
 }
 
+type socksProxyOverWSService struct {
+	conn *socksProxyOverWSConnection
+}
+
 func newTCPOverWSService(url *url.URL) *tcpOverWSService {
 	switch url.Scheme {
 	case "ssh":
@@ -122,6 +127,16 @@ func newBastionService() *tcpOverWSService {
 	}
 }
 
+func newSocksProxyOverWSService(accessPolicy *ipaccess.Policy) *socksProxyOverWSService {
+	proxy := socksProxyOverWSService{
+		conn: &socksProxyOverWSConnection{
+			accessPolicy: accessPolicy,
+		},
+	}
+
+	return &proxy
+}
+
 func addPortIfMissing(uri *url.URL, port int) {
 	if uri.Port() == "" {
 		uri.Host = fmt.Sprintf("%s:%d", uri.Hostname(), port)
@@ -142,6 +157,14 @@ func (o *tcpOverWSService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdo
 		o.streamHandler = DefaultStreamHandler
 	}
 	return nil
+}
+
+func (o *socksProxyOverWSService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+	return nil
+}
+
+func (o *socksProxyOverWSService) String() string {
+	return ServiceSocksProxy
 }
 
 // HelloWorld is an OriginService for the built-in Hello World server.

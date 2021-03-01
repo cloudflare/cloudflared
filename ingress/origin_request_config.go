@@ -3,6 +3,7 @@ package ingress
 import (
 	"time"
 
+	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/config"
@@ -213,6 +214,8 @@ type OriginRequestConfig struct {
 	ProxyPort uint `yaml:"proxyPort"`
 	// What sort of proxy should be started
 	ProxyType string `yaml:"proxyType"`
+	// IP rules for the proxy service
+	IPRules []ipaccess.Rule `yaml:"ipRules"`
 }
 
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {

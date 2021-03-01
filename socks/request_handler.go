@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/rs/zerolog"
 )
 
@@ -16,14 +17,16 @@ type RequestHandler interface {
 
 // StandardRequestHandler implements the base socks5 command processing
 type StandardRequestHandler struct {
-	dialer Dialer
+	dialer       Dialer
+	accessPolicy *ipaccess.Policy
 }
 
 // NewRequestHandler creates a standard SOCKS5 request handler
 // This handles the SOCKS5 commands and proxies them to their destination
-func NewRequestHandler(dialer Dialer) RequestHandler {
+func NewRequestHandler(dialer Dialer, accessPolicy *ipaccess.Policy) RequestHandler {
 	return &StandardRequestHandler{
-		dialer: dialer,
+		dialer:       dialer,
+		accessPolicy: accessPolicy,
 	}
 }
 
@@ -46,6 +49,25 @@ func (h *StandardRequestHandler) Handle(req *Request, conn io.ReadWriter) error 
 
 // handleConnect is used to handle a connect command
 func (h *StandardRequestHandler) handleConnect(conn io.ReadWriter, req *Request) error {
+	if h.accessPolicy != nil {
+		if req.DestAddr.IP == nil {
+			addr, err := net.ResolveIPAddr("ip", req.DestAddr.FQDN)
+			if err != nil {
+				_ = sendReply(conn, ruleFailure, req.DestAddr)
+				return fmt.Errorf("unable to resolve host to confirm acceess")
+			}
+
+			req.DestAddr.IP = addr.IP
+		}
+		if allowed, rule := h.accessPolicy.Allowed(req.DestAddr.IP, req.DestAddr.Port); !allowed {
+			_ = sendReply(conn, ruleFailure, req.DestAddr)
+			if rule != nil {
+				return fmt.Errorf("Connect to %v denied due to iprule: %s", req.DestAddr, rule.String())
+			}
+			return fmt.Errorf("Connect to %v denied", req.DestAddr)
+		}
+	}
+
 	target, localAddr, err := h.dialer.Dial(req.DestAddr.Address())
 	if err != nil {
 		msg := err.Error()
@@ -110,7 +132,17 @@ func (h *StandardRequestHandler) handleAssociate(conn io.ReadWriter, req *Reques
 
 func StreamHandler(tunnelConn io.ReadWriter, originConn net.Conn, log *zerolog.Logger) {
 	dialer := NewConnDialer(originConn)
-	requestHandler := NewRequestHandler(dialer)
+	requestHandler := NewRequestHandler(dialer, nil)
+	socksServer := NewConnectionHandler(requestHandler)
+
+	if err := socksServer.Serve(tunnelConn); err != nil {
+		log.Debug().Err(err).Msg("Socks stream handler error")
+	}
+}
+
+func StreamNetHandler(tunnelConn io.ReadWriter, accessPolicy *ipaccess.Policy, log *zerolog.Logger) {
+	dialer := NewNetDialer()
+	requestHandler := NewRequestHandler(dialer, accessPolicy)
 	socksServer := NewConnectionHandler(requestHandler)
 
 	if err := socksServer.Serve(tunnelConn); err != nil {
