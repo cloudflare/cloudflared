@@ -82,7 +82,17 @@ clean:
 
 .PHONY: cloudflared
 cloudflared: tunnel-deps
+ifeq ($(FIPS), true)
+	$(info Building cloudflared with go-fips)
+	-test -f fips/fips.go && mv fips/fips.go fips/fips.go.linux-amd64
+	mv fips/fips.go.linux-amd64 fips/fips.go
+endif
+
 	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+
+ifeq ($(FIPS), true)
+	mv fips/fips.go fips/fips.go.linux-amd64
+endif
 
 .PHONY: container
 container:
