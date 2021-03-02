@@ -201,9 +201,10 @@ func prepareTunnelConfig(
 		if err != nil {
 			return nil, ingress.Ingress{}, errors.Wrap(err, "can't generate clientUUID")
 		}
+		features := append(c.StringSlice("features"), origin.FeatureSerializedHeaders)
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
-			Features: []string{origin.FeatureSerializedHeaders},
+			Features: dedup(features),
 			Version:  version,
 			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
 		}
@@ -300,4 +301,23 @@ func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel boo
 
 func isRunningFromTerminal() bool {
 	return terminal.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// Remove any duplicates from the slice
+func dedup(slice []string) []string {
+
+	// Convert the slice into a set
+	set := make(map[string]bool, 0)
+	for _, str := range slice {
+		set[str] = true
+	}
+
+	// Convert the set back into a slice
+	keys := make([]string, len(set))
+	i := 0
+	for str := range set {
+		keys[i] = str
+		i++
+	}
+	return keys
 }

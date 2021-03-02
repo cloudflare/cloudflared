@@ -87,6 +87,11 @@ var (
 			"overwrite the previous tunnel. If you want to use a single hostname with multiple " +
 			"tunnels, you can do so with Cloudflare's Load Balancer product.",
 	})
+	featuresFlag = altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+		Name:    "features",
+		Aliases: []string{"F"},
+		Usage:   "Opt into various features that are still being developed or tested.",
+	})
 	credentialsFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    CredFileFlag,
 		Aliases: []string{CredFileFlagAlias},
@@ -370,6 +375,7 @@ func buildRunCommand() *cli.Command {
 		forceFlag,
 		credentialsFileFlag,
 		selectProtocolFlag,
+		featuresFlag,
 	}
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{
