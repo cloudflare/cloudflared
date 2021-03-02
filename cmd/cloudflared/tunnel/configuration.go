@@ -201,6 +201,7 @@ func prepareTunnelConfig(
 		if err != nil {
 			return nil, ingress.Ingress{}, errors.Wrap(err, "can't generate clientUUID")
 		}
+		log.Info().Msgf("Generated Client ID: %s", clientUUID)
 		features := append(c.StringSlice("features"), origin.FeatureSerializedHeaders)
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
