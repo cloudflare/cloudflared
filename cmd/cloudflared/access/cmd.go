@@ -167,9 +167,9 @@ func Commands() []*cli.Command {
 							Usage:   "Application logging level {fatal, error, info, debug}. ",
 						},
 						&cli.StringFlag{
-							Name:  sshConnectTo,
+							Name:   sshConnectTo,
 							Hidden: true,
-							Usage: "Connect to alternate location for testing, value is host, host:port, or sni:port:host",
+							Usage:  "Connect to alternate location for testing, value is host, host:port, or sni:port:host",
 						},
 					},
 				},
@@ -221,12 +221,18 @@ func login(c *cli.Context) error {
 		log.Error().Msg("Please provide the url of the Access application")
 		return err
 	}
-	if err := verifyTokenAtEdge(appURL, c, log); err != nil {
+
+	appInfo, err := token.GetAppInfo(appURL)
+	if err != nil {
+		return err
+	}
+
+	if err := verifyTokenAtEdge(appURL, appInfo, c, log); err != nil {
 		log.Err(err).Msg("Could not verify token")
 		return err
 	}
 
-	cfdToken, err := token.GetAppTokenIfExists(appURL)
+	cfdToken, err := token.GetAppTokenIfExists(appInfo)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Unable to find token for provided application.")
 		return err
@@ -268,13 +274,17 @@ func curl(c *cli.Context) error {
 		return err
 	}
 
-	tok, err := token.GetAppTokenIfExists(appURL)
+	appInfo, err := token.GetAppInfo(appURL)
+	if err != nil {
+		return err
+	}
+	tok, err := token.GetAppTokenIfExists(appInfo)
 	if err != nil || tok == "" {
 		if allowRequest {
 			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL, log)
+		tok, err = token.FetchToken(appURL, appInfo, log)
 		if err != nil {
 			log.Err(err).Msg("Failed to refresh token")
 			return err
@@ -318,7 +328,12 @@ func generateToken(c *cli.Context) error {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
 	}
-	tok, err := token.GetAppTokenIfExists(appURL)
+
+	appInfo, err := token.GetAppInfo(appURL)
+	if err != nil {
+		return err
+	}
+	tok, err := token.GetAppTokenIfExists(appInfo)
 	if err != nil || tok == "" {
 		fmt.Fprintln(os.Stderr, "Unable to find token for provided application. Please run login command to generate token.")
 		return err
@@ -369,19 +384,24 @@ func sshGen(c *cli.Context) error {
 	// this fetchToken function mutates the appURL param. We should refactor that
 	fetchTokenURL := &url.URL{}
 	*fetchTokenURL = *originURL
-	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, log)
+
+	appInfo, err := token.GetAppInfo(fetchTokenURL)
+	if err != nil {
+		return err
+	}
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, log)
 	if err != nil {
 		return err
 	}
 
-	if err := sshgen.GenerateShortLivedCertificate(originURL, cfdToken); err != nil {
+	if err := sshgen.GenerateShortLivedCertificate(appInfo, cfdToken); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// getAppURL will pull the appURL needed for fetching a user's Access token
+// getAppURL will pull the request URL needed for fetching a user's Access token
 func getAppURL(cmdArgs []string, log *zerolog.Logger) (*url.URL, error) {
 	if len(cmdArgs) < 1 {
 		log.Error().Msg("Please provide a valid URL as the first argument to curl.")
@@ -456,7 +476,7 @@ func isFileThere(candidate string) bool {
 // verifyTokenAtEdge checks for a token on disk, or generates a new one.
 // Then makes a request to to the origin with the token to ensure it is valid.
 // Returns nil if token is valid.
-func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, log *zerolog.Logger) error {
+func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, log *zerolog.Logger) error {
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
 		headers.Add(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
@@ -464,7 +484,7 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, log *zerolog.Logger) err
 	if c.IsSet(sshTokenSecretFlag) {
 		headers.Add(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
-	options := &carrier.StartOptions{OriginURL: appUrl.String(), Headers: headers}
+	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers}
 
 	if valid, err := isTokenValid(options, log); err != nil {
 		return err
@@ -472,7 +492,7 @@ func verifyTokenAtEdge(appUrl *url.URL, c *cli.Context, log *zerolog.Logger) err
 		return nil
 	}
 
-	if err := token.RemoveTokenIfExists(appUrl); err != nil {
+	if err := token.RemoveTokenIfExists(appInfo); err != nil {
 		return err
 	}
 

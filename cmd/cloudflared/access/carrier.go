@@ -10,6 +10,7 @@ import (
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/token"
 	"github.com/cloudflare/cloudflared/validation"
 
 	"github.com/pkg/errors"
@@ -107,6 +108,17 @@ func ssh(c *cli.Context) error {
 			return fmt.Errorf("invalid connection override: %s", connectTo)
 		}
 	}
+
+	originReq, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
+	if err != nil {
+		return err
+	}
+
+	appInfo, err := token.GetAppInfo(originReq.URL)
+	if err != nil {
+		return err
+	}
+	options.AppInfo = appInfo
 
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
 	wsConn := carrier.NewWSConnection(log)

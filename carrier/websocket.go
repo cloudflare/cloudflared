@@ -116,11 +116,7 @@ func createAccessAuthenticatedStream(options *StartOptions, log *zerolog.Logger)
 	}
 
 	// Access Token is invalid for some reason. Go through regen flow
-	originReq, err := http.NewRequest(http.MethodGet, options.OriginURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := token.RemoveTokenIfExists(originReq.URL); err != nil {
+	if err := token.RemoveTokenIfExists(options.AppInfo); err != nil {
 		return nil, err
 	}
 	wsConn, resp, err = createAccessWebSocketStream(options, log)
