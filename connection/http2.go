@@ -108,6 +108,7 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch connType {
 	case TypeControlStream:
 		proxyErr = c.serveControlStream(r.Context(), respWriter)
+		c.controlStreamErr = proxyErr
 	case TypeWebsocket:
 		stripWebsocketUpgradeHeader(r)
 		proxyErr = c.config.OriginProxy.Proxy(respWriter, r, TypeWebsocket)

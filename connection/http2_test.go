@@ -114,6 +114,7 @@ func TestServeHTTP(t *testing.T) {
 }
 
 type mockNamedTunnelRPCClient struct {
+	shouldFail   error
 	registered   chan struct{}
 	unregistered chan struct{}
 }
@@ -125,6 +126,9 @@ func (mc mockNamedTunnelRPCClient) RegisterConnection(
 	connIndex uint8,
 	observer *Observer,
 ) error {
+	if mc.shouldFail != nil {
+		return mc.shouldFail
+	}
 	close(mc.registered)
 	return nil
 }
@@ -136,12 +140,14 @@ func (mc mockNamedTunnelRPCClient) GracefulShutdown(ctx context.Context, gracePe
 func (mockNamedTunnelRPCClient) Close() {}
 
 type mockRPCClientFactory struct {
+	shouldFail   error
 	registered   chan struct{}
 	unregistered chan struct{}
 }
 
 func (mf *mockRPCClientFactory) newMockRPCClient(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient {
 	return mockNamedTunnelRPCClient{
+		shouldFail:   mf.shouldFail,
 		registered:   mf.registered,
 		unregistered: mf.unregistered,
 	}
@@ -246,6 +252,39 @@ func TestServeControlStream(t *testing.T) {
 	<-rpcClientFactory.unregistered
 	assert.False(t, http2Conn.stoppedGracefully)
 
+	wg.Wait()
+}
+
+func TestFailRegistration(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+
+	rpcClientFactory := mockRPCClientFactory{
+		shouldFail:   errDuplicationConnection,
+		registered:   make(chan struct{}),
+		unregistered: make(chan struct{}),
+	}
+	http2Conn.newRPCClientFunc = rpcClientFactory.newMockRPCClient
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		http2Conn.Serve(ctx)
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/", nil)
+	require.NoError(t, err)
+	req.Header.Set(internalUpgradeHeader, controlStreamUpgrade)
+
+	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	require.NoError(t, err)
+	resp, err := edgeHTTP2Conn.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+
+	assert.NotNil(t, http2Conn.controlStreamErr)
+	cancel()
 	wg.Wait()
 }
 
