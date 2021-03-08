@@ -5,11 +5,6 @@ import yaml
 
 LOGGER = logging.getLogger(__name__)
 
-def get_cloudflared():
-    cfd_binary = os.getenv('CFD_BINARY')
-    return "cloudflared" if cfd_binary is None else cfd_binary
-
-
 def write_config(path, config):
     config_path = path / "config.yaml"
     with open(config_path, 'w') as outfile:
@@ -17,11 +12,15 @@ def write_config(path, config):
     return config_path
 
 
-def start_cloudflared(path, config, args, pre_args=[]):
+def start_cloudflared(path, component_test_config, cfd_args, cfd_pre_args=[], classic=False):
+    if classic:
+        config = component_test_config.classic_tunnel_config
+    else:
+        config = component_test_config.named_tunnel_config
     config_path = write_config(path, config)
-    cmd = [get_cloudflared()]
-    cmd += pre_args
+    cmd = [component_test_config.cloudflared_binary]
+    cmd += cfd_pre_args
     cmd += ["--config", config_path]
-    cmd += args
+    cmd += cfd_args
     LOGGER.info(f"Run cmd {cmd} with config {config}")
     return subprocess.run(cmd, capture_output=True)

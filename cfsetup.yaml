@@ -215,6 +215,8 @@ stretch: &stretch
     pre-cache:
       - sudo pip3 install --upgrade -r component-tests/requirements.txt
     post-cache:
+      # Constructs config file from env vars
+      - python3 component-tests/config.py
       - pytest component-tests
   update-homebrew:
     builddeps:
