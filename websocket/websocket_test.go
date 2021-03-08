@@ -1,18 +1,23 @@
 package websocket
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/rs/zerolog"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	gws "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/websocket"
 )
 
@@ -100,6 +105,51 @@ func TestServe(t *testing.T) {
 	_ = conn.Close()
 	close(shutdownC)
 	<-errC
+}
+
+func TestWebsocketWrapper(t *testing.T) {
+
+	listener, err := hello.CreateTLSListener("localhost:0")
+	require.NoError(t, err)
+
+	serverErrorChan := make(chan error)
+	helloSvrCtx, cancelHelloSvr := context.WithCancel(context.Background())
+	defer func() { <-serverErrorChan }()
+	defer cancelHelloSvr()
+	go func() {
+		log := zerolog.Nop()
+		serverErrorChan <- hello.StartHelloWorldServer(&log, listener, helloSvrCtx.Done())
+	}()
+
+	tlsConfig := websocketClientTLSConfig(t)
+	d := gws.Dialer{TLSClientConfig: tlsConfig, HandshakeTimeout: time.Minute}
+	testAddr := fmt.Sprintf("https://%s/ws", listener.Addr().String())
+	req := testRequest(t, testAddr, nil)
+	conn, resp, err := ClientConnect(req, &d)
+	require.NoError(t, err)
+	require.Equal(t, testSecWebsocketAccept, resp.Header.Get("Sec-WebSocket-Accept"))
+
+	// Websocket now connected to test server so lets check our wrapper
+	wrapper := GorillaConn{Conn: conn}
+	buf := make([]byte, 100)
+	wrapper.Write([]byte("abc"))
+	n, err := wrapper.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, n, 3)
+	require.Equal(t, "abc", string(buf[:n]))
+
+	// Test partial read, read 1 of 3 bytes in one read and the other 2 in another read
+	wrapper.Write([]byte("abc"))
+	buf = buf[:1]
+	n, err = wrapper.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, n, 1)
+	require.Equal(t, "a", string(buf[:n]))
+	buf = buf[:cap(buf)]
+	n, err = wrapper.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, n, 2)
+	require.Equal(t, "bc", string(buf[:n]))
 }
 
 // func TestStartProxyServer(t *testing.T) {

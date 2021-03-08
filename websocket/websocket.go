@@ -114,7 +114,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error { _ = conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	gorillaConn := &GorillaConn{conn, h.log}
+	gorillaConn := &GorillaConn{Conn: conn, log: h.log}
 	go gorillaConn.pinger(r.Context())
 	defer conn.Close()
 

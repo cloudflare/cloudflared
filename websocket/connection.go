@@ -1,7 +1,9 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -27,17 +29,25 @@ const (
 // This is still used by access carrier
 type GorillaConn struct {
 	*websocket.Conn
-	log *zerolog.Logger
+	log     *zerolog.Logger
+	readBuf bytes.Buffer
 }
 
 // Read will read messages from the websocket connection
 func (c *GorillaConn) Read(p []byte) (int, error) {
+	// Intermediate buffer may contain unread bytes from the last read, start there before blocking on a new frame
+	if c.readBuf.Len() > 0 {
+		return c.readBuf.Read(p)
+	}
+
 	_, message, err := c.Conn.ReadMessage()
 	if err != nil {
 		return 0, err
 	}
-	return copy(p, message), nil
-
+	// Write into an intermediate buffer in case the websocket frame contains more data then len(p)
+	// Write returns nil error always and grows the buffer everything is always written or panic
+	c.readBuf.Write(message)
+	return c.readBuf.Read(p)
 }
 
 // Write will write messages to the websocket connection
@@ -47,6 +57,19 @@ func (c *GorillaConn) Write(p []byte) (int, error) {
 	}
 
 	return len(p), nil
+}
+
+// SetDeadline sets both read and write deadlines, as per net.Conn interface docs:
+// "It is equivalent to calling both SetReadDeadline and SetWriteDeadline."
+// Note there is no synchronization here, but the gorilla implementation isn't thread safe anyway
+func (c *GorillaConn) SetDeadline(t time.Time) error {
+	if err := c.Conn.SetReadDeadline(t); err != nil {
+		return fmt.Errorf("error setting read deadline: %w", err)
+	}
+	if err := c.Conn.SetWriteDeadline(t); err != nil {
+		return fmt.Errorf("error setting write deadline: %w", err)
+	}
+	return nil
 }
 
 // pinger simulates the websocket connection to keep it alive
