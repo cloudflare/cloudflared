@@ -12,7 +12,24 @@ tunnel: "3d539f97-cd3a-4d8e-c33b-65e9099c7a8d"
 credentials_file: "/Users/tunnel/.cloudflared/3d539f97-cd3a-4d8e-c33b-65e9099c7a8d.json"
 classic_hostname: "classic-tunnel-component-tests.example.com"
 origincert: "/Users/tunnel/.cloudflared/cert.pem"
+ingress:
+- hostname: named-tunnel-component-tests.example.com
+  service: http_status:200
+- service: http_status:404
 ```
+
+3. Route hostname to the tunnel. For the example config above, we can do that via
+```
+   cloudflared tunnel route dns 3d539f97-cd3a-4d8e-c33b-65e9099c7a8d named-tunnel-component-tests.example.com
+```
+
+4. Turn on linter
+If you are using Visual Studio, follow https://code.visualstudio.com/docs/python/linting to turn on linter.
+
+5. Turn on formatter
+If you are using Visual Studio, follow https://code.visualstudio.com/docs/python/editing#_formatting
+to turn on formatter and https://marketplace.visualstudio.com/items?itemName=cbrevik.toggle-format-on-save
+to turn on format on save.
 
 # How to run
 Specify path to config file via env var `COMPONENT_TESTS_CONFIG`. This is required.
