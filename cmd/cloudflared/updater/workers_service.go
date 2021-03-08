@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"runtime"
-	"strconv"
-	"strings"
 )
 
 // Options are the update options supported by the
@@ -28,6 +26,7 @@ type VersionResponse struct {
 	Checksum     string `json:"checksum"`
 	IsCompressed bool   `json:"compressed"`
 	UserMessage  string `json:"userMessage"`
+	ShouldUpdate bool   `json:"shouldUpdate"`
 	Error        string `json:"error"`
 }
 
@@ -86,71 +85,10 @@ func (s *WorkersService) Check() (CheckResult, error) {
 		return nil, errors.New(v.Error)
 	}
 
-	var versionToUpdate = ""
-	if s.opts.IsForced || IsNewerVersion(s.currentVersion, v.Version) {
+	versionToUpdate := ""
+	if v.ShouldUpdate {
 		versionToUpdate = v.Version
 	}
 
 	return NewWorkersVersion(v.URL, versionToUpdate, v.Checksum, s.targetPath, v.UserMessage, v.IsCompressed), nil
-}
-
-// IsNewerVersion checks semantic versioning for the latest version
-// cloudflared tagging is more of a date than a semantic version,
-// but the same comparision logic still holds for major.minor.patch
-// e.g. 2020.8.2 is newer than 2020.8.1.
-func IsNewerVersion(current string, check string) bool {
-	if strings.Contains(strings.ToLower(current), "dev") {
-		return false // dev builds shouldn't update
-	}
-
-	cMajor, cMinor, cPatch, err := SemanticParts(current)
-	if err != nil {
-		return false
-	}
-
-	nMajor, nMinor, nPatch, err := SemanticParts(check)
-	if err != nil {
-		return false
-	}
-
-	if nMajor > cMajor {
-		return true
-	}
-
-	if nMajor == cMajor && nMinor > cMinor {
-		return true
-	}
-
-	if nMajor == cMajor && nMinor == cMinor && nPatch > cPatch {
-		return true
-	}
-	return false
-}
-
-// SemanticParts gets the major, minor, and patch version of a semantic version string
-// e.g. 3.1.2 would return 3, 1, 2, nil
-func SemanticParts(version string) (major int, minor int, patch int, err error) {
-	major = 0
-	minor = 0
-	patch = 0
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
-		err = errors.New("invalid version")
-		return
-	}
-	major, err = strconv.Atoi(parts[0])
-	if err != nil {
-		return
-	}
-
-	minor, err = strconv.Atoi(parts[1])
-	if err != nil {
-		return
-	}
-
-	patch, err = strconv.Atoi(parts[2])
-	if err != nil {
-		return
-	}
-	return
 }

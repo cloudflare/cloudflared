@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,6 +14,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -68,8 +71,11 @@ func updateHandler(w http.ResponseWriter, r *http.Request) {
 	if query.Get(ClientVersionName) == knownBuggyVersion {
 		userMessage = expectedUserMsg
 	}
+	shouldUpdate := requestedVersion != "" || IsNewerVersion(query.Get(ClientVersionName), version)
 
-	v := VersionResponse{URL: url, Version: version, Checksum: checksum, UserMessage: userMessage}
+	v := VersionResponse{
+		URL: url, Version: version, Checksum: checksum, UserMessage: userMessage, ShouldUpdate: shouldUpdate,
+	}
 	respondWithJSON(w, v, http.StatusOK)
 }
 
@@ -81,7 +87,7 @@ func gzipUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	checksum := fmt.Sprintf("%x", h.Sum(nil))
 
 	url := fmt.Sprintf("http://%s/gzip-download.tgz", r.Host)
-	v := VersionResponse{URL: url, Version: version, Checksum: checksum}
+	v := VersionResponse{URL: url, Version: version, Checksum: checksum, ShouldUpdate: true}
 	respondWithJSON(w, v, http.StatusOK)
 }
 
@@ -120,6 +126,64 @@ func betaHandler(w http.ResponseWriter, r *http.Request) {
 
 func failureHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, VersionResponse{Error: "unsupported os and architecture"}, http.StatusBadRequest)
+}
+
+func IsNewerVersion(current string, check string) bool {
+	if current == "" || check == "" {
+		return false
+	}
+	if strings.Contains(strings.ToLower(current), "dev") {
+		return false // dev builds shouldn't update
+	}
+
+	cMajor, cMinor, cPatch, err := SemanticParts(current)
+	if err != nil {
+		return false
+	}
+
+	nMajor, nMinor, nPatch, err := SemanticParts(check)
+	if err != nil {
+		return false
+	}
+
+	if nMajor > cMajor {
+		return true
+	}
+
+	if nMajor == cMajor && nMinor > cMinor {
+		return true
+	}
+
+	if nMajor == cMajor && nMinor == cMinor && nPatch > cPatch {
+		return true
+	}
+	return false
+}
+
+func SemanticParts(version string) (major int, minor int, patch int, err error) {
+	major = 0
+	minor = 0
+	patch = 0
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 {
+		err = errors.New("invalid version")
+		return
+	}
+	major, err = strconv.Atoi(parts[0])
+	if err != nil {
+		return
+	}
+
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil {
+		return
+	}
+
+	patch, err = strconv.Atoi(parts[2])
+	if err != nil {
+		return
+	}
+	return
 }
 
 func createServer() *httptest.Server {
@@ -284,16 +348,4 @@ func TestUpdateWhenRunningKnownBuggyVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, v.Version(), mostRecentVersion)
 	require.Equal(t, v.UserMessage(), expectedUserMsg)
-}
-
-func TestVersionParsing(t *testing.T) {
-	require.False(t, IsNewerVersion("2020.8.2", "2020.8.2"))
-	require.True(t, IsNewerVersion("2020.8.2", "2020.8.3"))
-	require.True(t, IsNewerVersion("2020.8.2", "2021.1.2"))
-	require.True(t, IsNewerVersion("2020.8.2", "2020.9.1"))
-	require.True(t, IsNewerVersion("2020.8.2", "2020.12.45"))
-	require.False(t, IsNewerVersion("2020.8.2", "2020.6.3"))
-	require.False(t, IsNewerVersion("DEV", "2020.8.5"))
-	require.False(t, IsNewerVersion("2020.8.2", "asdlkfjasdf"))
-	require.True(t, IsNewerVersion("3.0.1", "4.2.1"))
 }
