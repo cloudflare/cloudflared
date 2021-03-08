@@ -1,6 +1,6 @@
 //+build darwin
 
-package shell
+package token
 
 import (
 	"os/exec"

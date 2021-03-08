@@ -15,7 +15,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/logger"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ingress"

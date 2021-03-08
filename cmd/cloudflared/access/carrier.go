@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/carrier"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/validation"

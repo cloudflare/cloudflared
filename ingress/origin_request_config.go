@@ -3,9 +3,10 @@ package ingress
 import (
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/urfave/cli/v2"
+
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
 const (

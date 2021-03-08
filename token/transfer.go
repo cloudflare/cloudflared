@@ -1,4 +1,4 @@
-package transfer
+package token
 
 import (
 	"bytes"
@@ -10,8 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/encrypter"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
@@ -21,14 +19,14 @@ const (
 	clientTimeout = time.Second * 60
 )
 
-// Run does the transfer "dance" with the end result downloading the supported resource.
+// RunTransfer does the transfer "dance" with the end result downloading the supported resource.
 // The expanded description is run is encapsulation of shared business logic needed
 // to request a resource (token/cert/etc) from the transfer service (loginhelper).
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
-	encrypterClient, err := encrypter.New("cloudflared_priv.pem", "cloudflared_pub.pem")
+func RunTransfer(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
+	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +36,7 @@ func Run(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bo
 	}
 
 	// See AUTH-1423 for why we use stderr (the way git wraps ssh)
-	err = shell.OpenBrowser(requestURL)
+	err = OpenBrowser(requestURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Please open the following URL and log in with your Cloudflare account:\n\n%s\n\nLeave cloudflared running to download the %s automatically.\n", requestURL, resourceName)
 	} else {

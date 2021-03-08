@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/overwatch"
 
 	"github.com/rs/zerolog"

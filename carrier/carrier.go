@@ -11,8 +11,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/token"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"

@@ -1,6 +1,6 @@
 //+build linux freebsd openbsd netbsd
 
-package shell
+package token
 
 import (
 	"os/exec"

@@ -1,6 +1,6 @@
 //+build windows
 
-package shell
+package token
 
 import (
 	"fmt"

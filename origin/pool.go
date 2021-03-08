@@ -1,17 +1,17 @@
-package buffer
+package origin
 
 import (
 	"sync"
 )
 
-type Pool struct {
-	// A Pool must not be copied after first use.
+type bufferPool struct {
+	// A bufferPool must not be copied after first use.
 	// https://golang.org/pkg/sync/#Pool
 	buffers sync.Pool
 }
 
-func NewPool(bufferSize int) *Pool {
-	return &Pool{
+func newBufferPool(bufferSize int) *bufferPool {
+	return &bufferPool{
 		buffers: sync.Pool{
 			New: func() interface{} {
 				return make([]byte, bufferSize)
@@ -20,10 +20,10 @@ func NewPool(bufferSize int) *Pool {
 	}
 }
 
-func (p *Pool) Get() []byte {
+func (p *bufferPool) Get() []byte {
 	return p.buffers.Get().([]byte)
 }
 
-func (p *Pool) Put(buf []byte) {
+func (p *bufferPool) Put(buf []byte) {
 	p.buffers.Put(buf)
 }

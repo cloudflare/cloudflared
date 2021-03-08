@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ingress"
 
 	"github.com/pkg/errors"

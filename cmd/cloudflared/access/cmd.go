@@ -2,20 +2,21 @@ package access
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"text/template"
 	"time"
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/shell"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshgen"
+	"github.com/cloudflare/cloudflared/token"
 	"github.com/cloudflare/cloudflared/validation"
 
 	"github.com/getsentry/raven-go"
@@ -271,7 +272,7 @@ func curl(c *cli.Context) error {
 	if err != nil || tok == "" {
 		if allowRequest {
 			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
-			return shell.Run("curl", cmdArgs...)
+			return run("curl", cmdArgs...)
 		}
 		tok, err = token.FetchToken(appURL, log)
 		if err != nil {
@@ -282,7 +283,29 @@ func curl(c *cli.Context) error {
 
 	cmdArgs = append(cmdArgs, "-H")
 	cmdArgs = append(cmdArgs, fmt.Sprintf("%s: %s", h2mux.CFAccessTokenHeader, tok))
-	return shell.Run("curl", cmdArgs...)
+	return run("curl", cmdArgs...)
+}
+
+
+// run kicks off a shell task and pipe the results to the respective std pipes
+func run(cmd string, args ...string) error {
+	c := exec.Command(cmd, args...)
+	stderr, err := c.StderrPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		io.Copy(os.Stderr, stderr)
+	}()
+
+	stdout, err := c.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		io.Copy(os.Stdout, stdout)
+	}()
+	return c.Run()
 }
 
 // token dumps provided token to stdout

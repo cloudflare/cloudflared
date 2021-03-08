@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/tunneldns"
 
 	"github.com/rs/zerolog"

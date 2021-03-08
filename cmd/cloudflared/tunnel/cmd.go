@@ -15,9 +15,10 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
@@ -104,7 +105,7 @@ func Commands() []*cli.Command {
 		buildDeleteCommand(),
 		buildCleanupCommand(),
 		// for compatibility, allow following as tunnel subcommands
-		tunneldns.Command(true),
+		proxydns.Command(true),
 		cliutil.RemovedCommand("db-connect"),
 	}
 

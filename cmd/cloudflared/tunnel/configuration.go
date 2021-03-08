@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -207,7 +207,7 @@ func prepareTunnelConfig(
 			ClientID: clientUUID[:],
 			Features: dedup(features),
 			Version:  version,
-			Arch:     fmt.Sprintf("%s_%s", buildInfo.GoOS, buildInfo.GoArch),
+			Arch:     buildInfo.OSArch(),
 		}
 		ingressRules, err = ingress.ParseIngress(cfg)
 		if err != nil && err != ingress.ErrNoIngressRules {
@@ -272,7 +272,7 @@ func prepareTunnelConfig(
 
 	return &origin.TunnelConfig{
 		ConnectionConfig: connectionConfig,
-		BuildInfo:        buildInfo,
+		OSArch:           buildInfo.OSArch(),
 		ClientID:         clientID,
 		EdgeAddrs:        c.StringSlice("edge"),
 		HAConnections:    c.Int("ha-connections"),

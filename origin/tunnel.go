@@ -15,7 +15,6 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -40,7 +39,7 @@ const (
 
 type TunnelConfig struct {
 	ConnectionConfig *connection.Config
-	BuildInfo        *buildinfo.BuildInfo
+	OSArch           string
 	ClientID         string
 	CloseConnOnce    *sync.Once // Used to close connectedSignal no more than once
 	EdgeAddrs        []string
@@ -72,7 +71,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	return &tunnelpogs.RegistrationOptions{
 		ClientID:             c.ClientID,
 		Version:              c.ReportedVersion,
-		OS:                   fmt.Sprintf("%s_%s", c.BuildInfo.GoOS, c.BuildInfo.GoArch),
+		OS:                   c.OSArch,
 		ExistingTunnelPolicy: policy,
 		PoolName:             c.LBPool,
 		Tags:                 c.Tags,

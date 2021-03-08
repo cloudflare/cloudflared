@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"

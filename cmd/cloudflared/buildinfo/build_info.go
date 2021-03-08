@@ -2,6 +2,7 @@ package buildinfo
 
 import (
 	"github.com/rs/zerolog"
+	"fmt"
 	"runtime"
 )
 
@@ -24,4 +25,8 @@ func GetBuildInfo(cloudflaredVersion string) *BuildInfo {
 func (bi *BuildInfo) Log(log *zerolog.Logger) {
 	log.Info().Msgf("Version %s", bi.CloudflaredVersion)
 	log.Info().Msgf("GOOS: %s, GOVersion: %s, GoArch: %s", bi.GoOS, bi.GoVersion, bi.GoArch)
+}
+
+func (bi *BuildInfo) OSArch() string {
+	return fmt.Sprintf("%s_%s", bi.GoOS, bi.GoArch)
 }

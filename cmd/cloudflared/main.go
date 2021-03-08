@@ -8,13 +8,13 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
-	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/watcher"
 
 	"github.com/getsentry/raven-go"
@@ -130,7 +130,7 @@ To determine if an update happened in a script, check for error code 11.`,
 		},
 	}
 	cmds = append(cmds, tunnel.Commands()...)
-	cmds = append(cmds, tunneldns.Command(false))
+	cmds = append(cmds, proxydns.Command(false))
 	cmds = append(cmds, access.Commands()...)
 	return cmds
 }

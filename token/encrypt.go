@@ -4,12 +4,12 @@
 // You can read more here https://godoc.org/golang.org/x/crypto/nacl/box.
 //
 //		msg := []byte("super safe message.")
-//		alice, err := New("alice_priv_key.pem", "alice_pub_key.pem")
+//		alice, err := NewEncrypter("alice_priv_key.pem", "alice_pub_key.pem")
 //		if err != nil {
 //			log.Fatal(err)
 //		}
 //
-//		bob, err := New("bob_priv_key.pem", "bob_pub_key.pem")
+//		bob, err := NewEncrypter("bob_priv_key.pem", "bob_pub_key.pem")
 //		if err != nil {
 //			log.Fatal(err)
 //		}
@@ -23,7 +23,7 @@
 //			log.Fatal(err)
 //		}
 //		fmt.Println(string(data))
-package encrypter
+package token
 
 import (
 	"bytes"
@@ -44,8 +44,8 @@ type Encrypter struct {
 	publicKey  *[32]byte
 }
 
-// New returns a new encrypter with initialized keypair
-func New(privateKey, publicKey string) (*Encrypter, error) {
+// NewEncrypter returns a new encrypter with initialized keypair
+func NewEncrypter(privateKey, publicKey string) (*Encrypter, error) {
 	e := &Encrypter{}
 	pubKey, key, err := e.fetchOrGenerateKeys(privateKey, publicKey)
 	if err != nil {

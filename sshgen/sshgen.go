@@ -15,12 +15,13 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	cfpath "github.com/cloudflare/cloudflared/cmd/cloudflared/path"
 	"github.com/coreos/go-oidc/jose"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/cloudflare/cloudflared/config"
+	cfpath "github.com/cloudflare/cloudflared/token"
 )
 
 const (

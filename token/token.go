@@ -13,9 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/path"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/transfer"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/origin"
 
 	"github.com/coreos/go-oidc/jose"
@@ -102,7 +100,7 @@ func (l *lock) Acquire() error {
 		os.Exit(0)
 	})
 
-	// Check for a path.lock file
+	// Check for a lock file
 	// if the lock file exists; start polling
 	// if not, create the lock file and go through the normal flow.
 	// See AUTH-1736 for the reason why we do all this
@@ -160,7 +158,7 @@ func getToken(appURL *url.URL, useHostOnly bool, log *zerolog.Logger) (string, e
 		return token, nil
 	}
 
-	appTokenPath, err := path.GenerateAppTokenFilePathFromURL(appURL, keyName)
+	appTokenPath, err := GenerateAppTokenFilePathFromURL(appURL, keyName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate app token file path")
 	}
@@ -184,7 +182,7 @@ func getToken(appURL *url.URL, useHostOnly bool, log *zerolog.Logger) (string, e
 	} else {
 		orgToken, err := GetOrgTokenIfExists(authDomain)
 		if err != nil {
-			orgTokenPath, err = path.GenerateOrgTokenFilePathFromURL(authDomain)
+			orgTokenPath, err = generateOrgTokenFilePathFromURL(authDomain)
 			if err != nil {
 				return "", errors.Wrap(err, "failed to generate org token file path")
 			}
@@ -220,7 +218,7 @@ func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHo
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	resourceData, err := transfer.Run(appURL, keyName, keyName, "", true, useHostOnly, log)
+	resourceData, err := RunTransfer(appURL, keyName, keyName, "", true, useHostOnly, log)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run transfer service")
 	}
@@ -316,7 +314,7 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 }
 
 func GetOrgTokenIfExists(authDomain string) (string, error) {
-	path, err := path.GenerateOrgTokenFilePathFromURL(authDomain)
+	path, err := generateOrgTokenFilePathFromURL(authDomain)
 	if err != nil {
 		return "", err
 	}
@@ -338,7 +336,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 }
 
 func GetAppTokenIfExists(url *url.URL) (string, error) {
-	path, err := path.GenerateAppTokenFilePathFromURL(url, keyName)
+	path, err := GenerateAppTokenFilePathFromURL(url, keyName)
 	if err != nil {
 		return "", err
 	}
@@ -376,7 +374,7 @@ func getTokenIfExists(path string) (*jose.JWT, error) {
 
 // RemoveTokenIfExists removes the a token from local storage if it exists
 func RemoveTokenIfExists(url *url.URL) error {
-	path, err := path.GenerateAppTokenFilePathFromURL(url, keyName)
+	path, err := GenerateAppTokenFilePathFromURL(url, keyName)
 	if err != nil {
 		return err
 	}

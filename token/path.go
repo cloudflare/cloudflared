@@ -1,4 +1,4 @@
-package path
+package token
 
 import (
 	"fmt"
@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
 	"github.com/mitchellh/go-homedir"
+
+	"github.com/cloudflare/cloudflared/config"
 )
 
 // GenerateAppTokenFilePathFromURL will return a filepath for given Access org token
@@ -21,8 +22,8 @@ func GenerateAppTokenFilePathFromURL(url *url.URL, suffix string) (string, error
 	return filepath.Join(configPath, name), nil
 }
 
-// GenerateOrgTokenFilePathFromURL will return a filepath for given Access application token
-func GenerateOrgTokenFilePathFromURL(authDomain string) (string, error) {
+// generateOrgTokenFilePathFromURL will return a filepath for given Access application token
+func generateOrgTokenFilePathFromURL(authDomain string) (string, error) {
 	configPath, err := getConfigPath()
 	if err != nil {
 		return "", err

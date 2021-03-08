@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v2"

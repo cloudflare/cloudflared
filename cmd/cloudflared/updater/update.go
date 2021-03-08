@@ -8,12 +8,13 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh/terminal"
+
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (

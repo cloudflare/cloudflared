@@ -1,6 +1,6 @@
 //+build !windows,!darwin,!linux,!netbsd,!freebsd,!openbsd
 
-package shell
+package token
 
 import (
 	"os/exec"

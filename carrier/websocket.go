@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/token"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/socks"
+	"github.com/cloudflare/cloudflared/token"
 	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
 
 	"github.com/gorilla/websocket"

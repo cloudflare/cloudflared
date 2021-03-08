@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/buffer"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
 )
 
 const (
@@ -26,7 +26,7 @@ type proxy struct {
 	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
-	bufferPool   *buffer.Pool
+	bufferPool   *bufferPool
 }
 
 func NewOriginProxy(
@@ -40,7 +40,7 @@ func NewOriginProxy(
 		warpRouting:  warpRouting,
 		tags:         tags,
 		log:          log,
-		bufferPool:   buffer.NewPool(512 * 1024),
+		bufferPool:   newBufferPool(512 * 1024),
 	}
 }
 

@@ -13,9 +13,9 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/config"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/transfer"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/token"
 )
 
 const (
@@ -56,7 +56,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	resourceData, err := transfer.Run(
+	resourceData, err := token.RunTransfer(
 		loginURL,
 		"cert",
 		"callback",
