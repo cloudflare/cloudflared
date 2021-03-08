@@ -44,8 +44,15 @@ func (c *GorillaConn) Read(p []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	// Write into an intermediate buffer in case the websocket frame contains more data then len(p)
-	// Write returns nil error always and grows the buffer everything is always written or panic
+
+	// Fast path, no need to stage in the intermediate buffer
+	if len(p) >= len(message) {
+		return copy(p, message), nil
+	}
+
+	// Slow path when the entire frame won't fit in p, stage through a readBuffer so the unread bytes
+	// aren't lost
+	// Write returns a nil error always and grows the buffer; everything is always written or panic
 	c.readBuf.Write(message)
 	return c.readBuf.Read(p)
 }
