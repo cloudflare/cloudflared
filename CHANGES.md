@@ -22,7 +22,8 @@
 
 ### Bug Fixes
 
-- none
+- GitHub [PR #317](https://github.com/cloudflare/cloudflared/issues/317) was broken in 2021.2.5 and is now fixed again.
+
 
 ## 2021.2.5
 

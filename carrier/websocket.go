@@ -82,6 +82,7 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 
 	dialer := &websocket.Dialer{
 		TLSClientConfig: options.TLSClientConfig,
+		Proxy:           http.ProxyFromEnvironment,
 	}
 	wsConn, resp, err := cfwebsocket.ClientConnect(req, dialer)
 	defer closeRespBody(resp)
