@@ -7,11 +7,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/rs/zerolog"
-
 	gobwas "github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -45,16 +44,13 @@ func (c *GorillaConn) Read(p []byte) (int, error) {
 		return 0, err
 	}
 
-	// Fast path, no need to stage in the intermediate buffer
-	if len(p) >= len(message) {
-		return copy(p, message), nil
-	}
+	copied := copy(p, message)
 
-	// Slow path when the entire frame won't fit in p, stage through a readBuffer so the unread bytes
-	// aren't lost
+	// Write unread bytes to readBuf; if everything was read this is a no-op
 	// Write returns a nil error always and grows the buffer; everything is always written or panic
-	c.readBuf.Write(message)
-	return c.readBuf.Read(p)
+	c.readBuf.Write(message[copied:])
+
+	return copied, nil
 }
 
 // Write will write messages to the websocket connection
