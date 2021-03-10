@@ -22,9 +22,17 @@ import (
 )
 
 const (
-	keyName     = "token"
-	tokenHeader = "CF_Authorization"
+	keyName               = "token"
+	tokenCookie           = "CF_Authorization"
+	appDomainHeader       = "CF-Access-Domain"
+	AccessLoginWorkerPath = "/cdn-cgi/access/login"
 )
+
+type AppInfo struct {
+	AuthDomain string
+	AppAUD     string
+	AppDomain  string
+}
 
 type lock struct {
 	lockFilePath string
@@ -142,23 +150,23 @@ func isTokenLocked(lockFilePath string) bool {
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
 // it appends the full url as the redirect URL to the access cli request if opening the browser
-func FetchTokenWithRedirect(appURL *url.URL, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, false, log)
+func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, false, log)
 }
 
 // FetchToken will either load a stored token or generate a new one
 // it appends the host of the appURL as the redirect URL to the access cli request if opening the browser
-func FetchToken(appURL *url.URL, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, true, log)
+func FetchToken(appURL *url.URL, appInfo *AppInfo, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, true, log)
 }
 
 // getToken will either load a stored token or generate a new one
-func getToken(appURL *url.URL, useHostOnly bool, log *zerolog.Logger) (string, error) {
-	if token, err := GetAppTokenIfExists(appURL); token != "" && err == nil {
+func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.Logger) (string, error) {
+	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
 		return token, nil
 	}
 
-	appTokenPath, err := GenerateAppTokenFilePathFromURL(appURL, keyName)
+	appTokenPath, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate app token file path")
 	}
@@ -170,40 +178,36 @@ func getToken(appURL *url.URL, useHostOnly bool, log *zerolog.Logger) (string, e
 	defer fileLockAppToken.Release()
 
 	// check to see if another process has gotten a token while we waited for the lock
-	if token, err := GetAppTokenIfExists(appURL); token != "" && err == nil {
+	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
 		return token, nil
 	}
 
 	// If an app token couldnt be found on disk, check for an org token and attempt to exchange it for an app token.
 	var orgTokenPath string
-	// Get auth domain to format into org token file path
-	if authDomain, err := getAuthDomain(appURL); err != nil {
-		log.Error().Msgf("failed to get auth domain: %s", err)
-	} else {
-		orgToken, err := GetOrgTokenIfExists(authDomain)
+	orgToken, err := GetOrgTokenIfExists(appInfo.AuthDomain)
+	if err != nil {
+		orgTokenPath, err = generateOrgTokenFilePathFromURL(appInfo.AuthDomain)
 		if err != nil {
-			orgTokenPath, err = generateOrgTokenFilePathFromURL(authDomain)
-			if err != nil {
-				return "", errors.Wrap(err, "failed to generate org token file path")
-			}
-
-			fileLockOrgToken := newLock(orgTokenPath)
-			if err = fileLockOrgToken.Acquire(); err != nil {
-				return "", errors.Wrap(err, "failed to acquire org token lock")
-			}
-			defer fileLockOrgToken.Release()
-			// check if an org token has been created since the lock was acquired
-			orgToken, err = GetOrgTokenIfExists(authDomain)
+			return "", errors.Wrap(err, "failed to generate org token file path")
 		}
-		if err == nil {
-			if appToken, err := exchangeOrgToken(appURL, orgToken); err != nil {
-				log.Debug().Msgf("failed to exchange org token for app token: %s", err)
-			} else {
-				if err := ioutil.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
-					return "", errors.Wrap(err, "failed to write app token to disk")
-				}
-				return appToken, nil
+
+		fileLockOrgToken := newLock(orgTokenPath)
+		if err = fileLockOrgToken.Acquire(); err != nil {
+			return "", errors.Wrap(err, "failed to acquire org token lock")
+		}
+		defer fileLockOrgToken.Release()
+		// check if an org token has been created since the lock was acquired
+		orgToken, err = GetOrgTokenIfExists(appInfo.AuthDomain)
+	}
+	if err == nil {
+		if appToken, err := exchangeOrgToken(appURL, orgToken); err != nil {
+			log.Debug().Msgf("failed to exchange org token for app token: %s", err)
+		} else {
+			// generate app path
+			if err := ioutil.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
+				return "", errors.Wrap(err, "failed to write app token to disk")
 			}
+			return appToken, nil
 		}
 	}
 	return getTokensFromEdge(appURL, appTokenPath, orgTokenPath, useHostOnly, log)
@@ -242,31 +246,46 @@ func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHo
 
 }
 
-// getAuthDomain makes a request to the appURL and stops at the first redirect. The 302 location header will contain the
+// GetAppInfo makes a request to the appURL and stops at the first redirect. The 302 location header will contain the
 // auth domain
-func getAuthDomain(appURL *url.URL) (string, error) {
+func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	client := &http.Client{
 		// do not follow redirects
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
+			// stop after hitting login endpoint since it will contain app path
+			if strings.Contains(via[len(via)-1].URL.Path, AccessLoginWorkerPath) {
+				return http.ErrUseLastResponse
+			}
+			return nil
 		},
 		Timeout: time.Second * 7,
 	}
 
-	authDomainReq, err := http.NewRequest("HEAD", appURL.String(), nil)
+	appInfoReq, err := http.NewRequest("HEAD", reqURL.String(), nil)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create auth domain request")
+		return nil, errors.Wrap(err, "failed to create app info request")
 	}
-	resp, err := client.Do(authDomainReq)
+	resp, err := client.Do(appInfoReq)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get auth domain")
+		return nil, errors.Wrap(err, "failed to get app info")
 	}
 	resp.Body.Close()
-	location, err := resp.Location()
-	if err != nil {
-		return "", fmt.Errorf("failed to get auth domain. Received status code %d from %s", resp.StatusCode, appURL.String())
+	location := resp.Request.URL
+	if !strings.Contains(location.Path, AccessLoginWorkerPath) {
+		return nil, fmt.Errorf("failed to get Access app info for %s", reqURL.String())
 	}
-	return location.Hostname(), nil
+
+	aud := resp.Request.URL.Query().Get("kid")
+	if aud == "" {
+		return nil, errors.New("Empty app aud")
+	}
+
+	domain := resp.Header.Get(appDomainHeader)
+	if domain == "" {
+		return nil, errors.New("Empty app domain")
+	}
+
+	return &AppInfo{location.Hostname(), aud, domain}, nil
 
 }
 
@@ -276,8 +295,8 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// attach org token to login request
-			if strings.Contains(req.URL.Path, "cdn-cgi/access/login") {
-				req.AddCookie(&http.Cookie{Name: tokenHeader, Value: orgToken})
+			if strings.Contains(req.URL.Path, AccessLoginWorkerPath) {
+				req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken})
 			}
 			// stop after hitting authorized endpoint since it will contain the app token
 			if strings.Contains(via[len(via)-1].URL.Path, "cdn-cgi/access/authorized") {
@@ -300,7 +319,7 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	var appToken string
 	for _, c := range resp.Cookies() {
 		//if Org token revoked on exchange, getTokensFromEdge instead
-		validAppToken := c.Name == tokenHeader && time.Now().Before(c.Expires)
+		validAppToken := c.Name == tokenCookie && time.Now().Before(c.Expires)
 		if validAppToken {
 			appToken = c.Value
 			break
@@ -335,8 +354,8 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 	return token.Encode(), nil
 }
 
-func GetAppTokenIfExists(url *url.URL) (string, error) {
-	path, err := GenerateAppTokenFilePathFromURL(url, keyName)
+func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
+	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
 	if err != nil {
 		return "", err
 	}
@@ -373,8 +392,8 @@ func getTokenIfExists(path string) (*jose.JWT, error) {
 }
 
 // RemoveTokenIfExists removes the a token from local storage if it exists
-func RemoveTokenIfExists(url *url.URL) error {
-	path, err := GenerateAppTokenFilePathFromURL(url, keyName)
+func RemoveTokenIfExists(appInfo *AppInfo) error {
+	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
 	if err != nil {
 		return err
 	}

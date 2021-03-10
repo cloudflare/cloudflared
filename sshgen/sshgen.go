@@ -12,7 +12,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/coreos/go-oidc/jose"
@@ -52,8 +51,8 @@ type errorResponse struct {
 var mockRequest func(url, contentType string, body io.Reader) (*http.Response, error) = nil
 
 // GenerateShortLivedCertificate generates and stores a keypair for short lived certs
-func GenerateShortLivedCertificate(appURL *url.URL, token string) error {
-	fullName, err := cfpath.GenerateAppTokenFilePathFromURL(appURL, keyName)
+func GenerateShortLivedCertificate(appInfo *cfpath.AppInfo, token string) error {
+	fullName, err := cfpath.GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
 	if err != nil {
 		return err
 	}

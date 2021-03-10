@@ -18,6 +18,7 @@
   `cloudflared tunnel --config config.yaml run`
 - Warnings are now shown in the output logs whenever cloudflared is running without the most recent version and
   `no-autoupdate` is `true`.
+- Access tokens are now stored per Access App instead of per request path.
 
 
 ### Bug Fixes

@@ -21,6 +21,7 @@ import (
 const LogFieldOriginURL = "originURL"
 
 type StartOptions struct {
+	AppInfo         *token.AppInfo
 	OriginURL       string
 	Headers         http.Header
 	Host            string
@@ -123,7 +124,7 @@ func IsAccessResponse(resp *http.Response) bool {
 	if err != nil || location == nil {
 		return false
 	}
-	if strings.HasPrefix(location.Path, "/cdn-cgi/access/login") {
+	if strings.HasPrefix(location.Path, token.AccessLoginWorkerPath) {
 		return true
 	}
 
@@ -137,7 +138,7 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 		return nil, err
 	}
 
-	token, err := token.FetchTokenWithRedirect(req.URL, log)
+	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, log)
 	if err != nil {
 		return nil, err
 	}
