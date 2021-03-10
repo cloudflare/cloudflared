@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -32,10 +33,10 @@ type signingArguments struct {
 }
 
 func TestCertGenSuccess(t *testing.T) {
-	appInfo := &cfpath.AppInfo{AppAUD: "abcd1234", AppDomain: "mySite.com"}
+	url, _ := url.Parse("https://cf-test-access.com/testpath")
 	token := tokenGenerator()
 
-	fullName, err := cfpath.GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
+	fullName, err := cfpath.GenerateAppTokenFilePathFromURL(url, keyName)
 	assert.NoError(t, err)
 
 	pubKeyName := fullName + ".pub"
@@ -65,7 +66,7 @@ func TestCertGenSuccess(t *testing.T) {
 		return w.Result(), nil
 	}
 
-	err = GenerateShortLivedCertificate(appInfo, token)
+	err = GenerateShortLivedCertificate(url, token)
 	assert.NoError(t, err)
 
 	exist, err := config.FileExists(fullName)

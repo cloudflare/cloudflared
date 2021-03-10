@@ -2,6 +2,7 @@ package token
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,13 +13,12 @@ import (
 )
 
 // GenerateAppTokenFilePathFromURL will return a filepath for given Access org token
-func GenerateAppTokenFilePathFromURL(appDomain, aud string, suffix string) (string, error) {
+func GenerateAppTokenFilePathFromURL(url *url.URL, suffix string) (string, error) {
 	configPath, err := getConfigPath()
 	if err != nil {
 		return "", err
 	}
-	name := fmt.Sprintf("%s-%s-%s", appDomain, aud, suffix)
-	name = strings.Replace(strings.Replace(name, "/", "-", -1), "*", "-", -1)
+	name := strings.Replace(fmt.Sprintf("%s%s-%s", url.Hostname(), url.EscapedPath(), suffix), "/", "-", -1)
 	return filepath.Join(configPath, name), nil
 }
 
