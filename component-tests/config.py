@@ -14,7 +14,8 @@ from util import LOGGER
 
 
 @dataclass(frozen=True)
-class TunnelBaseConfig:
+class BaseConfig:
+    cloudflared_binary: str
     no_autoupdate: bool = True
     metrics: str = f'localhost:{METRICS_PORT}'
 
@@ -26,7 +27,7 @@ class TunnelBaseConfig:
 
 
 @dataclass(frozen=True)
-class NamedTunnelBaseConfig(TunnelBaseConfig):
+class NamedTunnelBaseConfig(BaseConfig):
     # The attributes of the parent class are ordered before attributes in this class,
     # so we have to use default values here and check if they are set in __post_init__
     tunnel: str = None
@@ -67,7 +68,7 @@ class NamedTunnelConfig(NamedTunnelBaseConfig):
 
 
 @dataclass(frozen=True)
-class ClassicTunnelBaseConfig(TunnelBaseConfig):
+class ClassicTunnelBaseConfig(BaseConfig):
     hostname: str = None
     origincert: str = None
 
@@ -97,13 +98,6 @@ class ClassicTunnelConfig(ClassicTunnelBaseConfig):
 
     def get_url(self):
         return "https://" + self.hostname
-
-
-@dataclass
-class ComponentTestConfig:
-    cloudflared_binary: str
-    named_tunnel_config: NamedTunnelConfig
-    classic_tunnel_config: ClassicTunnelConfig
 
 
 def build_config_from_env():

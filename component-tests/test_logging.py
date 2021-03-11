@@ -69,7 +69,7 @@ class TestLogging:
         max_batches = 3
         batch_requests = 1000
         for _ in range(max_batches):
-            send_requests(config.named_tunnel_config.get_url(),
+            send_requests(config.get_url(),
                           batch_requests, require_ok=False)
             files = os.listdir(log_dir)
             if len(files) == 2:

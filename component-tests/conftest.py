@@ -4,7 +4,7 @@ import yaml
 
 from time import sleep
 
-from config import ComponentTestConfig, NamedTunnelConfig, ClassicTunnelConfig
+from config import NamedTunnelConfig, ClassicTunnelConfig
 from constants import BACKOFF_SECS
 from util import LOGGER
 
@@ -19,12 +19,12 @@ def component_tests_config():
         config = yaml.safe_load(stream)
         LOGGER.info(f"component tests base config {config}")
 
-        def _component_tests_config(extra_named_tunnel_config={}, extra_classic_tunnel_config={}):
-            named_tunnel_config = NamedTunnelConfig(additional_config=extra_named_tunnel_config,
-                                                    tunnel=config['tunnel'], credentials_file=config['credentials_file'],  ingress=config['ingress'])
-            classic_tunnel_config = ClassicTunnelConfig(
-                additional_config=extra_classic_tunnel_config, hostname=config['classic_hostname'], origincert=config['origincert'])
-            return ComponentTestConfig(config['cloudflared_binary'], named_tunnel_config, classic_tunnel_config)
+        def _component_tests_config(additional_config={}, named_tunnel=True):
+            if named_tunnel:
+                return NamedTunnelConfig(additional_config=additional_config,
+                                         cloudflared_binary=config['cloudflared_binary'], tunnel=config['tunnel'], credentials_file=config['credentials_file'],  ingress=config['ingress'])
+            return ClassicTunnelConfig(
+                additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'], hostname=config['classic_hostname'], origincert=config['origincert'])
 
         return _component_tests_config
 
