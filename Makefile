@@ -116,7 +116,6 @@ define publish_package
 	for HOST in $(CF_PKG_HOSTS); do \
 		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
 		scp -4 cloudflared*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
-		ssh cfsync@$$HOST 'chmod g+w /state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/*.$(1)'; \
 	done
 endef
 
