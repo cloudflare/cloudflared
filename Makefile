@@ -113,9 +113,10 @@ test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
 define publish_package
+	chmod 664 cloudflared*.$(1); \
 	for HOST in $(CF_PKG_HOSTS); do \
 		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
-		scp -4 cloudflared*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
+		scp -p -4 cloudflared*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
 	done
 endef
 
