@@ -13,7 +13,7 @@ class TestLogging:
     def test_logging_to_terminal(self, tmp_path, component_tests_config):
         config = component_tests_config()
         with start_cloudflared(tmp_path, config, new_process=True) as cloudflared:
-            wait_tunnel_ready()
+            wait_tunnel_ready(tunnel_url=config.get_url())
             self.assert_log_to_terminal(cloudflared)
 
     def test_logging_to_file(self, tmp_path, component_tests_config):
@@ -24,7 +24,7 @@ class TestLogging:
         }
         config = component_tests_config(extra_config)
         with start_cloudflared(tmp_path, config, new_process=True, capture_output=False):
-            wait_tunnel_ready()
+            wait_tunnel_ready(tunnel_url=config.get_url())
             self.assert_log_in_file(log_file)
             self.assert_json_log(log_file)
 
@@ -37,7 +37,7 @@ class TestLogging:
         }
         config = component_tests_config(extra_config)
         with start_cloudflared(tmp_path, config, new_process=True, capture_output=False):
-            wait_tunnel_ready()
+            wait_tunnel_ready(tunnel_url=config.get_url())
             self.assert_log_to_dir(config, log_dir)
 
     def assert_log_to_terminal(self, cloudflared):

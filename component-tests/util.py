@@ -44,25 +44,26 @@ def run_cloudflared_background(cmd, allow_input, capture_output):
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
-def wait_tunnel_ready(expect_connections=4):
-    url = f'http://localhost:{METRICS_PORT}/ready'
+def wait_tunnel_ready(tunnel_url=None, expect_connections=4):
+    metrics_url = f'http://localhost:{METRICS_PORT}/ready'
 
     with requests.Session() as s:
-        resp = send_request(s, url, True)
+        resp = send_request(s, metrics_url, True)
         assert resp.json()[
-            "readyConnections"] == expect_connections, f"Ready endpoint returned {resp.json()} but we expect {expect_connections} ready connections"
+            "readyConnections"] >= expect_connections, f"Ready endpoint returned {resp.json()} but we expect at least {expect_connections} connections"
+        if tunnel_url is not None:
+            send_request(s, tunnel_url, True)
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
-def check_tunnel_not_ready():
+def check_tunnel_not_connected():
     url = f'http://localhost:{METRICS_PORT}/ready'
 
     resp = requests.get(url, timeout=1)
     assert resp.status_code == 503, f"Expect {url} returns 503, got {resp.status_code}"
 
+
 # In some cases we don't need to check response status, such as when sending batch requests to generate logs
-
-
 def send_requests(url, count, require_ok=True):
     errors = 0
     with requests.Session() as s:
