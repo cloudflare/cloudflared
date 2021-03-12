@@ -5,6 +5,7 @@ from util import start_cloudflared, wait_tunnel_ready, send_requests, LOGGER
 
 
 class TestLogging:
+    # TODO: Test logging when running as a service https://jira.cfops.it/browse/TUN-4082
     # Rolling logger rotate log files after 1 MB
     rotate_after_size = 1000 * 1000
     default_log_file = "cloudflared.log"

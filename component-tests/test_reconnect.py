@@ -43,9 +43,11 @@ class TestReconnect():
                 if expect_connections > 0:
                     # Don't check if tunnel returns 200 here because there is a race condition between wait_tunnel_ready
                     # retrying to get 200 response and reconnecting
-                    wait_tunnel_ready(expect_connections=expect_connections)
+                    wait_tunnel_ready(
+                        require_min_connections=expect_connections)
                 else:
                     check_tunnel_not_connected()
 
             sleep(self.default_reconnect_secs + 10)
-            wait_tunnel_ready(tunnel_url=config.get_url())
+            wait_tunnel_ready(tunnel_url=config.get_url(),
+                              require_min_connections=self.default_ha_conns)

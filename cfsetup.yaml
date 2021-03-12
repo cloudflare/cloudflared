@@ -210,6 +210,9 @@ stretch: &stretch
       - python3.7
       - python3-pip
       - python3-setuptools
+      # procps installs the ps command which is needed in test_sysv_service because the init script
+      # uses ps pid to determine if the agent is running
+      - procps
     pre-cache-copy-paths:
       - component-tests/requirements.txt
     pre-cache:

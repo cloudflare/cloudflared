@@ -12,24 +12,32 @@ from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 LOGGER = logging.getLogger(__name__)
 
 
-def write_config(path, config):
-    config_path = path / "config.yaml"
+def write_config(directory, config):
+    config_path = directory / "config.yml"
     with open(config_path, 'w') as outfile:
         yaml.dump(config, outfile)
     return config_path
 
 
-def start_cloudflared(path, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False, allow_input=False, capture_output=True):
-    config_path = write_config(path, config.full_config)
-    cmd = [config.cloudflared_binary]
-    cmd += cfd_pre_args
-    cmd += ["--config", config_path]
-    cmd += cfd_args
-    LOGGER.info(f"Run cmd {cmd} with config {config}")
+def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False, allow_input=False, capture_output=True, root=False):
+    config_path = write_config(directory, config.full_config)
+    cmd = cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root)
     if new_process:
         return run_cloudflared_background(cmd, allow_input, capture_output)
     # By setting check=True, it will raise an exception if the process exits with non-zero exit code
     return subprocess.run(cmd, check=True, capture_output=capture_output)
+
+
+def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
+    cmd = []
+    if root:
+        cmd += ["sudo"]
+    cmd += [config.cloudflared_binary]
+    cmd += cfd_pre_args
+    cmd += ["--config", config_path]
+    cmd += cfd_args
+    LOGGER.info(f"Run cmd {cmd} with config {config}")
+    return cmd
 
 
 @contextmanager
@@ -44,13 +52,13 @@ def run_cloudflared_background(cmd, allow_input, capture_output):
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
-def wait_tunnel_ready(tunnel_url=None, expect_connections=4):
+def wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
     metrics_url = f'http://localhost:{METRICS_PORT}/ready'
 
     with requests.Session() as s:
         resp = send_request(s, metrics_url, True)
         assert resp.json()[
-            "readyConnections"] >= expect_connections, f"Ready endpoint returned {resp.json()} but we expect at least {expect_connections} connections"
+            "readyConnections"] >= require_min_connections, f"Ready endpoint returned {resp.json()} but we expect at least {require_min_connections} connections"
         if tunnel_url is not None:
             send_request(s, tunnel_url, True)
 

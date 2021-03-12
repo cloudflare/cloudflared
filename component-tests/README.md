@@ -31,6 +31,9 @@ If you are using Visual Studio, follow https://code.visualstudio.com/docs/python
 to turn on formatter and https://marketplace.visualstudio.com/items?itemName=cbrevik.toggle-format-on-save
 to turn on format on save.
 
+6. If you have cloudflared running as a service on your machine, you can either stop the service or ignore the service tests
+via `--ignore test_service.py`
+
 # How to run
 Specify path to config file via env var `COMPONENT_TESTS_CONFIG`. This is required.
 ## All tests
