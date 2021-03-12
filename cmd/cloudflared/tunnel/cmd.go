@@ -75,8 +75,8 @@ const (
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
 
-	debugLevelWarning = "At debug level, request URL, method, protocol, content legnth and header will be logged. " +
-		"Response status, content length and header will also be logged in debug level."
+	debugLevelWarning = "At debug level cloudflared will log request URL, method, protocol, content length, as well as, all request and response headers. " +
+		"This can expose sensitive information in your logs."
 
 	LogFieldCommand             = "command"
 	LogFieldExpandedPath        = "expandedPath"
@@ -920,7 +920,7 @@ func configureLoggingFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    logger.LogLevelFlag,
 			Value:   "info",
-			Usage:   "Application logging level {fatal, error, info, debug}. " + debugLevelWarning,
+			Usage:   "Application logging level {debug, info, warn, error, fatal}. " + debugLevelWarning,
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
@@ -928,7 +928,7 @@ func configureLoggingFlags(shouldHide bool) []cli.Flag {
 			Name:    logger.LogTransportLevelFlag,
 			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
 			Value:   "info",
-			Usage:   "Transport logging level(previously called protocol logging level) {fatal, error, info, debug}",
+			Usage:   "Transport logging level(previously called protocol logging level) {debug, info, warn, error, fatal}",
 			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),

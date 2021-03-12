@@ -40,7 +40,7 @@ Add to your {{.Home}}/.ssh/config:
 
 Host {{.Hostname}}
 {{- if .ShortLivedCerts}}
-  ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1' 
+  ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1'
 
 Host cfpipe-{{.Hostname}}
   HostName {{.Hostname}}
@@ -77,9 +77,9 @@ func Commands() []*cli.Command {
 			Aliases:  []string{"forward"},
 			Category: "Access",
 			Usage:    "access <subcommand>",
-			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access 
-			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are 
-			able to reach sensitive resources. The commands provided here allow you to interact with Access protected 
+			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access
+			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are
+			able to reach sensitive resources. The commands provided here allow you to interact with Access protected
 			applications from the command line.`,
 			Subcommands: []*cli.Command{
 				{
@@ -89,7 +89,7 @@ func Commands() []*cli.Command {
 					Description: `The login subcommand initiates an authentication flow with your identity provider.
 					The subcommand will launch a browser. For headless systems, a url is provided.
 					Once authenticated with your identity provider, the login command will generate a JSON Web Token (JWT)
-					scoped to your identity, the application you intend to reach, and valid for a session duration set by your 
+					scoped to your identity, the application you intend to reach, and valid for a session duration set by your
 					administrator. cloudflared stores the token in local storage.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
@@ -164,7 +164,7 @@ func Commands() []*cli.Command {
 						&cli.StringFlag{
 							Name:    logger.LogSSHLevelFlag,
 							Aliases: []string{"loglevel"}, //added to match the tunnel side
-							Usage:   "Application logging level {fatal, error, info, debug}. ",
+							Usage:   "Application logging level {debug, info, warn, error, fatal}. ",
 						},
 						&cli.StringFlag{
 							Name:   sshConnectTo,
@@ -295,7 +295,6 @@ func curl(c *cli.Context) error {
 	cmdArgs = append(cmdArgs, fmt.Sprintf("%s: %s", h2mux.CFAccessTokenHeader, tok))
 	return run("curl", cmdArgs...)
 }
-
 
 // run kicks off a shell task and pipe the results to the respective std pipes
 func run(cmd string, args ...string) error {
