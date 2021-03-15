@@ -343,6 +343,12 @@ func (sc *subcommandContext) findID(input string) (uuid.UUID, error) {
 // one Tunnelstore API call.
 func (sc *subcommandContext) findIDs(inputs []string) ([]uuid.UUID, error) {
 
+	// Shortcut without Tunnelstore call if we find that all inputs are already UUIDs.
+	uuids, err := convertNamesToUuids(inputs, make(map[string]uuid.UUID))
+	if err == nil {
+		return uuids, nil
+	}
+
 	// First, look up all tunnels the user has
 	filter := tunnelstore.NewFilter()
 	filter.NoDeleted()
@@ -362,7 +368,10 @@ func findIDs(tunnels []*tunnelstore.Tunnel, inputs []string) ([]uuid.UUID, error
 		nameToID[tunnel.Name] = tunnel.ID
 	}
 
-	// For each input, try to find the tunnel ID.
+	return convertNamesToUuids(inputs, nameToID)
+}
+
+func convertNamesToUuids(inputs []string, nameToID map[string]uuid.UUID) ([]uuid.UUID, error) {
 	tunnelIDs := make([]uuid.UUID, len(inputs))
 	var badInputs []string
 	for i, input := range inputs {

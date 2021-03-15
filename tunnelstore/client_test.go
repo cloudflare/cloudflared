@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"reflect"
 	"strings"
 	"testing"
@@ -204,4 +205,25 @@ func TestUnmarshalTunnelErr(t *testing.T) {
 		_, err := unmarshalTunnel(bytes.NewReader([]byte(test)))
 		assert.Error(t, err, fmt.Sprintf("Test #%v failed", i))
 	}
+}
+
+func TestUnmarshalConnections(t *testing.T) {
+	jsonBody := `{"success":true,"messages":[],"errors":[],"result":[{"id":"d4041254-91e3-4deb-bd94-b46e11680b1e","features":["ha-origin"],"version":"2021.2.5","arch":"darwin_amd64","conns":[{"colo_name":"LIS","id":"ac2286e5-c708-4588-a6a0-ba6b51940019","is_pending_reconnect":false,"origin_ip":"148.38.28.2","opened_at":"0001-01-01T00:00:00Z"}],"run_at":"0001-01-01T00:00:00Z"}]}`
+	expected := ActiveClient{
+		ID:       uuid.MustParse("d4041254-91e3-4deb-bd94-b46e11680b1e"),
+		Features: []string{"ha-origin"},
+		Version:  "2021.2.5",
+		Arch:     "darwin_amd64",
+		RunAt:    time.Time{},
+		Connections: []Connection{{
+			ID:                 uuid.MustParse("ac2286e5-c708-4588-a6a0-ba6b51940019"),
+			ColoName:           "LIS",
+			IsPendingReconnect: false,
+			OriginIP:           net.ParseIP("148.38.28.2"),
+			OpenedAt:           time.Time{},
+		}},
+	}
+	actual, err := parseConnectionsDetails(bytes.NewReader([]byte(jsonBody)))
+	assert.NoError(t, err)
+	assert.Equal(t, []*ActiveClient{&expected}, actual)
 }

@@ -8,11 +8,14 @@
 
 ### New Features
 
-- none
+- It is now possible to obtain more detailed information about the cloudflared connectors to Cloudflare Edge via
+  `cloudflared tunnel info <name/uuid>`. It is possible to sort the output as well as output in different formats,
+  such as: `cloudflared tunnel info --sort-by version --invert-sort --output json <name/uuid>`.
+  You can obtain more information via `cloudflared tunnel info --help`.
 
 ### Improvements
 
-- nonw
+- none
 
 ### Bug Fixes
 

@@ -29,9 +29,10 @@ import (
 )
 
 const (
-	allSortByOptions  = "name, id, createdAt, deletedAt, numConnections"
-	CredFileFlagAlias = "cred-file"
-	CredFileFlag      = "credentials-file"
+	allSortByOptions   = "name, id, createdAt, deletedAt, numConnections"
+	connsSortByOptions = "id, startedAt, numConnections, version"
+	CredFileFlagAlias  = "cred-file"
+	CredFileFlag       = "credentials-file"
 
 	LogFieldTunnelID = "tunnelID"
 )
@@ -64,11 +65,11 @@ var (
 		Aliases: []string{"rd"},
 		Usage:   "Include connections that have recently disconnected in the list",
 	}
-	outputFormatFlag = altsrc.NewStringFlag(&cli.StringFlag{
+	outputFormatFlag = &cli.StringFlag{
 		Name:    "output",
 		Aliases: []string{"o"},
 		Usage:   "Render output using given `FORMAT`. Valid options are 'json' or 'yaml'",
-	})
+	}
 	sortByFlag = &cli.StringFlag{
 		Name:    "sort-by",
 		Value:   "name",
@@ -114,6 +115,17 @@ var (
 		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
 		Hidden:  true,
 	})
+	sortInfoByFlag = &cli.StringFlag{
+		Name:    "sort-by",
+		Value:   "createdAt",
+		Usage:   fmt.Sprintf("Sorts the list of connections of a tunnel by the given field. Valid options are {%s}", connsSortByOptions),
+		EnvVars: []string{"TUNNEL_INFO_SORT_BY"},
+	}
+	invertInfoSortFlag = &cli.BoolFlag{
+		Name:    "invert-sort",
+		Usage:   "Inverts the sort order of the tunnel info.",
+		EnvVars: []string{"TUNNEL_INFO_INVERT_SORT"},
+	}
 )
 
 func buildCreateCommand() *cli.Command {
@@ -214,6 +226,9 @@ func listCommand(c *cli.Context) error {
 		return err
 	}
 
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
 	filter := tunnelstore.NewFilter()
 	if !c.Bool("show-deleted") {
 		filter.NoDeleted()
@@ -231,9 +246,6 @@ func listCommand(c *cli.Context) error {
 		}
 		filter.ByTunnelID(tunnelID)
 	}
-
-	warningChecker := updater.StartWarningCheck(c)
-	defer warningChecker.LogWarningIfAny(sc.log)
 
 	tunnels, err := sc.list(filter)
 	if err != nil {
@@ -284,16 +296,10 @@ func listCommand(c *cli.Context) error {
 }
 
 func formatAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnected bool) {
-	const (
-		minWidth = 0
-		tabWidth = 8
-		padding  = 1
-		padChar  = ' '
-		flags    = 0
-	)
-
-	writer := tabwriter.NewWriter(os.Stdout, minWidth, tabWidth, padding, padChar, flags)
+	writer := tabWriter()
 	defer writer.Flush()
+
+	_, _ = fmt.Fprintln(writer, "You can obtain more detailed information for each tunnel with `cloudflared tunnel info <name/uuid>`")
 
 	// Print column headers with tabbed columns
 	_, _ = fmt.Fprintln(writer, "ID\tNAME\tCREATED\tCONNECTIONS\t")
@@ -334,6 +340,152 @@ func fmtConnections(connections []tunnelstore.Connection, showRecentlyDisconnect
 		output = append(output, fmt.Sprintf("%dx%s", numConnsPerColo[coloName], coloName))
 	}
 	return strings.Join(output, ", ")
+}
+
+func buildInfoCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "info",
+		Action:      cliutil.ConfiguredAction(tunnelInfo),
+		Usage:       "List details about the active connectors for a tunnel",
+		UsageText:   "cloudflared tunnel [tunnel command options] info [subcommand options] [TUNNEL]",
+		Description: "cloudflared tunnel info displays details about the active connectors for a given tunnel (identified by name or uuid).",
+		Flags: []cli.Flag{
+			outputFormatFlag,
+			showRecentlyDisconnected,
+			sortInfoByFlag,
+			invertInfoSortFlag,
+		},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func tunnelInfo(c *cli.Context) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return err
+	}
+
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
+	if c.NArg() > 1 {
+		return cliutil.UsageError(`"cloudflared tunnel info" accepts only one argument, the ID or name of the tunnel to run.`)
+	}
+	tunnelID, err := sc.findID(c.Args().First())
+	if err != nil {
+		return errors.Wrap(err, "error parsing tunnel ID")
+	}
+
+	client, err := sc.client()
+	if err != nil {
+		return err
+	}
+
+	clients, err := client.ListActiveClients(tunnelID)
+	if err != nil {
+		return err
+	}
+
+	sortBy := c.String("sort-by")
+	invalidSortField := false
+	sort.Slice(clients, func(i, j int) bool {
+		cmp := func() bool {
+			switch sortBy {
+			case "id":
+				return clients[i].ID.String() < clients[j].ID.String()
+			case "createdAt":
+				return clients[i].RunAt.Unix() < clients[j].RunAt.Unix()
+			case "numConnections":
+				return len(clients[i].Connections) < len(clients[j].Connections)
+			case "version":
+				return clients[i].Version < clients[j].Version
+			default:
+				invalidSortField = true
+				return clients[i].RunAt.Unix() < clients[j].RunAt.Unix()
+			}
+		}()
+		if c.Bool("invert-sort") {
+			return !cmp
+		}
+		return cmp
+	})
+	if invalidSortField {
+		sc.log.Error().Msgf("%s is not a valid sort field. Valid sort fields are %s. Defaulting to 'name'.", sortBy, connsSortByOptions)
+	}
+
+	tunnel, err := getTunnel(sc, tunnelID)
+	if err != nil {
+		return err
+	}
+	info := Info{
+		tunnel.ID,
+		tunnel.Name,
+		tunnel.CreatedAt,
+		clients,
+	}
+
+	if outputFormat := c.String(outputFormatFlag.Name); outputFormat != "" {
+		return renderOutput(outputFormat, info)
+	}
+
+	if len(clients) > 0 {
+		formatAndPrintConnectionsList(info, c.Bool("show-recently-disconnected"))
+	} else {
+		fmt.Printf("Your tunnel %s does not have any active connection.\n", tunnelID)
+	}
+
+	return nil
+}
+
+func getTunnel(sc *subcommandContext, tunnelID uuid.UUID) (*tunnelstore.Tunnel, error) {
+	filter := tunnelstore.NewFilter()
+	filter.ByTunnelID(tunnelID)
+	tunnels, err := sc.list(filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(tunnels) != 1 {
+		return nil, errors.Errorf("Expected to find a single tunnel with uuid %v but found %d tunnels.", tunnelID, len(tunnels))
+	}
+	return tunnels[0], nil
+}
+
+func formatAndPrintConnectionsList(tunnelInfo Info, showRecentlyDisconnected bool) {
+	writer := tabWriter()
+	defer writer.Flush()
+
+	_, _ = fmt.Fprintf(writer, "NAME:     %s\nID:       %s\nCREATED:  %s\n\n", tunnelInfo.Name, tunnelInfo.ID, tunnelInfo.CreatedAt)
+
+	_, _ = fmt.Fprintln(writer, "CONNECTOR ID\tCREATED\tARCHITECTURE\tVERSION\tORIGIN IP\tEDGE\t")
+	for _, c := range tunnelInfo.Connectors {
+		var originIp = ""
+		if len(c.Connections) > 0 {
+			originIp = c.Connections[0].OriginIP.String()
+		}
+		formattedStr := fmt.Sprintf(
+			"%s\t%s\t%s\t%s\t%s\t%s\t",
+			c.ID,
+			c.RunAt.Format(time.RFC3339),
+			c.Arch,
+			c.Version,
+			originIp,
+			fmtConnections(c.Connections, showRecentlyDisconnected),
+		)
+		_, _ = fmt.Fprintln(writer, formattedStr)
+	}
+}
+
+func tabWriter() *tabwriter.Writer {
+	const (
+		minWidth = 0
+		tabWidth = 8
+		padding  = 1
+		padChar  = ' '
+		flags    = 0
+	)
+
+	writer := tabwriter.NewWriter(os.Stdout, minWidth, tabWidth, padding, padChar, flags)
+	return writer
 }
 
 func buildDeleteCommand() *cli.Command {

@@ -43,6 +43,17 @@ type Connection struct {
 	ColoName           string    `json:"colo_name"`
 	ID                 uuid.UUID `json:"id"`
 	IsPendingReconnect bool      `json:"is_pending_reconnect"`
+	OriginIP           net.IP    `json:"origin_ip"`
+	OpenedAt           time.Time `json:"opened_at"`
+}
+
+type ActiveClient struct {
+	ID          uuid.UUID    `json:"id"`
+	Features    []string     `json:"features"`
+	Version     string       `json:"version"`
+	Arch        string       `json:"arch"`
+	RunAt       time.Time    `json:"run_at"`
+	Connections []Connection `json:"conns"`
 }
 
 type Change = string
@@ -192,6 +203,7 @@ type Client interface {
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	DeleteTunnel(tunnelID uuid.UUID) error
 	ListTunnels(filter *Filter) ([]*Tunnel, error)
+	ListActiveClients(tunnelID uuid.UUID) ([]*ActiveClient, error)
 	CleanupConnections(tunnelID uuid.UUID) error
 	RouteTunnel(tunnelID uuid.UUID, route Route) (RouteResult, error)
 
@@ -334,6 +346,28 @@ func parseListTunnels(body io.ReadCloser) ([]*Tunnel, error) {
 	var tunnels []*Tunnel
 	err := parseResponse(body, &tunnels)
 	return tunnels, err
+}
+
+func (r *RESTClient) ListActiveClients(tunnelID uuid.UUID) ([]*ActiveClient, error) {
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/connections", tunnelID))
+	resp, err := r.sendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return parseConnectionsDetails(resp.Body)
+	}
+
+	return nil, r.statusCodeToError("list connection details", resp)
+}
+
+func parseConnectionsDetails(reader io.Reader) ([]*ActiveClient, error) {
+	var clients []*ActiveClient
+	err := parseResponse(reader, &clients)
+	return clients, err
 }
 
 func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {

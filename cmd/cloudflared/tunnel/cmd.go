@@ -100,6 +100,7 @@ func Commands() []*cli.Command {
 		buildRouteCommand(),
 		buildRunCommand(),
 		buildListCommand(),
+		buildInfoCommand(),
 		buildIngressSubcommand(),
 		buildDeleteCommand(),
 		buildCleanupCommand(),
@@ -464,7 +465,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		credentialsFileFlag,
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "is-autoupdated",
-			Usage:  "Signal the new process that Argo Tunnel client has been autoupdated",
+			Usage:  "Signal the new process that Argo Tunnel connector has been autoupdated",
 			Value:  false,
 			Hidden: true,
 		}),
