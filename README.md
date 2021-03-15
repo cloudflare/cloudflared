@@ -11,12 +11,13 @@ Before you use Argo Tunnel, you'll need to complete a few steps in the Cloudflar
 
 ## Installing `cloudflared`
 
-Downloads are available as standalone binaries, a Docker image, and Debian, RPM, and Homebrew packages. You can also find releases here on the `cloudflared` GitHub repository.
+Downloads are available as standalone binaries, a Docker image, and Debian, RPM, and Homebrew packages. You can also find releases [here](https://github.com/cloudflare/cloudflared/releases) on the `cloudflared` GitHub repository.
 
 * You can [install on macOS](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#macos) via Homebrew or by downloading the [latest Darwin amd64 release](https://github.com/cloudflare/cloudflared/releases)
 * Binaries, Debian, and RPM packages for Linux [can be found here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#linux)
 * A Docker image of `cloudflared` is [available on DockerHub](https://hub.docker.com/r/cloudflare/cloudflared)
 * You can install on Windows machines with the [steps here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#windows)
+* Build from source with the [instructions here](npm ERR! cb() never called!)
 
 User documentation for Argo Tunnel can be found at https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
 
