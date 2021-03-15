@@ -1,3 +1,7 @@
+2021.3.1
+- 2021-03-11 TUN-4051: Add component-tests to test graceful shutdown
+- 2021-03-12 TUN-4052: Add component tests to assert service mode behavior
+
 2021.3.0
 - 2021-03-10 TUN-4075: Dedup test should not compare order of list
 - 2021-03-10 Revert "AUTH-3394: Creates a token per app instead of per path"
