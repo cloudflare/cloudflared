@@ -1,3 +1,34 @@
+2021.3.0
+- 2021-03-10 TUN-4075: Dedup test should not compare order of list
+- 2021-03-10 Revert "AUTH-3394: Creates a token per app instead of per path"
+- 2021-03-11 TUN-4066: Remove unnecessary chmod during package publish to CF_PKG_HOSTS
+- 2021-03-11 TUN-4066: Set permissions in build agent before 'scp'-ing to machine hosting package repo
+- 2021-03-11 TUN-4050: Add component tests to assert reconnect behavior
+- 2021-03-10 AUTH-3394: Creates a token per app instead of per path - with fix for free tunnels
+- 2021-03-15 Publish change log for 2021.3.0
+- 2021-03-01 Issue #285 - Makefile does not detect TARGET_ARCH correctly on FreeBSD  (#325)
+- 2021-03-01 TUN-3988: Log why it cannot check if origin cert exists
+- 2021-03-02 TUN-3995: Optional --features flag for tunnel run.
+- 2021-03-02 TUN-3994: Log client_id when running a named tunnel
+- 2021-03-04 TUN-4026: Fix regression where HTTP2 edge transport was no longer propagating control plane errors
+- 2021-03-05 TUN-4055: Skeleton for component tests
+- 2021-03-08 TUN-4047: Add cfsetup target to run component test
+- 2021-03-08 TUN-4016: Delegate decision to update for Worker service
+- 2021-03-02 TUN-3905: Cannot run go mod vendor in cloudflared due to fips
+- 2021-03-08 TUN-4063: Cleanup dependencies between packages.
+- 2021-03-09 Allow partial reads from a GorillaConn; add SetDeadline (from net.Conn) (#330)
+- 2021-03-09 TUN-4069: Fix regression on support for websocket over proxy
+- 2021-03-02 AUTH-3394: Creates a token per app instead of per path
+- 2021-03-01 TUN-4017: Add support for using cloudflared as a full socks proxy.
+- 2021-03-08 TUN-4062: Read component tests config from yaml file
+- 2021-03-08 TUN-4049: Add component tests to assert logging behavior when running from terminal
+- 2021-02-23 TUN-3963: Repoint urfave/cli/v2 library at patched branch at github.com/ipostelnik/cli/v2@fixed which correctly handles reading flags declared at multiple levels of subcommands.
+- 2021-02-25 TUN-3970: Route ip show has alias route ip list
+- 2021-02-26 TUN-3978: Unhide teamnet commands and improve their help
+- 2021-02-26 TUN-3983: Renew CA certs in cloudflared
+- 2021-02-28 TUN-3989: Check in with Updater service in more situations and convey messages to user
+- 2021-02-11 TUN-3819: Remove client-side check that deleted tunnels have no connections
+
 2021.2.5
 - 2021-02-23 Publish change notes for 2021.2.5
 - 2021-02-11 TUN-3838: ResponseWriter no longer reads and origin error tests
