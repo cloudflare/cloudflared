@@ -45,7 +45,7 @@ func buildIngressSubcommand() *cli.Command {
 func buildValidateIngressCommand() *cli.Command {
 	return &cli.Command{
 		Name:        "validate",
-		Action:      cliutil.Action(validateIngressCommand),
+		Action:      cliutil.ConfiguredAction(validateIngressCommand),
 		Usage:       "Validate the ingress configuration ",
 		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
 		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
@@ -55,7 +55,7 @@ func buildValidateIngressCommand() *cli.Command {
 func buildTestURLCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "rule",
-		Action:    cliutil.Action(testURLCommand),
+		Action:    cliutil.ConfiguredAction(testURLCommand),
 		Usage:     "Check which ingress rule matches a given request URL",
 		UsageText: "cloudflared tunnel [--config FILEPATH] ingress rule URL",
 		ArgsUsage: "URL",

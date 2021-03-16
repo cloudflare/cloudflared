@@ -26,16 +26,10 @@ const (
 func buildLoginSubcommand(hidden bool) *cli.Command {
 	return &cli.Command{
 		Name:      "login",
-		Action:    cliutil.Action(login),
+		Action:    cliutil.ConfiguredAction(login),
 		Usage:     "Generate a configuration file with your login details",
 		ArgsUsage: " ",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:   "url",
-				Hidden: true,
-			},
-		},
-		Hidden: hidden,
+		Hidden:    hidden,
 	}
 }
 

@@ -119,7 +119,7 @@ var (
 func buildCreateCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "create",
-		Action:    cliutil.Action(createCommand),
+		Action:    cliutil.ConfiguredAction(createCommand),
 		Usage:     "Create a new tunnel with given name",
 		UsageText: "cloudflared tunnel [tunnel command options] create [subcommand options] NAME",
 		Description: `Creates a tunnel, registers it with Cloudflare edge and generates credential file used to run this tunnel.
@@ -190,7 +190,7 @@ func writeTunnelCredentials(
 func buildListCommand() *cli.Command {
 	return &cli.Command{
 		Name:        "list",
-		Action:      cliutil.Action(listCommand),
+		Action:      cliutil.ConfiguredAction(listCommand),
 		Usage:       "List existing tunnels",
 		UsageText:   "cloudflared tunnel [tunnel command options] list [subcommand options]",
 		Description: "cloudflared tunnel list will display all active tunnels, their created time and associated connections. Use -d flag to include deleted tunnels. See the list of options to filter the list",
@@ -339,7 +339,7 @@ func fmtConnections(connections []tunnelstore.Connection, showRecentlyDisconnect
 func buildDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:               "delete",
-		Action:             cliutil.Action(deleteCommand),
+		Action:             cliutil.ConfiguredAction(deleteCommand),
 		Usage:              "Delete existing tunnel by UUID or name",
 		UsageText:          "cloudflared tunnel [tunnel command options] delete [subcommand options] TUNNEL",
 		Description:        "cloudflared tunnel delete will delete tunnels with the given tunnel UUIDs or names. A tunnel cannot be deleted if it has active connections. To delete the tunnel unconditionally, use -f flag.",
@@ -392,7 +392,7 @@ func buildRunCommand() *cli.Command {
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{
 		Name:      "run",
-		Action:    cliutil.Action(runCommand),
+		Action:    cliutil.ConfiguredAction(runCommand),
 		Usage:     "Proxy a local web server by running the given tunnel",
 		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] [TUNNEL]",
 		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections
@@ -444,7 +444,7 @@ func runNamedTunnel(sc *subcommandContext, tunnelRef string) error {
 func buildCleanupCommand() *cli.Command {
 	return &cli.Command{
 		Name:               "cleanup",
-		Action:             cliutil.Action(cleanupCommand),
+		Action:             cliutil.ConfiguredAction(cleanupCommand),
 		Usage:              "Cleanup tunnel connections",
 		UsageText:          "cloudflared tunnel [tunnel command options] cleanup [subcommand options] TUNNEL",
 		Description:        "Delete connections for tunnels with the given UUIDs or names.",
@@ -473,7 +473,7 @@ func cleanupCommand(c *cli.Context) error {
 func buildRouteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "route",
-		Action:    cliutil.Action(routeCommand),
+		Action:    cliutil.ConfiguredAction(routeCommand),
 		Usage:     "Define which traffic routed from Cloudflare edge to this tunnel: requests to a DNS hostname, to a Cloudflare Load Balancer, or traffic originating from Cloudflare WARP clients",
 		UsageText: "cloudflared tunnel [tunnel command options] route [subcommand options] [dns TUNNEL HOSTNAME]|[lb TUNNEL HOSTNAME LB-POOL]|[ip NETWORK TUNNEL]",
 		Description: `The route command defines how Cloudflare will proxy requests to this tunnel.

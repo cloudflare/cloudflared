@@ -119,7 +119,7 @@ func Commands() []*cli.Command {
 func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 	return &cli.Command{
 		Name:      "tunnel",
-		Action:    cliutil.Action(TunnelCommand),
+		Action:    cliutil.ConfiguredAction(TunnelCommand),
 		Category:  "Tunnel",
 		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
 		ArgsUsage: " ",

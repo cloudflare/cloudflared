@@ -24,7 +24,7 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 			{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as a system service",
-				Action: cliutil.Action(installLinuxService),
+				Action: cliutil.ConfiguredAction(installLinuxService),
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:  "legacy",
@@ -35,7 +35,7 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 			{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel service",
-				Action: cliutil.Action(uninstallLinuxService),
+				Action: cliutil.ConfiguredAction(uninstallLinuxService),
 			},
 		},
 	})

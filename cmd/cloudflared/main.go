@@ -8,10 +8,10 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
@@ -89,7 +89,7 @@ func commands(version func(c *cli.Context)) []*cli.Command {
 	cmds := []*cli.Command{
 		{
 			Name:   "update",
-			Action: cliutil.Action(updater.Update),
+			Action: cliutil.ConfiguredAction(updater.Update),
 			Usage:  "Update the agent if a new version exists",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
@@ -144,7 +144,7 @@ func isEmptyInvocation(c *cli.Context) bool {
 }
 
 func action(graceShutdownC chan struct{}) cli.ActionFunc {
-	return cliutil.Action(func(c *cli.Context) (err error) {
+	return cliutil.ConfiguredAction(func(c *cli.Context) (err error) {
 		if isEmptyInvocation(c) {
 			return handleServiceMode(c, graceShutdownC)
 		}

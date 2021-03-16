@@ -91,12 +91,6 @@ func Commands() []*cli.Command {
 					Once authenticated with your identity provider, the login command will generate a JSON Web Token (JWT)
 					scoped to your identity, the application you intend to reach, and valid for a session duration set by your
 					administrator. cloudflared stores the token in local storage.`,
-					Flags: []cli.Flag{
-						&cli.StringFlag{
-							Name:   "url",
-							Hidden: true,
-						},
-					},
 				},
 				{
 					Name:   "curl",

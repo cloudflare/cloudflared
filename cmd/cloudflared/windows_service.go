@@ -51,12 +51,12 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 			{
 				Name:   "install",
 				Usage:  "Install Argo Tunnel as a Windows service",
-				Action: cliutil.Action(installWindowsService),
+				Action: cliutil.ConfiguredAction(installWindowsService),
 			},
 			{
 				Name:   "uninstall",
 				Usage:  "Uninstall the Argo Tunnel service",
-				Action: cliutil.Action(uninstallWindowsService),
+				Action: cliutil.ConfiguredAction(uninstallWindowsService),
 			},
 		},
 	})

@@ -9,6 +9,10 @@ import (
 )
 
 func Action(actionFunc cli.ActionFunc) cli.ActionFunc {
+	return WithErrorHandler(actionFunc)
+}
+
+func ConfiguredAction(actionFunc cli.ActionFunc) cli.ActionFunc {
 	return WithErrorHandler(func(c *cli.Context) error {
 		if err := setFlagsFromConfigFile(c); err != nil {
 			return err
