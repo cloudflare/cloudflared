@@ -50,9 +50,9 @@ class TestTermination():
                     target=self.stream_request, args=(config, connected, True, ))
                 in_flight_req.start()
 
+                with connected:
+                    connected.wait(self.timeout)
                 with self.within_grace_period():
-                    with connected:
-                        connected.wait(self.timeout)
                     # Send signal after the SSE connection is established
                     self.terminate_by_signal(cloudflared, sig)
                     self.wait_eyeball_thread(in_flight_req, self.grace_period)

@@ -67,8 +67,12 @@ def wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
 def check_tunnel_not_connected():
     url = f'http://localhost:{METRICS_PORT}/ready'
 
-    resp = requests.get(url, timeout=1)
-    assert resp.status_code == 503, f"Expect {url} returns 503, got {resp.status_code}"
+    try:
+        resp = requests.get(url, timeout=1)
+        assert resp.status_code == 503, f"Expect {url} returns 503, got {resp.status_code}"
+    # cloudflared might already terminate
+    except requests.exceptions.ConnectionError as e:
+        LOGGER.warning(f"Failed to connect to {url}, error: {e}")
 
 
 # In some cases we don't need to check response status, such as when sending batch requests to generate logs
