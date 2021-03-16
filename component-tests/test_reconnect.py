@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 import copy
-
+from flaky import flaky
 from retrying import retry
 from time import sleep
 
 from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected, send_requests
 
 
+@flaky(max_runs=3, min_passes=1)
 class TestReconnect():
     default_ha_conns = 4
     default_reconnect_secs = 5
