@@ -663,7 +663,8 @@ func AssertIfPipeReadable(t *testing.T, pipe io.ReadCloser) {
 		b := []byte{0}
 		n, err := pipe.Read(b)
 		if n > 0 {
-			t.Fatalf("read pipe was not empty")
+			t.Errorf("read pipe was not empty")
+			return
 		}
 		errC <- err
 	}()

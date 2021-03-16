@@ -81,7 +81,8 @@ func TestStartServer(t *testing.T) {
 	go func() {
 		err := Serve(wsConn, listener, shutdownC, options)
 		if err != nil {
-			t.Fatalf("Error running server: %v", err)
+			t.Errorf("Error running server: %v", err)
+			return
 		}
 	}()
 
