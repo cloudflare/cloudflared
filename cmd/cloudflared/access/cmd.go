@@ -316,7 +316,7 @@ func generateToken(c *cli.Context) error {
 	if err := raven.SetDSN(sentryDSN); err != nil {
 		return err
 	}
-	appURL, err := url.Parse(c.String("app"))
+	appURL, err := url.Parse(ensureURLScheme(c.String("app")))
 	if err != nil || c.NumFlags() < 1 {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
