@@ -47,7 +47,7 @@ func applyConfig(c *cli.Context, inputSource altsrc.InputSourceContext) error {
 		targetFlags := context.Command.Flags
 		if context.Command.Name == "" {
 			// commands that define child subcommands are executed as if they were an app
-			targetFlags = c.App.Flags
+			targetFlags = context.App.Flags
 		}
 		if err := altsrc.ApplyInputSourceValues(context, inputSource, targetFlags); err != nil {
 			return err
