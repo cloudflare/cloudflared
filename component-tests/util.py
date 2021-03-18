@@ -63,7 +63,7 @@ def wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
             send_request(s, tunnel_url, True)
 
 
-@retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
+@retry(stop_max_attempt_number=MAX_RETRIES * BACKOFF_SECS, wait_fixed=1000)
 def check_tunnel_not_connected():
     url = f'http://localhost:{METRICS_PORT}/ready'
 
