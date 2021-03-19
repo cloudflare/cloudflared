@@ -224,7 +224,7 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 			return fmt.Errorf("Tunnel %s has already been deleted", tunnel.ID)
 		}
 		if forceFlagSet {
-			if err := client.CleanupConnections(tunnel.ID); err != nil {
+			if err := client.CleanupConnections(tunnel.ID, tunnelstore.NewCleanupParams()); err != nil {
 				return errors.Wrapf(err, "Error cleaning up connections for tunnel %s", tunnel.ID)
 			}
 		}
@@ -276,13 +276,24 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 }
 
 func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
+	params := tunnelstore.NewCleanupParams()
+	extraLog := ""
+	if connector := sc.c.String("connector-id"); connector != "" {
+		connectorID, err := uuid.Parse(connector)
+		if err != nil {
+			return errors.Wrapf(err, "%s is not a valid client ID (must be a UUID)", connector)
+		}
+		params.ForClient(connectorID)
+		extraLog = fmt.Sprintf(" for connector-id %s", connectorID.String())
+	}
+
 	client, err := sc.client()
 	if err != nil {
 		return err
 	}
 	for _, tunnelID := range tunnelIDs {
-		sc.log.Info().Msgf("Cleanup connection for tunnel %s", tunnelID)
-		if err := client.CleanupConnections(tunnelID); err != nil {
+		sc.log.Info().Msgf("Cleanup connection for tunnel %s%s", tunnelID, extraLog)
+		if err := client.CleanupConnections(tunnelID, params); err != nil {
 			sc.log.Error().Msgf("Error cleaning up connections for tunnel %v, error :%v", tunnelID, err)
 		}
 	}

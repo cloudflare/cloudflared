@@ -126,6 +126,12 @@ var (
 		Usage:   "Inverts the sort order of the tunnel info.",
 		EnvVars: []string{"TUNNEL_INFO_INVERT_SORT"},
 	}
+	cleanupClientFlag = &cli.StringFlag{
+		Name:    "connector-id",
+		Aliases: []string{"c"},
+		Usage:   `Constraints the cleanup to stop the connections of a single Connector (by its ID). You can find the various Connectors (and their IDs) currently connected to your tunnel via 'cloudflared tunnel info <name>'.`,
+		EnvVars: []string{"TUNNEL_CLEANUP_CONNECTOR"},
+	}
 )
 
 func buildCreateCommand() *cli.Command {
@@ -600,6 +606,7 @@ func buildCleanupCommand() *cli.Command {
 		Usage:              "Cleanup tunnel connections",
 		UsageText:          "cloudflared tunnel [tunnel command options] cleanup [subcommand options] TUNNEL",
 		Description:        "Delete connections for tunnels with the given UUIDs or names.",
+		Flags:              []cli.Flag{cleanupClientFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }

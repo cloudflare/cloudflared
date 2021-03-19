@@ -204,7 +204,7 @@ type Client interface {
 	DeleteTunnel(tunnelID uuid.UUID) error
 	ListTunnels(filter *Filter) ([]*Tunnel, error)
 	ListActiveClients(tunnelID uuid.UUID) ([]*ActiveClient, error)
-	CleanupConnections(tunnelID uuid.UUID) error
+	CleanupConnections(tunnelID uuid.UUID, params *CleanupParams) error
 	RouteTunnel(tunnelID uuid.UUID, route Route) (RouteResult, error)
 
 	// Teamnet endpoints
@@ -370,8 +370,9 @@ func parseConnectionsDetails(reader io.Reader) ([]*ActiveClient, error) {
 	return clients, err
 }
 
-func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID) error {
+func (r *RESTClient) CleanupConnections(tunnelID uuid.UUID, params *CleanupParams) error {
 	endpoint := r.baseEndpoints.accountLevel
+	endpoint.RawQuery = params.encode()
 	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/connections", tunnelID))
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
