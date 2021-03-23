@@ -4,11 +4,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/cloudflare/cloudflared/watcher"
-
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
+
+	"github.com/cloudflare/cloudflared/watcher"
 )
 
 // Notifier sends out config updates

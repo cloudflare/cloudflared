@@ -4,4 +4,3 @@ package token
 func OpenBrowser(url string) error {
 	return getBrowserCmd(url).Start()
 }
-

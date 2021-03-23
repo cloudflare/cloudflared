@@ -7,14 +7,14 @@ import (
 	"net"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
+
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-
-	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 )
 
 const (

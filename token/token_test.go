@@ -17,7 +17,7 @@ func TestSignalHandler(t *testing.T) {
 	handlerRan := false
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Second)
-	sigHandler.register(func(){
+	sigHandler.register(func() {
 		handlerRan = true
 		done <- struct{}{}
 	})
@@ -28,10 +28,10 @@ func TestSignalHandler(t *testing.T) {
 
 	// Blocks for up to one second to make sure the handler callback runs before the assert.
 	select {
-		case <- done:
-			assert.True(t, handlerRan)
-		case <- timer.C:
-			t.Fail()
+	case <-done:
+		assert.True(t, handlerRan)
+	case <-timer.C:
+		t.Fail()
 	}
 	sigHandler.deregister()
 }
@@ -40,15 +40,15 @@ func TestSignalHandlerClose(t *testing.T) {
 	sigHandler := signalHandler{signals: []os.Signal{syscall.SIGUSR1}}
 	done := make(chan struct{})
 	timer := time.NewTimer(time.Second)
-	sigHandler.register(func(){done <- struct{}{}})
+	sigHandler.register(func() { done <- struct{}{} })
 	sigHandler.deregister()
 
 	p, err := os.FindProcess(os.Getpid())
 	require.Nil(t, err)
 	p.Signal(syscall.SIGUSR1)
 	select {
-	case <- done:
+	case <-done:
 		t.Fail()
-	case <- timer.C:
+	case <-timer.C:
 	}
 }

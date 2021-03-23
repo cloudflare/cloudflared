@@ -7,9 +7,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/websocket"
-	"github.com/pkg/errors"
 )
 
 var (

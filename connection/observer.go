@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"strings"
 
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-
 	"github.com/rs/zerolog"
+
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (

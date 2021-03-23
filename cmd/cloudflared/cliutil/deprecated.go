@@ -16,6 +16,6 @@ func RemovedCommand(name string) *cli.Command {
 			)
 		},
 		Description: fmt.Sprintf("%s is deprecated", name),
-		Hidden: true,
+		Hidden:      true,
 	}
 }

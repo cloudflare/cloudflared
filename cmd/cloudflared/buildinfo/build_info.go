@@ -1,9 +1,10 @@
 package buildinfo
 
 import (
-	"github.com/rs/zerolog"
 	"fmt"
 	"runtime"
+
+	"github.com/rs/zerolog"
 )
 
 type BuildInfo struct {

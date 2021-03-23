@@ -3,8 +3,9 @@ package tunnel
 import (
 	"net"
 
-	"github.com/cloudflare/cloudflared/teamnet"
 	"github.com/pkg/errors"
+
+	"github.com/cloudflare/cloudflared/teamnet"
 )
 
 const noClientMsg = "error while creating backend client"

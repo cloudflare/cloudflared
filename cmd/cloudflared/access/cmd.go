@@ -11,6 +11,12 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
+	"golang.org/x/net/idna"
+
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/h2mux"
@@ -18,12 +24,6 @@ import (
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/token"
 	"github.com/cloudflare/cloudflared/validation"
-
-	"github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
-	"github.com/urfave/cli/v2"
-	"golang.org/x/net/idna"
 )
 
 const (

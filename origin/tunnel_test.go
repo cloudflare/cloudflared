@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/connection"
-
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/connection"
 )
 
 type dynamicMockFetcher struct {

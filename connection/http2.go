@@ -10,11 +10,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cloudflare/cloudflared/h2mux"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
+
+	"github.com/cloudflare/cloudflared/h2mux"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (

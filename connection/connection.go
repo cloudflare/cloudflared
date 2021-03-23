@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/google/uuid"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const LogFieldConnIndex = "connIndex"

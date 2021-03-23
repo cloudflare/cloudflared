@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflared/teamnet"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/teamnet"
 )
 
 const (

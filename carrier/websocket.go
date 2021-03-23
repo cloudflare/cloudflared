@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"net/http/httputil"
 
+	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/token"
 	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
-
-	"github.com/gorilla/websocket"
-	"github.com/rs/zerolog"
 )
 
 // Websocket is used to carry data via WS binary frames over the tunnel from client to the origin

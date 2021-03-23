@@ -195,13 +195,15 @@ stretch: &stretch
       - *pinned_go_fips
       - build-essential
       - gotest-to-teamcity
+    pre-cache:
+      - go get golang.org/x/tools/cmd/goimports
+      - go get github.com/BurntSushi/go-sumtype
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
       - export FIPS=true
-      # cd to a non-module directory: https://github.com/golang/go/issues/24250
-      - (cd / && go get github.com/BurntSushi/go-sumtype)
       - export PATH="$HOME/go/bin:$PATH"
+      - ./fmt-check.sh
       - make test | gotest-to-teamcity
   component-test:
     build_dir: *build_dir

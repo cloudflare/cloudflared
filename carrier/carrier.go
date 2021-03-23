@@ -11,11 +11,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/token"
-
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/token"
 )
 
 const LogFieldOriginURL = "originURL"

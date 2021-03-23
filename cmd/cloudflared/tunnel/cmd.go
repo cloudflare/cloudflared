@@ -12,6 +12,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/go-systemd/daemon"
+	"github.com/facebookgo/grace/gracenet"
+	"github.com/getsentry/raven-go"
+	homedir "github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
+
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
@@ -27,15 +36,6 @@ import (
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/tunnelstore"
-
-	"github.com/coreos/go-systemd/daemon"
-	"github.com/facebookgo/grace/gracenet"
-	"github.com/getsentry/raven-go"
-	"github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
-	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 )
 
 const (

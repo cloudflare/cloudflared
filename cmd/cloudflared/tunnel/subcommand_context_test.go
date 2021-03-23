@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/tunnelstore"
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
 )
 
 func Test_findIDs(t *testing.T) {

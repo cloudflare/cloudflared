@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/google/uuid"
-	"github.com/mitchellh/go-homedir"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 func Test_fmtConnections(t *testing.T) {

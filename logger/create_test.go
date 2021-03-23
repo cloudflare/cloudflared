@@ -1,11 +1,12 @@
 package logger
 
 import (
+	"io"
+	"testing"
+
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"testing"
 )
 
 var writeCalls int
@@ -31,45 +32,45 @@ func TestResilientMultiWriter(t *testing.T) {
 		writers []io.Writer
 	}{
 		{
-			name:    "All valid writers",
+			name: "All valid writers",
 			writers: []io.Writer{
-				mockedWriter {
+				mockedWriter{
 					wantErr: false,
 				},
-				mockedWriter {
-					wantErr: false,
-				},
-			},
-		},
-		{
-			name:    "All invalid writers",
-			writers: []io.Writer{
-				mockedWriter {
-					wantErr: true,
-				},
-				mockedWriter {
-					wantErr: true,
-				},
-			},
-		},
-		{
-			name:    "First invalid writer",
-			writers: []io.Writer{
-				mockedWriter {
-					wantErr: true,
-				},
-				mockedWriter {
+				mockedWriter{
 					wantErr: false,
 				},
 			},
 		},
 		{
-			name:    "First valid writer",
+			name: "All invalid writers",
 			writers: []io.Writer{
-				mockedWriter {
+				mockedWriter{
+					wantErr: true,
+				},
+				mockedWriter{
+					wantErr: true,
+				},
+			},
+		},
+		{
+			name: "First invalid writer",
+			writers: []io.Writer{
+				mockedWriter{
+					wantErr: true,
+				},
+				mockedWriter{
 					wantErr: false,
 				},
-				mockedWriter {
+			},
+		},
+		{
+			name: "First valid writer",
+			writers: []io.Writer{
+				mockedWriter{
+					wantErr: false,
+				},
+				mockedWriter{
 					wantErr: true,
 				},
 			},

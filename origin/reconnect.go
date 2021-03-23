@@ -7,8 +7,9 @@ import (
 	"sync"
 	"time"
 
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/prometheus/client_golang/prometheus"
+
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 var (

@@ -13,14 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/socks"
 	"github.com/gobwas/ws/wsutil"
 	gorillaWS "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/socks"
 )
 
 const (

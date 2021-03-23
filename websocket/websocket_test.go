@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
-
-	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/tlsconfig"
 	gws "github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/websocket"
+
+	"github.com/cloudflare/cloudflared/hello"
+	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
 const (

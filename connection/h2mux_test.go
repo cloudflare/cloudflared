@@ -38,7 +38,7 @@ func newH2MuxConnection(t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
 				// we only expect RPC traffic in client->edge direction, provide minimal support for mocking
 				require.True(t, stream.IsRPCStream())
 				return stream.WriteHeaders([]h2mux.Header{
-					{Name:  ":status", Value: "200"},
+					{Name: ":status", Value: "200"},
 				})
 			}),
 		}

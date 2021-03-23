@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/origin"
-
 	"github.com/coreos/go-oidc/jose"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/origin"
 )
 
 const (

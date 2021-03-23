@@ -3,8 +3,9 @@ package tunnel
 import (
 	"time"
 
-	"github.com/cloudflare/cloudflared/tunnelstore"
 	"github.com/google/uuid"
+
+	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 type Info struct {

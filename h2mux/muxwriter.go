@@ -3,9 +3,10 @@ package h2mux
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/rs/zerolog"
 	"io"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"

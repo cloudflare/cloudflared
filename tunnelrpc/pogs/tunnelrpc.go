@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
-
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 )
 
 const (

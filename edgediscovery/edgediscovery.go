@@ -5,8 +5,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
 
 const (

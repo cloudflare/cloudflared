@@ -38,4 +38,3 @@ func (mockTunnelServerBase) Authenticate(ctx context.Context, originCert []byte,
 func (mockTunnelServerBase) ReconnectTunnel(ctx context.Context, jwt, eventDigest, connDigest []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error) {
 	panic("unexpected call to ReconnectTunnel")
 }
-

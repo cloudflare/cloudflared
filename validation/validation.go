@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
-
-	"net/http"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/idna"

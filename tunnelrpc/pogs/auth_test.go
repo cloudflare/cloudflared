@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/stretchr/testify/assert"
 	capnp "zombiezen.com/go/capnproto2"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 )
 
 // Ensure the AuthOutcome sum is correct

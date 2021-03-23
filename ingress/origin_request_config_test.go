@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudflare/cloudflared/config"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
+
+	"github.com/cloudflare/cloudflared/config"
 )
 
 // Ensure that the nullable config from `config` package and the

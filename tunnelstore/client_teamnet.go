@@ -7,8 +7,9 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/cloudflare/cloudflared/teamnet"
 	"github.com/pkg/errors"
+
+	"github.com/cloudflare/cloudflared/teamnet"
 )
 
 // ListRoutes calls the Tunnelstore GET endpoint for all routes under an account.

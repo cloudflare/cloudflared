@@ -7,11 +7,12 @@ import (
 	"net"
 	"net/http"
 
+	gws "github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+
 	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/websocket"
-	gws "github.com/gorilla/websocket"
-	"github.com/rs/zerolog"
 )
 
 // OriginConnection is a way to stream to a service running on the user's origin.

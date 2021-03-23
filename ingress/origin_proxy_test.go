@@ -11,10 +11,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/websocket"
 )
 
 // TestEstablishConnectionResponse ensures each implementation of StreamBasedOriginProxy returns

@@ -4,10 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/watcher"
-
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/watcher"
 )
 
 type mockNotifier struct {

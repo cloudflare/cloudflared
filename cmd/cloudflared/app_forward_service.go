@@ -1,10 +1,10 @@
 package main
 
 import (
+	"github.com/rs/zerolog"
+
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/config"
-
-	"github.com/rs/zerolog"
 )
 
 // ForwardServiceType is used to identify what kind of overwatch service this is

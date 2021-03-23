@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/ipaccess"
 )
 
 func TestUnsupportedBind(t *testing.T) {

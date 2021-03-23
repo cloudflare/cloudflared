@@ -67,10 +67,9 @@ func TestObserverEventsDontBlock(t *testing.T) {
 	}
 }
 
-
 type eventCollectorSink struct {
 	observedEvents []Event
-	mu sync.Mutex
+	mu             sync.Mutex
 }
 
 func (s *eventCollectorSink) OnTunnelEvent(event Event) {

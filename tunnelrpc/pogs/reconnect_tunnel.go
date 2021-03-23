@@ -3,8 +3,9 @@ package pogs
 import (
 	"context"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"zombiezen.com/go/capnproto2/server"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 )
 
 func (i TunnelServer_PogsImpl) ReconnectTunnel(p tunnelrpc.TunnelServer_reconnectTunnel) error {

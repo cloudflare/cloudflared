@@ -12,15 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gobwas/ws/wsutil"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-
-	"github.com/gobwas/ws/wsutil"
-	"github.com/rs/zerolog"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
 )
 
 var (

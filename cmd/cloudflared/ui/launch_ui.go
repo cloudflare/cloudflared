@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/ingress"
-
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/ingress"
 )
 
 type connState struct {

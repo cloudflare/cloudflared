@@ -9,10 +9,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/cloudflare/cloudflared/h2mux"
-
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/h2mux"
 )
 
 var stripWebsocketHeaders = []string{

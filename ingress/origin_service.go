@@ -11,14 +11,15 @@ import (
 	"sync"
 	"time"
 
+	gws "github.com/gorilla/websocket"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/websocket"
-	gws "github.com/gorilla/websocket"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
 )
 
 // originService is something a tunnel can proxy traffic to.

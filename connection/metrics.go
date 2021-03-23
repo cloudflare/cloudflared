@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/cloudflare/cloudflared/h2mux"
 )
 
 const (

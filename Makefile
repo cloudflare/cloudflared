@@ -254,3 +254,7 @@ vet:
 .PHONY: msi
 msi: cloudflared
 	go-msi make --msi cloudflared.msi --version $(MSI_VERSION)
+
+.PHONY: goimports
+goimports:
+	for d in $$(go list -mod=readonly -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc) ; do goimports -format-only -local github.com/cloudflare/cloudflared -w $$d ; done
