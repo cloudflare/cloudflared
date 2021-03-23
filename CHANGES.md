@@ -1,10 +1,6 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
-## UNRELEASED
-
-### Backward Incompatible Changes
-
-- none
+## 2021.3.2
 
 ### New Features
 
@@ -13,13 +9,10 @@
   such as: `cloudflared tunnel info --sort-by version --invert-sort --output json <name/uuid>`.
   You can obtain more information via `cloudflared tunnel info --help`.
 
-### Improvements
-
-- none
-
 ### Bug Fixes
 
 - Don't look for configuration file in default paths when `--config FILE` flag is present after `tunnel` subcommand.
+- cloudflared access token command now functions correctly with the new token-per-app change from 2021.3.0.
 
 
 ## 2021.3.0
