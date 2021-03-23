@@ -1,3 +1,18 @@
+2021.3.2
+- 2021-03-23 TUN-4042: Capture cloudflared output to debug component tests
+- 2021-03-23 Publish changelog for 2021.3.2
+- 2021-03-16 TUN-4089: Address flakiness in component tests for termination
+- 2021-03-16 TUN-4060: Fix Go Vet warnings (new with go 1.16) where t.Fatalf is called from a test goroutine
+- 2021-03-16 TUN-4091: Use flaky decorator to rerun reconnect component tests when they fail
+- 2021-03-12 TUN-4081: Update log severities to use Zerolog's levels
+- 2021-03-16 TUN-4094: Don't read configuration file for access commands
+- 2021-03-15 TUN-3993: New `cloudflared tunnel info` to obtain details about the active connectors for a tunnel
+- 2021-03-17 TUN-3715: Apply input source to the correct context
+- 2021-03-17 AUTH-3394: Ensure scheme on token command
+- 2021-03-18 TUN-4096: Reduce tunnel not connected assertion backoff to address flaky termination tests
+- 2021-03-19 TUN-3998: Allow to cleanup the connections of a tunnel limited to a single client
+- 2021-02-04 TUN-3715: Only read config file once, right before invoking the command
+
 2021.3.1
 - 2021-03-11 TUN-4051: Add component-tests to test graceful shutdown
 - 2021-03-12 TUN-4052: Add component tests to assert service mode behavior
