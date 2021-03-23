@@ -49,6 +49,9 @@ def run_cloudflared_background(cmd, allow_input, capture_output):
         yield cfd
     finally:
         cfd.terminate()
+        if capture_output:
+            LOGGER.info(
+                f"cloudflared log: {cfd.stderr.read()}")
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
