@@ -160,6 +160,10 @@ func prepareTunnelConfig(
 	if err != nil {
 		log.Err(err).Str(LogFieldHostname, configHostname).Msg("Invalid hostname")
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
+	} else if hostname != "" && isNamedTunnel {
+		log.Warn().Msg("The property `hostname` in your configuration is ignored because you configured a Named Tunnel " +
+			"in the property `tunnel`. Make sure to provision the routing (e.g. via `cloudflared tunnel route`) or else " +
+			"your origin will not be reachable. You should remove the `hostname` property to avoid this warning.")
 	}
 	isFreeTunnel := hostname == ""
 	clientID := c.String("id")
