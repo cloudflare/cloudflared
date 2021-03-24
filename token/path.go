@@ -2,6 +2,7 @@ package token
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,16 @@ import (
 
 	"github.com/cloudflare/cloudflared/config"
 )
+
+// GenerateSSHCertFilePathFromURL will return a file path for creating short lived certificates
+func GenerateSSHCertFilePathFromURL(url *url.URL, suffix string) (string, error) {
+	configPath, err := getConfigPath()
+	if err != nil {
+		return "", err
+	}
+	name := strings.Replace(fmt.Sprintf("%s%s-%s", url.Hostname(), url.EscapedPath(), suffix), "/", "-", -1)
+	return filepath.Join(configPath, name), nil
+}
 
 // GenerateAppTokenFilePathFromURL will return a filepath for given Access org token
 func GenerateAppTokenFilePathFromURL(appDomain, aud string, suffix string) (string, error) {

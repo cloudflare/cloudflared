@@ -387,7 +387,7 @@ func sshGen(c *cli.Context) error {
 		return err
 	}
 
-	if err := sshgen.GenerateShortLivedCertificate(appInfo, cfdToken); err != nil {
+	if err := sshgen.GenerateShortLivedCertificate(originURL, cfdToken); err != nil {
 		return err
 	}
 
