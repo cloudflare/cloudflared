@@ -12,7 +12,8 @@
 
 ### Improvements
 
-- none
+- Tunnel create command, as well as, running ad-hoc tunnels using `cloudflared tunnel -name NAME`, will not overwrite
+  existing files when writing tunnel credentials. 
 
 ### Bug Fixes
 

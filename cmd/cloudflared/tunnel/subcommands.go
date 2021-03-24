@@ -183,27 +183,20 @@ func tunnelFilePath(tunnelID uuid.UUID, directory string) (string, error) {
 	return homedir.Expand(filePath)
 }
 
-// If an `outputFile` is given, write the credentials there.
-// Otherwise, write it to the same directory as the originCert,
-// with the filename `<tunnel id>.json`.
-func writeTunnelCredentials(
-	originCertPath, outputFile string,
-	credentials *connection.Credentials,
-) (filePath string, err error) {
-	filePath = outputFile
-	if outputFile == "" {
-		originCertDir := filepath.Dir(originCertPath)
-		filePath, err = tunnelFilePath(credentials.TunnelID, originCertDir)
+// writeTunnelCredentials saves `credentials` as a JSON into `filePath`, only if
+// the file does not exist already
+func writeTunnelCredentials(filePath string, credentials *connection.Credentials) error {
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		if err == nil {
+			return fmt.Errorf("%s already exists", filePath)
+		}
+		return err
 	}
-	if err != nil {
-		return "", err
-	}
-	// Write the name and ID to the file too
 	body, err := json.Marshal(credentials)
 	if err != nil {
-		return "", errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
+		return errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
 	}
-	return filePath, ioutil.WriteFile(filePath, body, 400)
+	return ioutil.WriteFile(filePath, body, 400)
 }
 
 func buildListCommand() *cli.Command {
