@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import copy
-from flaky import flaky
-from retrying import retry
 from time import sleep
 
-from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected, send_requests
+from flaky import flaky
+
+from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected
 
 
 @flaky(max_runs=3, min_passes=1)
@@ -17,7 +17,7 @@ class TestReconnect():
 
     def test_named_reconnect(self, tmp_path, component_tests_config):
         config = component_tests_config(self.extra_config)
-        with start_cloudflared(tmp_path, config, new_process=True, allow_input=True) as cloudflared:
+        with start_cloudflared(tmp_path, config, new_process=True, allow_input=True, capture_output=False) as cloudflared:
             # Repeat the test multiple times because some issues only occur after multiple reconnects
             self.assert_reconnect(config, cloudflared, 5)
 
@@ -26,7 +26,7 @@ class TestReconnect():
         extra_config["hello-world"] = True
         config = component_tests_config(
             additional_config=extra_config, named_tunnel=False)
-        with start_cloudflared(tmp_path, config, cfd_args=[], new_process=True, allow_input=True) as cloudflared:
+        with start_cloudflared(tmp_path, config, cfd_args=[], new_process=True, allow_input=True, capture_output=False) as cloudflared:
             self.assert_reconnect(config, cloudflared, 1)
 
     def send_reconnect(self, cloudflared, secs):
