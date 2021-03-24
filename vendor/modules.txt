@@ -55,7 +55,8 @@ github.com/coreos/go-oidc/jose
 # github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 ## explicit
 github.com/coreos/go-systemd/daemon
-# github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d
+# github.com/cpuguy83/go-md2man/v2 v2.0.0
+## explicit
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -238,15 +239,14 @@ github.com/rs/zerolog
 github.com/rs/zerolog/internal/cbor
 github.com/rs/zerolog/internal/json
 github.com/rs/zerolog/log
-# github.com/russross/blackfriday/v2 v2.0.1
+# github.com/russross/blackfriday/v2 v2.1.0
+## explicit
 github.com/russross/blackfriday/v2
-# github.com/shurcooL/sanitized_anchor_name v1.0.0
-github.com/shurcooL/sanitized_anchor_name
 # github.com/stretchr/testify v1.6.0
 ## explicit
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/urfave/cli/v2 v2.2.0 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210223162147-c8b4f97735e4
+# github.com/urfave/cli/v2 v2.2.0 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d
 ## explicit
 github.com/urfave/cli/v2
 github.com/urfave/cli/v2/altsrc
@@ -431,4 +431,4 @@ zombiezen.com/go/capnproto2/rpc/internal/refcount
 zombiezen.com/go/capnproto2/schemas
 zombiezen.com/go/capnproto2/server
 zombiezen.com/go/capnproto2/std/capnp/rpc
-# github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210223162147-c8b4f97735e4
+# github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d

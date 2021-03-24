@@ -22,15 +22,55 @@ type FlagInputSourceExtension interface {
 // to an alternate input source.
 func ApplyInputSourceValues(context *cli.Context, inputSourceContext InputSourceContext, flags []cli.Flag) error {
 	for _, f := range flags {
-		inputSourceExtendedFlag, isType := f.(FlagInputSourceExtension)
-		if isType {
-			err := inputSourceExtendedFlag.ApplyInputSourceValue(context, inputSourceContext)
-			if err != nil {
+		if err := applyFlagValue(f, context, inputSourceContext); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ApplyInputSource sets flags from `inputSource` across cli.Context hierarchy.
+// If a flag is defined at multiple levels, this method will try to update only the most specific context
+// that uses the flag. If the most specific version of the flag doesn't support loading values from an input source
+// the method will not check definitions from less-specific contexts.
+func ApplyInputSource(c *cli.Context, inputSource InputSourceContext) error {
+	visited := make(map[string]bool)
+	for _, context := range c.Lineage() {
+		if context.Command == nil {
+			// we've reached the placeholder root context not associated with the app
+			break
+		}
+		flags := context.Command.Flags
+		if context.Command.Name == "" {
+			// commands that define child subcommands are executed as if they were an app
+			flags = context.App.Flags
+		}
+		applyingFlags:
+		for _, f := range flags {
+			for _, name := range f.Names() {
+				if visited[name] {
+					continue applyingFlags
+				}
+				visited[name] = true
+			}
+			if err := applyFlagValue(f, context, inputSource); err != nil {
 				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+func applyFlagValue(flag cli.Flag, context *cli.Context, inputSource InputSourceContext) error {
+	inputSourceExtendedFlag, isType := flag.(FlagInputSourceExtension)
+	if isType {
+		err := inputSourceExtendedFlag.ApplyInputSourceValue(context, inputSource)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

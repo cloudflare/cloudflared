@@ -1,5 +1,25 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## UNRELEASED
+
+### Backward Incompatible Changes
+
+- none
+
+### New Features
+
+- none
+
+### Improvements
+
+- none
+
+### Bug Fixes
+
+- Tunnel create and delete commands no longer use path to credentials from the configuration file.
+  If you need ot place tunnel credentials file at a specific location, you must use `--credentials-file` flag.
+
+
 ## 2021.3.2
 
 ### New Features

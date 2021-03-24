@@ -94,13 +94,14 @@ var (
 		Aliases: []string{"F"},
 		Usage:   "Opt into various features that are still being developed or tested.",
 	})
-	credentialsFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
+	credentialsFileFlagCLIOnly = &cli.StringFlag{
 		Name:    CredFileFlag,
 		Aliases: []string{CredFileFlagAlias},
 		Usage:   "Filepath at which to read/write the tunnel credentials",
 		EnvVars: []string{"TUNNEL_CRED_FILE"},
-	})
-	forceDeleteFlag = &cli.BoolFlag{
+	}
+	credentialsFileFlag = altsrc.NewStringFlag(credentialsFileFlagCLIOnly)
+	forceDeleteFlag     = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
 		Usage: "Cleans up any stale connections before the tunnel is deleted. cloudflared will not " +
@@ -146,7 +147,7 @@ func buildCreateCommand() *cli.Command {
   For example, to create a tunnel named 'my-tunnel' run:
 
   $ cloudflared tunnel create my-tunnel`,
-		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlag},
+		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlagCLIOnly},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -501,7 +502,7 @@ func buildDeleteCommand() *cli.Command {
 		Usage:              "Delete existing tunnel by UUID or name",
 		UsageText:          "cloudflared tunnel [tunnel command options] delete [subcommand options] TUNNEL",
 		Description:        "cloudflared tunnel delete will delete tunnels with the given tunnel UUIDs or names. A tunnel cannot be deleted if it has active connections. To delete the tunnel unconditionally, use -f flag.",
-		Flags:              []cli.Flag{credentialsFileFlag, forceDeleteFlag},
+		Flags:              []cli.Flag{credentialsFileFlagCLIOnly, forceDeleteFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }

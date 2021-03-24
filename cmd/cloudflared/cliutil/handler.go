@@ -32,26 +32,8 @@ func setFlagsFromConfigFile(c *cli.Context) error {
 		return cli.Exit(err, errorExitCode)
 	}
 
-	if err := applyConfig(c, inputSource); err != nil {
+	if err := altsrc.ApplyInputSource(c, inputSource); err != nil {
 		return cli.Exit(err, errorExitCode)
-	}
-	return nil
-}
-
-func applyConfig(c *cli.Context, inputSource altsrc.InputSourceContext) error {
-	for _, context := range c.Lineage() {
-		if context.Command == nil {
-			// we've reached the placeholder root context not associated with the app
-			break
-		}
-		targetFlags := context.Command.Flags
-		if context.Command.Name == "" {
-			// commands that define child subcommands are executed as if they were an app
-			targetFlags = context.App.Flags
-		}
-		if err := altsrc.ApplyInputSourceValues(context, inputSource, targetFlags); err != nil {
-			return err
-		}
 	}
 	return nil
 }

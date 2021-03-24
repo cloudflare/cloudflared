@@ -9,6 +9,7 @@ require (
 	github.com/coredns/coredns v1.7.0
 	github.com/coreos/go-oidc v0.0.0-20171002155002-a93f71fdfe73
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
+	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/facebookgo/ensure v0.0.0-20160127193407-b4ab57deab51 // indirect
 	github.com/facebookgo/freeport v0.0.0-20150612182905-d4adf43b75b9 // indirect
 	github.com/facebookgo/grace v0.0.0-20180706040059-75cf19382434
@@ -39,6 +40,7 @@ require (
 	github.com/prometheus/common v0.13.0 // indirect
 	github.com/rivo/tview v0.0.0-20200712113419-c65badfc3d92
 	github.com/rs/zerolog v1.20.0
+	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/stretchr/testify v1.6.0
 	github.com/urfave/cli/v2 v2.2.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
@@ -58,4 +60,4 @@ require (
 	zombiezen.com/go/capnproto2 v2.18.0+incompatible
 )
 
-replace github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210223162147-c8b4f97735e4
+replace github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d
