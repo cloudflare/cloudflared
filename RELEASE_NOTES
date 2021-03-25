@@ -1,3 +1,6 @@
+2021.3.4
+
+
 2021.3.3
 - 2021-03-23 TUN-4111: Warn the user if both properties "tunnel" and "hostname" are used
 - 2021-03-23 TUN-4082: Test logging when running as a service
