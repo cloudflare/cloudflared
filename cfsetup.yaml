@@ -220,9 +220,11 @@ stretch: &stretch
     pre-cache:
       - sudo pip3 install --upgrade -r component-tests/requirements.txt
     post-cache:
-      # Constructs config file from env vars
-      - python3 component-tests/config.py
+      # Creates and routes a Named Tunnel for this build. Also constructs config file from env vars.
+      - python3 component-tests/setup.py --type create
       - pytest component-tests
+      # The Named Tunnel is deleted and its route unprovisioned here.
+      - python3 component-tests/setup.py --type cleanup
   update-homebrew:
     builddeps:
       - openssh-client

@@ -1,14 +1,9 @@
 #!/usr/bin/env python
-import base64
 import copy
-import os
-import yaml
 
 from dataclasses import dataclass, InitVar
 
 from constants import METRICS_PORT
-
-from util import LOGGER
 
 # frozen=True raises exception when assigning to fields. This emulates immutability
 
@@ -98,35 +93,3 @@ class ClassicTunnelConfig(ClassicTunnelBaseConfig):
 
     def get_url(self):
         return "https://" + self.hostname
-
-
-def build_config_from_env():
-    config_path = get_env("COMPONENT_TESTS_CONFIG")
-    config_content = base64.b64decode(
-        get_env("COMPONENT_TESTS_CONFIG_CONTENT")).decode('utf-8')
-    config_yaml = yaml.safe_load(config_content)
-
-    credentials_file = get_env("COMPONENT_TESTS_CREDENTIALS_FILE")
-    write_file(credentials_file, config_yaml["credentials_file"])
-
-    origincert = get_env("COMPONENT_TESTS_ORIGINCERT")
-    write_file(origincert, config_yaml["origincert"])
-
-    write_file(config_content, config_path)
-
-
-def write_file(content, path):
-    with open(path, 'w') as outfile:
-        outfile.write(content)
-        outfile.close
-
-
-def get_env(env_name):
-    val = os.getenv(env_name)
-    if val is None:
-        raise Exception(f"{env_name} is not set")
-    return val
-
-
-if __name__ == '__main__':
-    build_config_from_env()

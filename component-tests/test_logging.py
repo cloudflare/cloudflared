@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import json
 import os
-import subprocess
 
 from util import start_cloudflared, wait_tunnel_ready, send_requests
 
