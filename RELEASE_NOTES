@@ -1,3 +1,14 @@
+2021.3.3
+- 2021-03-23 TUN-4111: Warn the user if both properties "tunnel" and "hostname" are used
+- 2021-03-23 TUN-4082: Test logging when running as a service
+- 2021-03-23 TUN-4112: Skip testing graceful shutdown with SIGINT on Windows
+- 2021-03-23 TUN-4116: Ingore credentials-file setting in configuration file during tunnel create and delete opeations.
+- 2021-03-23 TUN-4118: Don't overwrite existing file with tunnel credentials. For ad-hoc tunnels, this means tunnel won't start if there's a file in the way.
+- 2021-03-24 TUN-4123: Don't capture output in reconnect componet test
+- 2021-03-23 TUN-4067: Reformat code for consistent import order, grouping, and fix formatting. Added goimports target to the Makefile to make this easier in the future.
+- 2021-03-24 AUTH-3455: Generate short-lived ssh cert per hostname
+- 2021-03-25 Update changelog 2021.3.3
+
 2021.3.2
 - 2021-03-23 TUN-4042: Capture cloudflared output to debug component tests
 - 2021-03-23 Publish changelog for 2021.3.2
