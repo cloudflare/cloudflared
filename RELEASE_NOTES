@@ -1,3 +1,8 @@
+2021.3.5
+- 2021-03-26 TUN-3896: http-service and tunnelstore client use http2 transport.
+- 2021-03-25 TUN-4125: Change component tests to run in CI with its own dedicated resources
+- 2021-03-26 Publish change log for 2021.3.5
+
 2021.3.4
 
 
