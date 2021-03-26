@@ -368,8 +368,8 @@ func tunnelInfo(c *cli.Context) error {
 	warningChecker := updater.StartWarningCheck(c)
 	defer warningChecker.LogWarningIfAny(sc.log)
 
-	if c.NArg() > 1 {
-		return cliutil.UsageError(`"cloudflared tunnel info" accepts only one argument, the ID or name of the tunnel to run.`)
+	if c.NArg() != 1 {
+		return cliutil.UsageError(`"cloudflared tunnel info" accepts exactly one argument, the ID or name of the tunnel to get info about.`)
 	}
 	tunnelID, err := sc.findID(c.Args().First())
 	if err != nil {
