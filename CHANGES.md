@@ -1,23 +1,15 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
-## UNRELEASED
+## 2021.3.5
 
-### Backward Incompatible Changes
-
-- none
-
-### New Features
+### Improvements
 
  - HTTP/2 transport is now always chosen if origin server supports it and the service url scheme is HTTPS.
    This was previously done in a best attempt manner.
 
-### Improvements
-
-- none
-
 ### Bug Fixes
 
- - none
+ - The MacOS binaries were not successfully released in 2021.3.3 and 2021.3.4. This release is aimed at addressing that.
 
 ## 2021.3.3
 
