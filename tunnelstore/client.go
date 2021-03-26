@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"golang.org/x/net/http2"
+
 	"github.com/cloudflare/cloudflared/teamnet"
 )
 
@@ -247,6 +249,11 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create account level endpoint")
 	}
+	httpTransport := http.Transport{
+		TLSHandshakeTimeout:   defaultTimeout,
+		ResponseHeaderTimeout: defaultTimeout,
+	}
+	http2.ConfigureTransport(&httpTransport)
 	return &RESTClient{
 		baseEndpoints: &baseEndpoints{
 			accountLevel:  *accountLevelEndpoint,
@@ -256,11 +263,8 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 		authToken: authToken,
 		userAgent: userAgent,
 		client: http.Client{
-			Transport: &http.Transport{
-				TLSHandshakeTimeout:   defaultTimeout,
-				ResponseHeaderTimeout: defaultTimeout,
-			},
-			Timeout: defaultTimeout,
+			Transport: &httpTransport,
+			Timeout:   defaultTimeout,
 		},
 		log: log,
 	}, nil

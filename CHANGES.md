@@ -1,5 +1,24 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## UNRELEASED
+
+### Backward Incompatible Changes
+
+- none
+
+### New Features
+
+ - HTTP/2 transport is now always chosen if origin server supports it and the service url scheme is HTTPS.
+   This was previously done in a best attempt manner.
+
+### Improvements
+
+- none
+
+### Bug Fixes
+
+ - none
+
 ## 2021.3.3
 
 ### Improvements

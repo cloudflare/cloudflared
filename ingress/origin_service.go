@@ -15,6 +15,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"golang.org/x/net/http2"
+
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/cloudflare/cloudflared/socks"
@@ -287,6 +289,7 @@ func newHTTPTransport(service originService, cfg OriginRequestConfig, log *zerol
 		httpTransport.DialContext = dialContext
 	}
 
+	http2.ConfigureTransport(&httpTransport)
 	return &httpTransport, nil
 }
 
