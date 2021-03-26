@@ -23,6 +23,10 @@ type MuxedStreamDataSignaller interface {
 	Signal(ID uint32)
 }
 
+type Header struct {
+	Name, Value string
+}
+
 // MuxedStream is logically an HTTP/2 stream, with an additional buffer for outgoing data.
 type MuxedStream struct {
 	streamID uint32
@@ -74,8 +78,6 @@ type MuxedStream struct {
 	sentEOF bool
 	// true if the peer sent us an EOF
 	receivedEOF bool
-	// If valid, tunnelHostname is used to identify which origin service is the intended recipient of the request
-	tunnelHostname TunnelHostname
 	// Compression-related fields
 	receivedUseDict bool
 	method          string
@@ -250,10 +252,6 @@ func (s *MuxedStream) IsRPCStream() bool {
 		}
 	}
 	return true
-}
-
-func (s *MuxedStream) TunnelHostname() TunnelHostname {
-	return s.tunnelHostname
 }
 
 // Block until a value is sent on writeBufferHasSpace.

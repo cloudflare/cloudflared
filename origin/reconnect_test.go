@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudflare/cloudflared/retry"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -17,11 +18,11 @@ func TestRefreshAuthBackoff(t *testing.T) {
 	rcm := newReconnectCredentialManager(t.Name(), t.Name(), 4)
 
 	var wait time.Duration
-	timeAfter = func(d time.Duration) <-chan time.Time {
+	retry.Clock.After = func(d time.Duration) <-chan time.Time {
 		wait = d
 		return time.After(d)
 	}
-	backoff := &BackoffHandler{MaxRetries: 3}
+	backoff := &retry.BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return nil, fmt.Errorf("authentication failure")
 	}
@@ -45,7 +46,7 @@ func TestRefreshAuthBackoff(t *testing.T) {
 
 	// The backoff timer should have been reset. To confirm this, make timeNow
 	// return a value after the backoff timer's grace period
-	timeNow = func() time.Time {
+	retry.Clock.Now = func() time.Time {
 		expectedGracePeriod := time.Duration(time.Second * 2 << backoff.MaxRetries)
 		return time.Now().Add(expectedGracePeriod * 2)
 	}
@@ -57,12 +58,12 @@ func TestRefreshAuthSuccess(t *testing.T) {
 	rcm := newReconnectCredentialManager(t.Name(), t.Name(), 4)
 
 	var wait time.Duration
-	timeAfter = func(d time.Duration) <-chan time.Time {
+	retry.Clock.After = func(d time.Duration) <-chan time.Time {
 		wait = d
 		return time.After(d)
 	}
 
-	backoff := &BackoffHandler{MaxRetries: 3}
+	backoff := &retry.BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return tunnelpogs.NewAuthSuccess([]byte("jwt"), 19), nil
 	}
@@ -81,12 +82,12 @@ func TestRefreshAuthUnknown(t *testing.T) {
 	rcm := newReconnectCredentialManager(t.Name(), t.Name(), 4)
 
 	var wait time.Duration
-	timeAfter = func(d time.Duration) <-chan time.Time {
+	retry.Clock.After = func(d time.Duration) <-chan time.Time {
 		wait = d
 		return time.After(d)
 	}
 
-	backoff := &BackoffHandler{MaxRetries: 3}
+	backoff := &retry.BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return tunnelpogs.NewAuthUnknown(errors.New("auth unknown"), 19), nil
 	}
@@ -104,7 +105,7 @@ func TestRefreshAuthUnknown(t *testing.T) {
 func TestRefreshAuthFail(t *testing.T) {
 	rcm := newReconnectCredentialManager(t.Name(), t.Name(), 4)
 
-	backoff := &BackoffHandler{MaxRetries: 3}
+	backoff := &retry.BackoffHandler{MaxRetries: 3}
 	auth := func(ctx context.Context, n int) (tunnelpogs.AuthOutcome, error) {
 		return tunnelpogs.NewAuthFail(errors.New("auth fail")), nil
 	}

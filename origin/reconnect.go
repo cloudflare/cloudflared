@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/cloudflare/cloudflared/retry"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -103,7 +104,7 @@ func (cm *reconnectCredentialManager) SetConnDigest(connID uint8, digest []byte)
 
 func (cm *reconnectCredentialManager) RefreshAuth(
 	ctx context.Context,
-	backoff *BackoffHandler,
+	backoff *retry.BackoffHandler,
 	authenticate func(ctx context.Context, numPreviousAttempts int) (tunnelpogs.AuthOutcome, error),
 ) (retryTimer <-chan time.Time, err error) {
 	authOutcome, err := authenticate(ctx, backoff.Retries())
@@ -121,11 +122,11 @@ func (cm *reconnectCredentialManager) RefreshAuth(
 	case tunnelpogs.AuthSuccess:
 		cm.SetReconnectToken(outcome.JWT())
 		cm.authSuccess.Inc()
-		return timeAfter(outcome.RefreshAfter()), nil
+		return retry.Clock.After(outcome.RefreshAfter()), nil
 	case tunnelpogs.AuthUnknown:
 		duration := outcome.RefreshAfter()
 		cm.authFail.WithLabelValues(outcome.Error()).Inc()
-		return timeAfter(duration), nil
+		return retry.Clock.After(duration), nil
 	case tunnelpogs.AuthFail:
 		cm.authFail.WithLabelValues(outcome.Error()).Inc()
 		return nil, outcome

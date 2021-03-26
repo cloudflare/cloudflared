@@ -18,7 +18,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/origin"
+	"github.com/cloudflare/cloudflared/retry"
 )
 
 const (
@@ -36,7 +36,7 @@ type AppInfo struct {
 
 type lock struct {
 	lockFilePath string
-	backoff      *origin.BackoffHandler
+	backoff      *retry.BackoffHandler
 	sigHandler   *signalHandler
 }
 
@@ -94,7 +94,7 @@ func newLock(path string) *lock {
 	lockPath := path + ".lock"
 	return &lock{
 		lockFilePath: lockPath,
-		backoff:      &origin.BackoffHandler{MaxRetries: 7},
+		backoff:      &retry.BackoffHandler{MaxRetries: 7},
 		sigHandler: &signalHandler{
 			signals: []os.Signal{syscall.SIGINT, syscall.SIGTERM},
 		},

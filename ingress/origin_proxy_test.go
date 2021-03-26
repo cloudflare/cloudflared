@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
@@ -126,7 +126,7 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 	baseReq.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
 
 	bastionReq := baseReq.Clone(context.Background())
-	bastionReq.Header.Set(h2mux.CFJumpDestinationHeader, originListener.Addr().String())
+	carrier.SetBastionDest(bastionReq.Header, originListener.Addr().String())
 
 	expectHeader := http.Header{
 		"Connection":           {"Upgrade"},
@@ -135,19 +135,23 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 	}
 
 	tests := []struct {
+		testCase  string
 		service   *tcpOverWSService
 		req       *http.Request
 		expectErr bool
 	}{
 		{
-			service: newTCPOverWSService(originURL),
-			req:     baseReq,
+			testCase: "specific TCP service",
+			service:  newTCPOverWSService(originURL),
+			req:      baseReq,
 		},
 		{
-			service: newBastionService(),
-			req:     bastionReq,
+			testCase: "bastion service",
+			service:  newBastionService(),
+			req:      bastionReq,
 		},
 		{
+			testCase:  "invalid bastion request",
 			service:   newBastionService(),
 			req:       baseReq,
 			expectErr: true,
@@ -155,13 +159,15 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if test.expectErr {
-			_, resp, err := test.service.EstablishConnection(test.req)
-			assert.Error(t, err)
-			assert.Nil(t, resp)
-		} else {
-			assertEstablishConnectionResponse(t, test.service, test.req, expectHeader)
-		}
+		t.Run(test.testCase, func(t *testing.T) {
+			if test.expectErr {
+				_, resp, err := test.service.EstablishConnection(test.req)
+				assert.Error(t, err)
+				assert.Nil(t, resp)
+			} else {
+				assertEstablishConnectionResponse(t, test.service, test.req, expectHeader)
+			}
+		})
 	}
 
 	originListener.Close()
@@ -172,104 +178,6 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 		_, resp, err := service.EstablishConnection(bastionReq)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
-	}
-}
-
-func TestBastionDestination(t *testing.T) {
-	canonicalJumpDestHeader := http.CanonicalHeaderKey(h2mux.CFJumpDestinationHeader)
-	tests := []struct {
-		name         string
-		header       http.Header
-		expectedDest string
-		wantErr      bool
-	}{
-		{
-			name: "hostname destination",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"localhost"},
-			},
-			expectedDest: "localhost",
-		},
-		{
-			name: "hostname destination with port",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"localhost:9000"},
-			},
-			expectedDest: "localhost:9000",
-		},
-		{
-			name: "hostname destination with scheme and port",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"ssh://localhost:9000"},
-			},
-			expectedDest: "localhost:9000",
-		},
-		{
-			name: "full hostname url",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"ssh://localhost:9000/metrics"},
-			},
-			expectedDest: "localhost:9000",
-		},
-		{
-			name: "hostname destination with port and path",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"localhost:9000/metrics"},
-			},
-			expectedDest: "localhost:9000",
-		},
-		{
-			name: "ip destination",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"127.0.0.1"},
-			},
-			expectedDest: "127.0.0.1",
-		},
-		{
-			name: "ip destination with port",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"127.0.0.1:9000"},
-			},
-			expectedDest: "127.0.0.1:9000",
-		},
-		{
-			name: "ip destination with port and path",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"127.0.0.1:9000/metrics"},
-			},
-			expectedDest: "127.0.0.1:9000",
-		},
-		{
-			name: "ip destination with schem and port",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"tcp://127.0.0.1:9000"},
-			},
-			expectedDest: "127.0.0.1:9000",
-		},
-		{
-			name: "full ip url",
-			header: http.Header{
-				canonicalJumpDestHeader: []string{"ssh://127.0.0.1:9000/metrics"},
-			},
-			expectedDest: "127.0.0.1:9000",
-		},
-		{
-			name:    "no destination",
-			wantErr: true,
-		},
-	}
-	s := newBastionService()
-	for _, test := range tests {
-		r := &http.Request{
-			Header: test.header,
-		}
-		dest, err := s.bastionDest(r)
-		if test.wantErr {
-			assert.Error(t, err, "Test %s expects error", test.name)
-		} else {
-			assert.NoError(t, err, "Test %s expects no error, got error %v", test.name, err)
-			assert.Equal(t, test.expectedDest, dest, "Test %s expect dest %s, got %s", test.name, test.expectedDest, dest)
-		}
 	}
 }
 

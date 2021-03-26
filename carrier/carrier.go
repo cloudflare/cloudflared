@@ -5,20 +5,25 @@ package carrier
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/token"
 )
 
-const LogFieldOriginURL = "originURL"
+const (
+	LogFieldOriginURL       = "originURL"
+	CFAccessTokenHeader     = "Cf-Access-Token"
+	cfJumpDestinationHeader = "Cf-Access-Jump-Destination"
+)
 
 type StartOptions struct {
 	AppInfo         *token.AppInfo
@@ -32,15 +37,11 @@ type StartOptions struct {
 type Connection interface {
 	// ServeStream is used to forward data from the client to the edge
 	ServeStream(*StartOptions, io.ReadWriter) error
-
-	// StartServer is used to listen for incoming connections from the edge to the origin
-	StartServer(net.Listener, string, <-chan struct{}) error
 }
 
 // StdinoutStream is empty struct for wrapping stdin/stdout
 // into a single ReadWriter
-type StdinoutStream struct {
-}
+type StdinoutStream struct{}
 
 // Read will read from Stdin
 func (c *StdinoutStream) Read(p []byte) (int, error) {
@@ -149,7 +150,7 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 	if err != nil {
 		return nil, err
 	}
-	originRequest.Header.Set(h2mux.CFAccessTokenHeader, token)
+	originRequest.Header.Set(CFAccessTokenHeader, token)
 
 	for k, v := range options.Headers {
 		if len(v) >= 1 {
@@ -158,4 +159,27 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 	}
 
 	return originRequest, nil
+}
+
+func SetBastionDest(header http.Header, destination string) {
+	if destination != "" {
+		header.Set(cfJumpDestinationHeader, destination)
+	}
+}
+
+func ResolveBastionDest(r *http.Request) (string, error) {
+	jumpDestination := r.Header.Get(cfJumpDestinationHeader)
+	if jumpDestination == "" {
+		return "", fmt.Errorf("Did not receive final destination from client. The --destination flag is likely not set on the client side")
+	}
+	// Strip scheme and path set by client. Without a scheme
+	// Parsing a hostname and path without scheme might not return an error due to parsing ambiguities
+	if jumpURL, err := url.Parse(jumpDestination); err == nil && jumpURL.Host != "" {
+		return removePath(jumpURL.Host), nil
+	}
+	return removePath(jumpDestination), nil
+}
+
+func removePath(dest string) string {
+	return strings.SplitN(dest, "/", 2)[0]
 }

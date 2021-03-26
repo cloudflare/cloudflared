@@ -1,17 +1,13 @@
 package carrier
 
 import (
-	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httputil"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/token"
 	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
 )
@@ -21,20 +17,6 @@ import (
 type Websocket struct {
 	log     *zerolog.Logger
 	isSocks bool
-}
-
-type wsdialer struct {
-	conn *cfwebsocket.GorillaConn
-}
-
-func (d *wsdialer) Dial(address string) (io.ReadWriteCloser, *socks.AddrSpec, error) {
-	local, ok := d.conn.LocalAddr().(*net.TCPAddr)
-	if !ok {
-		return nil, nil, fmt.Errorf("not a tcp connection")
-	}
-
-	addr := socks.AddrSpec{IP: local.IP, Port: local.Port}
-	return d.conn, &addr, nil
 }
 
 // NewWSConnection returns a new connection object
@@ -54,14 +36,8 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 	}
 	defer wsConn.Close()
 
-	ingress.Stream(wsConn, conn, ws.log)
+	cfwebsocket.Stream(wsConn, conn, ws.log)
 	return nil
-}
-
-// StartServer creates a Websocket server to listen for connections.
-// This is used on the origin (tunnel) side to take data from the muxer and send it to the origin
-func (ws *Websocket) StartServer(listener net.Listener, remote string, shutdownC <-chan struct{}) error {
-	return cfwebsocket.StartProxyServer(ws.log, listener, remote, shutdownC, ingress.DefaultStreamHandler)
 }
 
 // createWebsocketStream will create a WebSocket connection to stream data over

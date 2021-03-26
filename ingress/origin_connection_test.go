@@ -22,6 +22,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/socks"
+	"github.com/cloudflare/cloudflared/websocket"
 )
 
 const (
@@ -157,7 +158,7 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 			require.NoError(t, err)
 			defer wsForwarderInConn.Close()
 
-			Stream(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, testLogger)
+			websocket.Stream(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, testLogger)
 			return nil
 		})
 

@@ -25,34 +25,10 @@ type OriginConnection interface {
 
 type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
 
-// Stream copies copy data to & from provided io.ReadWriters.
-func Stream(conn, backendConn io.ReadWriter, log *zerolog.Logger) {
-	proxyDone := make(chan struct{}, 2)
-
-	go func() {
-		_, err := io.Copy(conn, backendConn)
-		if err != nil {
-			log.Debug().Msgf("conn to backendConn copy: %v", err)
-		}
-		proxyDone <- struct{}{}
-	}()
-
-	go func() {
-		_, err := io.Copy(backendConn, conn)
-		if err != nil {
-			log.Debug().Msgf("backendConn to conn copy: %v", err)
-		}
-		proxyDone <- struct{}{}
-	}()
-
-	// If one side is done, we are done.
-	<-proxyDone
-}
-
 // DefaultStreamHandler is an implementation of streamHandlerFunc that
 // performs a two way io.Copy between originConn and remoteConn.
 func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger) {
-	Stream(originConn, remoteConn, log)
+	websocket.Stream(originConn, remoteConn, log)
 }
 
 // tcpConnection is an OriginConnection that directly streams to raw TCP.
@@ -61,7 +37,7 @@ type tcpConnection struct {
 }
 
 func (tc *tcpConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	Stream(tunnelConn, tc.conn, log)
+	websocket.Stream(tunnelConn, tc.conn, log)
 }
 
 func (tc *tcpConnection) Close() {
@@ -89,7 +65,7 @@ type wsConnection struct {
 }
 
 func (wsc *wsConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	Stream(tunnelConn, wsc.wsConn.UnderlyingConn(), log)
+	websocket.Stream(tunnelConn, wsc.wsConn.UnderlyingConn(), log)
 }
 
 func (wsc *wsConnection) Close() {

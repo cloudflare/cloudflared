@@ -19,7 +19,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/token"
@@ -286,7 +285,7 @@ func curl(c *cli.Context) error {
 	}
 
 	cmdArgs = append(cmdArgs, "-H")
-	cmdArgs = append(cmdArgs, fmt.Sprintf("%s: %s", h2mux.CFAccessTokenHeader, tok))
+	cmdArgs = append(cmdArgs, fmt.Sprintf("%s: %s", carrier.CFAccessTokenHeader, tok))
 	return run("curl", cmdArgs...)
 }
 
@@ -472,10 +471,10 @@ func isFileThere(candidate string) bool {
 func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, log *zerolog.Logger) error {
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
-		headers.Add(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
+		headers.Add(cfAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}
 	if c.IsSet(sshTokenSecretFlag) {
-		headers.Add(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
+		headers.Add(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
 	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers}
 

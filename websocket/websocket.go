@@ -4,15 +4,11 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-
-	"github.com/cloudflare/cloudflared/h2mux"
 )
 
 var stripWebsocketHeaders = []string{
@@ -45,80 +41,6 @@ func ClientConnect(req *http.Request, dialler *websocket.Dialer) (*websocket.Con
 	}
 	response.Header.Set("Sec-WebSocket-Accept", generateAcceptKey(req))
 	return conn, response, nil
-}
-
-// StartProxyServer will start a websocket server that will decode
-// the websocket data and write the resulting data to the provided
-func StartProxyServer(
-	log *zerolog.Logger,
-	listener net.Listener,
-	staticHost string,
-	shutdownC <-chan struct{},
-	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger),
-) error {
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-	}
-	h := handler{
-		upgrader:      upgrader,
-		log:           log,
-		staticHost:    staticHost,
-		streamHandler: streamHandler,
-	}
-
-	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: &h}
-	go func() {
-		<-shutdownC
-		_ = httpServer.Close()
-	}()
-
-	return httpServer.Serve(listener)
-}
-
-// HTTP handler for the websocket proxy.
-type handler struct {
-	log           *zerolog.Logger
-	staticHost    string
-	upgrader      websocket.Upgrader
-	streamHandler func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
-}
-
-func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// If remote is an empty string, get the destination from the client.
-	finalDestination := h.staticHost
-	if finalDestination == "" {
-		if jumpDestination := r.Header.Get(h2mux.CFJumpDestinationHeader); jumpDestination == "" {
-			h.log.Error().Msg("Did not receive final destination from client. The --destination flag is likely not set")
-			return
-		} else {
-			finalDestination = jumpDestination
-		}
-	}
-
-	stream, err := net.Dial("tcp", finalDestination)
-	if err != nil {
-		h.log.Err(err).Msg("Cannot connect to remote")
-		return
-	}
-	defer stream.Close()
-
-	if !websocket.IsWebSocketUpgrade(r) {
-		_, _ = w.Write(nonWebSocketRequestPage())
-		return
-	}
-	conn, err := h.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		h.log.Err(err).Msg("failed to upgrade")
-		return
-	}
-	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
-	conn.SetPongHandler(func(string) error { _ = conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	gorillaConn := &GorillaConn{Conn: conn, log: h.log}
-	go gorillaConn.pinger(r.Context())
-	defer conn.Close()
-
-	h.streamHandler(gorillaConn, stream, h.log)
 }
 
 // NewResponseHeader returns headers needed to return to origin for completing handshake
@@ -173,4 +95,28 @@ func ChangeRequestScheme(reqURL *url.URL) string {
 	default:
 		return reqURL.Scheme
 	}
+}
+
+// Stream copies copy data to & from provided io.ReadWriters.
+func Stream(conn, backendConn io.ReadWriter, log *zerolog.Logger) {
+	proxyDone := make(chan struct{}, 2)
+
+	go func() {
+		_, err := io.Copy(conn, backendConn)
+		if err != nil {
+			log.Debug().Msgf("conn to backendConn copy: %v", err)
+		}
+		proxyDone <- struct{}{}
+	}()
+
+	go func() {
+		_, err := io.Copy(backendConn, conn)
+		if err != nil {
+			log.Debug().Msgf("backendConn to conn copy: %v", err)
+		}
+		proxyDone <- struct{}{}
+	}()
+
+	// If one side is done, we are done.
+	<-proxyDone
 }

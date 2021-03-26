@@ -156,3 +156,99 @@ func testRequest(t *testing.T, url string, stream io.ReadWriter) *http.Request {
 
 	return req
 }
+
+func TestBastionDestination(t *testing.T) {
+	tests := []struct {
+		name         string
+		header       http.Header
+		expectedDest string
+		wantErr      bool
+	}{
+		{
+			name: "hostname destination",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"localhost"},
+			},
+			expectedDest: "localhost",
+		},
+		{
+			name: "hostname destination with port",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"localhost:9000"},
+			},
+			expectedDest: "localhost:9000",
+		},
+		{
+			name: "hostname destination with scheme and port",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"ssh://localhost:9000"},
+			},
+			expectedDest: "localhost:9000",
+		},
+		{
+			name: "full hostname url",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"ssh://localhost:9000/metrics"},
+			},
+			expectedDest: "localhost:9000",
+		},
+		{
+			name: "hostname destination with port and path",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"localhost:9000/metrics"},
+			},
+			expectedDest: "localhost:9000",
+		},
+		{
+			name: "ip destination",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"127.0.0.1"},
+			},
+			expectedDest: "127.0.0.1",
+		},
+		{
+			name: "ip destination with port",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"127.0.0.1:9000"},
+			},
+			expectedDest: "127.0.0.1:9000",
+		},
+		{
+			name: "ip destination with port and path",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"127.0.0.1:9000/metrics"},
+			},
+			expectedDest: "127.0.0.1:9000",
+		},
+		{
+			name: "ip destination with schem and port",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"tcp://127.0.0.1:9000"},
+			},
+			expectedDest: "127.0.0.1:9000",
+		},
+		{
+			name: "full ip url",
+			header: http.Header{
+				cfJumpDestinationHeader: []string{"ssh://127.0.0.1:9000/metrics"},
+			},
+			expectedDest: "127.0.0.1:9000",
+		},
+		{
+			name:    "no destination",
+			wantErr: true,
+		},
+	}
+	for _, test := range tests {
+		r := &http.Request{
+			Header: test.header,
+		}
+		dest, err := ResolveBastionDest(r)
+		if test.wantErr {
+			assert.Error(t, err, "Test %s expects error", test.name)
+		} else {
+			assert.NoError(t, err, "Test %s expects no error, got error %v", test.name, err)
+			assert.Equal(t, test.expectedDest, dest, "Test %s expect dest %s, got %s", test.name, test.expectedDest, dest)
+		}
+	}
+}

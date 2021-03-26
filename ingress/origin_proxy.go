@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/pkg/errors"
 
-	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
@@ -106,7 +104,7 @@ func (o *tcpOverWSService) EstablishConnection(r *http.Request) (OriginConnectio
 	var err error
 	dest := o.dest
 	if o.isBastion {
-		dest, err = o.bastionDest(r)
+		dest, err = carrier.ResolveBastionDest(r)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -128,23 +126,6 @@ func (o *tcpOverWSService) EstablishConnection(r *http.Request) (OriginConnectio
 	}
 	return originConn, resp, nil
 
-}
-
-func (o *tcpOverWSService) bastionDest(r *http.Request) (string, error) {
-	jumpDestination := r.Header.Get(h2mux.CFJumpDestinationHeader)
-	if jumpDestination == "" {
-		return "", fmt.Errorf("Did not receive final destination from client. The --destination flag is likely not set on the client side")
-	}
-	// Strip scheme and path set by client. Without a scheme
-	// Parsing a hostname and path without scheme might not return an error due to parsing ambiguities
-	if jumpURL, err := url.Parse(jumpDestination); err == nil && jumpURL.Host != "" {
-		return removePath(jumpURL.Host), nil
-	}
-	return removePath(jumpDestination), nil
-}
-
-func removePath(dest string) string {
-	return strings.SplitN(dest, "/", 2)[0]
 }
 
 func (o *socksProxyOverWSService) EstablishConnection(r *http.Request) (OriginConnection, *http.Response, error) {

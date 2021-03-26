@@ -1,4 +1,4 @@
-package origin
+package retry
 
 import (
 	"context"
@@ -14,7 +14,7 @@ func immediateTimeAfter(time.Duration) <-chan time.Time {
 
 func TestBackoffRetries(t *testing.T) {
 	// make backoff return immediately
-	timeAfter = immediateTimeAfter
+	Clock.After = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3}
 	if !backoff.Backoff(ctx) {
@@ -33,7 +33,7 @@ func TestBackoffRetries(t *testing.T) {
 
 func TestBackoffCancel(t *testing.T) {
 	// prevent backoff from returning normally
-	timeAfter = func(time.Duration) <-chan time.Time { return make(chan time.Time) }
+	Clock.After = func(time.Duration) <-chan time.Time { return make(chan time.Time) }
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	backoff := BackoffHandler{MaxRetries: 3}
 	cancelFunc()
@@ -47,10 +47,10 @@ func TestBackoffCancel(t *testing.T) {
 
 func TestBackoffGracePeriod(t *testing.T) {
 	currentTime := time.Now()
-	// make timeNow return whatever we like
-	timeNow = func() time.Time { return currentTime }
+	// make Clock.Now return whatever we like
+	Clock.Now = func() time.Time { return currentTime }
 	// make backoff return immediately
-	timeAfter = immediateTimeAfter
+	Clock.After = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 1}
 	if !backoff.Backoff(ctx) {
@@ -71,7 +71,7 @@ func TestBackoffGracePeriod(t *testing.T) {
 
 func TestGetMaxBackoffDurationRetries(t *testing.T) {
 	// make backoff return immediately
-	timeAfter = immediateTimeAfter
+	Clock.After = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3}
 	if _, ok := backoff.GetMaxBackoffDuration(ctx); !ok {
@@ -96,7 +96,7 @@ func TestGetMaxBackoffDurationRetries(t *testing.T) {
 
 func TestGetMaxBackoffDuration(t *testing.T) {
 	// make backoff return immediately
-	timeAfter = immediateTimeAfter
+	Clock.After = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3}
 	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*2 {
@@ -118,7 +118,7 @@ func TestGetMaxBackoffDuration(t *testing.T) {
 
 func TestBackoffRetryForever(t *testing.T) {
 	// make backoff return immediately
-	timeAfter = immediateTimeAfter
+	Clock.After = immediateTimeAfter
 	ctx := context.Background()
 	backoff := BackoffHandler{MaxRetries: 3, RetryForever: true}
 	if duration, ok := backoff.GetMaxBackoffDuration(ctx); !ok || duration > time.Second*2 {

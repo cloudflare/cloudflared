@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/retry"
 )
 
 type dynamicMockFetcher struct {
@@ -26,7 +27,7 @@ func (dmf *dynamicMockFetcher) fetch() connection.PercentageFetcher {
 
 func TestWaitForBackoffFallback(t *testing.T) {
 	maxRetries := uint(3)
-	backoff := BackoffHandler{
+	backoff := retry.BackoffHandler{
 		MaxRetries: maxRetries,
 		BaseTime:   time.Millisecond * 10,
 	}

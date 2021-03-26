@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -138,7 +139,7 @@ func ServeTunnelLoop(
 	connLog := config.Log.With().Uint8(connection.LogFieldConnIndex, connIndex).Logger()
 
 	protocolFallback := &protocolFallback{
-		BackoffHandler{MaxRetries: config.Retries},
+		retry.BackoffHandler{MaxRetries: config.Retries},
 		config.ProtocolSelector.Current(),
 		false,
 	}
@@ -195,18 +196,18 @@ func ServeTunnelLoop(
 // protocolFallback is a wrapper around backoffHandler that will try fallback option when backoff reaches
 // max retries
 type protocolFallback struct {
-	BackoffHandler
+	retry.BackoffHandler
 	protocol   connection.Protocol
 	inFallback bool
 }
 
 func (pf *protocolFallback) reset() {
-	pf.resetNow()
+	pf.ResetNow()
 	pf.inFallback = false
 }
 
 func (pf *protocolFallback) fallback(fallback connection.Protocol) {
-	pf.resetNow()
+	pf.ResetNow()
 	pf.protocol = fallback
 	pf.inFallback = true
 }
@@ -281,7 +282,7 @@ func ServeTunnel(
 	}
 
 	if protocol == connection.HTTP2 {
-		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.retries))
+		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
 		err = ServeHTTP2(
 			ctx,
 			connLog,
@@ -382,7 +383,7 @@ func ServeH2mux(
 
 	errGroup.Go(func() error {
 		if config.NamedTunnel != nil {
-			connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.retries))
+			connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
 			return handler.ServeNamedTunnel(serveCtx, config.NamedTunnel, connOptions, connectedFuse)
 		}
 		registrationOptions := config.RegistrationOptions(connIndex, edgeConn.LocalAddr().String(), cloudflaredUUID)

@@ -1,4 +1,4 @@
-package h2mux
+package connection
 
 import (
 	"fmt"
@@ -14,9 +14,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/h2mux"
 )
 
-type ByName []Header
+type ByName []h2mux.Header
 
 func (a ByName) Len() int      { return len(a) }
 func (a ByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
@@ -37,16 +39,16 @@ func TestH2RequestHeadersToH1Request_RegularHeaders(t *testing.T) {
 		"Mock header 2": {"Mock value 2"},
 	}
 
-	headersConversionErr := H2RequestHeadersToH1Request(createSerializedHeaders(RequestUserHeadersField, mockHeaders), request)
+	headersConversionErr := H2RequestHeadersToH1Request(createSerializedHeaders(RequestUserHeaders, mockHeaders), request)
 
 	assert.True(t, reflect.DeepEqual(mockHeaders, request.Header))
 	assert.NoError(t, headersConversionErr)
 }
 
-func createSerializedHeaders(headersField string, headers http.Header) []Header {
-	return []Header{{
-		headersField,
-		SerializeHeaders(headers),
+func createSerializedHeaders(headersField string, headers http.Header) []h2mux.Header {
+	return []h2mux.Header{{
+		Name:  headersField,
+		Value: SerializeHeaders(headers),
 	}}
 }
 
@@ -54,15 +56,16 @@ func TestH2RequestHeadersToH1Request_NoHeaders(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	assert.NoError(t, err)
 
+	emptyHeaders := make(http.Header)
 	headersConversionErr := H2RequestHeadersToH1Request(
-		[]Header{{
-			RequestUserHeadersField,
-			SerializeHeaders(http.Header{}),
+		[]h2mux.Header{{
+			Name:  RequestUserHeaders,
+			Value: SerializeHeaders(emptyHeaders),
 		}},
 		request,
 	)
 
-	assert.True(t, reflect.DeepEqual(http.Header{}, request.Header))
+	assert.True(t, reflect.DeepEqual(emptyHeaders, request.Header))
 	assert.NoError(t, headersConversionErr)
 }
 
@@ -70,9 +73,9 @@ func TestH2RequestHeadersToH1Request_InvalidHostPath(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	assert.NoError(t, err)
 
-	mockRequestHeaders := []Header{
+	mockRequestHeaders := []h2mux.Header{
 		{Name: ":path", Value: "//bad_path/"},
-		{Name: RequestUserHeadersField, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
+		{Name: RequestUserHeaders, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
 	}
 
 	headersConversionErr := H2RequestHeadersToH1Request(mockRequestHeaders, request)
@@ -90,9 +93,9 @@ func TestH2RequestHeadersToH1Request_HostPathWithQuery(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com/", nil)
 	assert.NoError(t, err)
 
-	mockRequestHeaders := []Header{
+	mockRequestHeaders := []h2mux.Header{
 		{Name: ":path", Value: "/?query=mock%20value"},
-		{Name: RequestUserHeadersField, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
+		{Name: RequestUserHeaders, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
 	}
 
 	headersConversionErr := H2RequestHeadersToH1Request(mockRequestHeaders, request)
@@ -110,9 +113,9 @@ func TestH2RequestHeadersToH1Request_HostPathWithURLEncoding(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com/", nil)
 	assert.NoError(t, err)
 
-	mockRequestHeaders := []Header{
+	mockRequestHeaders := []h2mux.Header{
 		{Name: ":path", Value: "/mock%20path"},
-		{Name: RequestUserHeadersField, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
+		{Name: RequestUserHeaders, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
 	}
 
 	headersConversionErr := H2RequestHeadersToH1Request(mockRequestHeaders, request)
@@ -267,9 +270,9 @@ func TestH2RequestHeadersToH1Request_WeirdURLs(t *testing.T) {
 		request, err := http.NewRequest(http.MethodGet, requestURL, nil)
 		assert.NoError(t, err)
 
-		mockRequestHeaders := []Header{
+		mockRequestHeaders := []h2mux.Header{
 			{Name: ":path", Value: testCase.path},
-			{Name: RequestUserHeadersField, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
+			{Name: RequestUserHeaders, Value: SerializeHeaders(http.Header{"Mock header": {"Mock value"}})},
 		}
 
 		headersConversionErr := H2RequestHeadersToH1Request(mockRequestHeaders, request)
@@ -337,12 +340,12 @@ func TestH2RequestHeadersToH1Request_QuickCheck(t *testing.T) {
 				const expectedMethod = "POST"
 				const expectedHostname = "request.hostname.example.com"
 
-				h2 := []Header{
+				h2 := []h2mux.Header{
 					{Name: ":method", Value: expectedMethod},
 					{Name: ":scheme", Value: testScheme},
 					{Name: ":authority", Value: expectedHostname},
 					{Name: ":path", Value: testPath},
-					{Name: RequestUserHeadersField, Value: ""},
+					{Name: RequestUserHeaders, Value: ""},
 				}
 				h1, err := http.NewRequest("GET", testOrigin.url, nil)
 				require.NoError(t, err)
@@ -424,10 +427,10 @@ func randomHTTP2Path(t *testing.T, rand *rand.Rand) string {
 	return result
 }
 
-func stdlibHeaderToH2muxHeader(headers http.Header) (h2muxHeaders []Header) {
+func stdlibHeaderToH2muxHeader(headers http.Header) (h2muxHeaders []h2mux.Header) {
 	for name, values := range headers {
 		for _, value := range values {
-			h2muxHeaders = append(h2muxHeaders, Header{name, value})
+			h2muxHeaders = append(h2muxHeaders, h2mux.Header{Name: name, Value: value})
 		}
 	}
 
@@ -515,14 +518,14 @@ func TestParseHeaders(t *testing.T) {
 		"Mock-Header-Three": {"3"},
 	}
 
-	mockHeaders := []Header{
+	mockHeaders := []h2mux.Header{
 		{Name: "One", Value: "1"}, // will be dropped
 		{Name: "Cf-Two", Value: "cf-value-1"},
 		{Name: "Cf-Two", Value: "cf-value-2"},
-		{Name: RequestUserHeadersField, Value: SerializeHeaders(mockUserHeadersToSerialize)},
+		{Name: RequestUserHeaders, Value: SerializeHeaders(mockUserHeadersToSerialize)},
 	}
 
-	expectedHeaders := []Header{
+	expectedHeaders := []h2mux.Header{
 		{Name: "Cf-Two", Value: "cf-value-1"},
 		{Name: "Cf-Two", Value: "cf-value-2"},
 		{Name: "Mock-Header-One", Value: "1"},
@@ -583,7 +586,7 @@ func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 
 	serializedHeadersIndex := -1
 	for i, header := range headers {
-		if header.Name == ResponseUserHeadersField {
+		if header.Name == ResponseUserHeaders {
 			serializedHeadersIndex = i
 			break
 		}
@@ -593,7 +596,7 @@ func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 		headers[:serializedHeadersIndex],
 		headers[serializedHeadersIndex+1:]...,
 	)
-	expectedControlHeaders := []Header{
+	expectedControlHeaders := []h2mux.Header{
 		{Name: ":status", Value: "200"},
 		{Name: "content-length", Value: "123"},
 	}
@@ -601,7 +604,7 @@ func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 	assert.ElementsMatch(t, expectedControlHeaders, actualControlHeaders)
 
 	actualUserHeaders, err := DeserializeHeaders(headers[serializedHeadersIndex].Value)
-	expectedUserHeaders := []Header{
+	expectedUserHeaders := []h2mux.Header{
 		{Name: "User-header-one", Value: ""},
 		{Name: "User-header-two", Value: "1"},
 		{Name: "User-header-two", Value: "2"},
@@ -630,7 +633,7 @@ func TestHeaderSize(t *testing.T) {
 	}
 
 	for _, header := range serializedHeaders {
-		if header.Name != ResponseUserHeadersField {
+		if header.Name != ResponseUserHeaders {
 			continue
 		}
 

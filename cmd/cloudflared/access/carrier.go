@@ -6,19 +6,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/carrier"
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/validation"
-
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
+
+	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/validation"
 )
 
 const (
-	LogFieldHost = "host"
+	LogFieldHost               = "host"
+	cfAccessClientIDHeader     = "Cf-Access-Client-Id"
+	cfAccessClientSecretHeader = "Cf-Access-Client-Secret"
 )
 
 // StartForwarder starts a client side websocket forward
@@ -31,16 +32,14 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *z
 	// get the headers from the config file and add to the request
 	headers := make(http.Header)
 	if forwarder.TokenClientID != "" {
-		headers.Set(h2mux.CFAccessClientIDHeader, forwarder.TokenClientID)
+		headers.Set(cfAccessClientIDHeader, forwarder.TokenClientID)
 	}
 
 	if forwarder.TokenSecret != "" {
-		headers.Set(h2mux.CFAccessClientSecretHeader, forwarder.TokenSecret)
+		headers.Set(cfAccessClientSecretHeader, forwarder.TokenSecret)
 	}
 
-	if forwarder.Destination != "" {
-		headers.Add(h2mux.CFJumpDestinationHeader, forwarder.Destination)
-	}
+	carrier.SetBastionDest(headers, forwarder.Destination)
 
 	options := &carrier.StartOptions{
 		OriginURL: forwarder.URL,
@@ -72,16 +71,13 @@ func ssh(c *cli.Context) error {
 	// get the headers from the cmdline and add them
 	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
-		headers.Set(h2mux.CFAccessClientIDHeader, c.String(sshTokenIDFlag))
+		headers.Set(cfAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}
 	if c.IsSet(sshTokenSecretFlag) {
-		headers.Set(h2mux.CFAccessClientSecretHeader, c.String(sshTokenSecretFlag))
+		headers.Set(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
 
-	destination := c.String(sshDestinationFlag)
-	if destination != "" {
-		headers.Add(h2mux.CFJumpDestinationHeader, destination)
-	}
+	carrier.SetBastionDest(headers, c.String(sshDestinationFlag))
 
 	options := &carrier.StartOptions{
 		OriginURL: originURL,
