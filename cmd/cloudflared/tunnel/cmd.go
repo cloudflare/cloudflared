@@ -565,10 +565,10 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "grace-period",
-			Usage:   "Duration to accept new requests after cloudflared receives first SIGINT/SIGTERM. A second SIGINT/SIGTERM will force cloudflared to shutdown immediately.",
+			Usage:   "When cloudflared receives SIGINT/SIGTERM it will stop accepting new requests, wait for in-progress requests to terminate, then shutdown. Waiting for in-progress requests will timeout after this grace period, or when a second SIGTERM/SIGINT is received.",
 			Value:   time.Second * 30,
 			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
-			Hidden:  true,
+			Hidden:  shouldHide,
 		}),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		altsrc.NewIntFlag(&cli.IntFlag{
