@@ -454,14 +454,30 @@ func formatAndPrintConnectionsList(tunnelInfo Info, showRecentlyDisconnected boo
 	writer := tabWriter()
 	defer writer.Flush()
 
+	// Print the general tunnel info table
 	_, _ = fmt.Fprintf(writer, "NAME:     %s\nID:       %s\nCREATED:  %s\n\n", tunnelInfo.Name, tunnelInfo.ID, tunnelInfo.CreatedAt)
 
+	// Determine whether to print the connector table
+	shouldDisplayTable := false
+	for _, c := range tunnelInfo.Connectors {
+		conns := fmtConnections(c.Connections, showRecentlyDisconnected)
+		if len(conns) > 0 {
+			shouldDisplayTable = true
+		}
+	}
+	if !shouldDisplayTable {
+		fmt.Println("This tunnel has no active connectors.")
+		return
+	}
+
+	// Print the connector table
 	_, _ = fmt.Fprintln(writer, "CONNECTOR ID\tCREATED\tARCHITECTURE\tVERSION\tORIGIN IP\tEDGE\t")
 	for _, c := range tunnelInfo.Connectors {
-		var originIp = ""
-		if len(c.Connections) > 0 {
-			originIp = c.Connections[0].OriginIP.String()
+		conns := fmtConnections(c.Connections, showRecentlyDisconnected)
+		if len(conns) == 0 {
+			continue
 		}
+		originIp := c.Connections[0].OriginIP.String()
 		formattedStr := fmt.Sprintf(
 			"%s\t%s\t%s\t%s\t%s\t%s\t",
 			c.ID,
@@ -469,7 +485,7 @@ func formatAndPrintConnectionsList(tunnelInfo Info, showRecentlyDisconnected boo
 			c.Arch,
 			c.Version,
 			originIp,
-			fmtConnections(c.Connections, showRecentlyDisconnected),
+			conns,
 		)
 		_, _ = fmt.Fprintln(writer, formattedStr)
 	}
