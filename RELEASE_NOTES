@@ -1,3 +1,10 @@
+2021.3.6
+- 2021-03-30 TUN-4150: Only show the connector table in 'tunnel info' if there are connectors. Don't show rows with zero connections.
+- 2021-03-31 TUN-4153: Revert best-effort HTTP2 usage when talking to origins
+- 2021-03-26 TUN-4141: Better error messages for tunnel info subcommand.
+- 2021-03-29 TUN-4146: Unhide and document grace-period
+- 2021-03-25 TUN-3863: Consolidate header handling logic in the connection package; move headers definitions from h2mux to packages that manage them; cleanup header conversions
+
 2021.3.5
 - 2021-03-26 TUN-3896: http-service and tunnelstore client use http2 transport.
 - 2021-03-25 TUN-4125: Change component tests to run in CI with its own dedicated resources
