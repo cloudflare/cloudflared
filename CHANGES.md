@@ -1,5 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.3.6
+
+### Bug Fixes
+
+- Reverted 2021.3.5 improvement to use HTTP/2 in a best-effort manner between cloudflared and origin services because
+  it was found to break in some cases.
+
 ## 2021.3.5
 
 ### Improvements
