@@ -33,7 +33,7 @@ func assertEstablishConnectionResponse(t *testing.T,
 }
 
 func TestHTTPServiceEstablishConnection(t *testing.T) {
-	origin := echoWSOrigin(t)
+	origin := echoWSOrigin(t, false)
 	defer origin.Close()
 	originURL, err := url.Parse(origin.URL)
 	require.NoError(t, err)
@@ -71,11 +71,11 @@ func TestHelloWorldEstablishConnection(t *testing.T) {
 	// Scheme and Host of URL will be override by the Scheme and Host of the helloWorld service
 	req, err := http.NewRequest(http.MethodGet, "https://place-holder/ws", nil)
 	require.NoError(t, err)
+	req.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
 
 	expectHeader := http.Header{
-		"Connection": {"Upgrade"},
-		// Accept key when Sec-Websocket-Key is not specified
-		"Sec-Websocket-Accept": {"Kfh9QIsMVZcl6xEPYxPHzW8SZ8w="},
+		"Connection":           {"Upgrade"},
+		"Sec-Websocket-Accept": {"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="},
 		"Upgrade":              {"websocket"},
 	}
 	assertEstablishConnectionResponse(t, helloWorldSerivce, req, expectHeader)

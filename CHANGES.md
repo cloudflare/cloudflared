@@ -1,5 +1,24 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## UNRELEASED
+
+### Backward Incompatible Changes
+
+- none
+
+### New Features
+
+- none
+
+### Improvements
+
+- none
+
+### Bug Fixes
+
+- Fixed proxying of websocket requests to avoid possibility of losing initial frames that were sent in the same TCP
+  packet as response headers [#345](https://github.com/cloudflare/cloudflared/issues/345).
+
 ## 2021.3.6
 
 ### Bug Fixes

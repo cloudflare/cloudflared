@@ -3,120 +3,108 @@ package websocket
 import (
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"net/url"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 )
-
-var stripWebsocketHeaders = []string{
-	"Upgrade",
-	"Connection",
-	"Sec-Websocket-Key",
-	"Sec-Websocket-Version",
-	"Sec-Websocket-Extensions",
-}
 
 // IsWebSocketUpgrade checks to see if the request is a WebSocket connection.
 func IsWebSocketUpgrade(req *http.Request) bool {
 	return websocket.IsWebSocketUpgrade(req)
 }
 
-// ClientConnect creates a WebSocket client connection for provided request. Caller is responsible for closing
-// the connection. The response body may not contain the entire response and does
-// not need to be closed by the application.
-func ClientConnect(req *http.Request, dialler *websocket.Dialer) (*websocket.Conn, *http.Response, error) {
-	req.URL.Scheme = ChangeRequestScheme(req.URL)
-	wsHeaders := websocketHeaders(req)
-	if dialler == nil {
-		dialler = &websocket.Dialer{
-			Proxy: http.ProxyFromEnvironment,
-		}
-	}
-	conn, response, err := dialler.Dial(req.URL.String(), wsHeaders)
-	if err != nil {
-		return nil, response, err
-	}
-	response.Header.Set("Sec-WebSocket-Accept", generateAcceptKey(req))
-	return conn, response, nil
-}
-
 // NewResponseHeader returns headers needed to return to origin for completing handshake
 func NewResponseHeader(req *http.Request) http.Header {
 	header := http.Header{}
 	header.Add("Connection", "Upgrade")
-	header.Add("Sec-Websocket-Accept", generateAcceptKey(req))
+	header.Add("Sec-Websocket-Accept", generateAcceptKey(req.Header.Get("Sec-WebSocket-Key")))
 	header.Add("Upgrade", "websocket")
 	return header
 }
 
-// the gorilla websocket library sets its own Upgrade, Connection, Sec-WebSocket-Key,
-// Sec-WebSocket-Version and Sec-Websocket-Extensions headers.
-// https://github.com/gorilla/websocket/blob/master/client.go#L189-L194.
-func websocketHeaders(req *http.Request) http.Header {
-	wsHeaders := make(http.Header)
-	for key, val := range req.Header {
-		wsHeaders[key] = val
-	}
-	// Assume the header keys are in canonical format.
-	for _, header := range stripWebsocketHeaders {
-		wsHeaders.Del(header)
-	}
-	wsHeaders.Set("Host", req.Host) // See TUN-1097
-	return wsHeaders
-}
-
-// sha1Base64 sha1 and then base64 encodes str.
-func sha1Base64(str string) string {
-	hasher := sha1.New()
-	_, _ = io.WriteString(hasher, str)
-	hash := hasher.Sum(nil)
-	return base64.StdEncoding.EncodeToString(hash)
-}
-
-// generateAcceptKey returns the string needed for the Sec-WebSocket-Accept header.
-// https://tools.ietf.org/html/rfc6455#section-1.3 describes this process in more detail.
-func generateAcceptKey(req *http.Request) string {
-	return sha1Base64(req.Header.Get("Sec-WebSocket-Key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-}
-
-// ChangeRequestScheme is needed as the gorilla websocket library requires the ws scheme.
-// (even though it changes it back to http/https, but ¯\_(ツ)_/¯.)
-func ChangeRequestScheme(reqURL *url.URL) string {
-	switch reqURL.Scheme {
-	case "https":
-		return "wss"
-	case "http":
-		return "ws"
-	case "":
-		return "ws"
-	default:
-		return reqURL.Scheme
-	}
-}
-
 // Stream copies copy data to & from provided io.ReadWriters.
-func Stream(conn, backendConn io.ReadWriter, log *zerolog.Logger) {
+func Stream(tunnelConn, originConn io.ReadWriter, log *zerolog.Logger) {
 	proxyDone := make(chan struct{}, 2)
 
 	go func() {
-		_, err := io.Copy(conn, backendConn)
+		_, err := copyData(tunnelConn, originConn, "origin->tunnel")
 		if err != nil {
-			log.Debug().Msgf("conn to backendConn copy: %v", err)
+			log.Debug().Msgf("origin to tunnel copy: %v", err)
 		}
 		proxyDone <- struct{}{}
 	}()
 
 	go func() {
-		_, err := io.Copy(backendConn, conn)
+		_, err := copyData(originConn, tunnelConn, "tunnel->origin")
 		if err != nil {
-			log.Debug().Msgf("backendConn to conn copy: %v", err)
+			log.Debug().Msgf("tunnel to origin copy: %v", err)
 		}
 		proxyDone <- struct{}{}
 	}()
 
 	// If one side is done, we are done.
 	<-proxyDone
+}
+
+// when set to true, enables logging of content copied to/from origin and tunnel
+const debugCopy = false
+
+func copyData(dst io.Writer, src io.Reader, dir string) (written int64, err error) {
+	if debugCopy {
+		// copyBuffer is based on stdio Copy implementation but shows copied data
+		copyBuffer := func(dst io.Writer, src io.Reader, dir string) (written int64, err error) {
+			var buf []byte
+			size := 32 * 1024
+			buf = make([]byte, size)
+			for {
+				t := time.Now()
+				nr, er := src.Read(buf)
+				if nr > 0 {
+					fmt.Println(dir, t.UnixNano(), "\n"+hex.Dump(buf[0:nr]))
+					nw, ew := dst.Write(buf[0:nr])
+					if nw < 0 || nr < nw {
+						nw = 0
+						if ew == nil {
+							ew = errors.New("invalid write")
+						}
+					}
+					written += int64(nw)
+					if ew != nil {
+						err = ew
+						break
+					}
+					if nr != nw {
+						err = io.ErrShortWrite
+						break
+					}
+				}
+				if er != nil {
+					if er != io.EOF {
+						err = er
+					}
+					break
+				}
+			}
+			return written, err
+		}
+		return copyBuffer(dst, src, dir)
+	} else {
+		return io.Copy(dst, src)
+	}
+}
+
+// from RFC-6455
+var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
+
+func generateAcceptKey(challengeKey string) string {
+	h := sha1.New()
+	h.Write([]byte(challengeKey))
+	h.Write(keyGUID)
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }

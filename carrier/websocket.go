@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -60,7 +61,7 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 		TLSClientConfig: options.TLSClientConfig,
 		Proxy:           http.ProxyFromEnvironment,
 	}
-	wsConn, resp, err := cfwebsocket.ClientConnect(req, dialer)
+	wsConn, resp, err := clientConnect(req, dialer)
 	defer closeRespBody(resp)
 
 	if err != nil && IsAccessResponse(resp) {
@@ -85,6 +86,63 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 	}
 
 	return &cfwebsocket.GorillaConn{Conn: wsConn}, nil
+}
+
+var stripWebsocketHeaders = []string{
+	"Upgrade",
+	"Connection",
+	"Sec-Websocket-Key",
+	"Sec-Websocket-Version",
+	"Sec-Websocket-Extensions",
+}
+
+// the gorilla websocket library sets its own Upgrade, Connection, Sec-WebSocket-Key,
+// Sec-WebSocket-Version and Sec-Websocket-Extensions headers.
+// https://github.com/gorilla/websocket/blob/master/client.go#L189-L194.
+func websocketHeaders(req *http.Request) http.Header {
+	wsHeaders := make(http.Header)
+	for key, val := range req.Header {
+		wsHeaders[key] = val
+	}
+	// Assume the header keys are in canonical format.
+	for _, header := range stripWebsocketHeaders {
+		wsHeaders.Del(header)
+	}
+	wsHeaders.Set("Host", req.Host) // See TUN-1097
+	return wsHeaders
+}
+
+// clientConnect creates a WebSocket client connection for provided request. Caller is responsible for closing
+// the connection. The response body may not contain the entire response and does
+// not need to be closed by the application.
+func clientConnect(req *http.Request, dialler *websocket.Dialer) (*websocket.Conn, *http.Response, error) {
+	req.URL.Scheme = changeRequestScheme(req.URL)
+	wsHeaders := websocketHeaders(req)
+	if dialler == nil {
+		dialler = &websocket.Dialer{
+			Proxy: http.ProxyFromEnvironment,
+		}
+	}
+	conn, response, err := dialler.Dial(req.URL.String(), wsHeaders)
+	if err != nil {
+		return nil, response, err
+	}
+	return conn, response, nil
+}
+
+// changeRequestScheme is needed as the gorilla websocket library requires the ws scheme.
+// (even though it changes it back to http/https, but ¯\_(ツ)_/¯.)
+func changeRequestScheme(reqURL *url.URL) string {
+	switch reqURL.Scheme {
+	case "https":
+		return "wss"
+	case "http":
+		return "ws"
+	case "":
+		return "ws"
+	default:
+		return reqURL.Scheme
+	}
 }
 
 // createAccessAuthenticatedStream will try load a token from storage and make
@@ -126,7 +184,7 @@ func createAccessWebSocketStream(options *StartOptions, log *zerolog.Logger) (*w
 	dump, err := httputil.DumpRequest(req, false)
 	log.Debug().Msgf("Access Websocket request: %s", string(dump))
 
-	conn, resp, err := cfwebsocket.ClientConnect(req, nil)
+	conn, resp, err := clientConnect(req, nil)
 
 	if resp != nil {
 		r, err := httputil.DumpResponse(resp, true)

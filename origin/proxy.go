@@ -67,7 +67,7 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 			lbProbe: lbProbe,
 			rule:    ingress.ServiceWarpRouting,
 		}
-		if err := p.proxyStreamRequest(serveCtx, w, req, sourceConnectionType, p.warpRouting.Proxy, logFields); err != nil {
+		if err := p.proxyStreamRequest(serveCtx, w, req, p.warpRouting.Proxy, logFields); err != nil {
 			p.logRequestError(err, cfRay, ingress.ServiceWarpRouting)
 			return err
 		}
@@ -96,7 +96,7 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		return fmt.Errorf("Not a connection-oriented service")
 	}
 
-	if err := p.proxyStreamRequest(serveCtx, w, req, sourceConnectionType, connectionProxy, logFields); err != nil {
+	if err := p.proxyStreamRequest(serveCtx, w, req, connectionProxy, logFields); err != nil {
 		p.logRequestError(err, cfRay, ruleNum)
 		return err
 	}
@@ -152,7 +152,6 @@ func (p *proxy) proxyStreamRequest(
 	serveCtx context.Context,
 	w connection.ResponseWriter,
 	req *http.Request,
-	sourceConnectionType connection.Type,
 	connectionProxy ingress.StreamBasedOriginProxy,
 	fields logFields,
 ) error {
