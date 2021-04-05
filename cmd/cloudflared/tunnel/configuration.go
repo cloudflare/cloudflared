@@ -85,8 +85,8 @@ func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 	}
 }
 
-func dnsProxyStandAlone(c *cli.Context) bool {
-	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world"))
+func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelConfig) bool {
+	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world") && namedTunnel == nil)
 }
 
 func findOriginCert(originCertPath string, log *zerolog.Logger) (string, error) {

@@ -20,11 +20,21 @@ def component_tests_config():
         LOGGER.info(f"component tests base config {config}")
 
         def _component_tests_config(additional_config={}, named_tunnel=True):
+
+            # Regression test for TUN-4177, running with proxy-dns should not prevent tunnels from running
+            additional_config["proxy-dns"] = True
+            additional_config["proxy-dns-port"] = 9053
+
             if named_tunnel:
                 return NamedTunnelConfig(additional_config=additional_config,
-                                         cloudflared_binary=config['cloudflared_binary'], tunnel=config['tunnel'], credentials_file=config['credentials_file'],  ingress=config['ingress'])
+                                         cloudflared_binary=config['cloudflared_binary'],
+                                         tunnel=config['tunnel'],
+                                         credentials_file=config['credentials_file'],
+                                         ingress=config['ingress'])
+
             return ClassicTunnelConfig(
-                additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'], hostname=config['classic_hostname'], origincert=config['origincert'])
+                additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'],
+                hostname=config['classic_hostname'], origincert=config['origincert'])
 
         return _component_tests_config
 

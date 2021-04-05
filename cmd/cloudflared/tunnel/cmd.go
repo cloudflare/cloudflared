@@ -296,7 +296,7 @@ func StartServer(
 	}()
 
 	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
-	if dnsProxyStandAlone(c) {
+	if dnsProxyStandAlone(c, namedTunnel) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
 		return waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, log)

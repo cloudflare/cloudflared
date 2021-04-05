@@ -11,13 +11,13 @@ expect_message = "Starting Hello World server"
 
 
 def assert_log_to_terminal(cloudflared):
-    stderr = cloudflared.stderr.read(1250)
+    stderr = cloudflared.stderr.read(1500)
     assert expect_message.encode() in stderr, f"{stderr} doesn't contain {expect_message}"
 
 
 def assert_log_in_file(file):
     with open(file, "r") as f:
-        log = f.read(1500)
+        log = f.read(1850)
         assert expect_message in log, f"{log} doesn't contain {expect_message}"
 
 
