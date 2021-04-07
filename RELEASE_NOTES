@@ -1,3 +1,9 @@
+2021.4.0
+- 2021-04-05 TUN-4178: Fix component test for running as a service in MacOS to not assume a named tunnel
+- 2021-04-05 TUN-4177: Running with proxy-dns should not prevent running Named Tunnels
+- 2021-04-02 TUN-4168: Transparently proxy websocket connections using stdlib HTTP client instead of gorilla/websocket; move websocket client code into carrier package since it's only used by access subcommands now (#345).
+- 2021-04-07 Publish change log for 2021.4.0
+
 2021.3.6
 - 2021-03-30 TUN-4150: Only show the connector table in 'tunnel info' if there are connectors. Don't show rows with zero connections.
 - 2021-03-31 TUN-4153: Revert best-effort HTTP2 usage when talking to origins
