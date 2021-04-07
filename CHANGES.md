@@ -1,23 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
-## UNRELEASED
-
-### Backward Incompatible Changes
-
-- none
-
-### New Features
-
-- none
-
-### Improvements
-
-- none
+## 2021.4.0
 
 ### Bug Fixes
 
 - Fixed proxying of websocket requests to avoid possibility of losing initial frames that were sent in the same TCP
   packet as response headers [#345](https://github.com/cloudflare/cloudflared/issues/345).
+- `proxy-dns` option now works in conjunction with running a named tunnel [#346](https://github.com/cloudflare/cloudflared/issues/346).
 
 ## 2021.3.6
 
