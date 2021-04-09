@@ -595,7 +595,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "stdin-control",
 			Usage:   "Control the process using commands sent through stdin",
-			EnvVars: []string{"STDIN-CONTROL"},
+			EnvVars: []string{"STDIN_CONTROL"},
 			Hidden:  true,
 			Value:   false,
 		}),
