@@ -138,6 +138,11 @@ func (ing Ingress) IsEmpty() bool {
 	return len(ing.Rules) == 0
 }
 
+// IsSingleRule checks if the user only specified a single ingress rule.
+func (ing Ingress) IsSingleRule() bool {
+	return len(ing.Rules) == 1
+}
+
 // StartOrigins will start any origin services managed by cloudflared, e.g. proxy servers or Hello World.
 func (ing Ingress) StartOrigins(
 	wg *sync.WaitGroup,

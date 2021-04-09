@@ -19,6 +19,8 @@ import (
 
 const (
 	TagHeaderNamePrefix = "Cf-Warp-Tag-"
+	LogFieldCFRay       = "cfRay"
+	LogFieldRule        = "ingressRule"
 )
 
 type proxy struct {
@@ -84,7 +86,7 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 
 	if sourceConnectionType == connection.TypeHTTP {
 		if err := p.proxyHTTPRequest(w, req, rule, logFields); err != nil {
-			p.logRequestError(err, cfRay, ruleNum)
+			p.logRequestError(err, cfRay, ruleField(p.ingressRules, ruleNum))
 			return err
 		}
 		return nil
@@ -97,10 +99,17 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 	}
 
 	if err := p.proxyStreamRequest(serveCtx, w, req, connectionProxy, logFields); err != nil {
-		p.logRequestError(err, cfRay, ruleNum)
+		p.logRequestError(err, cfRay, ruleField(p.ingressRules, ruleNum))
 		return err
 	}
 	return nil
+}
+
+func ruleField(ing ingress.Ingress, ruleNum int) string {
+	if ing.IsSingleRule() {
+		return ""
+	}
+	return fmt.Sprintf("%d", ruleNum)
 }
 
 func (p *proxy) proxyHTTPRequest(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule, fields logFields) error {
@@ -257,13 +266,16 @@ func (p *proxy) logOriginResponse(resp *http.Response, fields logFields) {
 	}
 }
 
-func (p *proxy) logRequestError(err error, cfRay string, rule interface{}) {
+func (p *proxy) logRequestError(err error, cfRay string, rule string) {
 	requestErrors.Inc()
+	log := p.log.Error().Err(err)
 	if cfRay != "" {
-		p.log.Error().Msgf("CF-RAY: %s Proxying to ingress %v error: %v", cfRay, rule, err)
-	} else {
-		p.log.Error().Msgf("Proxying to ingress %v error: %v", rule, err)
+		log = log.Str(LogFieldCFRay, cfRay)
 	}
+	if rule != "" {
+		log = log.Str(LogFieldRule, rule)
+	}
+	log.Msg("")
 }
 
 func findCfRayHeader(req *http.Request) string {
