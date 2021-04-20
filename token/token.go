@@ -25,6 +25,7 @@ const (
 	keyName               = "token"
 	tokenCookie           = "CF_Authorization"
 	appDomainHeader       = "CF-Access-Domain"
+	appAUDHeader          = "CF-Access-Aud"
 	AccessLoginWorkerPath = "/cdn-cgi/access/login"
 )
 
@@ -270,14 +271,19 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 		return nil, errors.Wrap(err, "failed to get app info")
 	}
 	resp.Body.Close()
-	location := resp.Request.URL
-	if !strings.Contains(location.Path, AccessLoginWorkerPath) {
-		return nil, fmt.Errorf("failed to get Access app info for %s", reqURL.String())
-	}
 
-	aud := resp.Request.URL.Query().Get("kid")
-	if aud == "" {
-		return nil, errors.New("Empty app aud")
+	var aud string
+	location := resp.Request.URL
+	if strings.Contains(location.Path, AccessLoginWorkerPath) {
+		aud = resp.Request.URL.Query().Get("kid")
+		if aud == "" {
+			return nil, errors.New("Empty app aud")
+		}
+	} else if audHeader := resp.Header.Get(appAUDHeader); audHeader != "" {
+		// 403/401 from the edge will have aud in a header
+		aud = audHeader
+	} else {
+		return nil, fmt.Errorf("failed to get Access app info for %s", reqURL.String())
 	}
 
 	domain := resp.Header.Get(appDomainHeader)
@@ -286,7 +292,6 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	}
 
 	return &AppInfo{location.Hostname(), aud, domain}, nil
-
 }
 
 // exchangeOrgToken attaches an org token to a request to the appURL and returns an app token. This uses the Access SSO
