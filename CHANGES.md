@@ -1,5 +1,14 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.4.1
+
+### New Features
+
+- It is now possible to run the same tunnel using more than one `cloudflared` instance. This is a server-side change and
+  is compatible with any client version that uses Named Tunnels.
+
+  To get started, visit our [developer documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/deploy-cloudflared-replicas).
+
 ## 2021.4.0
 
 ### Bug Fixes
@@ -31,7 +40,7 @@
 ### Improvements
 
 - Tunnel create command, as well as, running ad-hoc tunnels using `cloudflared tunnel -name NAME`, will not overwrite
-  existing files when writing tunnel credentials. 
+  existing files when writing tunnel credentials.
 
 ### Bug Fixes
 
@@ -77,7 +86,7 @@ ingress:
           ports: [80, 443]
           allow: true
 ```
-  
+
 
 ### Improvements
 
@@ -129,4 +138,3 @@ ingress:
 
 - The maximum number of upstream connections is now limited by default which should fix reported issues of cloudflared
   exhausting CPU usage when faced with connectivity issues.
-
