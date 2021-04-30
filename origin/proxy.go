@@ -238,8 +238,13 @@ func (p *proxy) logRequest(r *http.Request, fields logFields) {
 	} else {
 		p.log.Debug().Msgf("All requests should have a CF-RAY header. Please open a support ticket with Cloudflare. %s %s %s ", r.Method, r.URL, r.Proto)
 	}
-	p.log.Debug().Msgf("CF-RAY: %s Request Headers %+v", fields.cfRay, r.Header)
-	p.log.Debug().Msgf("CF-RAY: %s Serving with ingress rule %v", fields.cfRay, fields.rule)
+	p.log.Debug().
+		Str("CF-RAY", fields.cfRay).
+		Fields(r.Header).
+		Str("host", r.Host).
+		Str("path", r.URL.Path).
+		Interface("rule", fields.rule).
+		Msg("Inbound request")
 
 	if contentLen := r.ContentLength; contentLen == -1 {
 		p.log.Debug().Msgf("CF-RAY: %s Request Content length unknown", fields.cfRay)
