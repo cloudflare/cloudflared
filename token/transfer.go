@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	baseStoreURL  = "https://login.argotunnel.com/"
+	baseStoreURL  = "https://login.cloudflareaccess.org/"
 	clientTimeout = time.Second * 60
 )
 
@@ -83,11 +83,13 @@ func buildRequestURL(baseURL *url.URL, key, value string, cli, useHostOnly bool)
 	if useHostOnly {
 		baseURL.Path = ""
 	}
+	// TODO: pass arg for tunnel login
 	if !cli {
 		return baseURL.String(), nil
 	}
 	q.Set("redirect_url", baseURL.String()) // we add the token as a query param on both the redirect_url and the main url
 	q.Set("send_org_token", "true")         // indicates that the cli endpoint should return both the org and app token
+	q.Set("edge_token_transfer", "true")    // use new LoginHelper service built on workers
 	baseURL.RawQuery = q.Encode()           // and this actual baseURL.
 	baseURL.Path = "cdn-cgi/access/cli"
 	return baseURL.String(), nil
@@ -103,9 +105,6 @@ func transferRequest(requestURL string, log *zerolog.Logger) ([]byte, string, er
 		if err != nil {
 			return nil, "", err
 		} else if len(buf) > 0 {
-			if err := putSuccess(client, requestURL); err != nil {
-				log.Err(err).Msg("Failed to update resource success")
-			}
 			return buf, key, nil
 		}
 	}
@@ -135,23 +134,4 @@ func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, 
 		return nil, "", err
 	}
 	return buf.Bytes(), resp.Header.Get("service-public-key"), nil
-}
-
-// putSuccess tells the server we successfully downloaded the resource
-func putSuccess(client *http.Client, requestURL string) error {
-	req, err := http.NewRequest("PUT", requestURL+"/ok", nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-
-	resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("HTTP Response Status Code: %d", resp.StatusCode)
-	}
-	return nil
 }

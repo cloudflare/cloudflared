@@ -20,7 +20,7 @@ import (
 
 const (
 	baseLoginURL     = "https://dash.cloudflare.com/argotunnel"
-	callbackStoreURL = "https://login.argotunnel.com/"
+	callbackStoreURL = "https://login.cloudflareaccess.org/"
 )
 
 func buildLoginSubcommand(hidden bool) *cli.Command {
