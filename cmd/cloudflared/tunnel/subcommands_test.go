@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -95,7 +94,7 @@ func TestTunnelfilePath(t *testing.T) {
 	assert.NoError(t, err)
 	homeDir, err := homedir.Dir()
 	assert.NoError(t, err)
-	expected := fmt.Sprintf("%s/.cloudflared/%v.json", homeDir, tunnelID)
+	expected := filepath.Join(homeDir, ".cloudflared", tunnelID.String()+".json")
 	assert.Equal(t, expected, actual)
 }
 
