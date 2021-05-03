@@ -240,7 +240,7 @@ func (p *proxy) logRequest(r *http.Request, fields logFields) {
 	}
 	p.log.Debug().
 		Str("CF-RAY", fields.cfRay).
-		Fields(r.Header).
+		Str("Header", fmt.Sprintf("%+v", r.Header)).
 		Str("host", r.Host).
 		Str("path", r.URL.Path).
 		Interface("rule", fields.rule).
