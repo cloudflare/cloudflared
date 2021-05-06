@@ -699,7 +699,7 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   ingress.ProxyTCPKeepAlive,
+			Name:   ingress.ProxyTCPKeepAliveFlag,
 			Usage:  "HTTP proxy TCP keepalive duration",
 			Value:  time.Second * 30,
 			Hidden: shouldHide,

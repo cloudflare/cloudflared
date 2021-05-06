@@ -238,7 +238,7 @@ func installLinuxService(c *cli.Context) error {
 			"--origincert", serviceConfigDir + "/" + serviceCredentialFile,
 		}
 	} else {
-		src, err := config.ReadConfigFile(c, log)
+		src, _, err := config.ReadConfigFile(c, log)
 		if err != nil {
 			return err
 		}

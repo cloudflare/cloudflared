@@ -13,27 +13,38 @@ func Action(actionFunc cli.ActionFunc) cli.ActionFunc {
 }
 
 func ConfiguredAction(actionFunc cli.ActionFunc) cli.ActionFunc {
+	// Adapt actionFunc to the type signature required by ConfiguredActionWithWarnings
+	f := func(context *cli.Context, _ string) error {
+		return actionFunc(context)
+	}
+
+	return ConfiguredActionWithWarnings(f)
+}
+
+// Just like ConfiguredAction, but accepts a second parameter with configuration warnings.
+func ConfiguredActionWithWarnings(actionFunc func(*cli.Context, string) error) cli.ActionFunc {
 	return WithErrorHandler(func(c *cli.Context) error {
-		if err := setFlagsFromConfigFile(c); err != nil {
+		warnings, err := setFlagsFromConfigFile(c)
+		if err != nil {
 			return err
 		}
-		return actionFunc(c)
+		return actionFunc(c, warnings)
 	})
 }
 
-func setFlagsFromConfigFile(c *cli.Context) error {
+func setFlagsFromConfigFile(c *cli.Context) (configWarnings string, err error) {
 	const errorExitCode = 1
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
-	inputSource, err := config.ReadConfigFile(c, log)
+	inputSource, warnings, err := config.ReadConfigFile(c, log)
 	if err != nil {
 		if err == config.ErrNoConfigFile {
-			return nil
+			return "", nil
 		}
-		return cli.Exit(err, errorExitCode)
+		return "", cli.Exit(err, errorExitCode)
 	}
 
 	if err := altsrc.ApplyInputSource(c, inputSource); err != nil {
-		return cli.Exit(err, errorExitCode)
+		return "", cli.Exit(err, errorExitCode)
 	}
-	return nil
+	return warnings, nil
 }

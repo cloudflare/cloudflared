@@ -22,7 +22,7 @@ const (
 	Socks5Flag                    = "socks5"
 	ProxyConnectTimeoutFlag       = "proxy-connect-timeout"
 	ProxyTLSTimeoutFlag           = "proxy-tls-timeout"
-	ProxyTCPKeepAlive             = "proxy-tcp-keepalive"
+	ProxyTCPKeepAliveFlag         = "proxy-tcp-keepalive"
 	ProxyNoHappyEyeballsFlag      = "proxy-no-happy-eyeballs"
 	ProxyKeepAliveConnectionsFlag = "proxy-keepalive-connections"
 	ProxyKeepAliveTimeoutFlag     = "proxy-keepalive-timeout"
@@ -60,7 +60,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	if flag := ProxyTLSTimeoutFlag; c.IsSet(flag) {
 		tlsTimeout = c.Duration(flag)
 	}
-	if flag := ProxyTCPKeepAlive; c.IsSet(flag) {
+	if flag := ProxyTCPKeepAliveFlag; c.IsSet(flag) {
 		tcpKeepAlive = c.Duration(flag)
 	}
 	if flag := ProxyNoHappyEyeballsFlag; c.IsSet(flag) {
