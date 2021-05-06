@@ -1,4 +1,4 @@
-pinned_go: &pinned_go go=1.15.7-1
+pinned_go: &pinned_go go=1.16.4-3
 pinned_go_fips: &pinned_go_fips go-fips=1.15.5-3
 
 build_dir: &build_dir /cfsetup_build
@@ -279,8 +279,8 @@ centos-7:
       - https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
     pre-cache:
       - yum install -y fakeroot
-      - wget https://golang.org/dl/go1.15.7.linux-amd64.tar.gz -P /tmp/
-      - tar -C /usr/local -xzf /tmp/go1.15.7.linux-amd64.tar.gz
+      - wget https://golang.org/dl/go1.16.4.linux-amd64.tar.gz -P /tmp/
+      - tar -C /usr/local -xzf /tmp/go1.16.4.linux-amd64.tar.gz
     post-cache:
       - export PATH=$PATH:/usr/local/go/bin
       - export GOOS=linux
@@ -291,8 +291,8 @@ centos-7:
     builddeps: *el7_builddeps
     pre-cache:
       - yum install -y fakeroot
-      - wget https://golang.org/dl/go1.15.7.linux-amd64.tar.gz -P /tmp/
-      - tar -C /usr/local -xzf /tmp/go1.15.7.linux-amd64.tar.gz
+      - wget https://golang.org/dl/go1.16.4.linux-amd64.tar.gz -P /tmp/
+      - tar -C /usr/local -xzf /tmp/go1.16.4.linux-amd64.tar.gz
     post-cache:
       - export PATH=$PATH:/usr/local/go/bin
       - export GOOS=linux
