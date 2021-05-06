@@ -250,6 +250,12 @@ github.com/stretchr/testify/require
 ## explicit
 github.com/urfave/cli/v2
 github.com/urfave/cli/v2/altsrc
+# go.uber.org/automaxprocs v1.4.0
+## explicit
+go.uber.org/automaxprocs
+go.uber.org/automaxprocs/internal/cgroups
+go.uber.org/automaxprocs/internal/runtime
+go.uber.org/automaxprocs/maxprocs
 # golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 ## explicit
 golang.org/x/crypto/blake2b

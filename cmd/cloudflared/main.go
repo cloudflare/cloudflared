@@ -10,6 +10,7 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
+	_ "go.uber.org/automaxprocs"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
