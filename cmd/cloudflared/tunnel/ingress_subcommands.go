@@ -45,7 +45,7 @@ func buildIngressSubcommand() *cli.Command {
 func buildValidateIngressCommand() *cli.Command {
 	return &cli.Command{
 		Name:        "validate",
-		Action:      cliutil.ConfiguredAction(validateIngressCommand),
+		Action:      cliutil.ConfiguredActionWithWarnings(validateIngressCommand),
 		Usage:       "Validate the ingress configuration ",
 		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
 		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
@@ -68,7 +68,7 @@ func buildTestURLCommand() *cli.Command {
 }
 
 // validateIngressCommand check the syntax of the ingress rules in the cloudflared config file
-func validateIngressCommand(c *cli.Context) error {
+func validateIngressCommand(c *cli.Context, warnings string) error {
 	conf := config.GetConfiguration()
 	if conf.Source() == "" {
 		fmt.Println("No configuration file was found. Please create one, or use the --config flag to specify its filepath. You can use the help command to learn more about configuration files")
@@ -80,6 +80,11 @@ func validateIngressCommand(c *cli.Context) error {
 	}
 	if c.IsSet("url") {
 		return ingress.ErrURLIncompatibleWithIngress
+	}
+	if warnings != "" {
+		fmt.Println("Warning: unused keys detected in your config file. Here is a list of unused keys:")
+		fmt.Println(warnings)
+		return nil
 	}
 	fmt.Println("OK")
 	return nil

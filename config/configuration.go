@@ -358,13 +358,13 @@ func GetConfiguration() *Configuration {
 // ReadConfigFile returns InputSourceContext initialized from the configuration file.
 // On repeat calls returns with the same file, returns without reading the file again; however,
 // if value of "config" flag changes, will read the new config file
-func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (*configFileSettings, error) {
+func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSettings, warnings string, err error) {
 	configFile := c.String("config")
 	if configuration.Source() == configFile || configFile == "" {
 		if configuration.Source() == "" {
-			return nil, ErrNoConfigFile
+			return nil, "", ErrNoConfigFile
 		}
-		return &configuration, nil
+		return &configuration, "", nil
 	}
 
 	log.Debug().Msgf("Loading configuration from %s", configFile)
@@ -373,16 +373,27 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (*configFileSettings, e
 		if os.IsNotExist(err) {
 			err = ErrNoConfigFile
 		}
-		return nil, err
+		return nil, "", err
 	}
 	defer file.Close()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
 		if err == io.EOF {
 			log.Error().Msgf("Configuration file %s was empty", configFile)
-			return &configuration, nil
+			return &configuration, "", nil
 		}
-		return nil, errors.Wrap(err, "error parsing YAML in config file at "+configFile)
+		return nil, "", errors.Wrap(err, "error parsing YAML in config file at "+configFile)
 	}
 	configuration.sourceFile = configFile
-	return &configuration, nil
+
+	// Parse it again, with strict mode, to find warnings.
+	if file, err := os.Open(configFile); err == nil {
+		decoder := yaml.NewDecoder(file)
+		decoder.SetStrict(true)
+		var unusedConfig configFileSettings
+		if err := decoder.Decode(&unusedConfig); err != nil {
+			warnings = err.Error()
+		}
+	}
+
+	return &configuration, warnings, nil
 }
