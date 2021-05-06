@@ -1,0 +1,24 @@
+language: go
+sudo: false
+go_import_path: go.uber.org/automaxprocs
+
+env:
+  global:
+    - GO111MODULE=on
+
+matrix:
+  include:
+    - go: oldstable
+    - go: stable
+      env: LINT=1
+
+install:
+  - make install
+
+script:
+  - test -z "$LINT" || make lint
+  - make test
+
+after_success:
+  - make cover
+  - bash <(curl -s https://codecov.io/bash)
