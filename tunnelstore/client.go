@@ -72,6 +72,7 @@ type Route interface {
 	json.Marshaler
 	RecordType() string
 	UnmarshalResult(body io.Reader) (RouteResult, error)
+	String() string
 }
 
 type RouteResult interface {
@@ -114,6 +115,10 @@ func (dr *DNSRoute) UnmarshalResult(body io.Reader) (RouteResult, error) {
 
 func (dr *DNSRoute) RecordType() string {
 	return "dns"
+}
+
+func (dr *DNSRoute) String() string {
+	return fmt.Sprintf("%s %s", dr.RecordType(), dr.userHostname)
 }
 
 func (res *DNSRouteResult) SuccessSummary() string {
@@ -162,6 +167,10 @@ func (lr *LBRoute) MarshalJSON() ([]byte, error) {
 
 func (lr *LBRoute) RecordType() string {
 	return "lb"
+}
+
+func (lb *LBRoute) String() string {
+	return fmt.Sprintf("%s %s %s", lb.RecordType(), lb.lbName, lb.lbPool)
 }
 
 func (lr *LBRoute) UnmarshalResult(body io.Reader) (RouteResult, error) {

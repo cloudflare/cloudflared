@@ -595,6 +595,12 @@ func runCommand(c *cli.Context) error {
 		}
 	}
 
+	if c.String("hostname") != "" {
+		sc.log.Warn().Msg("The property `hostname` in your configuration is ignored because you configured a Named Tunnel " +
+			"in the property `tunnel` to run. Make sure to provision the routing (e.g. via `cloudflared tunnel route dns/lb`) or else " +
+			"your origin will not be reachable. You should remove the `hostname` property to avoid this warning.")
+	}
+
 	return runNamedTunnel(sc, tunnelRef)
 }
 
