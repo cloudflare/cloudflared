@@ -46,7 +46,7 @@ type signalHandler struct {
 	signals    []os.Signal
 }
 
-type appJWTPayload struct {
+type jwtPayload struct {
 	Aud   []string `json:"aud"`
 	Email string   `json:"email"`
 	Exp   int      `json:"exp"`
@@ -57,17 +57,12 @@ type appJWTPayload struct {
 	Subt  string   `json:"sub"`
 }
 
-type orgJWTPayload struct {
-	appJWTPayload
-	Aud string `json:"aud"`
-}
-
 type transferServiceResponse struct {
 	AppToken string `json:"app_token"`
 	OrgToken string `json:"org_token"`
 }
 
-func (p appJWTPayload) isExpired() bool {
+func (p jwtPayload) isExpired() bool {
 	return int(time.Now().Unix()) > p.Exp
 }
 
@@ -346,7 +341,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var payload orgJWTPayload
+	var payload jwtPayload
 	err = json.Unmarshal(token.Payload, &payload)
 	if err != nil {
 		return "", err
@@ -368,7 +363,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var payload appJWTPayload
+	var payload jwtPayload
 	err = json.Unmarshal(token.Payload, &payload)
 	if err != nil {
 		return "", err
