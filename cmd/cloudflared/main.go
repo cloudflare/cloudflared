@@ -10,7 +10,7 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
-	_ "go.uber.org/automaxprocs"
+	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
@@ -48,6 +48,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	metrics.RegisterBuildInfo(BuildTime, Version)
 	raven.SetRelease(Version)
+	maxprocs.Set()
 
 	// Graceful shutdown channel used by the app. When closed, app must terminate gracefully.
 	// Windows service manager closes this channel when it receives stop command.
