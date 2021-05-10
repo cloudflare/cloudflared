@@ -181,7 +181,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 	if r, ok := routeFromFlag(sc.c); ok {
 		if res, err := sc.route(tunnel.ID, r); err != nil {
-			sc.log.Err(err).Msg("failed to create route, please create it manually")
+			sc.log.Err(err).Str("route", r.String()).Msg("failed to provision routing, please create it manually via Cloudflare dashboard or UI; most likely you already have a conflicting record there")
 		} else {
 			sc.log.Info().Msg(res.SuccessSummary())
 		}
