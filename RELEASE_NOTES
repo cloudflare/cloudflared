@@ -1,3 +1,17 @@
+2021.5.0
+- 2021-05-10 TUN-4384: Silence log from automaxprocs
+- 2021-05-10 AUTH-3537: AUDs in JWTs are now always arrays
+- 2021-05-10 Update changelog for 2021.5.0
+- 2021-05-03 TUN-4343: Fix broken build by setting debug field correctly
+- 2021-05-06 TUN-4356: Set AUTOMAXPROCS to the CPU limit when running in a Linux container
+- 2021-05-06 TUN-4357: Bump Go to 1.16
+- 2021-05-06 TUN-4359: Warn about unused keys in 'tunnel ingress validate'
+- 2021-04-30 debug: log host / path
+- 2021-04-20 AUTH-3513: Checks header for app info in case response is a 403/401 from the edge
+- 2021-04-29 TUN-4000: Release notes for cloudflared replica model
+- 2021-04-09 TUN-2853: rename STDIN-CONTROL env var to STDIN_CONTROL
+- 2021-04-09 TUN-4206: Better error message when user is only using one ingress rule
+
 2021.4.0
 - 2021-04-05 TUN-4178: Fix component test for running as a service in MacOS to not assume a named tunnel
 - 2021-04-05 TUN-4177: Running with proxy-dns should not prevent running Named Tunnels
