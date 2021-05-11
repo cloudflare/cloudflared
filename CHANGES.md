@@ -1,13 +1,16 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
-## 2021.4.1
+## 2020.5.0
 
 ### New Features
-
 - It is now possible to run the same tunnel using more than one `cloudflared` instance. This is a server-side change and
   is compatible with any client version that uses Named Tunnels.
 
   To get started, visit our [developer documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/deploy-cloudflared-replicas).
+- `cloudflared tunnel ingress validate` will now warn about unused keys in your config file. This is helpful for
+  detecting typos in your config.
+- If `cloudflared` detects it is running inside a Linux container, it will limit itself to use only the number of CPUs
+  the pod has been granted, instead of trying to use every CPU available.
 
 ## 2021.4.0
 
