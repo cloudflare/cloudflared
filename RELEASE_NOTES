@@ -1,3 +1,6 @@
+2021.5.3
+- 2021-05-13 TUN-4411: Fix Go version
+
 2021.5.2
 - 2021-05-04 Setup a Github action for checking the cloudflared build
 
