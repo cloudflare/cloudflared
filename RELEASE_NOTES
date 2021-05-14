@@ -1,3 +1,6 @@
+2021.5.4
+- Fix release pipeline
+
 2021.5.1
 - 2021-05-10 TUN-4342: Fix false positive warning about unused hostname property
 - 2021-05-10 Release 2021.5.0
