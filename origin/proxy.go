@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	TagHeaderNamePrefix = "Cf-Warp-Tag-"
-	LogFieldCFRay       = "cfRay"
-	LogFieldRule        = "ingressRule"
+	TagHeaderNamePrefix   = "Cf-Warp-Tag-"
+	LogFieldCFRay         = "cfRay"
+	LogFieldRule          = "ingressRule"
+	LogFieldOriginService = "originService"
 )
 
 type proxy struct {
@@ -70,7 +71,7 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 			rule:    ingress.ServiceWarpRouting,
 		}
 		if err := p.proxyStreamRequest(serveCtx, w, req, p.warpRouting.Proxy, logFields); err != nil {
-			p.logRequestError(err, cfRay, ingress.ServiceWarpRouting)
+			p.logRequestError(err, cfRay, "", ingress.ServiceWarpRouting)
 			return err
 		}
 		return nil
@@ -86,7 +87,8 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 
 	if sourceConnectionType == connection.TypeHTTP {
 		if err := p.proxyHTTPRequest(w, req, rule, logFields); err != nil {
-			p.logRequestError(err, cfRay, ruleField(p.ingressRules, ruleNum))
+			rule, srv := ruleField(p.ingressRules, ruleNum)
+			p.logRequestError(err, cfRay, rule, srv)
 			return err
 		}
 		return nil
@@ -99,17 +101,19 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 	}
 
 	if err := p.proxyStreamRequest(serveCtx, w, req, connectionProxy, logFields); err != nil {
-		p.logRequestError(err, cfRay, ruleField(p.ingressRules, ruleNum))
+		rule, srv := ruleField(p.ingressRules, ruleNum)
+		p.logRequestError(err, cfRay, rule, srv)
 		return err
 	}
 	return nil
 }
 
-func ruleField(ing ingress.Ingress, ruleNum int) string {
+func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
+	srv = ing.Rules[ruleNum].Service.String()
 	if ing.IsSingleRule() {
-		return ""
+		return "", srv
 	}
-	return fmt.Sprintf("%d", ruleNum)
+	return fmt.Sprintf("%d", ruleNum), srv
 }
 
 func (p *proxy) proxyHTTPRequest(w connection.ResponseWriter, req *http.Request, rule *ingress.Rule, fields logFields) error {
@@ -133,7 +137,7 @@ func (p *proxy) proxyHTTPRequest(w connection.ResponseWriter, req *http.Request,
 
 	resp, err := httpService.RoundTrip(req)
 	if err != nil {
-		return errors.Wrap(err, "Error proxying request to origin")
+		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
 	}
 	defer resp.Body.Close()
 
@@ -271,7 +275,7 @@ func (p *proxy) logOriginResponse(resp *http.Response, fields logFields) {
 	}
 }
 
-func (p *proxy) logRequestError(err error, cfRay string, rule string) {
+func (p *proxy) logRequestError(err error, cfRay string, rule, service string) {
 	requestErrors.Inc()
 	log := p.log.Error().Err(err)
 	if cfRay != "" {
@@ -279,6 +283,9 @@ func (p *proxy) logRequestError(err error, cfRay string, rule string) {
 	}
 	if rule != "" {
 		log = log.Str(LogFieldRule, rule)
+	}
+	if service != "" {
+		log = log.Str(LogFieldOriginService, service)
 	}
 	log.Msg("")
 }
