@@ -1,5 +1,9 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.5.7
+### New Features
+- Named Tunnels will automatically select the protocol to connect to Cloudflare's edge network.
+
 ## 2021.5.0
 
 ### New Features

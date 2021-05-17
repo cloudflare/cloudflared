@@ -110,7 +110,7 @@ var (
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "protocol",
-		Value:   "h2mux",
+		Value:   "auto",
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", connection.AvailableProtocolFlagMessage),
 		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
