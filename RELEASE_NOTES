@@ -1,3 +1,7 @@
+2021.5.7
+- 2021-05-17 Fix typo in Changes.md
+- 2021-05-17 TUN-4421: Named Tunnels will automatically select the protocol to connect to Cloudflare's edge network
+
 2021.5.6
 - 2021-05-14 TUN-4418: Downgrade to Go 1.16.3
 
