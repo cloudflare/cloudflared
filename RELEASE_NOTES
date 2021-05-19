@@ -1,3 +1,7 @@
+2021.5.8
+- 2021-05-14 TUN-4419: Improve error message when cloudflared cannot reach origin
+- 2021-05-19 TUN-4425: --overwrite-dns flag for in adhoc and route dns cmds
+
 2021.5.7
 - 2021-05-17 Fix typo in Changes.md
 - 2021-05-17 TUN-4421: Named Tunnels will automatically select the protocol to connect to Cloudflare's edge network
