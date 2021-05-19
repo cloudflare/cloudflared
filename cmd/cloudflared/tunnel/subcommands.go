@@ -29,10 +29,11 @@ import (
 )
 
 const (
-	allSortByOptions   = "name, id, createdAt, deletedAt, numConnections"
-	connsSortByOptions = "id, startedAt, numConnections, version"
-	CredFileFlagAlias  = "cred-file"
-	CredFileFlag       = "credentials-file"
+	allSortByOptions     = "name, id, createdAt, deletedAt, numConnections"
+	connsSortByOptions   = "id, startedAt, numConnections, version"
+	CredFileFlagAlias    = "cred-file"
+	CredFileFlag         = "credentials-file"
+	overwriteDNSFlagName = "overwrite-dns"
 
 	LogFieldTunnelID = "tunnelID"
 )
@@ -132,6 +133,12 @@ var (
 		Aliases: []string{"c"},
 		Usage:   `Constraints the cleanup to stop the connections of a single Connector (by its ID). You can find the various Connectors (and their IDs) currently connected to your tunnel via 'cloudflared tunnel info <name>'.`,
 		EnvVars: []string{"TUNNEL_CLEANUP_CONNECTOR"},
+	}
+	overwriteDNSFlag = &cli.BoolFlag{
+		Name:    overwriteDNSFlagName,
+		Aliases: []string{"f"},
+		Usage:   `Overwrites existing DNS records with this hostname`,
+		EnvVars: []string{"TUNNEL_FORCE_PROVISIONING_DNS"},
 	}
 )
 
@@ -670,10 +677,11 @@ Further information about managing Cloudflare WARP traffic to your tunnel is ava
 		Subcommands: []*cli.Command{
 			buildRouteIPSubcommand(),
 		},
+		Flags: []cli.Flag{overwriteDNSFlag},
 	}
 }
 
-func dnsRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
+func dnsRouteFromArg(c *cli.Context, overwriteExisting bool) (tunnelstore.Route, error) {
 	const (
 		userHostnameIndex = 2
 		expectedNArgs     = 3
@@ -687,7 +695,7 @@ func dnsRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 	} else if !validateHostname(userHostname, true) {
 		return nil, errors.Errorf("%s is not a valid hostname", userHostname)
 	}
-	return tunnelstore.NewDNSRoute(userHostname), nil
+	return tunnelstore.NewDNSRoute(userHostname, overwriteExisting), nil
 }
 
 func lbRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
@@ -756,7 +764,7 @@ func routeCommand(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		route, err = dnsRouteFromArg(c)
+		route, err = dnsRouteFromArg(c, c.Bool(overwriteDNSFlagName))
 		if err != nil {
 			return err
 		}

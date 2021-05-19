@@ -1,5 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.5.8
+### New Features
+- When creating a DNS record to point a hostname at a tunnel, you can now use --overwrite-dns to overwrite any existing
+  DNS records with that hostname. This works when using the CLI to provision DNS, and when starting an adhoc tunnel, e.g.
+  - `cloudflared route --overwrite-dns dns foo foo.example.com`
+  - `cloudflared tunnel --overwrite-dns --name foo --hostname foo.example.com`
+
 ## 2021.5.7
 ### New Features
 - Named Tunnels will automatically select the protocol to connect to Cloudflare's edge network.

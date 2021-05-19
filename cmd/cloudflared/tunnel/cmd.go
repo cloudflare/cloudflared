@@ -87,6 +87,10 @@ const (
 var (
 	graceShutdownC chan struct{}
 	version        string
+
+	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
+		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
+		"any existing DNS records for this hostname.", overwriteDNSFlag)
 )
 
 func Flags() []cli.Flag {
@@ -181,7 +185,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 	if r, ok := routeFromFlag(sc.c); ok {
 		if res, err := sc.route(tunnel.ID, r); err != nil {
-			sc.log.Err(err).Str("route", r.String()).Msg("failed to provision routing, please create it manually via Cloudflare dashboard or UI; most likely you already have a conflicting record there")
+			sc.log.Err(err).Str("route", r.String()).Msg(routeFailMsg)
 		} else {
 			sc.log.Info().Msg(res.SuccessSummary())
 		}
@@ -199,12 +203,12 @@ func runClassicTunnel(sc *subcommandContext) error {
 	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled)
 }
 
-func routeFromFlag(c *cli.Context) (tunnelstore.Route, bool) {
+func routeFromFlag(c *cli.Context) (route tunnelstore.Route, ok bool) {
 	if hostname := c.String("hostname"); hostname != "" {
 		if lbPool := c.String("lb-pool"); lbPool != "" {
 			return tunnelstore.NewLBRoute(hostname, lbPool), true
 		}
-		return tunnelstore.NewDNSRoute(hostname), true
+		return tunnelstore.NewDNSRoute(hostname, c.Bool(overwriteDNSFlagName)), true
 	}
 	return nil, false
 }
@@ -613,6 +617,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		}),
 		selectProtocolFlag,
+		overwriteDNSFlag,
 	}...)
 
 	return flags

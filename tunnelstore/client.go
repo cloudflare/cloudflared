@@ -81,7 +81,8 @@ type RouteResult interface {
 }
 
 type DNSRoute struct {
-	userHostname string
+	userHostname      string
+	overwriteExisting bool
 }
 
 type DNSRouteResult struct {
@@ -89,19 +90,22 @@ type DNSRouteResult struct {
 	CName Change `json:"cname"`
 }
 
-func NewDNSRoute(userHostname string) Route {
+func NewDNSRoute(userHostname string, overwriteExisting bool) Route {
 	return &DNSRoute{
-		userHostname: userHostname,
+		userHostname:      userHostname,
+		overwriteExisting: overwriteExisting,
 	}
 }
 
 func (dr *DNSRoute) MarshalJSON() ([]byte, error) {
 	s := struct {
-		Type         string `json:"type"`
-		UserHostname string `json:"user_hostname"`
+		Type              string `json:"type"`
+		UserHostname      string `json:"user_hostname"`
+		OverwriteExisting bool   `json:"overwrite_existing"`
 	}{
-		Type:         dr.RecordType(),
-		UserHostname: dr.userHostname,
+		Type:              dr.RecordType(),
+		UserHostname:      dr.userHostname,
+		OverwriteExisting: dr.overwriteExisting,
 	}
 	return json.Marshal(&s)
 }
