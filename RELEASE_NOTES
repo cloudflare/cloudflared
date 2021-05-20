@@ -1,3 +1,8 @@
+2021.5.9
+- 2021-05-20 TUN-4426: Fix centos builds
+- 2021-05-20 Update changelog
+- 2021-04-30 AUTH-3426: Point to new transfer service URL and eliminate PUT /ok
+
 2021.5.8
 - 2021-05-14 TUN-4419: Improve error message when cloudflared cannot reach origin
 - 2021-05-19 TUN-4425: --overwrite-dns flag for in adhoc and route dns cmds
