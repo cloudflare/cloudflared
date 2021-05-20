@@ -279,6 +279,7 @@ centos-7:
       - https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
     pre-cache:
       - yum install -y fakeroot
+      - yum upgrade -y binutils-2.27-44.base.el7.x86_64
       - wget https://golang.org/dl/go1.16.3.linux-amd64.tar.gz -P /tmp/
       - tar -C /usr/local -xzf /tmp/go1.16.3.linux-amd64.tar.gz
     post-cache:
@@ -291,6 +292,7 @@ centos-7:
     builddeps: *el7_builddeps
     pre-cache:
       - yum install -y fakeroot
+      - yum upgrade -y binutils-2.27-44.base.el7.x86_64
       - wget https://golang.org/dl/go1.16.3.linux-amd64.tar.gz -P /tmp/
       - tar -C /usr/local -xzf /tmp/go1.16.3.linux-amd64.tar.gz
     post-cache:
