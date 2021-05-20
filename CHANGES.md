@@ -1,5 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.5.9
+### New Features
+- Uses new Worker based login helper service to facilitate token exchange in cloudflared flows.
+
+### Bug Fixes
+- Fixes Centos-7 builds.
+
 ## 2021.5.8
 ### New Features
 - When creating a DNS record to point a hostname at a tunnel, you can now use --overwrite-dns to overwrite any existing
