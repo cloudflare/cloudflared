@@ -69,12 +69,13 @@ func (r *MuxReader) run(log *zerolog.Logger) error {
 
 	// routine to periodically update bytesRead
 	go func() {
-		tickC := time.Tick(updateFreq)
+		ticker := time.NewTicker(updateFreq)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-r.abortChan:
 				return
-			case <-tickC:
+			case <-ticker.C:
 				r.metricsUpdater.updateInBoundBytes(r.bytesRead.Count())
 			}
 		}

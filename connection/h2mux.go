@@ -167,7 +167,8 @@ func (h *h2muxConnection) serveMuxer(ctx context.Context) error {
 }
 
 func (h *h2muxConnection) controlLoop(ctx context.Context, connectedFuse ConnectedFuse, isNamedTunnel bool) {
-	updateMetricsTickC := time.Tick(h.muxerConfig.MetricsUpdateFreq)
+	updateMetricsTicker := time.NewTicker(h.muxerConfig.MetricsUpdateFreq)
+	defer updateMetricsTicker.Stop()
 	var shutdownCompleted <-chan struct{}
 	for {
 		select {
@@ -191,7 +192,7 @@ func (h *h2muxConnection) controlLoop(ctx context.Context, connectedFuse Connect
 			// don't wait for shutdown to finish when context is closed, this is the hard termination path
 			return
 
-		case <-updateMetricsTickC:
+		case <-updateMetricsTicker.C:
 			h.observer.metrics.updateMuxerMetrics(h.connIndexStr, h.muxer.Metrics())
 		}
 	}

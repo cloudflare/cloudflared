@@ -78,12 +78,13 @@ func (w *MuxWriter) run(log *zerolog.Logger) error {
 
 	// routine to periodically communicate bytesWrote
 	go func() {
-		tickC := time.Tick(updateFreq)
+		ticker := time.NewTicker(updateFreq)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-w.abortChan:
 				return
-			case <-tickC:
+			case <-ticker.C:
 				w.metricsUpdater.updateOutBoundBytes(w.bytesWrote.Count())
 			}
 		}
