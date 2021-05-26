@@ -1,3 +1,6 @@
+2021.5.10
+- 2021-05-25 TUN-4456: Replaced instances of Tick() with Ticker() in h2mux paths
+
 2021.5.9
 - 2021-05-20 TUN-4426: Fix centos builds
 - 2021-05-20 Update changelog
