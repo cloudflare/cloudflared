@@ -88,7 +88,7 @@ ifeq ($(FIPS), true)
 	mv fips/fips.go.linux-amd64 fips/fips.go
 endif
 
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	CGO_ENABLED=0 GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
 ifeq ($(FIPS), true)
 	mv fips/fips.go fips/fips.go.linux-amd64
