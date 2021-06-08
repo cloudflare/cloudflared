@@ -34,7 +34,7 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
         cmd += ["sudo"]
     cmd += [config.cloudflared_binary]
     cmd += cfd_pre_args
-    cmd += ["--config", config_path]
+    cmd += ["--config", str(config_path)]
     cmd += cfd_args
     LOGGER.info(f"Run cmd {cmd} with config {config}")
     return cmd
@@ -50,8 +50,7 @@ def run_cloudflared_background(cmd, allow_input, capture_output):
     finally:
         cfd.terminate()
         if capture_output:
-            LOGGER.info(
-                f"cloudflared log: {cfd.stderr.read()}")
+            LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
