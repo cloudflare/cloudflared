@@ -98,6 +98,8 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer c.activeRequestsWG.Done()
 
 	connType := determineHTTP2Type(r)
+	handleMissingRequestParts(connType, r)
+
 	respWriter, err := newHTTP2RespWriter(r, w, connType)
 	if err != nil {
 		c.observer.log.Error().Msg(err.Error())
@@ -252,6 +254,20 @@ func determineHTTP2Type(r *http.Request) Type {
 		return TypeControlStream
 	default:
 		return TypeHTTP
+	}
+}
+
+func handleMissingRequestParts(connType Type, r *http.Request) {
+	if connType == TypeHTTP {
+		// http library has no guarantees that we receive a filled URL. If not, then we fill it, as we reuse the request
+		// for proxying. We use the same values as we used to in h2mux. For proxying they should not matter since we
+		// control the dialer on every egress proxied.
+		if len(r.URL.Scheme) == 0 {
+			r.URL.Scheme = "http"
+		}
+		if len(r.URL.Host) == 0 {
+			r.URL.Host = "localhost:8080"
+		}
 	}
 }
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 import copy
+import platform
 from time import sleep
 
+import pytest
 from flaky import flaky
 
 from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected
@@ -15,6 +17,7 @@ class TestReconnect:
         "stdin-control": True,
     }
 
+    @pytest.mark.skipif(platform.system() == "Windows", reason=f"Currently buggy on Windows TUN-4584")
     def test_named_reconnect(self, tmp_path, component_tests_config):
         config = component_tests_config(self.extra_config)
         with start_cloudflared(tmp_path, config, new_process=True, allow_input=True, capture_output=False) as cloudflared:
