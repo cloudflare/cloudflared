@@ -1,3 +1,10 @@
+2021.6.0
+- 2021-06-21 TUN-4571: Changelog for 2021.6.0
+- 2021-06-18 TUN-4571: Fix proxying to unix sockets when using HTTP2 transport to Cloudflare Edge
+- 2021-06-07 TUN-4502: Make `cloudflared tunnel route` subcommands described consistently
+- 2021-06-08 TUN-4504: Fix component tests in windows
+- 2021-05-27 TUN-4461: Log resulting DNS hostname if one is received from Cloudflare API
+
 2021.5.10
 - 2021-05-25 TUN-4456: Replaced instances of Tick() with Ticker() in h2mux paths
 
