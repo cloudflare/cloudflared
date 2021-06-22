@@ -163,6 +163,12 @@ func TunnelCommand(c *cli.Context) error {
 		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
 	}
 
+	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
+	// For now, default to legacy setup unless quick-service is specified
+	if c.String("hostname") == "" && c.String("quick-service") != "" {
+		return RunQuickTunnel(sc)
+	}
+
 	// Start a classic tunnel
 	return runClassicTunnel(sc)
 }
@@ -615,6 +621,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
 			Value:  false,
 			Hidden: shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:   "quick-service",
+			Usage:  "URL for a service which manages unauthenticated 'quick' tunnels.",
+			Hidden: true,
 		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
