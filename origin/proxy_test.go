@@ -6,9 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -273,26 +275,7 @@ func TestProxyMultipleOrigins(t *testing.T) {
 		},
 	}
 
-	ingress, err := ingress.ParseIngress(&config.Configuration{
-		TunnelID: t.Name(),
-		Ingress:  unvalidatedIngress,
-	})
-	require.NoError(t, err)
-
-	log := zerolog.Nop()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errC := make(chan error)
-	var wg sync.WaitGroup
-	require.NoError(t, ingress.StartOrigins(&wg, &log, ctx.Done(), errC))
-
-	proxy := NewOriginProxy(ingress, unusedWarpRoutingService, testTags, &log)
-
-	tests := []struct {
-		url            string
-		expectedStatus int
-		expectedBody   []byte
-	}{
+	tests := []MultipleIngressTest{
 		{
 			url:            "http://api.example.com",
 			expectedStatus: http.StatusCreated,
@@ -316,6 +299,31 @@ func TestProxyMultipleOrigins(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 		},
 	}
+
+	runIngressTestScenarios(t, unvalidatedIngress, tests)
+}
+
+type MultipleIngressTest struct {
+	url            string
+	expectedStatus int
+	expectedBody   []byte
+}
+
+func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.UnvalidatedIngressRule, tests []MultipleIngressTest) {
+	ingress, err := ingress.ParseIngress(&config.Configuration{
+		TunnelID: t.Name(),
+		Ingress:  unvalidatedIngress,
+	})
+	require.NoError(t, err)
+
+	log := zerolog.Nop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errC := make(chan error)
+	var wg sync.WaitGroup
+	require.NoError(t, ingress.StartOrigins(&wg, &log, ctx.Done(), errC))
+
+	proxy := NewOriginProxy(ingress, unusedWarpRoutingService, testTags, &log)
 
 	for _, test := range tests {
 		responseWriter := newMockHTTPRespWriter()
@@ -631,6 +639,45 @@ func TestConnections(t *testing.T) {
 			replayer.rw.Reset()
 		})
 	}
+}
+
+func TestUnixSocketOrigin(t *testing.T) {
+	file, err := ioutil.TempFile("", "unix.sock")
+	require.NoError(t, err)
+	os.Remove(file.Name()) // remove the file since binding the socket expects to create it
+
+	l, err := net.Listen("unix", file.Name())
+	require.NoError(t, err)
+	defer l.Close()
+	defer os.Remove(file.Name())
+
+	api := &httptest.Server{
+		Listener: l,
+		Config:   &http.Server{Handler: mockAPI{}},
+	}
+	api.Start()
+	defer api.Close()
+
+	unvalidatedIngress := []config.UnvalidatedIngressRule{
+		{
+			Hostname: "unix.example.com",
+			Service:  "unix:" + file.Name(),
+		},
+		{
+			Hostname: "*",
+			Service:  "http_status:404",
+		},
+	}
+
+	tests := []MultipleIngressTest{
+		{
+			url:            "http://unix.example.com",
+			expectedStatus: http.StatusCreated,
+			expectedBody:   []byte("Created"),
+		},
+	}
+
+	runIngressTestScenarios(t, unvalidatedIngress, tests)
 }
 
 type requestBody struct {

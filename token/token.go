@@ -278,7 +278,7 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 		// 403/401 from the edge will have aud in a header
 		aud = audHeader
 	} else {
-		return nil, fmt.Errorf("failed to get Access app info for %s", reqURL.String())
+		return nil, fmt.Errorf("failed to find Access application at %s", reqURL.String())
 	}
 
 	domain := resp.Header.Get(appDomainHeader)

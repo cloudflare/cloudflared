@@ -1,5 +1,15 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.6.0
+### Bug Fixes
+- Fixes a http2 transport (the new default for Named Tunnels) to work with unix socket origins.
+
+
+## 2021.5.10
+### Bug Fixes
+- Fixes a memory leak in h2mux transport that connects cloudflared to Cloudflare edge.
+
+
 ## 2021.5.9
 ### New Features
 - Uses new Worker based login helper service to facilitate token exchange in cloudflared flows.
