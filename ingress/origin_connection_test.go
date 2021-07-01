@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sync"
 	"testing"
 	"time"
 
@@ -188,71 +187,6 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 
 		require.NoError(t, errGroup.Wait())
 	}
-}
-
-func TestStreamWSConnection(t *testing.T) {
-	eyeballConn, edgeConn := net.Pipe()
-
-	origin := echoWSOrigin(t, true)
-	defer origin.Close()
-
-	var svc httpService
-	err := svc.start(&sync.WaitGroup{}, testLogger, nil, nil, OriginRequestConfig{
-		NoTLSVerify: true,
-	})
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodGet, origin.URL, nil)
-	require.NoError(t, err)
-	req.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
-	req.Header.Set("Connection", "Upgrade")
-	req.Header.Set("Upgrade", "websocket")
-
-	conn, resp, err := svc.newWebsocketProxyConnection(req)
-
-	require.NoError(t, err)
-	defer conn.Close()
-
-	require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
-	require.Equal(t, "Upgrade", resp.Header.Get("Connection"))
-	require.Equal(t, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", resp.Header.Get("Sec-Websocket-Accept"))
-	require.Equal(t, "websocket", resp.Header.Get("Upgrade"))
-
-	ctx, cancel := context.WithTimeout(context.Background(), testStreamTimeout)
-	defer cancel()
-
-	connClosed := make(chan struct{})
-
-	errGroup, ctx := errgroup.WithContext(ctx)
-	errGroup.Go(func() error {
-		select {
-		case <-connClosed:
-		case <-ctx.Done():
-		}
-		if ctx.Err() == context.DeadlineExceeded {
-			eyeballConn.Close()
-			edgeConn.Close()
-			conn.Close()
-		}
-
-		return ctx.Err()
-	})
-
-	errGroup.Go(func() error {
-		echoWSEyeball(t, eyeballConn)
-		fmt.Println("closing pipe")
-		edgeConn.Close()
-		return eyeballConn.Close()
-	})
-
-	errGroup.Go(func() error {
-		defer conn.Close()
-		conn.Stream(ctx, edgeConn, testLogger)
-		close(connClosed)
-		return nil
-	})
-
-	require.NoError(t, errGroup.Wait())
 }
 
 type wsEyeball struct {

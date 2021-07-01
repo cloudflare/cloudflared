@@ -571,8 +571,14 @@ func TestConnections(t *testing.T) {
 				},
 			},
 			want: want{
-				message: []byte{},
-				err:     true,
+				message: []byte("Forbidden\n"),
+				err:     false,
+				headers: map[string][]string{
+					"Content-Length":         {"10"},
+					"Content-Type":           {"text/plain; charset=utf-8"},
+					"Sec-Websocket-Version":  {"13"},
+					"X-Content-Type-Options": {"nosniff"},
+				},
 			},
 		},
 		{
@@ -806,6 +812,8 @@ func (w *wsRespWriter) WriteRespHeaders(status int, header http.Header) error {
 
 // respHeaders is a test function to read respHeaders
 func (w *wsRespWriter) headers() http.Header {
+	// Removing indeterminstic header because it cannot be asserted.
+	w.responseHeaders.Del("Date")
 	return w.responseHeaders
 }
 

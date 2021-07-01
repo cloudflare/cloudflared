@@ -2,7 +2,6 @@ package ingress
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -30,57 +29,6 @@ func assertEstablishConnectionResponse(t *testing.T,
 	assert.Equal(t, switchingProtocolText, resp.Status)
 	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 	assert.Equal(t, expectHeader, resp.Header)
-}
-
-func TestHTTPServiceEstablishConnection(t *testing.T) {
-	origin := echoWSOrigin(t, false)
-	defer origin.Close()
-	originURL, err := url.Parse(origin.URL)
-	require.NoError(t, err)
-
-	httpService := &httpService{
-		url:        originURL,
-		hostHeader: origin.URL,
-		transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
-	}
-	req, err := http.NewRequest(http.MethodGet, origin.URL, nil)
-	require.NoError(t, err)
-	req.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
-	req.Header.Set("Test-Cloudflared-Echo", t.Name())
-
-	expectHeader := http.Header{
-		"Connection":            {"Upgrade"},
-		"Sec-Websocket-Accept":  {"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="},
-		"Upgrade":               {"websocket"},
-		"Test-Cloudflared-Echo": {t.Name()},
-	}
-	assertEstablishConnectionResponse(t, httpService, req, expectHeader)
-}
-
-func TestHelloWorldEstablishConnection(t *testing.T) {
-	var wg sync.WaitGroup
-	shutdownC := make(chan struct{})
-	errC := make(chan error)
-	helloWorldSerivce := &helloWorld{}
-	helloWorldSerivce.start(&wg, testLogger, shutdownC, errC, OriginRequestConfig{})
-
-	// Scheme and Host of URL will be override by the Scheme and Host of the helloWorld service
-	req, err := http.NewRequest(http.MethodGet, "https://place-holder/ws", nil)
-	require.NoError(t, err)
-	req.Header.Set("Sec-Websocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
-
-	expectHeader := http.Header{
-		"Connection":           {"Upgrade"},
-		"Sec-Websocket-Accept": {"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="},
-		"Upgrade":              {"websocket"},
-	}
-	assertEstablishConnectionResponse(t, helloWorldSerivce, req, expectHeader)
-
-	close(shutdownC)
 }
 
 func TestRawTCPServiceEstablishConnection(t *testing.T) {
@@ -218,10 +166,6 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	req = req.Clone(context.Background())
-	_, resp, err = httpService.EstablishConnection(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 }
 
 func tcpListenRoutine(listener net.Listener, closeChan chan struct{}) {
