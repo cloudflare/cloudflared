@@ -20,8 +20,8 @@ import (
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
-// originService is something a tunnel can proxy traffic to.
-type originService interface {
+// OriginService is something a tunnel can proxy traffic to.
+type OriginService interface {
 	String() string
 	// Start the origin service if it's managed by cloudflared, e.g. proxy servers or Hello World.
 	// If it's not managed by cloudflared, this is a no-op because the user is responsible for
@@ -238,7 +238,7 @@ func (nrc *NopReadCloser) Close() error {
 	return nil
 }
 
-func newHTTPTransport(service originService, cfg OriginRequestConfig, log *zerolog.Logger) (*http.Transport, error) {
+func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerolog.Logger) (*http.Transport, error) {
 	originCertPool, err := tlsconfig.LoadOriginCA(cfg.CAPool, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error loading cert pool")

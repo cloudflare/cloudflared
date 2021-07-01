@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -32,6 +33,8 @@ type proxy struct {
 	log          *zerolog.Logger
 	bufferPool   *bufferPool
 }
+
+var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
 
 func NewOriginProxy(
 	ingressRules ingress.Ingress,
@@ -71,7 +74,13 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 			lbProbe: lbProbe,
 			rule:    ingress.ServiceWarpRouting,
 		}
-		if err := p.proxyStreamRequest(serveCtx, w, req, p.warpRouting.Proxy, logFields); err != nil {
+
+		host, err := getRequestHost(req)
+		if err != nil {
+			err = fmt.Errorf(`cloudflared recieved a warp-routing request with an empty host value: %v`, err)
+			return err
+		}
+		if err := p.proxyStreamRequest(serveCtx, w, host, req, p.warpRouting.Proxy, logFields); err != nil {
 			p.logRequestError(err, cfRay, "", ingress.ServiceWarpRouting)
 			return err
 		}
@@ -97,7 +106,11 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		return nil
 
 	case ingress.StreamBasedOriginProxy:
-		if err := p.proxyStreamRequest(serveCtx, w, req, originProxy, logFields); err != nil {
+		dest, err := getDestFromRule(rule, req)
+		if err != nil {
+			return err
+		}
+		if err := p.proxyStreamRequest(serveCtx, w, dest, req, originProxy, logFields); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
 			p.logRequestError(err, cfRay, rule, srv)
 			return err
@@ -105,8 +118,27 @@ func (p *proxy) Proxy(w connection.ResponseWriter, req *http.Request, sourceConn
 		return nil
 	default:
 		return fmt.Errorf("Unrecognized service: %s, %t", rule.Service, originProxy)
-
 	}
+}
+
+func getDestFromRule(rule *ingress.Rule, req *http.Request) (string, error) {
+	switch rule.Service.String() {
+	case ingress.ServiceBastion:
+		return carrier.ResolveBastionDest(req)
+	default:
+		return rule.Service.String(), nil
+	}
+}
+
+// getRequestHost returns the host of the http.Request.
+func getRequestHost(r *http.Request) (string, error) {
+	if r.Host != "" {
+		return r.Host, nil
+	}
+	if r.URL != nil {
+		return r.URL.Host, nil
+	}
+	return "", errors.New("host not set in incoming request")
 }
 
 func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
@@ -191,16 +223,24 @@ func (p *proxy) proxyHTTPRequest(
 func (p *proxy) proxyStreamRequest(
 	serveCtx context.Context,
 	w connection.ResponseWriter,
+	dest string,
 	req *http.Request,
 	connectionProxy ingress.StreamBasedOriginProxy,
 	fields logFields,
 ) error {
-	originConn, resp, err := connectionProxy.EstablishConnection(req)
+	originConn, err := connectionProxy.EstablishConnection(dest)
 	if err != nil {
 		return err
 	}
-	if resp.Body != nil {
-		defer resp.Body.Close()
+
+	resp := &http.Response{
+		Status:        switchingProtocolText,
+		StatusCode:    http.StatusSwitchingProtocols,
+		ContentLength: -1,
+	}
+
+	if secWebsocketKey := req.Header.Get("Sec-WebSocket-Key"); secWebsocketKey != "" {
+		resp.Header = websocket.NewResponseHeader(req)
 	}
 
 	if err = w.WriteRespHeaders(resp.StatusCode, resp.Header); err != nil {

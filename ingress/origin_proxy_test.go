@@ -17,20 +17,6 @@ import (
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
-// TestEstablishConnectionResponse ensures each implementation of StreamBasedOriginProxy returns
-// the expected response
-func assertEstablishConnectionResponse(t *testing.T,
-	originProxy StreamBasedOriginProxy,
-	req *http.Request,
-	expectHeader http.Header,
-) {
-	_, resp, err := originProxy.EstablishConnection(req)
-	assert.NoError(t, err)
-	assert.Equal(t, switchingProtocolText, resp.Status)
-	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
-	assert.Equal(t, expectHeader, resp.Header)
-}
-
 func TestRawTCPServiceEstablishConnection(t *testing.T) {
 	originListener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -43,8 +29,6 @@ func TestRawTCPServiceEstablishConnection(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s", originListener.Addr()), nil)
 	require.NoError(t, err)
 
-	assertEstablishConnectionResponse(t, rawTCPService, req, nil)
-
 	originListener.Close()
 	<-listenerClosed
 
@@ -52,9 +36,8 @@ func TestRawTCPServiceEstablishConnection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Origin not listening for new connection, should return an error
-	_, resp, err := rawTCPService.EstablishConnection(req)
+	_, err = rawTCPService.EstablishConnection(req.URL.String())
 	require.Error(t, err)
-	require.Nil(t, resp)
 }
 
 func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
@@ -75,12 +58,6 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 
 	bastionReq := baseReq.Clone(context.Background())
 	carrier.SetBastionDest(bastionReq.Header, originListener.Addr().String())
-
-	expectHeader := http.Header{
-		"Connection":           {"Upgrade"},
-		"Sec-Websocket-Accept": {"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="},
-		"Upgrade":              {"websocket"},
-	}
 
 	tests := []struct {
 		testCase  string
@@ -109,11 +86,9 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.testCase, func(t *testing.T) {
 			if test.expectErr {
-				_, resp, err := test.service.EstablishConnection(test.req)
+				bastionHost, _ := carrier.ResolveBastionDest(test.req)
+				_, err := test.service.EstablishConnection(bastionHost)
 				assert.Error(t, err)
-				assert.Nil(t, resp)
-			} else {
-				assertEstablishConnectionResponse(t, test.service, test.req, expectHeader)
 			}
 		})
 	}
@@ -123,9 +98,9 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 
 	for _, service := range []*tcpOverWSService{newTCPOverWSService(originURL), newBastionService()} {
 		// Origin not listening for new connection, should return an error
-		_, resp, err := service.EstablishConnection(bastionReq)
+		bastionHost, _ := carrier.ResolveBastionDest(bastionReq)
+		_, err := service.EstablishConnection(bastionHost)
 		assert.Error(t, err)
-		assert.Nil(t, resp)
 	}
 }
 
