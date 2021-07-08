@@ -252,6 +252,12 @@ tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
 	which capnpc-go  # go get zombiezen.com/go/capnproto2/capnpc-go
 	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
 
+.PHONY: quic-deps
+quic-deps: 
+	which capnp 
+	which capnpc-go
+	capnp compile -ogo quic/schema/quic_metadata_protocol.capnp
+
 .PHONY: vet
 vet:
 	go vet -mod=vendor ./...
