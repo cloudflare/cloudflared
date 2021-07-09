@@ -159,8 +159,6 @@ func (h *h2muxConnection) registerTunnel(ctx context.Context, credentialSetter C
 		return h.processRegisterTunnelError(registrationErr, register)
 	}
 
-	// Send free tunnel URL to UI
-	h.observer.sendURL(registration.Url)
 	credentialSetter.SetEventDigest(h.connIndex, registration.EventDigest)
 	return h.processRegistrationSuccess(registration, register, credentialSetter, classicTunnel)
 }
@@ -185,14 +183,6 @@ func (h *h2muxConnection) processRegistrationSuccess(
 	if registration.TunnelID != "" {
 		h.observer.metrics.tunnelsHA.AddTunnelID(h.connIndex, registration.TunnelID)
 		h.observer.log.Info().Msgf("Each HA connection's tunnel IDs: %v", h.observer.metrics.tunnelsHA.String())
-	}
-
-	// Print out the user's trial zone URL in a nice box (if they requested and got one and UI flag is not set)
-	if classicTunnel.IsTrialZone() {
-		err := h.observer.logTrialHostname(registration)
-		if err != nil {
-			return err
-		}
 	}
 
 	credentialManager.SetConnDigest(h.connIndex, registration.ConnDigest)

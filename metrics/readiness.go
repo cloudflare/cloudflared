@@ -36,8 +36,6 @@ func (rs *ReadyServer) OnTunnelEvent(c conn.Event) {
 		rs.Lock()
 		rs.isConnected[int(c.Index)] = false
 		rs.Unlock()
-	case conn.SetURL:
-		break
 	default:
 		rs.log.Error().Msgf("Unknown connection event case %v", c)
 	}

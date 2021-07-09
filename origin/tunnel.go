@@ -48,7 +48,6 @@ type TunnelConfig struct {
 	HAConnections    int
 	IncidentLookup   IncidentLookup
 	IsAutoupdated    bool
-	IsFreeTunnel     bool
 	LBPool           string
 	Tags             []tunnelpogs.Tag
 	Log              *zerolog.Logger

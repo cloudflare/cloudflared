@@ -161,7 +161,7 @@ func prepareTunnelConfig(
 		log.Err(err).Str(LogFieldHostname, configHostname).Msg("Invalid hostname")
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
 	}
-	isFreeTunnel := hostname == ""
+	isQuickTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
 		clientID, err = generateRandomClientID(log)
@@ -179,7 +179,7 @@ func prepareTunnelConfig(
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
 
 	var originCert []byte
-	if !isFreeTunnel {
+	if !isQuickTunnel {
 		originCertPath := c.String("origincert")
 		originCertLog := log.With().
 			Str(LogFieldOriginCertPath, originCertPath).
@@ -285,7 +285,6 @@ func prepareTunnelConfig(
 		HAConnections:    c.Int("ha-connections"),
 		IncidentLookup:   origin.NewIncidentLookup(),
 		IsAutoupdated:    c.Bool("is-autoupdated"),
-		IsFreeTunnel:     isFreeTunnel,
 		LBPool:           c.String("lb-pool"),
 		Tags:             tags,
 		Log:              log,

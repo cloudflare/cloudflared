@@ -18,7 +18,7 @@ const (
 	Connected
 	// Reconnecting means the connection to the edge is being re-established.
 	Reconnecting
-	// SetURL means this connection's tunnel was given a URL by the edge. Used for free tunnels.
+	// SetURL means this connection's tunnel was given a URL by the edge. Used for quick tunnels.
 	SetURL
 	// RegisteringTunnel means the non-named tunnel is registering its connection.
 	RegisteringTunnel

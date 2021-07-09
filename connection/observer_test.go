@@ -14,10 +14,10 @@ import (
 func TestSendUrl(t *testing.T) {
 	observer := NewObserver(&log, &log, false)
 
-	observer.sendURL("my-url.com")
+	observer.SendURL("my-url.com")
 	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://my-url.com"))
 
-	observer.sendURL("https://another-long-one.com")
+	observer.SendURL("https://another-long-one.com")
 	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://another-long-one.com"))
 }
 
