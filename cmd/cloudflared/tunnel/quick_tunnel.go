@@ -64,6 +64,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		&connection.NamedTunnelConfig{Credentials: credentials},
 		sc.log,
 		sc.isUIEnabled,
+		data.Result.Hostname,
 	)
 }
 
