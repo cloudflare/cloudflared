@@ -1,3 +1,10 @@
+2021.7.0
+- 2021-07-01 TUN-4626: Proxy non-stream based origin websockets with http Roundtrip.
+- 2021-07-01 TUN-4655: ingress.StreamBasedProxy.EstablishConnection takes dest input
+- 2021-07-09 TUN-4698: Add cloudflared metrics endpoint to serve quick tunnel hostname
+- 2021-06-21 TUN-4521: Modify cloudflared to use zoneless-tunnels-worker for free tunnels
+- 2021-04-05 AUTH-3475: Updated GetAppInfo error message
+
 2021.6.0
 - 2021-06-21 TUN-4571: Changelog for 2021.6.0
 - 2021-06-18 TUN-4571: Fix proxying to unix sockets when using HTTP2 transport to Cloudflare Edge
