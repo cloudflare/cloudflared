@@ -11,6 +11,13 @@ ifneq ($(GO_BUILD_TAGS),)
 	GO_BUILD_TAGS := -tags $(GO_BUILD_TAGS)
 endif
 
+ifeq ($(NIGHTLY), true)
+	DEB_PACKAGE_NAME := cloudflared-nightly
+	NIGHTLY_FLAGS := --conflicts cloudflared --replaces cloudflared
+else
+	DEB_PACKAGE_NAME := cloudflared
+endif
+
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 
@@ -138,7 +145,7 @@ define build_package
 		--license 'Cloudflare Service Agreement' \
 		--url 'https://github.com/cloudflare/cloudflared' \
 		-m 'Cloudflare <support@cloudflare.com>' \
-		-a $(TARGET_ARCH) -v $(VERSION) -n cloudflared --after-install postinst.sh --after-remove postrm.sh \
+		-a $(TARGET_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
 		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(MAN_DIR)
 endef
 

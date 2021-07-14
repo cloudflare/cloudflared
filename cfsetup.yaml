@@ -16,7 +16,7 @@ stretch: &stretch
       - make cloudflared
   build-deb:
     build_dir: *build_dir
-    builddeps:
+    builddeps: &build_deb_deps
       - *pinned_go_fips
       - build-essential
       - fakeroot
@@ -26,13 +26,18 @@ stretch: &stretch
       - export GOARCH=amd64
       - export FIPS=true
       - make cloudflared-deb
+  build-deb-nightly:
+    build_dir: *build_dir
+    builddeps: *build_deb_deps
+    post-cache:
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - export FIPS=true
+      - export NIGHTLY=true
+      - make cloudflared-deb
   build-deb-arm64:
     build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - build-essential
-      - fakeroot
-      - rubygem-fpm
+    builddeps: *build_deb_deps
     post-cache:
       - export GOOS=linux
       - export GOARCH=arm64
