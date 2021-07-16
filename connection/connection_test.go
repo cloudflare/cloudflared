@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"github.com/gobwas/ws/wsutil"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/ingress"
 )
 
 const (
@@ -18,7 +21,8 @@ const (
 )
 
 var (
-	testConfig = &Config{
+	unusedWarpRoutingService = (*ingress.WarpRoutingService)(nil)
+	testConfig               = &Config{
 		OriginProxy: &mockOriginProxy{},
 		GracePeriod: time.Millisecond * 100,
 	}
@@ -38,14 +42,17 @@ type testRequest struct {
 	isProxyError   bool
 }
 
-type mockOriginProxy struct {
-}
+type mockOriginProxy struct{}
 
-func (moc *mockOriginProxy) Proxy(w ResponseWriter, r *http.Request, sourceConnectionType Type) error {
-	if sourceConnectionType == TypeWebsocket {
-		return wsEndpoint(w, r)
+func (moc *mockOriginProxy) ProxyHTTP(
+	w ResponseWriter,
+	req *http.Request,
+	isWebsocket bool,
+) error {
+	if isWebsocket {
+		return wsEndpoint(w, req)
 	}
-	switch r.URL.Path {
+	switch req.URL.Path {
 	case "/ok":
 		originRespEndpoint(w, http.StatusOK, []byte(http.StatusText(http.StatusOK)))
 	case "/large_file":
@@ -59,6 +66,15 @@ func (moc *mockOriginProxy) Proxy(w ResponseWriter, r *http.Request, sourceConne
 	default:
 		originRespEndpoint(w, http.StatusNotFound, []byte("page not found"))
 	}
+	return nil
+
+}
+
+func (moc *mockOriginProxy) ProxyTCP(
+	ctx context.Context,
+	rwa ReadWriteAcker,
+	r *TCPRequest,
+) error {
 	return nil
 }
 

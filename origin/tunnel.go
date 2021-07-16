@@ -26,7 +26,6 @@ import (
 
 const (
 	dialTimeout              = 15 * time.Second
-	lbProbeUserAgentPrefix   = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
 )
@@ -417,6 +416,7 @@ func ServeHTTP2(
 		config.Observer,
 		connIndex,
 		connectedFuse,
+		config.Log,
 		gracefulShutdownC,
 	)
 

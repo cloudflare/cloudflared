@@ -26,9 +26,10 @@ var (
 	testTransport = http2.Transport{}
 )
 
-func newTestHTTP2Connection() (*http2Connection, net.Conn) {
+func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	edgeConn, originConn := net.Pipe()
 	var connIndex = uint8(0)
+	log := zerolog.Nop()
 	return NewHTTP2Connection(
 		originConn,
 		testConfig,
@@ -37,6 +38,7 @@ func newTestHTTP2Connection() (*http2Connection, net.Conn) {
 		NewObserver(&log, &log, false),
 		connIndex,
 		mockConnectedFuse{},
+		&log,
 		nil,
 	), edgeConn
 }

@@ -1,7 +1,6 @@
 package ingress
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 
@@ -9,7 +8,6 @@ import (
 )
 
 var (
-	switchingProtocolText        = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
 	errUnsupportedConnectionType = errors.New("internal error: unsupported connection type")
 )
 
