@@ -49,6 +49,8 @@ func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemp
 		<key>ProgramArguments</key>
 		<array>
 			<string>{{ .Path }}</string>
+			<string>tunnel</string>
+			<string>run</string>
 		</array>
 		<key>RunAtLoad</key>
 		<true/>
