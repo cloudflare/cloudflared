@@ -227,6 +227,10 @@ homebrew-release: homebrew-upload
 release: bin/equinox
 	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
+.PHONY: build-msi
+build-msi:
+	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) cloudflared.wxs
+
 .PHONY: github-release
 github-release: cloudflared
 	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
