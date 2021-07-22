@@ -88,7 +88,7 @@ clean:
 	go clean
 
 .PHONY: cloudflared
-cloudflared: tunnel-deps
+cloudflared: 
 ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
 	-test -f fips/fips.go && mv fips/fips.go fips/fips.go.linux-amd64
@@ -156,6 +156,14 @@ cloudflared-deb: cloudflared
 .PHONY: cloudflared-rpm
 cloudflared-rpm: cloudflared
 	$(call build_package,rpm)
+
+.PHONY: cloudflared-pkg
+cloudflared-pkg: cloudflared
+	$(call build_package,osxpkg)
+
+.PHONY: cloudflared-msi
+cloudflared-msi: cloudflared
+	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) --output cloudflared-$(VERSION)-$(TARGET_ARCH).msi cloudflared.wxs
 
 .PHONY: cloudflared-darwin-amd64.tgz
 cloudflared-darwin-amd64.tgz: cloudflared
@@ -227,10 +235,6 @@ homebrew-release: homebrew-upload
 release: bin/equinox
 	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
 
-.PHONY: build-msi
-build-msi:
-	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) cloudflared.wxs
-
 .PHONY: github-release
 github-release: cloudflared
 	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
@@ -248,10 +252,9 @@ bin/equinox:
 	mkdir -p bin
 	curl -s https://bin.equinox.io/c/75JtLRTsJ3n/release-tool-beta-$(EQUINOX_PLATFORM).tgz | tar xz -C bin/
 
-.PHONY: tunnel-deps
-tunnel-deps: tunnelrpc/tunnelrpc.capnp.go
 
-tunnelrpc/tunnelrpc.capnp.go: tunnelrpc/tunnelrpc.capnp
+.PHONY: tunnelrpc-deps
+tunnelrpc-deps:
 	which capnp  # https://capnproto.org/install.html
 	which capnpc-go  # go get zombiezen.com/go/capnproto2/capnpc-go
 	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
@@ -267,10 +270,6 @@ vet:
 	go vet -mod=vendor ./...
 	which go-sumtype  # go get github.com/BurntSushi/go-sumtype (don't do this in build directory or this will cause vendor issues)
 	go-sumtype $$(go list -mod=vendor ./...)
-
-.PHONY: msi
-msi: cloudflared
-	go-msi make --msi cloudflared.msi --version $(MSI_VERSION)
 
 .PHONY: goimports
 goimports:
