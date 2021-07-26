@@ -239,6 +239,10 @@ release: bin/equinox
 github-release: cloudflared
 	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
 
+.PHONY: github-release-built-pkgs
+github-release-built-pkgs:
+	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION)
+
 .PHONY: github-message
 github-message:
 	python3 github_message.py --release-version $(VERSION)
