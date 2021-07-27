@@ -165,7 +165,7 @@ def parse_args():
     exit(1)
 
 def upload_asset(release, filepath, filename, release_version, kv_account_id, namespace_id, kv_api_token):
-    logging.info(f"Uploading asset: {filename}")
+    logging.info("Uploading asset: %s", filename)
     release.upload_asset(filepath, name=filename)
 
     # check and extract if the file is a tar and gzipped file (as is the case with the macos builds)
