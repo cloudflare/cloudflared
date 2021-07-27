@@ -1,3 +1,6 @@
+2021.7.3
+- 2021-07-27 TUN-4799: Build deb, msi and rpm packages with fips
+
 2021.7.2
 - 2021-07-27 Fixed a syntax error with python logging.
 
