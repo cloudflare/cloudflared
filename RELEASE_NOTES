@@ -1,3 +1,6 @@
+2021.7.2
+- 2021-07-27 Fixed a syntax error with python logging.
+
 2021.7.1
 - 2021-07-21 TUN-4755: Add a windows msi release option to Make
 - 2021-07-22 TUN-4761: Added a build-all-packages target to cfsetup
