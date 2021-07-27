@@ -32,6 +32,7 @@ stretch: &stretch
       - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
       - chmod a+x /usr/local/bin/wixl
     post-cache:
+      - export FIPS=true
       - ./build-packages.sh
   github-release-pkgs:
     build_dir: *build_dir
