@@ -29,9 +29,8 @@ type Config struct {
 }
 
 type NamedTunnelConfig struct {
-	Credentials    Credentials
-	Client         pogs.ClientInfo
-	QuickTunnelUrl string
+	Credentials Credentials
+	Client      pogs.ClientInfo
 }
 
 // Credentials are stored in the credentials file and contain all info needed to run a tunnel.
@@ -54,6 +53,10 @@ type ClassicTunnelConfig struct {
 	OriginCert []byte
 	// feature-flag to use new edge reconnect tokens
 	UseReconnectToken bool
+}
+
+func (c *ClassicTunnelConfig) IsTrialZone() bool {
+	return c.Hostname == ""
 }
 
 // Type indicates the connection type of the  connection.

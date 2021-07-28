@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,7 +51,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		TunnelName:   data.Result.Name,
 	}
 
-	for _, line := range AsciiBox([]string{
+	for _, line := range connection.AsciiBox([]string{
 		"Your Quick Tunnel has been created! Visit it at:",
 		data.Result.Hostname,
 	}, 2) {
@@ -62,9 +61,10 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	return StartServer(
 		sc.c,
 		version,
-		&connection.NamedTunnelConfig{Credentials: credentials, QuickTunnelUrl: data.Result.Hostname},
+		&connection.NamedTunnelConfig{Credentials: credentials},
 		sc.log,
 		sc.isUIEnabled,
+		data.Result.Hostname,
 	)
 }
 
@@ -85,27 +85,4 @@ type QuickTunnel struct {
 	Hostname   string `json:"hostname"`
 	AccountTag string `json:"account_tag"`
 	Secret     []byte `json:"secret"`
-}
-
-// Print out the given lines in a nice ASCII box.
-func AsciiBox(lines []string, padding int) (box []string) {
-	maxLen := maxLen(lines)
-	spacer := strings.Repeat(" ", padding)
-	border := "+" + strings.Repeat("-", maxLen+(padding*2)) + "+"
-	box = append(box, border)
-	for _, line := range lines {
-		box = append(box, "|"+spacer+line+strings.Repeat(" ", maxLen-len(line))+spacer+"|")
-	}
-	box = append(box, border)
-	return
-}
-
-func maxLen(lines []string) int {
-	max := 0
-	for _, line := range lines {
-		if len(line) > max {
-			max = len(line)
-		}
-	}
-	return max
 }
