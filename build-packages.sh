@@ -1,3 +1,4 @@
+export CGO_ENABLED=0
 # This controls the directory the built artifacts go into
 export ARTIFACT_DIR=built_artifacts/
 mkdir -p $ARTIFACT_DIR
@@ -10,6 +11,7 @@ done
 
 mv *.msi $ARTIFACT_DIR
 
+export FIPS=true
 linuxArchs=("amd64" "386" "arm")
 export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do 
