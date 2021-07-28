@@ -1,3 +1,7 @@
+2021.7.4
+- 2021-07-28 TUN-4814: Revert "TUN-4699: Make quick tunnels the default in cloudflared"
+- 2021-07-28 TUN-4812: Disable CGO for cloudflared builds
+
 2021.7.3
 - 2021-07-27 TUN-4799: Build deb, msi and rpm packages with fips
 
