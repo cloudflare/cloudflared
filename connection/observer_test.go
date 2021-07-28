@@ -6,8 +6,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestSendUrl(t *testing.T) {
+	observer := NewObserver(&log, &log, false)
+
+	observer.sendURL("my-url.com")
+	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://my-url.com"))
+
+	observer.sendURL("https://another-long-one.com")
+	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://another-long-one.com"))
+}
+
+func getCounterValue(t *testing.T, metric *prometheus.CounterVec, val string) float64 {
+	var m = &dto.Metric{}
+	err := metric.WithLabelValues(val).Write(m)
+	assert.NoError(t, err)
+	return m.Counter.GetValue()
+}
 
 func TestRegisterServerLocation(t *testing.T) {
 	m := newTunnelMetrics()

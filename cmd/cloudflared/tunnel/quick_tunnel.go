@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,9 +52,14 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		TunnelName:   data.Result.Name,
 	}
 
+	url := data.Result.Hostname
+	if !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
+
 	for _, line := range connection.AsciiBox([]string{
 		"Your Quick Tunnel has been created! Visit it at:",
-		data.Result.Hostname,
+		url,
 	}, 2) {
 		sc.log.Info().Msg(line)
 	}
