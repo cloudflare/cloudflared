@@ -172,7 +172,10 @@ func NewProtocolSelector(
 
 	http2Percentage, err := fetchFunc()
 	if err != nil {
-		return nil, err
+		log.Err(err).Msg("Unable to lookup protocol. Defaulting to `http2`. If this fails, you can set `--protocol h2mux` in your cloudflared command.")
+		return &staticProtocolSelector{
+			current: HTTP2,
+		}, nil
 	}
 	if protocolFlag == HTTP2.String() {
 		if http2Percentage < 0 {
