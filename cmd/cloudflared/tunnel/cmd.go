@@ -165,7 +165,7 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
 	// For now, default to legacy setup unless quick-service is specified
-	if c.String("hostname") == "" && c.String("quick-service") != "" {
+	if !dnsProxyStandAlone(c, nil) && c.String("hostname") == "" && c.String("quick-service") != "" {
 		return RunQuickTunnel(sc)
 	}
 
