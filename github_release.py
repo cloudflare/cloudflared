@@ -197,25 +197,6 @@ def upload_asset(release, filepath, filename, release_version, kv_account_id, na
     except shutil.SameFileError:
         pass # the macOS release copy fails with being the same file (already in the artifacts directory)
 
-def compile_regex() :
-    # The capture groups are:
-    # 1: the text cloudflared
-    # 2: compiled architecture
-    # 3: possible extensions
-    capture_string = r'(cloudflared).+(amd64|x86_64|386|arm)(\.msi|\.deb|\.rpm|\.exe)?'
-    return re.compile(capture_string)
-
-def extract_filename(regex, filename):
-    match_groups = regex.match(filename)
-    os = "linux"
-    name = match_groups.group(1)
-    arch = match_groups.group(2)
-    ext = match_groups.group(3)
-    if ext in ['.msi', '.exe']:
-        os = "windows"
-    return "{}-{}-{}{}".format(name, os, arch, ext if ext is not None else "")
-
-
 def main():
     """ Attempts to upload Asset to Github Release. Creates Release if it doesnt exist """
     try:
@@ -229,11 +210,9 @@ def main():
             return
 
         if os.path.isdir(args.path):
-            regexp = compile_regex()
             onlyfiles = [f for f in listdir(args.path) if isfile(join(args.path, f))]
             for filename in onlyfiles:
                 binary_path = os.path.join(args.path, filename)
-                filename = extract_filename(regexp, filename)
                 upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
                 args.kv_api_token)
         else:

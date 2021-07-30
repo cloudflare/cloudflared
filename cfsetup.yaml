@@ -108,20 +108,6 @@ stretch: &stretch
       - export GOARCH=amd64
       - export FIPS=true
       - make release
-  github-release-linux-amd64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go_fips
-      - build-essential
-      - python3-setuptools
-      - python3-pip
-    pre-cache: &install_pygithub
-      - pip3 install pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - export FIPS=true
-      - make github-release
   release-linux-armv6:
     build_dir: *build_dir
     builddeps:
@@ -133,20 +119,6 @@ stretch: &stretch
       - export GOARCH=arm
       - export CC=arm-linux-gnueabihf-gcc
       - make release
-  github-release-linux-armv6:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - crossbuild-essential-armhf
-      - gcc-arm-linux-gnueabihf
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=arm
-      - export CC=arm-linux-gnueabihf-gcc
-      - make github-release
   release-linux-386:
     build_dir: *build_dir
     builddeps:
@@ -156,18 +128,6 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=386
       - make release
-  github-release-linux-386:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-multilib
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=386
-      - make github-release
   release-windows-amd64:
     build_dir: *build_dir
     builddeps:
@@ -178,19 +138,6 @@ stretch: &stretch
       - export GOARCH=amd64
       - export CC=x86_64-w64-mingw32-gcc
       - make release
-  github-release-windows-amd64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-mingw-w64
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=windows
-      - export GOARCH=amd64
-      - export CC=x86_64-w64-mingw32-gcc
-      - make github-release
   release-windows-386:
     build_dir: *build_dir
     builddeps:
@@ -201,40 +148,14 @@ stretch: &stretch
       - export GOARCH=386
       - export CC=i686-w64-mingw32-gcc-win32
       - make release
-  github-release-windows-386:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-mingw-w64
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=windows
-      - export GOARCH=386
-      - export CC=i686-w64-mingw32-gcc-win32
-      - make github-release
-  github-release-linux-arm64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - crossbuild-essential-armhf
-      - g++-aarch64-linux-gnu
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=arm64
-      - export CC=aarch64-linux-gnu-gcc
-      - make github-release
   github-release-macos-amd64:
     build_dir: *build_dir
     builddeps:
       - *pinned_go
       - python3-setuptools
       - python3-pip
-    pre-cache: *install_pygithub
+    pre-cache: &install_pygithub
+      - pip3 install pygithub
     post-cache:
       - make github-mac-upload
   test:
