@@ -49,6 +49,16 @@ var (
 		Aliases: []string{"n"},
 		Usage:   "List tunnels with the given `NAME`",
 	}
+	listNamePrefixFlag = &cli.StringFlag{
+		Name:    "name-prefix",
+		Aliases: []string{"np"},
+		Usage:   "List tunnels that start with the give `NAME` prefix",
+	}
+	listExcludeNamePrefixFlag = &cli.StringFlag{
+		Name:    "exclude-name-prefix",
+		Aliases: []string{"enp"},
+		Usage:   "List tunnels whose `NAME` does not start with the given prefix",
+	}
 	listExistedAtFlag = &cli.TimestampFlag{
 		Name:        "when",
 		Aliases:     []string{"w"},
@@ -217,6 +227,8 @@ func buildListCommand() *cli.Command {
 			outputFormatFlag,
 			showDeletedFlag,
 			listNameFlag,
+			listNamePrefixFlag,
+			listExcludeNamePrefixFlag,
 			listExistedAtFlag,
 			listIDFlag,
 			showRecentlyDisconnected,
@@ -242,6 +254,12 @@ func listCommand(c *cli.Context) error {
 	}
 	if name := c.String("name"); name != "" {
 		filter.ByName(name)
+	}
+	if namePrefix := c.String("name-prefix"); namePrefix != "" {
+		filter.ByNamePrefix(namePrefix)
+	}
+	if excludePrefix := c.String("exclude-name-prefix"); excludePrefix != "" {
+		filter.ExcludeNameWithPrefix(excludePrefix)
 	}
 	if existedAt := c.Timestamp("time"); existedAt != nil {
 		filter.ByExistedAt(*existedAt)

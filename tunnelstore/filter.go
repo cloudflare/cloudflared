@@ -25,6 +25,14 @@ func (f *Filter) ByName(name string) {
 	f.queryParams.Set("name", name)
 }
 
+func (f *Filter) ByNamePrefix(namePrefix string) {
+	f.queryParams.Set("name_prefix", namePrefix)
+}
+
+func (f *Filter) ExcludeNameWithPrefix(excludePrefix string) {
+	f.queryParams.Set("exclude_prefix", excludePrefix)
+}
+
 func (f *Filter) NoDeleted() {
 	f.queryParams.Set("is_deleted", "false")
 }
