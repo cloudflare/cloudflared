@@ -1,3 +1,11 @@
+2021.8.0
+- 2021-07-30 TUN-4847: Allow to list tunnels by prefix name or exclusion prefix name
+- 2021-07-30 TUN-4772: Release built executables with packages
+- 2021-07-30 TUN-4851: Component tests to sanity check that Proxy DNS and Tunnel are only run when expected
+- 2021-07-28 TUN-4811: Publish quick tunnels' hostname in /metrics under `userHostname` for backwards-compatibility
+- 2021-07-29 TUN-4832: Prevent tunnel from running accidentally when only proxy-dns should run
+- 2021-07-28 TUN-4819: Tolerate protocol TXT record lookup failing
+
 2021.7.4
 - 2021-07-28 TUN-4814: Revert "TUN-4699: Make quick tunnels the default in cloudflared"
 - 2021-07-28 TUN-4812: Disable CGO for cloudflared builds
