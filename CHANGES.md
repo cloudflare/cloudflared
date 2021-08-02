@@ -1,5 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.8.0
+### Bug fixes
+- Prevents tunnel from accidentally running when only proxy-dns should run. 
+
+### Improvements
+- If auto protocol transport lookup fails, we now default to a transport instead of not connecting.
+
 ## 2021.6.0
 ### Bug Fixes
 - Fixes a http2 transport (the new default for Named Tunnels) to work with unix socket origins.
