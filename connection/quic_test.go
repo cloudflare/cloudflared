@@ -1,20 +1,25 @@
 package connection
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
 
+	"github.com/gobwas/ws/wsutil"
 	"github.com/lucas-clemente/quic-go"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,65 +34,127 @@ func TestQUICServer(t *testing.T) {
 		KeepAlive: true,
 	}
 
+	// Setup test.
 	log := zerolog.New(os.Stdout)
 
+	// Start a UDP Listener for QUIC.
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-
 	require.NoError(t, err)
 	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
 	require.NoError(t, err)
 	defer udpListener.Close()
+
+	// Create a simple tls config.
 	tlsConfig := generateTLSConfig()
-	tlsConfClient := &tls.Config{
+
+	// Create a client config
+	tlsClientConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"argotunnel"},
 	}
+
+	// Start a mock httpProxy
+	originProxy := &mockOriginProxyWithRequest{}
+
+	// This is simply a sample websocket frame message.
+	wsBuf := &bytes.Buffer{}
+	wsutil.WriteClientText(wsBuf, []byte("Hello"))
+
 	var tests = []struct {
-		desc            string
-		dest            string
-		connectionType  quicpogs.ConnectionType
-		metadata        []quicpogs.Metadata
-		message         []byte
-		expectedMessage []byte
+		desc             string
+		dest             string
+		connectionType   quicpogs.ConnectionType
+		metadata         []quicpogs.Metadata
+		message          []byte
+		expectedResponse []byte
 	}{
 		{
-			desc:           "",
-			dest:           "somehost.com",
+			desc:           "test http proxy",
+			dest:           "/ok",
+			connectionType: quicpogs.ConnectionTypeHTTP,
+			metadata: []quicpogs.Metadata{
+				quicpogs.Metadata{
+					Key: "HttpHeader:Cf-Ray",
+					Val: "123123123",
+				},
+				quicpogs.Metadata{
+					Key: "HttpHost",
+					Val: "cf.host",
+				},
+				quicpogs.Metadata{
+					Key: "HttpMethod",
+					Val: "GET",
+				},
+			},
+			expectedResponse: []byte("OK"),
+		},
+		{
+			desc:           "test http body request streaming",
+			dest:           "/echo_body",
+			connectionType: quicpogs.ConnectionTypeHTTP,
+			metadata: []quicpogs.Metadata{
+				quicpogs.Metadata{
+					Key: "HttpHeader:Cf-Ray",
+					Val: "123123123",
+				},
+				quicpogs.Metadata{
+					Key: "HttpHost",
+					Val: "cf.host",
+				},
+				quicpogs.Metadata{
+					Key: "HttpMethod",
+					Val: "POST",
+				},
+			},
+			message:          []byte("This is the message body"),
+			expectedResponse: []byte("This is the message body"),
+		},
+		{
+			desc:           "test ws proxy",
+			dest:           "/ok",
 			connectionType: quicpogs.ConnectionTypeWebsocket,
 			metadata: []quicpogs.Metadata{
 				quicpogs.Metadata{
-					Key: "key",
-					Val: "value",
+					Key: "HttpHeader:Cf-Cloudflared-Proxy-Connection-Upgrade",
+					Val: "Websocket",
+				},
+				quicpogs.Metadata{
+					Key: "HttpHeader:Another-Header",
+					Val: "Misc",
+				},
+				quicpogs.Metadata{
+					Key: "HttpHost",
+					Val: "cf.host",
+				},
+				quicpogs.Metadata{
+					Key: "HttpMethod",
+					Val: "get",
 				},
 			},
-			expectedMessage: []byte("OK"),
+			message:          wsBuf.Bytes(),
+			expectedResponse: []byte{0x81, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-
 			var wg sync.WaitGroup
 			go func() {
 				wg.Add(1)
+				defer wg.Done()
 				quicServer(
 					t, udpListener, tlsConfig, quicConfig,
-					test.dest, test.connectionType, test.metadata, test.message, test.expectedMessage,
+					test.dest, test.connectionType, test.metadata, test.message, test.expectedResponse,
 				)
-				wg.Done()
 			}()
 
-			qC, err := NewQUICConnection(context.Background(), quicConfig, udpListener.LocalAddr(), tlsConfClient, log)
+			qC, err := NewQUICConnection(ctx, quicConfig, udpListener.LocalAddr(), tlsClientConfig, originProxy, log)
 			require.NoError(t, err)
+			go qC.Serve(ctx)
 
-			go func() {
-				wg.Wait()
-				cancel()
-			}()
-
-			qC.Serve(ctx)
-
+			wg.Wait()
+			cancel()
 		})
 	}
 
@@ -125,11 +192,12 @@ func quicServer(
 
 	if message != nil {
 		// ALPN successful. Write data.
-		_, err = stream.Write([]byte(message))
+		_, err := stream.Write([]byte(message))
 		require.NoError(t, err)
 	}
 
-	response, err := ioutil.ReadAll(stream)
+	response := make([]byte, len(expectedResponse))
+	stream.Read(response)
 	require.NoError(t, err)
 
 	// For now it is an echo server. Verify if the same data is returned.
@@ -158,4 +226,43 @@ func generateTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"argotunnel"},
 	}
+}
+
+type mockOriginProxyWithRequest struct{}
+
+func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Request, isWebsocket bool) error {
+	// These are a series of crude tests to ensure the headers and http related data is transferred from
+	// metadata.
+	if r.Method == "" {
+		return errors.New("method not sent")
+	}
+	if r.Host == "" {
+		return errors.New("host not sent")
+	}
+	if len(r.Header) == 0 {
+		return errors.New("headers not set")
+	}
+
+	if isWebsocket {
+		return wsEndpoint(w, r)
+	}
+	switch r.URL.Path {
+	case "/ok":
+		originRespEndpoint(w, http.StatusOK, []byte(http.StatusText(http.StatusOK)))
+	case "/echo_body":
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+		}
+		_ = w.WriteRespHeaders(resp.StatusCode, resp.Header)
+		io.Copy(w, r.Body)
+	case "/error":
+		return fmt.Errorf("Failed to proxy to origin")
+	default:
+		originRespEndpoint(w, http.StatusNotFound, []byte("page not found"))
+	}
+	return nil
+}
+
+func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
+	return nil
 }

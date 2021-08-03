@@ -29,6 +29,15 @@ type Metadata struct {
 	Val string `capnp:"val"`
 }
 
+// MetadataMap returns a map format of []Metadata.
+func (r *ConnectRequest) MetadataMap() map[string]string {
+	metadataMap := make(map[string]string)
+	for _, metadata := range r.Metadata {
+		metadataMap[metadata.Key] = metadata.Val
+	}
+	return metadataMap
+}
+
 func (r *ConnectRequest) fromPogs(msg *capnp.Message) error {
 	metadata, err := schema.ReadRootConnectRequest(msg)
 	if err != nil {
