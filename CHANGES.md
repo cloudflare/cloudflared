@@ -1,5 +1,10 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.8.2
+### Improvements
+- Because Equinox os shutting down, all cloudflared releases are now present [here](https://github.com/cloudflare/cloudflared/releases).
+[Equinox](https://dl.equinox.io/cloudflare/cloudflared/stable) will no longer receive updates. 
+
 ## 2021.8.0
 ### Bug fixes
 - Prevents tunnel from accidentally running when only proxy-dns should run. 

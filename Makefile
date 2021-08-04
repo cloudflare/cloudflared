@@ -26,16 +26,6 @@ PACKAGE_DIR   := $(CURDIR)/packaging
 INSTALL_BINDIR := /usr/bin/
 MAN_DIR := /usr/share/man/man1/
 
-EQUINOX_FLAGS = --version="$(VERSION)" \
-	--platforms="$(EQUINOX_BUILD_PLATFORMS)" \
-	--app="$(EQUINOX_APP_ID)" \
-	--token="$(EQUINOX_TOKEN)" \
-	--channel="$(EQUINOX_CHANNEL)"
-
-ifeq ($(EQUINOX_IS_DRAFT), true)
-	EQUINOX_FLAGS := --draft $(EQUINOX_FLAGS)
-endif
-
 LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
     TARGET_ARCH ?= $(GOARCH)
@@ -231,10 +221,6 @@ homebrew-upload: cloudflared-darwin-amd64.tgz
 homebrew-release: homebrew-upload
 	./publish-homebrew-formula.sh cloudflared-darwin-amd64.tgz $(VERSION) homebrew-cloudflare
 
-.PHONY: release
-release: bin/equinox
-	bin/equinox release $(EQUINOX_FLAGS) -- $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
-
 .PHONY: github-release
 github-release: cloudflared
 	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
@@ -251,11 +237,6 @@ github-message:
 github-mac-upload:
 	python3 github_release.py --path artifacts/cloudflared-darwin-amd64.tgz --release-version $(VERSION) --name cloudflared-darwin-amd64.tgz
 	python3 github_release.py --path artifacts/cloudflared-amd64.pkg --release-version $(VERSION) --name cloudflared-amd64.pkg
-
-bin/equinox:
-	mkdir -p bin
-	curl -s https://bin.equinox.io/c/75JtLRTsJ3n/release-tool-beta-$(EQUINOX_PLATFORM).tgz | tar xz -C bin/
-
 
 .PHONY: tunnelrpc-deps
 tunnelrpc-deps:
