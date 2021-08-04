@@ -1,3 +1,9 @@
+2021.8.1
+- 2021-08-02 TUN-4855: Added CHANGES.md for release 2021.8.0
+- 2021-08-03 TUN-4597: Add a QUIC server skeleton
+- 2021-08-03 TUN-4873: Disable unix domain socket test for windows unit tests
+- 2021-08-04 TUN-4875: Added amd64-linux builds back to releases
+
 2021.8.0
 - 2021-07-30 TUN-4847: Allow to list tunnels by prefix name or exclusion prefix name
 - 2021-07-30 TUN-4772: Release built executables with packages
