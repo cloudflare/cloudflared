@@ -15,7 +15,7 @@ done
 
 
 export FIPS=true
-linuxArchs=("amd64" "386" "arm")
+linuxArchs=("amd64" "386" "arm" "arm64")
 export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do 
     export TARGET_ARCH=$arch
@@ -27,6 +27,9 @@ for arch in ${linuxArchs[@]}; do
     RPMARCH=$arch
     if [ $arch == "amd64" ];then
         RPMARCH="x86_64"
+    fi
+    if [ $arch == "arm64" ]; then
+        RPMARCH="aarch64"
     fi
     make cloudflared-rpm
     mv cloudflared-$RPMVERSION-1.$RPMARCH.rpm $ARTIFACT_DIR/cloudflared-linux-$RPMARCH.rpm
