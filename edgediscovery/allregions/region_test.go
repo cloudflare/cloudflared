@@ -1,15 +1,12 @@
 package allregions
 
 import (
-	"fmt"
-	"net"
 	"reflect"
 	"testing"
 )
 
 func TestRegion_New(t *testing.T) {
-	r := NewRegion([]*net.TCPAddr{&addr0, &addr1, &addr2})
-	fmt.Println(r.connFor)
+	r := NewRegion([]*EdgeAddr{&addr0, &addr1, &addr2})
 	if r.AvailableAddrs() != 3 {
 		t.Errorf("r.AvailableAddrs() == %v but want 3", r.AvailableAddrs())
 	}
@@ -17,7 +14,7 @@ func TestRegion_New(t *testing.T) {
 
 func TestRegion_AddrUsedBy(t *testing.T) {
 	type fields struct {
-		connFor map[*net.TCPAddr]UsedBy
+		connFor map[*EdgeAddr]UsedBy
 	}
 	type args struct {
 		connID int
@@ -26,11 +23,11 @@ func TestRegion_AddrUsedBy(t *testing.T) {
 		name   string
 		fields fields
 		args   args
-		want   *net.TCPAddr
+		want   *EdgeAddr
 	}{
 		{
 			name: "happy trivial test",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 			}},
 			args: args{connID: 0},
@@ -38,7 +35,7 @@ func TestRegion_AddrUsedBy(t *testing.T) {
 		},
 		{
 			name: "sad trivial test",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 			}},
 			args: args{connID: 1},
@@ -46,7 +43,7 @@ func TestRegion_AddrUsedBy(t *testing.T) {
 		},
 		{
 			name: "sad test",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 				&addr1: InUse(1),
 				&addr2: InUse(2),
@@ -56,7 +53,7 @@ func TestRegion_AddrUsedBy(t *testing.T) {
 		},
 		{
 			name: "happy test",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 				&addr1: InUse(1),
 				&addr2: InUse(2),
@@ -79,7 +76,7 @@ func TestRegion_AddrUsedBy(t *testing.T) {
 
 func TestRegion_AvailableAddrs(t *testing.T) {
 	type fields struct {
-		connFor map[*net.TCPAddr]UsedBy
+		connFor map[*EdgeAddr]UsedBy
 	}
 	tests := []struct {
 		name   string
@@ -88,7 +85,7 @@ func TestRegion_AvailableAddrs(t *testing.T) {
 	}{
 		{
 			name: "contains addresses",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 				&addr1: Unused(),
 				&addr2: InUse(2),
@@ -97,7 +94,7 @@ func TestRegion_AvailableAddrs(t *testing.T) {
 		},
 		{
 			name: "all free",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: Unused(),
 				&addr1: Unused(),
 				&addr2: Unused(),
@@ -106,7 +103,7 @@ func TestRegion_AvailableAddrs(t *testing.T) {
 		},
 		{
 			name: "all used",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 				&addr1: InUse(1),
 				&addr2: InUse(2),
@@ -115,7 +112,7 @@ func TestRegion_AvailableAddrs(t *testing.T) {
 		},
 		{
 			name:   "empty",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{}},
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{}},
 			want:   0,
 		},
 	}
@@ -133,20 +130,20 @@ func TestRegion_AvailableAddrs(t *testing.T) {
 
 func TestRegion_GetUnusedIP(t *testing.T) {
 	type fields struct {
-		connFor map[*net.TCPAddr]UsedBy
+		connFor map[*EdgeAddr]UsedBy
 	}
 	type args struct {
-		excluding *net.TCPAddr
+		excluding *EdgeAddr
 	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
-		want   *net.TCPAddr
+		want   *EdgeAddr
 	}{
 		{
 			name: "happy test with excluding set",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: Unused(),
 				&addr1: Unused(),
 				&addr2: InUse(2),
@@ -156,7 +153,7 @@ func TestRegion_GetUnusedIP(t *testing.T) {
 		},
 		{
 			name: "happy test with no excluding",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 				&addr1: Unused(),
 				&addr2: InUse(2),
@@ -166,7 +163,7 @@ func TestRegion_GetUnusedIP(t *testing.T) {
 		},
 		{
 			name: "sad test with no excluding",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(0),
 				&addr1: InUse(1),
 				&addr2: InUse(2),
@@ -176,7 +173,7 @@ func TestRegion_GetUnusedIP(t *testing.T) {
 		},
 		{
 			name: "sad test with excluding",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: Unused(),
 				&addr1: InUse(1),
 				&addr2: InUse(2),
@@ -199,10 +196,10 @@ func TestRegion_GetUnusedIP(t *testing.T) {
 
 func TestRegion_GiveBack(t *testing.T) {
 	type fields struct {
-		connFor map[*net.TCPAddr]UsedBy
+		connFor map[*EdgeAddr]UsedBy
 	}
 	type args struct {
-		addr *net.TCPAddr
+		addr *EdgeAddr
 	}
 	tests := []struct {
 		name           string
@@ -213,7 +210,7 @@ func TestRegion_GiveBack(t *testing.T) {
 	}{
 		{
 			name: "sad test with excluding",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr1: InUse(1),
 			}},
 			args:           args{addr: &addr1},
@@ -222,7 +219,7 @@ func TestRegion_GiveBack(t *testing.T) {
 		},
 		{
 			name: "sad test with excluding",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr1: InUse(1),
 			}},
 			args:           args{addr: &addr2},
@@ -247,7 +244,7 @@ func TestRegion_GiveBack(t *testing.T) {
 
 func TestRegion_GetAnyAddress(t *testing.T) {
 	type fields struct {
-		connFor map[*net.TCPAddr]UsedBy
+		connFor map[*EdgeAddr]UsedBy
 	}
 	tests := []struct {
 		name    string
@@ -256,19 +253,19 @@ func TestRegion_GetAnyAddress(t *testing.T) {
 	}{
 		{
 			name:    "Sad test -- GetAnyAddress should only fail if the region is empty",
-			fields:  fields{connFor: map[*net.TCPAddr]UsedBy{}},
+			fields:  fields{connFor: map[*EdgeAddr]UsedBy{}},
 			wantNil: true,
 		},
 		{
 			name: "Happy test (all addresses unused)",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: Unused(),
 			}},
 			wantNil: false,
 		},
 		{
 			name: "Happy test (GetAnyAddress can still return addresses used by proxy conns)",
-			fields: fields{connFor: map[*net.TCPAddr]UsedBy{
+			fields: fields{connFor: map[*EdgeAddr]UsedBy{
 				&addr0: InUse(2),
 			}},
 			wantNil: false,

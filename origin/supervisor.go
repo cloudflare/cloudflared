@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -60,7 +60,7 @@ var errEarlyShutdown = errors.New("shutdown started")
 
 type tunnelError struct {
 	index int
-	addr  *net.TCPAddr
+	addr  *allregions.EdgeAddr
 	err   error
 }
 
@@ -226,7 +226,7 @@ func (s *Supervisor) startFirstTunnel(
 	connectedSignal *signal.Signal,
 ) {
 	var (
-		addr *net.TCPAddr
+		addr *allregions.EdgeAddr
 		err  error
 	)
 	const firstConnIndex = 0
@@ -294,7 +294,7 @@ func (s *Supervisor) startTunnel(
 	connectedSignal *signal.Signal,
 ) {
 	var (
-		addr *net.TCPAddr
+		addr *allregions.EdgeAddr
 		err  error
 	)
 	defer func() {
@@ -347,7 +347,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		return nil, err
 	}
 
-	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.EdgeTLSConfigs[connection.H2mux], arbitraryEdgeIP)
+	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.EdgeTLSConfigs[connection.H2mux], arbitraryEdgeIP.TCP)
 	if err != nil {
 		return nil, err
 	}

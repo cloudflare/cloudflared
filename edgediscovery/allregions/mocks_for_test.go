@@ -11,7 +11,7 @@ import (
 
 type mockAddrs struct {
 	// a set of synthetic SRV records
-	addrMap map[net.SRV][]*net.TCPAddr
+	addrMap map[net.SRV][]*EdgeAddr
 	// the total number of addresses, aggregated across addrMap.
 	// For the convenience of test code that would otherwise have to compute
 	// this by hand every time.
@@ -19,19 +19,24 @@ type mockAddrs struct {
 }
 
 func newMockAddrs(port uint16, numRegions uint8, numAddrsPerRegion uint8) mockAddrs {
-	addrMap := make(map[net.SRV][]*net.TCPAddr)
+	addrMap := make(map[net.SRV][]*EdgeAddr)
 	numAddrs := 0
 
 	for r := uint8(0); r < numRegions; r++ {
 		var (
 			srv   = net.SRV{Target: fmt.Sprintf("test-region-%v.example.com", r), Port: port}
-			addrs []*net.TCPAddr
+			addrs []*EdgeAddr
 		)
 		for a := uint8(0); a < numAddrsPerRegion; a++ {
-			addrs = append(addrs, &net.TCPAddr{
+			tcpAddr := &net.TCPAddr{
 				IP:   net.ParseIP(fmt.Sprintf("10.0.%v.%v", r, a)),
 				Port: int(port),
-			})
+			}
+			udpAddr := &net.UDPAddr{
+				IP:   net.ParseIP(fmt.Sprintf("10.0.%v.%v", r, a)),
+				Port: int(port),
+			}
+			addrs = append(addrs, &EdgeAddr{tcpAddr, udpAddr})
 		}
 		addrMap[srv] = addrs
 		numAddrs += len(addrs)
@@ -74,13 +79,13 @@ func mockNetLookupIP(
 	m mockAddrs,
 ) func(host string) ([]net.IP, error) {
 	return func(host string) ([]net.IP, error) {
-		for srv, tcpAddrs := range m.addrMap {
+		for srv, addrs := range m.addrMap {
 			if srv.Target != host {
 				continue
 			}
-			result := make([]net.IP, len(tcpAddrs))
-			for i, tcpAddr := range tcpAddrs {
-				result[i] = tcpAddr.IP
+			result := make([]net.IP, len(addrs))
+			for i, addr := range addrs {
+				result[i] = addr.TCP.IP
 			}
 			return result, nil
 		}

@@ -30,6 +30,12 @@ var (
 	netLookupIP  = net.LookupIP
 )
 
+// EdgeAddr is a representation of possible ways to refer an edge location.
+type EdgeAddr struct {
+	TCP *net.TCPAddr
+	UDP *net.UDPAddr
+}
+
 // If the call to net.LookupSRV fails, try to fall back to DoT from Cloudflare directly.
 //
 // Note: Instead of DoT, we could also have used DoH. Either of these:
@@ -53,7 +59,7 @@ var friendlyDNSErrorLines = []string{
 }
 
 // EdgeDiscovery implements HA service discovery lookup.
-func edgeDiscovery(log *zerolog.Logger) ([][]*net.TCPAddr, error) {
+func edgeDiscovery(log *zerolog.Logger) ([][]*EdgeAddr, error) {
 	_, addrs, err := netLookupSRV(srvService, srvProto, srvName)
 	if err != nil {
 		_, fallbackAddrs, fallbackErr := fallbackLookupSRV(srvService, srvProto, srvName)
@@ -69,16 +75,16 @@ func edgeDiscovery(log *zerolog.Logger) ([][]*net.TCPAddr, error) {
 		addrs = fallbackAddrs
 	}
 
-	var resolvedIPsPerCNAME [][]*net.TCPAddr
+	var resolvedAddrPerCNAME [][]*EdgeAddr
 	for _, addr := range addrs {
-		ips, err := resolveSRVToTCP(addr)
+		edgeAddrs, err := resolveSRV(addr)
 		if err != nil {
 			return nil, err
 		}
-		resolvedIPsPerCNAME = append(resolvedIPsPerCNAME, ips)
+		resolvedAddrPerCNAME = append(resolvedAddrPerCNAME, edgeAddrs)
 	}
 
-	return resolvedIPsPerCNAME, nil
+	return resolvedAddrPerCNAME, nil
 }
 
 func lookupSRVWithDOT(service, proto, name string) (cname string, addrs []*net.SRV, err error) {
@@ -100,7 +106,7 @@ func lookupSRVWithDOT(service, proto, name string) (cname string, addrs []*net.S
 	return r.LookupSRV(ctx, srvService, srvProto, srvName)
 }
 
-func resolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
+func resolveSRV(srv *net.SRV) ([]*EdgeAddr, error) {
 	ips, err := netLookupIP(srv.Target)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Couldn't resolve SRV record %v", srv)
@@ -108,23 +114,36 @@ func resolveSRVToTCP(srv *net.SRV) ([]*net.TCPAddr, error) {
 	if len(ips) == 0 {
 		return nil, fmt.Errorf("SRV record %v had no IPs", srv)
 	}
-	addrs := make([]*net.TCPAddr, len(ips))
+	addrs := make([]*EdgeAddr, len(ips))
 	for i, ip := range ips {
-		addrs[i] = &net.TCPAddr{IP: ip, Port: int(srv.Port)}
+		addrs[i] = &EdgeAddr{
+			TCP: &net.TCPAddr{IP: ip, Port: int(srv.Port)},
+			UDP: &net.UDPAddr{IP: ip, Port: int(srv.Port)},
+		}
 	}
 	return addrs, nil
 }
 
 // ResolveAddrs resolves TCP address given a list of addresses. Address can be a hostname, however, it will return at most one
 // of the hostname's IP addresses.
-func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*net.TCPAddr) {
+func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*EdgeAddr) {
 	for _, addr := range addrs {
 		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
-			log.Err(err).Msgf("Failed to resolve %s", addr)
-		} else {
-			resolved = append(resolved, tcpAddr)
+			log.Error().Msgf("Failed to resolve %s to TCP address, err: %v", addr, err)
+			continue
 		}
+
+		udpAddr, err := net.ResolveUDPAddr("udp", addr)
+		if err != nil {
+			log.Error().Msgf("Failed to resolve %s to UDP address, err: %v", addr, err)
+			continue
+		}
+		resolved = append(resolved, &EdgeAddr{
+			TCP: tcpAddr,
+			UDP: udpAddr,
+		})
+
 	}
 	return
 }

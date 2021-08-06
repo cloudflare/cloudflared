@@ -17,6 +17,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -125,7 +126,7 @@ func ServeTunnelLoop(
 	ctx context.Context,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
-	addr *net.TCPAddr,
+	addr *allregions.EdgeAddr,
 	connIndex uint8,
 	connectedSignal *signal.Signal,
 	cloudflaredUUID uuid.UUID,
@@ -246,7 +247,7 @@ func ServeTunnel(
 	connLog *zerolog.Logger,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
-	addr *net.TCPAddr,
+	addr *allregions.EdgeAddr,
 	connIndex uint8,
 	fuse *h2mux.BooleanFuse,
 	backoff *protocolFallback,
@@ -270,7 +271,7 @@ func ServeTunnel(
 
 	defer config.Observer.SendDisconnect(connIndex)
 
-	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr)
+	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
 	if err != nil {
 		connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
 		return err, true

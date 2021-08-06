@@ -6,35 +6,65 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
 
 var (
-	addr0 = net.TCPAddr{
-		IP:   net.ParseIP("123.0.0.0"),
-		Port: 8000,
-		Zone: "",
+	addr0 = allregions.EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.0.0.0"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.0.0.0"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
-	addr1 = net.TCPAddr{
-		IP:   net.ParseIP("123.0.0.1"),
-		Port: 8000,
-		Zone: "",
+	addr1 = allregions.EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.0.0.1"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.0.0.1"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
-	addr2 = net.TCPAddr{
-		IP:   net.ParseIP("123.0.0.2"),
-		Port: 8000,
-		Zone: "",
+	addr2 = allregions.EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.0.0.2"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.0.0.2"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
-	addr3 = net.TCPAddr{
-		IP:   net.ParseIP("123.0.0.3"),
-		Port: 8000,
-		Zone: "",
+	addr3 = allregions.EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.0.0.3"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.0.0.3"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
 
-	log = zerolog.Nop()
+	testLogger = zerolog.Nop()
 )
 
 func TestGiveBack(t *testing.T) {
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Give this connection an address
 	assert.Equal(t, 4, edge.AvailableAddrs())
@@ -51,7 +81,7 @@ func TestGiveBack(t *testing.T) {
 
 func TestRPCAndProxyShareSingleEdgeIP(t *testing.T) {
 	// Make an edge with a single IP
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0})
 	tunnelConnID := 0
 
 	// Use the IP for a tunnel
@@ -65,7 +95,7 @@ func TestRPCAndProxyShareSingleEdgeIP(t *testing.T) {
 }
 
 func TestGetAddrForRPC(t *testing.T) {
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Get a connection
 	assert.Equal(t, 4, edge.AvailableAddrs())
@@ -83,7 +113,7 @@ func TestGetAddrForRPC(t *testing.T) {
 
 func TestOnePerRegion(t *testing.T) {
 	// Make an edge with only one address
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0, &addr1})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0, &addr1})
 
 	// Use the only address
 	const connID = 0
@@ -105,7 +135,7 @@ func TestOnePerRegion(t *testing.T) {
 
 func TestOnlyOneAddrLeft(t *testing.T) {
 	// Make an edge with only one address
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0})
 
 	// Use the only address
 	const connID = 0
@@ -125,7 +155,7 @@ func TestOnlyOneAddrLeft(t *testing.T) {
 
 func TestNoAddrsLeft(t *testing.T) {
 	// Make an edge with no addresses
-	edge := MockEdge(&log, []*net.TCPAddr{})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{})
 
 	_, err := edge.GetAddr(2)
 	assert.Error(t, err)
@@ -134,7 +164,7 @@ func TestNoAddrsLeft(t *testing.T) {
 }
 
 func TestGetAddr(t *testing.T) {
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Give this connection an address
 	const connID = 0
@@ -149,7 +179,7 @@ func TestGetAddr(t *testing.T) {
 }
 
 func TestGetDifferentAddr(t *testing.T) {
-	edge := MockEdge(&log, []*net.TCPAddr{&addr0, &addr1, &addr2, &addr3})
+	edge := MockEdge(&testLogger, []*allregions.EdgeAddr{&addr0, &addr1, &addr2, &addr3})
 
 	// Give this connection an address
 	assert.Equal(t, 4, edge.AvailableAddrs())

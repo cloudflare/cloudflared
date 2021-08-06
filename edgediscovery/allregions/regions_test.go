@@ -8,31 +8,59 @@ import (
 )
 
 var (
-	addr0 = net.TCPAddr{
-		IP:   net.ParseIP("123.4.5.0"),
-		Port: 8000,
-		Zone: "",
+	addr0 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.0"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.0"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
-	addr1 = net.TCPAddr{
-		IP:   net.ParseIP("123.4.5.1"),
-		Port: 8000,
-		Zone: "",
+	addr1 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.1"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.1"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
-	addr2 = net.TCPAddr{
-		IP:   net.ParseIP("123.4.5.2"),
-		Port: 8000,
-		Zone: "",
+	addr2 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.2"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.2"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
-	addr3 = net.TCPAddr{
-		IP:   net.ParseIP("123.4.5.3"),
-		Port: 8000,
-		Zone: "",
+	addr3 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.3"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.3"),
+			Port: 8000,
+			Zone: "",
+		},
 	}
 )
 
 func makeRegions() Regions {
-	r1 := NewRegion([]*net.TCPAddr{&addr0, &addr1})
-	r2 := NewRegion([]*net.TCPAddr{&addr2, &addr3})
+	r1 := NewRegion([]*EdgeAddr{&addr0, &addr1})
+	r2 := NewRegion([]*EdgeAddr{&addr2, &addr3})
 	return Regions{region1: r1, region2: r2}
 }
 
@@ -105,7 +133,7 @@ func TestRegions_GetUnusedAddr_Excluding_Region2(t *testing.T) {
 
 func TestNewNoResolveBalancesRegions(t *testing.T) {
 	type args struct {
-		addrs []*net.TCPAddr
+		addrs []*EdgeAddr
 	}
 	tests := []struct {
 		name string
@@ -113,11 +141,11 @@ func TestNewNoResolveBalancesRegions(t *testing.T) {
 	}{
 		{
 			name: "one address",
-			args: args{addrs: []*net.TCPAddr{&addr0}},
+			args: args{addrs: []*EdgeAddr{&addr0}},
 		},
 		{
 			name: "two addresses",
-			args: args{addrs: []*net.TCPAddr{&addr0, &addr1}},
+			args: args{addrs: []*EdgeAddr{&addr0, &addr1}},
 		},
 	}
 	for _, tt := range tests {
