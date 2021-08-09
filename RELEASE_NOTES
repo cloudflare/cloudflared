@@ -1,3 +1,8 @@
+2021.8.2
+- 2021-08-03 TUN-4597: Added HTTPProxy for QUIC
+- 2021-08-04 TUN-4795: Remove Equinox releases
+- 2021-08-09 TUN-4911: Append Environment variable to Path instead of overwriting it
+
 2021.8.1
 - 2021-08-02 TUN-4855: Added CHANGES.md for release 2021.8.0
 - 2021-08-03 TUN-4597: Add a QUIC server skeleton
