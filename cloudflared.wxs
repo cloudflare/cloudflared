@@ -46,8 +46,8 @@
            Name="PATH"
            Value="[INSTALLDIR]."
            Permanent="no"
-           Part="all"
-           Action="set"
+           Part="last"
+           Action="create"
            System="yes" />
         </Component>
     </Directory>
