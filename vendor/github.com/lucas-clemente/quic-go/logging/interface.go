@@ -3,7 +3,6 @@
 package logging
 
 import (
-	"context"
 	"net"
 	"time"
 
@@ -50,9 +49,9 @@ type (
 	PreferredAddress = wire.PreferredAddress
 
 	// A TransportError is a transport-level error code.
-	TransportError = qerr.TransportErrorCode
+	TransportError = qerr.ErrorCode
 	// An ApplicationError is an application-defined error code.
-	ApplicationError = qerr.TransportErrorCode
+	ApplicationError = qerr.ErrorCode
 
 	// The RTTStats contain statistics used by the congestion controller.
 	RTTStats = utils.RTTStats
@@ -92,11 +91,11 @@ const (
 
 // A Tracer traces events.
 type Tracer interface {
-	// TracerForConnection requests a new tracer for a connection.
+	// ConnectionTracer requests a new tracer for a connection.
 	// The ODCID is the original destination connection ID:
 	// The destination connection ID that the client used on the first Initial packet it sent on this connection.
 	// If nil is returned, tracing will be disabled for this connection.
-	TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer
+	TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer
 
 	SentPacket(net.Addr, *Header, ByteCount, []Frame)
 	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
@@ -104,9 +103,8 @@ type Tracer interface {
 
 // A ConnectionTracer records events.
 type ConnectionTracer interface {
-	StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID)
-	NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber)
-	ClosedConnection(error)
+	StartedConnection(local, remote net.Addr, version VersionNumber, srcConnID, destConnID ConnectionID)
+	ClosedConnection(CloseReason)
 	SentTransportParameters(*TransportParameters)
 	ReceivedTransportParameters(*TransportParameters)
 	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
@@ -117,7 +115,6 @@ type ConnectionTracer interface {
 	BufferedPacket(PacketType)
 	DroppedPacket(PacketType, ByteCount, PacketDropReason)
 	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
-	AcknowledgedPacket(EncryptionLevel, PacketNumber)
 	LostPacket(EncryptionLevel, PacketNumber, PacketLossReason)
 	UpdatedCongestionState(CongestionState)
 	UpdatedPTOCount(value uint32)

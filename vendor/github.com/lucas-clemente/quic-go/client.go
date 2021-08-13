@@ -37,9 +37,8 @@ type client struct {
 
 	session quicSession
 
-	tracer    logging.ConnectionTracer
-	tracingID uint64
-	logger    utils.Logger
+	tracer logging.ConnectionTracer
+	logger utils.Logger
 }
 
 var (
@@ -203,16 +202,8 @@ func dialContext(
 	}
 	c.packetHandlers = packetHandlers
 
-	c.tracingID = nextSessionTracingID()
 	if c.config.Tracer != nil {
-		c.tracer = c.config.Tracer.TracerForConnection(
-			context.WithValue(ctx, SessionTracingKey, c.tracingID),
-			protocol.PerspectiveClient,
-			c.destConnID,
-		)
-	}
-	if c.tracer != nil {
-		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID)
+		c.tracer = c.config.Tracer.TracerForConnection(protocol.PerspectiveClient, c.destConnID)
 	}
 	if err := c.dial(ctx); err != nil {
 		return nil, err
@@ -279,6 +270,9 @@ func newClient(
 
 func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.conn.LocalAddr(), c.conn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
+	if c.tracer != nil {
+		c.tracer.StartedConnection(c.conn.LocalAddr(), c.conn.RemoteAddr(), c.version, c.srcConnID, c.destConnID)
+	}
 
 	c.session = newClientSession(
 		c.conn,
@@ -291,7 +285,6 @@ func (c *client) dial(ctx context.Context) error {
 		c.use0RTT,
 		c.hasNegotiatedVersion,
 		c.tracer,
-		c.tracingID,
 		c.logger,
 		c.version,
 	)
@@ -300,7 +293,7 @@ func (c *client) dial(ctx context.Context) error {
 	errorChan := make(chan error, 1)
 	go func() {
 		err := c.session.run() // returns as soon as the session is closed
-		if !errors.Is(err, &errCloseForRecreating{}) && c.createdPacketConn {
+		if !errors.Is(err, errCloseForRecreating{}) && c.createdPacketConn {
 			c.packetHandlers.Destroy()
 		}
 		errorChan <- err

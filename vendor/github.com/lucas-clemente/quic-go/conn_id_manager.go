@@ -53,7 +53,7 @@ func (h *connIDManager) Add(f *wire.NewConnectionIDFrame) error {
 		return err
 	}
 	if h.queue.Len() >= protocol.MaxActiveConnectionIDs {
-		return &qerr.TransportError{ErrorCode: qerr.ConnectionIDLimitError}
+		return qerr.ConnectionIDLimitError
 	}
 	return nil
 }

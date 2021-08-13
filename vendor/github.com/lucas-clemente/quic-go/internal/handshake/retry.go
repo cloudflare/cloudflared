@@ -48,7 +48,7 @@ func GetRetryIntegrityTag(retry []byte, origDestConnID protocol.ConnectionID, ve
 
 	var tag [16]byte
 	var sealed []byte
-	if version != protocol.VersionDraft34 && version != protocol.Version1 {
+	if version != protocol.VersionDraft34 {
 		sealed = oldRetryAEAD.Seal(tag[:0], oldRetryNonce[:], nil, retryBuf.Bytes())
 	} else {
 		sealed = retryAEAD.Seal(tag[:0], retryNonce[:], nil, retryBuf.Bytes())

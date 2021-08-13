@@ -90,10 +90,7 @@ type TransportParameters struct {
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
 	if err := p.unmarshal(bytes.NewReader(data), sentBy, false); err != nil {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.TransportParameterError,
-			ErrorMessage: err.Error(),
-		}
+		return qerr.NewError(qerr.TransportParameterError, err.Error())
 	}
 	return nil
 }
@@ -262,7 +259,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 		return fmt.Errorf("error while reading transport parameter %d: %s", paramID, err)
 	}
 	if remainingLen-r.Len() != expectedLen {
-		return fmt.Errorf("inconsistent transport parameter length for transport parameter %#x", paramID)
+		return fmt.Errorf("inconsistent transport parameter length for %d", paramID)
 	}
 	//nolint:exhaustive // This only covers the numeric transport parameters.
 	switch paramID {

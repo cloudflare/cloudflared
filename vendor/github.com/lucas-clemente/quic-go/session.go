@@ -10,7 +10,6 @@ import (
 	"net"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/ackhandler"
@@ -123,17 +122,23 @@ type errCloseForRecreating struct {
 	nextVersion      protocol.VersionNumber
 }
 
-func (e *errCloseForRecreating) Error() string {
+func (errCloseForRecreating) Error() string {
 	return "closing session in order to recreate it"
 }
 
-func (e *errCloseForRecreating) Is(target error) bool {
-	_, ok := target.(*errCloseForRecreating)
+func (errCloseForRecreating) Is(target error) bool {
+	_, ok := target.(errCloseForRecreating)
 	return ok
 }
 
-var sessionTracingID uint64        // to be accessed atomically
-func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
+type errVersionNegotiation struct {
+	ourVersions   []protocol.VersionNumber
+	theirVersions []protocol.VersionNumber
+}
+
+func (e errVersionNegotiation) Error() string {
+	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.ourVersions, e.theirVersions)
+}
 
 // A Session is a QUIC session
 type session struct {
@@ -247,7 +252,6 @@ var newSession = func(
 	tokenGenerator *handshake.TokenGenerator,
 	enable0RTT bool,
 	tracer logging.ConnectionTracer,
-	tracingID uint64,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -287,10 +291,8 @@ var newSession = func(
 		s.version,
 	)
 	s.preSetup()
-	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		0,
-		getMaxPacketSize(s.conn.RemoteAddr()),
 		s.rttStats,
 		s.perspective,
 		s.tracer,
@@ -378,7 +380,6 @@ var newClientSession = func(
 	enable0RTT bool,
 	hasNegotiatedVersion bool,
 	tracer logging.ConnectionTracer,
-	tracingID uint64,
 	logger utils.Logger,
 	v protocol.VersionNumber,
 ) quicSession {
@@ -414,10 +415,8 @@ var newClientSession = func(
 		s.version,
 	)
 	s.preSetup()
-	s.ctx, s.ctxCancel = context.WithCancel(context.WithValue(context.Background(), SessionTracingKey, tracingID))
 	s.sentPacketHandler, s.receivedPacketHandler = ackhandler.NewAckHandler(
 		initialPacketNumber,
-		getMaxPacketSize(s.conn.RemoteAddr()),
 		s.rttStats,
 		s.perspective,
 		s.tracer,
@@ -523,6 +522,7 @@ func (s *session) preSetup() {
 	s.receivedPackets = make(chan *receivedPacket, protocol.MaxSessionUnprocessedPackets)
 	s.closeChan = make(chan closeError, 1)
 	s.sendingScheduled = make(chan struct{}, 1)
+	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	s.handshakeCtx, s.handshakeCtxCancel = context.WithCancel(context.Background())
 
 	now := time.Now()
@@ -608,6 +608,7 @@ runLoop:
 				// nothing to see here.
 			case <-sendQueueAvailable:
 			case firstPacket := <-s.receivedPackets:
+				s.sentPacketHandler.ReceivedBytes(firstPacket.Size())
 				wasProcessed := s.handlePacketImpl(firstPacket)
 				// Don't set timers and send packets if the packet made us close the session.
 				select {
@@ -663,13 +664,19 @@ runLoop:
 			s.framer.QueueControlFrame(&wire.PingFrame{})
 			s.keepAlivePingSent = true
 		} else if !s.handshakeComplete && now.Sub(s.sessionCreationTime) >= s.config.handshakeTimeout() {
-			s.destroyImpl(qerr.ErrHandshakeTimeout)
+			if s.tracer != nil {
+				s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonHandshake))
+			}
+			s.destroyImpl(qerr.NewTimeoutError("Handshake did not complete in time"))
 			continue
 		} else {
 			idleTimeoutStartTime := s.idleTimeoutStartTime()
 			if (!s.handshakeComplete && now.Sub(idleTimeoutStartTime) >= s.config.HandshakeIdleTimeout) ||
 				(s.handshakeComplete && now.Sub(idleTimeoutStartTime) >= s.idleTimeout) {
-				s.destroyImpl(qerr.ErrIdleTimeout)
+				if s.tracer != nil {
+					s.tracer.ClosedConnection(logging.NewTimeoutCloseReason(logging.TimeoutReasonIdle))
+				}
+				s.destroyImpl(qerr.NewTimeoutError("No recent network activity"))
 				continue
 			}
 		}
@@ -690,8 +697,8 @@ runLoop:
 		}
 	}
 
-	s.handleCloseError(&closeErr)
-	if !errors.Is(closeErr.err, &errCloseForRecreating{}) && s.tracer != nil {
+	s.handleCloseError(closeErr)
+	if !errors.Is(closeErr.err, errCloseForRecreating{}) && s.tracer != nil {
 		s.tracer.Close()
 	}
 	s.logger.Infof("Connection %s closed.", s.logID)
@@ -731,26 +738,23 @@ func (s *session) nextKeepAliveTime() time.Time {
 	if !s.config.KeepAlive || s.keepAlivePingSent || !s.firstAckElicitingPacketAfterIdleSentTime.IsZero() {
 		return time.Time{}
 	}
-	return s.lastPacketReceivedTime.Add(s.keepAliveInterval)
+	return s.lastPacketReceivedTime.Add(s.keepAliveInterval / 2)
 }
 
 func (s *session) maybeResetTimer() {
 	var deadline time.Time
 	if !s.handshakeComplete {
-		deadline = utils.MinTime(
-			s.sessionCreationTime.Add(s.config.handshakeTimeout()),
-			s.idleTimeoutStartTime().Add(s.config.HandshakeIdleTimeout),
-		)
+		deadline = s.sessionCreationTime.Add(utils.MinDuration(s.config.handshakeTimeout(), s.config.HandshakeIdleTimeout))
 	} else {
 		if keepAliveTime := s.nextKeepAliveTime(); !keepAliveTime.IsZero() {
 			deadline = keepAliveTime
 		} else {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
 		}
-	}
-	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery {
-		if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
-			deadline = utils.MinTime(deadline, probeTime)
+		if !s.config.DisablePathMTUDiscovery {
+			if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
+				deadline = utils.MinTime(deadline, probeTime)
+			}
 		}
 	}
 
@@ -782,36 +786,6 @@ func (s *session) handleHandshakeComplete() {
 	s.connIDManager.SetHandshakeComplete()
 	s.connIDGenerator.SetHandshakeComplete()
 
-	if s.perspective == protocol.PerspectiveClient {
-		s.applyTransportParameters()
-		return
-	}
-
-	s.handleHandshakeConfirmed()
-
-	ticket, err := s.cryptoStreamHandler.GetSessionTicket()
-	if err != nil {
-		s.closeLocal(err)
-	}
-	if ticket != nil {
-		s.oneRTTStream.Write(ticket)
-		for s.oneRTTStream.HasData() {
-			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
-		}
-	}
-	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
-	if err != nil {
-		s.closeLocal(err)
-	}
-	s.queueControlFrame(&wire.NewTokenFrame{Token: token})
-	s.queueControlFrame(&wire.HandshakeDoneFrame{})
-}
-
-func (s *session) handleHandshakeConfirmed() {
-	s.handshakeConfirmed = true
-	s.sentPacketHandler.SetHandshakeConfirmed()
-	s.cryptoStreamHandler.SetHandshakeConfirmed()
-
 	if !s.config.DisablePathMTUDiscovery {
 		maxPacketSize := s.peerParams.MaxUDPPayloadSize
 		if maxPacketSize == 0 {
@@ -828,11 +802,34 @@ func (s *session) handleHandshakeConfirmed() {
 			},
 		)
 	}
+
+	if s.perspective == protocol.PerspectiveClient {
+		s.applyTransportParameters()
+		return
+	}
+
+	s.handshakeConfirmed = true
+	s.sentPacketHandler.SetHandshakeConfirmed()
+	ticket, err := s.cryptoStreamHandler.GetSessionTicket()
+	if err != nil {
+		s.closeLocal(err)
+	}
+	if ticket != nil {
+		s.oneRTTStream.Write(ticket)
+		for s.oneRTTStream.HasData() {
+			s.queueControlFrame(s.oneRTTStream.PopCryptoFrame(protocol.MaxPostHandshakeCryptoFrameSize))
+		}
+	}
+	token, err := s.tokenGenerator.NewToken(s.conn.RemoteAddr())
+	if err != nil {
+		s.closeLocal(err)
+	}
+	s.queueControlFrame(&wire.NewTokenFrame{Token: token})
+	s.cryptoStreamHandler.SetHandshakeConfirmed()
+	s.queueControlFrame(&wire.HandshakeDoneFrame{})
 }
 
 func (s *session) handlePacketImpl(rp *receivedPacket) bool {
-	s.sentPacketHandler.ReceivedBytes(rp.Size())
-
 	if wire.IsVersionNegotiationPacket(rp.data) {
 		s.handleVersionNegotiationPacket(rp)
 		return false
@@ -943,10 +940,7 @@ func (s *session) handleSinglePacket(p *receivedPacket, hdr *wire.Header) bool /
 			wasQueued = true
 			s.tryQueueingUndecryptablePacket(p, hdr)
 		case wire.ErrInvalidReservedBits:
-			s.closeLocal(&qerr.TransportError{
-				ErrorCode:    qerr.ProtocolViolation,
-				ErrorMessage: err.Error(),
-			})
+			s.closeLocal(qerr.NewError(qerr.ProtocolViolation, err.Error()))
 		case handshake.ErrDecryptionFailed:
 			// This might be a packet injected by an attacker. Drop it.
 			if s.tracer != nil {
@@ -1087,15 +1081,12 @@ func (s *session) handleVersionNegotiationPacket(p *receivedPacket) {
 	}
 	newVersion, ok := protocol.ChooseSupportedVersion(s.config.Versions, supportedVersions)
 	if !ok {
-		s.destroyImpl(&VersionNegotiationError{
-			Ours:   s.config.Versions,
-			Theirs: supportedVersions,
+		s.destroyImpl(errVersionNegotiation{
+			ourVersions:   s.config.Versions,
+			theirVersions: supportedVersions,
 		})
 		s.logger.Infof("No compatible QUIC version found.")
 		return
-	}
-	if s.tracer != nil {
-		s.tracer.NegotiatedVersion(newVersion, s.config.Versions, supportedVersions)
 	}
 
 	s.logger.Infof("Switching to QUIC version %s.", newVersion)
@@ -1113,24 +1104,11 @@ func (s *session) handleUnpackedPacket(
 	packetSize protocol.ByteCount, // only for logging
 ) error {
 	if len(packet.data) == 0 {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "empty packet",
-		}
+		return qerr.NewError(qerr.ProtocolViolation, "empty packet")
 	}
 
 	if !s.receivedFirstPacket {
 		s.receivedFirstPacket = true
-		if !s.versionNegotiated && s.tracer != nil {
-			var clientVersions, serverVersions []protocol.VersionNumber
-			switch s.perspective {
-			case protocol.PerspectiveClient:
-				clientVersions = s.config.Versions
-			case protocol.PerspectiveServer:
-				serverVersions = s.config.Versions
-			}
-			s.tracer.NegotiatedVersion(s.version, clientVersions, serverVersions)
-		}
 		// The server can change the source connection ID with the first Handshake packet.
 		if s.perspective == protocol.PerspectiveClient && packet.hdr.IsLongHeader && !packet.hdr.SrcConnectionID.Equal(s.handshakeDestConnID) {
 			cid := packet.hdr.SrcConnectionID
@@ -1152,6 +1130,7 @@ func (s *session) handleUnpackedPacket(
 				s.tracer.StartedConnection(
 					s.conn.LocalAddr(),
 					s.conn.RemoteAddr(),
+					s.version,
 					packet.hdr.SrcConnectionID,
 					packet.hdr.DestConnectionID,
 				)
@@ -1267,20 +1246,13 @@ func (s *session) handlePacket(p *receivedPacket) {
 }
 
 func (s *session) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) {
+	var e error
 	if frame.IsApplicationError {
-		s.closeRemote(&qerr.ApplicationError{
-			Remote:       true,
-			ErrorCode:    qerr.ApplicationErrorCode(frame.ErrorCode),
-			ErrorMessage: frame.ReasonPhrase,
-		})
-		return
+		e = qerr.NewApplicationError(frame.ErrorCode, frame.ReasonPhrase)
+	} else {
+		e = qerr.NewError(frame.ErrorCode, frame.ReasonPhrase)
 	}
-	s.closeRemote(&qerr.TransportError{
-		Remote:       true,
-		ErrorCode:    qerr.TransportErrorCode(frame.ErrorCode),
-		FrameType:    frame.FrameType,
-		ErrorMessage: frame.ReasonPhrase,
-	})
+	s.closeRemote(e)
 }
 
 func (s *session) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
@@ -1361,10 +1333,7 @@ func (s *session) handlePathChallengeFrame(frame *wire.PathChallengeFrame) {
 
 func (s *session) handleNewTokenFrame(frame *wire.NewTokenFrame) error {
 	if s.perspective == protocol.PerspectiveServer {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "received NEW_TOKEN frame from the client",
-		}
+		return qerr.NewError(qerr.ProtocolViolation, "Received NEW_TOKEN frame from the client.")
 	}
 	if s.config.TokenStore != nil {
 		s.config.TokenStore.Put(s.tokenStoreKey, &ClientToken{data: frame.Token})
@@ -1382,37 +1351,27 @@ func (s *session) handleRetireConnectionIDFrame(f *wire.RetireConnectionIDFrame,
 
 func (s *session) handleHandshakeDoneFrame() error {
 	if s.perspective == protocol.PerspectiveServer {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "received a HANDSHAKE_DONE frame",
-		}
+		return qerr.NewError(qerr.ProtocolViolation, "received a HANDSHAKE_DONE frame")
 	}
-	if !s.handshakeConfirmed {
-		s.handleHandshakeConfirmed()
-	}
+	s.handshakeConfirmed = true
+	s.sentPacketHandler.SetHandshakeConfirmed()
+	s.cryptoStreamHandler.SetHandshakeConfirmed()
 	return nil
 }
 
 func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.EncryptionLevel) error {
-	acked1RTTPacket, err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime)
-	if err != nil {
+	if err := s.sentPacketHandler.ReceivedAck(frame, encLevel, s.lastPacketReceivedTime); err != nil {
 		return err
 	}
-	if !acked1RTTPacket {
+	if encLevel != protocol.Encryption1RTT {
 		return nil
-	}
-	if s.perspective == protocol.PerspectiveClient && !s.handshakeConfirmed {
-		s.handleHandshakeConfirmed()
 	}
 	return s.cryptoStreamHandler.SetLargest1RTTAcked(frame.LargestAcked())
 }
 
 func (s *session) handleDatagramFrame(f *wire.DatagramFrame) error {
 	if f.Length(s.version) > protocol.MaxDatagramFrameSize {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.ProtocolViolation,
-			ErrorMessage: "DATAGRAM frame too large",
-		}
+		return qerr.NewError(qerr.ProtocolViolation, "DATAGRAM frame too large")
 	}
 	s.datagramQueue.HandleDatagramFrame(f)
 	return nil
@@ -1461,48 +1420,44 @@ func (s *session) shutdown() {
 	<-s.ctx.Done()
 }
 
-func (s *session) CloseWithError(code ApplicationErrorCode, desc string) error {
-	s.closeLocal(&qerr.ApplicationError{
-		ErrorCode:    code,
-		ErrorMessage: desc,
-	})
+func (s *session) CloseWithError(code protocol.ApplicationErrorCode, desc string) error {
+	s.closeLocal(qerr.NewApplicationError(qerr.ErrorCode(code), desc))
 	<-s.ctx.Done()
 	return nil
 }
 
-func (s *session) handleCloseError(closeErr *closeError) {
-	e := closeErr.err
-	if e == nil {
-		e = &qerr.ApplicationError{}
-	} else {
-		defer func() {
-			closeErr.err = e
-		}()
+func (s *session) handleCloseError(closeErr closeError) {
+	if closeErr.err == nil {
+		closeErr.err = qerr.NewApplicationError(0, "")
 	}
 
-	switch {
-	case errors.Is(e, qerr.ErrIdleTimeout),
-		errors.Is(e, qerr.ErrHandshakeTimeout),
-		errors.Is(e, &StatelessResetError{}),
-		errors.Is(e, &VersionNegotiationError{}),
-		errors.Is(e, &errCloseForRecreating{}),
-		errors.Is(e, &qerr.ApplicationError{}),
-		errors.Is(e, &qerr.TransportError{}):
-	default:
-		e = &qerr.TransportError{
-			ErrorCode:    qerr.InternalError,
-			ErrorMessage: e.Error(),
-		}
+	var quicErr *qerr.QuicError
+	var ok bool
+	if quicErr, ok = closeErr.err.(*qerr.QuicError); !ok {
+		quicErr = qerr.ToQuicError(closeErr.err)
 	}
 
-	s.streamsMap.CloseWithError(e)
+	s.streamsMap.CloseWithError(quicErr)
 	s.connIDManager.Close()
 	if s.datagramQueue != nil {
-		s.datagramQueue.CloseWithError(e)
+		s.datagramQueue.CloseWithError(quicErr)
 	}
 
-	if s.tracer != nil && !errors.Is(e, &errCloseForRecreating{}) {
-		s.tracer.ClosedConnection(e)
+	if s.tracer != nil {
+		// timeout errors are logged as soon as they occur (to distinguish between handshake and idle timeouts)
+		if nerr, ok := closeErr.err.(net.Error); !ok || !nerr.Timeout() {
+			var resetErr statelessResetErr
+			var vnErr errVersionNegotiation
+			if errors.As(closeErr.err, &resetErr) {
+				s.tracer.ClosedConnection(logging.NewStatelessResetCloseReason(resetErr.token))
+			} else if errors.As(closeErr.err, &vnErr) {
+				s.tracer.ClosedConnection(logging.NewVersionNegotiationError(vnErr.theirVersions))
+			} else if quicErr.IsApplicationError() {
+				s.tracer.ClosedConnection(logging.NewApplicationCloseReason(quicErr.ErrorCode, closeErr.remote))
+			} else {
+				s.tracer.ClosedConnection(logging.NewTransportCloseReason(quicErr.ErrorCode, closeErr.remote))
+			}
+		}
 	}
 
 	// If this is a remote close we're done here
@@ -1514,7 +1469,7 @@ func (s *session) handleCloseError(closeErr *closeError) {
 		s.connIDGenerator.RemoveAll()
 		return
 	}
-	connClosePacket, err := s.sendConnectionClose(e)
+	connClosePacket, err := s.sendConnectionClose(quicErr)
 	if err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
 	}
@@ -1553,10 +1508,7 @@ func (s *session) restoreTransportParameters(params *wire.TransportParameters) {
 
 func (s *session) handleTransportParameters(params *wire.TransportParameters) {
 	if err := s.checkTransportParameters(params); err != nil {
-		s.closeLocal(&qerr.TransportError{
-			ErrorCode:    qerr.TransportParameterError,
-			ErrorMessage: err.Error(),
-		})
+		s.closeLocal(err)
 	}
 	s.peerParams = params
 	// On the client side we have to wait for handshake completion.
@@ -1579,7 +1531,7 @@ func (s *session) checkTransportParameters(params *wire.TransportParameters) err
 
 	// check the initial_source_connection_id
 	if !params.InitialSourceConnectionID.Equal(s.handshakeDestConnID) {
-		return fmt.Errorf("expected initial_source_connection_id to equal %s, is %s", s.handshakeDestConnID, params.InitialSourceConnectionID)
+		return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected initial_source_connection_id to equal %s, is %s", s.handshakeDestConnID, params.InitialSourceConnectionID))
 	}
 
 	if s.perspective == protocol.PerspectiveServer {
@@ -1587,17 +1539,17 @@ func (s *session) checkTransportParameters(params *wire.TransportParameters) err
 	}
 	// check the original_destination_connection_id
 	if !params.OriginalDestinationConnectionID.Equal(s.origDestConnID) {
-		return fmt.Errorf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID)
+		return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected original_destination_connection_id to equal %s, is %s", s.origDestConnID, params.OriginalDestinationConnectionID))
 	}
 	if s.retrySrcConnID != nil { // a Retry was performed
 		if params.RetrySourceConnectionID == nil {
-			return errors.New("missing retry_source_connection_id")
+			return qerr.NewError(qerr.TransportParameterError, "missing retry_source_connection_id")
 		}
 		if !(*params.RetrySourceConnectionID).Equal(*s.retrySrcConnID) {
-			return fmt.Errorf("expected retry_source_connection_id to equal %s, is %s", s.retrySrcConnID, *params.RetrySourceConnectionID)
+			return qerr.NewError(qerr.TransportParameterError, fmt.Sprintf("expected retry_source_connection_id to equal %s, is %s", s.retrySrcConnID, *params.RetrySourceConnectionID))
 		}
 	} else if params.RetrySourceConnectionID != nil {
-		return errors.New("received retry_source_connection_id, although no Retry was performed")
+		return qerr.NewError(qerr.TransportParameterError, "received retry_source_connection_id, although no Retry was performed")
 	}
 	return nil
 }
@@ -1766,7 +1718,7 @@ func (s *session) sendPacket() (bool, error) {
 		s.sendQueue.Send(packet.buffer)
 		return true, nil
 	}
-	if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
+	if !s.config.DisablePathMTUDiscovery && s.handshakeComplete && s.mtuDiscoverer.ShouldSendProbe(now) {
 		packet, err := s.packer.PackMTUProbePacket(s.mtuDiscoverer.GetPing())
 		if err != nil {
 			return false, err
@@ -1792,21 +1744,8 @@ func (s *session) sendPackedPacket(packet *packedPacket, now time.Time) {
 	s.sendQueue.Send(packet.buffer)
 }
 
-func (s *session) sendConnectionClose(e error) ([]byte, error) {
-	var packet *coalescedPacket
-	var err error
-	var transportErr *qerr.TransportError
-	var applicationErr *qerr.ApplicationError
-	if errors.As(e, &transportErr) {
-		packet, err = s.packer.PackConnectionClose(transportErr)
-	} else if errors.As(e, &applicationErr) {
-		packet, err = s.packer.PackApplicationClose(applicationErr)
-	} else {
-		packet, err = s.packer.PackConnectionClose(&qerr.TransportError{
-			ErrorCode:    qerr.InternalError,
-			ErrorMessage: fmt.Sprintf("session BUG: unspecified error type (msg: %s)", e.Error()),
-		})
-	}
+func (s *session) sendConnectionClose(quicErr *qerr.QuicError) ([]byte, error) {
+	packet, err := s.packer.PackConnectionClose(quicErr)
 	if err != nil {
 		return nil, err
 	}

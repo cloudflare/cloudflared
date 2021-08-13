@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
@@ -15,8 +14,9 @@ const (
 	initialMaxDatagramSize     = protocol.ByteCount(protocol.InitialPacketSizeIPv4)
 	maxBurstPackets            = 3
 	renoBeta                   = 0.7 // Reno backoff factor.
+	initialMaxCongestionWindow = protocol.MaxCongestionWindowPackets * initialMaxDatagramSize
 	minCongestionWindowPackets = 2
-	initialCongestionWindow    = 32
+	initialCongestionWindow    = 32 * initialMaxDatagramSize
 )
 
 type cubicSender struct {
@@ -65,33 +65,11 @@ var (
 )
 
 // NewCubicSender makes a new cubic sender
-func NewCubicSender(
-	clock Clock,
-	rttStats *utils.RTTStats,
-	initialMaxDatagramSize protocol.ByteCount,
-	reno bool,
-	tracer logging.ConnectionTracer,
-) *cubicSender {
-	return newCubicSender(
-		clock,
-		rttStats,
-		reno,
-		initialMaxDatagramSize,
-		initialCongestionWindow*initialMaxDatagramSize,
-		protocol.MaxCongestionWindowPackets*initialMaxDatagramSize,
-		tracer,
-	)
+func NewCubicSender(clock Clock, rttStats *utils.RTTStats, reno bool, tracer logging.ConnectionTracer) *cubicSender {
+	return newCubicSender(clock, rttStats, reno, initialCongestionWindow, initialMaxCongestionWindow, tracer)
 }
 
-func newCubicSender(
-	clock Clock,
-	rttStats *utils.RTTStats,
-	reno bool,
-	initialMaxDatagramSize,
-	initialCongestionWindow,
-	initialMaxCongestionWindow protocol.ByteCount,
-	tracer logging.ConnectionTracer,
-) *cubicSender {
+func newCubicSender(clock Clock, rttStats *utils.RTTStats, reno bool, initialCongestionWindow, initialMaxCongestionWindow protocol.ByteCount, tracer logging.ConnectionTracer) *cubicSender {
 	c := &cubicSender{
 		rttStats:                   rttStats,
 		largestSentPacketNumber:    protocol.InvalidPacketNumber,
@@ -305,7 +283,7 @@ func (c *cubicSender) maybeTraceStateChange(new logging.CongestionState) {
 
 func (c *cubicSender) SetMaxDatagramSize(s protocol.ByteCount) {
 	if s < c.maxDatagramSize {
-		panic(fmt.Sprintf("congestion BUG: decreased max datagram size from %d to %d", c.maxDatagramSize, s))
+		panic("congestion BUG: decreased max datagram size")
 	}
 	cwndIsMinCwnd := c.congestionWindow == c.minCongestionWindow()
 	c.maxDatagramSize = s

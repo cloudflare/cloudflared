@@ -4,14 +4,13 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
-	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A ResetStreamFrame is a RESET_STREAM frame in QUIC
 type ResetStreamFrame struct {
 	StreamID  protocol.StreamID
-	ErrorCode qerr.StreamErrorCode
+	ErrorCode protocol.ApplicationErrorCode
 	FinalSize protocol.ByteCount
 }
 
@@ -39,7 +38,7 @@ func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStr
 
 	return &ResetStreamFrame{
 		StreamID:  streamID,
-		ErrorCode: qerr.StreamErrorCode(errorCode),
+		ErrorCode: protocol.ApplicationErrorCode(errorCode),
 		FinalSize: byteOffset,
 	}, nil
 }

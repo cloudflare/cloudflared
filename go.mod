@@ -29,7 +29,7 @@ require (
 	github.com/json-iterator/go v1.1.10
 	github.com/kr/text v0.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lucas-clemente/quic-go v0.21.1
+	github.com/lucas-clemente/quic-go v0.20.0
 	github.com/mattn/go-colorable v0.1.8
 	github.com/miekg/dns v1.1.31
 	github.com/mitchellh/go-homedir v1.1.0
@@ -38,6 +38,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35 // indirect
 	github.com/prometheus/client_golang v1.7.1
+	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.13.0 // indirect
 	github.com/rivo/tview v0.0.0-20200712113419-c65badfc3d92
 	github.com/rs/zerolog v1.20.0
@@ -46,9 +47,9 @@ require (
 	github.com/urfave/cli/v2 v2.2.0
 	go.uber.org/automaxprocs v1.4.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
-	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
+	golang.org/x/net v0.0.0-20200904194848-62affa334b73
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43 // indirect
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	golang.org/x/sys v0.0.0-20210510120138-977fb7262007
 	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf
 	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d // indirect

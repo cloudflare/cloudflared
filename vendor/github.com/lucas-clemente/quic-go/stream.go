@@ -86,6 +86,16 @@ type stream struct {
 
 var _ Stream = &stream{}
 
+type streamCanceledError struct {
+	error
+	errorCode protocol.ApplicationErrorCode
+}
+
+func (streamCanceledError) Canceled() bool                             { return true }
+func (e streamCanceledError) ErrorCode() protocol.ApplicationErrorCode { return e.errorCode }
+
+var _ StreamError = &streamCanceledError{}
+
 // newStream creates a new Stream
 func newStream(streamID protocol.StreamID,
 	sender streamSender,

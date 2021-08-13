@@ -26,7 +26,7 @@ func NewFrameParser(supportsDatagrams bool, v protocol.VersionNumber) FrameParse
 	}
 }
 
-// ParseNext parses the next frame.
+// ParseNextFrame parses the next frame
 // It skips PADDING frames.
 func (p *frameParser) ParseNext(r *bytes.Reader, encLevel protocol.EncryptionLevel) (Frame, error) {
 	for r.Len() != 0 {
@@ -38,11 +38,7 @@ func (p *frameParser) ParseNext(r *bytes.Reader, encLevel protocol.EncryptionLev
 
 		f, err := p.parseFrame(r, typeByte, encLevel)
 		if err != nil {
-			return nil, &qerr.TransportError{
-				FrameType:    uint64(typeByte),
-				ErrorCode:    qerr.FrameEncodingError,
-				ErrorMessage: err.Error(),
-			}
+			return nil, qerr.NewErrorWithFrameType(qerr.FrameEncodingError, uint64(typeByte), err.Error())
 		}
 		return f, nil
 	}

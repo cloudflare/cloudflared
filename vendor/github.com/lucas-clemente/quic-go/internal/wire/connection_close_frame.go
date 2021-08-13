@@ -5,13 +5,14 @@ import (
 	"io"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A ConnectionCloseFrame is a CONNECTION_CLOSE frame
 type ConnectionCloseFrame struct {
 	IsApplicationError bool
-	ErrorCode          uint64
+	ErrorCode          qerr.ErrorCode
 	FrameType          uint64
 	ReasonPhrase       string
 }
@@ -27,7 +28,7 @@ func parseConnectionCloseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Conn
 	if err != nil {
 		return nil, err
 	}
-	f.ErrorCode = ec
+	f.ErrorCode = qerr.ErrorCode(ec)
 	// read the Frame Type, if this is not an application error
 	if !f.IsApplicationError {
 		ft, err := quicvarint.Read(r)
@@ -58,8 +59,8 @@ func parseConnectionCloseFrame(r *bytes.Reader, _ protocol.VersionNumber) (*Conn
 }
 
 // Length of a written frame
-func (f *ConnectionCloseFrame) Length(protocol.VersionNumber) protocol.ByteCount {
-	length := 1 + quicvarint.Len(f.ErrorCode) + quicvarint.Len(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
+func (f *ConnectionCloseFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+	length := 1 + quicvarint.Len(uint64(f.ErrorCode)) + quicvarint.Len(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
 	if !f.IsApplicationError {
 		length += quicvarint.Len(f.FrameType) // for the frame type
 	}
@@ -73,7 +74,7 @@ func (f *ConnectionCloseFrame) Write(b *bytes.Buffer, version protocol.VersionNu
 		b.WriteByte(0x1c)
 	}
 
-	quicvarint.Write(b, f.ErrorCode)
+	quicvarint.Write(b, uint64(f.ErrorCode))
 	if !f.IsApplicationError {
 		quicvarint.Write(b, f.FrameType)
 	}
