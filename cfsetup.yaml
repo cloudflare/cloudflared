@@ -14,9 +14,52 @@ stretch: &stretch
       - export GOARCH=amd64
       - export FIPS=true
       - make cloudflared
-  build-deb:
+  build-all-packages: #except osxpkg
     build_dir: *build_dir
     builddeps:
+      - *pinned_go_fips
+      - build-essential
+      - fakeroot
+      - rubygem-fpm
+      - rpm
+      - wget
+      # libmsi and libgcab are libraries the wixl binary depends on.
+      - libmsi-dev
+      - libgcab-dev
+    pre-cache:
+      # TODO: https://jira.cfops.it/browse/TUN-4792 Replace this wixl with the official one once msitools supports
+      # environment.
+      - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
+      - chmod a+x /usr/local/bin/wixl
+    post-cache:
+      - export FIPS=true
+      - ./build-packages.sh
+  github-release-pkgs:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go_fips
+      - build-essential
+      - fakeroot
+      - rubygem-fpm
+      - rpm
+      - wget
+      # libmsi and libgcab are libraries the wixl binary depends on.
+      - libmsi-dev
+      - libgcab-dev
+      - python3-setuptools
+      - python3-pip
+    pre-cache:
+      - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
+      - chmod a+x /usr/local/bin/wixl
+      - pip3 install pygithub
+    post-cache:
+      # build all packages and move them to /cfsetup/built_artifacts
+      - ./build-packages.sh
+      # release the packages built and moved to /cfsetup/built_artifacts
+      - make github-release-built-pkgs
+  build-deb:
+    build_dir: *build_dir
+    builddeps: &build_deb_deps
       - *pinned_go_fips
       - build-essential
       - fakeroot
@@ -26,13 +69,18 @@ stretch: &stretch
       - export GOARCH=amd64
       - export FIPS=true
       - make cloudflared-deb
+  build-deb-nightly:
+    build_dir: *build_dir
+    builddeps: *build_deb_deps
+    post-cache:
+      - export GOOS=linux
+      - export GOARCH=amd64
+      - export FIPS=true
+      - export NIGHTLY=true
+      - make cloudflared-deb
   build-deb-arm64:
     build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - build-essential
-      - fakeroot
-      - rubygem-fpm
+    builddeps: *build_deb_deps
     post-cache:
       - export GOOS=linux
       - export GOARCH=arm64
@@ -50,143 +98,14 @@ stretch: &stretch
       - export GOARCH=amd64
       - export FIPS=true
       - make publish-deb
-  release-linux-amd64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go_fips
-      - build-essential
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - export FIPS=true
-      - make release
-  github-release-linux-amd64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go_fips
-      - build-essential
-      - python3-setuptools
-      - python3-pip
-    pre-cache: &install_pygithub
-      - pip3 install pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - export FIPS=true
-      - make github-release
-  release-linux-armv6:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - crossbuild-essential-armhf
-      - gcc-arm-linux-gnueabihf
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=arm
-      - export CC=arm-linux-gnueabihf-gcc
-      - make release
-  github-release-linux-armv6:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - crossbuild-essential-armhf
-      - gcc-arm-linux-gnueabihf
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=arm
-      - export CC=arm-linux-gnueabihf-gcc
-      - make github-release
-  release-linux-386:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-multilib
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=386
-      - make release
-  github-release-linux-386:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-multilib
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=386
-      - make github-release
-  release-windows-amd64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-mingw-w64
-    post-cache:
-      - export GOOS=windows
-      - export GOARCH=amd64
-      - export CC=x86_64-w64-mingw32-gcc
-      - make release
-  github-release-windows-amd64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-mingw-w64
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=windows
-      - export GOARCH=amd64
-      - export CC=x86_64-w64-mingw32-gcc
-      - make github-release
-  release-windows-386:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-mingw-w64
-    post-cache:
-      - export GOOS=windows
-      - export GOARCH=386
-      - export CC=i686-w64-mingw32-gcc-win32
-      - make release
-  github-release-windows-386:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - gcc-mingw-w64
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=windows
-      - export GOARCH=386
-      - export CC=i686-w64-mingw32-gcc-win32
-      - make github-release
-  github-release-linux-arm64:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - crossbuild-essential-armhf
-      - g++-aarch64-linux-gnu
-      - python3-setuptools
-      - python3-pip
-    pre-cache: *install_pygithub
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=arm64
-      - export CC=aarch64-linux-gnu-gcc
-      - make github-release
   github-release-macos-amd64:
     build_dir: *build_dir
     builddeps:
       - *pinned_go
       - python3-setuptools
       - python3-pip
-    pre-cache: *install_pygithub
+    pre-cache: &install_pygithub
+      - pip3 install pygithub
     post-cache:
       - make github-mac-upload
   test:

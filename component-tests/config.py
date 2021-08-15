@@ -3,7 +3,7 @@ import copy
 
 from dataclasses import dataclass, InitVar
 
-from constants import METRICS_PORT
+from constants import METRICS_PORT, PROXY_DNS_PORT
 
 # frozen=True raises exception when assigning to fields. This emulates immutability
 
@@ -93,3 +93,12 @@ class ClassicTunnelConfig(ClassicTunnelBaseConfig):
 
     def get_url(self):
         return "https://" + self.hostname
+
+
+@dataclass(frozen=True)
+class ProxyDnsConfig(BaseConfig):
+    full_config = {
+        "port": PROXY_DNS_PORT,
+        "no-autoupdate": True,
+    }
+

@@ -286,6 +286,7 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		&connection.NamedTunnelConfig{Credentials: credentials},
 		sc.log,
 		sc.isUIEnabled,
+		"",
 	)
 }
 

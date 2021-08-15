@@ -15,3 +15,4 @@ cscope.*
 *-session.log
 ssh_server_tests/.env
 /.cover
+built_artifacts/

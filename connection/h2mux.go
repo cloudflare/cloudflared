@@ -33,6 +33,8 @@ type h2muxConnection struct {
 	gracefulShutdownC <-chan struct{}
 	stoppedGracefully bool
 
+	log *zerolog.Logger
+
 	// newRPCClientFunc allows us to mock RPCs during testing
 	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 }
@@ -222,12 +224,11 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		sourceConnectionType = TypeWebsocket
 	}
 
-	err := h.config.OriginProxy.Proxy(respWriter, req, sourceConnectionType)
+	err := h.config.OriginProxy.ProxyHTTP(respWriter, req, sourceConnectionType == TypeWebsocket)
 	if err != nil {
 		respWriter.WriteErrorResponse()
-		return err
 	}
-	return nil
+	return err
 }
 
 func (h *h2muxConnection) newRequest(stream *h2mux.MuxedStream) (*http.Request, error) {

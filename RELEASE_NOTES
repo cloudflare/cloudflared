@@ -1,3 +1,48 @@
+2021.8.2
+- 2021-08-03 TUN-4597: Added HTTPProxy for QUIC
+- 2021-08-04 TUN-4795: Remove Equinox releases
+- 2021-08-09 TUN-4911: Append Environment variable to Path instead of overwriting it
+
+2021.8.1
+- 2021-08-02 TUN-4855: Added CHANGES.md for release 2021.8.0
+- 2021-08-03 TUN-4597: Add a QUIC server skeleton
+- 2021-08-03 TUN-4873: Disable unix domain socket test for windows unit tests
+- 2021-08-04 TUN-4875: Added amd64-linux builds back to releases
+
+2021.8.0
+- 2021-07-30 TUN-4847: Allow to list tunnels by prefix name or exclusion prefix name
+- 2021-07-30 TUN-4772: Release built executables with packages
+- 2021-07-30 TUN-4851: Component tests to smoke test that Proxy DNS and Tunnel are only run when expected
+- 2021-07-28 TUN-4811: Publish quick tunnels' hostname in /metrics under `userHostname` for backwards-compatibility
+- 2021-07-29 TUN-4832: Prevent tunnel from running accidentally when only proxy-dns should run
+- 2021-07-28 TUN-4819: Tolerate protocol TXT record lookup failing
+
+2021.7.4
+- 2021-07-28 TUN-4814: Revert "TUN-4699: Make quick tunnels the default in cloudflared"
+- 2021-07-28 TUN-4812: Disable CGO for cloudflared builds
+
+2021.7.3
+- 2021-07-27 TUN-4799: Build deb, msi and rpm packages with fips
+
+2021.7.2
+- 2021-07-27 Fixed a syntax error with python logging.
+
+2021.7.1
+- 2021-07-21 TUN-4755: Add a windows msi release option to Make
+- 2021-07-22 TUN-4761: Added a build-all-packages target to cfsetup
+- 2021-07-26 TUN-4771: Upload deb, rpm and msi packages to github
+- 2021-07-14 TUN-4714: Name nightly package cloudflared-nightly to avoid apt conflict
+- 2021-07-16 TUN-4701: Split Proxy into ProxyHTTP and ProxyTCP
+- 2021-07-08 TUN-4596: Add QUIC application protocol for QUIC stream handshake
+- 2021-07-09 TUN-4699: Make quick tunnels the default in cloudflared
+
+2021.7.0
+- 2021-07-01 TUN-4626: Proxy non-stream based origin websockets with http Roundtrip.
+- 2021-07-01 TUN-4655: ingress.StreamBasedProxy.EstablishConnection takes dest input
+- 2021-07-09 TUN-4698: Add cloudflared metrics endpoint to serve quick tunnel hostname
+- 2021-06-21 TUN-4521: Modify cloudflared to use zoneless-tunnels-worker for free tunnels
+- 2021-04-05 AUTH-3475: Updated GetAppInfo error message
+
 2021.6.0
 - 2021-06-21 TUN-4571: Changelog for 2021.6.0
 - 2021-06-18 TUN-4571: Fix proxying to unix sockets when using HTTP2 transport to Cloudflare Edge

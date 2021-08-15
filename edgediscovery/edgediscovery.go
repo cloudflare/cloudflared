@@ -2,10 +2,10 @@ package edgediscovery
 
 import (
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
@@ -54,7 +54,7 @@ func StaticEdge(log *zerolog.Logger, hostnames []string) (*Edge, error) {
 }
 
 // MockEdge creates a Cloudflare Edge from arbitrary TCP addresses. Used for testing.
-func MockEdge(log *zerolog.Logger, addrs []*net.TCPAddr) *Edge {
+func MockEdge(log *zerolog.Logger, addrs []*allregions.EdgeAddr) *Edge {
 	regions := allregions.NewNoResolve(addrs)
 	return &Edge{
 		log:     log,
@@ -67,7 +67,7 @@ func MockEdge(log *zerolog.Logger, addrs []*net.TCPAddr) *Edge {
 // ------------------------------------
 
 // GetAddrForRPC gives this connection an edge Addr.
-func (ed *Edge) GetAddrForRPC() (*net.TCPAddr, error) {
+func (ed *Edge) GetAddrForRPC() (*allregions.EdgeAddr, error) {
 	ed.Lock()
 	defer ed.Unlock()
 	addr := ed.regions.GetAnyAddress()
@@ -78,9 +78,8 @@ func (ed *Edge) GetAddrForRPC() (*net.TCPAddr, error) {
 }
 
 // GetAddr gives this proxy connection an edge Addr. Prefer Addrs this connection has already used.
-func (ed *Edge) GetAddr(connIndex int) (*net.TCPAddr, error) {
+func (ed *Edge) GetAddr(connIndex int) (*allregions.EdgeAddr, error) {
 	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
-
 	ed.Lock()
 	defer ed.Unlock()
 
@@ -96,14 +95,12 @@ func (ed *Edge) GetAddr(connIndex int) (*net.TCPAddr, error) {
 		log.Debug().Msg("edgediscovery - GetAddr: No addresses left to give proxy connection")
 		return nil, errNoAddressesLeft
 	}
-	log.Debug().Str(LogFieldAddress, addr.String()).Msg("edgediscovery - GetAddr: Giving connection its new address")
+	log.Debug().Msg("edgediscovery - GetAddr: Giving connection its new address")
 	return addr, nil
 }
 
 // GetDifferentAddr gives back the proxy connection's edge Addr and uses a new one.
-func (ed *Edge) GetDifferentAddr(connIndex int) (*net.TCPAddr, error) {
-	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
-
+func (ed *Edge) GetDifferentAddr(connIndex int) (*allregions.EdgeAddr, error) {
 	ed.Lock()
 	defer ed.Unlock()
 
@@ -117,7 +114,7 @@ func (ed *Edge) GetDifferentAddr(connIndex int) (*net.TCPAddr, error) {
 		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	log.Debug().Str(LogFieldAddress, addr.String()).Msg("edgediscovery - GetDifferentAddr: Giving connection its new address")
+	log.Debug().Msg("edgediscovery - GetDifferentAddr: Giving connection its new address")
 	return addr, nil
 }
 
@@ -130,7 +127,7 @@ func (ed *Edge) AvailableAddrs() int {
 
 // GiveBack the address so that other connections can use it.
 // Returns true if the address is in this edge.
-func (ed *Edge) GiveBack(addr *net.TCPAddr) bool {
+func (ed *Edge) GiveBack(addr *allregions.EdgeAddr) bool {
 	ed.Lock()
 	defer ed.Unlock()
 	ed.log.Debug().Msg("edgediscovery - GiveBack: Address now unused")

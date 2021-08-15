@@ -1,11 +1,16 @@
 package allregions
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
+
+func (ea *EdgeAddr) String() string {
+	return fmt.Sprintf("%s-%s", ea.TCP, ea.UDP)
+}
 
 func TestEdgeDiscovery(t *testing.T) {
 	mockAddrs := newMockAddrs(19, 2, 5)

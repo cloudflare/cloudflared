@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import test_logging
+from conftest import CfdModes
 from util import start_cloudflared, wait_tunnel_ready
 
 
@@ -34,7 +35,7 @@ class TestServiceMode:
             "hello-world": True,
             "logfile": str(log_file),
         }
-        config = component_tests_config(additional_config=additional_config, named_tunnel=False)
+        config = component_tests_config(additional_config=additional_config, cfd_mode=CfdModes.CLASSIC)
 
         def assert_log_file():
             test_logging.assert_log_in_file(log_file)
@@ -52,7 +53,7 @@ class TestServiceMode:
             "loglevel": "debug",
             "log-directory": str(log_dir),
         }
-        config = component_tests_config(additional_config=additional_config, named_tunnel=False)
+        config = component_tests_config(additional_config=additional_config, cfd_mode=CfdModes.CLASSIC)
 
         def assert_rotating_log():
             test_logging.assert_log_to_dir(config, log_dir)

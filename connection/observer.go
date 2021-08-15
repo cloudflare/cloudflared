@@ -111,6 +111,13 @@ func (o *Observer) sendConnectedEvent(connIndex uint8, location string) {
 
 func (o *Observer) sendURL(url string) {
 	o.sendEvent(Event{EventType: SetURL, URL: url})
+
+	if !strings.HasPrefix(url, "https://") {
+		// We add https:// in the prefix for backwards compatibility as we used to do that with the old free tunnels
+		// and some tools (like `wrangler tail`) are regexp-ing for that specifically.
+		url = "https://" + url
+	}
+	o.metrics.userHostnamesCounts.WithLabelValues(url).Inc()
 }
 
 func (o *Observer) SendReconnect(connIndex uint8) {

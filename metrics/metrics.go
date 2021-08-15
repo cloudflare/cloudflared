@@ -22,7 +22,7 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func newMetricsHandler(readyServer *ReadyServer) *mux.Router {
+func newMetricsHandler(readyServer *ReadyServer, quickTunnelHostname string) *mux.Router {
 	router := mux.NewRouter()
 	router.PathPrefix("/debug/").Handler(http.DefaultServeMux)
 
@@ -33,6 +33,9 @@ func newMetricsHandler(readyServer *ReadyServer) *mux.Router {
 	if readyServer != nil {
 		router.Handle("/ready", readyServer)
 	}
+	router.HandleFunc("/quicktunnel", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"hostname":"%s"}`, quickTunnelHostname)
+	})
 
 	return router
 }
@@ -41,6 +44,7 @@ func ServeMetrics(
 	l net.Listener,
 	shutdownC <-chan struct{},
 	readyServer *ReadyServer,
+	quickTunnelHostname string,
 	log *zerolog.Logger,
 ) (err error) {
 	var wg sync.WaitGroup
@@ -48,7 +52,7 @@ func ServeMetrics(
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
 	// profile CPU usage depends on WriteTimeout
-	h := newMetricsHandler(readyServer)
+	h := newMetricsHandler(readyServer, quickTunnelHostname)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,

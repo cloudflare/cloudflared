@@ -6,6 +6,7 @@ from time import sleep
 import pytest
 from flaky import flaky
 
+from conftest import CfdModes
 from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected
 
 
@@ -27,8 +28,7 @@ class TestReconnect:
     def test_classic_reconnect(self, tmp_path, component_tests_config):
         extra_config = copy.copy(self.extra_config)
         extra_config["hello-world"] = True
-        config = component_tests_config(
-            additional_config=extra_config, named_tunnel=False)
+        config = component_tests_config(additional_config=extra_config, cfd_mode=CfdModes.CLASSIC)
         with start_cloudflared(tmp_path, config, cfd_args=[], new_process=True, allow_input=True, capture_output=False) as cloudflared:
             self.assert_reconnect(config, cloudflared, 1)
 

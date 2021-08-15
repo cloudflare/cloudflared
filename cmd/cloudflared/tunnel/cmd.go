@@ -165,7 +165,7 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
 	// For now, default to legacy setup unless quick-service is specified
-	if c.String("hostname") == "" && c.String("quick-service") != "" {
+	if !dnsProxyStandAlone(c, nil) && c.String("hostname") == "" && c.String("quick-service") != "" {
 		return RunQuickTunnel(sc)
 	}
 
@@ -206,7 +206,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled)
+	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled, "")
 }
 
 func routeFromFlag(c *cli.Context) (route tunnelstore.Route, ok bool) {
@@ -225,6 +225,7 @@ func StartServer(
 	namedTunnel *connection.NamedTunnelConfig,
 	log *zerolog.Logger,
 	isUIEnabled bool,
+	quickTunnelHostname string,
 ) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
@@ -341,7 +342,7 @@ func StartServer(
 		defer wg.Done()
 		readinessServer := metrics.NewReadyServer(log)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, log)
+		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelHostname, log)
 	}()
 
 	if err := ingressRules.StartOrigins(&wg, log, ctx.Done(), errC); err != nil {

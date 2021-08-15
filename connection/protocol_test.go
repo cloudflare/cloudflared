@@ -158,7 +158,8 @@ func TestNewProtocolSelector(t *testing.T) {
 			protocol:          "unknown",
 			fetchFunc:         mockFetcherWithError(),
 			namedTunnelConfig: testNamedTunnelConfig,
-			wantErr:           true,
+			expectedProtocol:  HTTP2,
+			wantErr:           false,
 		},
 	}
 

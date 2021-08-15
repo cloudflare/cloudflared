@@ -1,29 +1,27 @@
 package allregions
 
-import (
-	"net"
-)
-
 // Region contains cloudflared edge addresses. The edge is partitioned into several regions for
 // redundancy purposes.
 type Region struct {
-	connFor map[*net.TCPAddr]UsedBy
+	connFor map[*EdgeAddr]UsedBy
 }
 
 // NewRegion creates a region with the given addresses, which are all unused.
-func NewRegion(addrs []*net.TCPAddr) Region {
+func NewRegion(addrs []*EdgeAddr) Region {
 	// The zero value of UsedBy is Unused(), so we can just initialize the map's values with their
 	// zero values.
-	m := make(map[*net.TCPAddr]UsedBy)
+	connFor := make(map[*EdgeAddr]UsedBy)
 	for _, addr := range addrs {
-		m[addr] = Unused()
+		connFor[addr] = Unused()
 	}
-	return Region{connFor: m}
+	return Region{
+		connFor: connFor,
+	}
 }
 
 // AddrUsedBy finds the address used by the given connection in this region.
 // Returns nil if the connection isn't using any IP.
-func (r *Region) AddrUsedBy(connID int) *net.TCPAddr {
+func (r *Region) AddrUsedBy(connID int) *EdgeAddr {
 	for addr, used := range r.connFor {
 		if used.Used && used.ConnID == connID {
 			return addr
@@ -45,7 +43,7 @@ func (r Region) AvailableAddrs() int {
 
 // GetUnusedIP returns a random unused address in this region.
 // Returns nil if all addresses are in use.
-func (r Region) GetUnusedIP(excluding *net.TCPAddr) *net.TCPAddr {
+func (r Region) GetUnusedIP(excluding *EdgeAddr) *EdgeAddr {
 	for addr, usedby := range r.connFor {
 		if !usedby.Used && addr != excluding {
 			return addr
@@ -55,7 +53,7 @@ func (r Region) GetUnusedIP(excluding *net.TCPAddr) *net.TCPAddr {
 }
 
 // Use the address, assigning it to a proxy connection.
-func (r Region) Use(addr *net.TCPAddr, connID int) {
+func (r Region) Use(addr *EdgeAddr, connID int) {
 	if addr == nil {
 		return
 	}
@@ -63,7 +61,7 @@ func (r Region) Use(addr *net.TCPAddr, connID int) {
 }
 
 // GetAnyAddress returns an arbitrary address from the region.
-func (r Region) GetAnyAddress() *net.TCPAddr {
+func (r Region) GetAnyAddress() *EdgeAddr {
 	for addr := range r.connFor {
 		return addr
 	}
@@ -72,7 +70,7 @@ func (r Region) GetAnyAddress() *net.TCPAddr {
 
 // GiveBack the address, ensuring it is no longer assigned to an IP.
 // Returns true if the address is in this region.
-func (r Region) GiveBack(addr *net.TCPAddr) (ok bool) {
+func (r Region) GiveBack(addr *EdgeAddr) (ok bool) {
 	if _, ok := r.connFor[addr]; !ok {
 		return false
 	}

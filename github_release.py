@@ -10,6 +10,9 @@ import shutil
 import hashlib
 import requests
 import tarfile
+from os import listdir
+from os.path import isfile, join
+import re
 
 from github import Github, GithubException, UnknownObjectException
 
@@ -135,7 +138,7 @@ def parse_args():
         logging.error("Missing asset path")
         is_valid = False
 
-    if not args.name:
+    if not args.name and not os.path.isdir(args.path):
         logging.error("Missing asset name")
         is_valid = False
 
@@ -161,6 +164,38 @@ def parse_args():
     parser.print_usage()
     exit(1)
 
+def upload_asset(release, filepath, filename, release_version, kv_account_id, namespace_id, kv_api_token):
+    logging.info("Uploading asset: %s", filename)
+    release.upload_asset(filepath, name=filename)
+
+    # check and extract if the file is a tar and gzipped file (as is the case with the macos builds)
+    binary_path = filepath
+    if binary_path.endswith("tgz"):
+        try:
+            shutil.rmtree('cfd')
+        except OSError:
+            pass
+        zipfile = tarfile.open(binary_path, "r:gz")
+        zipfile.extractall('cfd') # specify which folder to extract to
+        zipfile.close()
+
+        binary_path = os.path.join(os.getcwd(), 'cfd', 'cloudflared')
+
+    # send the sha256 (the checksum) to workers kv
+    pkg_hash = get_sha256(binary_path)
+    send_hash(pkg_hash, filename, release_version, kv_account_id, namespace_id, kv_api_token)
+
+    # create the artifacts directory if it doesn't exist
+    artifact_path = os.path.join(os.getcwd(), 'artifacts')
+    if not os.path.isdir(artifact_path):
+        os.mkdir(artifact_path)
+
+    # copy the binary to the path
+    copy_path = os.path.join(artifact_path, filename)
+    try:
+        shutil.copy(filepath, copy_path)
+    except shutil.SameFileError:
+        pass # the macOS release copy fails with being the same file (already in the artifacts directory)
 
 def main():
     """ Attempts to upload Asset to Github Release. Creates Release if it doesnt exist """
@@ -174,40 +209,18 @@ def main():
             logging.info("Skipping asset upload because of dry-run")
             return
 
-        release.upload_asset(args.path, name=args.name)
-
-        # check and extract if the file is a tar and gzipped file (as is the case with the macos builds)
-        binary_path = args.path
-        if binary_path.endswith("tgz"):
-            try:
-                shutil.rmtree('cfd') 
-            except OSError as e:
-                pass
-            zipfile = tarfile.open(binary_path, "r:gz")
-            zipfile.extractall('cfd') # specify which folder to extract to
-            zipfile.close()
-
-            binary_path = os.path.join(os.getcwd(), 'cfd', 'cloudflared') 
-
-        # send the sha256 (the checksum) to workers kv
-        pkg_hash = get_sha256(binary_path)
-        send_hash(pkg_hash, args.name, args.release_version, args.kv_account_id, args.namespace_id, args.kv_api_token)
-
-        # create the artifacts directory if it doesn't exist 
-        artifact_path = os.path.join(os.getcwd(), 'artifacts') 
-        if not os.path.isdir(artifact_path):
-            os.mkdir(artifact_path)
-
-        # copy the binary to the path
-        copy_path = os.path.join(artifact_path, args.name)
-        try:
-            shutil.copy(args.path, copy_path)
-        except shutil.SameFileError:
-            pass # the macOS release copy fails with being the same file (already in the artifacts directory). Catching to ignore.
+        if os.path.isdir(args.path):
+            onlyfiles = [f for f in listdir(args.path) if isfile(join(args.path, f))]
+            for filename in onlyfiles:
+                binary_path = os.path.join(args.path, filename)
+                upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
+                args.kv_api_token)
+        else:
+            upload_asset(release, args.path, args.name, args.release_version, args.kv_account_id, args.namespace_id,
+                args.kv_api_token)
 
     except Exception as e:
         logging.exception(e)
         exit(1)
-
 
 main()

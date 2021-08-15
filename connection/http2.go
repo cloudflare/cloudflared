@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
@@ -26,7 +27,9 @@ const (
 
 var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
 
-type http2Connection struct {
+// HTTP2Connection represents a net.Conn that uses HTTP2 frames to proxy traffic from the edge to cloudflared on the
+// origin.
+type HTTP2Connection struct {
 	conn         net.Conn
 	server       *http2.Server
 	config       *Config
@@ -38,6 +41,7 @@ type http2Connection struct {
 	// newRPCClientFunc allows us to mock RPCs during testing
 	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 
+	log               *zerolog.Logger
 	activeRequestsWG  sync.WaitGroup
 	connectedFuse     ConnectedFuse
 	gracefulShutdownC <-chan struct{}
@@ -45,6 +49,7 @@ type http2Connection struct {
 	controlStreamErr  error // result of running control stream handler
 }
 
+// NewHTTP2Connection returns a new instance of HTTP2Connection.
 func NewHTTP2Connection(
 	conn net.Conn,
 	config *Config,
@@ -53,9 +58,10 @@ func NewHTTP2Connection(
 	observer *Observer,
 	connIndex uint8,
 	connectedFuse ConnectedFuse,
+	log *zerolog.Logger,
 	gracefulShutdownC <-chan struct{},
-) *http2Connection {
-	return &http2Connection{
+) *HTTP2Connection {
+	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
 			MaxConcurrentStreams: math.MaxUint32,
@@ -68,11 +74,13 @@ func NewHTTP2Connection(
 		connIndex:         connIndex,
 		newRPCClientFunc:  newRegistrationRPCClient,
 		connectedFuse:     connectedFuse,
+		log:               log,
 		gracefulShutdownC: gracefulShutdownC,
 	}
 }
 
-func (c *http2Connection) Serve(ctx context.Context) error {
+// Serve serves an HTTP2 server that the edge can talk to.
+func (c *HTTP2Connection) Serve(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		c.close()
@@ -93,7 +101,7 @@ func (c *http2Connection) Serve(ctx context.Context) error {
 	}
 }
 
-func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.activeRequestsWG.Add(1)
 	defer c.activeRequestsWG.Done()
 
@@ -106,23 +114,47 @@ func (c *http2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var proxyErr error
 	switch connType {
 	case TypeControlStream:
-		proxyErr = c.serveControlStream(r.Context(), respWriter)
-		c.controlStreamErr = proxyErr
-	case TypeWebsocket:
+		if err := c.serveControlStream(r.Context(), respWriter); err != nil {
+			c.controlStreamErr = err
+			c.log.Error().Err(err)
+			respWriter.WriteErrorResponse()
+		}
+
+	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
-		proxyErr = c.config.OriginProxy.Proxy(respWriter, r, TypeWebsocket)
+		if err := c.config.OriginProxy.ProxyHTTP(respWriter, r, connType == TypeWebsocket); err != nil {
+			err := fmt.Errorf("Failed to proxy HTTP: %w", err)
+			c.log.Error().Err(err)
+			respWriter.WriteErrorResponse()
+		}
+
+	case TypeTCP:
+		host, err := getRequestHost(r)
+		if err != nil {
+			err := fmt.Errorf(`cloudflared recieved a warp-routing request with an empty host value: %w`, err)
+			c.log.Error().Err(err)
+			respWriter.WriteErrorResponse()
+		}
+
+		rws := NewHTTPResponseReadWriterAcker(respWriter, r)
+		if err := c.config.OriginProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
+			Dest:    host,
+			CFRay:   FindCfRayHeader(r),
+			LBProbe: IsLBProbeRequest(r),
+		}); err != nil {
+			respWriter.WriteErrorResponse()
+		}
+
 	default:
-		proxyErr = c.config.OriginProxy.Proxy(respWriter, r, connType)
-	}
-	if proxyErr != nil {
+		err := fmt.Errorf("Received unknown connection type: %s", connType)
+		c.log.Error().Err(err)
 		respWriter.WriteErrorResponse()
 	}
 }
 
-func (c *http2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
+func (c *HTTP2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
 	rpcClient := c.newRPCClientFunc(ctx, respWriter, c.observer.log)
 	defer rpcClient.Close()
 
@@ -145,7 +177,7 @@ func (c *http2Connection) serveControlStream(ctx context.Context, respWriter *ht
 	return nil
 }
 
-func (c *http2Connection) close() {
+func (c *HTTP2Connection) close() {
 	// Wait for all serve HTTP handlers to return
 	c.activeRequestsWG.Wait()
 	c.conn.Close()
@@ -286,4 +318,15 @@ func IsTCPStream(r *http.Request) bool {
 
 func stripWebsocketUpgradeHeader(r *http.Request) {
 	r.Header.Del(InternalUpgradeHeader)
+}
+
+// getRequestHost returns the host of the http.Request.
+func getRequestHost(r *http.Request) (string, error) {
+	if r.Host != "" {
+		return r.Host, nil
+	}
+	if r.URL != nil {
+		return r.URL.Host, nil
+	}
+	return "", errors.New("host not set in incoming request")
 }

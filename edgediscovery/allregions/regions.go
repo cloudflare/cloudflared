@@ -2,7 +2,6 @@ package allregions
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/rs/zerolog"
 )
@@ -20,16 +19,16 @@ type Regions struct {
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
 func ResolveEdge(log *zerolog.Logger) (*Regions, error) {
-	addrLists, err := edgeDiscovery(log)
+	edgeAddrs, err := edgeDiscovery(log)
 	if err != nil {
 		return nil, err
 	}
-	if len(addrLists) < 2 {
-		return nil, fmt.Errorf("expected at least 2 Cloudflare Regions regions, but SRV only returned %v", len(addrLists))
+	if len(edgeAddrs) < 2 {
+		return nil, fmt.Errorf("expected at least 2 Cloudflare Regions regions, but SRV only returned %v", len(edgeAddrs))
 	}
 	return &Regions{
-		region1: NewRegion(addrLists[0]),
-		region2: NewRegion(addrLists[1]),
+		region1: NewRegion(edgeAddrs[0]),
+		region2: NewRegion(edgeAddrs[1]),
 	}, nil
 }
 
@@ -45,9 +44,9 @@ func StaticEdge(hostnames []string, log *zerolog.Logger) (*Regions, error) {
 
 // NewNoResolve doesn't resolve the edge. Instead it just uses the given addresses.
 // You probably only need this for testing.
-func NewNoResolve(addrs []*net.TCPAddr) *Regions {
-	region1 := make([]*net.TCPAddr, 0)
-	region2 := make([]*net.TCPAddr, 0)
+func NewNoResolve(addrs []*EdgeAddr) *Regions {
+	region1 := make([]*EdgeAddr, 0)
+	region2 := make([]*EdgeAddr, 0)
 	for i, v := range addrs {
 		if i%2 == 0 {
 			region1 = append(region1, v)
@@ -67,7 +66,7 @@ func NewNoResolve(addrs []*net.TCPAddr) *Regions {
 // ------------------------------------
 
 // GetAnyAddress returns an arbitrary address from the larger region.
-func (rs *Regions) GetAnyAddress() *net.TCPAddr {
+func (rs *Regions) GetAnyAddress() *EdgeAddr {
 	if addr := rs.region1.GetAnyAddress(); addr != nil {
 		return addr
 	}
@@ -76,7 +75,7 @@ func (rs *Regions) GetAnyAddress() *net.TCPAddr {
 
 // AddrUsedBy finds the address used by the given connection.
 // Returns nil if the connection isn't using an address.
-func (rs *Regions) AddrUsedBy(connID int) *net.TCPAddr {
+func (rs *Regions) AddrUsedBy(connID int) *EdgeAddr {
 	if addr := rs.region1.AddrUsedBy(connID); addr != nil {
 		return addr
 	}
@@ -85,7 +84,7 @@ func (rs *Regions) AddrUsedBy(connID int) *net.TCPAddr {
 
 // GetUnusedAddr gets an unused addr from the edge, excluding the given addr. Prefer to use addresses
 // evenly across both regions.
-func (rs *Regions) GetUnusedAddr(excluding *net.TCPAddr, connID int) *net.TCPAddr {
+func (rs *Regions) GetUnusedAddr(excluding *EdgeAddr, connID int) *EdgeAddr {
 	if rs.region1.AvailableAddrs() > rs.region2.AvailableAddrs() {
 		return getAddrs(excluding, connID, &rs.region1, &rs.region2)
 	}
@@ -95,7 +94,7 @@ func (rs *Regions) GetUnusedAddr(excluding *net.TCPAddr, connID int) *net.TCPAdd
 
 // getAddrs tries to grab address form `first` region, then `second` region
 // this is an unrolled loop over 2 element array
-func getAddrs(excluding *net.TCPAddr, connID int, first *Region, second *Region) *net.TCPAddr {
+func getAddrs(excluding *EdgeAddr, connID int, first *Region, second *Region) *EdgeAddr {
 	addr := first.GetUnusedIP(excluding)
 	if addr != nil {
 		first.Use(addr, connID)
@@ -117,7 +116,7 @@ func (rs *Regions) AvailableAddrs() int {
 
 // GiveBack the address so that other connections can use it.
 // Returns true if the address is in this edge.
-func (rs *Regions) GiveBack(addr *net.TCPAddr) bool {
+func (rs *Regions) GiveBack(addr *EdgeAddr) bool {
 	if found := rs.region1.GiveBack(addr); found {
 		return found
 	}

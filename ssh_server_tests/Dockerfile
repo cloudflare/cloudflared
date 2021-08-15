@@ -1,7 +1,7 @@
 FROM python:3-buster
 
-RUN wget https://bin.equinox.io/c/VdrWdbjqyF/cloudflared-stable-linux-amd64.deb \
-  && dpkg -i cloudflared-stable-linux-amd64.deb
+RUN wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
+  && dpkg -i cloudflared-linux-amd64.deb
 
 RUN pip install pexpect
 

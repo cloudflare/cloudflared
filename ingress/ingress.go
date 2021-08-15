@@ -103,7 +103,7 @@ func NewWarpRoutingService() *WarpRoutingService {
 }
 
 // Get a single origin service from the CLI/config.
-func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (originService, error) {
+func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginService, error) {
 	if c.IsSet("hello-world") {
 		return new(helloWorld), nil
 	}
@@ -167,7 +167,7 @@ func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestCon
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
 		cfg := setConfig(defaults, r.OriginRequest)
-		var service originService
+		var service OriginService
 
 		if prefix := "unix:"; strings.HasPrefix(r.Service, prefix) {
 			// No validation necessary for unix socket filepath services
