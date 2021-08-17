@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
@@ -28,9 +29,11 @@ const (
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session   quic.Session
-	logger    zerolog.Logger
-	httpProxy OriginProxy
+	session           quic.Session
+	logger            *zerolog.Logger
+	httpProxy         OriginProxy
+	gracefulShutdownC <-chan struct{}
+	stoppedGracefully bool
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -40,19 +43,26 @@ func NewQUICConnection(
 	edgeAddr net.Addr,
 	tlsConfig *tls.Config,
 	httpProxy OriginProxy,
-	logger zerolog.Logger,
+	connOptions *tunnelpogs.ConnectionOptions,
+	controlStreamHandler ControlStreamHandler,
+	observer *Observer,
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to dial to edge")
 	}
 
-	//TODO: RegisterConnectionRPC here.
+	registrationStream, err := session.OpenStream()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open a registration stream")
+	}
+
+	go controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions)
 
 	return &QUICConnection{
 		session:   session,
 		httpProxy: httpProxy,
-		logger:    logger,
+		logger:    observer.log,
 	}, nil
 }
 
@@ -96,9 +106,24 @@ func (q *QUICConnection) handleStream(stream quic.Stream) error {
 		w := newHTTPResponseAdapter(stream)
 		return q.httpProxy.ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
-		return errors.New("not implemented")
+		// TODO: This is a placeholder for testing completion. TUN-4865 will add proper TCP support.
+		rwa := &streamReadWriteAcker{
+			ReadWriter: stream,
+		}
+		return q.httpProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
 	}
 	return nil
+}
+
+// streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
+// the client.
+type streamReadWriteAcker struct {
+	io.ReadWriter
+}
+
+// AckConnection acks response back to the proxy.
+func (s *streamReadWriteAcker) AckConnection() error {
+	return quicpogs.WriteConnectResponseData(s, nil)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.

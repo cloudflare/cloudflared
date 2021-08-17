@@ -16,6 +16,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gobwas/ws/wsutil"
 	"github.com/lucas-clemente/quic-go"
@@ -25,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // TestQUICServer tests if a quic server accepts and responds to a quic client with the acceptance protocol.
@@ -134,6 +136,13 @@ func TestQUICServer(t *testing.T) {
 			message:          wsBuf.Bytes(),
 			expectedResponse: []byte{0x81, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
 		},
+		{
+			desc:             "test tcp proxy",
+			connectionType:   quicpogs.ConnectionTypeTCP,
+			metadata:         []quicpogs.Metadata{},
+			message:          []byte("Here is some tcp data"),
+			expectedResponse: []byte("Here is some tcp data"),
+		},
 	}
 
 	for _, test := range tests {
@@ -149,11 +158,43 @@ func TestQUICServer(t *testing.T) {
 				)
 			}()
 
-			qC, err := NewQUICConnection(ctx, quicConfig, udpListener.LocalAddr(), tlsClientConfig, originProxy, log)
+			rpcClientFactory := mockRPCClientFactory{
+				registered:   make(chan struct{}),
+				unregistered: make(chan struct{}),
+			}
+
+			obs := NewObserver(&log, &log, false)
+			controlStream := NewControlStream(
+				obs,
+				mockConnectedFuse{},
+				&NamedTunnelConfig{},
+				1,
+				rpcClientFactory.newMockRPCClient,
+				nil,
+				1*time.Second,
+			)
+
+			qC, err := NewQUICConnection(
+				ctx,
+				quicConfig,
+				udpListener.LocalAddr(),
+				tlsClientConfig,
+				originProxy,
+				&pogs.ConnectionOptions{},
+				controlStream,
+				NewObserver(&log, &log, false),
+			)
 			require.NoError(t, err)
 			go qC.Serve(ctx)
 
 			wg.Wait()
+
+			select {
+			case <-rpcClientFactory.registered:
+				break //ok
+			case <-time.Tick(time.Second):
+				t.Fatal("timeout out waiting for registration")
+			}
 			cancel()
 		})
 	}
@@ -174,7 +215,7 @@ func quicServer(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	earlyListener, err := quic.ListenEarly(conn, tlsConf, config)
+	earlyListener, err := quic.Listen(conn, tlsConf, config)
 	require.NoError(t, err)
 
 	session, err := earlyListener.Accept(ctx)
@@ -183,7 +224,6 @@ func quicServer(
 	stream, err := session.OpenStreamSync(context.Background())
 	require.NoError(t, err)
 
-	// Start off ALPN
 	err = quicpogs.WriteConnectRequestData(stream, dest, connectionType, metadata...)
 	require.NoError(t, err)
 
@@ -264,5 +304,7 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Reque
 }
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
+	rwa.AckConnection()
+	io.Copy(rwa, rwa)
 	return nil
 }

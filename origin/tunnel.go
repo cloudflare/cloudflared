@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
@@ -271,14 +272,37 @@ func ServeTunnel(
 
 	defer config.Observer.SendDisconnect(connIndex)
 
+	connectedFuse := &connectedFuse{
+		fuse:    fuse,
+		backoff: backoff,
+	}
+
+	controlStream := connection.NewControlStream(
+		config.Observer,
+		connectedFuse,
+		config.NamedTunnel,
+		connIndex,
+		nil,
+		gracefulShutdownC,
+		config.ConnectionConfig.GracePeriod,
+	)
+
+	if protocol == connection.QUIC {
+		connOptions := config.ConnectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
+		return ServeQUIC(ctx,
+			addr.UDP,
+			config,
+			connOptions,
+			controlStream,
+			connectedFuse,
+			reconnectCh,
+			gracefulShutdownC)
+	}
+
 	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
 	if err != nil {
 		connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
 		return err, true
-	}
-	connectedFuse := &connectedFuse{
-		fuse:    fuse,
-		backoff: backoff,
 	}
 
 	if protocol == connection.HTTP2 {
@@ -289,10 +313,10 @@ func ServeTunnel(
 			config,
 			edgeConn,
 			connOptions,
+			controlStream,
 			connIndex,
-			connectedFuse,
-			reconnectCh,
 			gracefulShutdownC,
+			reconnectCh,
 		)
 	} else {
 		err = ServeH2mux(
@@ -403,22 +427,20 @@ func ServeHTTP2(
 	config *TunnelConfig,
 	tlsServerConn net.Conn,
 	connOptions *tunnelpogs.ConnectionOptions,
+	controlStreamHandler connection.ControlStreamHandler,
 	connIndex uint8,
-	connectedFuse connection.ConnectedFuse,
-	reconnectCh chan ReconnectSignal,
 	gracefulShutdownC <-chan struct{},
+	reconnectCh chan ReconnectSignal,
 ) error {
 	connLog.Debug().Msgf("Connecting via http2")
 	h2conn := connection.NewHTTP2Connection(
 		tlsServerConn,
 		config.ConnectionConfig,
-		config.NamedTunnel,
 		connOptions,
 		config.Observer,
 		connIndex,
-		connectedFuse,
+		controlStreamHandler,
 		config.Log,
-		gracefulShutdownC,
 	)
 
 	errGroup, serveCtx := errgroup.WithContext(ctx)
@@ -436,6 +458,75 @@ func ServeHTTP2(
 	})
 
 	return errGroup.Wait()
+}
+
+func ServeQUIC(
+	ctx context.Context,
+	edgeAddr *net.UDPAddr,
+	config *TunnelConfig,
+	connOptions *tunnelpogs.ConnectionOptions,
+	controlStreamHandler connection.ControlStreamHandler,
+	connectedFuse connection.ConnectedFuse,
+	reconnectCh chan ReconnectSignal,
+	gracefulShutdownC <-chan struct{},
+) (err error, recoverable bool) {
+	tlsConfig := config.EdgeTLSConfigs[connection.QUIC]
+	quicConfig := &quic.Config{
+		HandshakeIdleTimeout: time.Second * 10,
+		KeepAlive:            true,
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			quicConn, err := connection.NewQUICConnection(
+				ctx,
+				quicConfig,
+				edgeAddr,
+				tlsConfig,
+				config.ConnectionConfig.OriginProxy,
+				connOptions,
+				controlStreamHandler,
+				config.Observer)
+			if err != nil {
+				config.Log.Error().Msgf("Failed to create new quic connection, err: %v", err)
+				return err, true
+			}
+
+			errGroup, serveCtx := errgroup.WithContext(ctx)
+			errGroup.Go(func() error {
+				err := quicConn.Serve(ctx)
+				if err != nil {
+					config.Log.Error().Msgf("Failed to serve quic connection, err: %v", err)
+				}
+				return fmt.Errorf("Connection with edge closed")
+			})
+
+			errGroup.Go(func() error {
+				return listenReconnect(serveCtx, reconnectCh, gracefulShutdownC)
+			})
+
+			err = errGroup.Wait()
+			if err == nil {
+				return nil, false
+			}
+			config.Log.Info().Msg("Reconnecting with the same udp conn")
+		}
+	}
+}
+
+type quicLogger struct {
+	*zerolog.Logger
+}
+
+func (ql *quicLogger) Write(p []byte) (n int, err error) {
+	ql.Debug().Msgf("quic log: %v", string(p))
+	return len(p), nil
+}
+
+func (ql *quicLogger) Close() error {
+	return nil
 }
 
 func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh <-chan struct{}) error {

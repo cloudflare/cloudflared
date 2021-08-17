@@ -30,52 +30,44 @@ var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
 // HTTP2Connection represents a net.Conn that uses HTTP2 frames to proxy traffic from the edge to cloudflared on the
 // origin.
 type HTTP2Connection struct {
-	conn         net.Conn
-	server       *http2.Server
-	config       *Config
-	namedTunnel  *NamedTunnelConfig
-	connOptions  *tunnelpogs.ConnectionOptions
-	observer     *Observer
-	connIndexStr string
-	connIndex    uint8
+	conn        net.Conn
+	server      *http2.Server
+	config      *Config
+	connOptions *tunnelpogs.ConnectionOptions
+	observer    *Observer
+	connIndex   uint8
 	// newRPCClientFunc allows us to mock RPCs during testing
 	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 
-	log               *zerolog.Logger
-	activeRequestsWG  sync.WaitGroup
-	connectedFuse     ConnectedFuse
-	gracefulShutdownC <-chan struct{}
-	stoppedGracefully bool
-	controlStreamErr  error // result of running control stream handler
+	log                  *zerolog.Logger
+	activeRequestsWG     sync.WaitGroup
+	controlStreamHandler ControlStreamHandler
+	stoppedGracefully    bool
+	controlStreamErr     error // result of running control stream handler
 }
 
 // NewHTTP2Connection returns a new instance of HTTP2Connection.
 func NewHTTP2Connection(
 	conn net.Conn,
 	config *Config,
-	namedTunnelConfig *NamedTunnelConfig,
 	connOptions *tunnelpogs.ConnectionOptions,
 	observer *Observer,
 	connIndex uint8,
-	connectedFuse ConnectedFuse,
+	controlStreamHandler ControlStreamHandler,
 	log *zerolog.Logger,
-	gracefulShutdownC <-chan struct{},
 ) *HTTP2Connection {
 	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
 			MaxConcurrentStreams: math.MaxUint32,
 		},
-		config:            config,
-		namedTunnel:       namedTunnelConfig,
-		connOptions:       connOptions,
-		observer:          observer,
-		connIndexStr:      uint8ToString(connIndex),
-		connIndex:         connIndex,
-		newRPCClientFunc:  newRegistrationRPCClient,
-		connectedFuse:     connectedFuse,
-		log:               log,
-		gracefulShutdownC: gracefulShutdownC,
+		config:               config,
+		connOptions:          connOptions,
+		observer:             observer,
+		connIndex:            connIndex,
+		newRPCClientFunc:     newRegistrationRPCClient,
+		controlStreamHandler: controlStreamHandler,
+		log:                  log,
 	}
 }
 
@@ -91,7 +83,7 @@ func (c *HTTP2Connection) Serve(ctx context.Context) error {
 	})
 
 	switch {
-	case c.stoppedGracefully:
+	case c.controlStreamHandler.IsStopped():
 		return nil
 	case c.controlStreamErr != nil:
 		return c.controlStreamErr
@@ -116,7 +108,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch connType {
 	case TypeControlStream:
-		if err := c.serveControlStream(r.Context(), respWriter); err != nil {
+		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions); err != nil {
 			c.controlStreamErr = err
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
@@ -152,29 +144,6 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.log.Error().Err(err)
 		respWriter.WriteErrorResponse()
 	}
-}
-
-func (c *HTTP2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
-	rpcClient := c.newRPCClientFunc(ctx, respWriter, c.observer.log)
-	defer rpcClient.Close()
-
-	if err := rpcClient.RegisterConnection(ctx, c.namedTunnel, c.connOptions, c.connIndex, c.observer); err != nil {
-		return err
-	}
-	c.connectedFuse.Connected()
-
-	// wait for connection termination or start of graceful shutdown
-	select {
-	case <-ctx.Done():
-		break
-	case <-c.gracefulShutdownC:
-		c.stoppedGracefully = true
-	}
-
-	c.observer.sendUnregisteringEvent(c.connIndex)
-	rpcClient.GracefulShutdown(ctx, c.config.GracePeriod)
-	c.observer.log.Info().Uint8(LogFieldConnIndex, c.connIndex).Msg("Unregistered tunnel connection")
-	return nil
 }
 
 func (c *HTTP2Connection) close() {

@@ -15,32 +15,28 @@ const (
 	edgeH2muxTLSServerName = "cftunnel.com"
 	// edgeH2TLSServerName is the server name to establish http2 connection with edge
 	edgeH2TLSServerName = "h2.cftunnel.com"
+	// edgeQUICServerName is the server name to establish quic connection with edge.
+	edgeQUICServerName = "quic.cftunnel.com"
 	// threshold to switch back to h2mux when the user intentionally pick --protocol http2
 	explicitHTTP2FallbackThreshold = -1
 	autoSelectFlag                 = "auto"
 )
 
 var (
-	ProtocolList = []Protocol{H2mux, HTTP2}
+	// ProtocolList represents a list of supported protocols for communication with the edge.
+	ProtocolList = []Protocol{H2mux, HTTP2, QUIC}
 )
 
 type Protocol int64
 
 const (
+	// H2mux protocol can be used both with Classic and Named Tunnels. .
 	H2mux Protocol = iota
+	// HTTP2 is used only with named tunnels. It's more efficient than H2mux for L4 proxying.
 	HTTP2
+	// QUIC is used only with named tunnels.
+	QUIC
 )
-
-func (p Protocol) ServerName() string {
-	switch p {
-	case H2mux:
-		return edgeH2muxTLSServerName
-	case HTTP2:
-		return edgeH2TLSServerName
-	default:
-		return ""
-	}
-}
 
 // Fallback returns the fallback protocol and whether the protocol has a fallback
 func (p Protocol) fallback() (Protocol, bool) {
@@ -49,6 +45,8 @@ func (p Protocol) fallback() (Protocol, bool) {
 		return 0, false
 	case HTTP2:
 		return H2mux, true
+	case QUIC:
+		return HTTP2, true
 	default:
 		return 0, false
 	}
@@ -60,9 +58,37 @@ func (p Protocol) String() string {
 		return "h2mux"
 	case HTTP2:
 		return "http2"
+	case QUIC:
+		return "quic"
 	default:
 		return fmt.Sprintf("unknown protocol")
 	}
+}
+
+func (p Protocol) TLSSettings() *TLSSettings {
+	switch p {
+	case H2mux:
+		return &TLSSettings{
+			ServerName: edgeH2muxTLSServerName,
+		}
+	case HTTP2:
+		return &TLSSettings{
+			ServerName: edgeH2TLSServerName,
+		}
+	case QUIC:
+		fmt.Println("returning this?")
+		return &TLSSettings{
+			ServerName: edgeQUICServerName,
+			NextProtos: []string{"argotunnel"},
+		}
+	default:
+		return nil
+	}
+}
+
+type TLSSettings struct {
+	ServerName string
+	NextProtos []string
 }
 
 type ProtocolSelector interface {
@@ -182,6 +208,10 @@ func NewProtocolSelector(
 			return newAutoProtocolSelector(H2mux, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 		}
 		return newAutoProtocolSelector(HTTP2, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
+	}
+
+	if protocolFlag == QUIC.String() {
+		return newAutoProtocolSelector(QUIC, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 	}
 
 	if protocolFlag != autoSelectFlag {
