@@ -18,8 +18,8 @@ type Regions struct {
 // ------------------------------------
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
-func ResolveEdge(log *zerolog.Logger) (*Regions, error) {
-	edgeAddrs, err := edgeDiscovery(log)
+func ResolveEdge(log *zerolog.Logger, region string) (*Regions, error) {
+	edgeAddrs, err := edgeDiscovery(log, getRegionalServiceName(region))
 	if err != nil {
 		return nil, err
 	}
@@ -121,4 +121,13 @@ func (rs *Regions) GiveBack(addr *EdgeAddr) bool {
 		return found
 	}
 	return rs.region2.GiveBack(addr)
+}
+
+// Return regionalized service name if `region` isn't empty, otherwise return the global service name for origintunneld
+func getRegionalServiceName(region string) string {
+	if region != "" {
+		return region + "-" + srvService // Example: `us-origintunneld`
+	}
+
+	return srvService // Global service is just `origintunneld`
 }

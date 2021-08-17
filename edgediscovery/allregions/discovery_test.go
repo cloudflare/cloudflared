@@ -25,7 +25,7 @@ func TestEdgeDiscovery(t *testing.T) {
 	}
 
 	l := zerolog.Nop()
-	addrLists, err := edgeDiscovery(&l)
+	addrLists, err := edgeDiscovery(&l, "")
 	assert.NoError(t, err)
 	actualAddrSet := map[string]bool{}
 	for _, addrs := range addrLists {
