@@ -3,6 +3,7 @@ package edgediscovery
 import (
 	"context"
 	"crypto/tls"
+	"golang.org/x/net/proxy"
 	"net"
 	"time"
 
@@ -20,8 +21,9 @@ func DialEdge(
 	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
 	defer dialCancel()
 
-	dialer := net.Dialer{}
-	edgeConn, err := dialer.DialContext(dialCtx, "tcp", edgeTCPAddr.String())
+	//dialer := net.Dialer{}
+	//edgeConn, err := dialer.DialContext(dialCtx, "tcp", edgeTCPAddr.String())
+	edgeConn, err := proxy.Dial(dialCtx, "tcp", edgeTCPAddr.String())
 	if err != nil {
 		return nil, newDialError(err, "DialContext error")
 	}
