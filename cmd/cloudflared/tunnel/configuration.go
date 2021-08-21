@@ -256,7 +256,7 @@ func prepareTunnelConfig(
 		if err != nil {
 			return nil, ingress.Ingress{}, errors.Wrap(err, "unable to create TLS config to connect with edge")
 		}
-		if len(edgeTLSConfig.NextProtos) > 0 {
+		if len(tlsSettings.NextProtos) > 0 {
 			edgeTLSConfig.NextProtos = tlsSettings.NextProtos
 		}
 		edgeTLSConfigs[p] = edgeTLSConfig
