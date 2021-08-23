@@ -76,7 +76,6 @@ func (p Protocol) TLSSettings() *TLSSettings {
 			ServerName: edgeH2TLSServerName,
 		}
 	case QUIC:
-		fmt.Println("returning this?")
 		return &TLSSettings{
 			ServerName: edgeQUICServerName,
 			NextProtos: []string{"argotunnel"},

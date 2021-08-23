@@ -106,7 +106,6 @@ func (q *QUICConnection) handleStream(stream quic.Stream) error {
 		w := newHTTPResponseAdapter(stream)
 		return q.httpProxy.ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
-		// TODO: This is a placeholder for testing completion. TUN-4865 will add proper TCP support.
 		rwa := &streamReadWriteAcker{
 			ReadWriter: stream,
 		}
