@@ -1,3 +1,12 @@
+2021.8.3
+- 2021-08-23 TUN-4889: Add back appendtagheaders function
+- 2021-08-21 TUN-4940: Fix cloudflared not picking up correct NextProtos for quic
+- 2021-08-21 TUN-4613: Add a no-op protocol version slot
+- 2021-08-13 TUN-4922: Downgrade quic-go library to 0.20.0
+- 2021-08-17 TUN-4866: Add Control Stream for QUIC
+- 2021-08-17 TUN-4927: Parameterize region in edge discovery code
+- 2021-08-06 TUN-4602: Added UDP resolves to Edge discovery
+
 2021.8.2
 - 2021-08-03 TUN-4597: Added HTTPProxy for QUIC
 - 2021-08-04 TUN-4795: Remove Equinox releases
