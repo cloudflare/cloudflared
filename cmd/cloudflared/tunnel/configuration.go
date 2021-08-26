@@ -161,7 +161,6 @@ func prepareTunnelConfig(
 		log.Err(err).Str(LogFieldHostname, configHostname).Msg("Invalid hostname")
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
 	}
-	isQuickTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
 		clientID, err = generateRandomClientID(log)
@@ -177,19 +176,6 @@ func prepareTunnelConfig(
 	}
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
-
-	var originCert []byte
-	if !isQuickTunnel {
-		originCertPath := c.String("origincert")
-		originCertLog := log.With().
-			Str(LogFieldOriginCertPath, originCertPath).
-			Logger()
-
-		originCert, err = getOriginCert(originCertPath, &originCertLog)
-		if err != nil {
-			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
-		}
-	}
 
 	var (
 		ingressRules  ingress.Ingress
@@ -217,6 +203,17 @@ func prepareTunnelConfig(
 			return nil, ingress.Ingress{}, ingress.ErrURLIncompatibleWithIngress
 		}
 	} else {
+
+		originCertPath := c.String("origincert")
+		originCertLog := log.With().
+			Str(LogFieldOriginCertPath, originCertPath).
+			Logger()
+
+		originCert, err := getOriginCert(originCertPath, &originCertLog)
+		if err != nil {
+			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
+		}
+
 		classicTunnel = &connection.ClassicTunnelConfig{
 			Hostname:   hostname,
 			OriginCert: originCert,
