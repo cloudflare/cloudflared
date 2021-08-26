@@ -5,13 +5,11 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
 
 const (
-	LogFieldAddress   = "address"
 	LogFieldConnIndex = "connIndex"
 )
 
@@ -101,6 +99,8 @@ func (ed *Edge) GetAddr(connIndex int) (*allregions.EdgeAddr, error) {
 
 // GetDifferentAddr gives back the proxy connection's edge Addr and uses a new one.
 func (ed *Edge) GetDifferentAddr(connIndex int) (*allregions.EdgeAddr, error) {
+	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
+
 	ed.Lock()
 	defer ed.Unlock()
 
