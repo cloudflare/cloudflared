@@ -179,10 +179,16 @@ func NewProtocolSelector(
 		}, nil
 	}
 
-	// warp routing can only be served over http2 connections
+	// warp routing cannot be served over h2mux connections
 	if warpRoutingEnabled {
 		if protocolFlag == H2mux.String() {
-			log.Warn().Msg("Warp routing is only supported by http2 protocol. Upgrading protocol to http2")
+			log.Warn().Msg("Warp routing is not supported in h2mux protocol. Upgrading to http2 to allow it.")
+		}
+
+		if protocolFlag == QUIC.String() {
+			return &staticProtocolSelector{
+				current: QUIC,
+			}, nil
 		}
 		return &staticProtocolSelector{
 			current: HTTP2,
@@ -193,6 +199,10 @@ func NewProtocolSelector(
 		return &staticProtocolSelector{
 			current: H2mux,
 		}, nil
+	}
+
+	if protocolFlag == QUIC.String() {
+		return newAutoProtocolSelector(QUIC, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 	}
 
 	http2Percentage, err := fetchFunc()
@@ -207,10 +217,6 @@ func NewProtocolSelector(
 			return newAutoProtocolSelector(H2mux, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 		}
 		return newAutoProtocolSelector(HTTP2, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
-	}
-
-	if protocolFlag == QUIC.String() {
-		return newAutoProtocolSelector(QUIC, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
 	}
 
 	if protocolFlag != autoSelectFlag {
