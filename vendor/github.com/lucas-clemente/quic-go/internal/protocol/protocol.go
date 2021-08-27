@@ -52,9 +52,6 @@ const MaxByteCount = ByteCount(1<<62 - 1)
 // InvalidByteCount is an invalid byte count
 const InvalidByteCount ByteCount = -1
 
-// An ApplicationErrorCode is an application-defined error code.
-type ApplicationErrorCode uint64
-
 // A StatelessResetToken is a stateless reset token.
 type StatelessResetToken [16]byte
 

@@ -54,11 +54,17 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 	if c.receivedFinalOffset {
 		// If we receive another final offset, check that it's the same.
 		if final && offset != c.highestReceived {
-			return qerr.NewError(qerr.FinalSizeError, fmt.Sprintf("Received inconsistent final offset for stream %d (old: %d, new: %d bytes)", c.streamID, c.highestReceived, offset))
+			return &qerr.TransportError{
+				ErrorCode:    qerr.FinalSizeError,
+				ErrorMessage: fmt.Sprintf("received inconsistent final offset for stream %d (old: %d, new: %d bytes)", c.streamID, c.highestReceived, offset),
+			}
 		}
 		// Check that the offset is below the final offset.
 		if offset > c.highestReceived {
-			return qerr.NewError(qerr.FinalSizeError, fmt.Sprintf("Received offset %d for stream %d. Final offset was already received at %d", offset, c.streamID, c.highestReceived))
+			return &qerr.TransportError{
+				ErrorCode:    qerr.FinalSizeError,
+				ErrorMessage: fmt.Sprintf("received offset %d for stream %d, but final offset was already received at %d", offset, c.streamID, c.highestReceived),
+			}
 		}
 	}
 
@@ -72,7 +78,10 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 	// This can happen due to reordering.
 	if offset <= c.highestReceived {
 		if final {
-			return qerr.NewError(qerr.FinalSizeError, fmt.Sprintf("Received final offset %d for stream %d, but already received offset %d before", offset, c.streamID, c.highestReceived))
+			return &qerr.TransportError{
+				ErrorCode:    qerr.FinalSizeError,
+				ErrorMessage: fmt.Sprintf("received final offset %d for stream %d, but already received offset %d before", offset, c.streamID, c.highestReceived),
+			}
 		}
 		return nil
 	}
@@ -80,7 +89,10 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 	increment := offset - c.highestReceived
 	c.highestReceived = offset
 	if c.checkFlowControlViolation() {
-		return qerr.NewError(qerr.FlowControlError, fmt.Sprintf("Received %d bytes on stream %d, allowed %d bytes", offset, c.streamID, c.receiveWindow))
+		return &qerr.TransportError{
+			ErrorCode:    qerr.FlowControlError,
+			ErrorMessage: fmt.Sprintf("received %d bytes on stream %d, allowed %d bytes", offset, c.streamID, c.receiveWindow),
+		}
 	}
 	return c.connection.IncrementHighestReceived(increment)
 }
@@ -97,7 +109,10 @@ func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) Abandon() {
-	if unread := c.highestReceived - c.bytesRead; unread > 0 {
+	c.mutex.Lock()
+	unread := c.highestReceived - c.bytesRead
+	c.mutex.Unlock()
+	if unread > 0 {
 		c.connection.AddBytesRead(unread)
 	}
 }

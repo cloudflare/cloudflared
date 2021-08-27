@@ -15,3 +15,5 @@ const (
 	msgTypeIPv4PKTINFO = unix.IP_PKTINFO
 	msgTypeIPv6PKTINFO = unix.IPV6_PKTINFO
 )
+
+const batchSize = 8 // needs to smaller than MaxUint8 (otherwise the type of oobConn.readPos has to be changed)

@@ -209,7 +209,10 @@ func (m *streamsMap) DeleteStream(id protocol.StreamID) error {
 func (m *streamsMap) GetOrOpenReceiveStream(id protocol.StreamID) (receiveStreamI, error) {
 	str, err := m.getOrOpenReceiveStream(id)
 	if err != nil {
-		return nil, qerr.NewError(qerr.StreamStateError, err.Error())
+		return nil, &qerr.TransportError{
+			ErrorCode:    qerr.StreamStateError,
+			ErrorMessage: err.Error(),
+		}
 	}
 	return str, nil
 }
@@ -240,7 +243,10 @@ func (m *streamsMap) getOrOpenReceiveStream(id protocol.StreamID) (receiveStream
 func (m *streamsMap) GetOrOpenSendStream(id protocol.StreamID) (sendStreamI, error) {
 	str, err := m.getOrOpenSendStream(id)
 	if err != nil {
-		return nil, qerr.NewError(qerr.StreamStateError, err.Error())
+		return nil, &qerr.TransportError{
+			ErrorCode:    qerr.StreamStateError,
+			ErrorMessage: err.Error(),
+		}
 	}
 	return str, nil
 }

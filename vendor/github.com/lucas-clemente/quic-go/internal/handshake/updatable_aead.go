@@ -163,7 +163,7 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	if err == ErrDecryptionFailed {
 		a.invalidPacketCount++
 		if a.invalidPacketCount >= a.invalidPacketLimit {
-			return nil, qerr.AEADLimitReached
+			return nil, &qerr.TransportError{ErrorCode: qerr.AEADLimitReached}
 		}
 	}
 	if err == nil {
@@ -201,7 +201,10 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		}
 		// Opening succeeded. Check if the peer was allowed to update.
 		if a.keyPhase > 0 && a.firstSentWithCurrentKey == protocol.InvalidPacketNumber {
-			return nil, qerr.NewError(qerr.KeyUpdateError, "keys updated too quickly")
+			return nil, &qerr.TransportError{
+				ErrorCode:    qerr.KeyUpdateError,
+				ErrorMessage: "keys updated too quickly",
+			}
 		}
 		a.rollKeys()
 		a.logger.Debugf("Peer updated keys to %d", a.keyPhase)
@@ -250,7 +253,10 @@ func (a *updatableAEAD) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byt
 func (a *updatableAEAD) SetLargestAcked(pn protocol.PacketNumber) error {
 	if a.firstSentWithCurrentKey != protocol.InvalidPacketNumber &&
 		pn >= a.firstSentWithCurrentKey && a.numRcvdWithCurrentKey == 0 {
-		return qerr.NewError(qerr.KeyUpdateError, fmt.Sprintf("received ACK for key phase %d, but peer didn't update keys", a.keyPhase))
+		return &qerr.TransportError{
+			ErrorCode:    qerr.KeyUpdateError,
+			ErrorMessage: fmt.Sprintf("received ACK for key phase %d, but peer didn't update keys", a.keyPhase),
+		}
 	}
 	a.largestAcked = pn
 	return nil

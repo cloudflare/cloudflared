@@ -18,14 +18,6 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
-type statelessResetErr struct {
-	token protocol.StatelessResetToken
-}
-
-func (e statelessResetErr) Error() string {
-	return fmt.Sprintf("received a stateless reset with token %x", e.token)
-}
-
 type zeroRTTQueue struct {
 	queue       []*receivedPacket
 	retireTimer *time.Timer
@@ -430,7 +422,7 @@ func (h *packetHandlerMap) maybeHandleStatelessReset(data []byte) bool {
 	copy(token[:], data[len(data)-16:])
 	if sess, ok := h.resetTokens[token]; ok {
 		h.logger.Debugf("Received a stateless reset with token %#x. Closing session.", token)
-		go sess.destroy(statelessResetErr{token: token})
+		go sess.destroy(&StatelessResetError{Token: token})
 		return true
 	}
 	return false

@@ -39,12 +39,18 @@ func newCryptoStream() cryptoStream {
 func (s *cryptoStreamImpl) HandleCryptoFrame(f *wire.CryptoFrame) error {
 	highestOffset := f.Offset + protocol.ByteCount(len(f.Data))
 	if maxOffset := highestOffset; maxOffset > protocol.MaxCryptoStreamOffset {
-		return qerr.NewError(qerr.CryptoBufferExceeded, fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset))
+		return &qerr.TransportError{
+			ErrorCode:    qerr.CryptoBufferExceeded,
+			ErrorMessage: fmt.Sprintf("received invalid offset %d on crypto stream, maximum allowed %d", maxOffset, protocol.MaxCryptoStreamOffset),
+		}
 	}
 	if s.finished {
 		if highestOffset > s.highestOffset {
 			// reject crypto data received after this stream was already finished
-			return qerr.NewError(qerr.ProtocolViolation, "received crypto data after change of encryption level")
+			return &qerr.TransportError{
+				ErrorCode:    qerr.ProtocolViolation,
+				ErrorMessage: "received crypto data after change of encryption level",
+			}
 		}
 		// ignore data with a smaller offset than the highest received
 		// could e.g. be a retransmission
@@ -80,7 +86,10 @@ func (s *cryptoStreamImpl) GetCryptoData() []byte {
 
 func (s *cryptoStreamImpl) Finish() error {
 	if s.queue.HasMoreData() {
-		return qerr.NewError(qerr.ProtocolViolation, "encryption level changed, but crypto stream has more data to read")
+		return &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: "encryption level changed, but crypto stream has more data to read",
+		}
 	}
 	s.finished = true
 	return nil
