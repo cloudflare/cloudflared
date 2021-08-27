@@ -1,3 +1,7 @@
+2021.8.6
+- 2021-08-27 TUN-5000: De-flake logging to dir component test in Windows by increasing to buffer to cope with more logging
+- 2021-08-27 TUN-5003: Fix cfsetup for non-FIPS golang version
+
 2021.8.5
 - 2021-08-27 TUN-4961: Update quic-go to latest
 - 2021-08-27 Release 2021.8.4
