@@ -1,4 +1,4 @@
-pinned_go: &pinned_go go=1.17
+pinned_go: &pinned_go go=1.17-1
 pinned_go_fips: &pinned_go_fips go-boring=1.16.6-6
 
 build_dir: &build_dir /cfsetup_build
@@ -13,6 +13,15 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=amd64
       - export FIPS=true
+      - make cloudflared
+  build-non-fips:  # helpful to catch problems with non-fips (only used for releasing non-linux artifacts) before releases
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+    post-cache:
+      - export GOOS=linux
+      - export GOARCH=amd64
       - make cloudflared
   build-all-packages: #except osxpkg
     build_dir: *build_dir
