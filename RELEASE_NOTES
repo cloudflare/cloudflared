@@ -1,3 +1,10 @@
+2021.8.4
+- 2021-08-26 TUN-4974: Fix regression where we were debug logging by accident
+- 2021-08-26 TUN-4970: Only default to http2 for warp-routing if protocol is h2mux
+- 2021-08-26 TUN-4981: Improve readability of prepareTunnelConfig method
+- 2021-08-26 TUN-4926: Implement --region configuration option
+- 2021-07-09 TUN-4821: Make quick tunnels the default in cloudflared
+
 2021.8.3
 - 2021-08-23 TUN-4889: Add back appendtagheaders function
 - 2021-08-21 TUN-4940: Fix cloudflared not picking up correct NextProtos for quic
