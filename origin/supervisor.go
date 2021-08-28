@@ -74,7 +74,7 @@ func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, grace
 	if len(config.EdgeAddrs) > 0 {
 		edgeIPs, err = edgediscovery.StaticEdge(config.Log, config.EdgeAddrs)
 	} else {
-		edgeIPs, err = edgediscovery.ResolveEdge(config.Log, config.Region)
+		edgeIPs, err = edgediscovery.ResolveEdge(config.Log, "")
 	}
 	if err != nil {
 		return nil, err

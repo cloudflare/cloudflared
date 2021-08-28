@@ -494,11 +494,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_EDGE"},
 			Hidden:  true,
 		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "region",
-			Usage:   "Cloudflare Edge region to connect to. Omit or set to empty to connect to the global region.",
-			EnvVars: []string{"TUNNEL_REGION"},
-		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    tlsconfig.CaCertFlag,
 			Usage:   "Certificate Authority authenticating connections with Cloudflare's edge network.",
