@@ -279,6 +279,7 @@ func prepareTunnelConfig(
 		OSArch:           buildInfo.OSArch(),
 		ClientID:         clientID,
 		EdgeAddrs:        c.StringSlice("edge"),
+		Region:           c.String("region"),
 		HAConnections:    c.Int("ha-connections"),
 		IncidentLookup:   origin.NewIncidentLookup(),
 		IsAutoupdated:    c.Bool("is-autoupdated"),
