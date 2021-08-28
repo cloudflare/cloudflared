@@ -1,3 +1,6 @@
+2021.8.7
+- 2021-08-28 Revert "TUN-4926: Implement --region configuration option"
+
 2021.8.6
 - 2021-08-27 TUN-5000: De-flake logging to dir component test in Windows by increasing to buffer to cope with more logging
 - 2021-08-27 TUN-5003: Fix cfsetup for non-FIPS golang version
