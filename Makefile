@@ -253,7 +253,10 @@ quic-deps:
 .PHONY: vet
 vet:
 	go vet -mod=vendor ./...
-	which go-sumtype  # go get github.com/BurntSushi/go-sumtype (don't do this in build directory or this will cause vendor issues)
+	# go get github.com/sudarshan-reddy/go-sumtype (don't do this in build directory or this will cause vendor issues)
+	# Note: If you have github.com/BurntSushi/go-sumtype then you might have to use the repo above instead
+	# for now because it uses an older version of golang.org/x/tools.
+	which go-sumtype  
 	go-sumtype $$(go list -mod=vendor ./...)
 
 .PHONY: goimports
