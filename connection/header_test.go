@@ -511,7 +511,7 @@ func TestDeserializeMalformed(t *testing.T) {
 	}
 }
 
-func TestParseHeaders(t *testing.T) {
+func TestParseRequestHeaders(t *testing.T) {
 	mockUserHeadersToSerialize := http.Header{
 		"Mock-Header-One":   {"1", "1.5"},
 		"Mock-Header-Two":   {"2"},
@@ -541,8 +541,8 @@ func TestParseHeaders(t *testing.T) {
 	assert.ElementsMatch(t, expectedHeaders, stdlibHeaderToH2muxHeader(h1.Header))
 }
 
-func TestIsControlHeader(t *testing.T) {
-	controlHeaders := []string{
+func TestIsControlRequestHeader(t *testing.T) {
+	controlRequestHeaders := []string{
 		// Anything that begins with cf-
 		"cf-sample-header",
 
@@ -552,30 +552,69 @@ func TestIsControlHeader(t *testing.T) {
 		// content-length is a special case, it has to be there
 		// for some requests to work (per the HTTP2 spec)
 		"content-length",
+
+		// Websocket request headers
+		"connection",
+		"upgrade",
 	}
 
-	for _, header := range controlHeaders {
-		assert.True(t, IsControlHeader(header))
+	for _, header := range controlRequestHeaders {
+		assert.True(t, IsControlRequestHeader(header))
 	}
 }
 
-func TestIsNotControlHeader(t *testing.T) {
-	notControlHeaders := []string{
+func TestIsControlResponseHeader(t *testing.T) {
+	controlResponseHeaders := []string{
+		// Anything that begins with cf-int- or cf-cloudflared-
+		"cf-int-sample-header",
+		"cf-cloudflared-sample-header",
+
+		// Any http2 pseudoheader
+		":sample-pseudo-header",
+
+		// content-length is a special case, it has to be there
+		// for some requests to work (per the HTTP2 spec)
+		"content-length",
+	}
+
+	for _, header := range controlResponseHeaders {
+		assert.True(t, IsControlResponseHeader(header))
+	}
+}
+
+func TestIsNotControlRequestHeader(t *testing.T) {
+	notControlRequestHeaders := []string{
 		"mock-header",
 		"another-sample-header",
 	}
 
-	for _, header := range notControlHeaders {
-		assert.False(t, IsControlHeader(header))
+	for _, header := range notControlRequestHeaders {
+		assert.False(t, IsControlRequestHeader(header))
+	}
+}
+
+func TestIsNotControlResponseHeader(t *testing.T) {
+	notControlResponseHeaders := []string{
+		"mock-header",
+		"another-sample-header",
+		"upgrade",
+		"connection",
+		"cf-whatever", // On the response path, we only want to filter cf-int- and cf-cloudflared-
+	}
+
+	for _, header := range notControlResponseHeaders {
+		assert.False(t, IsControlResponseHeader(header))
 	}
 }
 
 func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 	mockHeaders := http.Header{
-		"User-header-one": {""},
-		"User-header-two": {"1", "2"},
-		"cf-header":       {"cf-value"},
-		"Content-Length":  {"123"},
+		"User-header-one":       {""},
+		"User-header-two":       {"1", "2"},
+		"cf-header":             {"cf-value"},
+		"cf-int-header":         {"cf-int-value"},
+		"cf-cloudflared-header": {"cf-cloudflared-value"},
+		"Content-Length":        {"123"},
 	}
 	mockResponse := http.Response{
 		StatusCode: 200,
@@ -608,6 +647,7 @@ func TestH1ResponseToH2ResponseHeaders(t *testing.T) {
 		{Name: "User-header-one", Value: ""},
 		{Name: "User-header-two", Value: "1"},
 		{Name: "User-header-two", Value: "2"},
+		{Name: "cf-header", Value: "cf-value"},
 	}
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, expectedUserHeaders, actualUserHeaders)

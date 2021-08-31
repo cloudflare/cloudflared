@@ -189,7 +189,7 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 			// so it should be sent as an HTTP/2 response header.
 			dest[name] = values
 			// Since these are http2 headers, they're required to be lowercase
-		} else if !IsControlHeader(h2name) || IsWebsocketClientHeader(h2name) {
+		} else if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values
 			userHeaders[name] = values
