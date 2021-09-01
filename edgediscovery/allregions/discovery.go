@@ -91,7 +91,7 @@ func edgeDiscovery(log *zerolog.Logger, srvService string) ([][]*EdgeAddr, error
 	return resolvedAddrPerCNAME, nil
 }
 
-func lookupSRVWithDOT(string, string, string) (cname string, addrs []*net.SRV, err error) {
+func lookupSRVWithDOT(srvService string, srvProto string, srvName string) (cname string, addrs []*net.SRV, err error) {
 	// Inspiration: https://github.com/artyom/dot/blob/master/dot.go
 	r := &net.Resolver{
 		PreferGo: true,
