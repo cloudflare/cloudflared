@@ -143,11 +143,13 @@ func Commands() []*cli.Command {
 							Name:    sshTokenIDFlag,
 							Aliases: []string{"id"},
 							Usage:   "specify an Access service token ID you wish to use.",
+							EnvVars: []string{"TUNNEL_SERVICE_TOKEN_ID"},
 						},
 						&cli.StringFlag{
 							Name:    sshTokenSecretFlag,
 							Aliases: []string{"secret"},
 							Usage:   "specify an Access service token secret you wish to use.",
+							EnvVars: []string{"TUNNEL_SERVICE_TOKEN_SECRET"},
 						},
 						&cli.StringFlag{
 							Name:    logger.LogSSHDirectoryFlag,
