@@ -1,0 +1,68 @@
+name: Docker
+
+on:
+  push:
+    # Publish `main` as Docker `latest` image.
+    branches:
+      - master
+
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - v*
+env:
+  BUILD_VERSION: "2021.9.0"
+  IMAGE_NAME: cloudflared
+  DOCKER_CLI_EXPERIMENTAL: enabled
+  REPOSITORY: ${{ github.actor }}/${{ github.workflow }} 
+
+jobs:
+  # Push image to GitHub Packages.
+  # See also https://docs.docker.com/docker-hub/builds/
+  push:
+    # Ensure test job passes before pushing image.
+    runs-on: ubuntu:20.04
+    if: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - name: Source checkout
+        uses: actions/checkout@v2.3.4 
+ 
+      - name: Setup QEMU
+        id: qemu
+        uses: docker/setup-qemu-action@v1.2.0
+      
+      - name: Setup Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Set Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ env.REPOSITORY }}
+          labels: |
+            org.opencontainers.image.version=$VERSION
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ env.REPOSITORY }}
+
+
+      - name: DockerHub login
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/login-action@v1.10.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}      
+      - name: Build and push
+        uses: docker/build-push-action@v2.7.0
+        with:
+          push: ${{ github.event_name != 'pull_request' }}
+          context: ${{ github.workflow }}
+          platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v7,linux/arm/v6,linux/ppc64le
+          build-args: $VERSION
+          cache-from: type=gha, scope=${{ github.workflow }}
+          cache-to: type=gha, scope=${{ github.workflow }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          tags: |
+            docker.io/${{ env.REPOSITORY }}:${{ env.BUILD_VERSION }}
+            docker.io/${{ env.REPOSITORY }}:latest
+            ghcr.io/${{ env.REPOSITORY }}:${{ env.BUILD_VERSION }}
+            ghcr.io/${{ env.REPOSITORY }}:latest
