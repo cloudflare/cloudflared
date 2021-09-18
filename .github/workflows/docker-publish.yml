@@ -6,21 +6,19 @@ on:
     branches:
       - master
 
-    # Publish `v1.2.3` tags as releases.
-    tags:
-      - v*
+  release:
+    types: [published]
 env:
-  BUILD_VERSION: "2021.9.0"
+  BUILD_VERSION: ${{ github.ref }}
   IMAGE_NAME: cloudflared
   DOCKER_CLI_EXPERIMENTAL: enabled
-  REPOSITORY: ${{ github.actor }}/${{ github.workflow }} 
+  REPOSITORY: ${{ github.repository }}
 
 jobs:
   # Push image to GitHub Packages.
   # See also https://docs.docker.com/docker-hub/builds/
   push:
-    # Ensure test job passes before pushing image.
-    runs-on: ubuntu:20.04
+    runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
     steps:
       - name: Source checkout
@@ -34,17 +32,33 @@ jobs:
         id: buildx
         uses: docker/setup-buildx-action@v1
 
+      - name: set version
+        run : |
+            VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,') #Get the tag or branch name (eg master or 2021.9.0)
+            REPOSITORY=$(echo $REPOSITORY | tr '[A-Z]' '[a-z]') #make all lowercase
+            # Strip "v" prefix from tag name or use short sha 
+            [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//') || VERSION=$(git rev-parse --short "$GITHUB_SHA")
+            #Create a GA variable to use in other steps
+            echo "app_version=$VERSION" >> $GITHUB_ENV
+            echo "REPOSITORY=$REPOSITORY" >> $GITHUB_ENV
+
       - name: Set Docker metadata
         id: docker_meta
         uses: docker/metadata-action@v3
         with:
           images: ${{ env.REPOSITORY }}
           labels: |
-            org.opencontainers.image.version=$VERSION
+            org.opencontainers.image.version=${{env.app_version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.title=${{ env.REPOSITORY }}
 
-
+      - name: GitHub login
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/login-action@v1.10.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: DockerHub login
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@v1.10.0
@@ -55,14 +69,13 @@ jobs:
         uses: docker/build-push-action@v2.7.0
         with:
           push: ${{ github.event_name != 'pull_request' }}
-          context: ${{ github.workflow }}
-          platforms: linux/amd64,linux/386,linux/arm64,linux/arm/v7,linux/arm/v6,linux/ppc64le
-          build-args: $VERSION
+          platforms: linux/amd64
+          build-args: ${{ env.app_version }}
           cache-from: type=gha, scope=${{ github.workflow }}
           cache-to: type=gha, scope=${{ github.workflow }}
           labels: ${{ steps.docker_meta.outputs.labels }}
           tags: |
-            docker.io/${{ env.REPOSITORY }}:${{ env.BUILD_VERSION }}
-            docker.io/${{ env.REPOSITORY }}:latest
-            ghcr.io/${{ env.REPOSITORY }}:${{ env.BUILD_VERSION }}
+            ${{env.REPOSITORY}}:${{ env.app_version }}
+            ${{env.REPOSITORY}}:latest
+            ghcr.io/${{ env.REPOSITORY }}:${{ env.app_version }}
             ghcr.io/${{ env.REPOSITORY }}:latest
