@@ -1,11 +1,6 @@
 name: Docker
 
 on:
-  push:
-    # Publish `main` as Docker `latest` image.
-    branches:
-      - master
-
   release:
     types: [published]
 env:
