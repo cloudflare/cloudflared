@@ -384,7 +384,11 @@ func StartServer(
 		observer.RegisterSink(app)
 	}
 
-	return waitToShutdown(&wg, cancel, errC, graceShutdownC, c.Duration("grace-period"), log)
+	gracePeriod, err := gracePeriod(c)
+	if err != nil {
+		return err
+	}
+	return waitToShutdown(&wg, cancel, errC, graceShutdownC, gracePeriod, log)
 }
 
 func waitToShutdown(wg *sync.WaitGroup,

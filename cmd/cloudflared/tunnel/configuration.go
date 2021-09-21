@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	homedir "github.com/mitchellh/go-homedir"
@@ -260,9 +261,13 @@ func prepareTunnelConfig(
 	}
 
 	originProxy := origin.NewOriginProxy(ingressRules, warpRoutingService, tags, log)
+	gracePeriod, err := gracePeriod(c)
+	if err != nil {
+		return nil, ingress.Ingress{}, err
+	}
 	connectionConfig := &connection.Config{
 		OriginProxy:     originProxy,
-		GracePeriod:     c.Duration("grace-period"),
+		GracePeriod:     gracePeriod,
 		ReplaceExisting: c.Bool("force"),
 	}
 	muxerConfig := &connection.MuxerConfig{
@@ -298,6 +303,14 @@ func prepareTunnelConfig(
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}, ingressRules, nil
+}
+
+func gracePeriod(c *cli.Context) (time.Duration, error) {
+	period := c.Duration("grace-period")
+	if period > connection.MaxGracePeriod {
+		return time.Duration(0), fmt.Errorf("grace-period must be equal or less than %v", connection.MaxGracePeriod)
+	}
+	return period, nil
 }
 
 func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel bool) bool {
