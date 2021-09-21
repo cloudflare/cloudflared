@@ -30,6 +30,8 @@ const (
 	dialTimeout              = 15 * time.Second
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
+	quicHandshakeIdleTimeout = 5 * time.Second
+	quicMaxIdleTimeout       = 15 * time.Second
 )
 
 type rpcName string
@@ -271,67 +273,20 @@ func ServeTunnel(
 	}()
 
 	defer config.Observer.SendDisconnect(connIndex)
-
-	connectedFuse := &connectedFuse{
-		fuse:    fuse,
-		backoff: backoff,
-	}
-
-	controlStream := connection.NewControlStream(
-		config.Observer,
-		connectedFuse,
-		config.NamedTunnel,
+	err, recoverable = serveTunnel(
+		ctx,
+		connLog,
+		credentialManager,
+		config,
+		addr,
 		connIndex,
-		nil,
+		fuse,
+		backoff,
+		cloudflaredUUID,
+		reconnectCh,
+		protocol,
 		gracefulShutdownC,
-		config.ConnectionConfig.GracePeriod,
 	)
-
-	if protocol == connection.QUIC {
-		connOptions := config.ConnectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
-		return ServeQUIC(ctx,
-			addr.UDP,
-			config,
-			connOptions,
-			controlStream,
-			connectedFuse,
-			reconnectCh,
-			gracefulShutdownC)
-	}
-
-	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
-	if err != nil {
-		connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
-		return err, true
-	}
-
-	if protocol == connection.HTTP2 {
-		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
-		err = ServeHTTP2(
-			ctx,
-			connLog,
-			config,
-			edgeConn,
-			connOptions,
-			controlStream,
-			connIndex,
-			gracefulShutdownC,
-			reconnectCh,
-		)
-	} else {
-		err = ServeH2mux(
-			ctx,
-			connLog,
-			credentialManager,
-			config,
-			edgeConn,
-			connIndex,
-			connectedFuse,
-			cloudflaredUUID,
-			reconnectCh,
-			gracefulShutdownC,
-		)
-	}
 
 	if err != nil {
 		switch err := err.(type) {
@@ -364,6 +319,94 @@ func ServeTunnel(
 		}
 	}
 	return nil, false
+}
+
+func serveTunnel(
+	ctx context.Context,
+	connLog *zerolog.Logger,
+	credentialManager *reconnectCredentialManager,
+	config *TunnelConfig,
+	addr *allregions.EdgeAddr,
+	connIndex uint8,
+	fuse *h2mux.BooleanFuse,
+	backoff *protocolFallback,
+	cloudflaredUUID uuid.UUID,
+	reconnectCh chan ReconnectSignal,
+	protocol connection.Protocol,
+	gracefulShutdownC <-chan struct{},
+) (err error, recoverable bool) {
+
+	connectedFuse := &connectedFuse{
+		fuse:    fuse,
+		backoff: backoff,
+	}
+	controlStream := connection.NewControlStream(
+		config.Observer,
+		connectedFuse,
+		config.NamedTunnel,
+		connIndex,
+		nil,
+		gracefulShutdownC,
+		config.ConnectionConfig.GracePeriod,
+	)
+
+	switch protocol {
+	case connection.QUIC:
+		connOptions := config.ConnectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
+		return ServeQUIC(ctx,
+			addr.UDP,
+			config,
+			connOptions,
+			controlStream,
+			connectedFuse,
+			reconnectCh,
+			gracefulShutdownC)
+
+	case connection.HTTP2:
+		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
+		if err != nil {
+			connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
+			return err, true
+		}
+
+		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
+		if err := ServeHTTP2(
+			ctx,
+			connLog,
+			config,
+			edgeConn,
+			connOptions,
+			controlStream,
+			connIndex,
+			gracefulShutdownC,
+			reconnectCh,
+		); err != nil {
+			return err, false
+		}
+
+	default:
+		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
+		if err != nil {
+			connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
+			return err, true
+		}
+
+		if err := ServeH2mux(
+			ctx,
+			connLog,
+			credentialManager,
+			config,
+			edgeConn,
+			connIndex,
+			connectedFuse,
+			cloudflaredUUID,
+			reconnectCh,
+			gracefulShutdownC,
+		); err != nil {
+			return err, false
+		}
+	}
+	return
 }
 
 type unrecoverableError struct {
@@ -472,7 +515,8 @@ func ServeQUIC(
 ) (err error, recoverable bool) {
 	tlsConfig := config.EdgeTLSConfigs[connection.QUIC]
 	quicConfig := &quic.Config{
-		HandshakeIdleTimeout: time.Second * 10,
+		HandshakeIdleTimeout: quicHandshakeIdleTimeout,
+		MaxIdleTimeout:       quicMaxIdleTimeout,
 		KeepAlive:            true,
 	}
 	for {
@@ -511,7 +555,6 @@ func ServeQUIC(
 			if err == nil {
 				return nil, false
 			}
-			config.Log.Info().Msg("Reconnecting with the same udp conn")
 		}
 	}
 }

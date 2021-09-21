@@ -57,7 +57,11 @@ func NewQUICConnection(
 		return nil, errors.Wrap(err, "failed to open a registration stream")
 	}
 
-	go controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions)
+	err = controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions)
+	if err != nil {
+		// Not wrapping error here to be consistent with the http2 message.
+		return nil, err
+	}
 
 	return &QUICConnection{
 		session:   session,
@@ -74,6 +78,10 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 	for {
 		stream, err := q.session.AcceptStream(ctx)
 		if err != nil {
+			// context.Canceled is usually a user ctrl+c. We don't want to log an error here as it's intentional.
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
 			return errors.Wrap(err, "failed to accept QUIC stream")
 		}
 		go func() {

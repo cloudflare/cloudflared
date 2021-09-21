@@ -16,7 +16,6 @@ import (
 	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/gobwas/ws/wsutil"
 	"github.com/lucas-clemente/quic-go"
@@ -27,6 +26,7 @@ import (
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // TestQUICServer tests if a quic server accepts and responds to a quic client with the acceptance protocol.
@@ -158,21 +158,7 @@ func TestQUICServer(t *testing.T) {
 				)
 			}()
 
-			rpcClientFactory := mockRPCClientFactory{
-				registered:   make(chan struct{}),
-				unregistered: make(chan struct{}),
-			}
-
-			obs := NewObserver(&log, &log, false)
-			controlStream := NewControlStream(
-				obs,
-				mockConnectedFuse{},
-				&NamedTunnelConfig{},
-				1,
-				rpcClientFactory.newMockRPCClient,
-				nil,
-				1*time.Second,
-			)
+			controlStream := fakeControlStream{}
 
 			qC, err := NewQUICConnection(
 				ctx,
@@ -188,17 +174,20 @@ func TestQUICServer(t *testing.T) {
 			go qC.Serve(ctx)
 
 			wg.Wait()
-
-			select {
-			case <-rpcClientFactory.registered:
-				break //ok
-			case <-time.Tick(time.Second):
-				t.Fatal("timeout out waiting for registration")
-			}
 			cancel()
 		})
 	}
+}
 
+type fakeControlStream struct {
+	ControlStreamHandler
+}
+
+func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions) error {
+	return nil
+}
+func (fakeControlStream) IsStopped() bool {
+	return true
 }
 
 func quicServer(
