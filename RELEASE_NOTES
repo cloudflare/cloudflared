@@ -1,3 +1,7 @@
+2021.9.1
+- 2021-09-21 TUN-5118: Quic connection now detects duplicate connections similar to http2
+- 2021-09-15 Fix TryCloudflare link
+
 2021.9.0
 - 2021-09-02 Fix broken TryCloudflare link
 - 2021-09-03 Add support for taking named tunnel credentials from an environment variable
