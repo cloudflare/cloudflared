@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -100,7 +101,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	connType := determineHTTP2Type(r)
 	handleMissingRequestParts(connType, r)
 
-	respWriter, err := newHTTP2RespWriter(r, w, connType)
+	respWriter, err := NewHTTP2RespWriter(r, w, connType)
 	if err != nil {
 		c.observer.log.Error().Msg(err.Error())
 		return
@@ -159,7 +160,7 @@ type http2RespWriter struct {
 	shouldFlush bool
 }
 
-func newHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (*http2RespWriter, error) {
+func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (*http2RespWriter, error) {
 	flusher, isFlusher := w.(http.Flusher)
 	if !isFlusher {
 		respWriter := &http2RespWriter{
@@ -231,7 +232,7 @@ func (rp *http2RespWriter) Write(p []byte) (n int, err error) {
 		// Implementer of OriginClient should make sure it doesn't write to the connection after Proxy returns
 		// Register a recover routine just in case.
 		if r := recover(); r != nil {
-			println("Recover from http2 response writer panic, error", r)
+			println(fmt.Sprintf("Recover from http2 response writer panic, error %s", debug.Stack()))
 		}
 	}()
 	n, err = rp.w.Write(p)

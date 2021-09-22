@@ -18,11 +18,15 @@ const (
 	writeWait = 10 * time.Second
 
 	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	defaultPongWait = 60 * time.Second
 
 	// Send pings to peer with this period. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
+	defaultPingPeriod = (defaultPongWait * 9) / 10
+
+	PingPeriodContextKey = PingPeriodContext("pingPeriod")
 )
+
+type PingPeriodContext string
 
 // GorillaConn is a wrapper around the standard gorilla websocket but implements a ReadWriter
 // This is still used by access carrier
@@ -77,7 +81,7 @@ func (c *GorillaConn) SetDeadline(t time.Time) error {
 
 // pinger simulates the websocket connection to keep it alive
 func (c *GorillaConn) pinger(ctx context.Context) {
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(defaultPingPeriod)
 	defer ticker.Stop()
 	for {
 		select {
@@ -94,12 +98,15 @@ func (c *GorillaConn) pinger(ctx context.Context) {
 type Conn struct {
 	rw  io.ReadWriter
 	log *zerolog.Logger
+	// closed is a channel to indicate if Conn has been fully terminated
+	shutdownC chan struct{}
 }
 
 func NewConn(ctx context.Context, rw io.ReadWriter, log *zerolog.Logger) *Conn {
 	c := &Conn{
-		rw:  rw,
-		log: log,
+		rw:        rw,
+		log:       log,
+		shutdownC: make(chan struct{}),
 	}
 	go c.pinger(ctx)
 	return c
@@ -123,23 +130,39 @@ func (c *Conn) Write(p []byte) (int, error) {
 }
 
 func (c *Conn) pinger(ctx context.Context) {
+	defer close(c.shutdownC)
 	pongMessge := wsutil.Message{
 		OpCode:  gobwas.OpPong,
 		Payload: []byte{},
 	}
-	ticker := time.NewTicker(pingPeriod)
+
+	ticker := time.NewTicker(c.pingPeriod(ctx))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			if err := wsutil.WriteServerMessage(c.rw, gobwas.OpPing, []byte{}); err != nil {
-				c.log.Err(err).Msgf("failed to write ping message")
+				c.log.Debug().Err(err).Msgf("failed to write ping message")
 			}
 			if err := wsutil.HandleClientControlMessage(c.rw, pongMessge); err != nil {
-				c.log.Err(err).Msgf("failed to write pong message")
+				c.log.Debug().Err(err).Msgf("failed to write pong message")
 			}
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func (c *Conn) pingPeriod(ctx context.Context) time.Duration {
+	if val := ctx.Value(PingPeriodContextKey); val != nil {
+		if period, ok := val.(time.Duration); ok {
+			return period
+		}
+	}
+	return defaultPingPeriod
+}
+
+// Close waits for pinger to terminate
+func (c *Conn) WaitForShutdown() {
+	<-c.shutdownC
 }
