@@ -64,9 +64,9 @@ func (c *controlStream) ServeControlStream(
 	shouldWaitForUnregister bool,
 ) error {
 	rpcClient := c.newRPCClientFunc(ctx, rw, c.observer.log)
-	defer rpcClient.Close()
 
 	if err := rpcClient.RegisterConnection(ctx, c.namedTunnelConfig, connOptions, c.connIndex, c.observer); err != nil {
+		rpcClient.Close()
 		return err
 	}
 	c.connectedFuse.Connected()
@@ -82,6 +82,7 @@ func (c *controlStream) ServeControlStream(
 
 func (c *controlStream) waitForUnregister(ctx context.Context, rpcClient NamedTunnelRPCClient) {
 	// wait for connection termination or start of graceful shutdown
+	defer rpcClient.Close()
 	select {
 	case <-ctx.Done():
 		break
