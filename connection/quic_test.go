@@ -183,7 +183,7 @@ type fakeControlStream struct {
 	ControlStreamHandler
 }
 
-func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions) error {
+func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions, shouldWaitForUnregister bool) error {
 	return nil
 }
 func (fakeControlStream) IsStopped() bool {

@@ -57,7 +57,7 @@ func NewQUICConnection(
 		return nil, errors.Wrap(err, "failed to open a registration stream")
 	}
 
-	err = controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions)
+	err = controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions, false)
 	if err != nil {
 		// Not wrapping error here to be consistent with the http2 message.
 		return nil, err
