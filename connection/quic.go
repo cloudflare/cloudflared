@@ -180,6 +180,20 @@ func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.Reader) (
 			req.Header.Add(httpHeaderKey[1], metadata.Val)
 		}
 	}
+	// Go's http.Client automatically sends chunked request body if this value is not set on the
+	// *http.Request struct regardless of header:
+	// https://go.googlesource.com/go/+/go1.8rc2/src/net/http/transfer.go#154.
+	if err := setContentLength(req); err != nil {
+		return nil, fmt.Errorf("Error setting content-length: %w", err)
+	}
 	stripWebsocketUpgradeHeader(req)
 	return req, err
+}
+
+func setContentLength(req *http.Request) error {
+	var err error
+	if contentLengthStr := req.Header.Get("Content-Length"); contentLengthStr != "" {
+		req.ContentLength, err = strconv.ParseInt(contentLengthStr, 10, 64)
+	}
+	return err
 }

@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -290,6 +291,107 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Reque
 		originRespEndpoint(w, http.StatusNotFound, []byte("page not found"))
 	}
 	return nil
+}
+
+func TestBuildHTTPRequest(t *testing.T) {
+	var tests = []struct {
+		name           string
+		connectRequest *quicpogs.ConnectRequest
+		req            *http.Request
+	}{
+		{
+			name: "check if http.Request is built correctly with content length",
+			connectRequest: &quicpogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []quicpogs.Metadata{
+					quicpogs.Metadata{
+						Key: "HttpHeader:Cf-Cloudflared-Proxy-Connection-Upgrade",
+						Val: "Websocket",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHeader:Content-Length",
+						Val: "514",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					quicpogs.Metadata{
+						Key: "HttpMethod",
+						Val: "get",
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "get",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header": []string{"Misc"},
+					"Content-Length": []string{"514"},
+				},
+				ContentLength: 514,
+				Host:          "cf.host",
+			},
+		},
+		{
+			name: "if content length isn't part of request headers, then it's not set",
+			connectRequest: &quicpogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []quicpogs.Metadata{
+					quicpogs.Metadata{
+						Key: "HttpHeader:Cf-Cloudflared-Proxy-Connection-Upgrade",
+						Val: "Websocket",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					quicpogs.Metadata{
+						Key: "HttpMethod",
+						Val: "get",
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "get",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header": []string{"Misc"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req, err := buildHTTPRequest(test.connectRequest, nil)
+			assert.NoError(t, err)
+			test.req = test.req.WithContext(req.Context())
+			assert.Equal(t, test.req, req)
+		})
+	}
 }
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
