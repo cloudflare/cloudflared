@@ -156,6 +156,18 @@ func TestNewNoResolveBalancesRegions(t *testing.T) {
 	}
 }
 
+func TestGetRegionalServiceName(t *testing.T) {
+	// Empty region should just go to origintunneld
+	globalServiceName := getRegionalServiceName("")
+	assert.Equal(t, srvService, globalServiceName)
+
+	// Non-empty region should go to the regional origintunneld variant
+	for _, region := range []string{"us", "pt", "am"} {
+		regionalServiceName := getRegionalServiceName(region)
+		assert.Equal(t, region+"-"+srvService, regionalServiceName)
+	}
+}
+
 func RegionsIsBalanced(t *testing.T, rs *Regions) {
 	delta := rs.region1.AvailableAddrs() - rs.region2.AvailableAddrs()
 	assert.True(t, abs(delta) <= 1)

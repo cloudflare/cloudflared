@@ -17,7 +17,7 @@ def assert_log_to_terminal(cloudflared):
 
 def assert_log_in_file(file):
     with open(file, "r") as f:
-        log = f.read(1850)
+        log = f.read(2000)
         assert expect_message in log, f"{log} doesn't contain {expect_message}"
 
 

@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	testTags                 = []tunnelpogs.Tag(nil)
+	testTags                 = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
 	unusedWarpRoutingService = (*ingress.WarpRoutingService)(nil)
 )
 
@@ -150,6 +150,9 @@ func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
 
 		err = proxy.ProxyHTTP(responseWriter, req, false)
 		require.NoError(t, err)
+		for _, tag := range testTags {
+			assert.Equal(t, tag.Value, req.Header.Get(TagHeaderNamePrefix+tag.Name))
+		}
 
 		assert.Equal(t, http.StatusOK, responseWriter.Code)
 	}

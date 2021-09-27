@@ -206,7 +206,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled, "")
+	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled)
 }
 
 func routeFromFlag(c *cli.Context) (route tunnelstore.Route, ok bool) {
@@ -225,7 +225,6 @@ func StartServer(
 	namedTunnel *connection.NamedTunnelConfig,
 	log *zerolog.Logger,
 	isUIEnabled bool,
-	quickTunnelHostname string,
 ) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
@@ -325,6 +324,15 @@ func StartServer(
 
 	observer := connection.NewObserver(log, logTransport, isUIEnabled)
 
+	// Send Quick Tunnel URL to UI if applicable
+	var quickTunnelURL string
+	if namedTunnel != nil {
+		quickTunnelURL = namedTunnel.QuickTunnelUrl
+	}
+	if quickTunnelURL != "" {
+		observer.SendURL(quickTunnelURL)
+	}
+
 	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
@@ -342,7 +350,7 @@ func StartServer(
 		defer wg.Done()
 		readinessServer := metrics.NewReadyServer(log)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelHostname, log)
+		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, log)
 	}()
 
 	if err := ingressRules.StartOrigins(&wg, log, ctx.Done(), errC); err != nil {
@@ -376,7 +384,11 @@ func StartServer(
 		observer.RegisterSink(app)
 	}
 
-	return waitToShutdown(&wg, cancel, errC, graceShutdownC, c.Duration("grace-period"), log)
+	gracePeriod, err := gracePeriod(c)
+	if err != nil {
+		return err
+	}
+	return waitToShutdown(&wg, cancel, errC, graceShutdownC, gracePeriod, log)
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
@@ -485,6 +497,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Address of the Cloudflare tunnel server. Only works in Cloudflare's internal testing environment.",
 			EnvVars: []string{"TUNNEL_EDGE"},
 			Hidden:  true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "region",
+			Usage:   "Cloudflare Edge region to connect to. Omit or set to empty to connect to the global region.",
+			EnvVars: []string{"TUNNEL_REGION"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    tlsconfig.CaCertFlag,
@@ -626,6 +643,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:   "quick-service",
 			Usage:  "URL for a service which manages unauthenticated 'quick' tunnels.",
+			Value:  "https://api.trycloudflare.com",
 			Hidden: true,
 		}),
 		selectProtocolFlag,

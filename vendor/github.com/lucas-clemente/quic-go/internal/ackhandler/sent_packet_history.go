@@ -64,8 +64,9 @@ func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) err
 // FirstOutStanding returns the first outstanding packet.
 func (h *sentPacketHistory) FirstOutstanding() *Packet {
 	for el := h.packetList.Front(); el != nil; el = el.Next() {
-		if !el.Value.declaredLost && !el.Value.skippedPacket {
-			return &el.Value
+		p := &el.Value
+		if !p.declaredLost && !p.skippedPacket && !p.IsPathMTUProbePacket {
+			return p
 		}
 	}
 	return nil

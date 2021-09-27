@@ -29,15 +29,13 @@ Once installed, you can authenticate `cloudflared` into your Cloudflare account 
 
 ## TryCloudflare
 
-Want to test Argo Tunnel before adding a website to Cloudflare? You can do so with TryCloudflare using the documentation [available here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/trycloudflare).
+Want to test Argo Tunnel before adding a website to Cloudflare? You can do so with TryCloudflare using the documentation [available here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/trycloudflare).
 
 ## Deprecated versions
 
-Cloudflare currently supports all versions of `cloudflared`. Starting on March 20, 2021, Cloudflare will no longer support versions released prior to 2020.5.1.
-
-All features available in versions released prior to 2020.5.1 are available in current versions. Breaking changes unrelated to feature availability may be introduced that will impact versions released prior to 2020.5.1. You can read more about upgrading `cloudflared` in our [developer documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#updating-cloudflared).
+Cloudflare currently supports versions of `cloudflared` 2020.5.1 and later. Breaking changes unrelated to feature availability may be introduced that will impact versions released prior to 2020.5.1. You can read more about upgrading `cloudflared` in our [developer documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#updating-cloudflared).
 
 | Version(s) | Deprecation status |
 |---|---|
 | 2020.5.1 and later | Supported |
-| Versions prior to 2020.5.1 | Will no longer be supported starting March 20, 2021 |
+| Versions prior to 2020.5.1 | No longer supported |

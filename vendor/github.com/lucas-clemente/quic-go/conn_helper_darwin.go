@@ -15,3 +15,7 @@ const (
 	msgTypeIPv4PKTINFO = unix.IP_PKTINFO
 	msgTypeIPv6PKTINFO = 0x2e
 )
+
+// ReadBatch only returns a single packet on OSX,
+// see https://godoc.org/golang.org/x/net/ipv4#PacketConn.ReadBatch.
+const batchSize = 1

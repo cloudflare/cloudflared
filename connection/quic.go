@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
@@ -28,9 +29,11 @@ const (
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session   quic.Session
-	logger    zerolog.Logger
-	httpProxy OriginProxy
+	session           quic.Session
+	logger            *zerolog.Logger
+	httpProxy         OriginProxy
+	gracefulShutdownC <-chan struct{}
+	stoppedGracefully bool
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -40,19 +43,30 @@ func NewQUICConnection(
 	edgeAddr net.Addr,
 	tlsConfig *tls.Config,
 	httpProxy OriginProxy,
-	logger zerolog.Logger,
+	connOptions *tunnelpogs.ConnectionOptions,
+	controlStreamHandler ControlStreamHandler,
+	observer *Observer,
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to dial to edge")
 	}
 
-	//TODO: RegisterConnectionRPC here.
+	registrationStream, err := session.OpenStream()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open a registration stream")
+	}
+
+	err = controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions, false)
+	if err != nil {
+		// Not wrapping error here to be consistent with the http2 message.
+		return nil, err
+	}
 
 	return &QUICConnection{
 		session:   session,
 		httpProxy: httpProxy,
-		logger:    logger,
+		logger:    observer.log,
 	}, nil
 }
 
@@ -64,6 +78,10 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 	for {
 		stream, err := q.session.AcceptStream(ctx)
 		if err != nil {
+			// context.Canceled is usually a user ctrl+c. We don't want to log an error here as it's intentional.
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
 			return errors.Wrap(err, "failed to accept QUIC stream")
 		}
 		go func() {
@@ -96,9 +114,23 @@ func (q *QUICConnection) handleStream(stream quic.Stream) error {
 		w := newHTTPResponseAdapter(stream)
 		return q.httpProxy.ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
-		return errors.New("not implemented")
+		rwa := &streamReadWriteAcker{
+			ReadWriter: stream,
+		}
+		return q.httpProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
 	}
 	return nil
+}
+
+// streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
+// the client.
+type streamReadWriteAcker struct {
+	io.ReadWriter
+}
+
+// AckConnection acks response back to the proxy.
+func (s *streamReadWriteAcker) AckConnection() error {
+	return quicpogs.WriteConnectResponseData(s, nil)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.

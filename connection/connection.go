@@ -18,6 +18,7 @@ import (
 const (
 	lbProbeUserAgentPrefix = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	LogFieldConnIndex      = "connIndex"
+	MaxGracePeriod         = time.Minute * 3
 )
 
 var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
@@ -29,8 +30,9 @@ type Config struct {
 }
 
 type NamedTunnelConfig struct {
-	Credentials Credentials
-	Client      pogs.ClientInfo
+	Credentials    Credentials
+	Client         pogs.ClientInfo
+	QuickTunnelUrl string
 }
 
 // Credentials are stored in the credentials file and contain all info needed to run a tunnel.
@@ -53,10 +55,6 @@ type ClassicTunnelConfig struct {
 	OriginCert []byte
 	// feature-flag to use new edge reconnect tokens
 	UseReconnectToken bool
-}
-
-func (c *ClassicTunnelConfig) IsTrialZone() bool {
-	return c.Hostname == ""
 }
 
 // Type indicates the connection type of the  connection.

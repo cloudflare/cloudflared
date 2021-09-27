@@ -261,8 +261,16 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 // and add the TunnelID into any old credentials (generated before TUN-3581 added the `TunnelID`
 // field to credentials files)
 func (sc *subcommandContext) findCredentials(tunnelID uuid.UUID) (connection.Credentials, error) {
-	credFinder := sc.credentialFinder(tunnelID)
-	credentials, err := sc.readTunnelCredentials(credFinder)
+	var credentials connection.Credentials
+	var err error
+	if credentialsContents := sc.c.String(CredContentsFlag); credentialsContents != "" {
+		if err = json.Unmarshal([]byte(credentialsContents), &credentials); err != nil {
+			err = errInvalidJSONCredential{path: "TUNNEL_CRED_CONTENTS", err: err}
+		}
+	} else {
+		credFinder := sc.credentialFinder(tunnelID)
+		credentials, err = sc.readTunnelCredentials(credFinder)
+	}
 	// This line ensures backwards compatibility with credentials files generated before
 	// TUN-3581. Those old credentials files don't have a TunnelID field, so we enrich the struct
 	// with the ID, which we have already resolved from the user input.
@@ -286,7 +294,6 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		&connection.NamedTunnelConfig{Credentials: credentials},
 		sc.log,
 		sc.isUIEnabled,
-		"",
 	)
 }
 

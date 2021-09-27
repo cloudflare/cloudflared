@@ -33,6 +33,7 @@ const (
 	connsSortByOptions   = "id, startedAt, numConnections, version"
 	CredFileFlagAlias    = "cred-file"
 	CredFileFlag         = "credentials-file"
+	CredContentsFlag     = "credentials-contents"
 	overwriteDNSFlagName = "overwrite-dns"
 
 	LogFieldTunnelID = "tunnelID"
@@ -111,8 +112,13 @@ var (
 		Usage:   "Filepath at which to read/write the tunnel credentials",
 		EnvVars: []string{"TUNNEL_CRED_FILE"},
 	}
-	credentialsFileFlag = altsrc.NewStringFlag(credentialsFileFlagCLIOnly)
-	forceDeleteFlag     = &cli.BoolFlag{
+	credentialsFileFlag     = altsrc.NewStringFlag(credentialsFileFlagCLIOnly)
+	credentialsContentsFlag = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    CredContentsFlag,
+		Usage:   "Contents of the tunnel credentials JSON file to use. When provided along with credentials-file, this will take precedence.",
+		EnvVars: []string{"TUNNEL_CRED_CONTENTS"},
+	})
+	forceDeleteFlag = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
 		Usage: "Cleans up any stale connections before the tunnel is deleted. cloudflared will not " +
@@ -579,6 +585,7 @@ func buildRunCommand() *cli.Command {
 	flags := []cli.Flag{
 		forceFlag,
 		credentialsFileFlag,
+		credentialsContentsFlag,
 		selectProtocolFlag,
 		featuresFlag,
 	}

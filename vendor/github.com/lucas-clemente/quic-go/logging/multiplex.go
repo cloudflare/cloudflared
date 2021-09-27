@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"net"
 	"time"
 )
@@ -22,10 +23,10 @@ func NewMultiplexedTracer(tracers ...Tracer) Tracer {
 	return &tracerMultiplexer{tracers}
 }
 
-func (m *tracerMultiplexer) TracerForConnection(p Perspective, odcid ConnectionID) ConnectionTracer {
+func (m *tracerMultiplexer) TracerForConnection(ctx context.Context, p Perspective, odcid ConnectionID) ConnectionTracer {
 	var connTracers []ConnectionTracer
 	for _, t := range m.tracers {
-		if ct := t.TracerForConnection(p, odcid); ct != nil {
+		if ct := t.TracerForConnection(ctx, p, odcid); ct != nil {
 			connTracers = append(connTracers, ct)
 		}
 	}
@@ -61,15 +62,21 @@ func NewMultiplexedConnectionTracer(tracers ...ConnectionTracer) ConnectionTrace
 	return &connTracerMultiplexer{tracers: tracers}
 }
 
-func (m *connTracerMultiplexer) StartedConnection(local, remote net.Addr, version VersionNumber, srcConnID, destConnID ConnectionID) {
+func (m *connTracerMultiplexer) StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID) {
 	for _, t := range m.tracers {
-		t.StartedConnection(local, remote, version, srcConnID, destConnID)
+		t.StartedConnection(local, remote, srcConnID, destConnID)
 	}
 }
 
-func (m *connTracerMultiplexer) ClosedConnection(reason CloseReason) {
+func (m *connTracerMultiplexer) NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber) {
 	for _, t := range m.tracers {
-		t.ClosedConnection(reason)
+		t.NegotiatedVersion(chosen, clientVersions, serverVersions)
+	}
+}
+
+func (m *connTracerMultiplexer) ClosedConnection(e error) {
+	for _, t := range m.tracers {
+		t.ClosedConnection(e)
 	}
 }
 
@@ -136,6 +143,12 @@ func (m *connTracerMultiplexer) UpdatedCongestionState(state CongestionState) {
 func (m *connTracerMultiplexer) UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFLight ByteCount, packetsInFlight int) {
 	for _, t := range m.tracers {
 		t.UpdatedMetrics(rttStats, cwnd, bytesInFLight, packetsInFlight)
+	}
+}
+
+func (m *connTracerMultiplexer) AcknowledgedPacket(encLevel EncryptionLevel, pn PacketNumber) {
+	for _, t := range m.tracers {
+		t.AcknowledgedPacket(encLevel, pn)
 	}
 }
 

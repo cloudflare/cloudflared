@@ -27,7 +27,7 @@ type Packet struct {
 type SentPacketHandler interface {
 	// SentPacket may modify the packet
 	SentPacket(packet *Packet)
-	ReceivedAck(ackFrame *wire.AckFrame, encLevel protocol.EncryptionLevel, recvTime time.Time) error
+	ReceivedAck(ackFrame *wire.AckFrame, encLevel protocol.EncryptionLevel, recvTime time.Time) (bool /* 1-RTT packet acked */, error)
 	ReceivedBytes(protocol.ByteCount)
 	DropPackets(protocol.EncryptionLevel)
 	ResetForRetry() error

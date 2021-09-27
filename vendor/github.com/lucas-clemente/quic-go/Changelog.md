@@ -1,6 +1,21 @@
 # Changelog
 
-## v0.20.0 (unreleased)
+## v0.22.0 (2021-07-25)
+
+- Use `ReadBatch` to read multiple UDP packets from the socket with a single syscall
+- Add a config option (`Config.DisableVersionNegotiationPackets`) to disable sending of Version Negotiation packets
+- Drop support for QUIC draft versions 32 and 34
+- Remove the `RetireBugBackwardsCompatibilityMode`, which was intended to mitigate a bug when retiring connection IDs in quic-go in v0.17.2 and ealier
+
+## v0.21.2 (2021-07-15)
+
+- Update qtls (for Go 1.15, 1.16 and 1.17rc1) to include the fix for the crypto/tls panic (see https://groups.google.com/g/golang-dev/c/5LJ2V7rd-Ag/m/YGLHVBZ6AAAJ for details)
+
+## v0.21.0 (2021-06-01)
+
+- quic-go now supports RFC 9000!
+
+## v0.20.0 (2021-03-19)
 
 - Remove the `quic.Config.HandshakeTimeout`. Introduce a `quic.Config.HandshakeIdleTimeout`.
 

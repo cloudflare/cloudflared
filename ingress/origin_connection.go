@@ -48,7 +48,12 @@ type tcpOverWSConnection struct {
 }
 
 func (wc *tcpOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	wc.streamHandler(websocket.NewConn(ctx, tunnelConn, log), wc.conn, log)
+	wsCtx, cancel := context.WithCancel(ctx)
+	wsConn := websocket.NewConn(wsCtx, tunnelConn, log)
+	wc.streamHandler(wsConn, wc.conn, log)
+	cancel()
+	// Makes sure wsConn stops sending ping before terminating the stream
+	wsConn.WaitForShutdown()
 }
 
 func (wc *tcpOverWSConnection) Close() {
@@ -63,7 +68,12 @@ type socksProxyOverWSConnection struct {
 }
 
 func (sp *socksProxyOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	socks.StreamNetHandler(websocket.NewConn(ctx, tunnelConn, log), sp.accessPolicy, log)
+	wsCtx, cancel := context.WithCancel(ctx)
+	wsConn := websocket.NewConn(wsCtx, tunnelConn, log)
+	socks.StreamNetHandler(wsConn, sp.accessPolicy, log)
+	cancel()
+	// Makes sure wsConn stops sending ping before terminating the stream
+	wsConn.WaitForShutdown()
 }
 
 func (sp *socksProxyOverWSConnection) Close() {

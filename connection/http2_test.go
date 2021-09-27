@@ -30,16 +30,24 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	edgeConn, originConn := net.Pipe()
 	var connIndex = uint8(0)
 	log := zerolog.Nop()
+	obs := NewObserver(&log, &log, false)
+	controlStream := NewControlStream(
+		obs,
+		mockConnectedFuse{},
+		&NamedTunnelConfig{},
+		connIndex,
+		nil,
+		nil,
+		1*time.Second,
+	)
 	return NewHTTP2Connection(
 		originConn,
 		testConfig,
-		&NamedTunnelConfig{},
 		&pogs.ConnectionOptions{},
-		NewObserver(&log, &log, false),
+		obs,
 		connIndex,
-		mockConnectedFuse{},
+		controlStream,
 		&log,
-		nil,
 	), edgeConn
 }
 
@@ -225,7 +233,18 @@ func TestServeControlStream(t *testing.T) {
 		registered:   make(chan struct{}),
 		unregistered: make(chan struct{}),
 	}
-	http2Conn.newRPCClientFunc = rpcClientFactory.newMockRPCClient
+
+	obs := NewObserver(&log, &log, false)
+	controlStream := NewControlStream(
+		obs,
+		mockConnectedFuse{},
+		&NamedTunnelConfig{},
+		1,
+		rpcClientFactory.newMockRPCClient,
+		nil,
+		1*time.Second,
+	)
+	http2Conn.controlStreamHandler = controlStream
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -264,7 +283,18 @@ func TestFailRegistration(t *testing.T) {
 		registered:   make(chan struct{}),
 		unregistered: make(chan struct{}),
 	}
-	http2Conn.newRPCClientFunc = rpcClientFactory.newMockRPCClient
+
+	obs := NewObserver(&log, &log, false)
+	controlStream := NewControlStream(
+		obs,
+		mockConnectedFuse{},
+		&NamedTunnelConfig{},
+		http2Conn.connIndex,
+		rpcClientFactory.newMockRPCClient,
+		nil,
+		1*time.Second,
+	)
+	http2Conn.controlStreamHandler = controlStream
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -297,10 +327,21 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 		unregistered: make(chan struct{}),
 	}
 	events := &eventCollectorSink{}
-	http2Conn.newRPCClientFunc = rpcClientFactory.newMockRPCClient
-	http2Conn.observer.RegisterSink(events)
+
 	shutdownC := make(chan struct{})
-	http2Conn.gracefulShutdownC = shutdownC
+	obs := NewObserver(&log, &log, false)
+	obs.RegisterSink(events)
+	controlStream := NewControlStream(
+		obs,
+		mockConnectedFuse{},
+		&NamedTunnelConfig{},
+		http2Conn.connIndex,
+		rpcClientFactory.newMockRPCClient,
+		shutdownC,
+		1*time.Second,
+	)
+
+	http2Conn.controlStreamHandler = controlStream
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -339,7 +380,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	case <-time.Tick(time.Second):
 		t.Fatal("timeout out waiting for unregistered signal")
 	}
-	assert.True(t, http2Conn.stoppedGracefully)
+	assert.True(t, controlStream.IsStopped())
 
 	cancel()
 	wg.Wait()

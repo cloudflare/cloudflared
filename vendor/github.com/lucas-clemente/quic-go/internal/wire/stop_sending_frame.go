@@ -4,13 +4,14 @@ import (
 	"bytes"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/quicvarint"
 )
 
 // A StopSendingFrame is a STOP_SENDING frame
 type StopSendingFrame struct {
 	StreamID  protocol.StreamID
-	ErrorCode protocol.ApplicationErrorCode
+	ErrorCode qerr.StreamErrorCode
 }
 
 // parseStopSendingFrame parses a STOP_SENDING frame
@@ -30,7 +31,7 @@ func parseStopSendingFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StopSend
 
 	return &StopSendingFrame{
 		StreamID:  protocol.StreamID(streamID),
-		ErrorCode: protocol.ApplicationErrorCode(errorCode),
+		ErrorCode: qerr.StreamErrorCode(errorCode),
 	}, nil
 }
 

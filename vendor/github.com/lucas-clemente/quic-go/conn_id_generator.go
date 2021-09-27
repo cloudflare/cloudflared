@@ -73,15 +73,21 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 
 func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.ConnectionID) error {
 	if seq > m.highestSeq {
-		return qerr.NewError(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d. Highest issued: %d", seq, m.highestSeq))
+		return &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: fmt.Sprintf("retired connection ID %d (highest issued: %d)", seq, m.highestSeq),
+		}
 	}
 	connID, ok := m.activeSrcConnIDs[seq]
 	// We might already have deleted this connection ID, if this is a duplicate frame.
 	if !ok {
 		return nil
 	}
-	if connID.Equal(sentWithDestConnID) && !protocol.UseRetireBugBackwardsCompatibilityMode(RetireBugBackwardsCompatibilityMode, m.version) {
-		return qerr.NewError(qerr.ProtocolViolation, fmt.Sprintf("tried to retire connection ID %d (%s), which was used as the Destination Connection ID on this packet", seq, connID))
+	if connID.Equal(sentWithDestConnID) {
+		return &qerr.TransportError{
+			ErrorCode:    qerr.ProtocolViolation,
+			ErrorMessage: fmt.Sprintf("retired connection ID %d (%s), which was used as the Destination Connection ID on this packet", seq, connID),
+		}
 	}
 	m.retireConnectionID(connID)
 	delete(m.activeSrcConnIDs, seq)
@@ -93,9 +99,6 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 }
 
 func (m *connIDGenerator) issueNewConnID() error {
-	if protocol.UseRetireBugBackwardsCompatibilityMode(RetireBugBackwardsCompatibilityMode, m.version) {
-		return nil
-	}
 	connID, err := protocol.GenerateConnectionID(m.connIDLen)
 	if err != nil {
 		return err

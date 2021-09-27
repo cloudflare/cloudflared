@@ -191,6 +191,51 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 				TunnelName:   name,
 			},
 		},
+		{
+			name: "TUNNEL_CRED_CONTENTS given contains old credentials contents",
+			fields: fields{
+				log: &log,
+				fs:  fs,
+				c: func() *cli.Context {
+					flagSet := flag.NewFlagSet("test0", flag.PanicOnError)
+					flagSet.String(CredContentsFlag, "", "")
+					c := cli.NewContext(cli.NewApp(), flagSet, nil)
+					_ = c.Set(CredContentsFlag, fmt.Sprintf(`{"AccountTag":"%s","TunnelSecret":"%s"}`, accountTag, secretB64))
+					return c
+				}(),
+			},
+			args: args{
+				tunnelID: tunnelID,
+			},
+			want: connection.Credentials{
+				AccountTag:   accountTag,
+				TunnelID:     tunnelID,
+				TunnelSecret: secret,
+			},
+		},
+		{
+			name: "TUNNEL_CRED_CONTENTS given contains new credentials contents",
+			fields: fields{
+				log: &log,
+				fs:  fs,
+				c: func() *cli.Context {
+					flagSet := flag.NewFlagSet("test0", flag.PanicOnError)
+					flagSet.String(CredContentsFlag, "", "")
+					c := cli.NewContext(cli.NewApp(), flagSet, nil)
+					_ = c.Set(CredContentsFlag, fmt.Sprintf(`{"AccountTag":"%s","TunnelSecret":"%s","TunnelID":"%s","TunnelName":"%s"}`, accountTag, secretB64, tunnelID, name))
+					return c
+				}(),
+			},
+			args: args{
+				tunnelID: tunnelID,
+			},
+			want: connection.Credentials{
+				AccountTag:   accountTag,
+				TunnelID:     tunnelID,
+				TunnelSecret: secret,
+				TunnelName:   name,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

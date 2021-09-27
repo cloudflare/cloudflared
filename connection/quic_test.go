@@ -25,6 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // TestQUICServer tests if a quic server accepts and responds to a quic client with the acceptance protocol.
@@ -134,6 +136,13 @@ func TestQUICServer(t *testing.T) {
 			message:          wsBuf.Bytes(),
 			expectedResponse: []byte{0x81, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
 		},
+		{
+			desc:             "test tcp proxy",
+			connectionType:   quicpogs.ConnectionTypeTCP,
+			metadata:         []quicpogs.Metadata{},
+			message:          []byte("Here is some tcp data"),
+			expectedResponse: []byte("Here is some tcp data"),
+		},
 	}
 
 	for _, test := range tests {
@@ -149,7 +158,18 @@ func TestQUICServer(t *testing.T) {
 				)
 			}()
 
-			qC, err := NewQUICConnection(ctx, quicConfig, udpListener.LocalAddr(), tlsClientConfig, originProxy, log)
+			controlStream := fakeControlStream{}
+
+			qC, err := NewQUICConnection(
+				ctx,
+				quicConfig,
+				udpListener.LocalAddr(),
+				tlsClientConfig,
+				originProxy,
+				&pogs.ConnectionOptions{},
+				controlStream,
+				NewObserver(&log, &log, false),
+			)
 			require.NoError(t, err)
 			go qC.Serve(ctx)
 
@@ -157,7 +177,17 @@ func TestQUICServer(t *testing.T) {
 			cancel()
 		})
 	}
+}
 
+type fakeControlStream struct {
+	ControlStreamHandler
+}
+
+func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions, shouldWaitForUnregister bool) error {
+	return nil
+}
+func (fakeControlStream) IsStopped() bool {
+	return true
 }
 
 func quicServer(
@@ -174,7 +204,7 @@ func quicServer(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	earlyListener, err := quic.ListenEarly(conn, tlsConf, config)
+	earlyListener, err := quic.Listen(conn, tlsConf, config)
 	require.NoError(t, err)
 
 	session, err := earlyListener.Accept(ctx)
@@ -183,7 +213,6 @@ func quicServer(
 	stream, err := session.OpenStreamSync(context.Background())
 	require.NoError(t, err)
 
-	// Start off ALPN
 	err = quicpogs.WriteConnectRequestData(stream, dest, connectionType, metadata...)
 	require.NoError(t, err)
 
@@ -264,5 +293,7 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Reque
 }
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
+	rwa.AckConnection()
+	io.Copy(rwa, rwa)
 	return nil
 }

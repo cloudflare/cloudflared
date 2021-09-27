@@ -63,6 +63,7 @@ func (p *Proxy) ProxyHTTP(
 
 	cfRay := connection.FindCfRayHeader(req)
 	lbProbe := connection.IsLBProbeRequest(req)
+	p.appendTagHeaders(req)
 
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	logFields := logFields{

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	homedir "github.com/mitchellh/go-homedir"
@@ -161,7 +162,6 @@ func prepareTunnelConfig(
 		log.Err(err).Str(LogFieldHostname, configHostname).Msg("Invalid hostname")
 		return nil, ingress.Ingress{}, errors.Wrap(err, "Invalid hostname")
 	}
-	isFreeTunnel := hostname == ""
 	clientID := c.String("id")
 	if !c.IsSet("id") {
 		clientID, err = generateRandomClientID(log)
@@ -177,19 +177,6 @@ func prepareTunnelConfig(
 	}
 
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
-
-	var originCert []byte
-	if !isFreeTunnel {
-		originCertPath := c.String("origincert")
-		originCertLog := log.With().
-			Str(LogFieldOriginCertPath, originCertPath).
-			Logger()
-
-		originCert, err = getOriginCert(originCertPath, &originCertLog)
-		if err != nil {
-			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
-		}
-	}
 
 	var (
 		ingressRules  ingress.Ingress
@@ -217,6 +204,17 @@ func prepareTunnelConfig(
 			return nil, ingress.Ingress{}, ingress.ErrURLIncompatibleWithIngress
 		}
 	} else {
+
+		originCertPath := c.String("origincert")
+		originCertLog := log.With().
+			Str(LogFieldOriginCertPath, originCertPath).
+			Logger()
+
+		originCert, err := getOriginCert(originCertPath, &originCertLog)
+		if err != nil {
+			return nil, ingress.Ingress{}, errors.Wrap(err, "Error getting origin cert")
+		}
+
 		classicTunnel = &connection.ClassicTunnelConfig{
 			Hostname:   hostname,
 			OriginCert: originCert,
@@ -248,17 +246,28 @@ func prepareTunnelConfig(
 
 	edgeTLSConfigs := make(map[connection.Protocol]*tls.Config, len(connection.ProtocolList))
 	for _, p := range connection.ProtocolList {
-		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, p.ServerName())
+		tlsSettings := p.TLSSettings()
+		if tlsSettings == nil {
+			return nil, ingress.Ingress{}, fmt.Errorf("%s has unknown TLS settings", p)
+		}
+		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, tlsSettings.ServerName)
 		if err != nil {
 			return nil, ingress.Ingress{}, errors.Wrap(err, "unable to create TLS config to connect with edge")
+		}
+		if len(tlsSettings.NextProtos) > 0 {
+			edgeTLSConfig.NextProtos = tlsSettings.NextProtos
 		}
 		edgeTLSConfigs[p] = edgeTLSConfig
 	}
 
 	originProxy := origin.NewOriginProxy(ingressRules, warpRoutingService, tags, log)
+	gracePeriod, err := gracePeriod(c)
+	if err != nil {
+		return nil, ingress.Ingress{}, err
+	}
 	connectionConfig := &connection.Config{
 		OriginProxy:     originProxy,
-		GracePeriod:     c.Duration("grace-period"),
+		GracePeriod:     gracePeriod,
 		ReplaceExisting: c.Bool("force"),
 	}
 	muxerConfig := &connection.MuxerConfig{
@@ -275,10 +284,10 @@ func prepareTunnelConfig(
 		OSArch:           buildInfo.OSArch(),
 		ClientID:         clientID,
 		EdgeAddrs:        c.StringSlice("edge"),
+		Region:           c.String("region"),
 		HAConnections:    c.Int("ha-connections"),
 		IncidentLookup:   origin.NewIncidentLookup(),
 		IsAutoupdated:    c.Bool("is-autoupdated"),
-		IsFreeTunnel:     isFreeTunnel,
 		LBPool:           c.String("lb-pool"),
 		Tags:             tags,
 		Log:              log,
@@ -294,6 +303,14 @@ func prepareTunnelConfig(
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}, ingressRules, nil
+}
+
+func gracePeriod(c *cli.Context) (time.Duration, error) {
+	period := c.Duration("grace-period")
+	if period > connection.MaxGracePeriod {
+		return time.Duration(0), fmt.Errorf("grace-period must be equal or less than %v", connection.MaxGracePeriod)
+	}
+	return period, nil
 }
 
 func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel bool) bool {

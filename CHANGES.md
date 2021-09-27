@@ -1,5 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.8.4
+### Improvements
+- Temporary tunnels (those hosted on trycloudflare.com that do not require a Cloudflare login) now run as Named Tunnels
+underneath. We recall that these tunnels should not be relied upon for production usage as they come with no guarantee
+of uptime. Previous cloudflared versions will soon be unable to run legacy temporary tunnels and will require an update
+(to this version or more recent).
+
 ## 2021.8.2
 ### Improvements
 - Because Equinox os shutting down, all cloudflared releases are now present [here](https://github.com/cloudflare/cloudflared/releases).

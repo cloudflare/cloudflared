@@ -87,6 +87,7 @@ type baseServer struct {
 		*handshake.TokenGenerator,
 		bool, /* enable 0-RTT */
 		logging.ConnectionTracer,
+		uint64,
 		utils.Logger,
 		protocol.VersionNumber,
 	) quicSession
@@ -365,7 +366,9 @@ func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* is the buffer s
 			}
 			return false
 		}
-		go s.sendVersionNegotiationPacket(p, hdr)
+		if !s.config.DisableVersionNegotiationPackets {
+			go s.sendVersionNegotiationPacket(p, hdr)
+		}
 		return false
 	}
 	if hdr.IsLongHeader && hdr.Type != protocol.PacketTypeInitial {
@@ -450,6 +453,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 	}
 	s.logger.Debugf("Changing connection ID to %s.", connID)
 	var sess quicSession
+	tracingID := nextSessionTracingID()
 	if added := s.sessionHandler.AddWithConnID(hdr.DestConnectionID, connID, func() packetHandler {
 		var tracer logging.ConnectionTracer
 		if s.config.Tracer != nil {
@@ -458,7 +462,11 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			if origDestConnID.Len() > 0 {
 				connID = origDestConnID
 			}
-			tracer = s.config.Tracer.TracerForConnection(protocol.PerspectiveServer, connID)
+			tracer = s.config.Tracer.TracerForConnection(
+				context.WithValue(context.Background(), SessionTracingKey, tracingID),
+				protocol.PerspectiveServer,
+				connID,
+			)
 		}
 		sess = s.newSession(
 			newSendConn(s.conn, p.remoteAddr, p.info),
@@ -474,6 +482,7 @@ func (s *baseServer) handleInitialImpl(p *receivedPacket, hdr *wire.Header) erro
 			s.tokenGenerator,
 			s.acceptEarlySessions,
 			tracer,
+			tracingID,
 			s.logger,
 			hdr.Version,
 		)
@@ -593,12 +602,12 @@ func (s *baseServer) sendConnectionRefused(remoteAddr net.Addr, hdr *wire.Header
 }
 
 // sendError sends the error as a response to the packet received with header hdr
-func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.ErrorCode, info *packetInfo) error {
+func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer handshake.LongHeaderSealer, errorCode qerr.TransportErrorCode, info *packetInfo) error {
 	packetBuffer := getPacketBuffer()
 	defer packetBuffer.Release()
 	buf := bytes.NewBuffer(packetBuffer.Data)
 
-	ccf := &wire.ConnectionCloseFrame{ErrorCode: errorCode}
+	ccf := &wire.ConnectionCloseFrame{ErrorCode: uint64(errorCode)}
 
 	replyHdr := &wire.ExtendedHeader{}
 	replyHdr.IsLongHeader = true

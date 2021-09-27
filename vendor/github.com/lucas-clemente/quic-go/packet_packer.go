@@ -20,7 +20,8 @@ type packer interface {
 	PackPacket() (*packedPacket, error)
 	MaybePackProbePacket(protocol.EncryptionLevel) (*packedPacket, error)
 	MaybePackAckPacket(handshakeConfirmed bool) (*packedPacket, error)
-	PackConnectionClose(*qerr.QuicError) (*coalescedPacket, error)
+	PackConnectionClose(*qerr.TransportError) (*coalescedPacket, error)
+	PackApplicationClose(*qerr.ApplicationError) (*coalescedPacket, error)
 
 	SetMaxPacketSize(protocol.ByteCount)
 	PackMTUProbePacket(ping ackhandler.Frame, size protocol.ByteCount) (*packedPacket, error)
@@ -203,14 +204,27 @@ func newPacketPacker(
 	}
 }
 
-// PackConnectionClose packs a packet that ONLY contains a ConnectionCloseFrame
-func (p *packetPacker) PackConnectionClose(quicErr *qerr.QuicError) (*coalescedPacket, error) {
+// PackConnectionClose packs a packet that closes the connection with a transport error.
+func (p *packetPacker) PackConnectionClose(e *qerr.TransportError) (*coalescedPacket, error) {
 	var reason string
 	// don't send details of crypto errors
-	if !quicErr.IsCryptoError() {
-		reason = quicErr.ErrorMessage
+	if !e.ErrorCode.IsCryptoError() {
+		reason = e.ErrorMessage
 	}
+	return p.packConnectionClose(false, uint64(e.ErrorCode), e.FrameType, reason)
+}
 
+// PackApplicationClose packs a packet that closes the connection with an application error.
+func (p *packetPacker) PackApplicationClose(e *qerr.ApplicationError) (*coalescedPacket, error) {
+	return p.packConnectionClose(true, uint64(e.ErrorCode), 0, e.ErrorMessage)
+}
+
+func (p *packetPacker) packConnectionClose(
+	isApplicationError bool,
+	errorCode uint64,
+	frameType uint64,
+	reason string,
+) (*coalescedPacket, error) {
 	var sealers [4]sealer
 	var hdrs [4]*wire.ExtendedHeader
 	var payloads [4]*payload
@@ -221,20 +235,17 @@ func (p *packetPacker) PackConnectionClose(quicErr *qerr.QuicError) (*coalescedP
 		if p.perspective == protocol.PerspectiveServer && encLevel == protocol.Encryption0RTT {
 			continue
 		}
-		quicErrToSend := quicErr
-		reasonPhrase := reason
-		if encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake {
-			// don't send application errors in Initial or Handshake packets
-			if quicErr.IsApplicationError() {
-				quicErrToSend = qerr.NewError(qerr.ApplicationError, "")
-				reasonPhrase = ""
-			}
-		}
 		ccf := &wire.ConnectionCloseFrame{
-			IsApplicationError: quicErrToSend.IsApplicationError(),
-			ErrorCode:          quicErrToSend.ErrorCode,
-			FrameType:          quicErrToSend.FrameType,
-			ReasonPhrase:       reasonPhrase,
+			IsApplicationError: isApplicationError,
+			ErrorCode:          errorCode,
+			FrameType:          frameType,
+			ReasonPhrase:       reason,
+		}
+		// don't send application errors in Initial or Handshake packets
+		if isApplicationError && (encLevel == protocol.EncryptionInitial || encLevel == protocol.EncryptionHandshake) {
+			ccf.IsApplicationError = false
+			ccf.ErrorCode = uint64(qerr.ApplicationErrorErrorCode)
+			ccf.ReasonPhrase = ""
 		}
 		payload := &payload{
 			frames: []ackhandler.Frame{{Frame: ccf}},

@@ -50,7 +50,10 @@ func (c *connectionFlowController) IncrementHighestReceived(increment protocol.B
 
 	c.highestReceived += increment
 	if c.checkFlowControlViolation() {
-		return qerr.NewError(qerr.FlowControlError, fmt.Sprintf("Received %d bytes for the connection, allowed %d bytes", c.highestReceived, c.receiveWindow))
+		return &qerr.TransportError{
+			ErrorCode:    qerr.FlowControlError,
+			ErrorMessage: fmt.Sprintf("received %d bytes for the connection, allowed %d bytes", c.highestReceived, c.receiveWindow),
+		}
 	}
 	return nil
 }

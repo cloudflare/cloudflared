@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucas-clemente/quic-go/internal/flowcontrol"
 	"github.com/lucas-clemente/quic-go/internal/protocol"
+	"github.com/lucas-clemente/quic-go/internal/qerr"
 	"github.com/lucas-clemente/quic-go/internal/utils"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
@@ -38,7 +39,7 @@ type receiveStream struct {
 
 	closeForShutdownErr error
 	cancelReadErr       error
-	resetRemotelyErr    StreamError
+	resetRemotelyErr    *StreamError
 
 	closedForShutdown bool // set when CloseForShutdown() is called
 	finRead           bool // set once we read a frame with a Fin
@@ -196,7 +197,7 @@ func (s *receiveStream) dequeueNextFrame() {
 	s.readPosInFrame = 0
 }
 
-func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
+func (s *receiveStream) CancelRead(errorCode StreamErrorCode) {
 	s.mutex.Lock()
 	completed := s.cancelReadImpl(errorCode)
 	s.mutex.Unlock()
@@ -207,7 +208,7 @@ func (s *receiveStream) CancelRead(errorCode protocol.ApplicationErrorCode) {
 	}
 }
 
-func (s *receiveStream) cancelReadImpl(errorCode protocol.ApplicationErrorCode) bool /* completed */ {
+func (s *receiveStream) cancelReadImpl(errorCode qerr.StreamErrorCode) bool /* completed */ {
 	if s.finRead || s.canceledRead || s.resetRemotely {
 		return false
 	}
@@ -281,9 +282,9 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 		return false, nil
 	}
 	s.resetRemotely = true
-	s.resetRemotelyErr = streamCanceledError{
-		errorCode: frame.ErrorCode,
-		error:     fmt.Errorf("stream %d was reset with error code %d", s.streamID, frame.ErrorCode),
+	s.resetRemotelyErr = &StreamError{
+		StreamID:  s.streamID,
+		ErrorCode: frame.ErrorCode,
 	}
 	s.signalRead()
 	return newlyRcvdFinalOffset, nil

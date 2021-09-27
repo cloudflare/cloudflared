@@ -12,9 +12,22 @@ import (
 // before writing the metadata.
 var protocolSignature = []byte{0x0A, 0x36, 0xCD, 0x12, 0xA1, 0x3E}
 
+const protocolVersionLength = 2
+
+type protocolVersion string
+
+const (
+	protocolV1 protocolVersion = "01"
+)
+
 // ReadConnectRequestData reads the handshake data from a QUIC stream.
 func ReadConnectRequestData(stream io.Reader) (*ConnectRequest, error) {
 	if err := verifySignature(stream); err != nil {
+		return nil, err
+	}
+
+	// This is a NO-OP for now. We could cause a branching if we wanted to use multiple versions.
+	if _, err := readVersion(stream); err != nil {
 		return nil, err
 	}
 
@@ -55,6 +68,11 @@ func ReadConnectResponseData(stream io.Reader) (*ConnectResponse, error) {
 		return nil, err
 	}
 
+	// This is a NO-OP for now. We could cause a branching if we wanted to use multiple versions.
+	if _, err := readVersion(stream); err != nil {
+		return nil, err
+	}
+
 	msg, err := capnp.NewDecoder(stream).Decode()
 	if err != nil {
 		return nil, err
@@ -92,8 +110,22 @@ func WriteConnectResponseData(stream io.Writer, respErr error, metadata ...Metad
 }
 
 func writePreamble(stream io.Writer) error {
-	return writeSignature(stream)
-	// TODO : TUN-4613 Write protocol version here
+	if err := writeSignature(stream); err != nil {
+		return err
+	}
+
+	return writeVersion(stream)
+}
+
+func writeVersion(stream io.Writer) error {
+	_, err := stream.Write([]byte(protocolV1)[:protocolVersionLength])
+	return err
+}
+
+func readVersion(stream io.Reader) (string, error) {
+	version := make([]byte, protocolVersionLength)
+	_, err := stream.Read(version)
+	return string(version), err
 }
 
 func writeSignature(stream io.Writer) error {

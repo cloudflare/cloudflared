@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -30,52 +31,44 @@ var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
 // HTTP2Connection represents a net.Conn that uses HTTP2 frames to proxy traffic from the edge to cloudflared on the
 // origin.
 type HTTP2Connection struct {
-	conn         net.Conn
-	server       *http2.Server
-	config       *Config
-	namedTunnel  *NamedTunnelConfig
-	connOptions  *tunnelpogs.ConnectionOptions
-	observer     *Observer
-	connIndexStr string
-	connIndex    uint8
+	conn        net.Conn
+	server      *http2.Server
+	config      *Config
+	connOptions *tunnelpogs.ConnectionOptions
+	observer    *Observer
+	connIndex   uint8
 	// newRPCClientFunc allows us to mock RPCs during testing
 	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 
-	log               *zerolog.Logger
-	activeRequestsWG  sync.WaitGroup
-	connectedFuse     ConnectedFuse
-	gracefulShutdownC <-chan struct{}
-	stoppedGracefully bool
-	controlStreamErr  error // result of running control stream handler
+	log                  *zerolog.Logger
+	activeRequestsWG     sync.WaitGroup
+	controlStreamHandler ControlStreamHandler
+	stoppedGracefully    bool
+	controlStreamErr     error // result of running control stream handler
 }
 
 // NewHTTP2Connection returns a new instance of HTTP2Connection.
 func NewHTTP2Connection(
 	conn net.Conn,
 	config *Config,
-	namedTunnelConfig *NamedTunnelConfig,
 	connOptions *tunnelpogs.ConnectionOptions,
 	observer *Observer,
 	connIndex uint8,
-	connectedFuse ConnectedFuse,
+	controlStreamHandler ControlStreamHandler,
 	log *zerolog.Logger,
-	gracefulShutdownC <-chan struct{},
 ) *HTTP2Connection {
 	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
 			MaxConcurrentStreams: math.MaxUint32,
 		},
-		config:            config,
-		namedTunnel:       namedTunnelConfig,
-		connOptions:       connOptions,
-		observer:          observer,
-		connIndexStr:      uint8ToString(connIndex),
-		connIndex:         connIndex,
-		newRPCClientFunc:  newRegistrationRPCClient,
-		connectedFuse:     connectedFuse,
-		log:               log,
-		gracefulShutdownC: gracefulShutdownC,
+		config:               config,
+		connOptions:          connOptions,
+		observer:             observer,
+		connIndex:            connIndex,
+		newRPCClientFunc:     newRegistrationRPCClient,
+		controlStreamHandler: controlStreamHandler,
+		log:                  log,
 	}
 }
 
@@ -91,7 +84,7 @@ func (c *HTTP2Connection) Serve(ctx context.Context) error {
 	})
 
 	switch {
-	case c.stoppedGracefully:
+	case c.controlStreamHandler.IsStopped():
 		return nil
 	case c.controlStreamErr != nil:
 		return c.controlStreamErr
@@ -108,7 +101,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	connType := determineHTTP2Type(r)
 	handleMissingRequestParts(connType, r)
 
-	respWriter, err := newHTTP2RespWriter(r, w, connType)
+	respWriter, err := NewHTTP2RespWriter(r, w, connType)
 	if err != nil {
 		c.observer.log.Error().Msg(err.Error())
 		return
@@ -116,7 +109,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch connType {
 	case TypeControlStream:
-		if err := c.serveControlStream(r.Context(), respWriter); err != nil {
+		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, true); err != nil {
 			c.controlStreamErr = err
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
@@ -154,29 +147,6 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *HTTP2Connection) serveControlStream(ctx context.Context, respWriter *http2RespWriter) error {
-	rpcClient := c.newRPCClientFunc(ctx, respWriter, c.observer.log)
-	defer rpcClient.Close()
-
-	if err := rpcClient.RegisterConnection(ctx, c.namedTunnel, c.connOptions, c.connIndex, c.observer); err != nil {
-		return err
-	}
-	c.connectedFuse.Connected()
-
-	// wait for connection termination or start of graceful shutdown
-	select {
-	case <-ctx.Done():
-		break
-	case <-c.gracefulShutdownC:
-		c.stoppedGracefully = true
-	}
-
-	c.observer.sendUnregisteringEvent(c.connIndex)
-	rpcClient.GracefulShutdown(ctx, c.config.GracePeriod)
-	c.observer.log.Info().Uint8(LogFieldConnIndex, c.connIndex).Msg("Unregistered tunnel connection")
-	return nil
-}
-
 func (c *HTTP2Connection) close() {
 	// Wait for all serve HTTP handlers to return
 	c.activeRequestsWG.Wait()
@@ -190,7 +160,7 @@ type http2RespWriter struct {
 	shouldFlush bool
 }
 
-func newHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (*http2RespWriter, error) {
+func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (*http2RespWriter, error) {
 	flusher, isFlusher := w.(http.Flusher)
 	if !isFlusher {
 		respWriter := &http2RespWriter{
@@ -220,7 +190,7 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 			// so it should be sent as an HTTP/2 response header.
 			dest[name] = values
 			// Since these are http2 headers, they're required to be lowercase
-		} else if !IsControlHeader(h2name) || IsWebsocketClientHeader(h2name) {
+		} else if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values
 			userHeaders[name] = values
@@ -262,7 +232,7 @@ func (rp *http2RespWriter) Write(p []byte) (n int, err error) {
 		// Implementer of OriginClient should make sure it doesn't write to the connection after Proxy returns
 		// Register a recover routine just in case.
 		if r := recover(); r != nil {
-			println("Recover from http2 response writer panic, error", r)
+			println(fmt.Sprintf("Recover from http2 response writer panic, error %s", debug.Stack()))
 		}
 	}()
 	n, err = rp.w.Write(p)

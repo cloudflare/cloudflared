@@ -1,7 +1,7 @@
 # use a builder image for building cloudflare
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
-FROM golang:1.16.4 as builder
+FROM golang:1.17.1 as builder
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     TARGET_GOOS=${TARGET_GOOS} \

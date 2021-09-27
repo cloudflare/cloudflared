@@ -54,7 +54,7 @@ const ()
 func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
 	for _, header := range h2 {
 		name := strings.ToLower(header.Name)
-		if !IsControlHeader(name) {
+		if !IsControlRequestHeader(name) {
 			continue
 		}
 
@@ -121,11 +121,18 @@ func H2RequestHeadersToH1Request(h2 []h2mux.Header, h1 *http.Request) error {
 	return nil
 }
 
-func IsControlHeader(headerName string) bool {
+func IsControlRequestHeader(headerName string) bool {
 	return headerName == "content-length" ||
-		headerName == "connection" || headerName == "upgrade" || // Websocket headers
+		headerName == "connection" || headerName == "upgrade" || // Websocket request headers
 		strings.HasPrefix(headerName, ":") ||
 		strings.HasPrefix(headerName, "cf-")
+}
+
+func IsControlResponseHeader(headerName string) bool {
+	return headerName == "content-length" ||
+		strings.HasPrefix(headerName, ":") ||
+		strings.HasPrefix(headerName, "cf-int-") ||
+		strings.HasPrefix(headerName, "cf-cloudflared-")
 }
 
 // isWebsocketClientHeader returns true if the header name is required by the client to upgrade properly
@@ -148,7 +155,7 @@ func H1ResponseToH2ResponseHeaders(status int, h1 http.Header) (h2 []h2mux.Heade
 
 			// Since these are http2 headers, they're required to be lowercase
 			h2 = append(h2, h2mux.Header{Name: "content-length", Value: values[0]})
-		} else if !IsControlHeader(h2name) || IsWebsocketClientHeader(h2name) {
+		} else if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values
 			userHeaders[header] = values

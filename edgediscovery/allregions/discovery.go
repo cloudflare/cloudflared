@@ -22,6 +22,8 @@ const (
 	dotServerName = "cloudflare-dns.com"
 	dotServerAddr = "1.1.1.1:853"
 	dotTimeout    = 15 * time.Second
+
+	logFieldAddress = "address"
 )
 
 // Redeclare network functions so they can be overridden in tests.
@@ -59,7 +61,9 @@ var friendlyDNSErrorLines = []string{
 }
 
 // EdgeDiscovery implements HA service discovery lookup.
-func edgeDiscovery(log *zerolog.Logger) ([][]*EdgeAddr, error) {
+func edgeDiscovery(log *zerolog.Logger, srvService string) ([][]*EdgeAddr, error) {
+	log.Debug().Str("domain", "_"+srvService+"._"+srvProto+"."+srvName).Msg("looking up edge SRV record")
+
 	_, addrs, err := netLookupSRV(srvService, srvProto, srvName)
 	if err != nil {
 		_, fallbackAddrs, fallbackErr := fallbackLookupSRV(srvService, srvProto, srvName)
@@ -87,7 +91,7 @@ func edgeDiscovery(log *zerolog.Logger) ([][]*EdgeAddr, error) {
 	return resolvedAddrPerCNAME, nil
 }
 
-func lookupSRVWithDOT(service, proto, name string) (cname string, addrs []*net.SRV, err error) {
+func lookupSRVWithDOT(srvService string, srvProto string, srvName string) (cname string, addrs []*net.SRV, err error) {
 	// Inspiration: https://github.com/artyom/dot/blob/master/dot.go
 	r := &net.Resolver{
 		PreferGo: true,
@@ -130,13 +134,13 @@ func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*EdgeAddr) {
 	for _, addr := range addrs {
 		tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
-			log.Error().Msgf("Failed to resolve %s to TCP address, err: %v", addr, err)
+			log.Error().Str(logFieldAddress, addr).Err(err).Msg("failed to resolve to TCP address")
 			continue
 		}
 
 		udpAddr, err := net.ResolveUDPAddr("udp", addr)
 		if err != nil {
-			log.Error().Msgf("Failed to resolve %s to UDP address, err: %v", addr, err)
+			log.Error().Str(logFieldAddress, addr).Err(err).Msg("failed to resolve to UDP address")
 			continue
 		}
 		resolved = append(resolved, &EdgeAddr{

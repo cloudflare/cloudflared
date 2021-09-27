@@ -18,11 +18,6 @@ type headerParseError struct {
 	err error
 }
 
-func (e *headerParseError) Is(err error) bool {
-	_, ok := err.(*headerParseError)
-	return ok
-}
-
 func (e *headerParseError) Unwrap() error {
 	return e.err
 }

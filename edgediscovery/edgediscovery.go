@@ -5,13 +5,11 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
 
 const (
-	LogFieldAddress   = "address"
 	LogFieldConnIndex = "connIndex"
 )
 
@@ -30,8 +28,8 @@ type Edge struct {
 
 // ResolveEdge runs the initial discovery of the Cloudflare edge, finding Addrs that can be allocated
 // to connections.
-func ResolveEdge(log *zerolog.Logger) (*Edge, error) {
-	regions, err := allregions.ResolveEdge(log)
+func ResolveEdge(log *zerolog.Logger, region string) (*Edge, error) {
+	regions, err := allregions.ResolveEdge(log, region)
 	if err != nil {
 		return new(Edge), err
 	}
@@ -101,6 +99,8 @@ func (ed *Edge) GetAddr(connIndex int) (*allregions.EdgeAddr, error) {
 
 // GetDifferentAddr gives back the proxy connection's edge Addr and uses a new one.
 func (ed *Edge) GetDifferentAddr(connIndex int) (*allregions.EdgeAddr, error) {
+	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
+
 	ed.Lock()
 	defer ed.Unlock()
 

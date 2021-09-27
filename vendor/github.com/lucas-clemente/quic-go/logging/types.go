@@ -1,9 +1,7 @@
 package logging
 
-import "github.com/lucas-clemente/quic-go/internal/protocol"
-
 // PacketType is the packet type of a QUIC packet
-type PacketType = protocol.PacketType
+type PacketType uint8
 
 const (
 	// PacketTypeInitial is the packet type of an Initial packet
