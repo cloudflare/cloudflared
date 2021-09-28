@@ -1,5 +1,18 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.9.2
+
+### New features
+- `cloudflared` can now run with `quic` as the underlying tunnel transport protocol. To try it, change or add "protocol: quic" to your config.yml file or
+run cloudflared with the `--protocol quic` flag. e.g:
+    `cloudflared tunnel --protocol quic run <tunnel-name>`
+
+### Bug Fixes
+- Fixed some generic transport bugs in `quic` mode. It's advised to upgrade to at least this version (2021.9.2) when running `cloudflared`
+with `quic` protocol.
+- `cloudflared` docker images will now show version.
+
+
 ## 2021.8.4
 ### Improvements
 - Temporary tunnels (those hosted on trycloudflare.com that do not require a Cloudflare login) now run as Named Tunnels
