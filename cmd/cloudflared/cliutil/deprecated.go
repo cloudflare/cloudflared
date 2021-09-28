@@ -11,7 +11,7 @@ func RemovedCommand(name string) *cli.Command {
 		Name: name,
 		Action: func(context *cli.Context) error {
 			return cli.Exit(
-				fmt.Sprintf("%s command is no longer supported by cloudflared. Consult Argo Tunnel documentation for possible alternative solutions.", name),
+				fmt.Sprintf("%s command is no longer supported by cloudflared. Consult Cloudflare Tunnel documentation for possible alternative solutions.", name),
 				-1,
 			)
 		},

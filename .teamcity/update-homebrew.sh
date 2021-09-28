@@ -46,8 +46,8 @@ git reset --hard origin/master
 URL="https://packages.argotunnel.com/dl/cloudflared-$VERSION-darwin-amd64.tgz"
 tee cloudflared.rb <<EOF
 class Cloudflared < Formula
-  desc 'Argo Tunnel'
-  homepage 'https://developers.cloudflare.com/argo-tunnel/'
+  desc 'Cloudflare Tunnel'
+  homepage 'https://developers.cloudflare.com/cloudflare-one/connections/connect-apps'
   url '$URL'
   sha256 '$SHA256'
   version '$VERSION'
@@ -62,6 +62,6 @@ git add cloudflared.rb
 git diff
 git config user.name "cloudflare-warp-bot"
 git config user.email "warp-bot@cloudflare.com"
-git commit -m "Release Argo Tunnel $VERSION"
+git commit -m "Release Cloudflare Tunnel $VERSION"
 
 git push -v origin master

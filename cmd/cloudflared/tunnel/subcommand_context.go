@@ -151,7 +151,7 @@ func (sc *subcommandContext) readTunnelCredentials(credFinder CredFinder) (conne
 func (sc *subcommandContext) create(name string, credentialsFilePath string) (*tunnelstore.Tunnel, error) {
 	client, err := sc.client()
 	if err != nil {
-		return nil, errors.Wrap(err, "couldn't create client to talk to Argo Tunnel backend")
+		return nil, errors.Wrap(err, "couldn't create client to talk to Cloudflare Tunnel backend")
 	}
 
 	tunnelSecret, err := generateTunnelSecret()

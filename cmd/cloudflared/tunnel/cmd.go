@@ -126,14 +126,14 @@ func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 		Name:      "tunnel",
 		Action:    cliutil.ConfiguredAction(TunnelCommand),
 		Category:  "Tunnel",
-		Usage:     "Make a locally-running web service accessible over the internet using Argo Tunnel.",
+		Usage:     "Make a locally-running web service accessible over the internet using Cloudflare Tunnel.",
 		ArgsUsage: " ",
-		Description: `Argo Tunnel asks you to specify a hostname on a Cloudflare-powered
+		Description: `Cloudflare Tunnel asks you to specify a hostname on a Cloudflare-powered
 		domain you control and a local address. Traffic from that hostname is routed
 		(optionally via a Cloudflare Load Balancer) to this machine and appears on the
 		specified port where it can be served.
 
-		This feature requires your Cloudflare account be subscribed to the Argo Smart Routing feature.
+		This feature requires your Cloudflare account be subscribed to the Cloudflare Smart Routing feature.
 
 		To use, begin by calling login to download a certificate:
 
@@ -488,7 +488,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		credentialsFileFlag,
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   "is-autoupdated",
-			Usage:  "Signal the new process that Argo Tunnel connector has been autoupdated",
+			Usage:  "Signal the new process that Cloudflare Tunnel connector has been autoupdated",
 			Value:  false,
 			Hidden: true,
 		}),

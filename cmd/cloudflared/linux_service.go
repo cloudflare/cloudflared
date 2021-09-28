@@ -19,11 +19,11 @@ import (
 func runApp(app *cli.App, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
-		Usage: "Manages the Argo Tunnel system service",
+		Usage: "Manages the Cloudflare Tunnel system service",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "install",
-				Usage:  "Install Argo Tunnel as a system service",
+				Usage:  "Install Cloudflare Tunnel as a system service",
 				Action: cliutil.ConfiguredAction(installLinuxService),
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
@@ -34,7 +34,7 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 			},
 			{
 				Name:   "uninstall",
-				Usage:  "Uninstall the Argo Tunnel service",
+				Usage:  "Uninstall the Cloudflare Tunnel service",
 				Action: cliutil.ConfiguredAction(uninstallLinuxService),
 			},
 		},
@@ -55,7 +55,7 @@ var systemdTemplates = []ServiceTemplate{
 	{
 		Path: "/etc/systemd/system/cloudflared.service",
 		Content: `[Unit]
-Description=Argo Tunnel
+Description=Cloudflare Tunnel
 After=network.target
 
 [Service]
@@ -72,7 +72,7 @@ WantedBy=multi-user.target
 	{
 		Path: "/etc/systemd/system/cloudflared-update.service",
 		Content: `[Unit]
-Description=Update Argo Tunnel
+Description=Update Cloudflare Tunnel
 After=network.target
 
 [Service]
@@ -82,7 +82,7 @@ ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 11 ]; then s
 	{
 		Path: "/etc/systemd/system/cloudflared-update.timer",
 		Content: `[Unit]
-Description=Update Argo Tunnel
+Description=Update Cloudflare Tunnel
 
 [Timer]
 OnCalendar=daily
@@ -99,7 +99,7 @@ var sysvTemplate = ServiceTemplate{
 	Content: `#!/bin/sh
 # For RedHat and cousins:
 # chkconfig: 2345 99 01
-# description: Argo Tunnel agent
+# description: Cloudflare Tunnel agent
 # processname: {{.Path}}
 ### BEGIN INIT INFO
 # Provides:          {{.Path}}
@@ -107,8 +107,8 @@ var sysvTemplate = ServiceTemplate{
 # Required-Stop:
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Argo Tunnel
-# Description:       Argo Tunnel agent
+# Short-Description: Cloudflare Tunnel
+# Description:       Cloudflare Tunnel agent
 ### END INIT INFO
 name=$(basename $(readlink -f $0))
 cmd="{{.Path}} --config /etc/cloudflared/config.yml --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s{{ range .ExtraArgs }} {{ . }}{{ end }}"

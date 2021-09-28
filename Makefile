@@ -132,7 +132,7 @@ define build_package
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > $(PACKAGE_DIR)/cloudflared.1
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) \
-		--description 'Cloudflare Argo tunnel daemon' \
+		--description 'Cloudflare Tunnel daemon' \
 		--vendor 'Cloudflare' \
 		--license 'Cloudflare Service Agreement' \
 		--url 'https://github.com/cloudflare/cloudflared' \

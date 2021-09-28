@@ -37,7 +37,7 @@ type OriginUpTime struct {
 	UpTime    string    `json:"uptime"`
 }
 
-const defaultServerName = "the Argo Tunnel test server"
+const defaultServerName = "the Cloudflare Tunnel test server"
 const indexTemplate = `
 <!DOCTYPE html>
 <html lang="en">
@@ -45,10 +45,10 @@ const indexTemplate = `
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=Edge">
     <title>
-      Argo Tunnel Connection
+      Cloudflare Tunnel Connection
     </title>
     <meta name="author" content="">
-    <meta name="description" content="Argo Tunnel Connection">
+    <meta name="description" content="Cloudflare Tunnel Connection">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       html{line-height:1.15;-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}body{margin:0}section{display:block}h1{font-size:2em;margin:.67em 0}a{background-color:transparent;-webkit-text-decoration-skip:objects}/* 1 */::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}/* 1 */a,body,dd,div,dl,dt,h1,h4,html,p,section{box-sizing:border-box}.bt{border-top-style:solid;border-top-width:1px}.bl{border-left-style:solid;border-left-width:1px}.b--orange{border-color:#f38020}.br1{border-radius:.125rem}.bw2{border-width:.25rem}.dib{display:inline-block}.sans-serif{font-family:open sans,-apple-system,BlinkMacSystemFont,avenir next,avenir,helvetica neue,helvetica,ubuntu,roboto,noto,segoe ui,arial,sans-serif}.overflow-x-auto{overflow-x:auto}.code{font-family:Consolas,monaco,monospace}.b{font-weight:700}.fw3{font-weight:300}.fw4{font-weight:400}.fw5{font-weight:500}.fw6{font-weight:600}.lh-copy{line-height:1.5}.link{text-decoration:none}.link,.link:active,.link:focus,.link:hover,.link:link,.link:visited{transition:color .15s ease-in}.link:focus{outline:1px dotted currentColor}.mw-100{max-width:100%}.mw4{max-width:8rem}.mw7{max-width:48rem}.bg-light-gray{background-color:#f7f7f7}.link-hover:hover{background-color:#1f679e}.white{color:#fff}.bg-white{background-color:#fff}.bg-blue{background-color:#408bc9}.pb2{padding-bottom:.5rem}.pb6{padding-bottom:8rem}.pt3{padding-top:1rem}.pt5{padding-top:4rem}.pv2{padding-top:.5rem;padding-bottom:.5rem}.ph3{padding-left:1rem;padding-right:1rem}.ph4{padding-left:2rem;padding-right:2rem}.ml0{margin-left:0}.mb1{margin-bottom:.25rem}.mb2{margin-bottom:.5rem}.mb3{margin-bottom:1rem}.mt5{margin-top:4rem}.ttu{text-transform:uppercase}.f4{font-size:1.25rem}.f5{font-size:1rem}.f6{font-size:.875rem}.f7{font-size:.75rem}.measure{max-width:30em}.center{margin-left:auto}.center{margin-right:auto}@media screen and (min-width:30em){.f2-ns{font-size:2.25rem}}@media screen and (min-width:30em) and (max-width:60em){.f5-m{font-size:1rem}}@media screen and (min-width:60em){.f4-l{font-size:1.25rem}}
@@ -66,7 +66,7 @@ const indexTemplate = `
         </svg>
         <h1 class="f4 f2-ns mt5 fw5">Congrats! You created a tunnel!</h1>
         <p class="f6 f5-m f4-l measure lh-copy fw3">
-          Argo Tunnel exposes locally running applications to the internet by
+          Cloudflare Tunnel exposes locally running applications to the internet by
           running an encrypted, virtual tunnel from your laptop or server to
           Cloudflare's edge network.
         </p>
@@ -74,7 +74,7 @@ const indexTemplate = `
         <a
           class="fw6 link white bg-blue ph4 pv2 br1 dib f5 link-hover"
           style="border-bottom: 1px solid #1f679e"
-          href="https://developers.cloudflare.com/argo-tunnel/">
+          href="https://developers.cloudflare.com/cloudflare-one/connections/connect-apps">
           Get started here
         </a>
        <section>
