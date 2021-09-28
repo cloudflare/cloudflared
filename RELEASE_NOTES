@@ -1,3 +1,11 @@
+2021.9.2
+- 2021-09-21 TUN-5129: Use go 1.17 and copy .git folder to docker build to compute version
+- 2021-09-21 TUN-5128: Enforce maximum grace period
+- 2021-09-22 TUN-5141: Make sure websocket pinger returns before streaming returns
+- 2021-09-24 TUN-5142: Add asynchronous servecontrolstream for QUIC
+- 2021-09-24 TUN-5142: defer close rpcconn inside unregister instead of ServeControlStream
+- 2021-09-27 TUN-5160: Set request.ContentLength when this value is in request header
+
 2021.9.1
 - 2021-09-21 TUN-5118: Quic connection now detects duplicate connections similar to http2
 - 2021-09-15 Fix TryCloudflare link
