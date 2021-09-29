@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -148,15 +149,27 @@ func (sc *subcommandContext) readTunnelCredentials(credFinder CredFinder) (conne
 	return credentials, nil
 }
 
-func (sc *subcommandContext) create(name string, credentialsFilePath string) (*tunnelstore.Tunnel, error) {
+func (sc *subcommandContext) create(name string, credentialsFilePath string, secret string) (*tunnelstore.Tunnel, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create client to talk to Cloudflare Tunnel backend")
 	}
 
-	tunnelSecret, err := generateTunnelSecret()
-	if err != nil {
-		return nil, errors.Wrap(err, "couldn't generate the secret for your new tunnel")
+	var tunnelSecret []byte
+	if secret == "" {
+		tunnelSecret, err = generateTunnelSecret()
+		if err != nil {
+			return nil, errors.Wrap(err, "couldn't generate the secret for your new tunnel")
+		}
+	} else {
+		decodedSecret, err := base64.StdEncoding.DecodeString(secret)
+		if err != nil {
+			return nil, errors.Wrap(err, "Couldn't decode tunnel secret from base64")
+		}
+		tunnelSecret = []byte(decodedSecret)
+		if len(tunnelSecret) < 32 {
+			return nil, errors.New("Decoded tunnel secret must be at least 32 bytes long")
+		}
 	}
 
 	tunnel, err := client.CreateTunnel(name, tunnelSecret)
