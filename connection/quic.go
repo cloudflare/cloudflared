@@ -158,11 +158,12 @@ func (hrw httpResponseAdapter) WriteErrorResponse(err error) {
 	quicpogs.WriteConnectResponseData(hrw, err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
-func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.Reader) (*http.Request, error) {
+func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadCloser) (*http.Request, error) {
 	metadata := connectRequest.MetadataMap()
 	dest := connectRequest.Dest
 	method := metadata[HTTPMethodKey]
 	host := metadata[HTTPHostKey]
+	isWebsocket := connectRequest.Type == quicpogs.ConnectionTypeWebsocket
 
 	req, err := http.NewRequest(method, dest, body)
 	if err != nil {
@@ -186,6 +187,16 @@ func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.Reader) (
 	if err := setContentLength(req); err != nil {
 		return nil, fmt.Errorf("Error setting content-length: %w", err)
 	}
+
+	// Go's client defaults to chunked encoding after a 200ms delay if the following cases are true:
+	//   * the request body blocks
+	//   * the content length is not set (or set to -1)
+	//   * the method doesn't usually have a body (GET, HEAD, DELETE, ...)
+	//   * there is no transfer-encoding=chunked already set.
+	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
+	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
+		req.Body = nil
+	}
 	stripWebsocketUpgradeHeader(req)
 	return req, err
 }
@@ -196,4 +207,11 @@ func setContentLength(req *http.Request) error {
 		req.ContentLength, err = strconv.ParseInt(contentLengthStr, 10, 64)
 	}
 	return err
+}
+
+func isTransferEncodingChunked(req *http.Request) bool {
+	transferEncodingVal := req.Header.Get("Transfer-Encoding")
+	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
+	// separated value as well.
+	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
 }

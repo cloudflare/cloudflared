@@ -108,6 +108,10 @@ func TestQUICServer(t *testing.T) {
 					Key: "HttpMethod",
 					Val: "POST",
 				},
+				quicpogs.Metadata{
+					Key: "HttpHeader:Content-Length",
+					Val: "24",
+				},
 			},
 			message:          []byte("This is the message body"),
 			expectedResponse: []byte("This is the message body"),
@@ -297,6 +301,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 	var tests = []struct {
 		name           string
 		connectRequest *quicpogs.ConnectRequest
+		body           io.ReadCloser
 		req            *http.Request
 	}{
 		{
@@ -341,7 +346,9 @@ func TestBuildHTTPRequest(t *testing.T) {
 				},
 				ContentLength: 514,
 				Host:          "cf.host",
+				Body:          io.NopCloser(&bytes.Buffer{}),
 			},
+			body: io.NopCloser(&bytes.Buffer{}),
 		},
 		{
 			name: "if content length isn't part of request headers, then it's not set",
@@ -380,13 +387,137 @@ func TestBuildHTTPRequest(t *testing.T) {
 				},
 				ContentLength: 0,
 				Host:          "cf.host",
+				Body:          nil,
 			},
+			body: io.NopCloser(&bytes.Buffer{}),
+		},
+		{
+			name: "if content length is 0, but transfer-encoding is chunked, body is not nil",
+			connectRequest: &quicpogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []quicpogs.Metadata{
+					quicpogs.Metadata{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHeader:Transfer-Encoding",
+						Val: "chunked",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					quicpogs.Metadata{
+						Key: "HttpMethod",
+						Val: "get",
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "get",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header":    []string{"Misc"},
+					"Transfer-Encoding": []string{"chunked"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+				Body:          io.NopCloser(&bytes.Buffer{}),
+			},
+			body: io.NopCloser(&bytes.Buffer{}),
+		},
+		{
+			name: "if content length is 0, but transfer-encoding is gzip,chunked, body is not nil",
+			connectRequest: &quicpogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []quicpogs.Metadata{
+					quicpogs.Metadata{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHeader:Transfer-Encoding",
+						Val: "gzip,chunked",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					quicpogs.Metadata{
+						Key: "HttpMethod",
+						Val: "get",
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "get",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header":    []string{"Misc"},
+					"Transfer-Encoding": []string{"gzip,chunked"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+				Body:          io.NopCloser(&bytes.Buffer{}),
+			},
+			body: io.NopCloser(&bytes.Buffer{}),
+		},
+		{
+			name: "if content length is 0, and connect request is a websocket, body is not nil",
+			connectRequest: &quicpogs.ConnectRequest{
+				Type: quicpogs.ConnectionTypeWebsocket,
+				Dest: "http://test.com",
+				Metadata: []quicpogs.Metadata{
+					quicpogs.Metadata{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					quicpogs.Metadata{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					quicpogs.Metadata{
+						Key: "HttpMethod",
+						Val: "get",
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "get",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header": []string{"Misc"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+				Body:          io.NopCloser(&bytes.Buffer{}),
+			},
+			body: io.NopCloser(&bytes.Buffer{}),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			req, err := buildHTTPRequest(test.connectRequest, nil)
+			req, err := buildHTTPRequest(test.connectRequest, test.body)
 			assert.NoError(t, err)
 			test.req = test.req.WithContext(req.Context())
 			assert.Equal(t, test.req, req)
