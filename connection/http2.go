@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"runtime/debug"
@@ -60,7 +59,7 @@ func NewHTTP2Connection(
 	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
-			MaxConcurrentStreams: math.MaxUint32,
+			MaxConcurrentStreams: MaxConcurrentStreams,
 		},
 		config:               config,
 		connOptions:          connOptions,

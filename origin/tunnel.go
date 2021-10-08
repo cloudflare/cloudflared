@@ -358,7 +358,6 @@ func serveTunnel(
 			config,
 			connOptions,
 			controlStream,
-			connectedFuse,
 			reconnectCh,
 			gracefulShutdownC)
 
@@ -509,15 +508,16 @@ func ServeQUIC(
 	config *TunnelConfig,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
-	connectedFuse connection.ConnectedFuse,
 	reconnectCh chan ReconnectSignal,
 	gracefulShutdownC <-chan struct{},
 ) (err error, recoverable bool) {
 	tlsConfig := config.EdgeTLSConfigs[connection.QUIC]
 	quicConfig := &quic.Config{
-		HandshakeIdleTimeout: quicHandshakeIdleTimeout,
-		MaxIdleTimeout:       quicMaxIdleTimeout,
-		KeepAlive:            true,
+		HandshakeIdleTimeout:  quicHandshakeIdleTimeout,
+		MaxIdleTimeout:        quicMaxIdleTimeout,
+		MaxIncomingStreams:    connection.MaxConcurrentStreams,
+		MaxIncomingUniStreams: connection.MaxConcurrentStreams,
+		KeepAlive:             true,
 	}
 	for {
 		select {
