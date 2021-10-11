@@ -1,45 +1,50 @@
 package edgediscovery
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 )
 
 const (
-	protocolRecord = "protocol.argotunnel.com"
+	protocolRecord = "protocol-v2.argotunnel.com"
 )
 
 var (
 	errNoProtocolRecord = fmt.Errorf("No TXT record found for %s to determine connection protocol", protocolRecord)
 )
 
-func HTTP2Percentage() (int32, error) {
-	records, err := net.LookupTXT(protocolRecord)
-	if err != nil {
-		return 0, err
-	}
-	if len(records) == 0 {
-		return 0, errNoProtocolRecord
-	}
-	return parseHTTP2Precentage(records[0])
+// ProtocolPercent represents a single Protocol Percentage combination.
+type ProtocolPercent struct {
+	Protocol   string `json:"protocol"`
+	Percentage int32  `json:"percentage"`
 }
 
-// The record looks like http2=percentage
-func parseHTTP2Precentage(record string) (int32, error) {
-	const key = "http2"
-	slices := strings.Split(record, "=")
-	if len(slices) != 2 {
-		return 0, fmt.Errorf("Malformed TXT record %s, expect http2=percentage", record)
-	}
-	if slices[0] != key {
-		return 0, fmt.Errorf("Incorrect key %s, expect %s", slices[0], key)
-	}
-	percentage, err := strconv.ParseInt(slices[1], 10, 32)
-	if err != nil {
-		return 0, err
-	}
-	return int32(percentage), nil
+// ProtocolPercents represents the preferred distribution ratio of protocols when protocol isn't specified.
+type ProtocolPercents []ProtocolPercent
 
+// GetPercentage returns the threshold percentage of a single protocol.
+func (p ProtocolPercents) GetPercentage(protocol string) int32 {
+	for _, protocolPercent := range p {
+		if strings.ToLower(protocolPercent.Protocol) == strings.ToLower(protocol) {
+			return protocolPercent.Percentage
+		}
+	}
+	return 0
+}
+
+// ProtocolPercentage returns the ratio of protocols and a specification ratio for their selection.
+func ProtocolPercentage() (ProtocolPercents, error) {
+	records, err := net.LookupTXT(protocolRecord)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, errNoProtocolRecord
+	}
+
+	var protocolsWithPercent ProtocolPercents
+	err = json.Unmarshal([]byte(records[0]), &protocolsWithPercent)
+	return protocolsWithPercent, err
 }
