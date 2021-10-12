@@ -1,3 +1,10 @@
+2021.10.0
+- 2021-10-11 TUN-5138: Switch to QUIC on auto protocol based on threshold
+- 2021-10-07 TUN-5195: Do not set empty body if not applicable
+- 2021-10-08 UN-5213: Increase MaxStreams value for QUIC transport
+- 2021-09-28 TUN-5169: Release 2021.9.2 CHANGES.md
+- 2021-09-28 TUN-5164: Update README and clean up references to Argo Tunnel (using Cloudflare Tunnel instead)
+
 2021.9.2
 - 2021-09-21 TUN-5129: Use go 1.17 and copy .git folder to docker build to compute version
 - 2021-09-21 TUN-5128: Enforce maximum grace period
