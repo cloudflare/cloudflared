@@ -1,3 +1,7 @@
+2021.10.1
+- 2021-10-12 TUN-5246: Use protocol: quic for Quick tunnels if one is not already set
+- 2021-10-13 TUN-5249: Revert "TUN-5138: Switch to QUIC on auto protocol based on threshold"
+
 2021.10.0
 - 2021-10-11 TUN-5138: Switch to QUIC on auto protocol based on threshold
 - 2021-10-07 TUN-5195: Do not set empty body if not applicable
