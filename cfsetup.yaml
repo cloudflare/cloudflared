@@ -55,6 +55,8 @@ stretch: &stretch
       # libmsi and libgcab are libraries the wixl binary depends on.
       - libmsi-dev
       - libgcab-dev
+      - python3-dev
+      - libffi-dev
       - python3-setuptools
       - python3-pip
     pre-cache:
