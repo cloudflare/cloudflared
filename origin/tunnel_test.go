@@ -8,18 +8,20 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/retry"
 )
 
 type dynamicMockFetcher struct {
-	protocolPercents edgediscovery.ProtocolPercents
-	err              error
+	percentage int32
+	err        error
 }
 
 func (dmf *dynamicMockFetcher) fetch() connection.PercentageFetcher {
-	return func() (edgediscovery.ProtocolPercents, error) {
-		return dmf.protocolPercents, dmf.err
+	return func() (int32, error) {
+		if dmf.err != nil {
+			return 0, dmf.err
+		}
+		return dmf.percentage, nil
 	}
 }
 
@@ -37,7 +39,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 		},
 	}
 	mockFetcher := dynamicMockFetcher{
-		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}},
+		percentage: 0,
 	}
 	warpRoutingEnabled := false
 	protocolSelector, err := connection.NewProtocolSelector(

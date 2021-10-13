@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudflare/cloudflared/edgediscovery"
 )
 
 const (
@@ -23,23 +21,29 @@ var (
 	}
 )
 
-func mockFetcher(getError bool, protocolPercent ...edgediscovery.ProtocolPercent) PercentageFetcher {
-	return func() (edgediscovery.ProtocolPercents, error) {
-		if getError {
-			return nil, fmt.Errorf("failed to fetch precentage")
-		}
-		return protocolPercent, nil
+func mockFetcher(percentage int32) PercentageFetcher {
+	return func() (int32, error) {
+		return percentage, nil
+	}
+}
+
+func mockFetcherWithError() PercentageFetcher {
+	return func() (int32, error) {
+		return 0, fmt.Errorf("failed to fetch precentage")
 	}
 }
 
 type dynamicMockFetcher struct {
-	protocolPercents edgediscovery.ProtocolPercents
-	err              error
+	percentage int32
+	err        error
 }
 
 func (dmf *dynamicMockFetcher) fetch() PercentageFetcher {
-	return func() (edgediscovery.ProtocolPercents, error) {
-		return dmf.protocolPercents, dmf.err
+	return func() (int32, error) {
+		if dmf.err != nil {
+			return 0, dmf.err
+		}
+		return dmf.percentage, nil
 	}
 }
 
@@ -65,7 +69,6 @@ func TestNewProtocolSelector(t *testing.T) {
 			name:              "named tunnel over h2mux",
 			protocol:          "h2mux",
 			expectedProtocol:  H2mux,
-			fetchFunc:         func() (edgediscovery.ProtocolPercents, error) { return nil, nil },
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
@@ -74,38 +77,28 @@ func TestNewProtocolSelector(t *testing.T) {
 			expectedProtocol:  HTTP2,
 			hasFallback:       true,
 			expectedFallback:  H2mux,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}),
+			fetchFunc:         mockFetcher(0),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
 			name:              "named tunnel http2 disabled",
 			protocol:          "http2",
 			expectedProtocol:  H2mux,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}),
-			namedTunnelConfig: testNamedTunnelConfig,
-		},
-		{
-			name:             "named tunnel quic disabled",
-			protocol:         "quic",
-			expectedProtocol: HTTP2,
-			// Hasfallback true is because if http2 fails, then we further fallback to h2mux.
-			hasFallback:       true,
-			expectedFallback:  H2mux,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}, edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: -1}),
+			fetchFunc:         mockFetcher(-1),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
 			name:              "named tunnel auto all http2 disabled",
 			protocol:          "auto",
 			expectedProtocol:  H2mux,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}),
+			fetchFunc:         mockFetcher(-1),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
 			name:              "named tunnel auto to h2mux",
 			protocol:          "auto",
 			expectedProtocol:  H2mux,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}),
+			fetchFunc:         mockFetcher(0),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
@@ -114,71 +107,36 @@ func TestNewProtocolSelector(t *testing.T) {
 			expectedProtocol:  HTTP2,
 			hasFallback:       true,
 			expectedFallback:  H2mux,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}),
-			namedTunnelConfig: testNamedTunnelConfig,
-		},
-		{
-			name:              "named tunnel auto to quic",
-			protocol:          "auto",
-			expectedProtocol:  QUIC,
-			hasFallback:       true,
-			expectedFallback:  HTTP2,
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}),
+			fetchFunc:         mockFetcher(100),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
 			name:               "warp routing requesting h2mux",
 			protocol:           "h2mux",
-			expectedProtocol:   HTTP2Warp,
+			expectedProtocol:   HTTP2,
 			hasFallback:        false,
-			fetchFunc:          mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}),
-			warpRoutingEnabled: true,
-			namedTunnelConfig:  testNamedTunnelConfig,
-		},
-		{
-			name:               "warp routing requesting h2mux picks HTTP2 even if http2 percent is -1",
-			protocol:           "h2mux",
-			expectedProtocol:   HTTP2Warp,
-			hasFallback:        false,
-			fetchFunc:          mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}),
+			expectedFallback:   H2mux,
+			fetchFunc:          mockFetcher(100),
 			warpRoutingEnabled: true,
 			namedTunnelConfig:  testNamedTunnelConfig,
 		},
 		{
 			name:               "warp routing http2",
 			protocol:           "http2",
-			expectedProtocol:   HTTP2Warp,
+			expectedProtocol:   HTTP2,
 			hasFallback:        false,
-			fetchFunc:          mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}),
-			warpRoutingEnabled: true,
-			namedTunnelConfig:  testNamedTunnelConfig,
-		},
-		{
-			name:               "warp routing quic",
-			protocol:           "quic",
-			expectedProtocol:   QUICWarp,
-			hasFallback:        true,
-			expectedFallback:   HTTP2Warp,
-			fetchFunc:          mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}),
+			expectedFallback:   H2mux,
+			fetchFunc:          mockFetcher(100),
 			warpRoutingEnabled: true,
 			namedTunnelConfig:  testNamedTunnelConfig,
 		},
 		{
 			name:               "warp routing auto",
 			protocol:           "auto",
-			expectedProtocol:   HTTP2Warp,
+			expectedProtocol:   HTTP2,
 			hasFallback:        false,
-			fetchFunc:          mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}),
-			warpRoutingEnabled: true,
-			namedTunnelConfig:  testNamedTunnelConfig,
-		},
-		{
-			name:               "warp routing auto- quic",
-			protocol:           "auto",
-			expectedProtocol:   QUICWarp,
-			hasFallback:        true,
-			expectedFallback:   HTTP2Warp,
-			fetchFunc:          mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}, edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}),
+			expectedFallback:   H2mux,
+			fetchFunc:          mockFetcher(100),
 			warpRoutingEnabled: true,
 			namedTunnelConfig:  testNamedTunnelConfig,
 		},
@@ -191,14 +149,14 @@ func TestNewProtocolSelector(t *testing.T) {
 		{
 			name:              "named tunnel unknown protocol",
 			protocol:          "unknown",
-			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}),
+			fetchFunc:         mockFetcher(100),
 			namedTunnelConfig: testNamedTunnelConfig,
 			wantErr:           true,
 		},
 		{
 			name:              "named tunnel fetch error",
-			protocol:          "auto",
-			fetchFunc:         mockFetcher(true),
+			protocol:          "unknown",
+			fetchFunc:         mockFetcherWithError(),
 			namedTunnelConfig: testNamedTunnelConfig,
 			expectedProtocol:  HTTP2,
 			wantErr:           false,
@@ -206,20 +164,18 @@ func TestNewProtocolSelector(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			selector, err := NewProtocolSelector(test.protocol, test.warpRoutingEnabled, test.namedTunnelConfig, test.fetchFunc, testNoTTL, &log)
-			if test.wantErr {
-				assert.Error(t, err, fmt.Sprintf("test %s failed", test.name))
-			} else {
-				assert.NoError(t, err, fmt.Sprintf("test %s failed", test.name))
-				assert.Equal(t, test.expectedProtocol, selector.Current(), fmt.Sprintf("test %s failed", test.name))
-				fallback, ok := selector.Fallback()
-				assert.Equal(t, test.hasFallback, ok, fmt.Sprintf("test %s failed", test.name))
-				if test.hasFallback {
-					assert.Equal(t, test.expectedFallback, fallback, fmt.Sprintf("test %s failed", test.name))
-				}
+		selector, err := NewProtocolSelector(test.protocol, test.warpRoutingEnabled, test.namedTunnelConfig, test.fetchFunc, testNoTTL, &log)
+		if test.wantErr {
+			assert.Error(t, err, fmt.Sprintf("test %s failed", test.name))
+		} else {
+			assert.NoError(t, err, fmt.Sprintf("test %s failed", test.name))
+			assert.Equal(t, test.expectedProtocol, selector.Current(), fmt.Sprintf("test %s failed", test.name))
+			fallback, ok := selector.Fallback()
+			assert.Equal(t, test.hasFallback, ok, fmt.Sprintf("test %s failed", test.name))
+			if test.hasFallback {
+				assert.Equal(t, test.expectedFallback, fallback, fmt.Sprintf("test %s failed", test.name))
 			}
-		})
+		}
 	}
 }
 
@@ -229,27 +185,27 @@ func TestAutoProtocolSelectorRefresh(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, H2mux, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
+	fetcher.percentage = 100
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
+	fetcher.percentage = 0
 	assert.Equal(t, H2mux, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
+	fetcher.percentage = 100
 	assert.Equal(t, HTTP2, selector.Current())
 
 	fetcher.err = fmt.Errorf("failed to fetch")
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
+	fetcher.percentage = -1
 	fetcher.err = nil
 	assert.Equal(t, H2mux, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
+	fetcher.percentage = 0
 	assert.Equal(t, H2mux, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}}
-	assert.Equal(t, QUIC, selector.Current())
+	fetcher.percentage = 100
+	assert.Equal(t, HTTP2, selector.Current())
 }
 
 func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
@@ -258,36 +214,35 @@ func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
+	fetcher.percentage = 100
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
+	fetcher.percentage = 0
 	assert.Equal(t, HTTP2, selector.Current())
 
 	fetcher.err = fmt.Errorf("failed to fetch")
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
+	fetcher.percentage = -1
 	fetcher.err = nil
 	assert.Equal(t, H2mux, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
+	fetcher.percentage = 0
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
+	fetcher.percentage = 100
 	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
+	fetcher.percentage = -1
 	assert.Equal(t, H2mux, selector.Current())
 }
 
 func TestProtocolSelectorRefreshTTL(t *testing.T) {
-	fetcher := dynamicMockFetcher{}
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}}
+	fetcher := dynamicMockFetcher{percentage: 100}
 	selector, err := NewProtocolSelector("auto", noWarpRoutingEnabled, testNamedTunnelConfig, fetcher.fetch(), time.Hour, &log)
 	assert.NoError(t, err)
-	assert.Equal(t, QUIC, selector.Current())
+	assert.Equal(t, HTTP2, selector.Current())
 
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 0}}
-	assert.Equal(t, QUIC, selector.Current())
+	fetcher.percentage = 0
+	assert.Equal(t, HTTP2, selector.Current())
 }
