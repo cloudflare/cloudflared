@@ -1,3 +1,7 @@
+2021.10.3
+- 2021-10-14 TUN-5255: Fix potential panic if Cloudflare API fails to respond to GetTunnel(id) during delete command
+- 2021-10-14 TUN-5257: Fix more cfsetup targets that were broken by recent package changes
+
 2021.10.2
 - 2021-10-11 TUN-5138: Switch to QUIC on auto protocol based on threshold
 - 2021-10-14 TUN-5250: Add missing packages for cfsetup to succeed in github release pkgs target
