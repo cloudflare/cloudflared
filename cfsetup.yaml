@@ -113,6 +113,9 @@ stretch: &stretch
     build_dir: *build_dir
     builddeps:
       - *pinned_go
+      - build-essential
+      - python3-dev
+      - libffi-dev
       - python3-setuptools
       - python3-pip
     pre-cache: &install_pygithub
@@ -165,6 +168,9 @@ stretch: &stretch
     build_dir: *build_dir
     builddeps:
       - *pinned_go
+      - build-essential
+      - python3-dev
+      - libffi-dev
       - python3-setuptools
       - python3-pip
     pre-cache: *install_pygithub
