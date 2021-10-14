@@ -1,3 +1,7 @@
+2021.10.2
+- 2021-10-11 TUN-5138: Switch to QUIC on auto protocol based on threshold
+- 2021-10-14 TUN-5250: Add missing packages for cfsetup to succeed in github release pkgs target
+
 2021.10.1
 - 2021-10-12 TUN-5246: Use protocol: quic for Quick tunnels if one is not already set
 - 2021-10-13 TUN-5249: Revert "TUN-5138: Switch to QUIC on auto protocol based on threshold"
