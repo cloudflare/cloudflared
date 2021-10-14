@@ -230,7 +230,7 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 	for _, id := range tunnelIDs {
 		tunnel, err := client.GetTunnel(id)
 		if err != nil {
-			return errors.Wrapf(err, "Can't get tunnel information. Please check tunnel id: %s", tunnel.ID)
+			return errors.Wrapf(err, "Can't get tunnel information. Please check tunnel id: %s", id)
 		}
 
 		// Check if tunnel DeletedAt field has already been set
