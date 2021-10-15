@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
+	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -358,6 +359,7 @@ func serveTunnel(
 			config,
 			connOptions,
 			controlStream,
+			connIndex,
 			reconnectCh,
 			gracefulShutdownC)
 
@@ -508,6 +510,7 @@ func ServeQUIC(
 	config *TunnelConfig,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
+	connIndex uint8,
 	reconnectCh chan ReconnectSignal,
 	gracefulShutdownC <-chan struct{},
 ) (err error, recoverable bool) {
@@ -518,6 +521,7 @@ func ServeQUIC(
 		MaxIncomingStreams:    connection.MaxConcurrentStreams,
 		MaxIncomingUniStreams: connection.MaxConcurrentStreams,
 		KeepAlive:             true,
+		Tracer:                quicpogs.NewClientTracer(config.Log, connIndex),
 	}
 	for {
 		select {
@@ -557,19 +561,6 @@ func ServeQUIC(
 			}
 		}
 	}
-}
-
-type quicLogger struct {
-	*zerolog.Logger
-}
-
-func (ql *quicLogger) Write(p []byte) (n int, err error) {
-	ql.Debug().Msgf("quic log: %v", string(p))
-	return len(p), nil
-}
-
-func (ql *quicLogger) Close() error {
-	return nil
 }
 
 func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh <-chan struct{}) error {
