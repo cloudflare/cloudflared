@@ -2,6 +2,7 @@ package tunnelstore
 
 import (
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,10 @@ func (f *Filter) ByExistedAt(existedAt time.Time) {
 
 func (f *Filter) ByTunnelID(tunnelID uuid.UUID) {
 	f.queryParams.Set("uuid", tunnelID.String())
+}
+
+func (f *Filter) MaxFetchSize(max uint) {
+	f.queryParams.Set("per_page", strconv.Itoa(int(max)))
 }
 
 func (f Filter) encode() string {

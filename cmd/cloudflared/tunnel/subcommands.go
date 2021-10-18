@@ -277,6 +277,9 @@ func listCommand(c *cli.Context) error {
 		}
 		filter.ByTunnelID(tunnelID)
 	}
+	if maxFetch := c.Uint("max-fetch-size"); maxFetch > 0 {
+		filter.MaxFetchSize(maxFetch)
+	}
 
 	tunnels, err := sc.list(filter)
 	if err != nil {

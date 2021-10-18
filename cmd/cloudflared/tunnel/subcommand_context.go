@@ -336,6 +336,10 @@ func (sc *subcommandContext) tunnelActive(name string) (*tunnelstore.Tunnel, boo
 	filter := tunnelstore.NewFilter()
 	filter.NoDeleted()
 	filter.ByName(name)
+	if maxFetch := sc.c.Uint("max-fetch-size"); maxFetch > 0 {
+		filter.MaxFetchSize(maxFetch)
+	}
+
 	tunnels, err := sc.list(filter)
 	if err != nil {
 		return nil, false, err
@@ -385,6 +389,10 @@ func (sc *subcommandContext) findIDs(inputs []string) ([]uuid.UUID, error) {
 	// First, look up all tunnels the user has
 	filter := tunnelstore.NewFilter()
 	filter.NoDeleted()
+	if maxFetch := sc.c.Uint("max-fetch-size"); maxFetch > 0 {
+		filter.MaxFetchSize(maxFetch)
+	}
+
 	tunnels, err := sc.list(filter)
 	if err != nil {
 		return nil, err
