@@ -646,12 +646,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  "https://api.trycloudflare.com",
 			Hidden: true,
 		}),
-		&cli.UintFlag{
+		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "max-fetch-size",
 			Usage:   `The maximum number of results that cloudflared can fetch from Cloudflare API for any listing operations needed`,
 			EnvVars: []string{"TUNNEL_MAX_FETCH_SIZE"},
 			Hidden:  true,
-		},
+		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
 	}...)

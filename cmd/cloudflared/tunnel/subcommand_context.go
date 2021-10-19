@@ -336,10 +336,6 @@ func (sc *subcommandContext) tunnelActive(name string) (*tunnelstore.Tunnel, boo
 	filter := tunnelstore.NewFilter()
 	filter.NoDeleted()
 	filter.ByName(name)
-	if maxFetch := sc.c.Uint("max-fetch-size"); maxFetch > 0 {
-		filter.MaxFetchSize(maxFetch)
-	}
-
 	tunnels, err := sc.list(filter)
 	if err != nil {
 		return nil, false, err
@@ -377,56 +373,42 @@ func (sc *subcommandContext) findID(input string) (uuid.UUID, error) {
 }
 
 // findIDs is just like mapping `findID` over a slice, but it only uses
-// one Tunnelstore API call.
+// one Tunnelstore API call per non-UUID input provided.
 func (sc *subcommandContext) findIDs(inputs []string) ([]uuid.UUID, error) {
+	uuids, names := splitUuids(inputs)
 
-	// Shortcut without Tunnelstore call if we find that all inputs are already UUIDs.
-	uuids, err := convertNamesToUuids(inputs, make(map[string]uuid.UUID))
-	if err == nil {
-		return uuids, nil
+	for _, name := range names {
+		filter := tunnelstore.NewFilter()
+		filter.NoDeleted()
+		filter.ByName(name)
+
+		tunnels, err := sc.list(filter)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(tunnels) != 1 {
+			return nil, fmt.Errorf("there should only be 1 non-deleted Tunnel named %s", name)
+		}
+
+		uuids = append(uuids, tunnels[0].ID)
 	}
 
-	// First, look up all tunnels the user has
-	filter := tunnelstore.NewFilter()
-	filter.NoDeleted()
-	if maxFetch := sc.c.Uint("max-fetch-size"); maxFetch > 0 {
-		filter.MaxFetchSize(maxFetch)
-	}
-
-	tunnels, err := sc.list(filter)
-	if err != nil {
-		return nil, err
-	}
-	// Do the pure list-processing in its own function, so that it can be
-	// unit tested easily.
-	return findIDs(tunnels, inputs)
+	return uuids, nil
 }
 
-func findIDs(tunnels []*tunnelstore.Tunnel, inputs []string) ([]uuid.UUID, error) {
-	// Put them into a dictionary for faster lookups
-	nameToID := make(map[string]uuid.UUID, len(tunnels))
-	for _, tunnel := range tunnels {
-		nameToID[tunnel.Name] = tunnel.ID
-	}
+func splitUuids(inputs []string) ([]uuid.UUID, []string) {
+	uuids := make([]uuid.UUID, 0)
+	names := make([]string, 0)
 
-	return convertNamesToUuids(inputs, nameToID)
-}
-
-func convertNamesToUuids(inputs []string, nameToID map[string]uuid.UUID) ([]uuid.UUID, error) {
-	tunnelIDs := make([]uuid.UUID, len(inputs))
-	var badInputs []string
-	for i, input := range inputs {
-		if id, err := uuid.Parse(input); err == nil {
-			tunnelIDs[i] = id
-		} else if id, ok := nameToID[input]; ok {
-			tunnelIDs[i] = id
+	for _, input := range inputs {
+		id, err := uuid.Parse(input)
+		if err != nil {
+			names = append(names, input)
 		} else {
-			badInputs = append(badInputs, input)
+			uuids = append(uuids, id)
 		}
 	}
-	if len(badInputs) > 0 {
-		msg := "Please specify either the ID or name of a tunnel. The following inputs were neither: %s"
-		return nil, fmt.Errorf(msg, strings.Join(badInputs, ", "))
-	}
-	return tunnelIDs, nil
+
+	return uuids, names
 }
