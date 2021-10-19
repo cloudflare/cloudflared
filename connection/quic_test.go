@@ -61,7 +61,7 @@ func TestQUICServer(t *testing.T) {
 
 	// This is simply a sample websocket frame message.
 	wsBuf := &bytes.Buffer{}
-	wsutil.WriteClientText(wsBuf, []byte("Hello"))
+	wsutil.WriteClientBinary(wsBuf, []byte("Hello"))
 
 	var tests = []struct {
 		desc             string
@@ -118,7 +118,7 @@ func TestQUICServer(t *testing.T) {
 		},
 		{
 			desc:           "test ws proxy",
-			dest:           "/ok",
+			dest:           "/ws/echo",
 			connectionType: quicpogs.ConnectionTypeWebsocket,
 			metadata: []quicpogs.Metadata{
 				quicpogs.Metadata{
@@ -139,7 +139,7 @@ func TestQUICServer(t *testing.T) {
 				},
 			},
 			message:          wsBuf.Bytes(),
-			expectedResponse: []byte{0x81, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
+			expectedResponse: []byte{0x82, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
 		},
 		{
 			desc:             "test tcp proxy",
@@ -278,7 +278,7 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Reque
 	}
 
 	if isWebsocket {
-		return wsEndpoint(w, r)
+		return wsEchoEndpoint(w, r)
 	}
 	switch r.URL.Path {
 	case "/ok":
