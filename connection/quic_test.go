@@ -154,8 +154,8 @@ func TestQUICServer(t *testing.T) {
 		t.Run(test.desc, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
-				wg.Add(1)
 				defer wg.Done()
 				quicServer(
 					t, udpListener, tlsConfig, quicConfig,
