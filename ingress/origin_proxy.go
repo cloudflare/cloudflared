@@ -40,6 +40,8 @@ func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	if o.hostHeader != "" {
 		// For incoming requests, the Host header is promoted to the Request.Host field and removed from the Header map.
+		// Pass the original Host header as X-Forwarded-Host.
+		req.Header.Set("X-Forwarded-Host", req.Host)
 		req.Host = o.hostHeader
 	}
 	return o.transport.RoundTrip(req)
