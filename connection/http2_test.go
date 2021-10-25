@@ -27,7 +27,7 @@ var (
 )
 
 func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
-	edgeConn, cfdConn := net.Pipe()
+	edgeConn, originConn := net.Pipe()
 	var connIndex = uint8(0)
 	log := zerolog.Nop()
 	obs := NewObserver(&log, &log, false)
@@ -41,8 +41,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		1*time.Second,
 	)
 	return NewHTTP2Connection(
-		cfdConn,
-		// OriginProxy is set in testConfig
+		originConn,
 		testConfig,
 		&pogs.ConnectionOptions{},
 		obs,
@@ -167,7 +166,6 @@ type wsRespWriter struct {
 	*httptest.ResponseRecorder
 	readPipe  *io.PipeReader
 	writePipe *io.PipeWriter
-	closed    bool
 }
 
 func newWSRespWriter() *wsRespWriter {
@@ -176,16 +174,7 @@ func newWSRespWriter() *wsRespWriter {
 		httptest.NewRecorder(),
 		readPipe,
 		writePipe,
-		false,
 	}
-}
-
-type nowriter struct {
-	io.Reader
-}
-
-func (nowriter) Write(p []byte) (int, error) {
-	return 0, fmt.Errorf("Writer not implemented")
 }
 
 func (w *wsRespWriter) RespBody() io.ReadWriter {
@@ -193,41 +182,38 @@ func (w *wsRespWriter) RespBody() io.ReadWriter {
 }
 
 func (w *wsRespWriter) Write(data []byte) (n int, err error) {
-	if w.closed {
-		// Simulate writing to http2 ResponseWriter after ServeHTTP has returned
-		panic("Write to closed ResponseWriter")
-	}
 	return w.writePipe.Write(data)
-}
-
-func (w *wsRespWriter) close() {
-	w.closed = true
 }
 
 func TestServeWS(t *testing.T) {
 	http2Conn, _ := newTestHTTP2Connection()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		http2Conn.Serve(ctx)
+	}()
 
 	respWriter := newWSRespWriter()
 	readPipe, writePipe := io.Pipe()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/ws/echo", readPipe)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/ws", readPipe)
 	require.NoError(t, err)
 	req.Header.Set(InternalUpgradeHeader, WebsocketUpgrade)
 
-	serveDone := make(chan struct{})
+	wg.Add(1)
 	go func() {
-		defer close(serveDone)
+		defer wg.Done()
 		http2Conn.ServeHTTP(respWriter, req)
-		respWriter.close()
 	}()
 
 	data := []byte("test websocket")
-	err = wsutil.WriteClientBinary(writePipe, data)
+	err = wsutil.WriteClientText(writePipe, data)
 	require.NoError(t, err)
 
-	respBody, err := wsutil.ReadServerBinary(respWriter.RespBody())
+	respBody, err := wsutil.ReadServerText(respWriter.RespBody())
 	require.NoError(t, err)
 	require.Equal(t, data, respBody, fmt.Sprintf("Expect %s, got %s", string(data), string(respBody)))
 
@@ -237,64 +223,7 @@ func TestServeWS(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(ResponseMetaHeader))
 
-	<-serveDone
-}
-
-// TestNoWriteAfterServeHTTPReturns is a regression test of https://jira.cfops.it/browse/TUN-5184
-// to make sure we don't write to the ResponseWriter after the ServeHTTP method returns
-func TestNoWriteAfterServeHTTPReturns(t *testing.T) {
-	cfdHTTP2Conn, edgeTCPConn := newTestHTTP2Connection()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	var wg sync.WaitGroup
-
-	serverDone := make(chan struct{})
-	go func() {
-		defer close(serverDone)
-		cfdHTTP2Conn.Serve(ctx)
-	}()
-
-	edgeTransport := http2.Transport{}
-	edgeHTTP2Conn, err := edgeTransport.NewClientConn(edgeTCPConn)
-	require.NoError(t, err)
-	message := []byte(t.Name())
-
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			readPipe, writePipe := io.Pipe()
-			reqCtx, reqCancel := context.WithCancel(ctx)
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://localhost:8080/ws/flaky", readPipe)
-			require.NoError(t, err)
-			req.Header.Set(InternalUpgradeHeader, WebsocketUpgrade)
-
-			resp, err := edgeHTTP2Conn.RoundTrip(req)
-			require.NoError(t, err)
-			// http2RespWriter should rewrite status 101 to 200
-			require.Equal(t, http.StatusOK, resp.StatusCode)
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for {
-					select {
-					case <-reqCtx.Done():
-						return
-					default:
-					}
-					_ = wsutil.WriteClientBinary(writePipe, message)
-				}
-			}()
-
-			time.Sleep(time.Millisecond * 100)
-			reqCancel()
-		}()
-	}
-
 	wg.Wait()
-	cancel()
-	<-serverDone
 }
 
 func TestServeControlStream(t *testing.T) {

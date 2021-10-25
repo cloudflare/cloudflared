@@ -53,7 +53,7 @@ func (wc *tcpOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWri
 	wc.streamHandler(wsConn, wc.conn, log)
 	cancel()
 	// Makes sure wsConn stops sending ping before terminating the stream
-	wsConn.Close()
+	wsConn.WaitForShutdown()
 }
 
 func (wc *tcpOverWSConnection) Close() {
@@ -73,7 +73,7 @@ func (sp *socksProxyOverWSConnection) Stream(ctx context.Context, tunnelConn io.
 	socks.StreamNetHandler(wsConn, sp.accessPolicy, log)
 	cancel()
 	// Makes sure wsConn stops sending ping before terminating the stream
-	wsConn.Close()
+	wsConn.WaitForShutdown()
 }
 
 func (sp *socksProxyOverWSConnection) Close() {

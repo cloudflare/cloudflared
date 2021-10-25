@@ -147,7 +147,7 @@ func TestServeStreamWS(t *testing.T) {
 	headers := []h2mux.Header{
 		{
 			Name:  ":path",
-			Value: "/ws/echo",
+			Value: "/ws",
 		},
 		{
 			Name:  "connection",
@@ -167,10 +167,10 @@ func TestServeStreamWS(t *testing.T) {
 	assert.True(t, hasHeader(stream, ResponseMetaHeader, responseMetaHeaderOrigin))
 
 	data := []byte("test websocket")
-	err = wsutil.WriteClientBinary(writePipe, data)
+	err = wsutil.WriteClientText(writePipe, data)
 	require.NoError(t, err)
 
-	respBody, err := wsutil.ReadServerBinary(stream)
+	respBody, err := wsutil.ReadServerText(stream)
 	require.NoError(t, err)
 	require.Equal(t, data, respBody, fmt.Sprintf("Expect %s, got %s", string(data), string(respBody)))
 
