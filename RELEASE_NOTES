@@ -1,3 +1,7 @@
+2021.10.5
+- 2021-10-25 Update change log for release 2021.10.4
+- 2021-10-25 Revert "TUN-5184: Make sure outstanding websocket write is finished, and no more writes after shutdown"
+
 2021.10.4
 - 2021-10-21 TUN-5287: Fix misuse of wait group in TestQUICServer that caused the test to exit immediately
 - 2021-10-21 TUN-5286: Upgrade crypto/ssh package to fix CVE-2020-29652
