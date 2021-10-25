@@ -1,3 +1,11 @@
+2021.10.4
+- 2021-10-21 TUN-5287: Fix misuse of wait group in TestQUICServer that caused the test to exit immediately
+- 2021-10-21 TUN-5286: Upgrade crypto/ssh package to fix CVE-2020-29652
+- 2021-10-18 TUN-5262: Allow to configure max fetch size for listing queries
+- 2021-10-19 TUN-5262: Improvements to `max-fetch-size` that allow to deal with large number of tunnels in account
+- 2021-10-15 TUN-5261: Collect QUIC metrics about RTT, packets and bytes transfered and log events at tracing level
+- 2021-10-19 TUN-5184: Make sure outstanding websocket write is finished, and no more writes after shutdown
+
 2021.10.3
 - 2021-10-14 TUN-5255: Fix potential panic if Cloudflare API fails to respond to GetTunnel(id) during delete command
 - 2021-10-14 TUN-5257: Fix more cfsetup targets that were broken by recent package changes
