@@ -1,5 +1,12 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.10.4
+### Improvements
+- Collect quic transport metrics on RTT, packets and bytes transferred.
+
+### Bug Fixes
+- Fix race condition that was writing to the connection after the http2 handler returns.
+
 ## 2021.9.2
 
 ### New features
