@@ -156,6 +156,12 @@ var (
 		Usage:   `Overwrites existing DNS records with this hostname`,
 		EnvVars: []string{"TUNNEL_FORCE_PROVISIONING_DNS"},
 	}
+	createSecretFlag = &cli.StringFlag{
+		Name:    "secret",
+		Aliases: []string{"s"},
+		Usage:   "Base64 encoded secret to set for the tunnel. The decoded secret must be at least 32 bytes long. If not specified, a random 32-byte secret will be generated.",
+		EnvVars: []string{"TUNNEL_CREATE_SECRET"},
+	}
 )
 
 func buildCreateCommand() *cli.Command {
@@ -170,7 +176,7 @@ func buildCreateCommand() *cli.Command {
   For example, to create a tunnel named 'my-tunnel' run:
 
   $ cloudflared tunnel create my-tunnel`,
-		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlagCLIOnly},
+		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlagCLIOnly, createSecretFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -196,7 +202,7 @@ func createCommand(c *cli.Context) error {
 	warningChecker := updater.StartWarningCheck(c)
 	defer warningChecker.LogWarningIfAny(sc.log)
 
-	_, err = sc.create(name, c.String(CredFileFlag))
+	_, err = sc.create(name, c.String(CredFileFlag), c.String(createSecretFlag.Name))
 	return errors.Wrap(err, "failed to create tunnel")
 }
 

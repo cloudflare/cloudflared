@@ -181,7 +181,8 @@ func Init(ver string, gracefulShutdown chan struct{}) {
 func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath string) error {
 	tunnel, ok, err := sc.tunnelActive(name)
 	if err != nil || !ok {
-		tunnel, err = sc.create(name, credentialsOutputPath)
+		// pass empty string as secret to generate one
+		tunnel, err = sc.create(name, credentialsOutputPath, "")
 		if err != nil {
 			return errors.Wrap(err, "failed to create tunnel")
 		}
