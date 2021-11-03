@@ -62,7 +62,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	// Retry #0 and #1. At retry #2, we switch protocol, so the fallback loop has one more retry than this
 	for i := 0; i < int(maxRetries-1); i++ {
 		protocolFallback.BackoffTimer() // simulate retry
-		ok := selectNextProtocol(&log, protocolFallback, protocolSelector)
+		ok := selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 		assert.True(t, ok)
 		assert.Equal(t, initProtocol, protocolFallback.protocol)
 	}
@@ -70,7 +70,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	// Retry fallback protocol
 	for i := 0; i < int(maxRetries); i++ {
 		protocolFallback.BackoffTimer() // simulate retry
-		ok := selectNextProtocol(&log, protocolFallback, protocolSelector)
+		ok := selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 		assert.True(t, ok)
 		fallback, ok := protocolSelector.Fallback()
 		assert.True(t, ok)
@@ -82,12 +82,19 @@ func TestWaitForBackoffFallback(t *testing.T) {
 
 	// No protocol to fallback, return error
 	protocolFallback.BackoffTimer() // simulate retry
-	ok := selectNextProtocol(&log, protocolFallback, protocolSelector)
+	ok := selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 	assert.False(t, ok)
 
 	protocolFallback.reset()
 	protocolFallback.BackoffTimer() // simulate retry
-	ok = selectNextProtocol(&log, protocolFallback, protocolSelector)
+	ok = selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 	assert.True(t, ok)
 	assert.Equal(t, initProtocol, protocolFallback.protocol)
+
+	protocolFallback.reset()
+	protocolFallback.BackoffTimer() // simulate retry
+	ok = selectNextProtocol(&log, protocolFallback, protocolSelector, true)
+	// Check that we get a true after the first try itself when this flag is true. This allows us to immediately
+	// switch protocols.
+	assert.True(t, ok)
 }

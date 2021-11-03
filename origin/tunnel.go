@@ -190,7 +190,13 @@ func ServeTunnelLoop(
 		case <-gracefulShutdownC:
 			return nil
 		case <-protocolFallback.BackoffTimer():
-			if !selectNextProtocol(&connLog, protocolFallback, config.ProtocolSelector) {
+			var idleTimeoutError *quic.IdleTimeoutError
+			if !selectNextProtocol(
+				&connLog,
+				protocolFallback,
+				config.ProtocolSelector,
+				errors.As(err, &idleTimeoutError),
+			) {
 				return err
 			}
 		}
@@ -222,8 +228,9 @@ func selectNextProtocol(
 	connLog *zerolog.Logger,
 	protocolBackoff *protocolFallback,
 	selector connection.ProtocolSelector,
+	isNetworkActivityTimeout bool,
 ) bool {
-	if protocolBackoff.ReachedMaxRetries() {
+	if protocolBackoff.ReachedMaxRetries() || isNetworkActivityTimeout {
 		fallback, hasFallback := selector.Fallback()
 		if !hasFallback {
 			return false

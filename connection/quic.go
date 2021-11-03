@@ -49,12 +49,12 @@ func NewQUICConnection(
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to dial to edge")
+		return nil, fmt.Errorf("failed to dial to edge: %w", err)
 	}
 
 	registrationStream, err := session.OpenStream()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open a registration stream")
+		return nil, fmt.Errorf("failed to open a registration stream: %w", err)
 	}
 
 	err = controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions, false)
@@ -82,7 +82,7 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			return errors.Wrap(err, "failed to accept QUIC stream")
+			return fmt.Errorf("failed to accept QUIC stream: %w", err)
 		}
 		go func() {
 			defer stream.Close()
