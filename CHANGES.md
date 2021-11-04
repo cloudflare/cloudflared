@@ -1,5 +1,10 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.11.0
+### Improvements
+- Fallback from `protocol:quic` to `protocol:http2` immediately if UDP connectivity isn't available. This could be because of a firewall or 
+egress rule.
+
 ## 2021.10.4
 ### Improvements
 - Collect quic transport metrics on RTT, packets and bytes transferred.
