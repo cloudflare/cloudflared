@@ -1,3 +1,7 @@
+2021.11.0
+- 2021-11-03 TUN-5285: Fallback to HTTP2 immediately if connection times out with no network activity
+- 2021-09-29 Add flag to 'tunnel create' subcommand to specify a base64-encoded secret
+
 2021.10.5
 - 2021-10-25 Update change log for release 2021.10.4
 - 2021-10-25 Revert "TUN-5184: Make sure outstanding websocket write is finished, and no more writes after shutdown"
