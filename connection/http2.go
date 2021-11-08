@@ -184,12 +184,14 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 	for name, values := range header {
 		// Since these are http2 headers, they're required to be lowercase
 		h2name := strings.ToLower(name)
+
 		if h2name == "content-length" {
 			// This header has meaning in HTTP/2 and will be used by the edge,
-			// so it should be sent as an HTTP/2 response header.
+			// so it should be sent *also* as an HTTP/2 response header.
 			dest[name] = values
-			// Since these are http2 headers, they're required to be lowercase
-		} else if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
+		}
+
+		if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values
 			userHeaders[name] = values
