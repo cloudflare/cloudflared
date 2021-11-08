@@ -131,6 +131,7 @@ func ServeTunnelLoop(
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	addr *allregions.EdgeAddr,
+	connAwareLogger *ConnAwareLogger,
 	connIndex uint8,
 	connectedSignal *signal.Signal,
 	cloudflaredUUID uuid.UUID,
@@ -140,7 +141,8 @@ func ServeTunnelLoop(
 	haConnections.Inc()
 	defer haConnections.Dec()
 
-	connLog := config.Log.With().Uint8(connection.LogFieldConnIndex, connIndex).Logger()
+	logger := config.Log.With().Uint8(connection.LogFieldConnIndex, connIndex).Logger()
+	connLog := connAwareLogger.ReplaceLogger(&logger)
 
 	protocolFallback := &protocolFallback{
 		retry.BackoffHandler{MaxRetries: config.Retries},
@@ -160,7 +162,7 @@ func ServeTunnelLoop(
 	for {
 		err, recoverable := ServeTunnel(
 			ctx,
-			&connLog,
+			connLog,
 			credentialManager,
 			config,
 			addr,
@@ -182,7 +184,7 @@ func ServeTunnelLoop(
 		if !ok {
 			return err
 		}
-		connLog.Info().Msgf("Retrying connection in up to %s seconds", duration)
+		connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
 
 		select {
 		case <-ctx.Done():
@@ -192,7 +194,7 @@ func ServeTunnelLoop(
 		case <-protocolFallback.BackoffTimer():
 			var idleTimeoutError *quic.IdleTimeoutError
 			if !selectNextProtocol(
-				&connLog,
+				connLog.Logger(),
 				protocolFallback,
 				config.ProtocolSelector,
 				errors.As(err, &idleTimeoutError),
@@ -255,7 +257,7 @@ func selectNextProtocol(
 // on error returns a flag indicating if error can be retried
 func ServeTunnel(
 	ctx context.Context,
-	connLog *zerolog.Logger,
+	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	addr *allregions.EdgeAddr,
@@ -299,29 +301,29 @@ func ServeTunnel(
 	if err != nil {
 		switch err := err.(type) {
 		case connection.DupConnRegisterTunnelError:
-			connLog.Err(err).Msg("Unable to establish connection.")
+			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection.")
 			// don't retry this connection anymore, let supervisor pick a new address
 			return err, false
 		case connection.ServerRegisterTunnelError:
-			connLog.Err(err).Msg("Register tunnel error from server side")
+			connLog.ConnAwareLogger().Err(err).Msg("Register tunnel error from server side")
 			// Don't send registration error return from server to Sentry. They are
 			// logged on server side
 			if incidents := config.IncidentLookup.ActiveIncidents(); len(incidents) > 0 {
-				connLog.Error().Msg(activeIncidentsMsg(incidents))
+				connLog.ConnAwareLogger().Msg(activeIncidentsMsg(incidents))
 			}
 			return err.Cause, !err.Permanent
 		case ReconnectSignal:
-			connLog.Info().
+			connLog.Logger().Info().
 				Uint8(connection.LogFieldConnIndex, connIndex).
 				Msgf("Restarting connection due to reconnect signal in %s", err.Delay)
 			err.DelayBeforeReconnect()
 			return err, true
 		default:
 			if err == context.Canceled {
-				connLog.Debug().Err(err).Msgf("Serve tunnel error")
+				connLog.Logger().Debug().Err(err).Msgf("Serve tunnel error")
 				return err, false
 			}
-			connLog.Err(err).Msgf("Serve tunnel error")
+			connLog.ConnAwareLogger().Err(err).Msgf("Serve tunnel error")
 			_, permanent := err.(unrecoverableError)
 			return err, !permanent
 		}
@@ -331,7 +333,7 @@ func ServeTunnel(
 
 func serveTunnel(
 	ctx context.Context,
-	connLog *zerolog.Logger,
+	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	addr *allregions.EdgeAddr,
@@ -364,6 +366,7 @@ func serveTunnel(
 		return ServeQUIC(ctx,
 			addr.UDP,
 			config,
+			connLog,
 			connOptions,
 			controlStream,
 			connIndex,
@@ -373,7 +376,7 @@ func serveTunnel(
 	case connection.HTTP2, connection.HTTP2Warp:
 		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
 		if err != nil {
-			connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
+			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection with Cloudflare edge")
 			return err, true
 		}
 
@@ -395,7 +398,7 @@ func serveTunnel(
 	default:
 		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, config.EdgeTLSConfigs[protocol], addr.TCP)
 		if err != nil {
-			connLog.Err(err).Msg("Unable to establish connection with Cloudflare edge")
+			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection with Cloudflare edge")
 			return err, true
 		}
 
@@ -427,7 +430,7 @@ func (r unrecoverableError) Error() string {
 
 func ServeH2mux(
 	ctx context.Context,
-	connLog *zerolog.Logger,
+	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
 	config *TunnelConfig,
 	edgeConn net.Conn,
@@ -437,7 +440,7 @@ func ServeH2mux(
 	reconnectCh chan ReconnectSignal,
 	gracefulShutdownC <-chan struct{},
 ) error {
-	connLog.Debug().Msgf("Connecting via h2mux")
+	connLog.Logger().Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
 	handler, err, recoverable := connection.NewH2muxConnection(
 		config.ConnectionConfig,
@@ -474,7 +477,7 @@ func ServeH2mux(
 
 func ServeHTTP2(
 	ctx context.Context,
-	connLog *zerolog.Logger,
+	connLog *ConnAwareLogger,
 	config *TunnelConfig,
 	tlsServerConn net.Conn,
 	connOptions *tunnelpogs.ConnectionOptions,
@@ -483,7 +486,7 @@ func ServeHTTP2(
 	gracefulShutdownC <-chan struct{},
 	reconnectCh chan ReconnectSignal,
 ) error {
-	connLog.Debug().Msgf("Connecting via http2")
+	connLog.Logger().Debug().Msgf("Connecting via http2")
 	h2conn := connection.NewHTTP2Connection(
 		tlsServerConn,
 		config.ConnectionConfig,
@@ -515,6 +518,7 @@ func ServeQUIC(
 	ctx context.Context,
 	edgeAddr *net.UDPAddr,
 	config *TunnelConfig,
+	connLogger *ConnAwareLogger,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
 	connIndex uint8,
@@ -528,7 +532,7 @@ func ServeQUIC(
 		MaxIncomingStreams:    connection.MaxConcurrentStreams,
 		MaxIncomingUniStreams: connection.MaxConcurrentStreams,
 		KeepAlive:             true,
-		Tracer:                quicpogs.NewClientTracer(config.Log, connIndex),
+		Tracer:                quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
 	}
 	for {
 		select {
@@ -545,7 +549,7 @@ func ServeQUIC(
 				controlStreamHandler,
 				config.Observer)
 			if err != nil {
-				config.Log.Error().Msgf("Failed to create new quic connection, err: %v", err)
+				connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
 				return err, true
 			}
 
@@ -553,7 +557,7 @@ func ServeQUIC(
 			errGroup.Go(func() error {
 				err := quicConn.Serve(ctx)
 				if err != nil {
-					config.Log.Error().Msgf("Failed to serve quic connection, err: %v", err)
+					connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
 				}
 				return fmt.Errorf("Connection with edge closed")
 			})
