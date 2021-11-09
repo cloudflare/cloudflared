@@ -1,11 +1,12 @@
-from contextlib import contextmanager
 import logging
-import requests
-from retrying import retry
+import os
 import subprocess
-import yaml
-
+from contextlib import contextmanager
 from time import sleep
+
+import requests
+import yaml
+from retrying import retry
 
 from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 
@@ -19,7 +20,8 @@ def write_config(directory, config):
     return config_path
 
 
-def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False, allow_input=False, capture_output=True, root=False):
+def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False,
+                      allow_input=False, capture_output=True, root=False):
     config_path = write_config(directory, config.full_config)
     cmd = cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root)
     if new_process:
@@ -53,16 +55,40 @@ def run_cloudflared_background(cmd, allow_input, capture_output):
             LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
 
 
+def wait_tunnel_ready(tunnel_url=None, require_min_connections=1, cfd_logs=None):
+    try:
+        inner_wait_tunnel_ready(tunnel_url, require_min_connections)
+    except Exception as e:
+        if cfd_logs is not None:
+            _log_cloudflared_logs(cfd_logs)
+        raise e
+
+
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
-def wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
+def inner_wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
     metrics_url = f'http://localhost:{METRICS_PORT}/ready'
 
     with requests.Session() as s:
         resp = send_request(s, metrics_url, True)
-        assert resp.json()[
-            "readyConnections"] >= require_min_connections, f"Ready endpoint returned {resp.json()} but we expect at least {require_min_connections} connections"
+
+        assert resp.json()["readyConnections"] >= require_min_connections, \
+            f"Ready endpoint returned {resp.json()} but we expect at least {require_min_connections} connections"
+
         if tunnel_url is not None:
             send_request(s, tunnel_url, True)
+
+
+def _log_cloudflared_logs(cfd_logs):
+    log_file = cfd_logs
+    if os.path.isdir(cfd_logs):
+        files = os.listdir(cfd_logs)
+        if len(files) == 0:
+            return
+        log_file = os.path.join(cfd_logs, files[0])
+    with open(log_file, "r") as f:
+        LOGGER.warning("Cloudflared Tunnel was not ready:")
+        for line in f.readlines():
+            LOGGER.warning(line)
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES * BACKOFF_SECS, wait_fixed=1000)
