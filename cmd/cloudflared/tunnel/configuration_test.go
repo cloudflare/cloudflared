@@ -1,4 +1,6 @@
+//go:build ignore
 // +build ignore
+
 // TODO: Remove the above build tag and include this test when we start compiling with Golang 1.10.0+
 
 package tunnel
