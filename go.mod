@@ -28,7 +28,7 @@ require (
 	github.com/json-iterator/go v1.1.10
 	github.com/kr/text v0.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/lucas-clemente/quic-go v0.23.0
+	github.com/lucas-clemente/quic-go v0.24.0
 	github.com/mattn/go-colorable v0.1.8
 	github.com/miekg/dns v1.1.31
 	github.com/mitchellh/go-homedir v1.1.0

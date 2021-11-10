@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package quic
@@ -11,7 +12,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const IP_DONTFRAGMENT = 14
+const (
+	disablePathMTUDiscovery = true
+	IP_DONTFRAGMENT         = 14
+)
 
 func newConn(c OOBCapablePacketConn) (connection, error) {
 	rawConn, err := c.SyscallConn()
