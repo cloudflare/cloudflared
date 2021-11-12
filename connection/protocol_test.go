@@ -26,7 +26,7 @@ var (
 func mockFetcher(getError bool, protocolPercent ...edgediscovery.ProtocolPercent) PercentageFetcher {
 	return func() (edgediscovery.ProtocolPercents, error) {
 		if getError {
-			return nil, fmt.Errorf("failed to fetch precentage")
+			return nil, fmt.Errorf("failed to fetch percentage")
 		}
 		return protocolPercent, nil
 	}

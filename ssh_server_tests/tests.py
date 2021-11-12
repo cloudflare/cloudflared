@@ -178,7 +178,7 @@ class TestSSHShell(TestSSHBase):
             self.assertIn(username, pwd)
 
             # Ensure shell launched with correct user's permissions and privs.
-            # Cant read root owned 0700 files.
+            # Can't read root owned 0700 files.
             output = self.get_command_output(
                 session, f"cat {self.ROOT_ONLY_TEST_FILE_PATH}"
             )

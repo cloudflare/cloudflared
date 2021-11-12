@@ -767,7 +767,7 @@ func newWSRespWriter(w io.Writer) *wsRespWriter {
 func (w *wsRespWriter) Write(p []byte) (int, error) {
 	returnedMsg, err := wsutil.ReadServerBinary(bytes.NewBuffer(p))
 	if err != nil {
-		// The data was not returned by a websocket connecton.
+		// The data was not returned by a websocket connection.
 		if err != io.ErrUnexpectedEOF {
 			return w.w.Write(p)
 		}

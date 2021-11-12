@@ -97,7 +97,7 @@ func TestDefaultStreamWSOverTCPConnection(t *testing.T) {
 }
 
 // TestSocksStreamWSOverTCPConnection simulates proxying in socks mode.
-// Eyeball side runs cloudflared accesss tcp with --url flag to start a websocket forwarder which
+// Eyeball side runs cloudflared access tcp with --url flag to start a websocket forwarder which
 // wraps SOCKS5 traffic in websocket
 // Origin side runs a tcpOverWSConnection with socks.StreamHandler
 func TestSocksStreamWSOverTCPConnection(t *testing.T) {

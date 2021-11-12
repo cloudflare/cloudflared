@@ -91,7 +91,7 @@ func (cm *reconnectCredentialManager) ConnDigest(connID uint8) ([]byte, error) {
 	defer cm.mu.RUnlock()
 	digest, ok := cm.connDigest[connID]
 	if !ok {
-		return nil, fmt.Errorf("no conneciton digest for connection %v", connID)
+		return nil, fmt.Errorf("no connection digest for connection %v", connID)
 	}
 	return digest, nil
 }

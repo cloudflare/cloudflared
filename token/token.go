@@ -178,7 +178,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.
 		return token, nil
 	}
 
-	// If an app token couldnt be found on disk, check for an org token and attempt to exchange it for an app token.
+	// If an app token couldn't be found on disk, check for an org token and attempt to exchange it for an app token.
 	var orgTokenPath string
 	orgToken, err := GetOrgTokenIfExists(appInfo.AuthDomain)
 	if err != nil {
@@ -213,7 +213,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.
 // getTokensFromEdge will attempt to use the transfer service to retrieve an app and org token, save them to disk,
 // and return the app token.
 func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHostOnly bool, log *zerolog.Logger) (string, error) {
-	// If no org token exists or if it couldnt be exchanged for an app token, then run the transfer service flow.
+	// If no org token exists or if it couldn't be exchanged for an app token, then run the transfer service flow.
 
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
