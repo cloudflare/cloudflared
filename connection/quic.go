@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -34,6 +35,7 @@ type QUICConnection struct {
 	httpProxy         OriginProxy
 	gracefulShutdownC <-chan struct{}
 	stoppedGracefully bool
+	udpSessions       *udpSessions
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -64,9 +66,10 @@ func NewQUICConnection(
 	}
 
 	return &QUICConnection{
-		session:   session,
-		httpProxy: httpProxy,
-		logger:    observer.log,
+		session:     session,
+		httpProxy:   httpProxy,
+		logger:      observer.log,
+		udpSessions: newUDPSessions(),
 	}, nil
 }
 
@@ -99,7 +102,30 @@ func (q *QUICConnection) Close() {
 }
 
 func (q *QUICConnection) handleStream(stream quic.Stream) error {
-	connectRequest, err := quicpogs.ReadConnectRequestData(stream)
+	signature, err := quicpogs.DetermineProtocol(stream)
+	if err != nil {
+		return err
+	}
+	switch signature {
+	case quicpogs.DataStreamProtocolSignature:
+		reqServerStream, err := quicpogs.NewRequestServerStream(stream, signature)
+		if err != nil {
+			return nil
+		}
+		return q.handleDataStream(reqServerStream)
+	case quicpogs.RPCStreamProtocolSignature:
+		rpcStream, err := quicpogs.NewRPCServerStream(stream, signature)
+		if err != nil {
+			return err
+		}
+		return q.handleRPCStream(rpcStream)
+	default:
+		return fmt.Errorf("Unknown protocol %v", signature)
+	}
+}
+
+func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) error {
+	connectRequest, err := stream.ReadConnectRequestData()
 	if err != nil {
 		return err
 	}
@@ -114,32 +140,38 @@ func (q *QUICConnection) handleStream(stream quic.Stream) error {
 		w := newHTTPResponseAdapter(stream)
 		return q.httpProxy.ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
-		rwa := &streamReadWriteAcker{
-			ReadWriter: stream,
-		}
+		rwa := &streamReadWriteAcker{stream}
 		return q.httpProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
 	}
 	return nil
 }
 
+func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) error {
+	return rpcStream.Serve(q, q.logger)
+}
+
+func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error {
+	return q.udpSessions.register(sessionID, dstIP, dstPort)
+}
+
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
 // the client.
 type streamReadWriteAcker struct {
-	io.ReadWriter
+	*quicpogs.RequestServerStream
 }
 
 // AckConnection acks response back to the proxy.
 func (s *streamReadWriteAcker) AckConnection() error {
-	return quicpogs.WriteConnectResponseData(s, nil)
+	return s.WriteConnectResponseData(nil)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.
 type httpResponseAdapter struct {
-	io.Writer
+	*quicpogs.RequestServerStream
 }
 
-func newHTTPResponseAdapter(w io.Writer) httpResponseAdapter {
-	return httpResponseAdapter{w}
+func newHTTPResponseAdapter(s *quicpogs.RequestServerStream) httpResponseAdapter {
+	return httpResponseAdapter{s}
 }
 
 func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
@@ -151,11 +183,11 @@ func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) 
 			metadata = append(metadata, quicpogs.Metadata{Key: httpHeaderKey, Val: v})
 		}
 	}
-	return quicpogs.WriteConnectResponseData(hrw, nil, metadata...)
+	return hrw.WriteConnectResponseData(nil, metadata...)
 }
 
 func (hrw httpResponseAdapter) WriteErrorResponse(err error) {
-	quicpogs.WriteConnectResponseData(hrw, err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
+	hrw.WriteConnectResponseData(err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
 func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadCloser) (*http.Request, error) {

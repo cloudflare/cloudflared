@@ -532,6 +532,7 @@ func ServeQUIC(
 		MaxIncomingStreams:    connection.MaxConcurrentStreams,
 		MaxIncomingUniStreams: connection.MaxConcurrentStreams,
 		KeepAlive:             true,
+		EnableDatagrams:       true,
 		Tracer:                quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
 	}
 	for {

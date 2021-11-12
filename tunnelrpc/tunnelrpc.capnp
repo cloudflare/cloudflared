@@ -142,3 +142,11 @@ interface TunnelServer extends (RegistrationServer) {
     authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
     reconnectTunnel @5 (jwt :Data, eventDigest :Data, connDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }
+
+struct RegisterUdpSessionResponse {
+    err @0 :Text;
+}
+
+interface SessionManager {
+    registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16) -> (result :RegisterUdpSessionResponse);
+}

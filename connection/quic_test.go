@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -76,15 +75,15 @@ func TestQUICServer(t *testing.T) {
 			dest:           "/ok",
 			connectionType: quicpogs.ConnectionTypeHTTP,
 			metadata: []quicpogs.Metadata{
-				quicpogs.Metadata{
+				{
 					Key: "HttpHeader:Cf-Ray",
 					Val: "123123123",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpHost",
 					Val: "cf.host",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpMethod",
 					Val: "GET",
 				},
@@ -96,19 +95,19 @@ func TestQUICServer(t *testing.T) {
 			dest:           "/echo_body",
 			connectionType: quicpogs.ConnectionTypeHTTP,
 			metadata: []quicpogs.Metadata{
-				quicpogs.Metadata{
+				{
 					Key: "HttpHeader:Cf-Ray",
 					Val: "123123123",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpHost",
 					Val: "cf.host",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpMethod",
 					Val: "POST",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpHeader:Content-Length",
 					Val: "24",
 				},
@@ -121,19 +120,19 @@ func TestQUICServer(t *testing.T) {
 			dest:           "/ok",
 			connectionType: quicpogs.ConnectionTypeWebsocket,
 			metadata: []quicpogs.Metadata{
-				quicpogs.Metadata{
+				{
 					Key: "HttpHeader:Cf-Cloudflared-Proxy-Connection-Upgrade",
 					Val: "Websocket",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpHeader:Another-Header",
 					Val: "Misc",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpHost",
 					Val: "cf.host",
 				},
-				quicpogs.Metadata{
+				{
 					Key: "HttpMethod",
 					Val: "get",
 				},
@@ -171,7 +170,7 @@ func TestQUICServer(t *testing.T) {
 				udpListener.LocalAddr(),
 				tlsClientConfig,
 				originProxy,
-				&pogs.ConnectionOptions{},
+				&tunnelpogs.ConnectionOptions{},
 				controlStream,
 				NewObserver(&log, &log, false),
 			)
@@ -218,10 +217,11 @@ func quicServer(
 	stream, err := session.OpenStreamSync(context.Background())
 	require.NoError(t, err)
 
-	err = quicpogs.WriteConnectRequestData(stream, dest, connectionType, metadata...)
+	reqClientStream := quicpogs.RequestClientStream{ReadWriteCloser: stream}
+	err = reqClientStream.WriteConnectRequestData(dest, connectionType, metadata...)
 	require.NoError(t, err)
 
-	_, err = quicpogs.ReadConnectResponseData(stream)
+	_, err = reqClientStream.ReadConnectResponseData()
 	require.NoError(t, err)
 
 	if message != nil {
@@ -309,23 +309,23 @@ func TestBuildHTTPRequest(t *testing.T) {
 			connectRequest: &quicpogs.ConnectRequest{
 				Dest: "http://test.com",
 				Metadata: []quicpogs.Metadata{
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Cf-Cloudflared-Proxy-Connection-Upgrade",
 						Val: "Websocket",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Content-Length",
 						Val: "514",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Another-Header",
 						Val: "Misc",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHost",
 						Val: "cf.host",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpMethod",
 						Val: "get",
 					},
@@ -355,19 +355,19 @@ func TestBuildHTTPRequest(t *testing.T) {
 			connectRequest: &quicpogs.ConnectRequest{
 				Dest: "http://test.com",
 				Metadata: []quicpogs.Metadata{
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Cf-Cloudflared-Proxy-Connection-Upgrade",
 						Val: "Websocket",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Another-Header",
 						Val: "Misc",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHost",
 						Val: "cf.host",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpMethod",
 						Val: "get",
 					},
@@ -396,19 +396,19 @@ func TestBuildHTTPRequest(t *testing.T) {
 			connectRequest: &quicpogs.ConnectRequest{
 				Dest: "http://test.com",
 				Metadata: []quicpogs.Metadata{
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Another-Header",
 						Val: "Misc",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Transfer-Encoding",
 						Val: "chunked",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHost",
 						Val: "cf.host",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpMethod",
 						Val: "get",
 					},
@@ -438,19 +438,19 @@ func TestBuildHTTPRequest(t *testing.T) {
 			connectRequest: &quicpogs.ConnectRequest{
 				Dest: "http://test.com",
 				Metadata: []quicpogs.Metadata{
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Another-Header",
 						Val: "Misc",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Transfer-Encoding",
 						Val: "gzip,chunked",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHost",
 						Val: "cf.host",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpMethod",
 						Val: "get",
 					},
@@ -481,15 +481,15 @@ func TestBuildHTTPRequest(t *testing.T) {
 				Type: quicpogs.ConnectionTypeWebsocket,
 				Dest: "http://test.com",
 				Metadata: []quicpogs.Metadata{
-					quicpogs.Metadata{
+					{
 						Key: "HttpHeader:Another-Header",
 						Val: "Misc",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpHost",
 						Val: "cf.host",
 					},
-					quicpogs.Metadata{
+					{
 						Key: "HttpMethod",
 						Val: "get",
 					},
