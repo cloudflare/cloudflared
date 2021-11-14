@@ -14,6 +14,7 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -25,17 +26,16 @@ const (
 	// HTTPMethodKey is used to get or set http method in QUIC ALPN if the underlying proxy connection type is HTTP.
 	HTTPMethodKey = "HttpMethod"
 	// HTTPHostKey is used to get or set http Method in QUIC ALPN if the underlying proxy connection type is HTTP.
-	HTTPHostKey = "HttpHost"
+	HTTPHostKey          = "HttpHost"
+	MaxDatagramFrameSize = 1220
 )
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session           quic.Session
-	logger            *zerolog.Logger
-	httpProxy         OriginProxy
-	gracefulShutdownC <-chan struct{}
-	stoppedGracefully bool
-	udpSessions       *udpSessions
+	session     quic.Session
+	logger      *zerolog.Logger
+	httpProxy   OriginProxy
+	udpSessions *udpSessions
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -49,6 +49,12 @@ func NewQUICConnection(
 	controlStreamHandler ControlStreamHandler,
 	observer *Observer,
 ) (*QUICConnection, error) {
+	localIP, err := GetLocalIP()
+	if err != nil {
+		return nil, err
+	}
+	observer.log.Info().Msgf("UDP proxy will use %s as packet source IP", localIP)
+	udpSessions := newUDPSessions(localIP)
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to edge: %w", err)
@@ -69,15 +75,24 @@ func NewQUICConnection(
 		session:     session,
 		httpProxy:   httpProxy,
 		logger:      observer.log,
-		udpSessions: newUDPSessions(),
+		udpSessions: udpSessions,
 	}, nil
 }
 
 // Serve starts a QUIC session that begins accepting streams.
 func (q *QUICConnection) Serve(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	errGroup, ctx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		return q.listenEdgeDatagram()
+	})
 
+	errGroup.Go(func() error {
+		return q.acceptStream(ctx)
+	})
+	return errGroup.Wait()
+}
+
+func (q *QUICConnection) acceptStream(ctx context.Context) error {
 	for {
 		stream, err := q.session.AcceptStream(ctx)
 		if err != nil {
@@ -93,6 +108,26 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 				q.logger.Err(err).Msg("Failed to handle QUIC stream")
 			}
 		}()
+	}
+}
+
+// listenEdgeDatagram listens for datagram from edge, parse the session ID and find the UDPConn to send the payload
+func (q *QUICConnection) listenEdgeDatagram() error {
+	for {
+		msg, err := q.session.ReceiveMessage()
+		if err != nil {
+			return err
+		}
+		go func(msg []byte) {
+			sessionID, msgWithoutID, err := quicpogs.ExtractSessionID(msg)
+			if err != nil {
+				q.logger.Err(err).Msg("Failed to parse session ID from datagram")
+				return
+			}
+			if err := q.udpSessions.send(sessionID, msgWithoutID); err != nil {
+				q.logger.Err(err).Msg("Failed to send UDP to origin")
+			}
+		}(msg)
 	}
 }
 
@@ -120,7 +155,7 @@ func (q *QUICConnection) handleStream(stream quic.Stream) error {
 		}
 		return q.handleRPCStream(rpcStream)
 	default:
-		return fmt.Errorf("Unknown protocol %v", signature)
+		return fmt.Errorf("unknown protocol %v", signature)
 	}
 }
 
@@ -151,7 +186,45 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 }
 
 func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error {
-	return q.udpSessions.register(sessionID, dstIP, dstPort)
+	udpConn, err := q.udpSessions.register(sessionID, dstIP, dstPort)
+	if err != nil {
+		return err
+	}
+	q.logger.Debug().Msgf("Register session %v, %v, %v", sessionID, dstIP, dstPort)
+	go q.listenOriginUDP(sessionID, udpConn)
+	return nil
+}
+
+// listenOriginUDP reads UDP from origin in a loop, and returns when it cannot write to edge or cannot read from origin
+func (q *QUICConnection) listenOriginUDP(sessionID uuid.UUID, conn *net.UDPConn) {
+	defer func() {
+		q.udpSessions.unregister(sessionID)
+		conn.Close()
+	}()
+	readBuffer := make([]byte, MaxDatagramFrameSize)
+	for {
+		n, err := conn.Read(readBuffer)
+		if n > 0 {
+			if n > MaxDatagramFrameSize-sessionIDLen {
+				// TODO: TUN-5302 return ICMP packet too big message
+				q.logger.Error().Msgf("Origin UDP payload has %d bytes, which exceeds transport MTU %d", n, MaxDatagramFrameSize-sessionIDLen)
+				continue
+			}
+			msgWithID, err := quicpogs.SuffixSessionID(sessionID, readBuffer[:n])
+			if err != nil {
+				q.logger.Err(err).Msg("Failed to suffix session ID to datagram, it will be dropped")
+				continue
+			}
+			if err := q.session.SendMessage(msgWithID); err != nil {
+				q.logger.Err(err).Msg("Failed to send datagram back to edge")
+				return
+			}
+		}
+		if err != nil {
+			q.logger.Err(err).Msg("Failed to read UDP from origin")
+			return
+		}
+	}
 }
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
@@ -208,7 +281,7 @@ func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadClose
 			// metadata.Key is off the format httpHeaderKey:<HTTPHeader>
 			httpHeaderKey := strings.Split(metadata.Key, ":")
 			if len(httpHeaderKey) != 2 {
-				return nil, fmt.Errorf("Header Key: %s malformed", metadata.Key)
+				return nil, fmt.Errorf("header Key: %s malformed", metadata.Key)
 			}
 			req.Header.Add(httpHeaderKey[1], metadata.Val)
 		}

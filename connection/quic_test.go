@@ -33,7 +33,8 @@ import (
 // It also serves as a demonstration for communication with the QUIC connection started by a cloudflared.
 func TestQUICServer(t *testing.T) {
 	quicConfig := &quic.Config{
-		KeepAlive: true,
+		KeepAlive:       true,
+		EnableDatagrams: true,
 	}
 
 	// Setup test.
