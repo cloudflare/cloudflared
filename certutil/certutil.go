@@ -66,7 +66,7 @@ func DecodeOriginCert(blocks []byte) (*OriginCert, error) {
 				originCert.ServiceKey = ntt.ServiceKey
 				originCert.AccountID = ntt.AccountID
 			} else {
-				// Try the older format, where the zoneID and service key are seperated by
+				// Try the older format, where the zoneID and service key are separated by
 				// a new line character
 				token := string(block.Bytes)
 				s := strings.Split(token, "\n")

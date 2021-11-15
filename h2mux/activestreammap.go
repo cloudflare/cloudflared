@@ -93,7 +93,7 @@ func (m *activeStreamMap) Set(newStream *MuxedStream) bool {
 	return true
 }
 
-// Delete stops tracking the stream. It should be called only after it is closed and resetted.
+// Delete stops tracking the stream. It should be called only after it is closed and reset.
 func (m *activeStreamMap) Delete(streamID uint32) {
 	m.Lock()
 	defer m.Unlock()

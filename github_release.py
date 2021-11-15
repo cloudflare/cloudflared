@@ -72,7 +72,7 @@ def get_or_create_release(repo, version, dry_run=False):
     except UnknownObjectException:
         logging.info("Release %s not found", version)
 
-    # We dont want to create a new release tag if one doesnt already exist
+    # We don't want to create a new release tag if one doesn't already exist
     assert_tag_exists(repo, version)
 
     if dry_run:
@@ -198,7 +198,7 @@ def upload_asset(release, filepath, filename, release_version, kv_account_id, na
         pass # the macOS release copy fails with being the same file (already in the artifacts directory)
 
 def main():
-    """ Attempts to upload Asset to Github Release. Creates Release if it doesnt exist """
+    """ Attempts to upload Asset to Github Release. Creates Release if it doesn't exist """
     try:
         args = parse_args()
         client = Github(args.api_key)

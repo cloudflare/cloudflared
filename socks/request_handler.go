@@ -55,7 +55,7 @@ func (h *StandardRequestHandler) handleConnect(conn io.ReadWriter, req *Request)
 			addr, err := net.ResolveIPAddr("ip", req.DestAddr.FQDN)
 			if err != nil {
 				_ = sendReply(conn, ruleFailure, req.DestAddr)
-				return fmt.Errorf("unable to resolve host to confirm acceess")
+				return fmt.Errorf("unable to resolve host to confirm access")
 			}
 
 			req.DestAddr.IP = addr.IP

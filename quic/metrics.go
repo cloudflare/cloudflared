@@ -366,7 +366,7 @@ func (sc *serverCollector) lostPackets(reason logging.PacketLossReason) {
 
 func (sc *serverCollector) updatedRTT(rtt *logging.RTTStats) {
 	latestRTT := rtt.LatestRTT()
-	// May return 0 if no valid updates have occured
+	// May return 0 if no valid updates have occurred
 	if latestRTT > 0 {
 		serverMetrics.rtt.Observe(durationToPromGauge(latestRTT))
 	}

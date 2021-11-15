@@ -130,7 +130,7 @@ func TestMuxMetricsUpdater(t *testing.T) {
 			m.updateReceiveWindow(uint32(j))
 			m.updateSendWindow(uint32(j))
 
-			// should always be disgarded since the send time is before readerSend
+			// should always be discarded since the send time is before readerSend
 			rm := &roundTripMeasurement{receiveTime: readerStart, sendTime: readerStart.Add(-time.Duration(j*dataPoints) * time.Millisecond)}
 			m.updateRTT(rm)
 

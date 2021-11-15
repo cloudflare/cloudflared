@@ -42,7 +42,7 @@ const (
 	// H2mux on HTTP2 failure to connect.
 	HTTP2Warp
 	//QUICWarp is used only with named tunnels. It's useful for warp-routing where we want to fallback to HTTP2 but
-	// dont' want HTTP2 to fallback to H2mux
+	// don't want HTTP2 to fallback to H2mux
 	QUICWarp
 )
 

@@ -125,7 +125,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case TypeTCP:
 		host, err := getRequestHost(r)
 		if err != nil {
-			err := fmt.Errorf(`cloudflared recieved a warp-routing request with an empty host value: %w`, err)
+			err := fmt.Errorf(`cloudflared received a warp-routing request with an empty host value: %w`, err)
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
 		}

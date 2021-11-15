@@ -12,7 +12,7 @@ import (
 /* This is an implementation of https://github.com/vkrasnov/h2-compression-dictionaries
 but modified for tunnels in a few key ways:
 Since tunnels is a server-to-server service, some aspects of the spec would cause
-unnessasary head-of-line blocking on the CPU and on the network, hence this implementation
+unnecessary head-of-line blocking on the CPU and on the network, hence this implementation
 allows for parallel compression on the "client", and buffering on the "server" to solve
 this problem. */
 
@@ -67,7 +67,7 @@ var compressionPresets = map[CompressionSetting]CompressionPreset{
 }
 
 func compressionSettingVal(version, fmt, sz, nd uint8) uint32 {
-	// Currently the compression settings are inlcude:
+	// Currently the compression settings are include:
 	// * version: only 1 is supported
 	// * fmt: only 2 for brotli is supported
 	// * sz: log2 of the maximal allowed dictionary size
@@ -438,7 +438,7 @@ func assignDictToStream(s *MuxedStream, p []byte) bool {
 	h2d.dictLock.Lock()
 
 	if w.comp != nil {
-		// Check again with lock, in therory the inteface allows for unordered writes
+		// Check again with lock, in therory the interface allows for unordered writes
 		h2d.dictLock.Unlock()
 		return false
 	}
@@ -468,7 +468,7 @@ func assignDictToStream(s *MuxedStream, p []byte) bool {
 		}
 	} else {
 		// Use the overflow dictionary as last resort
-		// If slots are availabe generate new dictioanries for path and content-type
+		// If slots are available generate new dictionaries for path and content-type
 		useID, _ = h2d.getGenericDictID()
 		pathID, pathFound = h2d.getNextDictID()
 		if pathFound {
