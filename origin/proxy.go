@@ -177,6 +177,11 @@ func (p *Proxy) proxyHTTPRequest(
 		roundTripReq.Header.Set("Connection", "keep-alive")
 	}
 
+	// Set the User-Agent as an empty string if not provided to avoid inserting golang default UA
+	if roundTripReq.Header.Get("User-Agent") == "" {
+		roundTripReq.Header.Set("User-Agent", "")
+	}
+
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
 		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
