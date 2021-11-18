@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	AvailableProtocolFlagMessage = "Available protocols: http2 - Go's implementation, h2mux - Cloudflare's implementation of HTTP/2, and auto - automatically select between http2 and h2mux"
+	AvailableProtocolFlagMessage = "Available protocols: 'auto' - automatically chooses the best protocol over time (the default; and also the recommended one); 'quic' - based on QUIC, relying on UDP egress to Cloudflare edge; 'http2' - using Go's HTTP2 library, relying on TCP egress to Cloudflare edge; 'h2mux' - Cloudflare's implementation of HTTP/2, deprecated"
 	// edgeH2muxTLSServerName is the server name to establish h2mux connection with edge
 	edgeH2muxTLSServerName = "cftunnel.com"
 	// edgeH2TLSServerName is the server name to establish http2 connection with edge
