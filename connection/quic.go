@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cloudflare/cloudflared/datagramsession"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -32,10 +33,11 @@ const (
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session     quic.Session
-	logger      *zerolog.Logger
-	httpProxy   OriginProxy
-	udpSessions *udpSessions
+	session        quic.Session
+	logger         *zerolog.Logger
+	httpProxy      OriginProxy
+	sessionManager datagramsession.Manager
+	localIP        net.IP
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -49,12 +51,6 @@ func NewQUICConnection(
 	controlStreamHandler ControlStreamHandler,
 	observer *Observer,
 ) (*QUICConnection, error) {
-	localIP, err := GetLocalIP()
-	if err != nil {
-		return nil, err
-	}
-	observer.log.Info().Msgf("UDP proxy will use %s as packet source IP", localIP)
-	udpSessions := newUDPSessions(localIP)
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to edge: %w", err)
@@ -71,11 +67,24 @@ func NewQUICConnection(
 		return nil, err
 	}
 
+	datagramMuxer, err := quicpogs.NewDatagramMuxer(session)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionManager := datagramsession.NewManager(datagramMuxer, observer.log)
+
+	localIP, err := getLocalIP()
+	if err != nil {
+		return nil, err
+	}
+
 	return &QUICConnection{
-		session:     session,
-		httpProxy:   httpProxy,
-		logger:      observer.log,
-		udpSessions: udpSessions,
+		session:        session,
+		httpProxy:      httpProxy,
+		logger:         observer.log,
+		sessionManager: sessionManager,
+		localIP:        localIP,
 	}, nil
 }
 
@@ -83,11 +92,10 @@ func NewQUICConnection(
 func (q *QUICConnection) Serve(ctx context.Context) error {
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		return q.listenEdgeDatagram()
-	})
-
-	errGroup.Go(func() error {
 		return q.acceptStream(ctx)
+	})
+	errGroup.Go(func() error {
+		return q.sessionManager.Serve(ctx)
 	})
 	return errGroup.Wait()
 }
@@ -108,26 +116,6 @@ func (q *QUICConnection) acceptStream(ctx context.Context) error {
 				q.logger.Err(err).Msg("Failed to handle QUIC stream")
 			}
 		}()
-	}
-}
-
-// listenEdgeDatagram listens for datagram from edge, parse the session ID and find the UDPConn to send the payload
-func (q *QUICConnection) listenEdgeDatagram() error {
-	for {
-		msg, err := q.session.ReceiveMessage()
-		if err != nil {
-			return err
-		}
-		go func(msg []byte) {
-			sessionID, msgWithoutID, err := quicpogs.ExtractSessionID(msg)
-			if err != nil {
-				q.logger.Err(err).Msg("Failed to parse session ID from datagram")
-				return
-			}
-			if err := q.udpSessions.send(sessionID, msgWithoutID); err != nil {
-				q.logger.Err(err).Msg("Failed to send UDP to origin")
-			}
-		}(msg)
 	}
 }
 
@@ -186,46 +174,29 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 }
 
 func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error {
-	udpConn, err := q.udpSessions.register(sessionID, dstIP, dstPort)
+	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
+	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
+	originProxy, err := q.newUDPProxy(dstIP, dstPort)
 	if err != nil {
+		q.logger.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
 		return err
 	}
-	q.logger.Debug().Msgf("Register session %v, %v, %v", sessionID, dstIP, dstPort)
-	go q.listenOriginUDP(sessionID, udpConn)
+	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
+	if err != nil {
+		q.logger.Err(err).Msgf("Failed to register udp session %s", sessionID)
+		return err
+	}
+	go func() {
+		defer q.sessionManager.UnregisterSession(q.session.Context(), sessionID)
+		if err := session.Serve(q.session.Context()); err != nil {
+			q.logger.Debug().Err(err).Str("sessionID", sessionID.String()).Msg("session terminated")
+		}
+	}()
+	q.logger.Debug().Msgf("Registered session %v, %v, %v", sessionID, dstIP, dstPort)
 	return nil
 }
 
-// listenOriginUDP reads UDP from origin in a loop, and returns when it cannot write to edge or cannot read from origin
-func (q *QUICConnection) listenOriginUDP(sessionID uuid.UUID, conn *net.UDPConn) {
-	defer func() {
-		q.udpSessions.unregister(sessionID)
-		conn.Close()
-	}()
-	readBuffer := make([]byte, MaxDatagramFrameSize)
-	for {
-		n, err := conn.Read(readBuffer)
-		if n > 0 {
-			if n > MaxDatagramFrameSize-sessionIDLen {
-				// TODO: TUN-5302 return ICMP packet too big message
-				q.logger.Error().Msgf("Origin UDP payload has %d bytes, which exceeds transport MTU %d", n, MaxDatagramFrameSize-sessionIDLen)
-				continue
-			}
-			msgWithID, err := quicpogs.SuffixSessionID(sessionID, readBuffer[:n])
-			if err != nil {
-				q.logger.Err(err).Msg("Failed to suffix session ID to datagram, it will be dropped")
-				continue
-			}
-			if err := q.session.SendMessage(msgWithID); err != nil {
-				q.logger.Err(err).Msg("Failed to send datagram back to edge")
-				return
-			}
-		}
-		if err != nil {
-			q.logger.Err(err).Msg("Failed to read UDP from origin")
-			return
-		}
-	}
-}
+// TODO: TUN-5422 Implement UnregisterUdpSession RPC
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
 // the client.
@@ -319,4 +290,36 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
+}
+
+// TODO: TUN-5303: Define an UDPProxy in ingress package
+func (q *QUICConnection) newUDPProxy(dstIP net.IP, dstPort uint16) (*net.UDPConn, error) {
+	dstAddr := &net.UDPAddr{
+		IP:   dstIP,
+		Port: int(dstPort),
+	}
+	return net.DialUDP("udp", nil, dstAddr)
+}
+
+// TODO: TUN-5303: Find the local IP once in ingress package
+// TODO: TUN-5421 allow user to specify which IP to bind to
+func getLocalIP() (net.IP, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, addr := range addrs {
+		// Find the IP that is not loop back
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if !ip.IsLoopback() {
+			return ip, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot determine IP to bind to")
 }
