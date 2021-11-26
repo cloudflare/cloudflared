@@ -81,12 +81,6 @@ func (r *RESTClient) GetByIP(ip net.IP) (teamnet.DetailedRoute, error) {
 	return teamnet.DetailedRoute{}, r.statusCodeToError("get route by IP", resp)
 }
 
-func parseListRoutes(body io.ReadCloser) ([]*teamnet.Route, error) {
-	var routes []*teamnet.Route
-	err := parseResponse(body, &routes)
-	return routes, err
-}
-
 func parseListDetailedRoutes(body io.ReadCloser) ([]*teamnet.DetailedRoute, error) {
 	var routes []*teamnet.DetailedRoute
 	err := parseResponse(body, &routes)

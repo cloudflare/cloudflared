@@ -15,10 +15,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-
 	"golang.org/x/net/http2"
 
 	"github.com/cloudflare/cloudflared/teamnet"
+	"github.com/cloudflare/cloudflared/vnet"
 )
 
 const (
@@ -238,6 +238,12 @@ type Client interface {
 	AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error)
 	DeleteRoute(network net.IPNet) error
 	GetByIP(ip net.IP) (teamnet.DetailedRoute, error)
+
+	// Virtual Networks endpoints
+	CreateVirtualNetwork(newVnet vnet.NewVirtualNetwork) (vnet.VirtualNetwork, error)
+	ListVirtualNetworks(filter *vnet.Filter) ([]*vnet.VirtualNetwork, error)
+	DeleteVirtualNetwork(id uuid.UUID) error
+	UpdateVirtualNetwork(id uuid.UUID, updates vnet.UpdateVirtualNetwork) error
 }
 
 type RESTClient struct {
@@ -252,6 +258,7 @@ type baseEndpoints struct {
 	accountLevel  url.URL
 	zoneLevel     url.URL
 	accountRoutes url.URL
+	accountVnets  url.URL
 }
 
 var _ Client = (*RESTClient)(nil)
@@ -268,6 +275,10 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create route account-level endpoint")
 	}
+	accountVnetsEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/virtual_networks", baseURL, accountTag))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create virtual network account-level endpoint")
+	}
 	zoneLevelEndpoint, err := url.Parse(fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneTag))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create account level endpoint")
@@ -282,6 +293,7 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 			accountLevel:  *accountLevelEndpoint,
 			zoneLevel:     *zoneLevelEndpoint,
 			accountRoutes: *accountRoutesEndpoint,
+			accountVnets:  *accountVnetsEndpoint,
 		},
 		authToken: authToken,
 		userAgent: userAgent,

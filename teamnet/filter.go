@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -86,6 +87,10 @@ func NewFromCLI(c *cli.Context) (*Filter, error) {
 		f.tunnelID(u)
 	}
 
+	if maxFetch := c.Int("max-fetch-size"); maxFetch > 0 {
+		f.MaxFetchSize(uint(maxFetch))
+	}
+
 	return f, nil
 }
 
@@ -131,6 +136,10 @@ func (f *Filter) existedAt(existedAt time.Time) {
 
 func (f *Filter) tunnelID(id uuid.UUID) {
 	f.queryParams.Set("tunnel_id", id.String())
+}
+
+func (f *Filter) MaxFetchSize(max uint) {
+	f.queryParams.Set("per_page", strconv.Itoa(int(max)))
 }
 
 func (f Filter) Encode() string {

@@ -102,6 +102,8 @@ func Commands() []*cli.Command {
 		buildLoginSubcommand(false),
 		buildCreateCommand(),
 		buildRouteCommand(),
+		// TODO TUN-5477 this should not be hidden
+		buildVirtualNetworkSubcommand(true),
 		buildRunCommand(),
 		buildListCommand(),
 		buildInfoCommand(),

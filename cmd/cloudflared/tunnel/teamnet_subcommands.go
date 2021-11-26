@@ -98,7 +98,7 @@ func showRoutesCommand(c *cli.Context) error {
 	if len(routes) > 0 {
 		formatAndPrintRouteList(routes)
 	} else {
-		fmt.Println("You have no routes, use 'cloudflared tunnel route ip add' to add a route")
+		fmt.Println("No routes were found for the given filter flags. You can use 'cloudflared tunnel route ip add' to add a route.")
 	}
 
 	return nil

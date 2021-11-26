@@ -329,7 +329,7 @@ func listCommand(c *cli.Context) error {
 	if len(tunnels) > 0 {
 		formatAndPrintTunnelList(tunnels, c.Bool("show-recently-disconnected"))
 	} else {
-		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
+		fmt.Println("No tunnels were found for the given filter flags. You can use 'cloudflared tunnel create' to create a tunnel.")
 	}
 
 	return nil
