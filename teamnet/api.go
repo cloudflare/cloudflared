@@ -16,11 +16,13 @@ import (
 // network, and says that eyeballs can reach that route using the corresponding
 // tunnel.
 type Route struct {
-	Network   CIDR      `json:"network"`
-	TunnelID  uuid.UUID `json:"tunnel_id"`
-	Comment   string    `json:"comment"`
-	CreatedAt time.Time `json:"created_at"`
-	DeletedAt time.Time `json:"deleted_at"`
+	Network  CIDR      `json:"network"`
+	TunnelID uuid.UUID `json:"tunnel_id"`
+	// Optional field. When unset, it means the Route belongs to the default virtual network.
+	VNetID    *uuid.UUID `json:"virtual_network_id,omitempty"`
+	Comment   string     `json:"comment"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt time.Time  `json:"deleted_at"`
 }
 
 // CIDR is just a newtype wrapper around net.IPNet. It adds JSON unmarshalling.
@@ -62,27 +64,33 @@ type NewRoute struct {
 	Network  net.IPNet
 	TunnelID uuid.UUID
 	Comment  string
+	// Optional field. If unset, backend will assume the default vnet for the account.
+	VNetID *uuid.UUID
 }
 
 // MarshalJSON handles fields with non-JSON types (e.g. net.IPNet).
 func (r NewRoute) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
-		TunnelID uuid.UUID `json:"tunnel_id"`
-		Comment  string    `json:"comment"`
+		TunnelID uuid.UUID  `json:"tunnel_id"`
+		Comment  string     `json:"comment"`
+		VNetID   *uuid.UUID `json:"virtual_network_id,omitempty"`
 	}{
 		TunnelID: r.TunnelID,
 		Comment:  r.Comment,
+		VNetID:   r.VNetID,
 	})
 }
 
 // DetailedRoute is just a Route with some extra fields, e.g. TunnelName.
 type DetailedRoute struct {
-	Network    CIDR      `json:"network"`
-	TunnelID   uuid.UUID `json:"tunnel_id"`
-	Comment    string    `json:"comment"`
-	CreatedAt  time.Time `json:"created_at"`
-	DeletedAt  time.Time `json:"deleted_at"`
-	TunnelName string    `json:"tunnel_name"`
+	Network  CIDR      `json:"network"`
+	TunnelID uuid.UUID `json:"tunnel_id"`
+	// Optional field. When unset, it means the DetailedRoute belongs to the default virtual network.
+	VNetID     *uuid.UUID `json:"virtual_network_id,omitempty"`
+	Comment    string     `json:"comment"`
+	CreatedAt  time.Time  `json:"created_at"`
+	DeletedAt  time.Time  `json:"deleted_at"`
+	TunnelName string     `json:"tunnel_name"`
 }
 
 // IsZero checks if DetailedRoute is the zero value.
@@ -97,13 +105,31 @@ func (r DetailedRoute) TableString() string {
 	if !r.DeletedAt.IsZero() {
 		deletedColumn = r.DeletedAt.Format(time.RFC3339)
 	}
+	vnetColumn := "default"
+	if r.VNetID != nil {
+		vnetColumn = r.VNetID.String()
+	}
+
 	return fmt.Sprintf(
-		"%s\t%s\t%s\t%s\t%s\t%s\t",
+		"%s\t%s\t%s\t%s\t%s\t%s\t%s\t",
 		r.Network.String(),
+		vnetColumn,
 		r.Comment,
 		r.TunnelID,
 		r.TunnelName,
 		r.CreatedAt.Format(time.RFC3339),
 		deletedColumn,
 	)
+}
+
+type DeleteRouteParams struct {
+	Network net.IPNet
+	// Optional field. If unset, backend will assume the default vnet for the account.
+	VNetID *uuid.UUID
+}
+
+type GetRouteByIpParams struct {
+	Ip net.IP
+	// Optional field. If unset, backend will assume the default vnet for the account.
+	VNetID *uuid.UUID
 }

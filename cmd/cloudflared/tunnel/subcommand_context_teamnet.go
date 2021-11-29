@@ -1,8 +1,6 @@
 package tunnel
 
 import (
-	"net"
-
 	"github.com/pkg/errors"
 
 	"github.com/cloudflare/cloudflared/teamnet"
@@ -26,18 +24,18 @@ func (sc *subcommandContext) addRoute(newRoute teamnet.NewRoute) (teamnet.Route,
 	return client.AddRoute(newRoute)
 }
 
-func (sc *subcommandContext) deleteRoute(network net.IPNet) error {
+func (sc *subcommandContext) deleteRoute(params teamnet.DeleteRouteParams) error {
 	client, err := sc.client()
 	if err != nil {
 		return errors.Wrap(err, noClientMsg)
 	}
-	return client.DeleteRoute(network)
+	return client.DeleteRoute(params)
 }
 
-func (sc *subcommandContext) getRouteByIP(ip net.IP) (teamnet.DetailedRoute, error) {
+func (sc *subcommandContext) getRouteByIP(params teamnet.GetRouteByIpParams) (teamnet.DetailedRoute, error) {
 	client, err := sc.client()
 	if err != nil {
 		return teamnet.DetailedRoute{}, errors.Wrap(err, noClientMsg)
 	}
-	return client.GetByIP(ip)
+	return client.GetByIP(params)
 }

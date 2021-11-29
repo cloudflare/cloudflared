@@ -35,6 +35,11 @@ var (
 		Name:  "filter-comment-is",
 		Usage: "Show only routes with this comment.",
 	}
+	filterVnet = cli.StringFlag{
+		Name:  "filter-virtual-network-id",
+		Usage: "Show only routes that are attached to the given virtual network ID.",
+	}
+
 	// Flags contains all filter flags.
 	FilterFlags = []cli.Flag{
 		&filterDeleted,
@@ -42,6 +47,7 @@ var (
 		&filterSubset,
 		&filterSuperset,
 		&filterComment,
+		&filterVnet,
 	}
 )
 
@@ -82,9 +88,17 @@ func NewFromCLI(c *cli.Context) (*Filter, error) {
 	if tunnelID := c.String(filterTunnelID.Name); tunnelID != "" {
 		u, err := uuid.Parse(tunnelID)
 		if err != nil {
-			return nil, errors.Wrap(err, "Couldn't parse UUID from --filter-tunnel-id")
+			return nil, errors.Wrapf(err, "Couldn't parse UUID from %s", filterTunnelID.Name)
 		}
 		f.tunnelID(u)
+	}
+
+	if vnetId := c.String(filterVnet.Name); vnetId != "" {
+		u, err := uuid.Parse(vnetId)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Couldn't parse UUID from %s", filterVnet.Name)
+		}
+		f.vnetID(u)
 	}
 
 	if maxFetch := c.Int("max-fetch-size"); maxFetch > 0 {
@@ -136,6 +150,10 @@ func (f *Filter) existedAt(existedAt time.Time) {
 
 func (f *Filter) tunnelID(id uuid.UUID) {
 	f.queryParams.Set("tunnel_id", id.String())
+}
+
+func (f *Filter) vnetID(id uuid.UUID) {
+	f.queryParams.Set("virtual_network_id", id.String())
 }
 
 func (f *Filter) MaxFetchSize(max uint) {

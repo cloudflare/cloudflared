@@ -2,11 +2,11 @@ package tunnelstore
 
 import (
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"path"
 
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/cloudflare/cloudflared/teamnet"
@@ -47,9 +47,11 @@ func (r *RESTClient) AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error) 
 }
 
 // DeleteRoute calls the Tunnelstore DELETE endpoint for a given route.
-func (r *RESTClient) DeleteRoute(network net.IPNet) error {
+func (r *RESTClient) DeleteRoute(params teamnet.DeleteRouteParams) error {
 	endpoint := r.baseEndpoints.accountRoutes
-	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(network.String()))
+	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(params.Network.String()))
+	setVnetParam(&endpoint, params.VNetID)
+
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
@@ -65,9 +67,11 @@ func (r *RESTClient) DeleteRoute(network net.IPNet) error {
 }
 
 // GetByIP checks which route will proxy a given IP.
-func (r *RESTClient) GetByIP(ip net.IP) (teamnet.DetailedRoute, error) {
+func (r *RESTClient) GetByIP(params teamnet.GetRouteByIpParams) (teamnet.DetailedRoute, error) {
 	endpoint := r.baseEndpoints.accountRoutes
-	endpoint.Path = path.Join(endpoint.Path, "ip", url.PathEscape(ip.String()))
+	endpoint.Path = path.Join(endpoint.Path, "ip", url.PathEscape(params.Ip.String()))
+	setVnetParam(&endpoint, params.VNetID)
+
 	resp, err := r.sendRequest("GET", endpoint, nil)
 	if err != nil {
 		return teamnet.DetailedRoute{}, errors.Wrap(err, "REST request failed")
@@ -97,4 +101,14 @@ func parseDetailedRoute(body io.ReadCloser) (teamnet.DetailedRoute, error) {
 	var route teamnet.DetailedRoute
 	err := parseResponse(body, &route)
 	return route, err
+}
+
+// setVnetParam overwrites the URL's query parameters with a query param to scope the Route action to a certain
+// virtual network (if one is provided).
+func setVnetParam(endpoint *url.URL, vnetID *uuid.UUID) {
+	queryParams := url.Values{}
+	if vnetID != nil {
+		queryParams.Set("virtual_network_id", vnetID.String())
+	}
+	endpoint.RawQuery = queryParams.Encode()
 }

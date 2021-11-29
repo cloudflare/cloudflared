@@ -236,8 +236,8 @@ type Client interface {
 	// Teamnet endpoints
 	ListRoutes(filter *teamnet.Filter) ([]*teamnet.DetailedRoute, error)
 	AddRoute(newRoute teamnet.NewRoute) (teamnet.Route, error)
-	DeleteRoute(network net.IPNet) error
-	GetByIP(ip net.IP) (teamnet.DetailedRoute, error)
+	DeleteRoute(params teamnet.DeleteRouteParams) error
+	GetByIP(params teamnet.GetRouteByIpParams) (teamnet.DetailedRoute, error)
 
 	// Virtual Networks endpoints
 	CreateVirtualNetwork(newVnet vnet.NewVirtualNetwork) (vnet.VirtualNetwork, error)
