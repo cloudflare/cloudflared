@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
+	"github.com/cloudflare/cloudflared/ingress"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -176,7 +177,7 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error {
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
-	originProxy, err := q.newUDPProxy(dstIP, dstPort)
+	originProxy, err := ingress.DialUDP(dstIP, dstPort)
 	if err != nil {
 		q.logger.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
 		return err
@@ -290,15 +291,6 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
-}
-
-// TODO: TUN-5303: Define an UDPProxy in ingress package
-func (q *QUICConnection) newUDPProxy(dstIP net.IP, dstPort uint16) (*net.UDPConn, error) {
-	dstAddr := &net.UDPAddr{
-		IP:   dstIP,
-		Port: int(dstPort),
-	}
-	return net.DialUDP("udp", nil, dstAddr)
 }
 
 // TODO: TUN-5303: Find the local IP once in ingress package

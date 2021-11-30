@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -192,8 +192,10 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 
 func TestWsConnReturnsBeforeStreamReturns(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		eyeballConn, err := connection.NewHTTP2RespWriter(r, w, connection.TypeWebsocket)
-		assert.NoError(t, err)
+		eyeballConn := &readWriter{
+			w: w,
+			r: r.Body,
+		}
 
 		cfdConn, originConn := net.Pipe()
 		tcpOverWSConn := tcpOverWSConnection{
@@ -318,4 +320,17 @@ func echoTCPOrigin(t *testing.T, conn net.Conn) {
 
 	_, err = conn.Write(testResponse)
 	assert.NoError(t, err)
+}
+
+type readWriter struct {
+	w io.Writer
+	r io.Reader
+}
+
+func (r *readWriter) Read(p []byte) (n int, err error) {
+	return r.r.Read(p)
+}
+
+func (r *readWriter) Write(p []byte) (n int, err error) {
+	return r.w.Write(p)
 }
