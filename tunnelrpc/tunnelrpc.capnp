@@ -149,4 +149,5 @@ struct RegisterUdpSessionResponse {
 
 interface SessionManager {
     registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16) -> (result :RegisterUdpSessionResponse);
+    unregisterUdpSession @1 (sessionId :Data) -> ();
 }

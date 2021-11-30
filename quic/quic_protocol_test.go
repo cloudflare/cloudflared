@@ -131,12 +131,15 @@ func TestRegisterUdpSession(t *testing.T) {
 	rpcClientStream, err := NewRPCClientStream(context.Background(), clientStream, &logger)
 	assert.NoError(t, err)
 
-	err = rpcClientStream.RegisterUdpSession(context.Background(), rpcServer.sessionID, rpcServer.dstIP, rpcServer.dstPort)
-	assert.NoError(t, err)
+	assert.NoError(t, rpcClientStream.RegisterUdpSession(context.Background(), rpcServer.sessionID, rpcServer.dstIP, rpcServer.dstPort))
 
 	// Different sessionID, the RPC server should reject the registraion
-	err = rpcClientStream.RegisterUdpSession(context.Background(), uuid.New(), rpcServer.dstIP, rpcServer.dstPort)
-	assert.Error(t, err)
+	assert.Error(t, rpcClientStream.RegisterUdpSession(context.Background(), uuid.New(), rpcServer.dstIP, rpcServer.dstPort))
+
+	assert.NoError(t, rpcClientStream.UnregisterUdpSession(context.Background(), rpcServer.sessionID))
+
+	// Different sessionID, the RPC server should reject the unregistraion
+	assert.Error(t, rpcClientStream.UnregisterUdpSession(context.Background(), uuid.New()))
 
 	rpcClientStream.Close()
 	<-sessionRegisteredChan
@@ -157,6 +160,13 @@ func (s mockRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UU
 	}
 	if s.dstPort != dstPort {
 		return fmt.Errorf("expect session ID %d, got %d", s.dstPort, dstPort)
+	}
+	return nil
+}
+
+func (s mockRPCServer) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
+	if s.sessionID != sessionID {
+		return fmt.Errorf("expect session ID %s, got %s", s.sessionID, sessionID)
 	}
 	return nil
 }

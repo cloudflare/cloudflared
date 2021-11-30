@@ -14,6 +14,7 @@ import (
 
 type SessionManager interface {
 	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error
+	UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error
 }
 
 type SessionManager_PogsImpl struct {
@@ -58,6 +59,21 @@ func (i SessionManager_PogsImpl) RegisterUdpSession(p tunnelrpc.SessionManager_r
 	}
 
 	return resp.Marshal(result)
+}
+
+func (i SessionManager_PogsImpl) UnregisterUdpSession(p tunnelrpc.SessionManager_unregisterUdpSession) error {
+	server.Ack(p.Options)
+
+	sessionIDRaw, err := p.Params.SessionId()
+	if err != nil {
+		return err
+	}
+	sessionID, err := uuid.FromBytes(sessionIDRaw)
+	if err != nil {
+		return err
+	}
+
+	return i.impl.UnregisterUdpSession(p.Ctx, sessionID)
 }
 
 type RegisterUdpSessionResponse struct {
@@ -115,4 +131,16 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 		return nil, err
 	}
 	return response, nil
+}
+
+func (c SessionManager_PogsClient) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
+	client := tunnelrpc.SessionManager{Client: c.Client}
+	promise := client.UnregisterUdpSession(ctx, func(p tunnelrpc.SessionManager_unregisterUdpSession_Params) error {
+		if err := p.SetSessionId(sessionID[:]); err != nil {
+			return err
+		}
+		return nil
+	})
+	_, err := promise.Struct()
+	return err
 }

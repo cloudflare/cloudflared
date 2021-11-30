@@ -38,7 +38,6 @@ type QUICConnection struct {
 	logger         *zerolog.Logger
 	httpProxy      OriginProxy
 	sessionManager datagramsession.Manager
-	localIP        net.IP
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -75,17 +74,11 @@ func NewQUICConnection(
 
 	sessionManager := datagramsession.NewManager(datagramMuxer, observer.log)
 
-	localIP, err := getLocalIP()
-	if err != nil {
-		return nil, err
-	}
-
 	return &QUICConnection{
 		session:        session,
 		httpProxy:      httpProxy,
 		logger:         observer.log,
 		sessionManager: sessionManager,
-		localIP:        localIP,
 	}, nil
 }
 
@@ -197,7 +190,10 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 	return nil
 }
 
-// TODO: TUN-5422 Implement UnregisterUdpSession RPC
+func (q *QUICConnection) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
+	q.sessionManager.UnregisterSession(ctx, sessionID)
+	return nil
+}
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
 // the client.
@@ -291,27 +287,4 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
-}
-
-// TODO: TUN-5303: Find the local IP once in ingress package
-// TODO: TUN-5421 allow user to specify which IP to bind to
-func getLocalIP() (net.IP, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return nil, err
-	}
-	for _, addr := range addrs {
-		// Find the IP that is not loop back
-		var ip net.IP
-		switch v := addr.(type) {
-		case *net.IPNet:
-			ip = v.IP
-		case *net.IPAddr:
-			ip = v.IP
-		}
-		if !ip.IsLoopback() {
-			return ip, nil
-		}
-	}
-	return nil, fmt.Errorf("cannot determine IP to bind to")
 }
