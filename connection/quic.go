@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
@@ -167,7 +168,7 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 	return rpcStream.Serve(q, q.logger)
 }
 
-func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error {
+func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) error {
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
 	originProxy, err := ingress.DialUDP(dstIP, dstPort)
@@ -182,7 +183,7 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 	}
 	go func() {
 		defer q.sessionManager.UnregisterSession(q.session.Context(), sessionID)
-		if err := session.Serve(q.session.Context()); err != nil {
+		if err := session.Serve(q.session.Context(), closeAfterIdleHint); err != nil {
 			q.logger.Debug().Err(err).Str("sessionID", sessionID.String()).Msg("session terminated")
 		}
 	}()

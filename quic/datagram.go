@@ -57,6 +57,10 @@ func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
 	return ExtractSessionID(msg)
 }
 
+func (dm *DatagramMuxer) MTU() uint {
+	return MaxDatagramFrameSize
+}
+
 // Each QUIC datagram should be suffixed with session ID.
 // ExtractSessionID extracts the session ID and a slice with only the payload
 func ExtractSessionID(b []byte) (uuid.UUID, []byte, error) {

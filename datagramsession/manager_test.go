@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -21,15 +22,15 @@ func TestManagerServe(t *testing.T) {
 	)
 	log := zerolog.Nop()
 	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(),
-		respChan: newDatagramChannel(),
+		reqChan:  newDatagramChannel(1),
+		respChan: newDatagramChannel(1),
 	}
 	mg := NewManager(transport, &log)
 
 	eyeballTracker := make(map[uuid.UUID]*datagramChannel)
 	for i := 0; i < sessions; i++ {
 		sessionID := uuid.New()
-		eyeballTracker[sessionID] = newDatagramChannel()
+		eyeballTracker[sessionID] = newDatagramChannel(1)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -88,7 +89,7 @@ func TestManagerServe(t *testing.T) {
 
 			sessionDone := make(chan struct{})
 			go func() {
-				session.Serve(ctx)
+				session.Serve(ctx, time.Minute*2)
 				close(sessionDone)
 			}()
 
@@ -179,9 +180,9 @@ type datagramChannel struct {
 	closedChan   chan struct{}
 }
 
-func newDatagramChannel() *datagramChannel {
+func newDatagramChannel(capacity uint) *datagramChannel {
 	return &datagramChannel{
-		datagramChan: make(chan *newDatagram, 1),
+		datagramChan: make(chan *newDatagram, capacity),
 		closedChan:   make(chan struct{}),
 	}
 }

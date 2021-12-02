@@ -127,7 +127,7 @@ func (m *manager) sendToSession(datagram *newDatagram) {
 	}
 	// session writes to destination over a connected UDP socket, which should not be blocking, so this call doesn't
 	// need to run in another go routine
-	_, err := session.writeToDst(datagram.payload)
+	_, err := session.transportToDst(datagram.payload)
 	if err != nil {
 		m.log.Err(err).Str("sessionID", datagram.sessionID.String()).Msg("Failed to write payload to session")
 	}

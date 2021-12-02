@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ import (
 )
 
 type SessionManager interface {
-	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) error
+	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) error
 	UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error
 }
 
@@ -47,8 +48,10 @@ func (i SessionManager_PogsImpl) RegisterUdpSession(p tunnelrpc.SessionManager_r
 	}
 	dstPort := p.Params.DstPort()
 
+	closeIdleAfterHint := time.Duration(p.Params.CloseAfterIdleHint())
+
 	resp := RegisterUdpSessionResponse{}
-	registrationErr := i.impl.RegisterUdpSession(p.Ctx, sessionID, dstIP, dstPort)
+	registrationErr := i.impl.RegisterUdpSession(p.Ctx, sessionID, dstIP, dstPort, closeIdleAfterHint)
 	if registrationErr != nil {
 		resp.Err = registrationErr
 	}
@@ -108,7 +111,7 @@ func (c SessionManager_PogsClient) Close() error {
 	return c.Conn.Close()
 }
 
-func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16) (*RegisterUdpSessionResponse, error) {
+func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) (*RegisterUdpSessionResponse, error) {
 	client := tunnelrpc.SessionManager{Client: c.Client}
 	promise := client.RegisterUdpSession(ctx, func(p tunnelrpc.SessionManager_registerUdpSession_Params) error {
 		if err := p.SetSessionId(sessionID[:]); err != nil {
@@ -118,6 +121,7 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 			return err
 		}
 		p.SetDstPort(dstPort)
+		p.SetCloseAfterIdleHint(int64(closeAfterIdleHint))
 		return nil
 	})
 	result, err := promise.Result().Struct()

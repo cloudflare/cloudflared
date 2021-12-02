@@ -8,4 +8,6 @@ type transport interface {
 	SendTo(sessionID uuid.UUID, payload []byte) error
 	// ReceiveFrom reads the next datagram from the transport
 	ReceiveFrom() (uuid.UUID, []byte, error)
+	// Max transmission unit of the transport
+	MTU() uint
 }
