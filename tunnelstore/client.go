@@ -275,7 +275,7 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create route account-level endpoint")
 	}
-	accountVnetsEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/virtual_networks", baseURL, accountTag))
+	accountVnetsEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/teamnet/virtual_networks", baseURL, accountTag))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create virtual network account-level endpoint")
 	}
