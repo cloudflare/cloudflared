@@ -116,7 +116,7 @@ test-ssh-server:
 define publish_package
 	chmod 664 cloudflared*.$(1); \
 	for HOST in $(CF_PKG_HOSTS); do \
-		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
+		ssh-keyscan -t ecdsa $$HOST >> ~/.ssh/known_hosts; \
 		scp -p -4 cloudflared*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
 	done
 endef
