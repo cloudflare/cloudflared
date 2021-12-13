@@ -77,9 +77,10 @@ func (s *Session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 			return
 		case <-s.doneChan:
 			return
-		case <-checkIdleTicker.C:
+		// TODO: TUN-5423 evaluate if using atomic is more efficient
+		case now := <-checkIdleTicker.C:
 			// The session is considered inactive if current time is after (last active time + allowed idle time)
-			if time.Now().After(activeAt.Add(closeAfterIdle)) {
+			if now.After(activeAt.Add(closeAfterIdle)) {
 				return
 			}
 		case activeAt = <-s.activeAtChan: // Update last active time
