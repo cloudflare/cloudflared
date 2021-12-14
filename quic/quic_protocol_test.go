@@ -114,11 +114,13 @@ func TestRegisterUdpSession(t *testing.T) {
 	clientStream := mockRPCStream{clientReader, clientWriter}
 	serverStream := mockRPCStream{serverReader, serverWriter}
 
+	unregisterMessage := "closed by eyeball"
 	rpcServer := mockRPCServer{
-		sessionID:      uuid.New(),
-		dstIP:          net.IP{172, 16, 0, 1},
-		dstPort:        8000,
-		closeIdleAfter: testCloseIdleAfterHint,
+		sessionID:         uuid.New(),
+		dstIP:             net.IP{172, 16, 0, 1},
+		dstPort:           8000,
+		closeIdleAfter:    testCloseIdleAfterHint,
+		unregisterMessage: unregisterMessage,
 	}
 	logger := zerolog.Nop()
 	sessionRegisteredChan := make(chan struct{})
@@ -142,20 +144,21 @@ func TestRegisterUdpSession(t *testing.T) {
 	// Different sessionID, the RPC server should reject the registraion
 	assert.Error(t, rpcClientStream.RegisterUdpSession(context.Background(), uuid.New(), rpcServer.dstIP, rpcServer.dstPort, testCloseIdleAfterHint))
 
-	assert.NoError(t, rpcClientStream.UnregisterUdpSession(context.Background(), rpcServer.sessionID))
+	assert.NoError(t, rpcClientStream.UnregisterUdpSession(context.Background(), rpcServer.sessionID, unregisterMessage))
 
 	// Different sessionID, the RPC server should reject the unregistraion
-	assert.Error(t, rpcClientStream.UnregisterUdpSession(context.Background(), uuid.New()))
+	assert.Error(t, rpcClientStream.UnregisterUdpSession(context.Background(), uuid.New(), unregisterMessage))
 
 	rpcClientStream.Close()
 	<-sessionRegisteredChan
 }
 
 type mockRPCServer struct {
-	sessionID      uuid.UUID
-	dstIP          net.IP
-	dstPort        uint16
-	closeIdleAfter time.Duration
+	sessionID         uuid.UUID
+	dstIP             net.IP
+	dstPort           uint16
+	closeIdleAfter    time.Duration
+	unregisterMessage string
 }
 
 func (s mockRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration) error {
@@ -174,9 +177,12 @@ func (s mockRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UU
 	return nil
 }
 
-func (s mockRPCServer) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
+func (s mockRPCServer) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
 	if s.sessionID != sessionID {
 		return fmt.Errorf("expect session ID %s, got %s", s.sessionID, sessionID)
+	}
+	if s.unregisterMessage != message {
+		return fmt.Errorf("expect unregister message %s, got %s", s.unregisterMessage, message)
 	}
 	return nil
 }

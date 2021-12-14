@@ -15,7 +15,7 @@ import (
 
 type SessionManager interface {
 	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) error
-	UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error
+	UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error
 }
 
 type SessionManager_PogsImpl struct {
@@ -76,7 +76,12 @@ func (i SessionManager_PogsImpl) UnregisterUdpSession(p tunnelrpc.SessionManager
 		return err
 	}
 
-	return i.impl.UnregisterUdpSession(p.Ctx, sessionID)
+	message, err := p.Params.Message()
+	if err != nil {
+		return err
+	}
+
+	return i.impl.UnregisterUdpSession(p.Ctx, sessionID, message)
 }
 
 type RegisterUdpSessionResponse struct {
@@ -137,10 +142,13 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 	return response, nil
 }
 
-func (c SessionManager_PogsClient) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
+func (c SessionManager_PogsClient) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
 	client := tunnelrpc.SessionManager{Client: c.Client}
 	promise := client.UnregisterUdpSession(ctx, func(p tunnelrpc.SessionManager_unregisterUdpSession_Params) error {
 		if err := p.SetSessionId(sessionID[:]); err != nil {
+			return err
+		}
+		if err := p.SetMessage(message); err != nil {
 			return err
 		}
 		return nil

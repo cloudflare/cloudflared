@@ -17,8 +17,9 @@ import (
 
 func TestManagerServe(t *testing.T) {
 	const (
-		sessions = 20
-		msgs     = 50
+		sessions            = 20
+		msgs                = 50
+		remoteUnregisterMsg = "eyeball closed connection"
 	)
 	log := zerolog.Nop()
 	transport := &mockQUICTransport{
@@ -89,7 +90,13 @@ func TestManagerServe(t *testing.T) {
 
 			sessionDone := make(chan struct{})
 			go func() {
-				session.Serve(ctx, time.Minute*2)
+				closedByRemote, err := session.Serve(ctx, time.Minute*2)
+				closeSession := &errClosedSession{
+					message:  remoteUnregisterMsg,
+					byRemote: true,
+				}
+				require.Equal(t, closeSession, err)
+				require.True(t, closedByRemote)
 				close(sessionDone)
 			}()
 
@@ -100,7 +107,7 @@ func TestManagerServe(t *testing.T) {
 			// Make sure eyeball and origin have received all messages before unregistering the session
 			require.NoError(t, reqErrGroup.Wait())
 
-			require.NoError(t, mg.UnregisterSession(ctx, sessionID))
+			require.NoError(t, mg.UnregisterSession(ctx, sessionID, remoteUnregisterMsg, true))
 			<-sessionDone
 
 			return nil

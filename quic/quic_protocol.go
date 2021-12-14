@@ -251,8 +251,8 @@ func (rcs *RPCClientStream) RegisterUdpSession(ctx context.Context, sessionID uu
 	return resp.Err
 }
 
-func (rcs *RPCClientStream) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
-	return rcs.client.UnregisterUdpSession(ctx, sessionID)
+func (rcs *RPCClientStream) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
+	return rcs.client.UnregisterUdpSession(ctx, sessionID, message)
 }
 
 func (rcs *RPCClientStream) Close() {

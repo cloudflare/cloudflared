@@ -168,6 +168,7 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 	return rpcStream.Serve(q, q.logger)
 }
 
+// RegisterUdpSession is the RPC method invoked by edge to register and run a session
 func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) error {
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
@@ -178,22 +179,60 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 	}
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
-		q.logger.Err(err).Msgf("Failed to register udp session %s", sessionID)
+		q.logger.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
 		return err
 	}
-	go func() {
-		defer q.sessionManager.UnregisterSession(q.session.Context(), sessionID)
-		if err := session.Serve(q.session.Context(), closeAfterIdleHint); err != nil {
-			q.logger.Debug().Err(err).Str("sessionID", sessionID.String()).Msg("session terminated")
-		}
-	}()
+
+	go q.serveUDPSession(session, closeAfterIdleHint)
+
 	q.logger.Debug().Msgf("Registered session %v, %v, %v", sessionID, dstIP, dstPort)
 	return nil
 }
 
-func (q *QUICConnection) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID) error {
-	q.sessionManager.UnregisterSession(ctx, sessionID)
-	return nil
+func (q *QUICConnection) serveUDPSession(session *datagramsession.Session, closeAfterIdleHint time.Duration) {
+	ctx := q.session.Context()
+	closedByRemote, err := session.Serve(ctx, closeAfterIdleHint)
+	// If session is terminated by remote, then we know it has been unregistered from session manager and edge
+	if !closedByRemote {
+		if err != nil {
+			q.closeUDPSession(ctx, session.ID, err.Error())
+		} else {
+			q.closeUDPSession(ctx, session.ID, "terminated without error")
+		}
+		q.logger.Debug().Err(err).Str("sessionID", session.ID.String()).Msg("session terminated")
+		return
+	}
+	q.logger.Debug().Err(err).Msg("Session terminated by edge")
+}
+
+// closeUDPSession first unregisters the session from session manager, then it tries to unregister from edge
+func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUID, message string) {
+	q.sessionManager.UnregisterSession(ctx, sessionID, message, false)
+	stream, err := q.session.OpenStream()
+	if err != nil {
+		// Log this at debug because this is not an error if session was closed due to lost connection
+		// with edge
+		q.logger.Debug().Err(err).Str("sessionID", sessionID.String()).
+			Msgf("Failed to open quic stream to unregister udp session with edge")
+		return
+	}
+	rpcClientStream, err := quicpogs.NewRPCClientStream(ctx, stream, q.logger)
+	if err != nil {
+		// Log this at debug because this is not an error if session was closed due to lost connection
+		// with edge
+		q.logger.Err(err).Str("sessionID", sessionID.String()).
+			Msgf("Failed to open rpc stream to unregister udp session with edge")
+		return
+	}
+	if err := rpcClientStream.UnregisterUdpSession(ctx, sessionID, message); err != nil {
+		q.logger.Err(err).Str("sessionID", sessionID.String()).
+			Msgf("Failed to unregister udp session with edge")
+	}
+}
+
+// UnregisterUdpSession is the RPC method invoked by edge to unregister and terminate a sesssion
+func (q *QUICConnection) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
+	return q.sessionManager.UnregisterSession(ctx, sessionID, message, true)
 }
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to

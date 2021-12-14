@@ -150,5 +150,5 @@ struct RegisterUdpSessionResponse {
 interface SessionManager {
     # Let the edge decide closeAfterIdle to make sure cloudflared doesn't close session before the edge closes its side
     registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16, closeAfterIdleHint: Int64) -> (result :RegisterUdpSessionResponse);
-    unregisterUdpSession @1 (sessionId :Data) -> ();
+    unregisterUdpSession @1 (sessionId :Data, message: Text) -> ();
 }

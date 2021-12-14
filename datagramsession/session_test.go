@@ -31,6 +31,12 @@ func TestCloseIdle(t *testing.T) {
 }
 
 func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.Duration) {
+	var (
+		localCloseReason = &errClosedSession{
+			message:  "connection closed by origin",
+			byRemote: false,
+		}
+	)
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
@@ -43,7 +49,18 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 	ctx, cancel := context.WithCancel(context.Background())
 	sessionDone := make(chan struct{})
 	go func() {
-		session.Serve(ctx, closeAfterIdle)
+		closedByRemote, err := session.Serve(ctx, closeAfterIdle)
+		switch closeBy {
+		case closeByContext:
+			require.Equal(t, context.Canceled, err)
+			require.False(t, closedByRemote)
+		case closeByCallingClose:
+			require.Equal(t, localCloseReason, err)
+			require.Equal(t, localCloseReason.byRemote, closedByRemote)
+		case closeByTimeout:
+			require.Equal(t, SessionIdleErr(closeAfterIdle), err)
+			require.False(t, closedByRemote)
+		}
 		close(sessionDone)
 	}()
 
@@ -64,7 +81,7 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 	case closeByContext:
 		cancel()
 	case closeByCallingClose:
-		session.close()
+		session.close(localCloseReason)
 	}
 
 	<-sessionDone

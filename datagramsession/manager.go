@@ -20,7 +20,7 @@ type Manager interface {
 	// RegisterSession starts tracking a session. Caller is responsible for starting the session
 	RegisterSession(ctx context.Context, sessionID uuid.UUID, dstConn io.ReadWriteCloser) (*Session, error)
 	// UnregisterSession stops tracking the session and terminates it
-	UnregisterSession(ctx context.Context, sessionID uuid.UUID) error
+	UnregisterSession(ctx context.Context, sessionID uuid.UUID, message string, byRemote bool) error
 }
 
 type manager struct {
@@ -100,8 +100,14 @@ func (m *manager) registerSession(ctx context.Context, registration *registerSes
 	registration.resultChan <- session
 }
 
-func (m *manager) UnregisterSession(ctx context.Context, sessionID uuid.UUID) error {
-	event := &unregisterSessionEvent{sessionID: sessionID}
+func (m *manager) UnregisterSession(ctx context.Context, sessionID uuid.UUID, message string, byRemote bool) error {
+	event := &unregisterSessionEvent{
+		sessionID: sessionID,
+		err: &errClosedSession{
+			message:  message,
+			byRemote: byRemote,
+		},
+	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -114,7 +120,7 @@ func (m *manager) unregisterSession(unregistration *unregisterSessionEvent) {
 	session, ok := m.sessions[unregistration.sessionID]
 	if ok {
 		delete(m.sessions, unregistration.sessionID)
-		session.close()
+		session.close(unregistration.err)
 	}
 }
 
