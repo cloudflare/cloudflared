@@ -1,3 +1,28 @@
+2021.12.0
+- 2021-12-13 TUN-5530: Get current time from ticker
+- 2021-12-15 TUN-5544: Update CHANGES.md for next release
+- 2021-12-07 TUN-5519: Adjust URL for virtual_networks endpoint to match what we will publish
+- 2021-12-02 TUN-5488: Close session after it's idle for a period defined by registerUdpSession RPC
+- 2021-12-09 TUN-5504: Fix upload of packages to public repo
+- 2021-11-30 TUN-5481: Create abstraction for Origin UDP Connection
+- 2021-11-30 TUN-5422: Define RPC to unregister session
+- 2021-11-26 TUN-5361: Commands for managing virtual networks
+- 2021-11-29 TUN-5362: Adjust route ip commands to be aware of virtual networks
+- 2021-11-23 TUN-5301: Separate datagram multiplex and session management logic from quic connection logic
+- 2021-11-10 TUN-5405: Update net package to v0.0.0-20211109214657-ef0fda0de508
+- 2021-11-10 TUN-5408: Update quic package to v0.24.0
+- 2021-11-12 Fix typos
+- 2021-11-13 Fix for Issue #501: Unexpected User-agent insertion when tunneling http request
+- 2021-11-16 TUN-5129: Remove `-dev` suffix when computing version and Git has uncommitted changes
+- 2021-11-18 TUN-5441: Fix message about available protocols
+- 2021-11-12 TUN-5300: Define RPC to register UDP sessions
+- 2021-11-14 TUN-5299: Send/receive QUIC datagram from edge and proxy to origin as UDP
+- 2021-11-04 TUN-5387: Updated CHANGES.md for 2021.11.0
+- 2021-11-08 TUN-5368: Log connection issues with LogLevel that depends on tunnel state
+- 2021-11-09 TUN-5397: Log cloudflared output when it fails to connect tunnel
+- 2021-11-09 TUN-5277: Ensure cloudflared binary is FIPS compliant on linux amd64
+- 2021-11-08 TUN-5393: Content-length is no longer a control header for non-h2mux transports
+
 2021.11.0
 - 2021-11-03 TUN-5285: Fallback to HTTP2 immediately if connection times out with no network activity
 - 2021-09-29 Add flag to 'tunnel create' subcommand to specify a base64-encoded secret
