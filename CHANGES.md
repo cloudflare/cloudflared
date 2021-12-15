@@ -1,5 +1,16 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.12.0
+### New Features
+- Cloudflared binary released for amd64 linux is now FIPS compliant.
+
+### Improvements
+- Logging about connectivity to Cloudflare edge now only yields `ERR` level logging if there are no connections to
+Cloudflare edge that are active. Otherwise it logs `WARN` level.
+ 
+### Bug Fixes
+- Fixes Github issue #501.
+
 ## 2021.11.0
 ### Improvements
 - Fallback from `protocol:quic` to `protocol:http2` immediately if UDP connectivity isn't available. This could be because of a firewall or 
