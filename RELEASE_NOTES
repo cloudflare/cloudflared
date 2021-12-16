@@ -1,3 +1,6 @@
+2021.12.1
+- 2021-12-16 TUN-5549: Revert "TUN-5277: Ensure cloudflared binary is FIPS compliant on linux amd64"
+
 2021.12.0
 - 2021-12-13 TUN-5530: Get current time from ticker
 - 2021-12-15 TUN-5544: Update CHANGES.md for next release
