@@ -3,6 +3,14 @@ MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut 
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
 
+ifeq ($(FIPS), true)
+	GO_BUILD_TAGS := $(GO_BUILD_TAGS) fips
+endif
+
+ifneq ($(GO_BUILD_TAGS),)
+	GO_BUILD_TAGS := -tags $(GO_BUILD_TAGS)
+endif
+
 ifeq ($(NIGHTLY), true)
 	DEB_PACKAGE_NAME := cloudflared-nightly
 	NIGHTLY_FLAGS := --conflicts cloudflared --replaces cloudflared
@@ -11,19 +19,7 @@ else
 endif
 
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
-VERSION_FLAGS := -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"
-
-LINK_FLAGS :=
-ifeq ($(FIPS), true)
-	LINK_FLAGS := -linkmode=external -extldflags=-static $(LINK_FLAGS)
-	# Prevent linking with libc regardless of CGO enabled or not.
-	GO_BUILD_TAGS := $(GO_BUILD_TAGS) osusergo netgo fips
-endif
-
-LDFLAGS := -ldflags='$(VERSION_FLAGS) $(LINK_FLAGS)'
-ifneq ($(GO_BUILD_TAGS),)
-	GO_BUILD_TAGS := -tags "$(GO_BUILD_TAGS)"
-endif
+VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
 
 IMPORT_PATH   := github.com/cloudflare/cloudflared
 PACKAGE_DIR   := $(CURDIR)/packaging
@@ -84,15 +80,17 @@ clean:
 	go clean
 
 .PHONY: cloudflared
-cloudflared:
+cloudflared: 
 ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
-	cp -f fips/fips.go.linux-amd64 cmd/cloudflared/fips.go
+	-test -f fips/fips.go && mv fips/fips.go fips/fips.go.linux-amd64
+	mv fips/fips.go.linux-amd64 fips/fips.go
 endif
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
+
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
+
 ifeq ($(FIPS), true)
-	rm -f cmd/cloudflared/fips.go
-	./check-fips.sh cloudflared
+	mv fips/fips.go fips/fips.go.linux-amd64
 endif
 
 .PHONY: container
@@ -102,10 +100,10 @@ container:
 .PHONY: test
 test: vet
 ifndef CI
-	go test -v -mod=vendor -race $(LDFLAGS) ./...
+	go test -v -mod=vendor -race $(VERSION_FLAGS) ./...
 else
 	@mkdir -p .cover
-	go test -v -mod=vendor -race $(LDFLAGS) -coverprofile=".cover/c.out" ./...
+	go test -v -mod=vendor -race $(VERSION_FLAGS) -coverprofile=".cover/c.out" ./...
 	go tool cover -html ".cover/c.out" -o .cover/all.html
 endif
 
@@ -249,8 +247,8 @@ tunnelrpc-deps:
 	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
 
 .PHONY: quic-deps
-quic-deps:
-	which capnp
+quic-deps: 
+	which capnp 
 	which capnpc-go
 	capnp compile -ogo quic/schema/quic_metadata_protocol.capnp
 
@@ -260,7 +258,7 @@ vet:
 	# go get github.com/sudarshan-reddy/go-sumtype (don't do this in build directory or this will cause vendor issues)
 	# Note: If you have github.com/BurntSushi/go-sumtype then you might have to use the repo above instead
 	# for now because it uses an older version of golang.org/x/tools.
-	which go-sumtype
+	which go-sumtype  
 	go-sumtype $$(go list -mod=vendor ./...)
 
 .PHONY: goimports

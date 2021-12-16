@@ -1,5 +1,9 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.12.1
+### Bug Fixe
+ - Fixes Github issue #530 where cloudflared 2021.12.0 could not reach origins that were HTTPS and using certain encryption methods forbidden by FIPS compliance (such as Let's Encrypt certificates). To address this fix we have temporarily reverted FIPS compliance from amd64 linux binaries that was recently introduced (or fixed actually as it was never working before).
+
 ## 2021.12.0
 ### New Features
 - Cloudflared binary released for amd64 linux is now FIPS compliant.
