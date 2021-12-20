@@ -155,13 +155,16 @@ func NewRPCServerStream(stream io.ReadWriteCloser, protocol ProtocolSignature) (
 }
 
 func (s *RPCServerStream) Serve(sessionManager tunnelpogs.SessionManager, logger *zerolog.Logger) error {
-	rpcTransport := tunnelrpc.NewTransportLogger(logger, rpc.StreamTransport(s))
+	// RPC logs are very robust, create a new logger that only logs error to reduce noise
+	rpcLogger := logger.Level(zerolog.ErrorLevel)
+	rpcTransport := tunnelrpc.NewTransportLogger(&rpcLogger, rpc.StreamTransport(s))
 	defer rpcTransport.Close()
 
 	main := tunnelpogs.SessionManager_ServerToClient(sessionManager)
 	rpcConn := rpc.NewConn(
 		rpcTransport,
 		rpc.MainInterface(main.Client),
+		tunnelrpc.ConnLog(&rpcLogger),
 	)
 	defer rpcConn.Close()
 
@@ -179,7 +182,7 @@ func DetermineProtocol(stream io.Reader) (ProtocolSignature, error) {
 	case RPCStreamProtocolSignature:
 		return RPCStreamProtocolSignature, nil
 	default:
-		return ProtocolSignature{}, fmt.Errorf("Unknown signature %v", signature)
+		return ProtocolSignature{}, fmt.Errorf("unknown signature %v", signature)
 	}
 }
 
