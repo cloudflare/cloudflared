@@ -50,7 +50,6 @@ func (m *manager) Serve(ctx context.Context) error {
 		for {
 			sessionID, payload, err := m.transport.ReceiveFrom()
 			if err != nil {
-				m.log.Err(err).Msg("Failed to receive datagram from transport, closing session manager")
 				return err
 			}
 			datagram := &newDatagram{
