@@ -1,8 +1,16 @@
 **Experimental**: This is a new format for release notes. The format and availability is subject to change.
 
+## 2021.12.2
+### Bug Fixes
+- Fix logging when `quic` transport is used and UDP traffic is proxied.
+- FIPS compliant cloudflared binaries will now be released as separate artifacts. Recall that these are only for linux
+and amd64.
+
 ## 2021.12.1
-### Bug Fixe
- - Fixes Github issue #530 where cloudflared 2021.12.0 could not reach origins that were HTTPS and using certain encryption methods forbidden by FIPS compliance (such as Let's Encrypt certificates). To address this fix we have temporarily reverted FIPS compliance from amd64 linux binaries that was recently introduced (or fixed actually as it was never working before).
+### Bug Fixes
+ - Fixes Github issue #530 where cloudflared 2021.12.0 could not reach origins that were HTTPS and using certain encryption
+methods forbidden by FIPS compliance (such as Let's Encrypt certificates). To address this fix we have temporarily reverted
+FIPS compliance from amd64 linux binaries that was recently introduced (or fixed actually as it was never working before).
 
 ## 2021.12.0
 ### New Features
