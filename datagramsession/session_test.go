@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,7 +45,8 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 		reqChan:  newDatagramChannel(1),
 		respChan: newDatagramChannel(1),
 	}
-	session := newSession(sessionID, transport, cfdConn)
+	log := zerolog.Nop()
+	session := newSession(sessionID, transport, cfdConn, &log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sessionDone := make(chan struct{})
@@ -119,7 +121,8 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 		reqChan:  newDatagramChannel(100),
 		respChan: newDatagramChannel(100),
 	}
-	session := newSession(sessionID, transport, cfdConn)
+	log := zerolog.Nop()
+	session := newSession(sessionID, transport, cfdConn, &log)
 
 	startTime := time.Now()
 	activeUntil := startTime.Add(activeTime)
@@ -181,7 +184,7 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 
 func TestMarkActiveNotBlocking(t *testing.T) {
 	const concurrentCalls = 50
-	session := newSession(uuid.New(), nil, nil)
+	session := newSession(uuid.New(), nil, nil, nil)
 	var wg sync.WaitGroup
 	wg.Add(concurrentCalls)
 	for i := 0; i < concurrentCalls; i++ {

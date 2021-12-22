@@ -95,7 +95,7 @@ func (m *manager) RegisterSession(ctx context.Context, sessionID uuid.UUID, orig
 }
 
 func (m *manager) registerSession(ctx context.Context, registration *registerSessionEvent) {
-	session := newSession(registration.sessionID, m.transport, registration.originProxy)
+	session := newSession(registration.sessionID, m.transport, registration.originProxy, m.log)
 	m.sessions[registration.sessionID] = session
 	registration.resultChan <- session
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -17,7 +18,7 @@ func SessionIdleErr(timeout time.Duration) error {
 	return fmt.Errorf("session idle for %v", timeout)
 }
 
-// Each Session is a bidirectional pipe of datagrams between transport and dstConn
+// Session is a bidirectional pipe of datagrams between transport and dstConn
 // Currently the only implementation of transport is quic DatagramMuxer
 // Destination can be a connection with origin or with eyeball
 // When the destination is origin:
@@ -35,9 +36,10 @@ type Session struct {
 	// activeAtChan is used to communicate the last read/write time
 	activeAtChan chan time.Time
 	closeChan    chan error
+	log          *zerolog.Logger
 }
 
-func newSession(id uuid.UUID, transport transport, dstConn io.ReadWriteCloser) *Session {
+func newSession(id uuid.UUID, transport transport, dstConn io.ReadWriteCloser, log *zerolog.Logger) *Session {
 	return &Session{
 		ID:        id,
 		transport: transport,
@@ -47,6 +49,7 @@ func newSession(id uuid.UUID, transport transport, dstConn io.ReadWriteCloser) *
 		activeAtChan: make(chan time.Time, 2),
 		// capacity is 2 because close() and dstToTransport routine in Serve() can write to this channel
 		closeChan: make(chan error, 2),
+		log:       log,
 	}
 }
 
@@ -54,7 +57,8 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 	go func() {
 		// QUIC implementation copies data to another buffer before returning https://github.com/lucas-clemente/quic-go/blob/v0.24.0/session.go#L1967-L1975
 		// This makes it safe to share readBuffer between iterations
-		readBuffer := make([]byte, s.transport.ReceiveMTU())
+		const maxPacketSize = 1500
+		readBuffer := make([]byte, maxPacketSize)
 		for {
 			if err := s.dstToTransport(readBuffer); err != nil {
 				s.closeChan <- err
@@ -103,8 +107,15 @@ func (s *Session) dstToTransport(buffer []byte) error {
 	n, err := s.dstConn.Read(buffer)
 	s.markActive()
 	if n > 0 {
-		if err := s.transport.SendTo(s.ID, buffer[:n]); err != nil {
-			return err
+		if n <= int(s.transport.MTU()) {
+			err = s.transport.SendTo(s.ID, buffer[:n])
+		} else {
+			// drop packet for now, eventually reply with ICMP for PMTUD
+			s.log.Debug().
+				Str("session", s.ID.String()).
+				Int("len", n).
+				Uint("mtu", s.transport.MTU()).
+				Msg("dropped packet exceeding MTU")
 		}
 	}
 	return err

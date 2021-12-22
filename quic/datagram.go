@@ -36,7 +36,7 @@ func NewDatagramMuxer(quicSession quic.Session) (*DatagramMuxer, error) {
 func (dm *DatagramMuxer) SendTo(sessionID uuid.UUID, payload []byte) error {
 	if len(payload) > MaxDatagramFrameSize-sessionIDLen {
 		// TODO: TUN-5302 return ICMP packet too big message
-		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.SendMTU())
+		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.MTU())
 	}
 	msgWithID, err := SuffixSessionID(sessionID, payload)
 	if err != nil {
@@ -59,14 +59,9 @@ func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
 	return ExtractSessionID(msg)
 }
 
-// Maximum application payload to send through QUIC datagram frame
-func (dm *DatagramMuxer) SendMTU() uint {
+// Maximum application payload to send to / receive from QUIC datagram frame
+func (dm *DatagramMuxer) MTU() uint {
 	return uint(MaxDatagramFrameSize - sessionIDLen)
-}
-
-// Maximum expected bytes to read from QUIC datagram frame
-func (dm *DatagramMuxer) ReceiveMTU() uint {
-	return MaxDatagramFrameSize
 }
 
 // Each QUIC datagram should be suffixed with session ID.
