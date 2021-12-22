@@ -29,8 +29,7 @@ const (
 	// HTTPMethodKey is used to get or set http method in QUIC ALPN if the underlying proxy connection type is HTTP.
 	HTTPMethodKey = "HttpMethod"
 	// HTTPHostKey is used to get or set http Method in QUIC ALPN if the underlying proxy connection type is HTTP.
-	HTTPHostKey          = "HttpHost"
-	MaxDatagramFrameSize = 1220
+	HTTPHostKey = "HttpHost"
 )
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.

@@ -9,7 +9,9 @@ import (
 )
 
 const (
-	MaxDatagramFrameSize = 1220
+	// Max datagram frame size is limited to 1220 https://github.com/lucas-clemente/quic-go/blob/v0.24.0/internal/protocol/params.go#L138
+	// However, 3 more bytes are reserved https://github.com/lucas-clemente/quic-go/blob/v0.24.0/internal/wire/datagram_frame.go#L61
+	MaxDatagramFrameSize = 1217
 	sessionIDLen         = len(uuid.UUID{})
 )
 
@@ -34,7 +36,7 @@ func NewDatagramMuxer(quicSession quic.Session) (*DatagramMuxer, error) {
 func (dm *DatagramMuxer) SendTo(sessionID uuid.UUID, payload []byte) error {
 	if len(payload) > MaxDatagramFrameSize-sessionIDLen {
 		// TODO: TUN-5302 return ICMP packet too big message
-		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), MaxDatagramFrameSize-sessionIDLen)
+		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.SendMTU())
 	}
 	msgWithID, err := SuffixSessionID(sessionID, payload)
 	if err != nil {
@@ -57,7 +59,13 @@ func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
 	return ExtractSessionID(msg)
 }
 
-func (dm *DatagramMuxer) MTU() uint {
+// Maximum application payload to send through QUIC datagram frame
+func (dm *DatagramMuxer) SendMTU() uint {
+	return uint(MaxDatagramFrameSize - sessionIDLen)
+}
+
+// Maximum expected bytes to read from QUIC datagram frame
+func (dm *DatagramMuxer) ReceiveMTU() uint {
 	return MaxDatagramFrameSize
 }
 

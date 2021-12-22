@@ -54,7 +54,7 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 	go func() {
 		// QUIC implementation copies data to another buffer before returning https://github.com/lucas-clemente/quic-go/blob/v0.24.0/session.go#L1967-L1975
 		// This makes it safe to share readBuffer between iterations
-		readBuffer := make([]byte, s.transport.MTU())
+		readBuffer := make([]byte, s.transport.ReceiveMTU())
 		for {
 			if err := s.dstToTransport(readBuffer); err != nil {
 				s.closeChan <- err
