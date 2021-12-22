@@ -1,3 +1,9 @@
+2021.12.2
+- 2021-12-20 TUN-5571: Remove redundant session manager log, it's already logged in origin/tunnel.ServeQUIC
+- 2021-12-20 TUN-5570: Only log RPC server events at error level to reduce noise
+- 2021-12-14 TUN-5494: Send a RPC with terminate reason to edge if the session is closed locally
+- 2021-11-09 TUN-5551: Reintroduce FIPS compliance for linux amd64 now as separate binaries
+
 2021.12.1
 - 2021-12-16 TUN-5549: Revert "TUN-5277: Ensure cloudflared binary is FIPS compliant on linux amd64"
 
