@@ -198,10 +198,8 @@ func (q *QUICConnection) serveUDPSession(session *datagramsession.Session, close
 		} else {
 			q.closeUDPSession(ctx, session.ID, "terminated without error")
 		}
-		q.logger.Debug().Err(err).Str("sessionID", session.ID.String()).Msg("session terminated")
-		return
 	}
-	q.logger.Debug().Err(err).Msg("Session terminated by edge")
+	q.logger.Debug().Err(err).Str("sessionID", session.ID.String()).Msg("Session terminated")
 }
 
 // closeUDPSession first unregisters the session from session manager, then it tries to unregister from edge
