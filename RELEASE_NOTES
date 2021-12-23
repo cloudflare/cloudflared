@@ -1,3 +1,9 @@
+2021.12.3
+- 2021-12-22 TUN-5584: Changes for release 2021.12.2
+- 2021-12-22 TUN-5590: QUIC datagram max user payload is 1217 bytes
+- 2021-12-22 TUN-5593: Read full packet from UDP connection, even if it exceeds MTU of the transport. When packet length is greater than the MTU of the transport, we will silently drop packets (for now).
+- 2021-12-23 TUN-5597: Log session ID when session is terminated by edge
+
 2021.12.2
 - 2021-12-20 TUN-5571: Remove redundant session manager log, it's already logged in origin/tunnel.ServeQUIC
 - 2021-12-20 TUN-5570: Only log RPC server events at error level to reduce noise
