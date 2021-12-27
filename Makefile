@@ -156,6 +156,10 @@ endef
 cloudflared-deb: cloudflared
 	$(call build_package,deb)
 
+.PHONY: cloudflared-internal-deb
+cloudflared-internal-deb: cloudflared-deb
+	bash -c 'for f in cloudflared-fips_*.deb; do mv -- "$$f" "$${f/-fips/}"; done'
+
 .PHONY: cloudflared-rpm
 cloudflared-rpm: cloudflared
 	$(call build_package,rpm)
