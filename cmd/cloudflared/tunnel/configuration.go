@@ -16,7 +16,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/crypto/ssh/terminal"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
@@ -148,8 +149,7 @@ func getOriginCert(originCertPath string, log *zerolog.Logger) ([]byte, error) {
 
 func prepareTunnelConfig(
 	c *cli.Context,
-	buildInfo *buildinfo.BuildInfo,
-	version string,
+	info *cliutil.BuildInfo,
 	log, logTransport *zerolog.Logger,
 	observer *connection.Observer,
 	namedTunnel *connection.NamedTunnelConfig,
@@ -193,8 +193,8 @@ func prepareTunnelConfig(
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
 			Features: dedup(features),
-			Version:  version,
-			Arch:     buildInfo.OSArch(),
+			Version:  info.Version(),
+			Arch:     info.OSArch(),
 		}
 		ingressRules, err = ingress.ParseIngress(cfg)
 		if err != nil && err != ingress.ErrNoIngressRules {
@@ -281,7 +281,7 @@ func prepareTunnelConfig(
 
 	return &origin.TunnelConfig{
 		ConnectionConfig: connectionConfig,
-		OSArch:           buildInfo.OSArch(),
+		OSArch:           info.OSArch(),
 		ClientID:         clientID,
 		EdgeAddrs:        c.StringSlice("edge"),
 		Region:           c.String("region"),
@@ -293,7 +293,7 @@ func prepareTunnelConfig(
 		Log:              log,
 		LogTransport:     logTransport,
 		Observer:         observer,
-		ReportedVersion:  version,
+		ReportedVersion:  info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		Retries:          uint(c.Int("retries")),
 		RunFromTerminal:  isRunningFromTerminal(),

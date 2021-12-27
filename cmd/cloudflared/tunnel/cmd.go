@@ -22,7 +22,6 @@ import (
 	"github.com/urfave/cli/v2/altsrc"
 
 	"github.com/cloudflare/cloudflared/cfapi"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
@@ -86,7 +85,7 @@ const (
 
 var (
 	graceShutdownC chan struct{}
-	version        string
+	buildInfo      *cliutil.BuildInfo
 
 	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
@@ -175,8 +174,8 @@ func TunnelCommand(c *cli.Context) error {
 	return runClassicTunnel(sc)
 }
 
-func Init(ver string, gracefulShutdown chan struct{}) {
-	version, graceShutdownC = ver, gracefulShutdown
+func Init(info *cliutil.BuildInfo, gracefulShutdown chan struct{}) {
+	buildInfo, graceShutdownC = info, gracefulShutdown
 }
 
 // runAdhocNamedTunnel create, route and run a named tunnel in one command
@@ -209,7 +208,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled)
+	return StartServer(sc.c, buildInfo, nil, sc.log, sc.isUIEnabled)
 }
 
 func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
@@ -224,7 +223,7 @@ func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
 
 func StartServer(
 	c *cli.Context,
-	version string,
+	info *cliutil.BuildInfo,
 	namedTunnel *connection.NamedTunnelConfig,
 	log *zerolog.Logger,
 	isUIEnabled bool,
@@ -271,8 +270,7 @@ func StartServer(
 		defer trace.Stop()
 	}
 
-	buildInfo := buildinfo.GetBuildInfo(version)
-	buildInfo.Log(log)
+	info.Log(log)
 	logClientOptions(c, log)
 
 	// this context drives the server, when it's cancelled tunnel and all other components (origins, dns, etc...) should stop
@@ -336,7 +334,7 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, buildInfo, version, log, logTransport, observer, namedTunnel)
+	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
@@ -377,7 +375,7 @@ func StartServer(
 
 	if isUIEnabled {
 		tunnelUI := ui.NewUIModel(
-			version,
+			info.Version(),
 			hostname,
 			metricsListener.Addr().String(),
 			&ingressRules,

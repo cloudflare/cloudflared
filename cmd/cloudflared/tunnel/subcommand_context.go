@@ -76,7 +76,7 @@ func (sc *subcommandContext) client() (cfapi.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	userAgent := fmt.Sprintf("cloudflared/%s", version)
+	userAgent := fmt.Sprintf("cloudflared/%s", buildInfo.Version())
 	client, err := cfapi.NewRESTClient(
 		sc.c.String("api-url"),
 		credential.cert.AccountID,
@@ -303,7 +303,7 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 
 	return StartServer(
 		sc.c,
-		version,
+		buildInfo,
 		&connection.NamedTunnelConfig{Credentials: credentials},
 		sc.log,
 		sc.isUIEnabled,

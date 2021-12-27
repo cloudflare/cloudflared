@@ -25,6 +25,7 @@ ifeq ($(FIPS), true)
 	LINK_FLAGS := -linkmode=external -extldflags=-static $(LINK_FLAGS)
 	# Prevent linking with libc regardless of CGO enabled or not.
 	GO_BUILD_TAGS := $(GO_BUILD_TAGS) osusergo netgo fips
+	VERSION_FLAGS := $(VERSION_FLAGS) -X "main.BuildType=FIPS"
 endif
 
 LDFLAGS := -ldflags='$(VERSION_FLAGS) $(LINK_FLAGS)'
