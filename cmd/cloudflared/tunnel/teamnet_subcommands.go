@@ -8,12 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 
+	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/teamnet"
-
-	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -92,7 +91,7 @@ to tell which virtual network whose routing table you want to use.`,
 
 func showRoutesFlags() []cli.Flag {
 	flags := make([]cli.Flag, 0)
-	flags = append(flags, teamnet.FilterFlags...)
+	flags = append(flags, cfapi.IpRouteFilterFlags...)
 	flags = append(flags, outputFormatFlag)
 	return flags
 }
@@ -103,7 +102,7 @@ func showRoutesCommand(c *cli.Context) error {
 		return err
 	}
 
-	filter, err := teamnet.NewFromCLI(c)
+	filter, err := cfapi.NewIpRouteFilterFromCLI(c)
 	if err != nil {
 		return errors.Wrap(err, "invalid config for routing filters")
 	}
@@ -168,7 +167,7 @@ func addRouteCommand(c *cli.Context) error {
 		vnetId = &id
 	}
 
-	_, err = sc.addRoute(teamnet.NewRoute{
+	_, err = sc.addRoute(cfapi.NewRoute{
 		Comment:  comment,
 		Network:  *network,
 		TunnelID: tunnelID,
@@ -199,7 +198,7 @@ func deleteRouteCommand(c *cli.Context) error {
 		return errors.New("Invalid network CIDR")
 	}
 
-	params := teamnet.DeleteRouteParams{
+	params := cfapi.DeleteRouteParams{
 		Network: *network,
 	}
 
@@ -233,7 +232,7 @@ func getRouteByIPCommand(c *cli.Context) error {
 		return fmt.Errorf("Invalid IP %s", ipInput)
 	}
 
-	params := teamnet.GetRouteByIpParams{
+	params := cfapi.GetRouteByIpParams{
 		Ip: ip,
 	}
 
@@ -252,12 +251,12 @@ func getRouteByIPCommand(c *cli.Context) error {
 	if route.IsZero() {
 		fmt.Printf("No route matches the IP %s\n", ip)
 	} else {
-		formatAndPrintRouteList([]*teamnet.DetailedRoute{&route})
+		formatAndPrintRouteList([]*cfapi.DetailedRoute{&route})
 	}
 	return nil
 }
 
-func formatAndPrintRouteList(routes []*teamnet.DetailedRoute) {
+func formatAndPrintRouteList(routes []*cfapi.DetailedRoute) {
 	const (
 		minWidth = 0
 		tabWidth = 8

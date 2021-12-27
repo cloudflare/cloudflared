@@ -21,6 +21,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 
+	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/buildinfo"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
@@ -35,7 +36,6 @@ import (
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
-	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 const (
@@ -212,12 +212,12 @@ func runClassicTunnel(sc *subcommandContext) error {
 	return StartServer(sc.c, version, nil, sc.log, sc.isUIEnabled)
 }
 
-func routeFromFlag(c *cli.Context) (route tunnelstore.Route, ok bool) {
+func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
 	if hostname := c.String("hostname"); hostname != "" {
 		if lbPool := c.String("lb-pool"); lbPool != "" {
-			return tunnelstore.NewLBRoute(hostname, lbPool), true
+			return cfapi.NewLBRoute(hostname, lbPool), true
 		}
-		return tunnelstore.NewDNSRoute(hostname, c.Bool(overwriteDNSFlagName)), true
+		return cfapi.NewDNSRoute(hostname, c.Bool(overwriteDNSFlagName)), true
 	}
 	return nil, false
 }

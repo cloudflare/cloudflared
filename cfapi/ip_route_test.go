@@ -1,4 +1,4 @@
-package teamnet
+package cfapi
 
 import (
 	"encoding/json"

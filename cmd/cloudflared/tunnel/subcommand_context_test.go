@@ -13,8 +13,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 
+	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 type mockFileSystem struct {
@@ -36,7 +36,7 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 		log               *zerolog.Logger
 		isUIEnabled       bool
 		fs                fileSystem
-		tunnelstoreClient tunnelstore.Client
+		tunnelstoreClient cfapi.Client
 		userCredential    *userCredential
 	}
 	type args struct {
@@ -187,13 +187,13 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 }
 
 type deleteMockTunnelStore struct {
-	tunnelstore.Client
+	cfapi.Client
 	mockTunnels      map[uuid.UUID]mockTunnelBehaviour
 	deletedTunnelIDs []uuid.UUID
 }
 
 type mockTunnelBehaviour struct {
-	tunnel     tunnelstore.Tunnel
+	tunnel     cfapi.Tunnel
 	deleteErr  error
 	cleanupErr error
 }
@@ -209,7 +209,7 @@ func newDeleteMockTunnelStore(tunnels ...mockTunnelBehaviour) *deleteMockTunnelS
 	}
 }
 
-func (d *deleteMockTunnelStore) GetTunnel(tunnelID uuid.UUID) (*tunnelstore.Tunnel, error) {
+func (d *deleteMockTunnelStore) GetTunnel(tunnelID uuid.UUID) (*cfapi.Tunnel, error) {
 	tunnel, ok := d.mockTunnels[tunnelID]
 	if !ok {
 		return nil, fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
@@ -233,7 +233,7 @@ func (d *deleteMockTunnelStore) DeleteTunnel(tunnelID uuid.UUID) error {
 	return nil
 }
 
-func (d *deleteMockTunnelStore) CleanupConnections(tunnelID uuid.UUID, _ *tunnelstore.CleanupParams) error {
+func (d *deleteMockTunnelStore) CleanupConnections(tunnelID uuid.UUID, _ *cfapi.CleanupParams) error {
 	tunnel, ok := d.mockTunnels[tunnelID]
 	if !ok {
 		return fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
@@ -284,10 +284,10 @@ func Test_subcommandContext_Delete(t *testing.T) {
 				}(),
 				tunnelstoreClient: newDeleteMockTunnelStore(
 					mockTunnelBehaviour{
-						tunnel: tunnelstore.Tunnel{ID: tunnelID1},
+						tunnel: cfapi.Tunnel{ID: tunnelID1},
 					},
 					mockTunnelBehaviour{
-						tunnel: tunnelstore.Tunnel{ID: tunnelID2},
+						tunnel: cfapi.Tunnel{ID: tunnelID2},
 					},
 				),
 			},

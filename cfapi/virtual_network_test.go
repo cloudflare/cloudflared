@@ -1,4 +1,4 @@
-package vnet
+package cfapi
 
 import (
 	"encoding/json"

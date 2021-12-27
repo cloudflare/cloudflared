@@ -1,17 +1,9 @@
-package tunnelstore
+package cfapi
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"net"
-	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -104,126 +96,4 @@ func TestLBRouteResultSuccessSummary(t *testing.T) {
 		actual := res.SuccessSummary()
 		assert.Equal(t, tt.expected, actual, "case %d", i+1)
 	}
-}
-
-func Test_parseListTunnels(t *testing.T) {
-	type args struct {
-		body string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []*Tunnel
-		wantErr bool
-	}{
-		{
-			name: "empty list",
-			args: args{body: `{"success": true, "result": []}`},
-			want: []*Tunnel{},
-		},
-		{
-			name:    "success is false",
-			args:    args{body: `{"success": false, "result": []}`},
-			wantErr: true,
-		},
-		{
-			name:    "errors are present",
-			args:    args{body: `{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": []}`},
-			wantErr: true,
-		},
-		{
-			name:    "invalid response",
-			args:    args{body: `abc`},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			body := ioutil.NopCloser(bytes.NewReader([]byte(tt.args.body)))
-			got, err := parseListTunnels(body)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseListTunnels() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseListTunnels() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_unmarshalTunnel(t *testing.T) {
-	type args struct {
-		reader io.Reader
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *Tunnel
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := unmarshalTunnel(tt.args.reader)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("unmarshalTunnel() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("unmarshalTunnel() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestUnmarshalTunnelOk(t *testing.T) {
-
-	jsonBody := `{"success": true, "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}`
-	expected := Tunnel{
-		ID:          uuid.Nil,
-		Name:        "test",
-		CreatedAt:   time.Time{},
-		Connections: []Connection{},
-	}
-	actual, err := unmarshalTunnel(bytes.NewReader([]byte(jsonBody)))
-	assert.NoError(t, err)
-	assert.Equal(t, &expected, actual)
-}
-
-func TestUnmarshalTunnelErr(t *testing.T) {
-
-	tests := []string{
-		`abc`,
-		`{"success": true, "result": abc}`,
-		`{"success": false, "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}}`,
-		`{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}}`,
-	}
-
-	for i, test := range tests {
-		_, err := unmarshalTunnel(bytes.NewReader([]byte(test)))
-		assert.Error(t, err, fmt.Sprintf("Test #%v failed", i))
-	}
-}
-
-func TestUnmarshalConnections(t *testing.T) {
-	jsonBody := `{"success":true,"messages":[],"errors":[],"result":[{"id":"d4041254-91e3-4deb-bd94-b46e11680b1e","features":["ha-origin"],"version":"2021.2.5","arch":"darwin_amd64","conns":[{"colo_name":"LIS","id":"ac2286e5-c708-4588-a6a0-ba6b51940019","is_pending_reconnect":false,"origin_ip":"148.38.28.2","opened_at":"0001-01-01T00:00:00Z"}],"run_at":"0001-01-01T00:00:00Z"}]}`
-	expected := ActiveClient{
-		ID:       uuid.MustParse("d4041254-91e3-4deb-bd94-b46e11680b1e"),
-		Features: []string{"ha-origin"},
-		Version:  "2021.2.5",
-		Arch:     "darwin_amd64",
-		RunAt:    time.Time{},
-		Connections: []Connection{{
-			ID:                 uuid.MustParse("ac2286e5-c708-4588-a6a0-ba6b51940019"),
-			ColoName:           "LIS",
-			IsPendingReconnect: false,
-			OriginIP:           net.ParseIP("148.38.28.2"),
-			OpenedAt:           time.Time{},
-		}},
-	}
-	actual, err := parseConnectionsDetails(bytes.NewReader([]byte(jsonBody)))
-	assert.NoError(t, err)
-	assert.Equal(t, []*ActiveClient{&expected}, actual)
 }

@@ -14,9 +14,9 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/certutil"
+	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 type errInvalidJSONCredential struct {
@@ -37,7 +37,7 @@ type subcommandContext struct {
 	fs          fileSystem
 
 	// These fields should be accessed using their respective Getter
-	tunnelstoreClient tunnelstore.Client
+	tunnelstoreClient cfapi.Client
 	userCredential    *userCredential
 }
 
@@ -68,7 +68,7 @@ type userCredential struct {
 	certPath string
 }
 
-func (sc *subcommandContext) client() (tunnelstore.Client, error) {
+func (sc *subcommandContext) client() (cfapi.Client, error) {
 	if sc.tunnelstoreClient != nil {
 		return sc.tunnelstoreClient, nil
 	}
@@ -77,7 +77,7 @@ func (sc *subcommandContext) client() (tunnelstore.Client, error) {
 		return nil, err
 	}
 	userAgent := fmt.Sprintf("cloudflared/%s", version)
-	client, err := tunnelstore.NewRESTClient(
+	client, err := cfapi.NewRESTClient(
 		sc.c.String("api-url"),
 		credential.cert.AccountID,
 		credential.cert.ZoneID,
@@ -149,7 +149,7 @@ func (sc *subcommandContext) readTunnelCredentials(credFinder CredFinder) (conne
 	return credentials, nil
 }
 
-func (sc *subcommandContext) create(name string, credentialsFilePath string, secret string) (*tunnelstore.Tunnel, error) {
+func (sc *subcommandContext) create(name string, credentialsFilePath string, secret string) (*cfapi.Tunnel, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, errors.Wrap(err, "couldn't create client to talk to Cloudflare Tunnel backend")
@@ -224,7 +224,7 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 	return tunnel, nil
 }
 
-func (sc *subcommandContext) list(filter *tunnelstore.Filter) ([]*tunnelstore.Tunnel, error) {
+func (sc *subcommandContext) list(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 			return fmt.Errorf("Tunnel %s has already been deleted", tunnel.ID)
 		}
 		if forceFlagSet {
-			if err := client.CleanupConnections(tunnel.ID, tunnelstore.NewCleanupParams()); err != nil {
+			if err := client.CleanupConnections(tunnel.ID, cfapi.NewCleanupParams()); err != nil {
 				return errors.Wrapf(err, "Error cleaning up connections for tunnel %s", tunnel.ID)
 			}
 		}
@@ -311,7 +311,7 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 }
 
 func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
-	params := tunnelstore.NewCleanupParams()
+	params := cfapi.NewCleanupParams()
 	extraLog := ""
 	if connector := sc.c.String("connector-id"); connector != "" {
 		connectorID, err := uuid.Parse(connector)
@@ -335,7 +335,7 @@ func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
 	return nil
 }
 
-func (sc *subcommandContext) route(tunnelID uuid.UUID, r tunnelstore.Route) (tunnelstore.RouteResult, error) {
+func (sc *subcommandContext) route(tunnelID uuid.UUID, r cfapi.HostnameRoute) (cfapi.HostnameRouteResult, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, err
@@ -345,8 +345,8 @@ func (sc *subcommandContext) route(tunnelID uuid.UUID, r tunnelstore.Route) (tun
 }
 
 // Query Tunnelstore to find the active tunnel with the given name.
-func (sc *subcommandContext) tunnelActive(name string) (*tunnelstore.Tunnel, bool, error) {
-	filter := tunnelstore.NewFilter()
+func (sc *subcommandContext) tunnelActive(name string) (*cfapi.Tunnel, bool, error) {
+	filter := cfapi.NewTunnelFilter()
 	filter.NoDeleted()
 	filter.ByName(name)
 	tunnels, err := sc.list(filter)
@@ -391,7 +391,7 @@ func (sc *subcommandContext) findIDs(inputs []string) ([]uuid.UUID, error) {
 	uuids, names := splitUuids(inputs)
 
 	for _, name := range names {
-		filter := tunnelstore.NewFilter()
+		filter := cfapi.NewTunnelFilter()
 		filter.NoDeleted()
 		filter.ByName(name)
 

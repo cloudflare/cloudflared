@@ -1,21 +1,59 @@
-package tunnelstore
+package cfapi
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-
-	"github.com/cloudflare/cloudflared/vnet"
 )
 
-func (r *RESTClient) CreateVirtualNetwork(newVnet vnet.NewVirtualNetwork) (vnet.VirtualNetwork, error) {
+type NewVirtualNetwork struct {
+	Name      string `json:"name"`
+	Comment   string `json:"comment"`
+	IsDefault bool   `json:"is_default"`
+}
+
+type VirtualNetwork struct {
+	ID        uuid.UUID `json:"id"`
+	Comment   string    `json:"comment"`
+	Name      string    `json:"name"`
+	IsDefault bool      `json:"is_default_network"`
+	CreatedAt time.Time `json:"created_at"`
+	DeletedAt time.Time `json:"deleted_at"`
+}
+
+type UpdateVirtualNetwork struct {
+	Name      *string `json:"name,omitempty"`
+	Comment   *string `json:"comment,omitempty"`
+	IsDefault *bool   `json:"is_default_network,omitempty"`
+}
+
+func (virtualNetwork VirtualNetwork) TableString() string {
+	deletedColumn := "-"
+	if !virtualNetwork.DeletedAt.IsZero() {
+		deletedColumn = virtualNetwork.DeletedAt.Format(time.RFC3339)
+	}
+	return fmt.Sprintf(
+		"%s\t%s\t%s\t%s\t%s\t%s\t",
+		virtualNetwork.ID,
+		virtualNetwork.Name,
+		strconv.FormatBool(virtualNetwork.IsDefault),
+		virtualNetwork.Comment,
+		virtualNetwork.CreatedAt.Format(time.RFC3339),
+		deletedColumn,
+	)
+}
+
+func (r *RESTClient) CreateVirtualNetwork(newVnet NewVirtualNetwork) (VirtualNetwork, error) {
 	resp, err := r.sendRequest("POST", r.baseEndpoints.accountVnets, newVnet)
 	if err != nil {
-		return vnet.VirtualNetwork{}, errors.Wrap(err, "REST request failed")
+		return VirtualNetwork{}, errors.Wrap(err, "REST request failed")
 	}
 	defer resp.Body.Close()
 
@@ -23,10 +61,10 @@ func (r *RESTClient) CreateVirtualNetwork(newVnet vnet.NewVirtualNetwork) (vnet.
 		return parseVnet(resp.Body)
 	}
 
-	return vnet.VirtualNetwork{}, r.statusCodeToError("add virtual network", resp)
+	return VirtualNetwork{}, r.statusCodeToError("add virtual network", resp)
 }
 
-func (r *RESTClient) ListVirtualNetworks(filter *vnet.Filter) ([]*vnet.VirtualNetwork, error) {
+func (r *RESTClient) ListVirtualNetworks(filter *VnetFilter) ([]*VirtualNetwork, error) {
 	endpoint := r.baseEndpoints.accountVnets
 	endpoint.RawQuery = filter.Encode()
 	resp, err := r.sendRequest("GET", endpoint, nil)
@@ -59,7 +97,7 @@ func (r *RESTClient) DeleteVirtualNetwork(id uuid.UUID) error {
 	return r.statusCodeToError("delete virtual network", resp)
 }
 
-func (r *RESTClient) UpdateVirtualNetwork(id uuid.UUID, updates vnet.UpdateVirtualNetwork) error {
+func (r *RESTClient) UpdateVirtualNetwork(id uuid.UUID, updates UpdateVirtualNetwork) error {
 	endpoint := r.baseEndpoints.accountVnets
 	endpoint.Path = path.Join(endpoint.Path, url.PathEscape(id.String()))
 	resp, err := r.sendRequest("PATCH", endpoint, updates)
@@ -76,14 +114,14 @@ func (r *RESTClient) UpdateVirtualNetwork(id uuid.UUID, updates vnet.UpdateVirtu
 	return r.statusCodeToError("update virtual network", resp)
 }
 
-func parseListVnets(body io.ReadCloser) ([]*vnet.VirtualNetwork, error) {
-	var vnets []*vnet.VirtualNetwork
+func parseListVnets(body io.ReadCloser) ([]*VirtualNetwork, error) {
+	var vnets []*VirtualNetwork
 	err := parseResponse(body, &vnets)
 	return vnets, err
 }
 
-func parseVnet(body io.ReadCloser) (vnet.VirtualNetwork, error) {
-	var vnet vnet.VirtualNetwork
+func parseVnet(body io.ReadCloser) (VirtualNetwork, error) {
+	var vnet VirtualNetwork
 	err := parseResponse(body, &vnet)
 	return vnet, err
 }

@@ -4,18 +4,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/cloudflare/cloudflared/vnet"
+	"github.com/cloudflare/cloudflared/cfapi"
 )
 
-func (sc *subcommandContext) addVirtualNetwork(newVnet vnet.NewVirtualNetwork) (vnet.VirtualNetwork, error) {
+func (sc *subcommandContext) addVirtualNetwork(newVnet cfapi.NewVirtualNetwork) (cfapi.VirtualNetwork, error) {
 	client, err := sc.client()
 	if err != nil {
-		return vnet.VirtualNetwork{}, errors.Wrap(err, noClientMsg)
+		return cfapi.VirtualNetwork{}, errors.Wrap(err, noClientMsg)
 	}
 	return client.CreateVirtualNetwork(newVnet)
 }
 
-func (sc *subcommandContext) listVirtualNetworks(filter *vnet.Filter) ([]*vnet.VirtualNetwork, error) {
+func (sc *subcommandContext) listVirtualNetworks(filter *cfapi.VnetFilter) ([]*cfapi.VirtualNetwork, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, errors.Wrap(err, noClientMsg)
@@ -31,7 +31,7 @@ func (sc *subcommandContext) deleteVirtualNetwork(vnetId uuid.UUID) error {
 	return client.DeleteVirtualNetwork(vnetId)
 }
 
-func (sc *subcommandContext) updateVirtualNetwork(vnetId uuid.UUID, updates vnet.UpdateVirtualNetwork) error {
+func (sc *subcommandContext) updateVirtualNetwork(vnetId uuid.UUID, updates cfapi.UpdateVirtualNetwork) error {
 	client, err := sc.client()
 	if err != nil {
 		return errors.Wrap(err, noClientMsg)

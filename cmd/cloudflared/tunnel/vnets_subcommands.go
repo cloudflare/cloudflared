@@ -9,9 +9,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
+	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
-	"github.com/cloudflare/cloudflared/vnet"
 )
 
 var (
@@ -102,7 +102,7 @@ default or update an existing one to become the default.`,
 
 func listVirtualNetworksFlags() []cli.Flag {
 	flags := make([]cli.Flag, 0)
-	flags = append(flags, vnet.FilterFlags...)
+	flags = append(flags, cfapi.VnetFilterFlags...)
 	flags = append(flags, outputFormatFlag)
 	return flags
 }
@@ -128,7 +128,7 @@ func addVirtualNetworkCommand(c *cli.Context) error {
 		comment = args.Get(1)
 	}
 
-	newVnet := vnet.NewVirtualNetwork{
+	newVnet := cfapi.NewVirtualNetwork{
 		Name:      name,
 		Comment:   comment,
 		IsDefault: c.Bool(makeDefaultFlag.Name),
@@ -160,7 +160,7 @@ func listVirtualNetworksCommand(c *cli.Context) error {
 	warningChecker := updater.StartWarningCheck(c)
 	defer warningChecker.LogWarningIfAny(sc.log)
 
-	filter, err := vnet.NewFromCLI(c)
+	filter, err := cfapi.NewFromCLI(c)
 	if err != nil {
 		return errors.Wrap(err, "invalid flags for filtering virtual networks")
 	}
@@ -220,7 +220,7 @@ func updateVirtualNetworkCommand(c *cli.Context) error {
 		return err
 	}
 
-	updates := vnet.UpdateVirtualNetwork{}
+	updates := cfapi.UpdateVirtualNetwork{}
 
 	if c.IsSet(newNameFlag.Name) {
 		newName := c.String(newNameFlag.Name)
@@ -248,7 +248,7 @@ func getVnetId(sc *subcommandContext, input string) (uuid.UUID, error) {
 		return val, nil
 	}
 
-	filter := vnet.NewFilter()
+	filter := cfapi.NewVnetFilter()
 	filter.WithDeleted(false)
 	filter.ByName(input)
 
@@ -264,7 +264,7 @@ func getVnetId(sc *subcommandContext, input string) (uuid.UUID, error) {
 	return vnets[0].ID, nil
 }
 
-func formatAndPrintVnetsList(vnets []*vnet.VirtualNetwork) {
+func formatAndPrintVnetsList(vnets []*cfapi.VirtualNetwork) {
 	const (
 		minWidth = 0
 		tabWidth = 8

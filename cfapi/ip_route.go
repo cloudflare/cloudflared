@@ -1,9 +1,13 @@
-package teamnet
+package cfapi
 
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"net/url"
+	"path"
 	"time"
 
 	"github.com/google/uuid"
@@ -132,4 +136,105 @@ type GetRouteByIpParams struct {
 	Ip net.IP
 	// Optional field. If unset, backend will assume the default vnet for the account.
 	VNetID *uuid.UUID
+}
+
+// ListRoutes calls the Tunnelstore GET endpoint for all routes under an account.
+func (r *RESTClient) ListRoutes(filter *IpRouteFilter) ([]*DetailedRoute, error) {
+	endpoint := r.baseEndpoints.accountRoutes
+	endpoint.RawQuery = filter.Encode()
+	resp, err := r.sendRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return parseListDetailedRoutes(resp.Body)
+	}
+
+	return nil, r.statusCodeToError("list routes", resp)
+}
+
+// AddRoute calls the Tunnelstore POST endpoint for a given route.
+func (r *RESTClient) AddRoute(newRoute NewRoute) (Route, error) {
+	endpoint := r.baseEndpoints.accountRoutes
+	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(newRoute.Network.String()))
+	resp, err := r.sendRequest("POST", endpoint, newRoute)
+	if err != nil {
+		return Route{}, errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return parseRoute(resp.Body)
+	}
+
+	return Route{}, r.statusCodeToError("add route", resp)
+}
+
+// DeleteRoute calls the Tunnelstore DELETE endpoint for a given route.
+func (r *RESTClient) DeleteRoute(params DeleteRouteParams) error {
+	endpoint := r.baseEndpoints.accountRoutes
+	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(params.Network.String()))
+	setVnetParam(&endpoint, params.VNetID)
+
+	resp, err := r.sendRequest("DELETE", endpoint, nil)
+	if err != nil {
+		return errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		_, err := parseRoute(resp.Body)
+		return err
+	}
+
+	return r.statusCodeToError("delete route", resp)
+}
+
+// GetByIP checks which route will proxy a given IP.
+func (r *RESTClient) GetByIP(params GetRouteByIpParams) (DetailedRoute, error) {
+	endpoint := r.baseEndpoints.accountRoutes
+	endpoint.Path = path.Join(endpoint.Path, "ip", url.PathEscape(params.Ip.String()))
+	setVnetParam(&endpoint, params.VNetID)
+
+	resp, err := r.sendRequest("GET", endpoint, nil)
+	if err != nil {
+		return DetailedRoute{}, errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return parseDetailedRoute(resp.Body)
+	}
+
+	return DetailedRoute{}, r.statusCodeToError("get route by IP", resp)
+}
+
+func parseListDetailedRoutes(body io.ReadCloser) ([]*DetailedRoute, error) {
+	var routes []*DetailedRoute
+	err := parseResponse(body, &routes)
+	return routes, err
+}
+
+func parseRoute(body io.ReadCloser) (Route, error) {
+	var route Route
+	err := parseResponse(body, &route)
+	return route, err
+}
+
+func parseDetailedRoute(body io.ReadCloser) (DetailedRoute, error) {
+	var route DetailedRoute
+	err := parseResponse(body, &route)
+	return route, err
+}
+
+// setVnetParam overwrites the URL's query parameters with a query param to scope the HostnameRoute action to a certain
+// virtual network (if one is provided).
+func setVnetParam(endpoint *url.URL, vnetID *uuid.UUID) {
+	queryParams := url.Values{}
+	if vnetID != nil {
+		queryParams.Set("virtual_network_id", vnetID.String())
+	}
+	endpoint.RawQuery = queryParams.Encode()
 }
