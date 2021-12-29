@@ -1,3 +1,8 @@
+2021.12.4
+- 2021-12-27 TUN-5482: Refactor tunnelstore client related packages for more coherent package
+- 2021-12-27 TUN-5551: Change internally published debian package to be FIPS compliant
+- 2021-12-27 TUN-5551: Show whether the binary was built for FIPS compliance
+
 2021.12.3
 - 2021-12-22 TUN-5584: Changes for release 2021.12.2
 - 2021-12-22 TUN-5590: QUIC datagram max user payload is 1217 bytes
