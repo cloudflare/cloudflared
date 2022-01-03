@@ -3,15 +3,19 @@ MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut 
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
 
-ifeq ($(FIPS), true)
+ifeq ($(ORIGINAL_NAME), true)
+	# Used for builds that want FIPS compilation but want the artifacts generated to still have the original name.
+	BINARY_NAME := cloudflared
+else ifeq ($(FIPS), true)
+	# Used for FIPS compliant builds that do not match the case above.
 	BINARY_NAME := cloudflared-fips
 else
+	# Used for all other (non-FIPS) builds.
 	BINARY_NAME := cloudflared
 endif
 
 ifeq ($(NIGHTLY), true)
-	# We do not release FIPS in NIGHTLY, so no need to consider that case here.
-	DEB_PACKAGE_NAME := cloudflared-nightly
+	DEB_PACKAGE_NAME := $(BINARY_NAME)-nightly
 	NIGHTLY_FLAGS := --conflicts cloudflared --replaces cloudflared
 else
 	DEB_PACKAGE_NAME := $(BINARY_NAME)
@@ -156,10 +160,6 @@ endef
 .PHONY: cloudflared-deb
 cloudflared-deb: cloudflared
 	$(call build_package,deb)
-
-.PHONY: cloudflared-internal-deb
-cloudflared-internal-deb: cloudflared-deb
-	bash -c 'for f in cloudflared-fips_*.deb; do mv -- "$$f" "$${f/-fips/}"; done'
 
 .PHONY: cloudflared-rpm
 cloudflared-rpm: cloudflared

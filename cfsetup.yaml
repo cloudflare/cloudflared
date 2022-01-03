@@ -93,7 +93,8 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=amd64
       - export FIPS=true
-      - make cloudflared-internal-deb
+      - export ORIGINAL_NAME=true
+      - make cloudflared-deb
   build-fips-internal-deb-nightly:
     build_dir: *build_dir
     builddeps: *build_fips_deb_deps
@@ -102,7 +103,8 @@ stretch: &stretch
       - export GOARCH=amd64
       - export NIGHTLY=true
       - export FIPS=true
-      - make cloudflared-internal-deb
+      - export ORIGINAL_NAME=true
+      - make cloudflared-deb
   build-deb-arm64:
     build_dir: *build_dir
     builddeps: *build_deb_deps
