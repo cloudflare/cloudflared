@@ -8,6 +8,7 @@ import time
 import pytest
 import requests
 
+from constants import protocols
 from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected
 
 
@@ -17,17 +18,21 @@ def supported_signals():
     return [signal.SIGTERM, signal.SIGINT]
 
 
-class TestTermination():
+class TestTermination:
     grace_period = 5
     timeout = 10
-    extra_config = {
-        "grace-period": f"{grace_period}s",
-    }
     sse_endpoint = "/sse?freq=1s"
 
+    def _extra_config(self, protocol):
+        return {
+            "grace-period": f"{self.grace_period}s",
+            "protocol": protocol,
+        }
+
     @pytest.mark.parametrize("signal", supported_signals())
-    def test_graceful_shutdown(self, tmp_path, component_tests_config, signal):
-        config = component_tests_config(self.extra_config)
+    @pytest.mark.parametrize("protocol", protocols())
+    def test_graceful_shutdown(self, tmp_path, component_tests_config, signal, protocol):
+        config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(
                 tmp_path, config, new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
@@ -47,8 +52,9 @@ class TestTermination():
     # test cloudflared terminates before grace period expires when all eyeball
     # connections are drained
     @pytest.mark.parametrize("signal", supported_signals())
-    def test_shutdown_once_no_connection(self, tmp_path, component_tests_config, signal):
-        config = component_tests_config(self.extra_config)
+    @pytest.mark.parametrize("protocol", protocols())
+    def test_shutdown_once_no_connection(self, tmp_path, component_tests_config, signal, protocol):
+        config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(
                 tmp_path, config, new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
@@ -66,8 +72,9 @@ class TestTermination():
                 self.wait_eyeball_thread(in_flight_req, self.grace_period)
 
     @pytest.mark.parametrize("signal", supported_signals())
-    def test_no_connection_shutdown(self, tmp_path, component_tests_config, signal):
-        config = component_tests_config(self.extra_config)
+    @pytest.mark.parametrize("protocol", protocols())
+    def test_no_connection_shutdown(self, tmp_path, component_tests_config, signal, protocol):
+        config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(
                 tmp_path, config, new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())

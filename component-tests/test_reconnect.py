@@ -7,6 +7,7 @@ import pytest
 from flaky import flaky
 
 from conftest import CfdModes
+from constants import protocols
 from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connected
 
 
@@ -18,9 +19,16 @@ class TestReconnect:
         "stdin-control": True,
     }
 
+    def _extra_config(self, protocol):
+        return {
+            "stdin-control": True,
+            "protocol": protocol,
+        }
+
     @pytest.mark.skipif(platform.system() == "Windows", reason=f"Currently buggy on Windows TUN-4584")
-    def test_named_reconnect(self, tmp_path, component_tests_config):
-        config = component_tests_config(self.extra_config)
+    @pytest.mark.parametrize("protocol", protocols())
+    def test_named_reconnect(self, tmp_path, component_tests_config, protocol):
+        config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(tmp_path, config, new_process=True, allow_input=True, capture_output=False) as cloudflared:
             # Repeat the test multiple times because some issues only occur after multiple reconnects
             self.assert_reconnect(config, cloudflared, 5)
