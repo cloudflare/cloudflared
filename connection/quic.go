@@ -34,10 +34,11 @@ const (
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session        quic.Session
-	logger         *zerolog.Logger
-	httpProxy      OriginProxy
-	sessionManager datagramsession.Manager
+	session              quic.Session
+	logger               *zerolog.Logger
+	httpProxy            OriginProxy
+	sessionManager       datagramsession.Manager
+	controlStreamHandler ControlStreamHandler
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -49,7 +50,7 @@ func NewQUICConnection(
 	httpProxy OriginProxy,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler ControlStreamHandler,
-	observer *Observer,
+	logger *zerolog.Logger,
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
@@ -72,34 +73,44 @@ func NewQUICConnection(
 		return nil, err
 	}
 
-	sessionManager := datagramsession.NewManager(datagramMuxer, observer.log)
+	sessionManager := datagramsession.NewManager(datagramMuxer, logger)
 
 	return &QUICConnection{
-		session:        session,
-		httpProxy:      httpProxy,
-		logger:         observer.log,
-		sessionManager: sessionManager,
+		session:              session,
+		httpProxy:            httpProxy,
+		logger:               logger,
+		sessionManager:       sessionManager,
+		controlStreamHandler: controlStreamHandler,
 	}, nil
 }
 
 // Serve starts a QUIC session that begins accepting streams.
 func (q *QUICConnection) Serve(ctx context.Context) error {
+	// If either goroutine returns nil error, we rely on this cancellation to make sure the other goroutine exits
+	// as fast as possible as well. Nil error means we want to exit for good (caller code won't retry serving this
+	// connection).
+	// If either goroutine returns a non nil error, then the error group cancels the context, thus also canceling the
+	// other goroutine as fast as possible.
+	ctx, cancel := context.WithCancel(ctx)
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
+		defer cancel()
 		return q.acceptStream(ctx)
 	})
 	errGroup.Go(func() error {
+		defer cancel()
 		return q.sessionManager.Serve(ctx)
 	})
 	return errGroup.Wait()
 }
 
 func (q *QUICConnection) acceptStream(ctx context.Context) error {
+	defer q.Close()
 	for {
 		stream, err := q.session.AcceptStream(ctx)
 		if err != nil {
 			// context.Canceled is usually a user ctrl+c. We don't want to log an error here as it's intentional.
-			if errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) || q.controlStreamHandler.IsStopped() {
 				return nil
 			}
 			return fmt.Errorf("failed to accept QUIC stream: %w", err)

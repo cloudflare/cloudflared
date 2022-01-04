@@ -548,7 +548,7 @@ func ServeQUIC(
 				config.ConnectionConfig.OriginProxy,
 				connOptions,
 				controlStreamHandler,
-				config.Observer)
+				connLogger.Logger())
 			if err != nil {
 				connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
 				return err, true
@@ -556,11 +556,11 @@ func ServeQUIC(
 
 			errGroup, serveCtx := errgroup.WithContext(ctx)
 			errGroup.Go(func() error {
-				err := quicConn.Serve(ctx)
+				err := quicConn.Serve(serveCtx)
 				if err != nil {
 					connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
 				}
-				return fmt.Errorf("Connection with edge closed")
+				return err
 			})
 
 			errGroup.Go(func() error {

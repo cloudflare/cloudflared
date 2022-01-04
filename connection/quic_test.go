@@ -661,7 +661,7 @@ func testQUICConnection(ctx context.Context, udpListenerAddr net.Addr, t *testin
 		originProxy,
 		&tunnelpogs.ConnectionOptions{},
 		fakeControlStream{},
-		NewObserver(&log, &log, false),
+		&log,
 	)
 	require.NoError(t, err)
 	return qc

@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
@@ -50,7 +51,11 @@ func (m *manager) Serve(ctx context.Context) error {
 		for {
 			sessionID, payload, err := m.transport.ReceiveFrom()
 			if err != nil {
-				return err
+				if aerr, ok := err.(*quic.ApplicationError); ok && uint64(aerr.ErrorCode) == uint64(quic.NoError) {
+					return nil
+				} else {
+					return err
+				}
 			}
 			datagram := &newDatagram{
 				sessionID: sessionID,
@@ -69,7 +74,7 @@ func (m *manager) Serve(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return nil
 			case datagram := <-m.datagramChan:
 				m.sendToSession(datagram)
 			case registration := <-m.registrationChan:
