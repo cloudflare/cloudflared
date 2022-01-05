@@ -35,13 +35,6 @@ const (
 	quicMaxIdleTimeout       = 15 * time.Second
 )
 
-type rpcName string
-
-const (
-	reconnect    rpcName = "reconnect"
-	authenticate rpcName = " authenticate"
-)
-
 type TunnelConfig struct {
 	ConnectionConfig *connection.Config
 	OSArch           string
@@ -535,44 +528,39 @@ func ServeQUIC(
 		EnableDatagrams:       true,
 		Tracer:                quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
 	}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			quicConn, err := connection.NewQUICConnection(
-				ctx,
-				quicConfig,
-				edgeAddr,
-				tlsConfig,
-				config.ConnectionConfig.OriginProxy,
-				connOptions,
-				controlStreamHandler,
-				connLogger.Logger())
-			if err != nil {
-				connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
-				return err, true
-			}
 
-			errGroup, serveCtx := errgroup.WithContext(ctx)
-			errGroup.Go(func() error {
-				err := quicConn.Serve(serveCtx)
-				if err != nil {
-					connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
-				}
-				return err
-			})
-
-			errGroup.Go(func() error {
-				return listenReconnect(serveCtx, reconnectCh, gracefulShutdownC)
-			})
-
-			err = errGroup.Wait()
-			if err == nil {
-				return nil, false
-			}
-		}
+	quicConn, err := connection.NewQUICConnection(
+		quicConfig,
+		edgeAddr,
+		tlsConfig,
+		config.ConnectionConfig.OriginProxy,
+		connOptions,
+		controlStreamHandler,
+		connLogger.Logger())
+	if err != nil {
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
+		return err, true
 	}
+
+	errGroup, serveCtx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		err := quicConn.Serve(serveCtx)
+		if err != nil {
+			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
+		}
+		return err
+	})
+
+	errGroup.Go(func() error {
+		err := listenReconnect(serveCtx, reconnectCh, gracefulShutdownC)
+		if err != nil {
+			// forcefully break the connection (this is only used for testing)
+			quicConn.Close()
+		}
+		return err
+	})
+
+	return errGroup.Wait(), false
 }
 
 func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh <-chan struct{}) error {

@@ -29,7 +29,9 @@ type controlStream struct {
 
 // ControlStreamHandler registers connections with origintunneld and initiates graceful shutdown.
 type ControlStreamHandler interface {
-	ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions, shouldWaitForUnregister bool) error
+	// ServeControlStream handles the control plane of the transport in the current goroutine calling this
+	ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions) error
+	// IsStopped tells whether the method above has finished
 	IsStopped() bool
 }
 
@@ -61,7 +63,6 @@ func (c *controlStream) ServeControlStream(
 	ctx context.Context,
 	rw io.ReadWriteCloser,
 	connOptions *tunnelpogs.ConnectionOptions,
-	shouldWaitForUnregister bool,
 ) error {
 	rpcClient := c.newRPCClientFunc(ctx, rw, c.observer.log)
 
@@ -71,12 +72,7 @@ func (c *controlStream) ServeControlStream(
 	}
 	c.connectedFuse.Connected()
 
-	if shouldWaitForUnregister {
-		c.waitForUnregister(ctx, rpcClient)
-	} else {
-		go c.waitForUnregister(ctx, rpcClient)
-	}
-
+	c.waitForUnregister(ctx, rpcClient)
 	return nil
 }
 

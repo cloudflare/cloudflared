@@ -108,7 +108,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch connType {
 	case TypeControlStream:
-		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, true); err != nil {
+		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions); err != nil {
 			c.controlStreamErr = err
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()

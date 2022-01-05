@@ -39,11 +39,11 @@ type QUICConnection struct {
 	httpProxy            OriginProxy
 	sessionManager       datagramsession.Manager
 	controlStreamHandler ControlStreamHandler
+	connOptions          *tunnelpogs.ConnectionOptions
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
 func NewQUICConnection(
-	ctx context.Context,
 	quicConfig *quic.Config,
 	edgeAddr net.Addr,
 	tlsConfig *tls.Config,
@@ -55,17 +55,6 @@ func NewQUICConnection(
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial to edge: %w", err)
-	}
-
-	registrationStream, err := session.OpenStream()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open a registration stream: %w", err)
-	}
-
-	err = controlStreamHandler.ServeControlStream(ctx, registrationStream, connOptions, false)
-	if err != nil {
-		// Not wrapping error here to be consistent with the http2 message.
-		return nil, err
 	}
 
 	datagramMuxer, err := quicpogs.NewDatagramMuxer(session)
@@ -81,11 +70,18 @@ func NewQUICConnection(
 		logger:               logger,
 		sessionManager:       sessionManager,
 		controlStreamHandler: controlStreamHandler,
+		connOptions:          connOptions,
 	}, nil
 }
 
 // Serve starts a QUIC session that begins accepting streams.
 func (q *QUICConnection) Serve(ctx context.Context) error {
+	// origintunneld assumes the first stream is used for the control plane
+	controlStream, err := q.session.OpenStream()
+	if err != nil {
+		return fmt.Errorf("failed to open a registration control stream: %w", err)
+	}
+
 	// If either goroutine returns nil error, we rely on this cancellation to make sure the other goroutine exits
 	// as fast as possible as well. Nil error means we want to exit for good (caller code won't retry serving this
 	// connection).
@@ -93,6 +89,13 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 	// other goroutine as fast as possible.
 	ctx, cancel := context.WithCancel(ctx)
 	errGroup, ctx := errgroup.WithContext(ctx)
+
+	// In the future, if cloudflared can autonomously push traffic to the edge, we have to make sure the control
+	// stream is already fully registered before the other goroutines can proceed.
+	errGroup.Go(func() error {
+		defer cancel()
+		return q.serveControlStream(ctx, controlStream)
+	})
 	errGroup.Go(func() error {
 		defer cancel()
 		return q.acceptStream(ctx)
@@ -101,7 +104,19 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 		defer cancel()
 		return q.sessionManager.Serve(ctx)
 	})
+
 	return errGroup.Wait()
+}
+
+func (q *QUICConnection) serveControlStream(ctx context.Context, controlStream quic.Stream) error {
+	// This blocks until the control plane is done.
+	err := q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions)
+	if err != nil {
+		// Not wrapping error here to be consistent with the http2 message.
+		return err
+	}
+
+	return nil
 }
 
 func (q *QUICConnection) acceptStream(ctx context.Context) error {

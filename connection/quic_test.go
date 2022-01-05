@@ -154,7 +154,7 @@ func TestQUICServer(t *testing.T) {
 				)
 			}()
 
-			qc := testQUICConnection(ctx, udpListener.LocalAddr(), t)
+			qc := testQUICConnection(udpListener.LocalAddr(), t)
 			go qc.Serve(ctx)
 
 			wg.Wait()
@@ -167,7 +167,8 @@ type fakeControlStream struct {
 	ControlStreamHandler
 }
 
-func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions, shouldWaitForUnregister bool) error {
+func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions) error {
+	<-ctx.Done()
 	return nil
 }
 func (fakeControlStream) IsStopped() bool {
@@ -532,7 +533,7 @@ func TestServeUDPSession(t *testing.T) {
 		edgeQUICSessionChan <- edgeQUICSession
 	}()
 
-	qc := testQUICConnection(ctx, udpListener.LocalAddr(), t)
+	qc := testQUICConnection(udpListener.LocalAddr(), t)
 	go qc.Serve(ctx)
 
 	edgeQUICSession := <-edgeQUICSessionChan
@@ -645,7 +646,7 @@ func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionI
 	return nil
 }
 
-func testQUICConnection(ctx context.Context, udpListenerAddr net.Addr, t *testing.T) *QUICConnection {
+func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection {
 	tlsClientConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"argotunnel"},
@@ -654,7 +655,6 @@ func testQUICConnection(ctx context.Context, udpListenerAddr net.Addr, t *testin
 	originProxy := &mockOriginProxyWithRequest{}
 	log := zerolog.New(os.Stdout)
 	qc, err := NewQUICConnection(
-		ctx,
 		testQUICConfig,
 		udpListenerAddr,
 		tlsClientConfig,
