@@ -41,7 +41,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	}
 	warpRoutingEnabled := false
 	protocolSelector, err := connection.NewProtocolSelector(
-		connection.HTTP2.String(),
+		"auto",
 		warpRoutingEnabled,
 		namedTunnel,
 		mockFetcher.fetch(),

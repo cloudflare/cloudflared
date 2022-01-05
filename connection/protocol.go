@@ -19,9 +19,7 @@ const (
 	edgeH2TLSServerName = "h2.cftunnel.com"
 	// edgeQUICServerName is the server name to establish quic connection with edge.
 	edgeQUICServerName = "quic.cftunnel.com"
-	// threshold to switch back to h2mux when the user intentionally pick --protocol http2
-	explicitHTTP2FallbackThreshold = -1
-	autoSelectFlag                 = "auto"
+	autoSelectFlag     = "auto"
 )
 
 var (
@@ -237,25 +235,23 @@ func selectNamedTunnelProtocols(
 	threshold int32,
 	protocol Protocol,
 ) (ProtocolSelector, error) {
-	if protocolFlag == H2mux.String() {
-		return &staticProtocolSelector{
-			current: H2mux,
-		}, nil
+	// If the user picks a protocol, then we stick to it no matter what.
+	switch protocolFlag {
+	case H2mux.String():
+		return &staticProtocolSelector{current: H2mux}, nil
+	case QUIC.String():
+		return &staticProtocolSelector{current: QUIC}, nil
+	case HTTP2.String():
+		return &staticProtocolSelector{current: HTTP2}, nil
 	}
 
-	if protocolFlag == QUIC.String() {
-		return newAutoProtocolSelector(QUIC, []Protocol{QUIC, HTTP2, H2mux}, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
+	// If the user does not pick (hopefully the majority) then we use the one derived from the TXT DNS record and
+	// fallback on failures.
+	if protocolFlag == autoSelectFlag {
+		return newAutoProtocolSelector(protocol, []Protocol{QUIC, HTTP2, H2mux}, threshold, fetchFunc, ttl, log), nil
 	}
 
-	if protocolFlag == HTTP2.String() {
-		return newAutoProtocolSelector(HTTP2, []Protocol{HTTP2, H2mux}, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
-	}
-
-	if protocolFlag != autoSelectFlag {
-		return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
-	}
-
-	return newAutoProtocolSelector(protocol, []Protocol{QUIC, HTTP2, H2mux}, threshold, fetchFunc, ttl, log), nil
+	return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
 }
 
 func selectWarpRoutingProtocols(
@@ -266,19 +262,21 @@ func selectWarpRoutingProtocols(
 	threshold int32,
 	protocol Protocol,
 ) (ProtocolSelector, error) {
-	if protocolFlag == QUIC.String() {
-		return newAutoProtocolSelector(QUICWarp, []Protocol{QUICWarp, HTTP2Warp}, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
+	// If the user picks a protocol, then we stick to it no matter what.
+	switch protocolFlag {
+	case QUIC.String():
+		return &staticProtocolSelector{current: QUICWarp}, nil
+	case HTTP2.String():
+		return &staticProtocolSelector{current: HTTP2Warp}, nil
 	}
 
-	if protocolFlag == HTTP2.String() {
-		return newAutoProtocolSelector(HTTP2Warp, []Protocol{HTTP2Warp}, explicitHTTP2FallbackThreshold, fetchFunc, ttl, log), nil
+	// If the user does not pick (hopefully the majority) then we use the one derived from the TXT DNS record and
+	// fallback on failures.
+	if protocolFlag == autoSelectFlag {
+		return newAutoProtocolSelector(protocol, []Protocol{QUICWarp, HTTP2Warp}, threshold, fetchFunc, ttl, log), nil
 	}
 
-	if protocolFlag != autoSelectFlag {
-		return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
-	}
-
-	return newAutoProtocolSelector(protocol, []Protocol{QUICWarp, HTTP2Warp}, threshold, fetchFunc, ttl, log), nil
+	return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
 }
 
 func switchThreshold(accountTag string) int32 {

@@ -72,21 +72,33 @@ func TestNewProtocolSelector(t *testing.T) {
 			name:              "named tunnel over http2",
 			protocol:          "http2",
 			expectedProtocol:  HTTP2,
-			hasFallback:       true,
-			expectedFallback:  H2mux,
 			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
-			name:              "named tunnel http2 disabled",
+			name:              "named tunnel http2 disabled still gets http2 because it is manually picked",
 			protocol:          "http2",
-			expectedProtocol:  H2mux,
+			expectedProtocol:  HTTP2,
 			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}),
 			namedTunnelConfig: testNamedTunnelConfig,
 		},
 		{
+			name:              "named tunnel quic disabled still gets quic because it is manually picked",
+			protocol:          "quic",
+			expectedProtocol:  QUIC,
+			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}, edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: -1}),
+			namedTunnelConfig: testNamedTunnelConfig,
+		},
+		{
+			name:              "named tunnel quic and http2 disabled",
+			protocol:          "auto",
+			expectedProtocol:  H2mux,
+			fetchFunc:         mockFetcher(false, edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}, edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: -1}),
+			namedTunnelConfig: testNamedTunnelConfig,
+		},
+		{
 			name:             "named tunnel quic disabled",
-			protocol:         "quic",
+			protocol:         "auto",
 			expectedProtocol: HTTP2,
 			// Hasfallback true is because if http2 fails, then we further fallback to h2mux.
 			hasFallback:       true,
@@ -155,7 +167,7 @@ func TestNewProtocolSelector(t *testing.T) {
 		},
 		{
 			name:               "warp routing quic",
-			protocol:           "quic",
+			protocol:           "auto",
 			expectedProtocol:   QUICWarp,
 			hasFallback:        true,
 			expectedFallback:   HTTP2Warp,
@@ -254,6 +266,7 @@ func TestAutoProtocolSelectorRefresh(t *testing.T) {
 
 func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 	fetcher := dynamicMockFetcher{}
+	// Since the user chooses http2 on purpose, we always stick to it.
 	selector, err := NewProtocolSelector("http2", noWarpRoutingEnabled, testNamedTunnelConfig, fetcher.fetch(), testNoTTL, &log)
 	assert.NoError(t, err)
 	assert.Equal(t, HTTP2, selector.Current())
@@ -269,7 +282,7 @@ func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 
 	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
 	fetcher.err = nil
-	assert.Equal(t, H2mux, selector.Current())
+	assert.Equal(t, HTTP2, selector.Current())
 
 	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
 	assert.Equal(t, HTTP2, selector.Current())
@@ -278,7 +291,7 @@ func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
 	assert.Equal(t, HTTP2, selector.Current())
 
 	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
-	assert.Equal(t, H2mux, selector.Current())
+	assert.Equal(t, HTTP2, selector.Current())
 }
 
 func TestProtocolSelectorRefreshTTL(t *testing.T) {
