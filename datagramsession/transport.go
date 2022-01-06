@@ -9,5 +9,5 @@ type transport interface {
 	// ReceiveFrom reads the next datagram from the transport
 	ReceiveFrom() (uuid.UUID, []byte, error)
 	// Max transmission unit to receive from the transport
-	MTU() uint
+	MTU() int
 }

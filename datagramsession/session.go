@@ -114,7 +114,7 @@ func (s *Session) dstToTransport(buffer []byte) error {
 			s.log.Debug().
 				Str("session", s.ID.String()).
 				Int("len", n).
-				Uint("mtu", s.transport.MTU()).
+				Int("mtu", s.transport.MTU()).
 				Msg("dropped packet exceeding MTU")
 		}
 	}

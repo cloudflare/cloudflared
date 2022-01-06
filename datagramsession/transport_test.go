@@ -22,8 +22,8 @@ func (mt *mockQUICTransport) ReceiveFrom() (uuid.UUID, []byte, error) {
 	return mt.reqChan.Receive(context.Background())
 }
 
-func (mt *mockQUICTransport) MTU() uint {
-	return 1217
+func (mt *mockQUICTransport) MTU() int {
+	return 1280
 }
 
 func (mt *mockQUICTransport) newRequest(ctx context.Context, sessionID uuid.UUID, payload []byte) error {

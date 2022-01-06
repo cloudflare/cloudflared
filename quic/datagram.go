@@ -9,10 +9,7 @@ import (
 )
 
 const (
-	// Max datagram frame size is limited to 1220 https://github.com/lucas-clemente/quic-go/blob/v0.24.0/internal/protocol/params.go#L138
-	// However, 3 more bytes are reserved https://github.com/lucas-clemente/quic-go/blob/v0.24.0/internal/wire/datagram_frame.go#L61
-	MaxDatagramFrameSize = 1217
-	sessionIDLen         = len(uuid.UUID{})
+	sessionIDLen = len(uuid.UUID{})
 )
 
 type DatagramMuxer struct {
@@ -34,11 +31,11 @@ func NewDatagramMuxer(quicSession quic.Session) (*DatagramMuxer, error) {
 // SendTo suffix the session ID to the payload so the other end of the QUIC session can demultiplex
 // the payload from multiple datagram sessions
 func (dm *DatagramMuxer) SendTo(sessionID uuid.UUID, payload []byte) error {
-	if len(payload) > MaxDatagramFrameSize-sessionIDLen {
+	if len(payload) > maxDatagramPayloadSize {
 		// TODO: TUN-5302 return ICMP packet too big message
 		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.MTU())
 	}
-	msgWithID, err := SuffixSessionID(sessionID, payload)
+	msgWithID, err := suffixSessionID(sessionID, payload)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix session ID to datagram, it will be dropped")
 	}
@@ -56,17 +53,17 @@ func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
 	if err != nil {
 		return uuid.Nil, nil, err
 	}
-	return ExtractSessionID(msg)
+	return extractSessionID(msg)
 }
 
 // Maximum application payload to send to / receive from QUIC datagram frame
-func (dm *DatagramMuxer) MTU() uint {
-	return uint(MaxDatagramFrameSize - sessionIDLen)
+func (dm *DatagramMuxer) MTU() int {
+	return maxDatagramPayloadSize
 }
 
 // Each QUIC datagram should be suffixed with session ID.
-// ExtractSessionID extracts the session ID and a slice with only the payload
-func ExtractSessionID(b []byte) (uuid.UUID, []byte, error) {
+// extractSessionID extracts the session ID and a slice with only the payload
+func extractSessionID(b []byte) (uuid.UUID, []byte, error) {
 	msgLen := len(b)
 	if msgLen < sessionIDLen {
 		return uuid.Nil, nil, fmt.Errorf("session ID has %d bytes, but data only has %d", sessionIDLen, len(b))
@@ -82,7 +79,7 @@ func ExtractSessionID(b []byte) (uuid.UUID, []byte, error) {
 
 // SuffixSessionID appends the session ID at the end of the payload. Suffix is more performant than prefix because
 // the payload slice might already have enough capacity to append the session ID at the end
-func SuffixSessionID(sessionID uuid.UUID, b []byte) ([]byte, error) {
+func suffixSessionID(sessionID uuid.UUID, b []byte) ([]byte, error) {
 	if len(b)+len(sessionID) > MaxDatagramFrameSize {
 		return nil, fmt.Errorf("datagram size exceed %d", MaxDatagramFrameSize)
 	}

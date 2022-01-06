@@ -291,8 +291,9 @@ type Config struct {
 	DisableVersionNegotiationPackets bool
 	// See https://datatracker.ietf.org/doc/draft-ietf-quic-datagram/.
 	// Datagrams will only be available when both peers enable datagram support.
-	EnableDatagrams bool
-	Tracer          logging.Tracer
+	EnableDatagrams      bool
+	MaxDatagramFrameSize int64
+	Tracer               logging.Tracer
 }
 
 // ConnectionState records basic details about a QUIC connection

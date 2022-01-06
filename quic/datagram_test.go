@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
@@ -23,11 +24,11 @@ var (
 
 func TestSuffixThenRemoveSessionID(t *testing.T) {
 	msg := []byte(t.Name())
-	msgWithID, err := SuffixSessionID(testSessionID, msg)
+	msgWithID, err := suffixSessionID(testSessionID, msg)
 	require.NoError(t, err)
 	require.Len(t, msgWithID, len(msg)+sessionIDLen)
 
-	sessionID, msgWithoutID, err := ExtractSessionID(msgWithID)
+	sessionID, msgWithoutID, err := extractSessionID(msgWithID)
 	require.NoError(t, err)
 	require.Equal(t, msg, msgWithoutID)
 	require.Equal(t, testSessionID, sessionID)
@@ -36,26 +37,27 @@ func TestSuffixThenRemoveSessionID(t *testing.T) {
 func TestRemoveSessionIDError(t *testing.T) {
 	// message is too short to contain session ID
 	msg := []byte("test")
-	_, _, err := ExtractSessionID(msg)
+	_, _, err := extractSessionID(msg)
 	require.Error(t, err)
 }
 
 func TestSuffixSessionIDError(t *testing.T) {
 	msg := make([]byte, MaxDatagramFrameSize-sessionIDLen)
-	_, err := SuffixSessionID(testSessionID, msg)
+	_, err := suffixSessionID(testSessionID, msg)
 	require.NoError(t, err)
 
 	msg = make([]byte, MaxDatagramFrameSize-sessionIDLen+1)
-	_, err = SuffixSessionID(testSessionID, msg)
+	_, err = suffixSessionID(testSessionID, msg)
 	require.Error(t, err)
 }
 
 func TestMaxDatagramPayload(t *testing.T) {
-	payload := make([]byte, MaxDatagramFrameSize-sessionIDLen)
+	payload := make([]byte, maxDatagramPayloadSize)
 
 	quicConfig := &quic.Config{
-		KeepAlive:       true,
-		EnableDatagrams: true,
+		KeepAlive:            true,
+		EnableDatagrams:      true,
+		MaxDatagramFrameSize: MaxDatagramFrameSize,
 	}
 	quicListener := newQUICListener(t, quicConfig)
 	defer quicListener.Close()
@@ -65,13 +67,19 @@ func TestMaxDatagramPayload(t *testing.T) {
 	errGroup.Go(func() error {
 		// Accept quic connection
 		quicSession, err := quicListener.Accept(ctx)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		muxer, err := NewDatagramMuxer(quicSession)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		sessionID, receivedPayload, err := muxer.ReceiveFrom()
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		require.Equal(t, testSessionID, sessionID)
 		require.True(t, bytes.Equal(payload, receivedPayload))
 
@@ -89,13 +97,19 @@ func TestMaxDatagramPayload(t *testing.T) {
 		require.NoError(t, err)
 
 		muxer, err := NewDatagramMuxer(quicSession)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
+		// Wait a few milliseconds for MTU discovery to take place
+		time.Sleep(time.Millisecond * 100)
 		err = muxer.SendTo(testSessionID, payload)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		// Payload larger than transport MTU, should return an error
-		largePayload := append(payload, byte(1))
+		largePayload := make([]byte, MaxDatagramFrameSize)
 		err = muxer.SendTo(testSessionID, largePayload)
 		require.Error(t, err)
 

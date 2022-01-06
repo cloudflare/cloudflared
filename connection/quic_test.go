@@ -560,8 +560,7 @@ func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.
 	}()
 
 	// Send a message to the quic session on edge side, it should be deumx to this datagram session
-	muxedPayload, err := quicpogs.SuffixSessionID(sessionID, payload)
-	require.NoError(t, err)
+	muxedPayload := append(payload, sessionID[:]...)
 	err = edgeQUICSession.SendMessage(muxedPayload)
 	require.NoError(t, err)
 
