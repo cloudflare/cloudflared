@@ -1,3 +1,12 @@
+2022.1.0
+- 2022-01-03 TUN-5612: Add support for specifying TLS min/max version
+- 2022-01-03 TUN-5612: Make tls min/max version public visible
+- 2022-01-03 TUN-5551: Internally published debian artifacts are now named just cloudflared even though they are FIPS compliant
+- 2022-01-04 TUN-5600: Close QUIC transports as soon as possible while respecting graceful shutdown
+- 2022-01-05 TUN-5616: Never fallback transport if user chooses it on purpose
+- 2022-01-05 TUN-5204: Unregister QUIC transports on disconnect
+- 2022-01-04 TUN-5600: Add coverage to component tests for various transports
+
 2021.12.4
 - 2021-12-27 TUN-5482: Refactor tunnelstore client related packages for more coherent package
 - 2021-12-27 TUN-5551: Change internally published debian package to be FIPS compliant
