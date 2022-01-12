@@ -1,3 +1,7 @@
+2022.1.1
+- 2022-01-10 TUN-5631: Build everything with go 1.17.5
+- 2022-01-06 TUN-5623: Configure quic max datagram frame size to 1350 bytes for none Windows platforms
+
 2022.1.0
 - 2022-01-03 TUN-5612: Add support for specifying TLS min/max version
 - 2022-01-03 TUN-5612: Make tls min/max version public visible
