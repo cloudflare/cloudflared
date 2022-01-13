@@ -43,7 +43,8 @@ stretch: &stretch
     pre-cache: &github_release_pkgs_pre_cache
       - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
       - chmod a+x /usr/local/bin/wixl
-      - pip3 install pygithub
+      - pip3 install pynacl==1.4.0
+      - pip3 install pygithub==1.55
     post-cache:
       # build all packages (except macos and FIPS) and move them to /cfsetup/built_artifacts
       - ./build-packages.sh
@@ -134,7 +135,8 @@ stretch: &stretch
       - python3-setuptools
       - python3-pip
     pre-cache: &install_pygithub
-      - pip3 install pygithub
+      - pip3 install pynacl==1.4.0
+      - pip3 install pygithub==1.55
     post-cache:
       - make github-mac-upload
   test:
