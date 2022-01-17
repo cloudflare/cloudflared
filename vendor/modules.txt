@@ -367,7 +367,7 @@ golang.org/x/crypto/ssh/terminal
 ## explicit; go 1.12
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.0.0-20211109214657-ef0fda0de508
+# golang.org/x/net v0.0.0-20220114011407-0dd24b26b47d
 ## explicit; go 1.17
 golang.org/x/net/bpf
 golang.org/x/net/context
