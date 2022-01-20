@@ -31,6 +31,7 @@ const (
 var (
 	Version   = "DEV"
 	BuildTime = "unknown"
+	BuildType = ""
 	// Mostly network errors that we don't want reported back to Sentry, this is done by substring match.
 	ignoredErrors = []string{
 		"connection reset by peer",
@@ -46,9 +47,10 @@ var (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	metrics.RegisterBuildInfo(BuildTime, Version)
+	metrics.RegisterBuildInfo(BuildType, BuildTime, Version)
 	raven.SetRelease(Version)
 	maxprocs.Set()
+	bInfo := cliutil.GetBuildInfo(BuildType, Version)
 
 	// Graceful shutdown channel used by the app. When closed, app must terminate gracefully.
 	// Windows service manager closes this channel when it receives stop command.
@@ -67,21 +69,21 @@ func main() {
 	app.Copyright = fmt.Sprintf(
 		`(c) %d Cloudflare Inc.
    Your installation of cloudflared software constitutes a symbol of your signature indicating that you accept
-   the terms of the Cloudflare License (https://developers.cloudflare.com/argo-tunnel/license/),
+   the terms of the Cloudflare License (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/license),
    Terms (https://www.cloudflare.com/terms/) and Privacy Policy (https://www.cloudflare.com/privacypolicy/).`,
 		time.Now().Year(),
 	)
-	app.Version = fmt.Sprintf("%s (built %s)", Version, BuildTime)
+	app.Version = fmt.Sprintf("%s (built %s%s)", Version, BuildTime, bInfo.GetBuildTypeMsg())
 	app.Description = `cloudflared connects your machine or user identity to Cloudflare's global network.
 	You can use it to authenticate a session to reach an API behind Access, route web traffic to this machine,
 	and configure access control.
 
-	See https://developers.cloudflare.com/argo-tunnel/ for more in-depth documentation.`
+	See https://developers.cloudflare.com/cloudflare-one/connections/connect-apps for more in-depth documentation.`
 	app.Flags = flags()
 	app.Action = action(graceShutdownC)
 	app.Commands = commands(cli.ShowVersion)
 
-	tunnel.Init(Version, graceShutdownC) // we need this to support the tunnel sub command...
+	tunnel.Init(bInfo, graceShutdownC) // we need this to support the tunnel sub command...
 	access.Init(graceShutdownC)
 	updater.Init(Version)
 	runApp(app, graceShutdownC)

@@ -130,6 +130,10 @@ func (e *errCloseForRecreating) Error() string {
 var sessionTracingID uint64        // to be accessed atomically
 func nextSessionTracingID() uint64 { return atomic.AddUint64(&sessionTracingID, 1) }
 
+func pathMTUDiscoveryEnabled(config *Config) bool {
+	return !disablePathMTUDiscovery && !config.DisablePathMTUDiscovery
+}
+
 // A Session is a QUIC session
 type session struct {
 	// Destination connection ID used during the handshake.
@@ -312,7 +316,10 @@ var newSession = func(
 		RetrySourceConnectionID:         retrySrcConnID,
 	}
 	if s.config.EnableDatagrams {
-		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+		params.MaxDatagramFrameSize = protocol.ByteCount(s.config.MaxDatagramFrameSize)
+		if params.MaxDatagramFrameSize == 0 {
+			params.MaxDatagramFrameSize = protocol.DefaultMaxDatagramFrameSize
+		}
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -436,7 +443,7 @@ var newClientSession = func(
 		InitialSourceConnectionID:      srcConnID,
 	}
 	if s.config.EnableDatagrams {
-		params.MaxDatagramFrameSize = protocol.MaxDatagramFrameSize
+		params.MaxDatagramFrameSize = protocol.ByteCount(s.config.MaxDatagramFrameSize)
 	}
 	if s.tracer != nil {
 		s.tracer.SentTransportParameters(params)
@@ -590,7 +597,9 @@ runLoop:
 				default:
 				}
 			}
-		} else if !processedUndecryptablePacket {
+		}
+		// If we processed any undecryptable packets, jump to the resetting of the timers directly.
+		if !processedUndecryptablePacket {
 			select {
 			case closeErr = <-s.closeChan:
 				break runLoop
@@ -743,7 +752,7 @@ func (s *session) maybeResetTimer() {
 			deadline = s.idleTimeoutStartTime().Add(s.idleTimeout)
 		}
 	}
-	if s.handshakeConfirmed && !s.config.DisablePathMTUDiscovery {
+	if s.handshakeConfirmed && pathMTUDiscoveryEnabled(s.config) {
 		if probeTime := s.mtuDiscoverer.NextProbeTime(); !probeTime.IsZero() {
 			deadline = utils.MinTime(deadline, probeTime)
 		}
@@ -807,7 +816,7 @@ func (s *session) handleHandshakeConfirmed() {
 	s.sentPacketHandler.SetHandshakeConfirmed()
 	s.cryptoStreamHandler.SetHandshakeConfirmed()
 
-	if !s.config.DisablePathMTUDiscovery {
+	if pathMTUDiscoveryEnabled(s.config) {
 		maxPacketSize := s.peerParams.MaxUDPPayloadSize
 		if maxPacketSize == 0 {
 			maxPacketSize = protocol.MaxByteCount
@@ -1403,7 +1412,7 @@ func (s *session) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encrypt
 }
 
 func (s *session) handleDatagramFrame(f *wire.DatagramFrame) error {
-	if f.Length(s.version) > protocol.MaxDatagramFrameSize {
+	if f.Length(s.version) > protocol.ByteCount(s.config.MaxDatagramFrameSize) {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.ProtocolViolation,
 			ErrorMessage: "DATAGRAM frame too large",
@@ -1768,7 +1777,7 @@ func (s *session) sendPacket() (bool, error) {
 		s.sendQueue.Send(packet.buffer)
 		return true, nil
 	}
-	if !s.config.DisablePathMTUDiscovery && s.mtuDiscoverer.ShouldSendProbe(now) {
+	if pathMTUDiscoveryEnabled(s.config) && s.mtuDiscoverer.ShouldSendProbe(now) {
 		packet, err := s.packer.PackMTUProbePacket(s.mtuDiscoverer.GetPing())
 		if err != nil {
 			return false, err

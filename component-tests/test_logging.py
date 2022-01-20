@@ -75,7 +75,7 @@ class TestLogging:
         }
         config = component_tests_config(extra_config)
         with start_cloudflared(tmp_path, config, new_process=True, capture_output=False):
-            wait_tunnel_ready(tunnel_url=config.get_url())
+            wait_tunnel_ready(tunnel_url=config.get_url(), cfd_logs=str(log_file))
             assert_log_in_file(log_file)
             assert_json_log(log_file)
 
@@ -88,5 +88,5 @@ class TestLogging:
         }
         config = component_tests_config(extra_config)
         with start_cloudflared(tmp_path, config, new_process=True, capture_output=False):
-            wait_tunnel_ready(tunnel_url=config.get_url())
+            wait_tunnel_ready(tunnel_url=config.get_url(), cfd_logs=str(log_dir))
             assert_log_to_dir(config, log_dir)

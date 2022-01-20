@@ -142,3 +142,13 @@ interface TunnelServer extends (RegistrationServer) {
     authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
     reconnectTunnel @5 (jwt :Data, eventDigest :Data, connDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }
+
+struct RegisterUdpSessionResponse {
+    err @0 :Text;
+}
+
+interface SessionManager {
+    # Let the edge decide closeAfterIdle to make sure cloudflared doesn't close session before the edge closes its side
+    registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16, closeAfterIdleHint: Int64) -> (result :RegisterUdpSessionResponse);
+    unregisterUdpSession @1 (sessionId :Data, message: Text) -> ();
+}

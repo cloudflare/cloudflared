@@ -1,3 +1,4 @@
+//go:build darwin
 // +build darwin
 
 package main
@@ -20,16 +21,16 @@ const (
 func runApp(app *cli.App, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
-		Usage: "Manages the Argo Tunnel launch agent",
+		Usage: "Manages the Cloudflare Tunnel launch agent",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "install",
-				Usage:  "Install Argo Tunnel as an user launch agent",
+				Usage:  "Install Cloudflare Tunnel as an user launch agent",
 				Action: cliutil.ConfiguredAction(installLaunchd),
 			},
 			{
 				Name:   "uninstall",
-				Usage:  "Uninstall the Argo Tunnel launch agent",
+				Usage:  "Uninstall the Cloudflare Tunnel launch agent",
 				Action: cliutil.ConfiguredAction(uninstallLaunchd),
 			},
 		},
@@ -110,13 +111,13 @@ func installLaunchd(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	if isRootUser() {
-		log.Info().Msg("Installing Argo Tunnel client as a system launch daemon. " +
-			"Argo Tunnel client will run at boot")
+		log.Info().Msg("Installing Cloudflare Tunnel client as a system launch daemon. " +
+			"Cloudflare Tunnel client will run at boot")
 	} else {
-		log.Info().Msg("Installing Argo Tunnel client as an user launch agent. " +
-			"Note that Argo Tunnel client will only run when the user is logged in. " +
-			"If you want to run Argo Tunnel client at boot, install with root permission. " +
-			"For more information, visit https://developers.cloudflare.com/argo-tunnel/reference/service/")
+		log.Info().Msg("Installing Cloudflare Tunnel client as an user launch agent. " +
+			"Note that Cloudflare Tunnel client will only run when the user is logged in. " +
+			"If you want to run Cloudflare Tunnel client at boot, install with root permission. " +
+			"For more information, visit https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/run-as-service")
 	}
 	etPath, err := os.Executable()
 	if err != nil {
@@ -159,9 +160,9 @@ func uninstallLaunchd(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	if isRootUser() {
-		log.Info().Msg("Uninstalling Argo Tunnel as a system launch daemon")
+		log.Info().Msg("Uninstalling Cloudflare Tunnel as a system launch daemon")
 	} else {
-		log.Info().Msg("Uninstalling Argo Tunnel as an user launch agent")
+		log.Info().Msg("Uninstalling Cloudflare Tunnel as an user launch agent")
 	}
 	installPath, err := installPath()
 	if err != nil {

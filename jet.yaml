@@ -1,6 +1,6 @@
 ---
 basename: "cloudflared"
-comment: "Cloudflare Argo Tunnel"
+comment: "Cloudflare Tunnel"
 copyright: "Cloudflare, Inc"
 arch: "x86"
 abi: "64"

@@ -47,7 +47,7 @@ type batchData struct {
 }
 
 // WorkersVersion implements the Version interface.
-// It contains everything needed to preform a version upgrade
+// It contains everything needed to perform a version upgrade
 type WorkersVersion struct {
 	downloadURL  string
 	checksum     string

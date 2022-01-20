@@ -132,10 +132,10 @@ const MaxPostHandshakeCryptoFrameSize = 1000
 // but must ensure that a maximum size ACK frame fits into one packet.
 const MaxAckFrameSize ByteCount = 1000
 
-// MaxDatagramFrameSize is the maximum size of a DATAGRAM frame as defined in
+// DefaultMaxDatagramFrameSize is the maximum size of a DATAGRAM frame as defined in
 // https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.
 // The size is chosen such that a DATAGRAM frame fits into a QUIC packet.
-const MaxDatagramFrameSize ByteCount = 1220
+const DefaultMaxDatagramFrameSize ByteCount = 1220
 
 // DatagramRcvQueueLen is the length of the receive queue for DATAGRAM frames.
 // See https://datatracker.ietf.org/doc/draft-pauly-quic-datagram/.

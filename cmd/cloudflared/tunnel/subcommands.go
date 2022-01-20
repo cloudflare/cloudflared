@@ -21,11 +21,11 @@ import (
 	"golang.org/x/net/idna"
 	yaml "gopkg.in/yaml.v2"
 
+	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/tunnelstore"
 )
 
 const (
@@ -64,8 +64,8 @@ var (
 		Name:        "when",
 		Aliases:     []string{"w"},
 		Usage:       "List tunnels that are active at the given `TIME` in RFC3339 format",
-		Layout:      tunnelstore.TimeLayout,
-		DefaultText: fmt.Sprintf("current time, %s", time.Now().Format(tunnelstore.TimeLayout)),
+		Layout:      cfapi.TimeLayout,
+		DefaultText: fmt.Sprintf("current time, %s", time.Now().Format(cfapi.TimeLayout)),
 	}
 	listIDFlag = &cli.StringFlag{
 		Name:    "id",
@@ -156,6 +156,12 @@ var (
 		Usage:   `Overwrites existing DNS records with this hostname`,
 		EnvVars: []string{"TUNNEL_FORCE_PROVISIONING_DNS"},
 	}
+	createSecretFlag = &cli.StringFlag{
+		Name:    "secret",
+		Aliases: []string{"s"},
+		Usage:   "Base64 encoded secret to set for the tunnel. The decoded secret must be at least 32 bytes long. If not specified, a random 32-byte secret will be generated.",
+		EnvVars: []string{"TUNNEL_CREATE_SECRET"},
+	}
 )
 
 func buildCreateCommand() *cli.Command {
@@ -170,7 +176,7 @@ func buildCreateCommand() *cli.Command {
   For example, to create a tunnel named 'my-tunnel' run:
 
   $ cloudflared tunnel create my-tunnel`,
-		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlagCLIOnly},
+		Flags:              []cli.Flag{outputFormatFlag, credentialsFileFlagCLIOnly, createSecretFlag},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -196,7 +202,7 @@ func createCommand(c *cli.Context) error {
 	warningChecker := updater.StartWarningCheck(c)
 	defer warningChecker.LogWarningIfAny(sc.log)
 
-	_, err = sc.create(name, c.String(CredFileFlag))
+	_, err = sc.create(name, c.String(CredFileFlag), c.String(createSecretFlag.Name))
 	return errors.Wrap(err, "failed to create tunnel")
 }
 
@@ -254,7 +260,7 @@ func listCommand(c *cli.Context) error {
 	warningChecker := updater.StartWarningCheck(c)
 	defer warningChecker.LogWarningIfAny(sc.log)
 
-	filter := tunnelstore.NewFilter()
+	filter := cfapi.NewTunnelFilter()
 	if !c.Bool("show-deleted") {
 		filter.NoDeleted()
 	}
@@ -276,6 +282,9 @@ func listCommand(c *cli.Context) error {
 			return errors.Wrapf(err, "%s is not a valid tunnel ID", id)
 		}
 		filter.ByTunnelID(tunnelID)
+	}
+	if maxFetch := c.Int("max-fetch-size"); maxFetch > 0 {
+		filter.MaxFetchSize(uint(maxFetch))
 	}
 
 	tunnels, err := sc.list(filter)
@@ -320,13 +329,13 @@ func listCommand(c *cli.Context) error {
 	if len(tunnels) > 0 {
 		formatAndPrintTunnelList(tunnels, c.Bool("show-recently-disconnected"))
 	} else {
-		fmt.Println("You have no tunnels, use 'cloudflared tunnel create' to define a new tunnel")
+		fmt.Println("No tunnels were found for the given filter flags. You can use 'cloudflared tunnel create' to create a tunnel.")
 	}
 
 	return nil
 }
 
-func formatAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconnected bool) {
+func formatAndPrintTunnelList(tunnels []*cfapi.Tunnel, showRecentlyDisconnected bool) {
 	writer := tabWriter()
 	defer writer.Flush()
 
@@ -348,7 +357,7 @@ func formatAndPrintTunnelList(tunnels []*tunnelstore.Tunnel, showRecentlyDisconn
 	}
 }
 
-func fmtConnections(connections []tunnelstore.Connection, showRecentlyDisconnected bool) string {
+func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected bool) string {
 
 	// Count connections per colo
 	numConnsPerColo := make(map[string]uint, len(connections))
@@ -468,8 +477,8 @@ func tunnelInfo(c *cli.Context) error {
 	return nil
 }
 
-func getTunnel(sc *subcommandContext, tunnelID uuid.UUID) (*tunnelstore.Tunnel, error) {
-	filter := tunnelstore.NewFilter()
+func getTunnel(sc *subcommandContext, tunnelID uuid.UUID) (*cfapi.Tunnel, error) {
+	filter := cfapi.NewTunnelFilter()
 	filter.ByTunnelID(tunnelID)
 	tunnels, err := sc.list(filter)
 	if err != nil {
@@ -702,7 +711,7 @@ Further information about managing Cloudflare WARP traffic to your tunnel is ava
 			{
 				Name:        "dns",
 				Action:      cliutil.ConfiguredAction(routeDnsCommand),
-				Usage:       "Route a hostname by creating a DNS CNAME record to a tunnel",
+				Usage:       "HostnameRoute a hostname by creating a DNS CNAME record to a tunnel",
 				UsageText:   "cloudflared tunnel route dns [TUNNEL] [HOSTNAME]",
 				Description: `Creates a DNS CNAME record hostname that points to the tunnel.`,
 				Flags:       []cli.Flag{overwriteDNSFlag},
@@ -719,7 +728,7 @@ Further information about managing Cloudflare WARP traffic to your tunnel is ava
 	}
 }
 
-func dnsRouteFromArg(c *cli.Context, overwriteExisting bool) (tunnelstore.Route, error) {
+func dnsRouteFromArg(c *cli.Context, overwriteExisting bool) (cfapi.HostnameRoute, error) {
 	const (
 		userHostnameIndex = 1
 		expectedNArgs     = 2
@@ -733,10 +742,10 @@ func dnsRouteFromArg(c *cli.Context, overwriteExisting bool) (tunnelstore.Route,
 	} else if !validateHostname(userHostname, true) {
 		return nil, errors.Errorf("%s is not a valid hostname", userHostname)
 	}
-	return tunnelstore.NewDNSRoute(userHostname, overwriteExisting), nil
+	return cfapi.NewDNSRoute(userHostname, overwriteExisting), nil
 }
 
-func lbRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
+func lbRouteFromArg(c *cli.Context) (cfapi.HostnameRoute, error) {
 	const (
 		lbNameIndex   = 1
 		lbPoolIndex   = 2
@@ -759,7 +768,7 @@ func lbRouteFromArg(c *cli.Context) (tunnelstore.Route, error) {
 		return nil, errors.Errorf("%s is not a valid pool name", lbPool)
 	}
 
-	return tunnelstore.NewLBRoute(lbName, lbPool), nil
+	return cfapi.NewLBRoute(lbName, lbPool), nil
 }
 
 var nameRegex = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
@@ -806,7 +815,7 @@ func routeCommand(c *cli.Context, routeType string) error {
 	if err != nil {
 		return err
 	}
-	var route tunnelstore.Route
+	var route cfapi.HostnameRoute
 	switch routeType {
 	case "dns":
 		route, err = dnsRouteFromArg(c, c.Bool(overwriteDNSFlagName))

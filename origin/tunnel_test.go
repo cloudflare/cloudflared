@@ -8,20 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/retry"
 )
 
 type dynamicMockFetcher struct {
-	percentage int32
-	err        error
+	protocolPercents edgediscovery.ProtocolPercents
+	err              error
 }
 
 func (dmf *dynamicMockFetcher) fetch() connection.PercentageFetcher {
-	return func() (int32, error) {
-		if dmf.err != nil {
-			return 0, dmf.err
-		}
-		return dmf.percentage, nil
+	return func() (edgediscovery.ProtocolPercents, error) {
+		return dmf.protocolPercents, dmf.err
 	}
 }
 
@@ -39,11 +37,11 @@ func TestWaitForBackoffFallback(t *testing.T) {
 		},
 	}
 	mockFetcher := dynamicMockFetcher{
-		percentage: 0,
+		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}},
 	}
 	warpRoutingEnabled := false
 	protocolSelector, err := connection.NewProtocolSelector(
-		connection.HTTP2.String(),
+		"auto",
 		warpRoutingEnabled,
 		namedTunnel,
 		mockFetcher.fetch(),
@@ -64,7 +62,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	// Retry #0 and #1. At retry #2, we switch protocol, so the fallback loop has one more retry than this
 	for i := 0; i < int(maxRetries-1); i++ {
 		protocolFallback.BackoffTimer() // simulate retry
-		ok := selectNextProtocol(&log, protocolFallback, protocolSelector)
+		ok := selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 		assert.True(t, ok)
 		assert.Equal(t, initProtocol, protocolFallback.protocol)
 	}
@@ -72,7 +70,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	// Retry fallback protocol
 	for i := 0; i < int(maxRetries); i++ {
 		protocolFallback.BackoffTimer() // simulate retry
-		ok := selectNextProtocol(&log, protocolFallback, protocolSelector)
+		ok := selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 		assert.True(t, ok)
 		fallback, ok := protocolSelector.Fallback()
 		assert.True(t, ok)
@@ -84,12 +82,19 @@ func TestWaitForBackoffFallback(t *testing.T) {
 
 	// No protocol to fallback, return error
 	protocolFallback.BackoffTimer() // simulate retry
-	ok := selectNextProtocol(&log, protocolFallback, protocolSelector)
+	ok := selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 	assert.False(t, ok)
 
 	protocolFallback.reset()
 	protocolFallback.BackoffTimer() // simulate retry
-	ok = selectNextProtocol(&log, protocolFallback, protocolSelector)
+	ok = selectNextProtocol(&log, protocolFallback, protocolSelector, false)
 	assert.True(t, ok)
 	assert.Equal(t, initProtocol, protocolFallback.protocol)
+
+	protocolFallback.reset()
+	protocolFallback.BackoffTimer() // simulate retry
+	ok = selectNextProtocol(&log, protocolFallback, protocolSelector, true)
+	// Check that we get a true after the first try itself when this flag is true. This allows us to immediately
+	// switch protocols.
+	assert.True(t, ok)
 }

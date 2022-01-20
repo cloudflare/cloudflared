@@ -240,7 +240,7 @@ func login(c *cli.Context) error {
 	return nil
 }
 
-// ensureURLScheme prepends a URL with https:// if it doesnt have a scheme. http:// URLs will not be converted.
+// ensureURLScheme prepends a URL with https:// if it doesn't have a scheme. http:// URLs will not be converted.
 func ensureURLScheme(url string) string {
 	url = strings.Replace(strings.ToLower(url), "http://", "https://", 1)
 	if !strings.HasPrefix(url, "https://") {

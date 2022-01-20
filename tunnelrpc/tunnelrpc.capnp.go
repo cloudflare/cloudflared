@@ -3371,195 +3371,731 @@ func (p TunnelServer_reconnectTunnel_Results_Promise) Result() TunnelRegistratio
 	return TunnelRegistration_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
-const schema_db8274f9144abc7e = "x\xda\xccY{l\x1c\xd5\xd5?g\xee\xaeg\xed\xd8" +
-	"\xac\x87\xd9\xc4\x89\x05\x9f\xbf/\x0a\xe2\xc3`\xc0q\xa9" +
-	"\xd2\x94\xd6v\xb0Sl\xf2\xf0x\x93\x96G\x82\x18\xef" +
-	"\xde\xd8\xe3\xee\xce,3\xb3\xc6N\x13\x92\x98\xa4\x10\xc4" +
-	"+!\xe1\x91\x926\x04\xd1\xaa\x14ZR@m*\xaa" +
-	"B_\x80x\xa3P%\x10\xd4\x96\x90>\xa2PJ\xa0" +
-	"BT\x94\xa9\xce\xcc\xce\xc3kc;\xd0?\xfa\xdf\xea" +
-	"\xcc\xb9\xf7\x9es~\xe7\x9e\xf3\xbbg\xcf\xff\x9a\xd8&" +
-	"4\xc7\xc5\x19\x00\xca\xc6x\x85\xc3\x1b_Y\xbb\xe7\x8c" +
-	"_\x8d\x82R\x8f\xe8\\\xfbxw\xeaC{\xf4u\x88" +
-	"3\x11\xa0E\x8b\xafEy}\\\x04\x90G\xe2\x7f\x06" +
-	"t.\x91\xce\xbb\"\xf5\xd2\x0b\xd7\x81T\x1fU\x8e\x91" +
-	"\xf2\xea\x8aF\x94\xf3\x15\xa4\xacU\x90\xf2\x85\xf9\x17\xf7" +
-	"~~\xe7\xb3\x9bA\xaa\x17Be\xc0\x96\x95\xe2Z\x94" +
-	"5\x914\xb9\xb8\x1c\xd0yo\xc7\xec\x1f\xdc\xfb\xc2\xd3" +
-	"[@:\x13\xa1t\xf6z\xf15\x04\x94\xb7\x89?\x02" +
-	"tZ\x17?\xbf\xbf\xbe\xe5\x8e\x1de\xe7\x0a\xa4\xd8\x9c" +
-	"hD\xb9=A\xbb})q\x0d\xa03w\xe8\x8c\xab" +
-	"~\xf9\x9bG\xee\x04\xa5\x09\xd19\xdcw\xf6\xabl\xf7" +
-	"\x03\xaf\xc3J\x14Q\x00h\xb97\xb1\x976\xde\xe7\xea" +
-	"\xbex\xce\xe3?\xbb\xed\x91\xeb\xbf\x05\xca\x99\x88\x00\xae" +
-	"#3+\xffI\x0agU\xb6\x02:;\x0e\xfe|Y" +
-	"~\xdb\xae\xbd\x9ei\xeew\xa5R\x10 \xe6l\xee\xfa" +
-	" \xbf\xf2\xbe\xf4}%\xa3)J-\x9d\x95'\x10\xb0" +
-	"\xe5\xb2\xca\x06\x04t.x\xed\xe8\xf2\xa5?^\xf3\xbd" +
-	"\xc8\xdab\xd5ZZ\xfb\xd0\xff\\R9|t\xf1\xc3" +
-	" 5\xf9_\xae\xae\xea\xa5/\xb1\xd5\xecc\xf5\xae_" +
-	"<Z\x8e\x87\xebj\xbe\xaa\x0f\xe5MUnx\xaa\xdc" +
-	"#n|r\xd7\xd9\x89\xef\xbc\xf7\xd8D\x81\xb9\x7fF" +
-	"\x1f\xca\xfbgP`\x1e\x9bA\xce\xce\xec\xc2\xc3O4" +
-	"\xc7~\x12\x0d\xf3\xcc\xeac\xae\xb3\xd5\x14\xe6\xd3\xdf^" +
-	"T\xa3\xbf3\xfaD\xd9n\xae\xe23\xd5\xdd(\xbfQ" +
-	"M\xbb\x1dr\x95\xbb\xaf\xb8}{\xfc\xe8\xedO\x91\xa5" +
-	"\x11|\xe3\x09\xd7\xcf\x1a\x13\xe5\xad5\xf4sKM\x1d" +
-	"\x03t\xea\x1f\xfe\xe2\x0f\x17e\x0f=;\x81\xa5r\\" +
-	":!K\x12\xfd\xaa\x91\xc8\xd0#M\xfb\xbe\xf1\xd7\x9b" +
-	"_>P2\x14\xdd\\\x94\\T\xd6K\x84J\x00j" +
-	"Y\x94\\\xcd\xdd\xd2 \xca\xfb\xdc\xed\x1er\xb5\x85\xa3" +
-	"\xea\x9c\x8d\xbf\xfb\xf2\xe1\x08\x0e\xfb\xa47\x11b\xce\xb2" +
-	"\xaf^1X\xb9\xfe\xc8\x91\xe8A\xf7KnD\xf6\xbb" +
-	"K\xff\xf6\xddc\xb7\x1e\xcfg\xff\xe4\xe6\x92\x1f\xb3C" +
-	"\xd2B\x01P~W\xa2,\xafk\xa8\xe9\x9c{\xb0\xe7" +
-	"\x98\x07\xa5\xb7\xc5\xf3\xa7.\"\x85\xa3\xa7\xd2\x16\x17\\" +
-	"\xd5\xceW-\xb8\xf4\x18H\xf5l\xcc5\x88\xcb\x0bQ" +
-	"\x9e)\xd3\x02I\xbe\x1e\xe5\xb3Ru\x00\xce-\xd7v" +
-	",\xff\xc2\xdc'ODM\x9a\x93\xa2\xb4\x92\x9bR\xb4" +
-	"\xdf\x9a\x05\xc7\xbfr\xc6-\xbf=Q\x16HWqi" +
-	"\xaa\x11\xe5\xd5)r\xfd2R~g\xf1\xb7\x0f\xd4'" +
-	"\xeb\xdf/\x0bS\x85\x9bA\xa9A\x94\xb7\x91n\xcb\xcd" +
-	"\xa9\xa7(\x99\xbe\xf9\xfa\x95\xc3\xaf\\\xf7\xde?\xca\x11" +
-	"u\xb7\xde4\xab\x17\xe5\x9d\xb3h\xebm\xb3\x08\xff;" +
-	"W\xfce\xc3\xf1\x9d\xb3>\x18\xe7Ws\xdd \xca\x9d" +
-	"u\xa4\xd9^w\xbd|/\xfdr^\x12\xefk\xee\xd8" +
-	"\xf0\xec\x87\x91\x8c\xdfZ\xd7M\x19\x7f\x87x\xcf\x91\x8d" +
-	"\xbf\xbf\xf2\xa3\xa8\xc3[\xea\xde$\x87\xef\xae#\x87\xd7" +
-	"\xbds\xf7\xc5\xb7\xaez\xf0\xe3\x08|\xfb\xebFi\xa9" +
-	"]\xd4u\x9e3\x0b\xb1\xccy\xfe\xcf\xcc\xb9\x19\xb5\xa0" +
-	"\x17\x16\xb6\x17\xed\x01\xae\xdbZF\xb5y/o\xb5\x0a" +
-	"\x86n\xf1\x1eD\xa5\x96\xc5\x00b\x08 \xa9\x83\x00\xca" +
-	"U\x0c\x95\x9c\x80\x12b\x8a\x00\x964\x12\x0e0Tl" +
-	"\x01%AHQ\xc9\x90\xae\x9e\x0b\xa0\xe4\x18*\xc3\x02" +
-	"\"K!\x03\x90\x8a\xdb\x01\x94a\x86\xcaf\x01\x9d\x02" +
-	"7\xf3\xaa\xceuH\xda\x9d\xa6\x89\xd5 `5\xa0c" +
-	"r\xdb\x1cQ\xfbr\x90\xe4\x11\xb18x\x8d\x8d5 " +
-	"`\x0d\xa03`\x14Mk\xa5n\xa3\x96\xeb\xe5kL" +
-	"n\xe1\x00V\x80\x80\x15\x80\x81{l\xbc{\x17\xe54" +
-	"\xae\xdb\xc9.}\x8dQ\xe6T\xf7DNu\x97\x9c\xda" +
-	"\x1cqj\xd3\"\x00e\x1dC\xe5\x06\x01%V\xf2j" +
-	"K#\xf5\x05\x86\xcaM\x02:\x19\xf7\x90\xae,\x00\x04" +
-	"\xf6\xae\xe1\xaa]4\xb9E\xb2S\x00{\x18\xban\x9d" +
-	"\x02\xb8a\x88\x9b\x96f\xe8\xbe\x9bI\xd5\xcc\x0c\x04\xa1" +
-	"\x98\x04\xaa\xcea\xcd\xb25\xbd\x7f\x85+o\xed1r" +
-	"Zf\x84\xbc\xaav\xed<}!\x00\xa24\xf3r\x00" +
-	"\x14$i\x11@\xab\xd6\xaf\x1b&w\xb2\x9a\x951t" +
-	"\x9d\x03\xcb\xd8\x1b\xfa\xd4\x9c\xaagxpP\xc5\xf8\x83" +
-	"\xbc\x03\xd2\xdc\x1c\xe2\xe6\xb9j$A\xe6\xf5\xa8\xa6\xca" +
-	"\xf2\x96R\x1d\xc4\xb1\xf3r\x00\xa5\x83\xa1\xd2\x13\x89\xe3" +
-	"R\x8a\xe3\x12\x86\xca\xa5\x918\xae\xa48\xf60TV" +
-	"\x09\xe8\x18\xa6\xd6\xaf\xe9\x17q`f\x14c\xcb\xd6\xd5" +
-	"<\xa7\x98\x95\xe2\xb1\xc1(\xd8\x9a\xa1[X\x1b\xd6Q" +
-	"@\xac\x9d\x1cu\xcf\x81$\xe56\xc5'\x11X{\x16" +
-	"Y\xfb\xff\x0c\x95\xcfE\xacm\xa6T>\x9f\xa1r\xa1" +
-	"\x80\x8e\x9a\xc9\x18E\xdd^\x01L\xed/\x03%\xcd!" +
-	"\x991yh\xaf\x7fl|\x82\xbc\xa3xg\xc8\xf4^" +
-	"\xee\xdd\xa9sMn\x89\xc5\x9cM\xd6T;\x8eg\xce" +
-	"|\x00e\x1eC\xe5|\x01k\xf0c\xc7\xb3\xa7i{" +
-	"hO\x037M\xc3\xc4\xda\xb0\xe6\x94\xbc\xcf\x94\x0e@" +
-	"C\xef\xe0\xb6\xaa\xe5\x90b\x14\xb4\xb9\xb2\x18M\x05r" +
-	"Q7y\xbff\xd9\xdc\xf4\xc4\xf3Z\x09\xe9\xbc\xa5\xc4" +
-	"\x82\xd0\xd5\xec\x02Pj\x19*\xa7\x09\xe8\xf4\x9bj\x86" +
-	"\xf7p\x135#\xbbL\xd5\x8d4\xe3\x19\x8c\x83\x80\xf1" +
-	"\xc8\xa1\xa7\x9c\xec\xa1\xbd\xdc*\xe6l\x0b\x82U\x93\xaf" +
-	"7y)\x08\xa5\xe5=\x0d\x9e\xcd\xa9\xc0\xe6\xf5s\xc3" +
-	"\xda\x13\xc0\xbd\xa9/\xbc\xbaArn\xa5\xc4\xb8\x81\xa1" +
-	"\xb2#r\xc9\xb7Q\x1a\xdf\xc6P\xb9G@)\x16K" +
-	"a\x0c@\xba\x9b\xd2x\x07Ce\x8f0\xb6B\xf1!" +
-	"\xae\xdb\x1dZ?\x88\xdc\x0a\xa5db\x87\xd6\xcf\x81Y" +
-	"\x9f5\xd1\x13S\xc4\xc3\xe8\xb3\x8c\x1c\xb7y\x07\xcf\xe4" +
-	"TS\xb5\xb5!\xee}/%\xa3\x0f\xead\x1b\xf6\xba" +
-	"\x88\xd0bC\x1f\x07S\x98\xd4%\xa8\xd0\x9a\xac^\x85" +
-	"\xea\xcb\x0b\xb6&\x1a\xbaE\x971\x82\xce\xc2\x89\xd01" +
-	"Ct\xd0\x07g4\x0a\x0e\x96\xc0\xd9\x15\xe2 \xc5\x04" +
-	"\x0f\x9c\xdd{\x01\x94=\x0c\x95\x07\x05l\xf5\xca2\xd6" +
-	"\x86l\xbc\x14P\xaf\xf8,1\xa0!\xa3\xe6\xba\x0a\x01" +
-	",&/\xe4\xd4\x0c\xef\xc4R\xa1\x05D\x10\x10]\x14" +
-	"\xf3\x05\x93[\x16j\x86\xae\x14\xd5\x9c\xc6\xec\x91\xa0\xfd" +
-	"\xe8\xc5|\x8f\xc9\x8744\x8aV\xbbm\xf3\xbcX\xb0" +
-	"\xadq\xcdi\xd2\x00\xd1\x15\x16\xb5\x9cUV\xad\x1a\xc3" +
-	"\xf2\x10\x04\xa8\x89\xaa\xd59\x0c\x95\x05\x02&\x8bE-" +
-	"\x1b\x98\x9f32.n\x90\\\xa6\xe6\xf9\xb8\x8eR1" +
-	"\xe5u\x1as\x19{\xd4\xa4{\x9b\xfe\x9bJ\xfd\xe4\xfc" +
-	"\x85\\\x07\xb7\x1f\x86&S\x01hc\xa8,\x89\x98\xdc" +
-	"5?\xe2\x87o\xf2\xd2\xbe\xd0\x0f\xf1\xeb|\xc4\xb7\xaa" +
-	"\x81\xe7\xa9\xb8\xfa\xc1,9\xd3\x0e\xe2%\xa1\xced\xf6" +
-	"E/\xd4\xf2B\x83\xeb!\xd9\xb8\xc0\xb7Q\x1e\xc1n" +
-	"\x80\xf402Lo\xc6\xd0Ly\x13.\x02H\xaf#" +
-	"\xf9\x0d\x18Z*o\xc1z\x80\xf4F\x92\xdf\x84\x01\xcf" +
-	"\x92\xb7\xe2\x03\x00\xe9\x9bH|\x17\xa9\xc7\x98{%\xe4" +
-	"\x9d\xee\xf6;H\xbe\x87\xe4\xf1X\x0a\xe3\x00\xf2nl" +
-	"\x04H\xdfE\xf2GI^!\xa4\xb0\x02@\xde\x87\x83" +
-	"\x00\xe9\x87I\xfe8\xc9\xc5x\x8a\xa8\xa6\xbc\x1fM\x80" +
-	"\xf4OI\xfek\x92'f\xa70\x01 ?\xe9\xca\x9f" +
-	" \xf9s$\xaf\x9c\x93\xc2J\x00\xf9\x19\x1c\x05H?" +
-	"M\xf2\x03$\xaf\xc2\x14V\x01\xc8/\xe3.\x80\xf4\x01" +
-	"\x92\xff\x81\xe43*R8\x03@~\xc3\xb5\xe7 \xc9" +
-	"\xdf\"yu,\x85\xd5\x00\xf2\x1fq/@\xfa-\x92" +
-	"\xff\x9d\xe45b\x0ak\x00\xe4\xb7]\xbf\x8e\x93<!" +
-	"\x94\x910?\xa3\xca\x98\x163\xac\x002^\xba\xe3\xe8" +
-	"\xa5{\x8f\x91$6\x85\xc9\xf05\x0e\x88I@\xa7`" +
-	"\x18\xb9ec35i\xab\xfd\x96\xcf\xeaj\xc3\x17\x1b" +
-	" \x09\x83\xd6\x0cIC\xef\xca\x06\x85\xa0\xbc\xea\xf8\x96" +
-	"hV{\xd16\x8a\x05h\xc8\xaa6\xcf\x065\xc7," +
-	"\xea\x8bM#\xbf\x02\xb9\x99\xd7t57E5\xaa\x04" +
-	"\x01+\xa1T\x12\xfc\xbd'/M\x9f\xccQ\x83\x8c\x16" +
-	"\xca3\xba\xa1\xb0p\x85\xda?\x9d:5?\xa4ZI" +
-	"=R\x90\x1a\x86\xd4\\\xf1\xd3\x94\xa7\xb1\xdd\xbe\xb7\xd5" +
-	"c\x0bQ\x8aB\x0d%\xc1PI\x09\xd8jz\x1d\xaa" +
-	"\xd6\x7f\xdaM]J\xc6r\xb6\xa4\xff\x10r\xf7\xc7\xc8" +
-	"\xb8\x84\xce\x11J\xfbO\xdb\xfc~n{\xbf\xe8)B" +
-	"<Z\x8cv\xe2\x93[\xdd\xcb\xad\xe4t\\\x0f\x9f\xc0" +
-	"e\xce\x8b\xd3j\xfc\x13\xb4}\x9f\x16F\xdeQ\x84\xfd" +
-	"*\x86\xca@\x04{NM!\xcbP)\x84M<\xdf" +
-	"\x1b\xbe\x0d%&\x94\x1e\x87\xd4(\x0a\x0c\x95u\x02&" +
-	"\xe9\xa5\x81\xb5\xe1\x0ck\x8c\xd1c_W\x94\x0a]z" +
-	"\x96\x03\x0e\xfb\xd9\x1ci\x1f\xc1lhj\x025=\xb7" +
-	"}b:e\xc0\x83y\xcbt\xdf(\xad\xde\xa1\x94g" +
-	"\xb3Y\x1c \x98=\xa1?\xdf\x90\xf6\xad\x05A\xfa\xbe" +
-	"\x88\xe1|\x06\xfdq\x8c\xb4\xdb\x04A\xda)\xa2\x10\x0c" +
-	"\xe8\xd0\x1f\xc4I[o\x04A\xda\"\"\x0b\xe6k\xe8" +
-	"O\x08\x9aG\xaa\x10\x04i\xbd\x88\xb1`\xa6\x88\xfe|" +
-	"A\xbaz\x10\x04I\x131\x1e\x8c\xee\xd0\x1f4I\xab" +
-	"GA\x90V\x8a\x8e\x1f$h\xf5\xfchC\xc7\xcfQ" +
-	"hp\xb3\xb4\x0d\x1d\x9f9\xa2O*\x00\xda\xd0\xf1i" +
-	"*\xfb$\x9e\xeaj\xf9\xcfNH\xd2\xc3\xb3\x8d\xc8\x99" +
-	"w\xff\xb1T\x00\xa0\x0d\x95\x18F\xc6+\x00\x9f\x96\xea" +
-	"\xf4\xf2\x86\xcfRJ&\x00\xd7;'\x18;D\xf6%" +
-	"\xf6V\xcdP\x99-LI\xd8b\x9f\xe4\x85\x9f\xb4I" +
-	"ZL\xfb\xffo\xb0\xff\xcbDx\x9ec\xa8\x1c\x8c\\" +
-	"\xc7WI\xf8\x12C\xe5p\x84\xf0\x1c\xa2;z\x90\xa1" +
-	"\xf2~8\xaby\xf7F\x00\xe5}\x86\xbd\x11\x02!\xfd" +
-	"\x8b\x14?\xa26\xeb\xd2\x07\xf4\xe8C\x1c\xb7\x03\xa4\x13" +
-	"\xd4~S.}\x88y\xf4A\xc2>\x80t-\xc9O" +
-	"\x8b\xd2\x879x9@z6\xc9\xe7\xa1\x80\"\x8f\xcc" +
-	"y\x8afH\xb0rF\xff\x12M\x9f\xb0'\xf9\xc3#" +
-	"\xb4\x17\xabZ\xaehr\x08[b\xa9HtD\xba\xb4" +
-	"7Uj_C\xe9\x97\xa6\xe4\xc9\xa2\x85\"\x08(\x9e" +
-	"\xdccmZ\x1d\xa3\xd34\x0d4\xcb\xc8\xe7\xfc\x90|" +
-	"\x06\xdc\x938\xf4\xc5\x0c\x95\x15\x04E\x9b\x07\x85\xd2\x17" +
-	"\xd2\xe5\x86\x8cZ\xb4\xf88\x1f\x80q3x`[\x03" +
-	"F1\x97\xed\xe5 \xda\xe6HY\x08\xa6$\xa1i\x9e" +
-	"\xf4+N\xc2\xad8\xfe\xe8\x16\xfd\x09\xad\xd4\xbc\x0b\x04" +
-	"\xa9\x89*\x8e?\x8dD\x7f\x10/\xfd\xdf\x03 H\xa7" +
-	"\x87\x05\x00\xfd\x180C\x1f{\xe5\xbd\x0fn\x8e\xb6a" +
-	"\x0f\xe2\x7f\xe2\xd9\xe9\xb5\x9f\x93\xb8\xe9c\xa6WT\xc6" +
-	"\xc5\xe9\xf4\xcd\xe0\xcf\x9e\xb2\x9b^\xf9Y_\xe0~#" +
-	"\xf9w\x00\x00\x00\xff\xffH\xa22\xa3"
+type RegisterUdpSessionResponse struct{ capnp.Struct }
+
+// RegisterUdpSessionResponse_TypeID is the unique identifier for the type RegisterUdpSessionResponse.
+const RegisterUdpSessionResponse_TypeID = 0xab6d5210c1f26687
+
+func NewRegisterUdpSessionResponse(s *capnp.Segment) (RegisterUdpSessionResponse, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return RegisterUdpSessionResponse{st}, err
+}
+
+func NewRootRegisterUdpSessionResponse(s *capnp.Segment) (RegisterUdpSessionResponse, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return RegisterUdpSessionResponse{st}, err
+}
+
+func ReadRootRegisterUdpSessionResponse(msg *capnp.Message) (RegisterUdpSessionResponse, error) {
+	root, err := msg.RootPtr()
+	return RegisterUdpSessionResponse{root.Struct()}, err
+}
+
+func (s RegisterUdpSessionResponse) String() string {
+	str, _ := text.Marshal(0xab6d5210c1f26687, s.Struct)
+	return str
+}
+
+func (s RegisterUdpSessionResponse) Err() (string, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.Text(), err
+}
+
+func (s RegisterUdpSessionResponse) HasErr() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s RegisterUdpSessionResponse) ErrBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.TextBytes(), err
+}
+
+func (s RegisterUdpSessionResponse) SetErr(v string) error {
+	return s.Struct.SetText(0, v)
+}
+
+// RegisterUdpSessionResponse_List is a list of RegisterUdpSessionResponse.
+type RegisterUdpSessionResponse_List struct{ capnp.List }
+
+// NewRegisterUdpSessionResponse creates a new list of RegisterUdpSessionResponse.
+func NewRegisterUdpSessionResponse_List(s *capnp.Segment, sz int32) (RegisterUdpSessionResponse_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
+	return RegisterUdpSessionResponse_List{l}, err
+}
+
+func (s RegisterUdpSessionResponse_List) At(i int) RegisterUdpSessionResponse {
+	return RegisterUdpSessionResponse{s.List.Struct(i)}
+}
+
+func (s RegisterUdpSessionResponse_List) Set(i int, v RegisterUdpSessionResponse) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegisterUdpSessionResponse_List) String() string {
+	str, _ := text.MarshalList(0xab6d5210c1f26687, s.List)
+	return str
+}
+
+// RegisterUdpSessionResponse_Promise is a wrapper for a RegisterUdpSessionResponse promised by a client call.
+type RegisterUdpSessionResponse_Promise struct{ *capnp.Pipeline }
+
+func (p RegisterUdpSessionResponse_Promise) Struct() (RegisterUdpSessionResponse, error) {
+	s, err := p.Pipeline.Struct()
+	return RegisterUdpSessionResponse{s}, err
+}
+
+type SessionManager struct{ Client capnp.Client }
+
+// SessionManager_TypeID is the unique identifier for the type SessionManager.
+const SessionManager_TypeID = 0x839445a59fb01686
+
+func (c SessionManager) RegisterUdpSession(ctx context.Context, params func(SessionManager_registerUdpSession_Params) error, opts ...capnp.CallOption) SessionManager_registerUdpSession_Results_Promise {
+	if c.Client == nil {
+		return SessionManager_registerUdpSession_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0x839445a59fb01686,
+			MethodID:      0,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:SessionManager",
+			MethodName:    "registerUdpSession",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 16, PointerCount: 2}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(SessionManager_registerUdpSession_Params{Struct: s}) }
+	}
+	return SessionManager_registerUdpSession_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
+func (c SessionManager) UnregisterUdpSession(ctx context.Context, params func(SessionManager_unregisterUdpSession_Params) error, opts ...capnp.CallOption) SessionManager_unregisterUdpSession_Results_Promise {
+	if c.Client == nil {
+		return SessionManager_unregisterUdpSession_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0x839445a59fb01686,
+			MethodID:      1,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:SessionManager",
+			MethodName:    "unregisterUdpSession",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 2}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(SessionManager_unregisterUdpSession_Params{Struct: s}) }
+	}
+	return SessionManager_unregisterUdpSession_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
+
+type SessionManager_Server interface {
+	RegisterUdpSession(SessionManager_registerUdpSession) error
+
+	UnregisterUdpSession(SessionManager_unregisterUdpSession) error
+}
+
+func SessionManager_ServerToClient(s SessionManager_Server) SessionManager {
+	c, _ := s.(server.Closer)
+	return SessionManager{Client: server.New(SessionManager_Methods(nil, s), c)}
+}
+
+func SessionManager_Methods(methods []server.Method, s SessionManager_Server) []server.Method {
+	if cap(methods) == 0 {
+		methods = make([]server.Method, 0, 2)
+	}
+
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0x839445a59fb01686,
+			MethodID:      0,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:SessionManager",
+			MethodName:    "registerUdpSession",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := SessionManager_registerUdpSession{c, opts, SessionManager_registerUdpSession_Params{Struct: p}, SessionManager_registerUdpSession_Results{Struct: r}}
+			return s.RegisterUdpSession(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
+	})
+
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0x839445a59fb01686,
+			MethodID:      1,
+			InterfaceName: "tunnelrpc/tunnelrpc.capnp:SessionManager",
+			MethodName:    "unregisterUdpSession",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := SessionManager_unregisterUdpSession{c, opts, SessionManager_unregisterUdpSession_Params{Struct: p}, SessionManager_unregisterUdpSession_Results{Struct: r}}
+			return s.UnregisterUdpSession(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 0},
+	})
+
+	return methods
+}
+
+// SessionManager_registerUdpSession holds the arguments for a server call to SessionManager.registerUdpSession.
+type SessionManager_registerUdpSession struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  SessionManager_registerUdpSession_Params
+	Results SessionManager_registerUdpSession_Results
+}
+
+// SessionManager_unregisterUdpSession holds the arguments for a server call to SessionManager.unregisterUdpSession.
+type SessionManager_unregisterUdpSession struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  SessionManager_unregisterUdpSession_Params
+	Results SessionManager_unregisterUdpSession_Results
+}
+
+type SessionManager_registerUdpSession_Params struct{ capnp.Struct }
+
+// SessionManager_registerUdpSession_Params_TypeID is the unique identifier for the type SessionManager_registerUdpSession_Params.
+const SessionManager_registerUdpSession_Params_TypeID = 0x904e297b87fbecea
+
+func NewSessionManager_registerUdpSession_Params(s *capnp.Segment) (SessionManager_registerUdpSession_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 2})
+	return SessionManager_registerUdpSession_Params{st}, err
+}
+
+func NewRootSessionManager_registerUdpSession_Params(s *capnp.Segment) (SessionManager_registerUdpSession_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 2})
+	return SessionManager_registerUdpSession_Params{st}, err
+}
+
+func ReadRootSessionManager_registerUdpSession_Params(msg *capnp.Message) (SessionManager_registerUdpSession_Params, error) {
+	root, err := msg.RootPtr()
+	return SessionManager_registerUdpSession_Params{root.Struct()}, err
+}
+
+func (s SessionManager_registerUdpSession_Params) String() string {
+	str, _ := text.Marshal(0x904e297b87fbecea, s.Struct)
+	return str
+}
+
+func (s SessionManager_registerUdpSession_Params) SessionId() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s SessionManager_registerUdpSession_Params) HasSessionId() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s SessionManager_registerUdpSession_Params) SetSessionId(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+func (s SessionManager_registerUdpSession_Params) DstIp() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return []byte(p.Data()), err
+}
+
+func (s SessionManager_registerUdpSession_Params) HasDstIp() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s SessionManager_registerUdpSession_Params) SetDstIp(v []byte) error {
+	return s.Struct.SetData(1, v)
+}
+
+func (s SessionManager_registerUdpSession_Params) DstPort() uint16 {
+	return s.Struct.Uint16(0)
+}
+
+func (s SessionManager_registerUdpSession_Params) SetDstPort(v uint16) {
+	s.Struct.SetUint16(0, v)
+}
+
+func (s SessionManager_registerUdpSession_Params) CloseAfterIdleHint() int64 {
+	return int64(s.Struct.Uint64(8))
+}
+
+func (s SessionManager_registerUdpSession_Params) SetCloseAfterIdleHint(v int64) {
+	s.Struct.SetUint64(8, uint64(v))
+}
+
+// SessionManager_registerUdpSession_Params_List is a list of SessionManager_registerUdpSession_Params.
+type SessionManager_registerUdpSession_Params_List struct{ capnp.List }
+
+// NewSessionManager_registerUdpSession_Params creates a new list of SessionManager_registerUdpSession_Params.
+func NewSessionManager_registerUdpSession_Params_List(s *capnp.Segment, sz int32) (SessionManager_registerUdpSession_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 16, PointerCount: 2}, sz)
+	return SessionManager_registerUdpSession_Params_List{l}, err
+}
+
+func (s SessionManager_registerUdpSession_Params_List) At(i int) SessionManager_registerUdpSession_Params {
+	return SessionManager_registerUdpSession_Params{s.List.Struct(i)}
+}
+
+func (s SessionManager_registerUdpSession_Params_List) Set(i int, v SessionManager_registerUdpSession_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s SessionManager_registerUdpSession_Params_List) String() string {
+	str, _ := text.MarshalList(0x904e297b87fbecea, s.List)
+	return str
+}
+
+// SessionManager_registerUdpSession_Params_Promise is a wrapper for a SessionManager_registerUdpSession_Params promised by a client call.
+type SessionManager_registerUdpSession_Params_Promise struct{ *capnp.Pipeline }
+
+func (p SessionManager_registerUdpSession_Params_Promise) Struct() (SessionManager_registerUdpSession_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return SessionManager_registerUdpSession_Params{s}, err
+}
+
+type SessionManager_registerUdpSession_Results struct{ capnp.Struct }
+
+// SessionManager_registerUdpSession_Results_TypeID is the unique identifier for the type SessionManager_registerUdpSession_Results.
+const SessionManager_registerUdpSession_Results_TypeID = 0x8635c6b4f45bf5cd
+
+func NewSessionManager_registerUdpSession_Results(s *capnp.Segment) (SessionManager_registerUdpSession_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return SessionManager_registerUdpSession_Results{st}, err
+}
+
+func NewRootSessionManager_registerUdpSession_Results(s *capnp.Segment) (SessionManager_registerUdpSession_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return SessionManager_registerUdpSession_Results{st}, err
+}
+
+func ReadRootSessionManager_registerUdpSession_Results(msg *capnp.Message) (SessionManager_registerUdpSession_Results, error) {
+	root, err := msg.RootPtr()
+	return SessionManager_registerUdpSession_Results{root.Struct()}, err
+}
+
+func (s SessionManager_registerUdpSession_Results) String() string {
+	str, _ := text.Marshal(0x8635c6b4f45bf5cd, s.Struct)
+	return str
+}
+
+func (s SessionManager_registerUdpSession_Results) Result() (RegisterUdpSessionResponse, error) {
+	p, err := s.Struct.Ptr(0)
+	return RegisterUdpSessionResponse{Struct: p.Struct()}, err
+}
+
+func (s SessionManager_registerUdpSession_Results) HasResult() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s SessionManager_registerUdpSession_Results) SetResult(v RegisterUdpSessionResponse) error {
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewResult sets the result field to a newly
+// allocated RegisterUdpSessionResponse struct, preferring placement in s's segment.
+func (s SessionManager_registerUdpSession_Results) NewResult() (RegisterUdpSessionResponse, error) {
+	ss, err := NewRegisterUdpSessionResponse(s.Struct.Segment())
+	if err != nil {
+		return RegisterUdpSessionResponse{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// SessionManager_registerUdpSession_Results_List is a list of SessionManager_registerUdpSession_Results.
+type SessionManager_registerUdpSession_Results_List struct{ capnp.List }
+
+// NewSessionManager_registerUdpSession_Results creates a new list of SessionManager_registerUdpSession_Results.
+func NewSessionManager_registerUdpSession_Results_List(s *capnp.Segment, sz int32) (SessionManager_registerUdpSession_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
+	return SessionManager_registerUdpSession_Results_List{l}, err
+}
+
+func (s SessionManager_registerUdpSession_Results_List) At(i int) SessionManager_registerUdpSession_Results {
+	return SessionManager_registerUdpSession_Results{s.List.Struct(i)}
+}
+
+func (s SessionManager_registerUdpSession_Results_List) Set(i int, v SessionManager_registerUdpSession_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s SessionManager_registerUdpSession_Results_List) String() string {
+	str, _ := text.MarshalList(0x8635c6b4f45bf5cd, s.List)
+	return str
+}
+
+// SessionManager_registerUdpSession_Results_Promise is a wrapper for a SessionManager_registerUdpSession_Results promised by a client call.
+type SessionManager_registerUdpSession_Results_Promise struct{ *capnp.Pipeline }
+
+func (p SessionManager_registerUdpSession_Results_Promise) Struct() (SessionManager_registerUdpSession_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return SessionManager_registerUdpSession_Results{s}, err
+}
+
+func (p SessionManager_registerUdpSession_Results_Promise) Result() RegisterUdpSessionResponse_Promise {
+	return RegisterUdpSessionResponse_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+type SessionManager_unregisterUdpSession_Params struct{ capnp.Struct }
+
+// SessionManager_unregisterUdpSession_Params_TypeID is the unique identifier for the type SessionManager_unregisterUdpSession_Params.
+const SessionManager_unregisterUdpSession_Params_TypeID = 0x96b74375ce9b0ef6
+
+func NewSessionManager_unregisterUdpSession_Params(s *capnp.Segment) (SessionManager_unregisterUdpSession_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
+	return SessionManager_unregisterUdpSession_Params{st}, err
+}
+
+func NewRootSessionManager_unregisterUdpSession_Params(s *capnp.Segment) (SessionManager_unregisterUdpSession_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
+	return SessionManager_unregisterUdpSession_Params{st}, err
+}
+
+func ReadRootSessionManager_unregisterUdpSession_Params(msg *capnp.Message) (SessionManager_unregisterUdpSession_Params, error) {
+	root, err := msg.RootPtr()
+	return SessionManager_unregisterUdpSession_Params{root.Struct()}, err
+}
+
+func (s SessionManager_unregisterUdpSession_Params) String() string {
+	str, _ := text.Marshal(0x96b74375ce9b0ef6, s.Struct)
+	return str
+}
+
+func (s SessionManager_unregisterUdpSession_Params) SessionId() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s SessionManager_unregisterUdpSession_Params) HasSessionId() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s SessionManager_unregisterUdpSession_Params) SetSessionId(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+func (s SessionManager_unregisterUdpSession_Params) Message() (string, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.Text(), err
+}
+
+func (s SessionManager_unregisterUdpSession_Params) HasMessage() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s SessionManager_unregisterUdpSession_Params) MessageBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.TextBytes(), err
+}
+
+func (s SessionManager_unregisterUdpSession_Params) SetMessage(v string) error {
+	return s.Struct.SetText(1, v)
+}
+
+// SessionManager_unregisterUdpSession_Params_List is a list of SessionManager_unregisterUdpSession_Params.
+type SessionManager_unregisterUdpSession_Params_List struct{ capnp.List }
+
+// NewSessionManager_unregisterUdpSession_Params creates a new list of SessionManager_unregisterUdpSession_Params.
+func NewSessionManager_unregisterUdpSession_Params_List(s *capnp.Segment, sz int32) (SessionManager_unregisterUdpSession_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2}, sz)
+	return SessionManager_unregisterUdpSession_Params_List{l}, err
+}
+
+func (s SessionManager_unregisterUdpSession_Params_List) At(i int) SessionManager_unregisterUdpSession_Params {
+	return SessionManager_unregisterUdpSession_Params{s.List.Struct(i)}
+}
+
+func (s SessionManager_unregisterUdpSession_Params_List) Set(i int, v SessionManager_unregisterUdpSession_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s SessionManager_unregisterUdpSession_Params_List) String() string {
+	str, _ := text.MarshalList(0x96b74375ce9b0ef6, s.List)
+	return str
+}
+
+// SessionManager_unregisterUdpSession_Params_Promise is a wrapper for a SessionManager_unregisterUdpSession_Params promised by a client call.
+type SessionManager_unregisterUdpSession_Params_Promise struct{ *capnp.Pipeline }
+
+func (p SessionManager_unregisterUdpSession_Params_Promise) Struct() (SessionManager_unregisterUdpSession_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return SessionManager_unregisterUdpSession_Params{s}, err
+}
+
+type SessionManager_unregisterUdpSession_Results struct{ capnp.Struct }
+
+// SessionManager_unregisterUdpSession_Results_TypeID is the unique identifier for the type SessionManager_unregisterUdpSession_Results.
+const SessionManager_unregisterUdpSession_Results_TypeID = 0xf24ec4ab5891b676
+
+func NewSessionManager_unregisterUdpSession_Results(s *capnp.Segment) (SessionManager_unregisterUdpSession_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return SessionManager_unregisterUdpSession_Results{st}, err
+}
+
+func NewRootSessionManager_unregisterUdpSession_Results(s *capnp.Segment) (SessionManager_unregisterUdpSession_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return SessionManager_unregisterUdpSession_Results{st}, err
+}
+
+func ReadRootSessionManager_unregisterUdpSession_Results(msg *capnp.Message) (SessionManager_unregisterUdpSession_Results, error) {
+	root, err := msg.RootPtr()
+	return SessionManager_unregisterUdpSession_Results{root.Struct()}, err
+}
+
+func (s SessionManager_unregisterUdpSession_Results) String() string {
+	str, _ := text.Marshal(0xf24ec4ab5891b676, s.Struct)
+	return str
+}
+
+// SessionManager_unregisterUdpSession_Results_List is a list of SessionManager_unregisterUdpSession_Results.
+type SessionManager_unregisterUdpSession_Results_List struct{ capnp.List }
+
+// NewSessionManager_unregisterUdpSession_Results creates a new list of SessionManager_unregisterUdpSession_Results.
+func NewSessionManager_unregisterUdpSession_Results_List(s *capnp.Segment, sz int32) (SessionManager_unregisterUdpSession_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
+	return SessionManager_unregisterUdpSession_Results_List{l}, err
+}
+
+func (s SessionManager_unregisterUdpSession_Results_List) At(i int) SessionManager_unregisterUdpSession_Results {
+	return SessionManager_unregisterUdpSession_Results{s.List.Struct(i)}
+}
+
+func (s SessionManager_unregisterUdpSession_Results_List) Set(i int, v SessionManager_unregisterUdpSession_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s SessionManager_unregisterUdpSession_Results_List) String() string {
+	str, _ := text.MarshalList(0xf24ec4ab5891b676, s.List)
+	return str
+}
+
+// SessionManager_unregisterUdpSession_Results_Promise is a wrapper for a SessionManager_unregisterUdpSession_Results promised by a client call.
+type SessionManager_unregisterUdpSession_Results_Promise struct{ *capnp.Pipeline }
+
+func (p SessionManager_unregisterUdpSession_Results_Promise) Struct() (SessionManager_unregisterUdpSession_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return SessionManager_unregisterUdpSession_Results{s}, err
+}
+
+const schema_db8274f9144abc7e = "x\xda\xccY}p\x14e\x9a\x7f\x9e\xee\x99t\x02\x19" +
+	"f\xbaz 0%\x97\x93\xc2\xf2\x88\x82\x06\xce+\x8e" +
+	"\xb3.\x09\x06\xceD>\xd23p\xe5\x09Zvf\xde" +
+	"\x84\xc9\xcdt\x0f\xdd=\x91 \xc8\x87 b\xf9\x05\x82" +
+	"\"\xca\xc9ayW\xa0\xde\xc1\xa9\xe7\xb2%\xb5\xb2+" +
+	"*\xa5\xa8X\xb0\x85\x8a\xb5\x8b\xc8\xeeJ\xc1\xba\"\xac" +
+	"\xe5\xaeko=\xdd\xd3\x1f\x99\x84$\xc8\xfe\xb1\xffM" +
+	"\x9e~\xde\xf7}>~\xcf\xef}\xde'\xd7wT6" +
+	"r\xf5\xe1\x9a\x08\x80\xbc%\\a\xb1\xba\x0f\x97n\xbf" +
+	"\xeag\xabAN Z\xf7\xbc\xd6\x1a\xff\xd6\\\xfd\x09" +
+	"\x84y\x01`\xca\xe2\x8a\xa5(\xad\xad\x10\x00\xa4U\x15" +
+	"\xbf\x06\xb4\xee\x1b\xb5\xfb\x99\xe7fl\xba\x17\xc4\x04\xef" +
+	"+\x03NaB+J=\x02i\x16\x85u\xd2Q\xfa" +
+	"e\xdd\"^\xb7 \xfe\xc1{\xa4\x1d\xdc:D[\xef" +
+	"\x13\xeaP:d/8(\xd0\xd67\xe6\xdf\xdf\xf1\x0f" +
+	"\x9b\xdfY\x03b\x82\xeb\xb5\xf5+\x95KQ:XI" +
+	"\x9a\x07*\xe7\x02Z_o\x1a\xfd\xfc\x7f\xbe\xf7\xf6Z" +
+	"\x10\xafF(Y\xfai\xe5\xc7\x08(}U\xf9\xbf\x80" +
+	"\xd6\xa1\x0b\x0b\xce\xbf\xfc\xe6\x0d\xf7\x818\x81\x14\x90\x14" +
+	"6T\x8d\xe3\x00\xa5\x9dU\x0d\x80\xd6\xe93\x7f\\w" +
+	"\xf7\x849\x8f\x82<\x019\x800G\x1a\x07\xab\x12\xa4" +
+	"q\xa2\x8a\xaci\x98yhob\xca\xe3\x9b\xcaL\xb7" +
+	"\x15\xf7\x0f\xabC\xe9\xf002\xe8\xd0\xb0\xbb\x00\xad\xdf" +
+	"\x8fx\xea\xbd\xe2M\xaf>^:\xcfV\xaa\x1f^G" +
+	"\xbb\xb5\x0c'\x85q\xddW\xdd\xf9\xd3\x03/=\x01\xf2" +
+	"DD\xebx\xfb5G\xf9m\xbb>\x81\xf9(\xd0\xf1" +
+	"Sv\x0e\xdfA\xc6\xef\xb5u\xdf\xbf\xf6\xb5\x1f?\xfa" +
+	"\xd2\xba\xa7@\xbe\x1a\x11\xc0\x0e\xd6\xd8\xea?\x90B}" +
+	"5\x19\xbf\xe9\xd8\xbe9\xf9\x0d[w8\xee\xdb\xdf\xff" +
+	"\xad\x9a\xe3 d\xadi\xf9&?\xff\xd9\xd4\xb3\xa5\xc0" +
+	"\x84\xe9\xd3\xec\xeas\x088E\xa9\xaeE@\xeb\x86\x8f" +
+	"O\xcd\x9d\xfd\x7f\x1d\xff\x1dX\xbb<\xb2\x94\xd6\xae\xeb" +
+	"8\xb7?\x96\xcc?_\xe6\xb0\x1d\xbb\x9e\xc8.\x946" +
+	"D\xc8\xe1\x87\"d\xc2\x8b\x7fsK\xd5\x92S3w" +
+	"\x838\xd1\xdd\xe6\xc5H\x92\xb6\x09\xdd\xce\x7f\xafl\xf9" +
+	"\xc9\xcb\xe5p\xb2c\xb23\xd2\x8e\xd2>\xdag\xca\xde" +
+	"\x88m\xcf\x03\xfb\xb7^S\xf9\xcc\xd7\xaf\xf4\x17\xe6\x13" +
+	"#\xdaQ\xba0\x82N\xfdj\x04Efd\x0b\x1e\x7f" +
+	"\xbd>\xf4j0\xefr\xf44E\x86E)\xefc\xcf" +
+	"N\x8f\xa8_\xae~\xbdl7[1\x1ckEiL" +
+	"\x8cv\x1b\x19#\xe5\xd6\x05\x8fm\x0c\x9fz\xec-\xb2" +
+	"4\x00\xb80\x01m\xca\x9e\x98\x8e\xd2\x81\x98\x9d\xedX" +
+	"\x0d\x0fh%v\xff\xd3\xffL\xcf|\xf4N?\x96J" +
+	"M\xf1s\xd2\xec8\xfdj\x89\x93\xa1''\xee\xb9\xfb" +
+	"\x8b\x87\x0e\x1f)\x19j\xc7\xf0\xb9\xb8\x9d\xc2\xbdq\x8a" +
+	"\x9f\x87\x80\xb2(\xd9\x9a\x1f\xc5\xbbP:ko\xf7\x85" +
+	"\xad\xcd\x9dR\xc6\xac\xfc\xf9?\x1f\x0f$\xedl\xfc3" +
+	"\x84\x905\xe7_\x17tU-?y2x\xd0\x89\xb8" +
+	"\x1d\x91\x0b\xf6\xd2\xdf\xfe\xd7\xe9G\xce\xe43\xbf\xb2\x81" +
+	"\xe7\xc6l\xe4\xc8i\x04\xcd\x89#\x09\xe85\xb5\x91\x19" +
+	"\xe3\x8e\xb5\x9dvR\xe9lQ5j:)\\9\x8a" +
+	"\xb6\xb8\xe1\xce&\xb6p\xea\xad\xa7\xfb\x94|\xd3\xa8i" +
+	"(\xc9\xa3l\x90\x8dZ\x87\x12\xab\xa9\x01\xb0\xba\xff\x7f" +
+	"\xc3\xad\xcf\xbf1\xe7\x9cS\x0b\xb6\xb1\xf3k&\x134" +
+	"\x1e\xbe\xa7y\xee?\x8e\xdb\x7f.h\xec\xec\x1aB\xa7" +
+	"\xa4\xd4\xd0I\x1dS\xcf\xfc\xcbU\x0f\xbfy\xae?\x08" +
+	"\xae\xaa\xa9CiC\x8d\x0dAR\xfer\xe6\x7f\x1cI" +
+	"D\x13\xe7\xcb\x02Xa'\xaf\xa6\x0b\xa5\x035v\xf2" +
+	"j\xde\"\x98\xdd\xf7\xc9\x1dK>\xbc\xf7\xeb\x0b\xe5\xb9" +
+	"\xb6\xb7~eL\x12\xa5\x83cl~\x19C\xc8xb" +
+	"\xdeoV\x9c\xd9<\xea\x9b\xbe$\x97\xe8B\xa9'a" +
+	"\x93\\b\x9dt\x94~Y\x1f\x08\xcf\xd67\xafx\xe7" +
+	"\xdb@-\xecK\xb4\x92\xc3\x8f\x0bO\x9f\\\xf9\x8b;" +
+	"\xbe\x0b:\xbc7\xf1\x199|(A\x0e/\xfb\xf2\xc9" +
+	"\x9b\x1fY\xf8\xc2\xf7\xc1\xc4&V\xd3R\xb3\xa8\xaa," +
+	"\xa7\x17B\xe9\xeb\xdc\x9f\xe9Ii\xa5\xa0\x16\xa65\x15" +
+	"\xcdEL5\xb3i\xc5dI\xd6`\x144\xd5`m" +
+	"\x88r\x8c\x0f\x01\x84\x10@T\xba\x00\xe4;y\x94s" +
+	"\x1c\x8a\x88qJ\xbd\x98%\xe1\"\x1ee\x93C\x91\xe3" +
+	"\xe2\xc4<\xe2\xe2q\x00r\x8eGy\x09\x87\xc8\xc7\x91" +
+	"\x07\x10\x8b\x1b\x01\xe4%<\xcak8\xb4\x0aL\xcf+" +
+	"*S!j\xce\xd0u\xac\x06\x0e\xab\x01-\x9d\x99z" +
+	"\x8f\xd2\x9e\x83(\x0b\x88\x85\xae\xbbL\x8c\x00\x87\x11@" +
+	"k\x91V\xd4\x8d\xf9\xaa\x89\xd9\\\x92u\xe8\xcc\xc0E" +
+	"X\x01\x1cV\x00\x0e\xe4^\x8a\x19FVSg+\xaa" +
+	"\xd2\xc9t\x00\xf2\xac\x92\x0f\x03x\xa4\x8d.\xbd\x8b\xf5" +
+	"[\x81\x13'\x0a\xe830\xba\xf0\x13\xaf\xdc\x05\x9c8" +
+	"V\xb0t\xd6\x995L\xa6\xe3\xfcL\xc1\xde\x9b\xd7\xd4" +
+	"F\xb4\x8a\xaa\xf3\x01\x99\xee|\x88\xd2\xa9\x8d\xd8\x86\xbe" +
+	"u|_\xebn\xcae\x99jF[\xd4\x0e\xad,\xe4" +
+	"\xad\xfd\x85\xbc\xb5\x14\xf25\x81\x90\xaf\x9a\x0e /\xe3" +
+	"Q\xbe\x9fC\x91/\xc5|m\x1d\x80\xbc\x92G\xf9A" +
+	"\x0e\xad\xb4}HK\x06\x00\xbchv0\xc5,\xea\xcc" +
+	" \xd9\x08\xc06\x1e\xed\xa0\x8f\x00\\\xd1\xcdt\xb2\xdd" +
+	"MBT\xd1\xd3\x8b\xbcD\x0d\x10\xe9\x19K\xb2\x86\x99" +
+	"U;\xe7\xd9\xf2\x866-\x97M\xf7\x90W\xd5\xb6\x9d" +
+	"c\xa7\x01 \x8a#o\x03@N\x14\xa7\x034d;" +
+	"UMgV&k\xa45Ue\xc0\xa7\xcd\x15\xedJ" +
+	"NQ\xd3\xcc;\xa8\xa2\xefA\xce\x01)\xa6w3}" +
+	"\x92\x12\x80\xef\xf86EW\xf8\xbc!W{q\x9cq" +
+	"\x1b\x80\xdc\xcc\xa3\xdc\x16\x88\xe3l\x8a\xe3,\x1e\xe5[" +
+	"\x03q\x9cOql\xe3Q^\xc8\xa1\xa5\xe9\xd9\xce\xac" +
+	"z\x13\x03^\x0f\"\xd00U%\xcf(f\xa5x\xac" +
+	"\xd0\x0afVS\x0d\x8c\xf9\xfc\x0f\x88\xb1@\xa4\x84\xc1" +
+	"09\xc9\x85\x94\x8b(M\x1d\x9fdFQ\xc8\x99\x86" +
+	"\x1c\xf2<\x89L\x03\x90+y\x94\xe3\x1c6\xe8\xcc(" +
+	"\xe6L\x8c\xf9\xd7\xec_\xe2T7|\x01\x18&\xfb\x83" +
+	"\xe1d\x009\xc3\xa3\\\xe0\x10K\xd1\xcbO\x0f\xb0\x01" +
+	"\x8f\x0e\x0a\x17o\x05\x90M\x1e\xe5\x95\x1cZ\x86sH" +
+	"\x0b`\xc6\x8dhm\xc60[\x0a\xee_+2\x86\xd9" +
+	"\xa6\xe9&\x0a\xc0\xa1\x00\x84[\xcd`M\x1dTS-" +
+	"\x99\x1c\xbb9\xcb\xab&\x86\x81\xc30\x0cXT\x0e>" +
+	"\xa2DlN\xb5\xbb\xdeL 0\xfc\x1d\x8f\xf2\xdf\x07" +
+	"\xbc\xa9'\x1e\xbb\x9eG\xf9F\x0e-%\x9d\xd6\x8a\xaa" +
+	"9\x0fx\xa5\xb3\x0c\xf3)\x06\xd1\xb4\xce|8\x0c=" +
+	"\xd4.9\x94\x05;\xaa+y#h^\xb2?\xf3(" +
+	"\xb0\xd7\xf2(O\xed?\x86+\xf2\xcc0\x94N\xd6\xa7" +
+	"B\xc3\xfd\xb0\x0dUY\x9a\x00\x9bd\x0e\xcfO\xd2\x99" +
+	"!\x14s&YQmY\x8e\x19\x94\xde\xf1<\xca\xd7" +
+	"s\x18\xc1\xef-\xc7\x8e\x89\x1b\xfd0\xd52]\xd7t" +
+	"\x8c\xf9\xf7`\x09}\xe9\xd2\x01\xa8\xa9\xcd\xccT\xb29" +
+	"\xa4\xca\xf0\x9a\xb22\x8c\x0eV\xda~\xd8\x1c\xf1\xf8\x06" +
+	"\x02h\xbeWQ\x10\xc2b<\xcaWphu\xeaJ" +
+	"\x9a\xb51\x1d\xb3Zf\x8e\xa2j)\x9e\xa5\xfb\xe0e" +
+	"\xc4\xa5\x1e\x9a\xb4K\xcd\x00o\xd5\xc0\xebuV\x0aB" +
+	"iy[\xadcs\xdc\xb3y\xf98\xff>\xf4\xd2\xbc" +
+	"\xaa\xdd'l\x8f\x92\xd6\x13^\xef\xe7Q\xde\x14\xa0\xf6" +
+	"\x0dD^\x8f\xf2(?\xcd\xa1\x18\x0a\xc51\x04 >" +
+	"I(\xd9\xc4\xa3\xbc\x9d\xeb}k\xb2n\xa6\x9a\xcd\xd9" +
+	"N\x10\x98\xe1K\xc9\xc4\xe6l'\x03\xde\xb8\\z\xab" +
+	"\x1c$\x1eZ\xbb\xa1\xe5\x98\xc9\x9aY:\xa7\xe8\x8a\x99" +
+	"\xedf\xce\xf7\x12\x18\xdd\xa4\x0e\x84\xdbd\x9f\xea!\xfc" +
+	"F\xddF%\x00\x87q>G\x0a,\xd0_\x0c`\xad" +
+	"\xb39Y\xa6\xa9}0\xe0WL\x09\x07h\x0ct\x05" +
+	"\xfa\xeas\x0bfV\xd0T\x83\xec\x0b\xa4~Z\x7f\xa9" +
+	"\xd7\xfd\xd4\xbbt\xba~u0\xf3%:\xdd\xb0\xd5O" +
+	"\xb2\x18\xe2\x9c\xcco\xdb\x01 o\xe7Q~\x81\xc3\x06" +
+	"\xe7\xa6\xc7\x98\xffR.e\xcb\xb9\xcffiP\x9bV" +
+	"r>\xe5Z:+\xe4\x944\x9b\x81\xa5\xbb\x1b\x10\x81" +
+	"C\xb4!\x92/\xe8\xcc00\xab\xa9rQ\xc9ey" +
+	"\xb3\xc7\xeb\xb7\xd4b\xbeMg\xddY\xd4\x8aF\x93i" +
+	"\xb2\xbcP0\x8d\xa1tc~\x80\x88\x1f\x84l\xce(" +
+	"c\xe8:\x9f{\xbc\x00M\xec\xf2)0Z,f=" +
+	"\xee\xb3rZ\xda\xce\x1bD\xe7(\xf9\xbe\x14X1h" +
+	"\xad\xf6\xaat\x97\x91\xff\x9a\xba\x87\x81\x1bvr\xdd\xee" +
+	"h\x03&S\x094\xf2(\xcf\x0a\x98\xdc29\xe0\x87" +
+	"k\xf2\xecv\xdf\x0f\xe1\xdfY\x8fkU-\xcb\x13s" +
+	"\xbb\xc1,9\xd3\x04\xc2-\xbe\xce@\xf6\x05\x0bjn" +
+	"\xa1\xd6\xf6\x90l\x9c\xea\xda(\xf5`+@j\x09\xf2" +
+	"\x98Z\x83\xbe\x99\xd2*\x9c\x0e\x90ZF\xf2\xfb\xd1\xb7" +
+	"TZ\x8b\x09\x80\xd4J\x92?\x88\xde\xc3BZ\x8f\xbb" +
+	"\x00R\x0f\x92x\x0b\xa9\x87x\xbb$\xa4\xcd\xf6\xf6\x9b" +
+	"H\xbe\x9d\xe4\xe1P\x1c\xc3\x00\xd26\xac\x03Hm!" +
+	"\xf9\xcb$\xaf\xe0\xe2X\x01 \xed\xc1.\x80\xd4n\x92" +
+	"\xbfFr!\x1c\xa7\xb7\x95\xb4\x17u\x80\xd4\x8fH\xfe" +
+	"\x06\xc9+G\xc7\xb1\x12@\xdao\xcb_'\xf9\xbb$" +
+	"\xaf\x1a\x13\xc7*\x00\xe9 \xae\x06H\xbdM\xf2#$" +
+	"\x1f\x86q\x1c\x06 \x1d\xc6\xad\x00\xa9#$\xff%\xc9" +
+	"\x87W\xc4q8\x80\xf4\xa9m\xcf1\x92\x7fN\xf2\xea" +
+	"P\x1c\xab\x01\xa4\x13\xb8\x03 \xf59\xc9\x7fG\xf2\x88" +
+	"\x10\xc7\x08\x80t\xd6\xf6\xeb\x0c\xc9+\xb9\xb2\xbe\xdeE" +
+	"TY\xf3\xcek\x86\x972V\xaaqt\xe0\xde\xa6E" +
+	"\xa9A\xc7\xa8?)\x03\xc4(\xa0U\xd0\xb4\xdc\x9c\xde" +
+	"H\x8d\x9aJ\xa7\xe1>\x14b\xfe\xf0\x02\x90\x84\xde\xbd" +
+	"\x0fQMm\xc9xDP\xce:\xae%Y\xa3\xa9h" +
+	"j\xc5\x02\xd4f\x14\x93e<\xce\xd1\x8b\xeaL]\xcb" +
+	"\xcfC\xa6\xe7\xb3\xaa\x92\x1b\x84\x8d\xaa\x80\xc3*(Q" +
+	"\x82\xbb\xf7\xc0\xd4t\xf1g\x8f\x87h\xae\x1c\xd1\xb5\x85" +
+	"i\xf3\x94\xce\xa1\xf0\xd4d\xbf\x7f\x8b\xaa\x01B\xaa\xed" +
+	"Vr\xc5\x1fBO\xbd[\x89d\x83\xd3\x8a\x0c\xf6(" +
+	"pg\x19\x83SI\xef\x86\xb0\xf7\x85\x8a\x811#\x9d" +
+	"\xc3\x95\xf6\x1f\xb2\xf9\x9d\xcct~\xd1\xeb\x96\xde\x16B" +
+	"\xf0\x9a\xbf\xb4\xd5IfD\x87\xe2\xba?\xf3\x19\xfc=" +
+	"\xd4\xcf\xc5\xdf\xcf\xb5\xef\xf6\x9c\x817\x11\xe5~!\x8f" +
+	"\xf2\xa2@\xeeYk?o\xa2\xa4?\x0c\x11y\xae4" +
+	"\x0d\xa1\x8b\xa2\xc0\xa3\xbc\x8c\xc3(=^1\xe6\x0f\x87" +
+	"{\x19\xdd\xfb\xc1NPhQ3\x0cp\x89\x8b\xe6\xc0" +
+	"\xf5\xe1\x8dI\x07\xef\xce\x86\xe6\xb6\xdb\xf5\x0e\x1apo" +
+	"\xf4Xv\xf2E\xdfe\x0d\xce\xa1\x84\xb3\xd1\xf6\x1c\xc6" +
+	"\x1d\xc3\xa2;\xd0\x13\xf7,\x05N\xdc)\xa0?\xaaD" +
+	"w2)n\xd3\x81\x137\x0b\xc8y\x83mt\x07\xd8" +
+	"\xe2\xfa\x07\x80\x13\xd7\x0a\xc8{sitGb\xf5=" +
+	"\xc3\x108q\xb9\x80!o\xde\x8f\xee@M\\\xdc\x05" +
+	"\x9c\x98\x150\xec\x8d\xbc\xd1\x9d\xb9\x8a\xb7\xaf\x06N\x9c" +
+	"\xef\x0f~\xa0\xc1\xf1\xa3\x11-\x17\xa3Pk\xa3\xb4\xf7" +
+	"\x18\xc8\xd1\x02hD\xcb\xed\x81\xf9\x8b5\xc1\xb6\x96;" +
+	"\xc9\x80hZ1Y#5gN\xfdc\x89\x00\xa0\x11" +
+	"\xe5\x10\x06\xe6\x89\x00\x97\xfb\x08M\xb2Z;\xcf?\xb4" +
+	"er\xd7\xff@J\xe2\xfb\xb3\x9a\xce\xf1&b\x81}" +
+	"\xa9\x0b\xac\xe6Q\x1e\xcd\x0d\xda\xf8\x85.\xe6\x85\x0b\xfe" +
+	"(-\xa6\xfd\xff\xd6\xdb\xff05N\xef\xf2(\x1f\x0b" +
+	"\x94\xf5Q\x12~\xc0\xa3|<\xd08}D\xb5~\x8c" +
+	"G\xf9\xbc?\xe4\xfc\xea\x01\x00\xf9<\x8f\xc9@#\"" +
+	"\xfe\x89\x14\xbf\xa3\xeb\xdanC\xd0iC\xc2\xb8\x11 " +
+	"UI\xd7x\xdcnCBN\x1b\"b;@*F" +
+	"\xf2+\x82m\xc8\x18\xbc\x0d 5\x9a\xe4\xe3\xb1\xf7\xbb" +
+	"F(\xea~\xa3\x96\xd3:ge\xd5~\xef6w\xea" +
+	"\x8a\xe6L%\x9b+\xea\x0c\xfc\xab\xb5D6\xcd\x81\xdb" +
+	"\xde\x19\xc7:\x93\x97\x14\x810\x83\x867\x95\xb9\x84\x17" +
+	"\xe5\x90n\x9e\x19\xba\xae\xa1^\xd6\xc4N\xf6\x9bX\xaf" +
+	"\x87\xa5^\xfcf\x1e\xe5y\x94\x8aF'\x15r\xbb\xdf" +
+	"v\xd7\xa6\x95\xa2\xc1\xfa\xf8\x00<\xd3\xbd)\x80\xb1H" +
+	"+\xe62I\x06\x82\xa9\xf7\x94\x85`\xd0f6\xc5\xa2" +
+	".s9\x13d\xf7\xbf!\xe8\xfe\xd3#0Av\xc7" +
+	"\xf8\xe8\xfeo\xab\xef\x04\xd9\x8dA\x9f\x09\xb2\xf3\xc1\xc6" +
+	"h\xef\x09\xf2e<_\x9dk,\xc0\x18\x974X\x1d" +
+	"\xf2<\xd2\xfb\xf7oY\xa5W]\xee\x98\xc0\xbd\x90\xfe" +
+	"\x1c\x00\x00\xff\xff\xa1\x1ap\xe9"
 
 func init() {
 	schemas.Register(schema_db8274f9144abc7e,
 		0x82c325a07ad22a65,
+		0x839445a59fb01686,
 		0x83ced0145b2f114b,
 		0x84cb9536a2cf6d3c,
 		0x85c8cea1ab1894f3,
+		0x8635c6b4f45bf5cd,
+		0x904e297b87fbecea,
 		0x9496331ab9cd463f,
+		0x96b74375ce9b0ef6,
 		0x97b3c5c260257622,
 		0x9b87b390babc2ccf,
 		0xa29a916d4ebdd894,
 		0xa353a3556df74984,
 		0xa766b24d4fe5da35,
+		0xab6d5210c1f26687,
 		0xb046e578094b1ead,
 		0xb4bf9861fe035d04,
 		0xb5f39f082b9ac18a,
@@ -3574,6 +4110,7 @@ func init() {
 		0xe6646dec8feaa6ee,
 		0xea50d822450d1f17,
 		0xea58385c65416035,
+		0xf24ec4ab5891b676,
 		0xf2c122394f447e8e,
 		0xf2c68e2547ec3866,
 		0xf41a0f001ad49e46,

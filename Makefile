@@ -1,25 +1,41 @@
-VERSION       := $(shell git describe --tags --always --dirty="-dev" --match "[0-9][0-9][0-9][0-9].*.*")
+VERSION       := $(shell git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
 
-ifeq ($(FIPS), true)
-	GO_BUILD_TAGS := $(GO_BUILD_TAGS) fips
-endif
-
-ifneq ($(GO_BUILD_TAGS),)
-	GO_BUILD_TAGS := -tags $(GO_BUILD_TAGS)
+ifeq ($(ORIGINAL_NAME), true)
+	# Used for builds that want FIPS compilation but want the artifacts generated to still have the original name.
+	BINARY_NAME := cloudflared
+else ifeq ($(FIPS), true)
+	# Used for FIPS compliant builds that do not match the case above.
+	BINARY_NAME := cloudflared-fips
+else
+	# Used for all other (non-FIPS) builds.
+	BINARY_NAME := cloudflared
 endif
 
 ifeq ($(NIGHTLY), true)
-	DEB_PACKAGE_NAME := cloudflared-nightly
+	DEB_PACKAGE_NAME := $(BINARY_NAME)-nightly
 	NIGHTLY_FLAGS := --conflicts cloudflared --replaces cloudflared
 else
-	DEB_PACKAGE_NAME := cloudflared
+	DEB_PACKAGE_NAME := $(BINARY_NAME)
 endif
 
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
-VERSION_FLAGS := -ldflags='-X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"'
+VERSION_FLAGS := -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"
+
+LINK_FLAGS :=
+ifeq ($(FIPS), true)
+	LINK_FLAGS := -linkmode=external -extldflags=-static $(LINK_FLAGS)
+	# Prevent linking with libc regardless of CGO enabled or not.
+	GO_BUILD_TAGS := $(GO_BUILD_TAGS) osusergo netgo fips
+	VERSION_FLAGS := $(VERSION_FLAGS) -X "main.BuildType=FIPS"
+endif
+
+LDFLAGS := -ldflags='$(VERSION_FLAGS) $(LINK_FLAGS)'
+ifneq ($(GO_BUILD_TAGS),)
+	GO_BUILD_TAGS := -tags "$(GO_BUILD_TAGS)"
+endif
 
 IMPORT_PATH   := github.com/cloudflare/cloudflared
 PACKAGE_DIR   := $(CURDIR)/packaging
@@ -61,9 +77,9 @@ else
 endif
 
 ifeq ($(TARGET_OS), windows)
-	EXECUTABLE_PATH=./cloudflared.exe
+	EXECUTABLE_PATH=./$(BINARY_NAME).exe
 else
-	EXECUTABLE_PATH=./cloudflared
+	EXECUTABLE_PATH=./$(BINARY_NAME)
 endif
 
 ifeq ($(FLAVOR), centos-7)
@@ -80,17 +96,15 @@ clean:
 	go clean
 
 .PHONY: cloudflared
-cloudflared: 
+cloudflared:
 ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
-	-test -f fips/fips.go && mv fips/fips.go fips/fips.go.linux-amd64
-	mv fips/fips.go.linux-amd64 fips/fips.go
+	cp -f fips/fips.go.linux-amd64 cmd/cloudflared/fips.go
 endif
-
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(VERSION_FLAGS) $(IMPORT_PATH)/cmd/cloudflared
-
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
 ifeq ($(FIPS), true)
-	mv fips/fips.go fips/fips.go.linux-amd64
+	rm -f cmd/cloudflared/fips.go
+	./check-fips.sh cloudflared
 endif
 
 .PHONY: container
@@ -100,10 +114,10 @@ container:
 .PHONY: test
 test: vet
 ifndef CI
-	go test -v -mod=vendor -race $(VERSION_FLAGS) ./...
+	go test -v -mod=vendor -race $(LDFLAGS) ./...
 else
 	@mkdir -p .cover
-	go test -v -mod=vendor -race $(VERSION_FLAGS) -coverprofile=".cover/c.out" ./...
+	go test -v -mod=vendor -race $(LDFLAGS) -coverprofile=".cover/c.out" ./...
 	go tool cover -html ".cover/c.out" -o .cover/all.html
 endif
 
@@ -112,10 +126,10 @@ test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
 define publish_package
-	chmod 664 cloudflared*.$(1); \
+	chmod 664 $(BINARY_NAME)*.$(1); \
 	for HOST in $(CF_PKG_HOSTS); do \
-		ssh-keyscan -t rsa $$HOST >> ~/.ssh/known_hosts; \
-		scp -p -4 cloudflared*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/cloudflared/; \
+		ssh-keyscan -t ecdsa $$HOST >> ~/.ssh/known_hosts; \
+		scp -p -4 $(BINARY_NAME)*.$(1) cfsync@$$HOST:/state/cf-pkg/staging/$(2)/$(TARGET_PUBLIC_REPO)/$(BINARY_NAME)/; \
 	done
 endef
 
@@ -127,12 +141,14 @@ publish-deb: cloudflared-deb
 publish-rpm: cloudflared-rpm
 	$(call publish_package,rpm,yum)
 
+# When we build packages, the package name will be FIPS-aware.
+# But we keep the binary installed by it to be named "cloudflared" regardless.
 define build_package
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > $(PACKAGE_DIR)/cloudflared.1
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) \
-		--description 'Cloudflare Argo tunnel daemon' \
+		--description 'Cloudflare Tunnel daemon' \
 		--vendor 'Cloudflare' \
 		--license 'Cloudflare Service Agreement' \
 		--url 'https://github.com/cloudflare/cloudflared' \
@@ -247,8 +263,8 @@ tunnelrpc-deps:
 	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
 
 .PHONY: quic-deps
-quic-deps: 
-	which capnp 
+quic-deps:
+	which capnp
 	which capnpc-go
 	capnp compile -ogo quic/schema/quic_metadata_protocol.capnp
 
@@ -258,7 +274,7 @@ vet:
 	# go get github.com/sudarshan-reddy/go-sumtype (don't do this in build directory or this will cause vendor issues)
 	# Note: If you have github.com/BurntSushi/go-sumtype then you might have to use the repo above instead
 	# for now because it uses an older version of golang.org/x/tools.
-	which go-sumtype  
+	which go-sumtype
 	go-sumtype $$(go list -mod=vendor ./...)
 
 .PHONY: goimports

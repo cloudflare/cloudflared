@@ -7,6 +7,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudflare/cloudflared/tunnelstate"
+
 	"github.com/cloudflare/cloudflared/connection"
 )
 
@@ -18,7 +20,7 @@ func TestReadyServer_makeResponse(t *testing.T) {
 		name                 string
 		fields               fields
 		wantOK               bool
-		wantReadyConnections int
+		wantReadyConnections uint
 	}{
 		{
 			name: "One connection online => HTTP 200",
@@ -49,7 +51,7 @@ func TestReadyServer_makeResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rs := &ReadyServer{
-				isConnected: tt.fields.isConnected,
+				tracker: tunnelstate.MockedConnTracker(tt.fields.isConnected),
 			}
 			gotStatusCode, gotReadyConnections := rs.makeResponse()
 			if tt.wantOK && gotStatusCode != http.StatusOK {

@@ -70,9 +70,13 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		sc.log.Info().Msg(line)
 	}
 
+	if !sc.c.IsSet("protocol") {
+		sc.c.Set("protocol", "quic")
+	}
+
 	return StartServer(
 		sc.c,
-		version,
+		buildInfo,
 		&connection.NamedTunnelConfig{Credentials: credentials, QuickTunnelUrl: data.Result.Hostname},
 		sc.log,
 		sc.isUIEnabled,

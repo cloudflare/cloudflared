@@ -1,12 +1,15 @@
-VERSION=$(git describe --tags --always --dirty="-dev" --match "[0-9][0-9][0-9][0-9].*.*")
+VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
+
+# Avoid depending on C code since we don't need it.
 export CGO_ENABLED=0
+
 # This controls the directory the built artifacts go into
 export ARTIFACT_DIR=built_artifacts/
 mkdir -p $ARTIFACT_DIR
 windowsArchs=("amd64" "386")
 export TARGET_OS=windows
-for arch in ${windowsArchs[@]}; do 
+for arch in ${windowsArchs[@]}; do
     export TARGET_ARCH=$arch
     make cloudflared-msi
     mv ./cloudflared.exe $ARTIFACT_DIR/cloudflared-windows-$arch.exe
@@ -14,15 +17,14 @@ for arch in ${windowsArchs[@]}; do
 done
 
 
-export FIPS=true
-linuxArchs=("amd64" "386" "arm" "arm64")
+linuxArchs=("386" "amd64" "arm" "arm64")
 export TARGET_OS=linux
-for arch in ${linuxArchs[@]}; do 
+for arch in ${linuxArchs[@]}; do
     export TARGET_ARCH=$arch
     make cloudflared-deb
     mv cloudflared\_$VERSION\_$arch.deb $ARTIFACT_DIR/cloudflared-linux-$arch.deb
 
-    # rpm packages invert the - and _ and use x86_64 instead of amd64. 
+    # rpm packages invert the - and _ and use x86_64 instead of amd64.
     RPMVERSION=$(echo $VERSION|sed -r 's/-/_/g')
     RPMARCH=$arch
     if [ $arch == "amd64" ];then
@@ -37,4 +39,3 @@ for arch in ${linuxArchs[@]}; do
     # finally move the linux binary as well.
     mv ./cloudflared $ARTIFACT_DIR/cloudflared-linux-$arch
 done
-

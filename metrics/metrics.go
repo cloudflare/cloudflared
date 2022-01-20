@@ -83,15 +83,15 @@ func ServeMetrics(
 	return err
 }
 
-func RegisterBuildInfo(buildTime string, version string) {
+func RegisterBuildInfo(buildType, buildTime, version string) {
 	buildInfo := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			// Don't namespace build_info, since we want it to be consistent across all Cloudflare services
 			Name: "build_info",
 			Help: "Build and version information",
 		},
-		[]string{"goversion", "revision", "version"},
+		[]string{"goversion", "type", "revision", "version"},
 	)
 	prometheus.MustRegister(buildInfo)
-	buildInfo.WithLabelValues(runtime.Version(), buildTime, version).Set(1)
+	buildInfo.WithLabelValues(runtime.Version(), buildType, buildTime, version).Set(1)
 }

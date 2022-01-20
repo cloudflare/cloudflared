@@ -174,7 +174,7 @@ func Handshake(
 	pingTimestamp := NewPingTimestamp()
 	connActive := NewSignal()
 	idleDuration := config.HeartbeatInterval
-	// Sanity check to enusre idelDuration is sane
+	// Sanity check to ensure idelDuration is sane
 	if idleDuration == 0 || idleDuration < defaultTimeout {
 		idleDuration = defaultTimeout
 		config.Log.Info().Msgf("muxer: Minimum idle time has been adjusted to %d", defaultTimeout)
@@ -274,7 +274,7 @@ func (m *Muxer) readPeerSettings(magic uint32) error {
 		m.compressionQuality = compressionPresets[CompressionNone]
 		return nil
 	}
-	// Values used for compression are the mimimum between the two peers
+	// Values used for compression are the minimum between the two peers
 	if sz < m.compressionQuality.dictSize {
 		m.compressionQuality.dictSize = sz
 	}

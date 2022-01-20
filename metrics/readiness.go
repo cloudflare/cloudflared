@@ -4,46 +4,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 
 	conn "github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 
 	"github.com/rs/zerolog"
 )
 
 // ReadyServer serves HTTP 200 if the tunnel can serve traffic. Intended for k8s readiness checks.
 type ReadyServer struct {
-	sync.RWMutex
-	isConnected map[int]bool
-	log         *zerolog.Logger
+	tracker *tunnelstate.ConnTracker
 }
 
 // NewReadyServer initializes a ReadyServer and starts listening for dis/connection events.
 func NewReadyServer(log *zerolog.Logger) *ReadyServer {
 	return &ReadyServer{
-		isConnected: make(map[int]bool, 0),
-		log:         log,
+		tracker: tunnelstate.NewConnTracker(log),
 	}
 }
 
 func (rs *ReadyServer) OnTunnelEvent(c conn.Event) {
-	switch c.EventType {
-	case conn.Connected:
-		rs.Lock()
-		rs.isConnected[int(c.Index)] = true
-		rs.Unlock()
-	case conn.Disconnected, conn.Reconnecting, conn.RegisteringTunnel, conn.Unregistering:
-		rs.Lock()
-		rs.isConnected[int(c.Index)] = false
-		rs.Unlock()
-	default:
-		rs.log.Error().Msgf("Unknown connection event case %v", c)
-	}
+	rs.tracker.OnTunnelEvent(c)
 }
 
 type body struct {
-	Status           int `json:"status"`
-	ReadyConnections int `json:"readyConnections"`
+	Status           int  `json:"status"`
+	ReadyConnections uint `json:"readyConnections"`
 }
 
 // ServeHTTP responds with HTTP 200 if the tunnel is connected to the edge.
@@ -63,15 +49,11 @@ func (rs *ReadyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // This is the bulk of the logic for ServeHTTP, broken into its own pure function
 // to make unit testing easy.
-func (rs *ReadyServer) makeResponse() (statusCode, readyConnections int) {
-	statusCode = http.StatusServiceUnavailable
-	rs.RLock()
-	defer rs.RUnlock()
-	for _, connected := range rs.isConnected {
-		if connected {
-			statusCode = http.StatusOK
-			readyConnections++
-		}
+func (rs *ReadyServer) makeResponse() (statusCode int, readyConnections uint) {
+	readyConnections = rs.tracker.CountActiveConns()
+	if readyConnections > 0 {
+		return http.StatusOK, readyConnections
+	} else {
+		return http.StatusServiceUnavailable, readyConnections
 	}
-	return statusCode, readyConnections
 }

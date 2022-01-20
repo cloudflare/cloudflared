@@ -596,7 +596,7 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, ackAll
 
 	var hasDatagram bool
 	if p.datagramQueue != nil {
-		if datagram := p.datagramQueue.Get(); datagram != nil {
+		if datagram := p.datagramQueue.Get(maxFrameSize, p.version); datagram != nil {
 			payload.frames = append(payload.frames, ackhandler.Frame{
 				Frame: datagram,
 				// set it to a no-op. Then we won't set the default callback, which would retransmit the frame.

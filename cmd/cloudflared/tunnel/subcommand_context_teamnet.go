@@ -1,16 +1,14 @@
 package tunnel
 
 import (
-	"net"
-
 	"github.com/pkg/errors"
 
-	"github.com/cloudflare/cloudflared/teamnet"
+	"github.com/cloudflare/cloudflared/cfapi"
 )
 
 const noClientMsg = "error while creating backend client"
 
-func (sc *subcommandContext) listRoutes(filter *teamnet.Filter) ([]*teamnet.DetailedRoute, error) {
+func (sc *subcommandContext) listRoutes(filter *cfapi.IpRouteFilter) ([]*cfapi.DetailedRoute, error) {
 	client, err := sc.client()
 	if err != nil {
 		return nil, errors.Wrap(err, noClientMsg)
@@ -18,26 +16,26 @@ func (sc *subcommandContext) listRoutes(filter *teamnet.Filter) ([]*teamnet.Deta
 	return client.ListRoutes(filter)
 }
 
-func (sc *subcommandContext) addRoute(newRoute teamnet.NewRoute) (teamnet.Route, error) {
+func (sc *subcommandContext) addRoute(newRoute cfapi.NewRoute) (cfapi.Route, error) {
 	client, err := sc.client()
 	if err != nil {
-		return teamnet.Route{}, errors.Wrap(err, noClientMsg)
+		return cfapi.Route{}, errors.Wrap(err, noClientMsg)
 	}
 	return client.AddRoute(newRoute)
 }
 
-func (sc *subcommandContext) deleteRoute(network net.IPNet) error {
+func (sc *subcommandContext) deleteRoute(params cfapi.DeleteRouteParams) error {
 	client, err := sc.client()
 	if err != nil {
 		return errors.Wrap(err, noClientMsg)
 	}
-	return client.DeleteRoute(network)
+	return client.DeleteRoute(params)
 }
 
-func (sc *subcommandContext) getRouteByIP(ip net.IP) (teamnet.DetailedRoute, error) {
+func (sc *subcommandContext) getRouteByIP(params cfapi.GetRouteByIpParams) (cfapi.DetailedRoute, error) {
 	client, err := sc.client()
 	if err != nil {
-		return teamnet.DetailedRoute{}, errors.Wrap(err, noClientMsg)
+		return cfapi.DetailedRoute{}, errors.Wrap(err, noClientMsg)
 	}
-	return client.GetByIP(ip)
+	return client.GetByIP(params)
 }

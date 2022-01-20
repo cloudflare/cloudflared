@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -118,7 +119,9 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 			w.WriteHeader(http.StatusSwitchingProtocols)
 			return
 		}
-		w.Write([]byte("ok"))
+		// return the X-Forwarded-Host header for assertions
+		// as the httptest Server URL isn't available here yet
+		w.Write([]byte(r.Header.Get("X-Forwarded-Host")))
 	}
 	origin := httptest.NewServer(http.HandlerFunc(handler))
 	defer origin.Close()
@@ -140,6 +143,10 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 	resp, err := httpService.RoundTrip(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	respBody, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, respBody, []byte(originURL.Host))
 
 }
 

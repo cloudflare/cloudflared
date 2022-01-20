@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"runtime/debug"
@@ -60,7 +59,7 @@ func NewHTTP2Connection(
 	return &HTTP2Connection{
 		conn: conn,
 		server: &http2.Server{
-			MaxConcurrentStreams: math.MaxUint32,
+			MaxConcurrentStreams: MaxConcurrentStreams,
 		},
 		config:               config,
 		connOptions:          connOptions,
@@ -109,7 +108,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch connType {
 	case TypeControlStream:
-		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, true); err != nil {
+		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions); err != nil {
 			c.controlStreamErr = err
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
@@ -126,7 +125,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case TypeTCP:
 		host, err := getRequestHost(r)
 		if err != nil {
-			err := fmt.Errorf(`cloudflared recieved a warp-routing request with an empty host value: %w`, err)
+			err := fmt.Errorf(`cloudflared received a warp-routing request with an empty host value: %w`, err)
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
 		}
@@ -185,12 +184,14 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 	for name, values := range header {
 		// Since these are http2 headers, they're required to be lowercase
 		h2name := strings.ToLower(name)
+
 		if h2name == "content-length" {
 			// This header has meaning in HTTP/2 and will be used by the edge,
-			// so it should be sent as an HTTP/2 response header.
+			// so it should be sent *also* as an HTTP/2 response header.
 			dest[name] = values
-			// Since these are http2 headers, they're required to be lowercase
-		} else if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
+		}
+
+		if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values
 			userHeaders[name] = values

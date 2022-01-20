@@ -19,6 +19,8 @@ type TLSParameters struct {
 	RootCAs          []string
 	ServerName       string
 	CurvePreferences []tls.CurveID
+	MinVersion       uint16 // min tls version. If zero, TLS1.0 is defined as minimum.
+	MaxVersion       uint16 // max tls version. If zero, last TLS version is used defined as limit (currently TLS1.3)
 }
 
 // GetConfig returns a TLS configuration according to the Config set by the user.
@@ -71,6 +73,9 @@ func GetConfig(p *TLSParameters) (*tls.Config, error) {
 		// Cloudflare optimize CurveP256
 		tlsconfig.CurvePreferences = []tls.CurveID{tls.CurveP256}
 	}
+
+	tlsconfig.MinVersion = p.MinVersion
+	tlsconfig.MaxVersion = p.MaxVersion
 
 	return tlsconfig, nil
 }
