@@ -36,7 +36,7 @@ var (
 		Usage: "Show only routes with this comment.",
 	}
 	filterIpRouteByVnet = cli.StringFlag{
-		Name:  "filter-virtual-network-id",
+		Name:  "filter-vnet-id",
 		Usage: "Show only routes that are attached to the given virtual network ID.",
 	}
 

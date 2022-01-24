@@ -17,7 +17,7 @@ import (
 
 var (
 	vnetFlag = &cli.StringFlag{
-		Name:    "virtual-network",
+		Name:    "vnet",
 		Aliases: []string{"vn"},
 		Usage:   "The ID or name of the virtual network to which the route is associated to.",
 	}
@@ -35,7 +35,7 @@ determine who can reach certain routes.
 By default IP routes all exist within a single virtual network. If you use the same IP
 space(s) in different physical private networks, all meant to be reachable via IP routes,
 then you have to manage the ambiguous IP routes by associating them to virtual networks.
-See "cloudflared tunnel network --help" for more information.`,
+See "cloudflared tunnel vnet --help" for more information.`,
 		Subcommands: []*cli.Command{
 			{
 				Name:      "add",
@@ -50,9 +50,9 @@ the specified Tunnel, and reach an IP in the given CIDR, as long as that IP is
 reachable from cloudflared.
 If the CIDR exists in more than one private network, to be connected with Cloudflare
 Tunnels, then you have to manage those IP routes with virtual networks (see
-"cloudflared tunnel network --help)". In those cases, you then have to tell
+"cloudflared tunnel vnet --help)". In those cases, you then have to tell
 which virtual network's routing table you want to add the route to with:
-"cloudflared tunnel route ip add --virtual-network [ID/name] [CIDR] [TUNNEL]".`,
+"cloudflared tunnel route ip add --vnet [ID/name] [CIDR] [TUNNEL]".`,
 				Flags: []cli.Flag{vnetFlag},
 			},
 			{
