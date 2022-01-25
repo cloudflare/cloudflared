@@ -11,6 +11,7 @@ package dnsserver
 // care what plugin above them are doing.
 var Directives = []string{
 	"metadata",
+	"geoip",
 	"cancel",
 	"tls",
 	"reload",
@@ -27,6 +28,7 @@ var Directives = []string{
 	"errors",
 	"log",
 	"dnstap",
+	"local",
 	"dns64",
 	"acl",
 	"any",
@@ -34,8 +36,10 @@ var Directives = []string{
 	"loadbalance",
 	"cache",
 	"rewrite",
+	"header",
 	"dnssec",
 	"autopath",
+	"minimal",
 	"template",
 	"transfer",
 	"hosts",

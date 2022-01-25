@@ -4,14 +4,13 @@ import (
 	"net"
 	"runtime"
 
+	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/coremain"
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics/vars"
 	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/plugin/pkg/uniq"
-
-	"github.com/caddyserver/caddy"
 )
 
 var (
@@ -81,8 +80,9 @@ func parse(c *caddy.Controller) (*Metrics, error) {
 		}
 		i++
 
-		for _, z := range c.ServerBlockKeys {
-			met.AddZone(plugin.Host(z).Normalize())
+		zones := plugin.OriginsFromArgsOrServerBlock(nil /* args */, c.ServerBlockKeys)
+		for _, z := range zones {
+			met.AddZone(z)
 		}
 		args := c.RemainingArgs()
 

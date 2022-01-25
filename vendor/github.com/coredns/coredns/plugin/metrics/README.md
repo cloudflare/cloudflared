@@ -17,7 +17,7 @@ The following metrics are exported:
 * `coredns_dns_request_size_bytes{server, zone, proto}` - size of the request in bytes.
 * `coredns_dns_do_requests_total{server, zone}` -  queries that have the DO bit set
 * `coredns_dns_response_size_bytes{server, zone, proto}` - response size in bytes.
-* `coredns_dns_responses_total{server, zone, rcode}` - response per zone and rcode.
+* `coredns_dns_responses_total{server, zone, rcode, plugin}` - response per zone, rcode and plugin.
 * `coredns_plugin_enabled{server, zone, name}` - indicates whether a plugin is enabled on per server and zone basis.
 
 Each counter has a label `zone` which is the zonename used for the request/response.
@@ -30,8 +30,10 @@ Extra labels used are:
 * `proto` which holds the transport of the response ("udp" or "tcp")
 * The address family (`family`) of the transport (1 = IP (IP version 4), 2 = IP6 (IP version 6)).
 * `type` which holds the query type. It holds most common types (A, AAAA, MX, SOA, CNAME, PTR, TXT,
-  NS, SRV, DS, DNSKEY, RRSIG, NSEC, NSEC3, IXFR, AXFR and ANY) and "other" which lumps together all
+  NS, SRV, DS, DNSKEY, RRSIG, NSEC, NSEC3, HTTPS, IXFR, AXFR and ANY) and "other" which lumps together all
   other types.
+* the `plugin` label holds the name of the plugin that made the write to the client. If the server
+  did the write (on error for instance), the value is empty.
 
 If monitoring is enabled, queries that do not enter the plugin chain are exported under the fake
 name "dropped" (without a closing dot - this is never a valid domain name).

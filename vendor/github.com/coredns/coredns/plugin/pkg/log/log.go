@@ -10,7 +10,7 @@ package log
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	golog "log"
 	"os"
 	"sync"
@@ -102,7 +102,7 @@ func Fatal(v ...interface{}) { log(fatal, v...); os.Exit(1) }
 func Fatalf(format string, v ...interface{}) { logf(fatal, format, v...); os.Exit(1) }
 
 // Discard sets the log output to /dev/null.
-func Discard() { golog.SetOutput(ioutil.Discard) }
+func Discard() { golog.SetOutput(io.Discard) }
 
 const (
 	debug   = "[DEBUG] "

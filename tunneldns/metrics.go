@@ -2,7 +2,6 @@ package tunneldns
 
 import (
 	"context"
-	"sync"
 
 	"github.com/coredns/coredns/plugin"
 	"github.com/coredns/coredns/plugin/metrics"
@@ -11,10 +10,11 @@ import (
 	"github.com/coredns/coredns/plugin/pkg/rcode"
 	"github.com/coredns/coredns/request"
 	"github.com/miekg/dns"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
-var once sync.Once
+const (
+	pluginName = "cloudflared"
+)
 
 // MetricsPlugin is an adapter for CoreDNS and built-in metrics
 type MetricsPlugin struct {
@@ -23,14 +23,6 @@ type MetricsPlugin struct {
 
 // NewMetricsPlugin creates a plugin with configured metrics
 func NewMetricsPlugin(next plugin.Handler) *MetricsPlugin {
-	once.Do(func() {
-		prometheus.MustRegister(vars.RequestCount)
-		prometheus.MustRegister(vars.RequestDuration)
-		prometheus.MustRegister(vars.RequestSize)
-		prometheus.MustRegister(vars.RequestDo)
-		prometheus.MustRegister(vars.ResponseSize)
-		prometheus.MustRegister(vars.ResponseRcode)
-	})
 	return &MetricsPlugin{Next: next}
 }
 
@@ -43,7 +35,7 @@ func (p MetricsPlugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dn
 
 	// Update built-in metrics
 	server := metrics.WithServer(ctx)
-	vars.Report(server, state, ".", rcode.ToString(rw.Rcode), rw.Len, rw.Start)
+	vars.Report(server, state, ".", rcode.ToString(rw.Rcode), pluginName, rw.Len, rw.Start)
 
 	return status, err
 }

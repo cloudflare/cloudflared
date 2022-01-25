@@ -3,10 +3,14 @@ package plugin
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/coredns/coredns/plugin/pkg/cidr"
+	"github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/plugin/pkg/parse"
+
 	"github.com/miekg/dns"
 )
 
@@ -62,81 +66,132 @@ type (
 // Normalize will return the host portion of host, stripping
 // of any port or transport. The host will also be fully qualified and lowercased.
 // An empty string is returned on failure
+// Deprecated: use OriginsFromArgsOrServerBlock or NormalizeExact
 func (h Host) Normalize() string {
-	// The error can be ignored here, because this function should only be called after the corefile has already been vetted.
-	host, _ := h.MustNormalize()
-	return host
+	var caller string
+	if _, file, line, ok := runtime.Caller(1); ok {
+		caller = fmt.Sprintf("(%v line %d) ", file, line)
+	}
+	log.Warning("An external plugin " + caller + "is using the deprecated function Normalize. " +
+		"This will be removed in a future versions of CoreDNS. The plugin should be updated to use " +
+		"OriginsFromArgsOrServerBlock or NormalizeExact instead.")
+
+	s := string(h)
+	_, s = parse.Transport(s)
+
+	// The error can be ignored here, because this function is called after the corefile has already been vetted.
+	hosts, _, err := SplitHostPort(s)
+	if err != nil {
+		return ""
+	}
+	return Name(hosts[0]).Normalize()
 }
 
 // MustNormalize will return the host portion of host, stripping
 // of any port or transport. The host will also be fully qualified and lowercased.
 // An error is returned on error
+// Deprecated: use OriginsFromArgsOrServerBlock or NormalizeExact
 func (h Host) MustNormalize() (string, error) {
+	var caller string
+	if _, file, line, ok := runtime.Caller(1); ok {
+		caller = fmt.Sprintf("(%v line %d) ", file, line)
+	}
+	log.Warning("An external plugin " + caller + "is using the deprecated function MustNormalize. " +
+		"This will be removed in a future versions of CoreDNS. The plugin should be updated to use " +
+		"OriginsFromArgsOrServerBlock or NormalizeExact instead.")
+
 	s := string(h)
 	_, s = parse.Transport(s)
 
 	// The error can be ignored here, because this function is called after the corefile has already been vetted.
-	host, _, _, err := SplitHostPort(s)
+	hosts, _, err := SplitHostPort(s)
 	if err != nil {
 		return "", err
 	}
-	return Name(host).Normalize(), nil
+	return Name(hosts[0]).Normalize(), nil
 }
 
-// SplitHostPort splits s up in a host and port portion, taking reverse address notation into account.
-// String the string s should *not* be prefixed with any protocols, i.e. dns://. The returned ipnet is the
-// *net.IPNet that is used when the zone is a reverse and a netmask is given.
-func SplitHostPort(s string) (host, port string, ipnet *net.IPNet, err error) {
+// NormalizeExact will return the host portion of host, stripping
+// of any port or transport. The host will also be fully qualified and lowercased.
+// An empty slice is returned on failure
+func (h Host) NormalizeExact() []string {
+	// The error can be ignored here, because this function should only be called after the corefile has already been vetted.
+	s := string(h)
+	_, s = parse.Transport(s)
+
+	hosts, _, err := SplitHostPort(s)
+	if err != nil {
+		return nil
+	}
+	for i := range hosts {
+		hosts[i] = Name(hosts[i]).Normalize()
+
+	}
+	return hosts
+}
+
+// SplitHostPort splits s up in a host(s) and port portion, taking reverse address notation into account.
+// String the string s should *not* be prefixed with any protocols, i.e. dns://. SplitHostPort can return
+// multiple hosts when a reverse notation on a non-octet boundary is given.
+func SplitHostPort(s string) (hosts []string, port string, err error) {
 	// If there is: :[0-9]+ on the end we assume this is the port. This works for (ascii) domain
 	// names and our reverse syntax, which always needs a /mask *before* the port.
 	// So from the back, find first colon, and then check if it's a number.
-	host = s
-
 	colon := strings.LastIndex(s, ":")
 	if colon == len(s)-1 {
-		return "", "", nil, fmt.Errorf("expecting data after last colon: %q", s)
+		return nil, "", fmt.Errorf("expecting data after last colon: %q", s)
 	}
 	if colon != -1 {
 		if p, err := strconv.Atoi(s[colon+1:]); err == nil {
 			port = strconv.Itoa(p)
-			host = s[:colon]
+			s = s[:colon]
 		}
 	}
 
 	// TODO(miek): this should take escaping into account.
-	if len(host) > 255 {
-		return "", "", nil, fmt.Errorf("specified zone is too long: %d > 255", len(host))
+	if len(s) > 255 {
+		return nil, "", fmt.Errorf("specified zone is too long: %d > 255", len(s))
 	}
 
-	_, d := dns.IsDomainName(host)
-	if !d {
-		return "", "", nil, fmt.Errorf("zone is not a valid domain name: %s", host)
+	if _, ok := dns.IsDomainName(s); !ok {
+		return nil, "", fmt.Errorf("zone is not a valid domain name: %s", s)
 	}
 
 	// Check if it parses as a reverse zone, if so we use that. Must be fully specified IP and mask.
-	ip, n, err := net.ParseCIDR(host)
-	ones, bits := 0, 0
-	if err == nil {
-		if rev, e := dns.ReverseAddr(ip.String()); e == nil {
-			ones, bits = n.Mask.Size()
-			// get the size, in bits, of each portion of hostname defined in the reverse address. (8 for IPv4, 4 for IPv6)
-			sizeDigit := 8
-			if len(n.IP) == net.IPv6len {
-				sizeDigit = 4
-			}
-			// Get the first lower octet boundary to see what encompassing zone we should be authoritative for.
-			mod := (bits - ones) % sizeDigit
-			nearest := (bits - ones) + mod
-			offset := 0
-			var end bool
-			for i := 0; i < nearest/sizeDigit; i++ {
-				offset, end = dns.NextLabel(rev, offset)
-				if end {
-					break
-				}
-			}
-			host = rev[offset:]
-		}
+	_, n, err := net.ParseCIDR(s)
+	if err != nil {
+		return []string{s}, port, nil
 	}
-	return host, port, n, nil
+
+	if s[0] == ':' || (s[0] == '0' && strings.Contains(s, ":")) {
+		return nil, "", fmt.Errorf("invalid CIDR %s", s)
+	}
+
+	// now check if multiple hosts must be returned.
+	nets := cidr.Split(n)
+	hosts = cidr.Reverse(nets)
+	return hosts, port, nil
+}
+
+// OriginsFromArgsOrServerBlock returns the normalized args if that slice
+// is not empty, otherwise the serverblock slice is returned (in a newly copied slice).
+func OriginsFromArgsOrServerBlock(args, serverblock []string) []string {
+	if len(args) == 0 {
+		s := make([]string, len(serverblock))
+		copy(s, serverblock)
+		for i := range s {
+			s[i] = Host(s[i]).NormalizeExact()[0] // expansion of these already happened in dnsserver/register.go
+		}
+		return s
+	}
+	s := []string{}
+	for i := range args {
+		sx := Host(args[i]).NormalizeExact()
+		if len(sx) == 0 {
+			continue // silently ignores errors.
+		}
+		s = append(s, sx...)
+	}
+
+	return s
 }

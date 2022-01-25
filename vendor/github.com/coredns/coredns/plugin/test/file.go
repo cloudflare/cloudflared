@@ -1,18 +1,17 @@
 package test
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
 
 // TempFile will create a temporary file on disk and returns the name and a cleanup function to remove it later.
 func TempFile(dir, content string) (string, func(), error) {
-	f, err := ioutil.TempFile(dir, "go-test-tmpfile")
+	f, err := os.CreateTemp(dir, "go-test-tmpfile")
 	if err != nil {
 		return "", nil, err
 	}
-	if err := ioutil.WriteFile(f.Name(), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(f.Name(), []byte(content), 0644); err != nil {
 		return "", nil, err
 	}
 	rmFunc := func() { os.Remove(f.Name()) }
@@ -21,7 +20,7 @@ func TempFile(dir, content string) (string, func(), error) {
 
 // WritePEMFiles creates a tmp dir with ca.pem, cert.pem, and key.pem and the func to remove it
 func WritePEMFiles(dir string) (string, func(), error) {
-	tempDir, err := ioutil.TempDir(dir, "go-test-pemfiles")
+	tempDir, err := os.MkdirTemp(dir, "go-test-pemfiles")
 	if err != nil {
 		return "", nil, err
 	}
@@ -45,7 +44,7 @@ xGbtCkhVk2VQ+BiCWnjYXJ6ZMzabP7wiOFDP9Pvr2ik22PRItsW/TLfHFXM1jDmc
 I1rs/VUGKzcJGVIWbHrgjP68CTStGAvKgbsTqw7aLXTSqtPw88N9XVSyRg==
 -----END CERTIFICATE-----`
 	path := filepath.Join(tempDir, "ca.pem")
-	if err := ioutil.WriteFile(path, []byte(data), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
 		return "", nil, err
 	}
 	data = `-----BEGIN CERTIFICATE-----
@@ -66,7 +65,7 @@ zhDEPP4FhY+Sz+y1yWirphl7A1aZwhXVPcfWIGqpQ3jzNwUeocbH27kuLh+U4hQo
 qeg10RdFnw==
 -----END CERTIFICATE-----`
 	path = filepath.Join(tempDir, "cert.pem")
-	if err = ioutil.WriteFile(path, []byte(data), 0644); err != nil {
+	if err = os.WriteFile(path, []byte(data), 0644); err != nil {
 		return "", nil, err
 	}
 
@@ -98,7 +97,7 @@ E/WObVJXDnBdViu0L9abE9iaTToBVri4cmlDlZagLuKVR+TFTCN/DSlVZTDkqkLI
 8chzqtkH6b2b2R73hyRysWjsomys34ma3mEEPTX/aXeAF2MSZ/EWT9yL
 -----END RSA PRIVATE KEY-----`
 	path = filepath.Join(tempDir, "key.pem")
-	if err = ioutil.WriteFile(path, []byte(data), 0644); err != nil {
+	if err = os.WriteFile(path, []byte(data), 0644); err != nil {
 		return "", nil, err
 	}
 

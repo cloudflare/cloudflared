@@ -422,7 +422,7 @@ func NS(ctx context.Context, b ServiceBackend, zone string, state request.Reques
 	old := state.QName()
 
 	state.Clear()
-	state.Req.Question[0].Name = "ns.dns." + zone
+	state.Req.Question[0].Name = dnsutil.Join("ns.dns.", zone)
 	services, err := b.Services(ctx, state, false, opt)
 	if err != nil {
 		return nil, nil, err
@@ -440,8 +440,8 @@ func NS(ctx context.Context, b ServiceBackend, zone string, state request.Reques
 
 		case dns.TypeA, dns.TypeAAAA:
 			serv.Host = msg.Domain(serv.Key)
-			extra = append(extra, newAddress(serv, serv.Host, ip, what))
 			ns := serv.NewNS(state.QName())
+			extra = append(extra, newAddress(serv, ns.Ns, ip, what))
 			if _, ok := seen[ns.Ns]; ok {
 				continue
 			}
@@ -462,12 +462,8 @@ func SOA(ctx context.Context, b ServiceBackend, zone string, state request.Reque
 
 	header := dns.RR_Header{Name: zone, Rrtype: dns.TypeSOA, Ttl: ttl, Class: dns.ClassINET}
 
-	Mbox := hostmaster + "."
-	Ns := "ns.dns."
-	if zone[0] != '.' {
-		Mbox += zone
-		Ns += zone
-	}
+	Mbox := dnsutil.Join(hostmaster, zone)
+	Ns := dnsutil.Join("ns.dns", zone)
 
 	soa := &dns.SOA{Hdr: header,
 		Mbox:    Mbox,

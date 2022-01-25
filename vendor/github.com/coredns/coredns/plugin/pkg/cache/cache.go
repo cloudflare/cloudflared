@@ -45,9 +45,10 @@ func New(size int) *Cache {
 }
 
 // Add adds a new element to the cache. If the element already exists it is overwritten.
-func (c *Cache) Add(key uint64, el interface{}) {
+// Returns true if an existing element was evicted to make room for this element.
+func (c *Cache) Add(key uint64, el interface{}) bool {
 	shard := key & (shardSize - 1)
-	c.shards[shard].Add(key, el)
+	return c.shards[shard].Add(key, el)
 }
 
 // Get looks up element index under key.
@@ -71,22 +72,33 @@ func (c *Cache) Len() int {
 	return l
 }
 
+// Walk walks each shard in the cache.
+func (c *Cache) Walk(f func(map[uint64]interface{}, uint64) bool) {
+	for _, s := range c.shards {
+		s.Walk(f)
+	}
+}
+
 // newShard returns a new shard with size.
 func newShard(size int) *shard { return &shard{items: make(map[uint64]interface{}), size: size} }
 
 // Add adds element indexed by key into the cache. Any existing element is overwritten
-func (s *shard) Add(key uint64, el interface{}) {
+// Returns true if an existing element was evicted to make room for this element.
+func (s *shard) Add(key uint64, el interface{}) bool {
+	eviction := false
 	s.Lock()
 	if len(s.items) >= s.size {
 		if _, ok := s.items[key]; !ok {
 			for k := range s.items {
 				delete(s.items, k)
+				eviction = true
 				break
 			}
 		}
 	}
 	s.items[key] = el
 	s.Unlock()
+	return eviction
 }
 
 // Remove removes the element indexed by key from the cache.
@@ -120,6 +132,26 @@ func (s *shard) Len() int {
 	l := len(s.items)
 	s.RUnlock()
 	return l
+}
+
+// Walk walks the shard for each element the function f is executed while holding a write lock.
+func (s *shard) Walk(f func(map[uint64]interface{}, uint64) bool) {
+	s.RLock()
+	items := make([]uint64, len(s.items))
+	i := 0
+	for k := range s.items {
+		items[i] = k
+		i++
+	}
+	s.RUnlock()
+	for _, k := range items {
+		s.Lock()
+		ok := f(s.items, k)
+		s.Unlock()
+		if !ok {
+			return
+		}
+	}
 }
 
 const shardSize = 256
