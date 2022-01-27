@@ -122,7 +122,7 @@ func (q *QUICConnection) serveControlStream(ctx context.Context, controlStream q
 func (q *QUICConnection) acceptStream(ctx context.Context) error {
 	defer q.Close()
 	for {
-		stream, err := q.session.AcceptStream(ctx)
+		quicStream, err := q.session.AcceptStream(ctx)
 		if err != nil {
 			// context.Canceled is usually a user ctrl+c. We don't want to log an error here as it's intentional.
 			if errors.Is(err, context.Canceled) || q.controlStreamHandler.IsStopped() {
@@ -131,7 +131,9 @@ func (q *QUICConnection) acceptStream(ctx context.Context) error {
 			return fmt.Errorf("failed to accept QUIC stream: %w", err)
 		}
 		go func() {
+			stream := quicpogs.NewSafeStreamCloser(quicStream)
 			defer stream.Close()
+
 			if err = q.handleStream(stream); err != nil {
 				q.logger.Err(err).Msg("Failed to handle QUIC stream")
 			}
@@ -144,7 +146,7 @@ func (q *QUICConnection) Close() {
 	q.session.CloseWithError(0, "")
 }
 
-func (q *QUICConnection) handleStream(stream quic.Stream) error {
+func (q *QUICConnection) handleStream(stream io.ReadWriteCloser) error {
 	signature, err := quicpogs.DetermineProtocol(stream)
 	if err != nil {
 		return err

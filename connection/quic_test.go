@@ -3,14 +3,9 @@ package connection
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,7 +28,7 @@ import (
 )
 
 var (
-	testTLSServerConfig = generateTLSConfig()
+	testTLSServerConfig = quicpogs.GenerateTLSConfig()
 	testQUICConfig      = &quic.Config{
 		KeepAlive:       true,
 		EnableDatagrams: true,
@@ -84,7 +79,7 @@ func TestQUICServer(t *testing.T) {
 		},
 		{
 			desc:           "test http body request streaming",
-			dest:           "/echo_body",
+			dest:           "/slow_echo_body",
 			connectionType: quicpogs.ConnectionTypeHTTP,
 			metadata: []quicpogs.Metadata{
 				{
@@ -195,8 +190,9 @@ func quicServer(
 	session, err := earlyListener.Accept(ctx)
 	require.NoError(t, err)
 
-	stream, err := session.OpenStreamSync(context.Background())
+	quicStream, err := session.OpenStreamSync(context.Background())
 	require.NoError(t, err)
+	stream := quicpogs.NewSafeStreamCloser(quicStream)
 
 	reqClientStream := quicpogs.RequestClientStream{ReadWriteCloser: stream}
 	err = reqClientStream.WriteConnectRequestData(dest, connectionType, metadata...)
@@ -207,40 +203,18 @@ func quicServer(
 
 	if message != nil {
 		// ALPN successful. Write data.
-		_, err := stream.Write([]byte(message))
+		_, err := stream.Write(message)
 		require.NoError(t, err)
 	}
 
 	response := make([]byte, len(expectedResponse))
-	stream.Read(response)
-	require.NoError(t, err)
+	_, err = stream.Read(response)
+	if err != io.EOF {
+		require.NoError(t, err)
+	}
 
 	// For now it is an echo server. Verify if the same data is returned.
 	assert.Equal(t, expectedResponse, response)
-}
-
-// Setup a bare-bones TLS config for the server
-func generateTLSConfig() *tls.Config {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		panic(err)
-	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		panic(err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		panic(err)
-	}
-	return &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		NextProtos:   []string{"argotunnel"},
-	}
 }
 
 type mockOriginProxyWithRequest struct{}
@@ -264,6 +238,9 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Reque
 	switch r.URL.Path {
 	case "/ok":
 		originRespEndpoint(w, http.StatusOK, []byte(http.StatusText(http.StatusOK)))
+	case "/slow_echo_body":
+		time.Sleep(5)
+		fallthrough
 	case "/echo_body":
 		resp := &http.Response{
 			StatusCode: http.StatusOK,

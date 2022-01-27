@@ -31,8 +31,6 @@ const (
 	dialTimeout              = 15 * time.Second
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
-	quicHandshakeIdleTimeout = 5 * time.Second
-	quicMaxIdleTimeout       = 15 * time.Second
 )
 
 type TunnelConfig struct {
@@ -523,8 +521,8 @@ func ServeQUIC(
 ) (err error, recoverable bool) {
 	tlsConfig := config.EdgeTLSConfigs[connection.QUIC]
 	quicConfig := &quic.Config{
-		HandshakeIdleTimeout:  quicHandshakeIdleTimeout,
-		MaxIdleTimeout:        quicMaxIdleTimeout,
+		HandshakeIdleTimeout:  quicpogs.HandshakeIdleTimeout,
+		MaxIdleTimeout:        quicpogs.MaxIdleTimeout,
 		MaxIncomingStreams:    connection.MaxConcurrentStreams,
 		MaxIncomingUniStreams: connection.MaxConcurrentStreams,
 		KeepAlive:             true,

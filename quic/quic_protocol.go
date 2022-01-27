@@ -17,8 +17,8 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-// The first 6 bytes of the stream is used to distinguish the type of stream. It ensures whoever performs a handshake does
-// not write data before writing the metadata.
+// ProtocolSignature defines the first 6 bytes of the stream, which is used to distinguish the type of stream. It
+// ensures whoever performs a handshake does not write data before writing the metadata.
 type ProtocolSignature [6]byte
 
 var (
@@ -29,12 +29,15 @@ var (
 	RPCStreamProtocolSignature = ProtocolSignature{0x52, 0xBB, 0x82, 0x5C, 0xDB, 0x65}
 )
 
-const protocolVersionLength = 2
-
 type protocolVersion string
 
 const (
 	protocolV1 protocolVersion = "01"
+
+	protocolVersionLength = 2
+
+	HandshakeIdleTimeout = 5 * time.Second
+	MaxIdleTimeout       = 15 * time.Second
 )
 
 // RequestServerStream is a stream to serve requests
