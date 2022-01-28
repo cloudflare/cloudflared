@@ -271,11 +271,20 @@ func (wr *bidirectionalStream) Write(p []byte) (n int, err error) {
 func (p *Proxy) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {
 	reader := bufio.NewReader(respBody)
 	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			break
+		line, readErr := reader.ReadBytes('\n')
+
+		// We first try to write whatever we read even if an error occurred
+		// The reason for doing it is to guarantee we really push everything to the eyeball side
+		// before returning
+		if len(line) > 0 {
+			if _, writeErr := w.Write(line); writeErr != nil {
+				return
+			}
 		}
-		_, _ = w.Write(line)
+
+		if readErr != nil {
+			return
+		}
 	}
 }
 
