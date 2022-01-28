@@ -34,7 +34,7 @@ func Test_parseIngress(t *testing.T) {
 	localhost8000 := MustParseURL(t, "https://localhost:8000")
 	localhost8001 := MustParseURL(t, "https://localhost:8001")
 	fourOhFour := newStatusCode(404)
-	defaultConfig := setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{})
+	defaultConfig := setConfig(originRequestFromConfig(config.OriginRequestConfig{}), config.OriginRequestConfig{})
 	require.Equal(t, defaultKeepAliveConnections, defaultConfig.KeepAliveConnections)
 	tr := true
 	type args struct {
@@ -324,7 +324,17 @@ ingress:
 				{
 					Hostname: "socks.foo.com",
 					Service:  newSocksProxyOverWSService(accessPolicy()),
-					Config:   defaultConfig,
+					Config: setConfig(originRequestFromConfig(config.OriginRequestConfig{}), config.OriginRequestConfig{IPRules: []config.IngressIPRule{
+						{
+							Prefix: ipRulePrefix("1.1.1.0/24"),
+							Ports:  []int{80, 443},
+							Allow:  true,
+						},
+						{
+							Prefix: ipRulePrefix("0.0.0.0/0"),
+							Allow:  false,
+						},
+					}}),
 				},
 				{
 					Service: &fourOhFour,
@@ -345,7 +355,7 @@ ingress:
 				{
 					Hostname: "bastion.foo.com",
 					Service:  newBastionService(),
-					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
+					Config:   setConfig(originRequestFromConfig(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
 					Service: &fourOhFour,
@@ -365,7 +375,7 @@ ingress:
 				{
 					Hostname: "bastion.foo.com",
 					Service:  newBastionService(),
-					Config:   setConfig(originRequestFromYAML(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
+					Config:   setConfig(originRequestFromConfig(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
 				},
 				{
 					Service: &fourOhFour,
@@ -395,6 +405,10 @@ ingress:
 			require.Equal(t, tt.want, got.Rules)
 		})
 	}
+}
+
+func ipRulePrefix(s string) *string {
+	return &s
 }
 
 func TestSingleOriginSetsConfig(t *testing.T) {

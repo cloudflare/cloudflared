@@ -175,60 +175,62 @@ func ValidateUrl(c *cli.Context, allowURLFromArgs bool) (*url.URL, error) {
 }
 
 type UnvalidatedIngressRule struct {
-	Hostname      string
-	Path          string
-	Service       string
-	OriginRequest OriginRequestConfig `yaml:"originRequest"`
+	Hostname      string              `json:"hostname"`
+	Path          string              `json:"path"`
+	Service       string              `json:"service"`
+	OriginRequest OriginRequestConfig `yaml:"originRequest" json:"originRequest"`
 }
 
 // OriginRequestConfig is a set of optional fields that users may set to
 // customize how cloudflared sends requests to origin services. It is used to set
 // up general config that apply to all rules, and also, specific per-rule
 // config.
-// Note: To specify a time.Duration in go-yaml, use e.g. "3s" or "24h".
+// Note:
+// - To specify a time.Duration in go-yaml, use e.g. "3s" or "24h".
+// - To specify a time.Duration in json, use int64 of the nanoseconds
 type OriginRequestConfig struct {
 	// HTTP proxy timeout for establishing a new connection
-	ConnectTimeout *time.Duration `yaml:"connectTimeout"`
+	ConnectTimeout *time.Duration `yaml:"connectTimeout" json:"connectTimeout"`
 	// HTTP proxy timeout for completing a TLS handshake
-	TLSTimeout *time.Duration `yaml:"tlsTimeout"`
+	TLSTimeout *time.Duration `yaml:"tlsTimeout" json:"tlsTimeout"`
 	// HTTP proxy TCP keepalive duration
-	TCPKeepAlive *time.Duration `yaml:"tcpKeepAlive"`
+	TCPKeepAlive *time.Duration `yaml:"tcpKeepAlive" json:"tcpKeepAlive"`
 	// HTTP proxy should disable "happy eyeballs" for IPv4/v6 fallback
-	NoHappyEyeballs *bool `yaml:"noHappyEyeballs"`
+	NoHappyEyeballs *bool `yaml:"noHappyEyeballs" json:"noHappyEyeballs"`
 	// HTTP proxy maximum keepalive connection pool size
-	KeepAliveConnections *int `yaml:"keepAliveConnections"`
+	KeepAliveConnections *int `yaml:"keepAliveConnections" json:"keepAliveConnections"`
 	// HTTP proxy timeout for closing an idle connection
-	KeepAliveTimeout *time.Duration `yaml:"keepAliveTimeout"`
+	KeepAliveTimeout *time.Duration `yaml:"keepAliveTimeout" json:"keepAliveTimeout"`
 	// Sets the HTTP Host header for the local webserver.
-	HTTPHostHeader *string `yaml:"httpHostHeader"`
+	HTTPHostHeader *string `yaml:"httpHostHeader" json:"httpHostHeader"`
 	// Hostname on the origin server certificate.
-	OriginServerName *string `yaml:"originServerName"`
+	OriginServerName *string `yaml:"originServerName" json:"originServerName"`
 	// Path to the CA for the certificate of your origin.
 	// This option should be used only if your certificate is not signed by Cloudflare.
-	CAPool *string `yaml:"caPool"`
+	CAPool *string `yaml:"caPool" json:"caPool"`
 	// Disables TLS verification of the certificate presented by your origin.
 	// Will allow any certificate from the origin to be accepted.
 	// Note: The connection from your machine to Cloudflare's Edge is still encrypted.
-	NoTLSVerify *bool `yaml:"noTLSVerify"`
+	NoTLSVerify *bool `yaml:"noTLSVerify" json:"noTLSVerify"`
 	// Disables chunked transfer encoding.
 	// Useful if you are running a WSGI server.
-	DisableChunkedEncoding *bool `yaml:"disableChunkedEncoding"`
+	DisableChunkedEncoding *bool `yaml:"disableChunkedEncoding" json:"disableChunkedEncoding"`
 	// Runs as jump host
-	BastionMode *bool `yaml:"bastionMode"`
+	BastionMode *bool `yaml:"bastionMode" json:"bastionMode"`
 	// Listen address for the proxy.
-	ProxyAddress *string `yaml:"proxyAddress"`
+	ProxyAddress *string `yaml:"proxyAddress" json:"proxyAddress"`
 	// Listen port for the proxy.
-	ProxyPort *uint `yaml:"proxyPort"`
+	ProxyPort *uint `yaml:"proxyPort" json:"proxyPort"`
 	// Valid options are 'socks' or empty.
-	ProxyType *string `yaml:"proxyType"`
+	ProxyType *string `yaml:"proxyType" json:"proxyType"`
 	// IP rules for the proxy service
-	IPRules []IngressIPRule `yaml:"ipRules"`
+	IPRules []IngressIPRule `yaml:"ipRules" json:"ipRules"`
 }
 
 type IngressIPRule struct {
-	Prefix *string `yaml:"prefix"`
-	Ports  []int   `yaml:"ports"`
-	Allow  bool    `yaml:"allow"`
+	Prefix *string `yaml:"prefix" json:"prefix"`
+	Ports  []int   `yaml:"ports" json:"ports"`
+	Allow  bool    `yaml:"allow" json:"allow"`
 }
 
 type Configuration struct {
@@ -240,7 +242,7 @@ type Configuration struct {
 }
 
 type WarpRoutingConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"enabled" json:"enabled"`
 }
 
 type configFileSettings struct {
