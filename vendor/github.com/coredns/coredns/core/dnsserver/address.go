@@ -4,20 +4,13 @@ import (
 	"fmt"
 	"net"
 	"strings"
-
-	"github.com/coredns/coredns/plugin"
-	"github.com/coredns/coredns/plugin/pkg/parse"
-	"github.com/coredns/coredns/plugin/pkg/transport"
-
-	"github.com/miekg/dns"
 )
 
 type zoneAddr struct {
 	Zone      string
 	Port      string
-	Transport string     // dns, tls or grpc
-	IPNet     *net.IPNet // if reverse zone this hold the IPNet
-	Address   string     // used for bound zoneAddr - validation of overlapping
+	Transport string // dns, tls or grpc
+	Address   string // used for bound zoneAddr - validation of overlapping
 }
 
 // String returns the string representation of z.
@@ -27,32 +20,6 @@ func (z zoneAddr) String() string {
 		s += " on " + z.Address
 	}
 	return s
-}
-
-// normalizeZone parses a zone string into a structured format with separate
-// host, and port portions, as well as the original input string.
-func normalizeZone(str string) (zoneAddr, error) {
-	trans, str := parse.Transport(str)
-
-	host, port, ipnet, err := plugin.SplitHostPort(str)
-	if err != nil {
-		return zoneAddr{}, err
-	}
-
-	if port == "" {
-		switch trans {
-		case transport.DNS:
-			port = Port
-		case transport.TLS:
-			port = transport.TLSPort
-		case transport.GRPC:
-			port = transport.GRPCPort
-		case transport.HTTPS:
-			port = transport.HTTPSPort
-		}
-	}
-
-	return zoneAddr{Zone: dns.Fqdn(host), Port: port, Transport: trans, IPNet: ipnet}, nil
 }
 
 // SplitProtocolHostPort splits a full formed address like "dns://[::1]:53" into parts.

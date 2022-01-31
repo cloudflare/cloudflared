@@ -30,7 +30,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/attributes"
-	"google.golang.org/grpc/internal"
+	icredentials "google.golang.org/grpc/internal/credentials"
 )
 
 // PerRPCCredentials defines the common interface for the credentials which need to
@@ -58,9 +58,9 @@ type PerRPCCredentials interface {
 type SecurityLevel int
 
 const (
-	// Invalid indicates an invalid security level.
+	// InvalidSecurityLevel indicates an invalid security level.
 	// The zero SecurityLevel value is invalid for backward compatibility.
-	Invalid SecurityLevel = iota
+	InvalidSecurityLevel SecurityLevel = iota
 	// NoSecurity indicates a connection is insecure.
 	NoSecurity
 	// IntegrityOnly indicates a connection only provides integrity protection.
@@ -92,7 +92,7 @@ type CommonAuthInfo struct {
 }
 
 // GetCommonAuthInfo returns the pointer to CommonAuthInfo struct.
-func (c *CommonAuthInfo) GetCommonAuthInfo() *CommonAuthInfo {
+func (c CommonAuthInfo) GetCommonAuthInfo() CommonAuthInfo {
 	return c
 }
 
@@ -140,6 +140,11 @@ type TransportCredentials interface {
 	// Additionally, ClientHandshakeInfo data will be available via the context
 	// passed to this call.
 	//
+	// The second argument to this method is the `:authority` header value used
+	// while creating new streams on this connection after authentication
+	// succeeds. Implementations must use this as the server name during the
+	// authentication handshake.
+	//
 	// If the returned net.Conn is closed, it MUST close the net.Conn provided.
 	ClientHandshake(context.Context, string, net.Conn) (net.Conn, AuthInfo, error)
 	// ServerHandshake does the authentication handshake for servers. It returns
@@ -153,9 +158,13 @@ type TransportCredentials interface {
 	Info() ProtocolInfo
 	// Clone makes a copy of this TransportCredentials.
 	Clone() TransportCredentials
-	// OverrideServerName overrides the server name used to verify the hostname on the returned certificates from the server.
-	// gRPC internals also use it to override the virtual hosting name if it is set.
-	// It must be called before dialing. Currently, this is only used by grpclb.
+	// OverrideServerName specifies the value used for the following:
+	// - verifying the hostname on the returned certificates
+	// - as SNI in the client's handshake to support virtual hosting
+	// - as the value for `:authority` header at stream creation time
+	//
+	// Deprecated: use grpc.WithAuthority instead. Will be supported
+	// throughout 1.x.
 	OverrideServerName(string) error
 }
 
@@ -169,8 +178,18 @@ type TransportCredentials interface {
 //
 // This API is experimental.
 type Bundle interface {
+	// TransportCredentials returns the transport credentials from the Bundle.
+	//
+	// Implementations must return non-nil transport credentials. If transport
+	// security is not needed by the Bundle, implementations may choose to
+	// return insecure.NewCredentials().
 	TransportCredentials() TransportCredentials
+
+	// PerRPCCredentials returns the per-RPC credentials from the Bundle.
+	//
+	// May be nil if per-RPC credentials are not needed.
 	PerRPCCredentials() PerRPCCredentials
+
 	// NewWithMode should make a copy of Bundle, and switch mode. Modifying the
 	// existing Bundle may cause races.
 	//
@@ -188,15 +207,12 @@ type RequestInfo struct {
 	AuthInfo AuthInfo
 }
 
-// requestInfoKey is a struct to be used as the key when attaching a RequestInfo to a context object.
-type requestInfoKey struct{}
-
 // RequestInfoFromContext extracts the RequestInfo from the context if it exists.
 //
 // This API is experimental.
 func RequestInfoFromContext(ctx context.Context) (ri RequestInfo, ok bool) {
-	ri, ok = ctx.Value(requestInfoKey{}).(RequestInfo)
-	return
+	ri, ok = icredentials.RequestInfoFromContext(ctx).(RequestInfo)
+	return ri, ok
 }
 
 // ClientHandshakeInfo holds data to be passed to ClientHandshake. This makes
@@ -211,16 +227,12 @@ type ClientHandshakeInfo struct {
 	Attributes *attributes.Attributes
 }
 
-// clientHandshakeInfoKey is a struct used as the key to store
-// ClientHandshakeInfo in a context.
-type clientHandshakeInfoKey struct{}
-
 // ClientHandshakeInfoFromContext returns the ClientHandshakeInfo struct stored
 // in ctx.
 //
 // This API is experimental.
 func ClientHandshakeInfoFromContext(ctx context.Context) ClientHandshakeInfo {
-	chi, _ := ctx.Value(clientHandshakeInfoKey{}).(ClientHandshakeInfo)
+	chi, _ := icredentials.ClientHandshakeInfoFromContext(ctx).(ClientHandshakeInfo)
 	return chi
 }
 
@@ -229,17 +241,16 @@ func ClientHandshakeInfoFromContext(ctx context.Context) ClientHandshakeInfo {
 // or 3) CommonAuthInfo.SecurityLevel has an invalid zero value. For 2) and 3), it is for the purpose of backward-compatibility.
 //
 // This API is experimental.
-func CheckSecurityLevel(ctx context.Context, level SecurityLevel) error {
+func CheckSecurityLevel(ai AuthInfo, level SecurityLevel) error {
 	type internalInfo interface {
-		GetCommonAuthInfo() *CommonAuthInfo
+		GetCommonAuthInfo() CommonAuthInfo
 	}
-	ri, _ := RequestInfoFromContext(ctx)
-	if ri.AuthInfo == nil {
-		return errors.New("unable to obtain SecurityLevel from context")
+	if ai == nil {
+		return errors.New("AuthInfo is nil")
 	}
-	if ci, ok := ri.AuthInfo.(internalInfo); ok {
+	if ci, ok := ai.(internalInfo); ok {
 		// CommonAuthInfo.SecurityLevel has an invalid value.
-		if ci.GetCommonAuthInfo().SecurityLevel == Invalid {
+		if ci.GetCommonAuthInfo().SecurityLevel == InvalidSecurityLevel {
 			return nil
 		}
 		if ci.GetCommonAuthInfo().SecurityLevel < level {
@@ -248,15 +259,6 @@ func CheckSecurityLevel(ctx context.Context, level SecurityLevel) error {
 	}
 	// The condition is satisfied or AuthInfo struct does not implement GetCommonAuthInfo() method.
 	return nil
-}
-
-func init() {
-	internal.NewRequestInfoContext = func(ctx context.Context, ri RequestInfo) context.Context {
-		return context.WithValue(ctx, requestInfoKey{}, ri)
-	}
-	internal.NewClientHandshakeInfoContext = func(ctx context.Context, chi ClientHandshakeInfo) context.Context {
-		return context.WithValue(ctx, clientHandshakeInfoKey{}, chi)
-	}
 }
 
 // ChannelzSecurityInfo defines the interface that security protocols should implement

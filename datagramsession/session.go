@@ -106,6 +106,7 @@ func (s *Session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 func (s *Session) dstToTransport(buffer []byte) error {
 	n, err := s.dstConn.Read(buffer)
 	s.markActive()
+	// https://pkg.go.dev/io#Reader suggests caller should always process n > 0 bytes
 	if n > 0 {
 		if n <= int(s.transport.MTU()) {
 			err = s.transport.SendTo(s.ID, buffer[:n])
@@ -117,6 +118,10 @@ func (s *Session) dstToTransport(buffer []byte) error {
 				Int("mtu", s.transport.MTU()).
 				Msg("dropped packet exceeding MTU")
 		}
+	}
+	// Some UDP application might send 0-size payload.
+	if err == nil && n == 0 {
+		err = s.transport.SendTo(s.ID, []byte{})
 	}
 	return err
 }

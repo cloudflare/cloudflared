@@ -1,3 +1,13 @@
+2022.1.3
+- 2022-01-21 TUN-5477: Unhide vnet commands
+- 2022-01-24 TUN-5669: Change network command to vnet
+- 2022-01-25 TUN-5675: Remove github.com/dgrijalva/jwt-go dependency by upgrading coredns version
+- 2022-01-27 TUN-5719: Re-attempt connection to edge with QUIC despite network error when there is no fallback
+- 2022-01-28 TUN-5724: Fix SSE streaming by guaranteeing we write everything we read
+- 2022-01-17 TUN-5547: Bump golang x/net package to fix http2 transport bugs
+- 2022-01-19 TUN-5659: Proxy UDP with zero-byte payload
+- 2021-10-22 Add X-Forwarded-Host for http proxy
+
 2022.1.2
 - 2022-01-13 TUN-5650: Fix pynacl version to 1.4.0 and pygithub version to 1.55 so release doesn't break unexpectedly
 

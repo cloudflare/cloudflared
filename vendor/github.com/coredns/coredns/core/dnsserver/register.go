@@ -4,16 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
+	"github.com/coredns/caddy"
+	"github.com/coredns/caddy/caddyfile"
 	"github.com/coredns/coredns/plugin"
-	"github.com/coredns/coredns/plugin/pkg/dnsutil"
 	"github.com/coredns/coredns/plugin/pkg/parse"
 	"github.com/coredns/coredns/plugin/pkg/transport"
 
-	"github.com/caddyserver/caddy"
-	"github.com/caddyserver/caddy/caddyfile"
+	"github.com/miekg/dns"
 )
 
 const serverType = "dns"
@@ -22,6 +21,7 @@ const serverType = "dns"
 // wise they potentially clash with other server types.
 func init() {
 	flag.StringVar(&Port, serverType+".port", DefaultPort, "Default port")
+	flag.StringVar(&Port, "p", DefaultPort, "Default port")
 
 	caddy.RegisterServerType(serverType, caddy.ServerType{
 		Directives: func() []string { return Directives },
@@ -61,11 +61,57 @@ var _ caddy.Context = &dnsContext{}
 func (h *dnsContext) InspectServerBlocks(sourceFile string, serverBlocks []caddyfile.ServerBlock) ([]caddyfile.ServerBlock, error) {
 	// Normalize and check all the zone names and check for duplicates
 	for ib, s := range serverBlocks {
+		// Walk the s.Keys and expand any reverse address in their proper DNS in-addr zones. If the expansions leads for
+		// more than one reverse zone, replace the current value and add the rest to s.Keys.
+		zoneAddrs := []zoneAddr{}
 		for ik, k := range s.Keys {
-			za, err := normalizeZone(k)
+			trans, k1 := parse.Transport(k) // get rid of any dns:// or other scheme.
+			hosts, port, err := plugin.SplitHostPort(k1)
+			// We need to make this a fully qualified domain name to catch all errors here and not later when
+			// plugin.Normalize is called again on these strings, with the prime difference being that the domain
+			// name is fully qualified. This was found by fuzzing where "ȶ" is deemed OK, but "ȶ." is not (might be a
+			// bug in miekg/dns actually). But here we were checking ȶ, which is OK, and later we barf in ȶ. leading to
+			// "index out of range".
+			for ih := range hosts {
+				_, _, err := plugin.SplitHostPort(dns.Fqdn(hosts[ih]))
+				if err != nil {
+					return nil, err
+				}
+			}
 			if err != nil {
 				return nil, err
 			}
+
+			if port == "" {
+				switch trans {
+				case transport.DNS:
+					port = Port
+				case transport.TLS:
+					port = transport.TLSPort
+				case transport.GRPC:
+					port = transport.GRPCPort
+				case transport.HTTPS:
+					port = transport.HTTPSPort
+				}
+			}
+
+			if len(hosts) > 1 {
+				s.Keys[ik] = hosts[0] + ":" + port // replace for the first
+				for _, h := range hosts[1:] {      // add the rest
+					s.Keys = append(s.Keys, h+":"+port)
+				}
+			}
+			for i := range hosts {
+				zoneAddrs = append(zoneAddrs, zoneAddr{Zone: dns.Fqdn(hosts[i]), Port: port, Transport: trans})
+			}
+		}
+
+		serverBlocks[ib].Keys = s.Keys // important to save back the new keys that are potentially created here.
+
+		var firstConfigInBlock *Config
+
+		for ik := range s.Keys {
+			za := zoneAddrs[ik]
 			s.Keys[ik] = za.String()
 			// Save the config to our master list, and key it for lookups.
 			cfg := &Config{
@@ -74,23 +120,16 @@ func (h *dnsContext) InspectServerBlocks(sourceFile string, serverBlocks []caddy
 				Port:        za.Port,
 				Transport:   za.Transport,
 			}
-			keyConfig := keyForConfig(ib, ik)
-			if za.IPNet == nil {
-				h.saveConfig(keyConfig, cfg)
-				continue
-			}
 
-			ones, bits := za.IPNet.Mask.Size()
-			if (bits-ones)%8 != 0 { // only do this for non-octet boundaries
-				cfg.FilterFunc = func(s string) bool {
-					// TODO(miek): strings.ToLower! Slow and allocates new string.
-					addr := dnsutil.ExtractAddressFromReverse(strings.ToLower(s))
-					if addr == "" {
-						return true
-					}
-					return za.IPNet.Contains(net.ParseIP(addr))
-				}
+			// Set reference to the first config in the current block.
+			// This is used later by MakeServers to share a single plugin list
+			// for all zones in a server block.
+			if ik == 0 {
+				firstConfigInBlock = cfg
 			}
+			cfg.firstConfigInBlock = firstConfigInBlock
+
+			keyConfig := keyForConfig(ib, ik)
 			h.saveConfig(keyConfig, cfg)
 		}
 	}
@@ -105,6 +144,17 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 	errValid := h.validateZonesAndListeningAddresses()
 	if errValid != nil {
 		return nil, errValid
+	}
+
+	// Copy the Plugin, ListenHosts and Debug from first config in the block
+	// to all other config in the same block . Doing this results in zones
+	// sharing the same plugin instances and settings as other zones in
+	// the same block.
+	for _, c := range h.configs {
+		c.Plugin = c.firstConfigInBlock.Plugin
+		c.ListenHosts = c.firstConfigInBlock.ListenHosts
+		c.Debug = c.firstConfigInBlock.Debug
+		c.TLSConfig = c.firstConfigInBlock.TLSConfig
 	}
 
 	// we must map (group) each config to a bind address
@@ -223,7 +273,6 @@ func (h *dnsContext) validateZonesAndListeningAddresses() error {
 // address (what you pass into net.Listen) to the list of site configs.
 // This function does NOT vet the configs to ensure they are compatible.
 func groupConfigsByListenAddr(configs []*Config) (map[string][]*Config, error) {
-
 	groups := make(map[string][]*Config)
 	for _, conf := range configs {
 		for _, h := range conf.ListenHosts {

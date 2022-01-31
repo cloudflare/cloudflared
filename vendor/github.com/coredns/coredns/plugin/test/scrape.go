@@ -77,7 +77,7 @@ func Scrape(url string) []*MetricFamily {
 	return result
 }
 
-// ScrapeMetricAsInt provide a sum of all metrics collected for the name and label provided.
+// ScrapeMetricAsInt provides a sum of all metrics collected for the name and label provided.
 // if the metric is not a numeric value, it will be counted a 0.
 func ScrapeMetricAsInt(addr string, name string, label string, nometricvalue int) int {
 

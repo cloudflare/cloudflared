@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/miekg/dns"
@@ -50,7 +49,6 @@ func NewRequest(method, url string, m *dns.Msg) (*http.Request, error) {
 	default:
 		return nil, fmt.Errorf("method not allowed: %s", method)
 	}
-
 }
 
 // ResponseToMsg converts a http.Response to a dns message.
@@ -72,7 +70,6 @@ func RequestToMsg(req *http.Request) (*dns.Msg, error) {
 	default:
 		return nil, fmt.Errorf("method not allowed: %s", req.Method)
 	}
-
 }
 
 // requestToMsgPost extracts the dns message from the request body.
@@ -95,7 +92,7 @@ func requestToMsgGet(req *http.Request) (*dns.Msg, error) {
 }
 
 func toMsg(r io.ReadCloser) (*dns.Msg, error) {
-	buf, err := ioutil.ReadAll(r)
+	buf, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}

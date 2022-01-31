@@ -4,15 +4,13 @@ package coremain
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"runtime"
 	"strings"
 
+	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
-
-	"github.com/caddyserver/caddy"
 )
 
 func init() {
@@ -36,21 +34,6 @@ func init() {
 // Run is CoreDNS's main() function.
 func Run() {
 	caddy.TrapSignals()
-
-	// Reset flag.CommandLine to get rid of unwanted flags for instance from glog (used in kubernetes).
-	// And read the ones we want to keep.
-	flag.VisitAll(func(f *flag.Flag) {
-		if _, ok := flagsBlacklist[f.Name]; ok {
-			return
-		}
-		flagsToKeep = append(flagsToKeep, f)
-	})
-
-	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	for _, f := range flagsToKeep {
-		flag.Var(f.Value, f.Name, f.Usage)
-	}
-
 	flag.Parse()
 
 	if len(flag.Args()) > 0 {
@@ -112,7 +95,7 @@ func confLoader(serverType string) (caddy.Input, error) {
 		return caddy.CaddyfileFromPipe(os.Stdin, serverType)
 	}
 
-	contents, err := ioutil.ReadFile(conf)
+	contents, err := os.ReadFile(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +108,7 @@ func confLoader(serverType string) (caddy.Input, error) {
 
 // defaultLoader loads the Corefile from the current working directory.
 func defaultLoader(serverType string) (caddy.Input, error) {
-	contents, err := ioutil.ReadFile(caddy.DefaultConfigFile)
+	contents, err := os.ReadFile(caddy.DefaultConfigFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -198,16 +181,3 @@ var (
 	// Gitcommit contains the commit where we built CoreDNS from.
 	GitCommit string
 )
-
-// flagsBlacklist removes flags with these names from our flagset.
-var flagsBlacklist = map[string]struct{}{
-	"logtostderr":      {},
-	"alsologtostderr":  {},
-	"v":                {},
-	"stderrthreshold":  {},
-	"vmodule":          {},
-	"log_backtrace_at": {},
-	"log_dir":          {},
-}
-
-var flagsToKeep []*flag.Flag

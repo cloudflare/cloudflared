@@ -8,11 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin"
-	"github.com/coredns/coredns/plugin/metrics/vars"
 	"github.com/coredns/coredns/plugin/pkg/reuseport"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -31,29 +32,18 @@ type Metrics struct {
 	zoneNames []string
 	zoneMap   map[string]struct{}
 	zoneMu    sync.RWMutex
+
+	plugins map[string]struct{} // all available plugins, used to determine which plugin made the client write
 }
 
 // New returns a new instance of Metrics with the given address.
 func New(addr string) *Metrics {
 	met := &Metrics{
 		Addr:    addr,
-		Reg:     prometheus.NewRegistry(),
+		Reg:     prometheus.DefaultRegisterer.(*prometheus.Registry),
 		zoneMap: make(map[string]struct{}),
+		plugins: pluginList(caddy.ListPlugins()),
 	}
-	// Add the default collectors
-	met.MustRegister(prometheus.NewGoCollector())
-	met.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-
-	// Add all of our collectors
-	met.MustRegister(buildInfo)
-	met.MustRegister(vars.Panic)
-	met.MustRegister(vars.RequestCount)
-	met.MustRegister(vars.RequestDuration)
-	met.MustRegister(vars.RequestSize)
-	met.MustRegister(vars.RequestDo)
-	met.MustRegister(vars.ResponseSize)
-	met.MustRegister(vars.ResponseRcode)
-	met.MustRegister(vars.PluginEnabled)
 
 	return met
 }
@@ -154,6 +144,19 @@ func keys(m map[string]struct{}) []string {
 	return sx
 }
 
+// pluginList iterates over the returned plugin map from caddy and removes the "dns." prefix from them.
+func pluginList(m map[string][]string) map[string]struct{} {
+	pm := map[string]struct{}{}
+	for _, p := range m["others"] {
+		// only add 'dns.' plugins
+		if len(p) > 3 {
+			pm[p[4:]] = struct{}{}
+			continue
+		}
+	}
+	return pm
+}
+
 // ListenAddr is assigned the address of the prometheus listener. Its use is mainly in tests where
 // we listen on "localhost:0" and need to retrieve the actual address.
 var ListenAddr string
@@ -162,7 +165,7 @@ var ListenAddr string
 // before erroring when it tries to close the metrics server
 const shutdownTimeout time.Duration = time.Second * 5
 
-var buildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+var buildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Namespace: plugin.Namespace,
 	Name:      "build_info",
 	Help:      "A metric with a constant '1' value labeled by version, revision, and goversion from which CoreDNS was built.",

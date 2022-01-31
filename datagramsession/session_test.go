@@ -195,3 +195,40 @@ func TestMarkActiveNotBlocking(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestZeroBytePayload(t *testing.T) {
+	sessionID := uuid.New()
+	cfdConn, originConn := net.Pipe()
+	transport := &mockQUICTransport{
+		reqChan:  newDatagramChannel(1),
+		respChan: newDatagramChannel(1),
+	}
+	log := zerolog.Nop()
+	session := newSession(sessionID, transport, cfdConn, &log)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errGroup, ctx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		// Read from underlying conn and send to transport
+		closedByRemote, err := session.Serve(ctx, time.Minute*2)
+		require.Equal(t, context.Canceled, err)
+		require.False(t, closedByRemote)
+		return nil
+	})
+
+	errGroup.Go(func() error {
+		// Write to underlying connection
+		n, err := originConn.Write([]byte{})
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+		return nil
+	})
+
+	receivedSessionID, payload, err := transport.respChan.Receive(ctx)
+	require.NoError(t, err)
+	require.Len(t, payload, 0)
+	require.Equal(t, sessionID, receivedSessionID)
+
+	cancel()
+	require.NoError(t, errGroup.Wait())
+}

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -138,6 +139,7 @@ func TestProxySingleOrigin(t *testing.T) {
 	t.Run("testProxyHTTP", testProxyHTTP(proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
+	t.Run("testProxySSEAllData", testProxySSEAllData(proxy))
 	cancel()
 	wg.Wait()
 }
@@ -253,6 +255,21 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 
 		cancel()
 		wg.Wait()
+	}
+}
+
+// Regression test to guarantee that we always write the contents downstream even if EOF is reached without
+// hitting the delimiter
+func testProxySSEAllData(proxy *Proxy) func(t *testing.T) {
+	return func(t *testing.T) {
+		eyeballReader := io.NopCloser(strings.NewReader("data\r\r"))
+		responseWriter := newMockSSERespWriter()
+
+		// responseWriter uses an unbuffered channel, so we call in a different go-routine
+		go proxy.writeEventStream(responseWriter, eyeballReader)
+
+		result := string(<-responseWriter.writeNotification)
+		require.Equal(t, "data\r\r", result)
 	}
 }
 
@@ -447,7 +464,7 @@ func TestConnections(t *testing.T) {
 		// eyeball connection type.
 		connectionType connection.Type
 
-		//requestheaders to be sent in the call to proxy.Proxy
+		// requestheaders to be sent in the call to proxy.Proxy
 		requestHeaders http.Header
 	}
 
@@ -508,7 +525,7 @@ func TestConnections(t *testing.T) {
 			args: args{
 				ingressServiceScheme: "ws://",
 				originService:        runEchoWSService,
-				//eyeballResponseWriter gets set after roundtrip dial.
+				// eyeballResponseWriter gets set after roundtrip dial.
 				eyeballRequestBody: newPipedWSRequestBody([]byte("test3")),
 				warpRoutingService: ingress.NewWarpRoutingService(),
 				requestHeaders: map[string][]string{

@@ -37,7 +37,7 @@ var (
 
 func buildVirtualNetworkSubcommand(hidden bool) *cli.Command {
 	return &cli.Command{
-		Name:      "network",
+		Name:      "vnet",
 		Usage:     "Configure and query virtual networks to manage private IP routes with overlapping IPs.",
 		UsageText: "cloudflared tunnel [--config FILEPATH] network COMMAND [arguments...]",
 		Description: `cloudflared allows to manage IP routes that expose origins in your private network space via their IP directly
@@ -177,7 +177,7 @@ func listVirtualNetworksCommand(c *cli.Context) error {
 	if len(vnets) > 0 {
 		formatAndPrintVnetsList(vnets)
 	} else {
-		fmt.Println("No virtual networks were found for the given filter flags. You can use 'cloudflared tunnel network add' to add a virtual network.")
+		fmt.Println("No virtual networks were found for the given filter flags. You can use 'cloudflared tunnel vnet add' to add a virtual network.")
 	}
 
 	return nil

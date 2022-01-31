@@ -29,14 +29,15 @@ func (p RRSet) Less(i, j int) bool { return p[i].String() < p[j].String() }
 // Case represents a test case that encapsulates various data from a query and response.
 // Note that is the TTL of a record is 303 we don't compare it with the TTL.
 type Case struct {
-	Qname  string
-	Qtype  uint16
-	Rcode  int
-	Do     bool
-	Answer []dns.RR
-	Ns     []dns.RR
-	Extra  []dns.RR
-	Error  error
+	Qname             string
+	Qtype             uint16
+	Rcode             int
+	Do                bool
+	AuthenticatedData bool
+	Answer            []dns.RR
+	Ns                []dns.RR
+	Extra             []dns.RR
+	Error             error
 }
 
 // Msg returns a *dns.Msg embedded in c.
@@ -99,6 +100,9 @@ func DNSKEY(rr string) *dns.DNSKEY { r, _ := dns.NewRR(rr); return r.(*dns.DNSKE
 // DS returns a DS record from rr. It panics on errors.
 func DS(rr string) *dns.DS { r, _ := dns.NewRR(rr); return r.(*dns.DS) }
 
+// NAPTR returns a NAPTR record from rr. It panics on errors.
+func NAPTR(rr string) *dns.NAPTR { r, _ := dns.NewRR(rr); return r.(*dns.NAPTR) }
+
 // OPT returns an OPT record with UDP buffer size set to bufsize and the DO bit set to do.
 func OPT(bufsize int, do bool) *dns.OPT {
 	o := new(dns.OPT)
@@ -112,7 +116,7 @@ func OPT(bufsize int, do bool) *dns.OPT {
 	return o
 }
 
-// Header test if the header in resp matches the header as defined in tc.
+// Header tests if the header in resp matches the header as defined in tc.
 func Header(tc Case, resp *dns.Msg) error {
 	if resp.Rcode != tc.Rcode {
 		return fmt.Errorf("rcode is %q, expected %q", dns.RcodeToString[resp.Rcode], dns.RcodeToString[tc.Rcode])
@@ -248,7 +252,7 @@ func Section(tc Case, sec sect, rr []dns.RR) error {
 	return nil
 }
 
-// CNAMEOrder makes sure that CNAMES do not appear after their target records
+// CNAMEOrder makes sure that CNAMES do not appear after their target records.
 func CNAMEOrder(res *dns.Msg) error {
 	for i, c := range res.Answer {
 		if c.Header().Rrtype != dns.TypeCNAME {

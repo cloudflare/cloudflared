@@ -9,38 +9,60 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin/pkg/dnsutil"
 	"github.com/coredns/coredns/plugin/pkg/doh"
 	"github.com/coredns/coredns/plugin/pkg/response"
 	"github.com/coredns/coredns/plugin/pkg/reuseport"
 	"github.com/coredns/coredns/plugin/pkg/transport"
-
-	"github.com/caddyserver/caddy"
 )
 
 // ServerHTTPS represents an instance of a DNS-over-HTTPS server.
 type ServerHTTPS struct {
 	*Server
-	httpsServer *http.Server
-	listenAddr  net.Addr
-	tlsConfig   *tls.Config
+	httpsServer  *http.Server
+	listenAddr   net.Addr
+	tlsConfig    *tls.Config
+	validRequest func(*http.Request) bool
 }
 
-// NewServerHTTPS returns a new CoreDNS GRPC server and compiles all plugins in to it.
+// NewServerHTTPS returns a new CoreDNS HTTPS server and compiles all plugins in to it.
 func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 	s, err := NewServer(addr, group)
 	if err != nil {
 		return nil, err
 	}
 	// The *tls* plugin must make sure that multiple conflicting
-	// TLS configuration return an error: it can only be specified once.
+	// TLS configuration returns an error: it can only be specified once.
 	var tlsConfig *tls.Config
 	for _, conf := range s.zones {
 		// Should we error if some configs *don't* have TLS?
 		tlsConfig = conf.TLSConfig
 	}
 
-	sh := &ServerHTTPS{Server: s, tlsConfig: tlsConfig, httpsServer: new(http.Server)}
+	// http/2 is recommended when using DoH. We need to specify it in next protos
+	// or the upgrade won't happen.
+	if tlsConfig != nil {
+		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
+	}
+
+	// Use a custom request validation func or use the standard DoH path check.
+	var validator func(*http.Request) bool
+	for _, conf := range s.zones {
+		validator = conf.HTTPRequestValidateFunc
+	}
+	if validator == nil {
+		validator = func(r *http.Request) bool { return r.URL.Path == doh.Path }
+	}
+
+	srv := &http.Server{
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	sh := &ServerHTTPS{
+		Server: s, tlsConfig: tlsConfig, httpsServer: srv, validRequest: validator,
+	}
 	sh.httpsServer.Handler = sh
 
 	return sh, nil
@@ -104,7 +126,7 @@ func (s *ServerHTTPS) Stop() error {
 // chain, converts it back and write it to the client.
 func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	if r.URL.Path != doh.Path {
+	if !s.validRequest(r) {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
@@ -118,11 +140,16 @@ func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Create a DoHWriter with the correct addresses in it.
 	h, p, _ := net.SplitHostPort(r.RemoteAddr)
 	port, _ := strconv.Atoi(p)
-	dw := &DoHWriter{laddr: s.listenAddr, raddr: &net.TCPAddr{IP: net.ParseIP(h), Port: port}}
+	dw := &DoHWriter{
+		laddr:   s.listenAddr,
+		raddr:   &net.TCPAddr{IP: net.ParseIP(h), Port: port},
+		request: r,
+	}
 
 	// We just call the normal chain handler - all error handling is done there.
 	// We should expect a packet to be returned that we can send to the client.
 	ctx := context.WithValue(context.Background(), Key{}, s.Server)
+	ctx = context.WithValue(ctx, LoopKey{}, 0)
 	s.ServeDNS(ctx, dw, msg)
 
 	// See section 4.2.1 of RFC 8484.
