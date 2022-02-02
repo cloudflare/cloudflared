@@ -23,6 +23,7 @@ type StreamBasedOriginProxy interface {
 }
 
 func (o *unixSocketPath) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.URL.Scheme = "http"
 	return o.transport.RoundTrip(req)
 }
 
