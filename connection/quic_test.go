@@ -560,12 +560,12 @@ func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.
 	if closeType != closedByRemote {
 		// Session was not closed by remote, so closeUDPSession should be invoked to unregister from remote
 		unregisterFromEdgeChan := make(chan struct{})
-		rpcServer := &mockSessionRPCServer{
+		sessionRPCServer := &mockSessionRPCServer{
 			sessionID:            sessionID,
 			unregisterReason:     expectedReason,
 			calledUnregisterChan: unregisterFromEdgeChan,
 		}
-		go runMockSessionRPCServer(ctx, edgeQUICSession, rpcServer, t)
+		go runRPCServer(ctx, edgeQUICSession, sessionRPCServer, nil, t)
 
 		<-unregisterFromEdgeChan
 	}
@@ -581,7 +581,7 @@ const (
 	closedByTimeout
 )
 
-func runMockSessionRPCServer(ctx context.Context, session quic.Session, rpcServer *mockSessionRPCServer, t *testing.T) {
+func runRPCServer(ctx context.Context, session quic.Session, sessionRPCServer tunnelpogs.SessionManager, configRPCServer tunnelpogs.ConfigurationManager, t *testing.T) {
 	stream, err := session.AcceptStream(ctx)
 	require.NoError(t, err)
 
@@ -596,7 +596,7 @@ func runMockSessionRPCServer(ctx context.Context, session quic.Session, rpcServe
 	assert.NoError(t, err)
 
 	log := zerolog.New(os.Stdout)
-	err = rpcServerStream.Serve(rpcServer, &log)
+	err = rpcServerStream.Serve(sessionRPCServer, configRPCServer, &log)
 	assert.NoError(t, err)
 }
 
@@ -618,7 +618,6 @@ func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionI
 		return fmt.Errorf("expect unregister reason %s, got %s", s.unregisterReason, reason)
 	}
 	close(s.calledUnregisterChan)
-	fmt.Println("unregister from edge")
 	return nil
 }
 

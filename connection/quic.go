@@ -192,7 +192,7 @@ func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) 
 }
 
 func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) error {
-	return rpcStream.Serve(q, q.logger)
+	return rpcStream.Serve(q, q, q.logger)
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
@@ -258,6 +258,11 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 // UnregisterUdpSession is the RPC method invoked by edge to unregister and terminate a sesssion
 func (q *QUICConnection) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
 	return q.sessionManager.UnregisterSession(ctx, sessionID, message, true)
+}
+
+// UpdateConfiguration is the RPC method invoked by edge when there is a new configuration
+func (q *QUICConnection) UpdateConfiguration(ctx context.Context, version int32, config []byte) (*tunnelpogs.UpdateConfigurationResponse, error) {
+	return nil, fmt.Errorf("TODO: TUN-5698")
 }
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to
