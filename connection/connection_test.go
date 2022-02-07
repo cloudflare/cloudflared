@@ -14,18 +14,19 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/ingress"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
 const (
-	largeFileSize = 2 * 1024 * 1024
+	largeFileSize   = 2 * 1024 * 1024
+	testGracePeriod = time.Millisecond * 100
 )
 
 var (
 	unusedWarpRoutingService = (*ingress.WarpRoutingService)(nil)
-	testConfig               = &Config{
-		OriginProxy: &mockOriginProxy{},
-		GracePeriod: time.Millisecond * 100,
+	testConfigManager        = &mockConfigManager{
+		originProxy: &mockOriginProxy{},
 	}
 	log           = zerolog.Nop()
 	testOriginURL = &url.URL{
@@ -41,6 +42,20 @@ type testRequest struct {
 	expectedStatus int
 	expectedBody   []byte
 	isProxyError   bool
+}
+
+type mockConfigManager struct {
+	originProxy OriginProxy
+}
+
+func (*mockConfigManager) Update(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
+	return &tunnelpogs.UpdateConfigurationResponse{
+		LastAppliedVersion: version,
+	}
+}
+
+func (mcr *mockConfigManager) GetOriginProxy() OriginProxy {
+	return mcr.originProxy
 }
 
 type mockOriginProxy struct{}

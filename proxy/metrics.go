@@ -1,4 +1,4 @@
-package origin
+package proxy
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,14 +43,6 @@ var (
 			Help:      "Count of error proxying to origin",
 		},
 	)
-	haConnections = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: connection.MetricsNamespace,
-			Subsystem: connection.TunnelSubsystem,
-			Name:      "ha_connections",
-			Help:      "Number of active ha connections",
-		},
-	)
 )
 
 func init() {
@@ -59,7 +51,6 @@ func init() {
 		concurrentRequests,
 		responseByCode,
 		requestErrors,
-		haConnections,
 	)
 }
 

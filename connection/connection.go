@@ -25,13 +25,12 @@ const (
 
 var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
 
-type Config struct {
-	OriginProxy     OriginProxy
-	GracePeriod     time.Duration
-	ReplaceExisting bool
+type ConfigManager interface {
+	Update(version int32, config []byte) *pogs.UpdateConfigurationResponse
+	GetOriginProxy() OriginProxy
 }
 
-type NamedTunnelConfig struct {
+type NamedTunnelProperties struct {
 	Credentials    Credentials
 	Client         pogs.ClientInfo
 	QuickTunnelUrl string
@@ -52,7 +51,7 @@ func (c *Credentials) Auth() pogs.TunnelAuth {
 	}
 }
 
-type ClassicTunnelConfig struct {
+type ClassicTunnelProperties struct {
 	Hostname   string
 	OriginCert []byte
 	// feature-flag to use new edge reconnect tokens

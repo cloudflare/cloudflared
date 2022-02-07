@@ -195,7 +195,7 @@ type PercentageFetcher func() (edgediscovery.ProtocolPercents, error)
 func NewProtocolSelector(
 	protocolFlag string,
 	warpRoutingEnabled bool,
-	namedTunnel *NamedTunnelConfig,
+	namedTunnel *NamedTunnelProperties,
 	fetchFunc PercentageFetcher,
 	ttl time.Duration,
 	log *zerolog.Logger,

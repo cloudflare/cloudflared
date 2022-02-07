@@ -77,7 +77,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	return StartServer(
 		sc.c,
 		buildInfo,
-		&connection.NamedTunnelConfig{Credentials: credentials, QuickTunnelUrl: data.Result.Hostname},
+		&connection.NamedTunnelProperties{Credentials: credentials, QuickTunnelUrl: data.Result.Hostname},
 		sc.log,
 		sc.isUIEnabled,
 	)

@@ -30,12 +30,12 @@ var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
 // HTTP2Connection represents a net.Conn that uses HTTP2 frames to proxy traffic from the edge to cloudflared on the
 // origin.
 type HTTP2Connection struct {
-	conn        net.Conn
-	server      *http2.Server
-	config      *Config
-	connOptions *tunnelpogs.ConnectionOptions
-	observer    *Observer
-	connIndex   uint8
+	conn          net.Conn
+	server        *http2.Server
+	configManager ConfigManager
+	connOptions   *tunnelpogs.ConnectionOptions
+	observer      *Observer
+	connIndex     uint8
 	// newRPCClientFunc allows us to mock RPCs during testing
 	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 
@@ -49,7 +49,7 @@ type HTTP2Connection struct {
 // NewHTTP2Connection returns a new instance of HTTP2Connection.
 func NewHTTP2Connection(
 	conn net.Conn,
-	config *Config,
+	configManager ConfigManager,
 	connOptions *tunnelpogs.ConnectionOptions,
 	observer *Observer,
 	connIndex uint8,
@@ -61,7 +61,7 @@ func NewHTTP2Connection(
 		server: &http2.Server{
 			MaxConcurrentStreams: MaxConcurrentStreams,
 		},
-		config:               config,
+		configManager:        configManager,
 		connOptions:          connOptions,
 		observer:             observer,
 		connIndex:            connIndex,
@@ -116,7 +116,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
-		if err := c.config.OriginProxy.ProxyHTTP(respWriter, r, connType == TypeWebsocket); err != nil {
+		if err := c.configManager.GetOriginProxy().ProxyHTTP(respWriter, r, connType == TypeWebsocket); err != nil {
 			err := fmt.Errorf("Failed to proxy HTTP: %w", err)
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
@@ -131,7 +131,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		rws := NewHTTPResponseReadWriterAcker(respWriter, r)
-		if err := c.config.OriginProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
+		if err := c.configManager.GetOriginProxy().ProxyTCP(r.Context(), rws, &TCPRequest{
 			Dest:    host,
 			CFRay:   FindCfRayHeader(r),
 			LBProbe: IsLBProbeRequest(r),

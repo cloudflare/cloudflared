@@ -22,9 +22,10 @@ const (
 )
 
 type h2muxConnection struct {
-	config      *Config
-	muxerConfig *MuxerConfig
-	muxer       *h2mux.Muxer
+	configManager ConfigManager
+	gracePeriod   time.Duration
+	muxerConfig   *MuxerConfig
+	muxer         *h2mux.Muxer
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connIndexStr string
 	connIndex    uint8
@@ -60,7 +61,8 @@ func (mc *MuxerConfig) H2MuxerConfig(h h2mux.MuxedStreamHandler, log *zerolog.Lo
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
 func NewH2muxConnection(
-	config *Config,
+	configManager ConfigManager,
+	gracePeriod time.Duration,
 	muxerConfig *MuxerConfig,
 	edgeConn net.Conn,
 	connIndex uint8,
@@ -68,7 +70,8 @@ func NewH2muxConnection(
 	gracefulShutdownC <-chan struct{},
 ) (*h2muxConnection, error, bool) {
 	h := &h2muxConnection{
-		config:            config,
+		configManager:     configManager,
+		gracePeriod:       gracePeriod,
 		muxerConfig:       muxerConfig,
 		connIndexStr:      uint8ToString(connIndex),
 		connIndex:         connIndex,
@@ -88,7 +91,7 @@ func NewH2muxConnection(
 	return h, nil, false
 }
 
-func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *NamedTunnelConfig, connOptions *tunnelpogs.ConnectionOptions, connectedFuse ConnectedFuse) error {
+func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *NamedTunnelProperties, connOptions *tunnelpogs.ConnectionOptions, connectedFuse ConnectedFuse) error {
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		return h.serveMuxer(serveCtx)
@@ -117,7 +120,7 @@ func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *Nam
 	return err
 }
 
-func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel *ClassicTunnelConfig, credentialManager CredentialManager, registrationOptions *tunnelpogs.RegistrationOptions, connectedFuse ConnectedFuse) error {
+func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel *ClassicTunnelProperties, credentialManager CredentialManager, registrationOptions *tunnelpogs.RegistrationOptions, connectedFuse ConnectedFuse) error {
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		return h.serveMuxer(serveCtx)
@@ -224,7 +227,7 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		sourceConnectionType = TypeWebsocket
 	}
 
-	err := h.config.OriginProxy.ProxyHTTP(respWriter, req, sourceConnectionType == TypeWebsocket)
+	err := h.configManager.GetOriginProxy().ProxyHTTP(respWriter, req, sourceConnectionType == TypeWebsocket)
 	if err != nil {
 		respWriter.WriteErrorResponse()
 	}

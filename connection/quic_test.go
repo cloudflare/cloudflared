@@ -627,13 +627,12 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection 
 		NextProtos:         []string{"argotunnel"},
 	}
 	// Start a mock httpProxy
-	originProxy := &mockOriginProxyWithRequest{}
 	log := zerolog.New(os.Stdout)
 	qc, err := NewQUICConnection(
 		testQUICConfig,
 		udpListenerAddr,
 		tlsClientConfig,
-		originProxy,
+		&mockConfigManager{originProxy: &mockOriginProxyWithRequest{}},
 		&tunnelpogs.ConnectionOptions{},
 		fakeControlStream{},
 		&log,

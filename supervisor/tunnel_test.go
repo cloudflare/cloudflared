@@ -1,4 +1,4 @@
-package origin
+package supervisor
 
 import (
 	"testing"
@@ -32,11 +32,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	}
 	log := zerolog.Nop()
 	resolveTTL := time.Duration(0)
-	namedTunnel := &connection.NamedTunnelConfig{
-		Credentials: connection.Credentials{
-			AccountTag: "test-account",
-		},
-	}
+	namedTunnel := &connection.NamedTunnelProperties{}
 	mockFetcher := dynamicMockFetcher{
 		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}},
 	}

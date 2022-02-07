@@ -35,7 +35,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelConfig{},
+		&NamedTunnelProperties{},
 		connIndex,
 		nil,
 		nil,
@@ -43,8 +43,8 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	)
 	return NewHTTP2Connection(
 		cfdConn,
-		// OriginProxy is set in testConfig
-		testConfig,
+		// OriginProxy is set in testConfigManager
+		testConfigManager,
 		&pogs.ConnectionOptions{},
 		obs,
 		connIndex,
@@ -132,7 +132,7 @@ type mockNamedTunnelRPCClient struct {
 
 func (mc mockNamedTunnelRPCClient) RegisterConnection(
 	c context.Context,
-	config *NamedTunnelConfig,
+	properties *NamedTunnelProperties,
 	options *tunnelpogs.ConnectionOptions,
 	connIndex uint8,
 	observer *Observer,
@@ -313,7 +313,7 @@ func TestServeControlStream(t *testing.T) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelConfig{},
+		&NamedTunnelProperties{},
 		1,
 		rpcClientFactory.newMockRPCClient,
 		nil,
@@ -363,7 +363,7 @@ func TestFailRegistration(t *testing.T) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelConfig{},
+		&NamedTunnelProperties{},
 		http2Conn.connIndex,
 		rpcClientFactory.newMockRPCClient,
 		nil,
@@ -409,7 +409,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelConfig{},
+		&NamedTunnelProperties{},
 		http2Conn.connIndex,
 		rpcClientFactory.newMockRPCClient,
 		shutdownC,

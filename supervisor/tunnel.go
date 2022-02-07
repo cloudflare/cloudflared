@@ -1,4 +1,4 @@
-package origin
+package supervisor
 
 import (
 	"context"
@@ -34,32 +34,33 @@ const (
 )
 
 type TunnelConfig struct {
-	ConnectionConfig *connection.Config
-	OSArch           string
-	ClientID         string
-	CloseConnOnce    *sync.Once // Used to close connectedSignal no more than once
-	EdgeAddrs        []string
-	Region           string
-	HAConnections    int
-	IncidentLookup   IncidentLookup
-	IsAutoupdated    bool
-	LBPool           string
-	Tags             []tunnelpogs.Tag
-	Log              *zerolog.Logger
-	LogTransport     *zerolog.Logger
-	Observer         *connection.Observer
-	ReportedVersion  string
-	Retries          uint
-	RunFromTerminal  bool
+	GracePeriod     time.Duration
+	ReplaceExisting bool
+	OSArch          string
+	ClientID        string
+	CloseConnOnce   *sync.Once // Used to close connectedSignal no more than once
+	EdgeAddrs       []string
+	Region          string
+	HAConnections   int
+	IncidentLookup  IncidentLookup
+	IsAutoupdated   bool
+	LBPool          string
+	Tags            []tunnelpogs.Tag
+	Log             *zerolog.Logger
+	LogTransport    *zerolog.Logger
+	Observer        *connection.Observer
+	ReportedVersion string
+	Retries         uint
+	RunFromTerminal bool
 
-	NamedTunnel      *connection.NamedTunnelConfig
-	ClassicTunnel    *connection.ClassicTunnelConfig
+	NamedTunnel      *connection.NamedTunnelProperties
+	ClassicTunnel    *connection.ClassicTunnelProperties
 	MuxerConfig      *connection.MuxerConfig
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 }
 
-func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
+func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
 	policy := tunnelrpc.ExistingTunnelPolicy_balance
 	if c.HAConnections <= 1 && c.LBPool == "" {
 		policy = tunnelrpc.ExistingTunnelPolicy_disconnect
@@ -81,7 +82,7 @@ func (c *TunnelConfig) RegistrationOptions(connectionID uint8, OriginLocalIP str
 	}
 }
 
-func (c *TunnelConfig) ConnectionOptions(originLocalAddr string, numPreviousAttempts uint8) *tunnelpogs.ConnectionOptions {
+func (c *TunnelConfig) connectionOptions(originLocalAddr string, numPreviousAttempts uint8) *tunnelpogs.ConnectionOptions {
 	// attempt to parse out origin IP, but don't fail since it's informational field
 	host, _, _ := net.SplitHostPort(originLocalAddr)
 	originIP := net.ParseIP(host)
@@ -89,7 +90,7 @@ func (c *TunnelConfig) ConnectionOptions(originLocalAddr string, numPreviousAtte
 	return &tunnelpogs.ConnectionOptions{
 		Client:              c.NamedTunnel.Client,
 		OriginLocalIP:       originIP,
-		ReplaceExisting:     c.ConnectionConfig.ReplaceExisting,
+		ReplaceExisting:     c.ReplaceExisting,
 		CompressionQuality:  uint8(c.MuxerConfig.CompressionSetting),
 		NumPreviousAttempts: numPreviousAttempts,
 	}
@@ -106,11 +107,12 @@ func (c *TunnelConfig) SupportedFeatures() []string {
 func StartTunnelDaemon(
 	ctx context.Context,
 	config *TunnelConfig,
+	dynamiConfig *DynamicConfig,
 	connectedSignal *signal.Signal,
 	reconnectCh chan ReconnectSignal,
 	graceShutdownC <-chan struct{},
 ) error {
-	s, err := NewSupervisor(config, reconnectCh, graceShutdownC)
+	s, err := NewSupervisor(config, dynamiConfig, reconnectCh, graceShutdownC)
 	if err != nil {
 		return err
 	}
@@ -120,6 +122,7 @@ func StartTunnelDaemon(
 func ServeTunnelLoop(
 	ctx context.Context,
 	credentialManager *reconnectCredentialManager,
+	configManager *configManager,
 	config *TunnelConfig,
 	addr *allregions.EdgeAddr,
 	connAwareLogger *ConnAwareLogger,
@@ -155,6 +158,7 @@ func ServeTunnelLoop(
 			ctx,
 			connLog,
 			credentialManager,
+			configManager,
 			config,
 			addr,
 			connIndex,
@@ -253,6 +257,7 @@ func ServeTunnel(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
+	configManager *configManager,
 	config *TunnelConfig,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
@@ -281,6 +286,7 @@ func ServeTunnel(
 		ctx,
 		connLog,
 		credentialManager,
+		configManager,
 		config,
 		addr,
 		connIndex,
@@ -329,6 +335,7 @@ func serveTunnel(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
+	configManager *configManager,
 	config *TunnelConfig,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
@@ -339,7 +346,6 @@ func serveTunnel(
 	protocol connection.Protocol,
 	gracefulShutdownC <-chan struct{},
 ) (err error, recoverable bool) {
-
 	connectedFuse := &connectedFuse{
 		fuse:    fuse,
 		backoff: backoff,
@@ -351,14 +357,15 @@ func serveTunnel(
 		connIndex,
 		nil,
 		gracefulShutdownC,
-		config.ConnectionConfig.GracePeriod,
+		config.GracePeriod,
 	)
 
 	switch protocol {
 	case connection.QUIC, connection.QUICWarp:
-		connOptions := config.ConnectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
+		connOptions := config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return ServeQUIC(ctx,
 			addr.UDP,
+			configManager,
 			config,
 			connLog,
 			connOptions,
@@ -374,10 +381,11 @@ func serveTunnel(
 			return err, true
 		}
 
-		connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
+		connOptions := config.connectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
 		if err := ServeHTTP2(
 			ctx,
 			connLog,
+			configManager,
 			config,
 			edgeConn,
 			connOptions,
@@ -400,6 +408,7 @@ func serveTunnel(
 			ctx,
 			connLog,
 			credentialManager,
+			configManager,
 			config,
 			edgeConn,
 			connIndex,
@@ -426,6 +435,7 @@ func ServeH2mux(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
+	configManager *configManager,
 	config *TunnelConfig,
 	edgeConn net.Conn,
 	connIndex uint8,
@@ -437,7 +447,8 @@ func ServeH2mux(
 	connLog.Logger().Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
 	handler, err, recoverable := connection.NewH2muxConnection(
-		config.ConnectionConfig,
+		configManager,
+		config.GracePeriod,
 		config.MuxerConfig,
 		edgeConn,
 		connIndex,
@@ -455,10 +466,10 @@ func ServeH2mux(
 
 	errGroup.Go(func() error {
 		if config.NamedTunnel != nil {
-			connOptions := config.ConnectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
+			connOptions := config.connectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
 			return handler.ServeNamedTunnel(serveCtx, config.NamedTunnel, connOptions, connectedFuse)
 		}
-		registrationOptions := config.RegistrationOptions(connIndex, edgeConn.LocalAddr().String(), cloudflaredUUID)
+		registrationOptions := config.registrationOptions(connIndex, edgeConn.LocalAddr().String(), cloudflaredUUID)
 		return handler.ServeClassicTunnel(serveCtx, config.ClassicTunnel, credentialManager, registrationOptions, connectedFuse)
 	})
 
@@ -472,6 +483,7 @@ func ServeH2mux(
 func ServeHTTP2(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
+	configManager *configManager,
 	config *TunnelConfig,
 	tlsServerConn net.Conn,
 	connOptions *tunnelpogs.ConnectionOptions,
@@ -483,7 +495,7 @@ func ServeHTTP2(
 	connLog.Logger().Debug().Msgf("Connecting via http2")
 	h2conn := connection.NewHTTP2Connection(
 		tlsServerConn,
-		config.ConnectionConfig,
+		configManager,
 		connOptions,
 		config.Observer,
 		connIndex,
@@ -511,6 +523,7 @@ func ServeHTTP2(
 func ServeQUIC(
 	ctx context.Context,
 	edgeAddr *net.UDPAddr,
+	configManager *configManager,
 	config *TunnelConfig,
 	connLogger *ConnAwareLogger,
 	connOptions *tunnelpogs.ConnectionOptions,
@@ -535,7 +548,7 @@ func ServeQUIC(
 		quicConfig,
 		edgeAddr,
 		tlsConfig,
-		config.ConnectionConfig.OriginProxy,
+		configManager,
 		connOptions,
 		controlStreamHandler,
 		connLogger.Logger())

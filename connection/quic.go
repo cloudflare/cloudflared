@@ -36,7 +36,7 @@ const (
 type QUICConnection struct {
 	session              quic.Session
 	logger               *zerolog.Logger
-	httpProxy            OriginProxy
+	configManager        ConfigManager
 	sessionManager       datagramsession.Manager
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
@@ -47,7 +47,7 @@ func NewQUICConnection(
 	quicConfig *quic.Config,
 	edgeAddr net.Addr,
 	tlsConfig *tls.Config,
-	httpProxy OriginProxy,
+	configManager ConfigManager,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler ControlStreamHandler,
 	logger *zerolog.Logger,
@@ -66,7 +66,7 @@ func NewQUICConnection(
 
 	return &QUICConnection{
 		session:              session,
-		httpProxy:            httpProxy,
+		configManager:        configManager,
 		logger:               logger,
 		sessionManager:       sessionManager,
 		controlStreamHandler: controlStreamHandler,
@@ -183,10 +183,10 @@ func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) 
 		}
 
 		w := newHTTPResponseAdapter(stream)
-		return q.httpProxy.ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
+		return q.configManager.GetOriginProxy().ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
 		rwa := &streamReadWriteAcker{stream}
-		return q.httpProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
+		return q.configManager.GetOriginProxy().ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package origin
+package proxy
 
 import (
 	"bufio"
@@ -28,7 +28,7 @@ const (
 
 // Proxy represents a means to Proxy between cloudflared and the origin services.
 type Proxy struct {
-	ingressRules ingress.Ingress
+	ingressRules *ingress.Ingress
 	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
@@ -37,7 +37,7 @@ type Proxy struct {
 
 // NewOriginProxy returns a new instance of the Proxy struct.
 func NewOriginProxy(
-	ingressRules ingress.Ingress,
+	ingressRules *ingress.Ingress,
 	warpRouting *ingress.WarpRoutingService,
 	tags []tunnelpogs.Tag,
 	log *zerolog.Logger,
@@ -139,7 +139,7 @@ func (p *Proxy) ProxyTCP(
 	return nil
 }
 
-func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
+func ruleField(ing *ingress.Ingress, ruleNum int) (ruleID string, srv string) {
 	srv = ing.Rules[ruleNum].Service.String()
 	if ing.IsSingleRule() {
 		return "", srv

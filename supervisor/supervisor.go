@@ -1,4 +1,4 @@
-package origin
+package supervisor
 
 import (
 	"context"
@@ -37,6 +37,7 @@ const (
 // reconnects them if they disconnect.
 type Supervisor struct {
 	cloudflaredUUID   uuid.UUID
+	configManager     *configManager
 	config            *TunnelConfig
 	edgeIPs           *edgediscovery.Edge
 	tunnelErrors      chan tunnelError
@@ -64,7 +65,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, dynamiConfig *DynamicConfig, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
 	cloudflaredUUID, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
@@ -88,6 +89,7 @@ func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, grace
 	return &Supervisor{
 		cloudflaredUUID:            cloudflaredUUID,
 		config:                     config,
+		configManager:              newConfigManager(dynamiConfig, config.Tags, config.Log),
 		edgeIPs:                    edgeIPs,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
@@ -242,6 +244,7 @@ func (s *Supervisor) startFirstTunnel(
 	err = ServeTunnelLoop(
 		ctx,
 		s.reconnectCredentialManager,
+		s.configManager,
 		s.config,
 		addr,
 		s.log,
@@ -276,6 +279,7 @@ func (s *Supervisor) startFirstTunnel(
 		err = ServeTunnelLoop(
 			ctx,
 			s.reconnectCredentialManager,
+			s.configManager,
 			s.config,
 			addr,
 			s.log,
@@ -310,6 +314,7 @@ func (s *Supervisor) startTunnel(
 	err = ServeTunnelLoop(
 		ctx,
 		s.reconnectCredentialManager,
+		s.configManager,
 		s.config,
 		addr,
 		s.log,
@@ -380,7 +385,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 	defer rpcClient.Close()
 
 	const arbitraryConnectionID = uint8(0)
-	registrationOptions := s.config.RegistrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
+	registrationOptions := s.config.registrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
 	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
 	return rpcClient.Authenticate(ctx, s.config.ClassicTunnel, registrationOptions)
 }

@@ -1,4 +1,4 @@
-package origin
+package proxy
 
 import (
 	"bytes"
@@ -135,7 +135,7 @@ func TestProxySingleOrigin(t *testing.T) {
 	errC := make(chan error)
 	require.NoError(t, ingressRule.StartOrigins(&wg, &log, ctx.Done(), errC))
 
-	proxy := NewOriginProxy(ingressRule, unusedWarpRoutingService, testTags, &log)
+	proxy := NewOriginProxy(&ingressRule, unusedWarpRoutingService, testTags, &log)
 	t.Run("testProxyHTTP", testProxyHTTP(proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
@@ -345,7 +345,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 	var wg sync.WaitGroup
 	require.NoError(t, ingress.StartOrigins(&wg, &log, ctx.Done(), errC))
 
-	proxy := NewOriginProxy(ingress, unusedWarpRoutingService, testTags, &log)
+	proxy := NewOriginProxy(&ingress, unusedWarpRoutingService, testTags, &log)
 
 	for _, test := range tests {
 		responseWriter := newMockHTTPRespWriter()
@@ -394,7 +394,7 @@ func TestProxyError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	proxy := NewOriginProxy(ing, unusedWarpRoutingService, testTags, &log)
+	proxy := NewOriginProxy(&ing, unusedWarpRoutingService, testTags, &log)
 
 	responseWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
@@ -637,7 +637,7 @@ func TestConnections(t *testing.T) {
 			var wg sync.WaitGroup
 			errC := make(chan error)
 			ingressRule.StartOrigins(&wg, logger, ctx.Done(), errC)
-			proxy := NewOriginProxy(ingressRule, test.args.warpRoutingService, testTags, logger)
+			proxy := NewOriginProxy(&ingressRule, test.args.warpRoutingService, testTags, logger)
 
 			dest := ln.Addr().String()
 			req, err := http.NewRequest(
