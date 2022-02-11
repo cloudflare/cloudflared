@@ -13,6 +13,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -37,8 +38,8 @@ const (
 // reconnects them if they disconnect.
 type Supervisor struct {
 	cloudflaredUUID   uuid.UUID
-	configManager     *configManager
 	config            *TunnelConfig
+	orchestrator      *orchestration.Orchestrator
 	edgeIPs           *edgediscovery.Edge
 	tunnelErrors      chan tunnelError
 	tunnelsConnecting map[int]chan struct{}
@@ -65,7 +66,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, dynamiConfig *DynamicConfig, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrator, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
 	cloudflaredUUID, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
@@ -89,7 +90,7 @@ func NewSupervisor(config *TunnelConfig, dynamiConfig *DynamicConfig, reconnectC
 	return &Supervisor{
 		cloudflaredUUID:            cloudflaredUUID,
 		config:                     config,
-		configManager:              newConfigManager(dynamiConfig, config.Tags, config.Log),
+		orchestrator:               orchestrator,
 		edgeIPs:                    edgeIPs,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
@@ -244,8 +245,8 @@ func (s *Supervisor) startFirstTunnel(
 	err = ServeTunnelLoop(
 		ctx,
 		s.reconnectCredentialManager,
-		s.configManager,
 		s.config,
+		s.orchestrator,
 		addr,
 		s.log,
 		firstConnIndex,
@@ -279,8 +280,8 @@ func (s *Supervisor) startFirstTunnel(
 		err = ServeTunnelLoop(
 			ctx,
 			s.reconnectCredentialManager,
-			s.configManager,
 			s.config,
+			s.orchestrator,
 			addr,
 			s.log,
 			firstConnIndex,
@@ -314,8 +315,8 @@ func (s *Supervisor) startTunnel(
 	err = ServeTunnelLoop(
 		ctx,
 		s.reconnectCredentialManager,
-		s.configManager,
 		s.config,
+		s.orchestrator,
 		addr,
 		s.log,
 		uint8(index),

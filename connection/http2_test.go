@@ -44,7 +44,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	return NewHTTP2Connection(
 		cfdConn,
 		// OriginProxy is set in testConfigManager
-		testConfigManager,
+		testOrchestrator,
 		&pogs.ConnectionOptions{},
 		obs,
 		connIndex,

@@ -28,7 +28,7 @@ const (
 
 // Proxy represents a means to Proxy between cloudflared and the origin services.
 type Proxy struct {
-	ingressRules *ingress.Ingress
+	ingressRules ingress.Ingress
 	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
@@ -37,18 +37,23 @@ type Proxy struct {
 
 // NewOriginProxy returns a new instance of the Proxy struct.
 func NewOriginProxy(
-	ingressRules *ingress.Ingress,
-	warpRouting *ingress.WarpRoutingService,
+	ingressRules ingress.Ingress,
+	warpRoutingEnabled bool,
 	tags []tunnelpogs.Tag,
 	log *zerolog.Logger,
 ) *Proxy {
-	return &Proxy{
+	proxy := &Proxy{
 		ingressRules: ingressRules,
-		warpRouting:  warpRouting,
 		tags:         tags,
 		log:          log,
 		bufferPool:   newBufferPool(512 * 1024),
 	}
+	if warpRoutingEnabled {
+		proxy.warpRouting = ingress.NewWarpRoutingService()
+		log.Info().Msgf("Warp-routing is enabled")
+	}
+
+	return proxy
 }
 
 // ProxyHTTP further depends on ingress rules to establish a connection with the origin service. This may be
@@ -139,7 +144,7 @@ func (p *Proxy) ProxyTCP(
 	return nil
 }
 
-func ruleField(ing *ingress.Ingress, ruleNum int) (ruleID string, srv string) {
+func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
 	srv = ing.Rules[ruleNum].Service.String()
 	if ing.IsSingleRule() {
 		return "", srv

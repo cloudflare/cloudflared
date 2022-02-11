@@ -23,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -153,7 +154,7 @@ func prepareTunnelConfig(
 	log, logTransport *zerolog.Logger,
 	observer *connection.Observer,
 	namedTunnel *connection.NamedTunnelProperties,
-) (*supervisor.TunnelConfig, *supervisor.DynamicConfig, error) {
+) (*supervisor.TunnelConfig, *orchestration.Config, error) {
 	isNamedTunnel := namedTunnel != nil
 
 	configHostname := c.String("hostname")
@@ -292,7 +293,7 @@ func prepareTunnelConfig(
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}
-	dynamicConfig := &supervisor.DynamicConfig{
+	dynamicConfig := &orchestration.Config{
 		Ingress:            &ingressRules,
 		WarpRoutingEnabled: warpRoutingEnabled,
 	}

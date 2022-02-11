@@ -6,14 +6,12 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudflare/cloudflared/ingress"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -24,15 +22,10 @@ const (
 )
 
 var (
-	unusedWarpRoutingService = (*ingress.WarpRoutingService)(nil)
-	testConfigManager        = &mockConfigManager{
+	testOrchestrator = &mockOrchestrator{
 		originProxy: &mockOriginProxy{},
 	}
 	log           = zerolog.Nop()
-	testOriginURL = &url.URL{
-		Scheme: "https",
-		Host:   "connectiontest.argotunnel.com",
-	}
 	testLargeResp = make([]byte, largeFileSize)
 )
 
@@ -44,18 +37,18 @@ type testRequest struct {
 	isProxyError   bool
 }
 
-type mockConfigManager struct {
+type mockOrchestrator struct {
 	originProxy OriginProxy
 }
 
-func (*mockConfigManager) Update(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
+func (*mockOrchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
 	return &tunnelpogs.UpdateConfigurationResponse{
 		LastAppliedVersion: version,
 	}
 }
 
-func (mcr *mockConfigManager) GetOriginProxy() OriginProxy {
-	return mcr.originProxy
+func (mcr *mockOrchestrator) GetOriginProxy() (OriginProxy, error) {
+	return mcr.originProxy, nil
 }
 
 type mockOriginProxy struct{}

@@ -22,10 +22,10 @@ const (
 )
 
 type h2muxConnection struct {
-	configManager ConfigManager
-	gracePeriod   time.Duration
-	muxerConfig   *MuxerConfig
-	muxer         *h2mux.Muxer
+	orchestrator Orchestrator
+	gracePeriod  time.Duration
+	muxerConfig  *MuxerConfig
+	muxer        *h2mux.Muxer
 	// connectionID is only used by metrics, and prometheus requires labels to be string
 	connIndexStr string
 	connIndex    uint8
@@ -61,7 +61,7 @@ func (mc *MuxerConfig) H2MuxerConfig(h h2mux.MuxedStreamHandler, log *zerolog.Lo
 
 // NewTunnelHandler returns a TunnelHandler, origin LAN IP and error
 func NewH2muxConnection(
-	configManager ConfigManager,
+	orchestrator Orchestrator,
 	gracePeriod time.Duration,
 	muxerConfig *MuxerConfig,
 	edgeConn net.Conn,
@@ -70,7 +70,7 @@ func NewH2muxConnection(
 	gracefulShutdownC <-chan struct{},
 ) (*h2muxConnection, error, bool) {
 	h := &h2muxConnection{
-		configManager:     configManager,
+		orchestrator:      orchestrator,
 		gracePeriod:       gracePeriod,
 		muxerConfig:       muxerConfig,
 		connIndexStr:      uint8ToString(connIndex),
@@ -227,7 +227,13 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		sourceConnectionType = TypeWebsocket
 	}
 
-	err := h.configManager.GetOriginProxy().ProxyHTTP(respWriter, req, sourceConnectionType == TypeWebsocket)
+	originProxy, err := h.orchestrator.GetOriginProxy()
+	if err != nil {
+		respWriter.WriteErrorResponse()
+		return err
+	}
+
+	err = originProxy.ProxyHTTP(respWriter, req, sourceConnectionType == TypeWebsocket)
 	if err != nil {
 		respWriter.WriteErrorResponse()
 	}

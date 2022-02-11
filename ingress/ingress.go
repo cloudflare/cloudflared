@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -145,13 +144,11 @@ func (ing Ingress) IsSingleRule() bool {
 
 // StartOrigins will start any origin services managed by cloudflared, e.g. proxy servers or Hello World.
 func (ing Ingress) StartOrigins(
-	wg *sync.WaitGroup,
 	log *zerolog.Logger,
 	shutdownC <-chan struct{},
-	errC chan error,
 ) error {
 	for _, rule := range ing.Rules {
-		if err := rule.Service.start(wg, log, shutdownC, errC, rule.Config); err != nil {
+		if err := rule.Service.start(log, shutdownC, rule.Config); err != nil {
 			return errors.Wrapf(err, "Error starting local service %s", rule.Service)
 		}
 	}

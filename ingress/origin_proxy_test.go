@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -132,10 +131,8 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 	httpService := &httpService{
 		url: originURL,
 	}
-	var wg sync.WaitGroup
 	shutdownC := make(chan struct{})
-	errC := make(chan error)
-	require.NoError(t, httpService.start(&wg, testLogger, shutdownC, errC, cfg))
+	require.NoError(t, httpService.start(testLogger, shutdownC, cfg))
 
 	req, err := http.NewRequest(http.MethodGet, originURL.String(), nil)
 	require.NoError(t, err)
@@ -169,10 +166,8 @@ func TestHTTPServiceUsesIngressRuleScheme(t *testing.T) {
 	httpService := &httpService{
 		url: originURL,
 	}
-	var wg sync.WaitGroup
 	shutdownC := make(chan struct{})
-	errC := make(chan error)
-	require.NoError(t, httpService.start(&wg, testLogger, shutdownC, errC, cfg))
+	require.NoError(t, httpService.start(testLogger, shutdownC, cfg))
 
 	// Tunnel uses scheme defined in the service field of the ingress rule, independent of the X-Forwarded-Proto header
 	protos := []string{"https", "http", "dne"}

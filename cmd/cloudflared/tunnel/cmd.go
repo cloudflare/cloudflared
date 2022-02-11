@@ -31,6 +31,7 @@ import (
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
+	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -353,7 +354,8 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, log)
 	}()
 
-	if err := dynamicConfig.Ingress.StartOrigins(&wg, log, ctx.Done(), errC); err != nil {
+	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	if err != nil {
 		return err
 	}
 
@@ -369,7 +371,7 @@ func StartServer(
 			wg.Done()
 			log.Info().Msg("Tunnel server stopped")
 		}()
-		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, dynamicConfig, connectedSignal, reconnectCh, graceShutdownC)
+		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, reconnectCh, graceShutdownC)
 	}()
 
 	if isUIEnabled {

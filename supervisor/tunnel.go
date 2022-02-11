@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -107,12 +108,12 @@ func (c *TunnelConfig) SupportedFeatures() []string {
 func StartTunnelDaemon(
 	ctx context.Context,
 	config *TunnelConfig,
-	dynamiConfig *DynamicConfig,
+	orchestrator *orchestration.Orchestrator,
 	connectedSignal *signal.Signal,
 	reconnectCh chan ReconnectSignal,
 	graceShutdownC <-chan struct{},
 ) error {
-	s, err := NewSupervisor(config, dynamiConfig, reconnectCh, graceShutdownC)
+	s, err := NewSupervisor(config, orchestrator, reconnectCh, graceShutdownC)
 	if err != nil {
 		return err
 	}
@@ -122,8 +123,8 @@ func StartTunnelDaemon(
 func ServeTunnelLoop(
 	ctx context.Context,
 	credentialManager *reconnectCredentialManager,
-	configManager *configManager,
 	config *TunnelConfig,
+	orchestrator *orchestration.Orchestrator,
 	addr *allregions.EdgeAddr,
 	connAwareLogger *ConnAwareLogger,
 	connIndex uint8,
@@ -158,8 +159,8 @@ func ServeTunnelLoop(
 			ctx,
 			connLog,
 			credentialManager,
-			configManager,
 			config,
+			orchestrator,
 			addr,
 			connIndex,
 			connectedFuse,
@@ -257,8 +258,8 @@ func ServeTunnel(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
-	configManager *configManager,
 	config *TunnelConfig,
+	orchestrator *orchestration.Orchestrator,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
 	fuse *h2mux.BooleanFuse,
@@ -286,8 +287,8 @@ func ServeTunnel(
 		ctx,
 		connLog,
 		credentialManager,
-		configManager,
 		config,
+		orchestrator,
 		addr,
 		connIndex,
 		fuse,
@@ -335,8 +336,8 @@ func serveTunnel(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
-	configManager *configManager,
 	config *TunnelConfig,
+	orchestrator *orchestration.Orchestrator,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
 	fuse *h2mux.BooleanFuse,
@@ -365,8 +366,8 @@ func serveTunnel(
 		connOptions := config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return ServeQUIC(ctx,
 			addr.UDP,
-			configManager,
 			config,
+			orchestrator,
 			connLog,
 			connOptions,
 			controlStream,
@@ -385,8 +386,8 @@ func serveTunnel(
 		if err := ServeHTTP2(
 			ctx,
 			connLog,
-			configManager,
 			config,
+			orchestrator,
 			edgeConn,
 			connOptions,
 			controlStream,
@@ -408,8 +409,8 @@ func serveTunnel(
 			ctx,
 			connLog,
 			credentialManager,
-			configManager,
 			config,
+			orchestrator,
 			edgeConn,
 			connIndex,
 			connectedFuse,
@@ -435,8 +436,8 @@ func ServeH2mux(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	credentialManager *reconnectCredentialManager,
-	configManager *configManager,
 	config *TunnelConfig,
+	orchestrator *orchestration.Orchestrator,
 	edgeConn net.Conn,
 	connIndex uint8,
 	connectedFuse *connectedFuse,
@@ -447,7 +448,7 @@ func ServeH2mux(
 	connLog.Logger().Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
 	handler, err, recoverable := connection.NewH2muxConnection(
-		configManager,
+		orchestrator,
 		config.GracePeriod,
 		config.MuxerConfig,
 		edgeConn,
@@ -483,8 +484,8 @@ func ServeH2mux(
 func ServeHTTP2(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
-	configManager *configManager,
 	config *TunnelConfig,
+	orchestrator *orchestration.Orchestrator,
 	tlsServerConn net.Conn,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
@@ -495,7 +496,7 @@ func ServeHTTP2(
 	connLog.Logger().Debug().Msgf("Connecting via http2")
 	h2conn := connection.NewHTTP2Connection(
 		tlsServerConn,
-		configManager,
+		orchestrator,
 		connOptions,
 		config.Observer,
 		connIndex,
@@ -523,8 +524,8 @@ func ServeHTTP2(
 func ServeQUIC(
 	ctx context.Context,
 	edgeAddr *net.UDPAddr,
-	configManager *configManager,
 	config *TunnelConfig,
+	orchestrator *orchestration.Orchestrator,
 	connLogger *ConnAwareLogger,
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
@@ -548,7 +549,7 @@ func ServeQUIC(
 		quicConfig,
 		edgeAddr,
 		tlsConfig,
-		configManager,
+		orchestrator,
 		connOptions,
 		controlStreamHandler,
 		connLogger.Logger())

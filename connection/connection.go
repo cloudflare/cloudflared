@@ -25,9 +25,9 @@ const (
 
 var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
 
-type ConfigManager interface {
-	Update(version int32, config []byte) *pogs.UpdateConfigurationResponse
-	GetOriginProxy() OriginProxy
+type Orchestrator interface {
+	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
+	GetOriginProxy() (OriginProxy, error)
 }
 
 type NamedTunnelProperties struct {

@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,13 +19,18 @@ import (
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
+const (
+	HelloWorldService = "Hello World test origin"
+)
+
 // OriginService is something a tunnel can proxy traffic to.
 type OriginService interface {
 	String() string
 	// Start the origin service if it's managed by cloudflared, e.g. proxy servers or Hello World.
 	// If it's not managed by cloudflared, this is a no-op because the user is responsible for
 	// starting the origin service.
-	start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error
+	// Implementor of services managed by cloudflared should terminate the service if shutdownC is closed
+	start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg OriginRequestConfig) error
 }
 
 // unixSocketPath is an OriginService representing a unix socket (which accepts HTTP)
@@ -39,7 +43,7 @@ func (o *unixSocketPath) String() string {
 	return "unix socket: " + o.path
 }
 
-func (o *unixSocketPath) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *unixSocketPath) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
@@ -54,7 +58,7 @@ type httpService struct {
 	transport  *http.Transport
 }
 
-func (o *httpService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *httpService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	transport, err := newHTTPTransport(o, cfg, log)
 	if err != nil {
 		return err
@@ -78,7 +82,7 @@ func (o *rawTCPService) String() string {
 	return o.name
 }
 
-func (o *rawTCPService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *rawTCPService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	return nil
 }
 
@@ -139,7 +143,7 @@ func (o *tcpOverWSService) String() string {
 	return o.dest
 }
 
-func (o *tcpOverWSService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *tcpOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	if cfg.ProxyType == socksProxy {
 		o.streamHandler = socks.StreamHandler
 	} else {
@@ -148,7 +152,7 @@ func (o *tcpOverWSService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdo
 	return nil
 }
 
-func (o *socksProxyOverWSService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (o *socksProxyOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	return nil
 }
 
@@ -164,18 +168,16 @@ type helloWorld struct {
 }
 
 func (o *helloWorld) String() string {
-	return "Hello World test origin"
+	return HelloWorldService
 }
 
 // Start starts a HelloWorld server and stores its address in the Service receiver.
 func (o *helloWorld) start(
-	wg *sync.WaitGroup,
 	log *zerolog.Logger,
 	shutdownC <-chan struct{},
-	errC chan error,
 	cfg OriginRequestConfig,
 ) error {
-	if err := o.httpService.start(wg, log, shutdownC, errC, cfg); err != nil {
+	if err := o.httpService.start(log, shutdownC, cfg); err != nil {
 		return err
 	}
 
@@ -183,11 +185,7 @@ func (o *helloWorld) start(
 	if err != nil {
 		return errors.Wrap(err, "Cannot start Hello World Server")
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_ = hello.StartHelloWorldServer(log, helloListener, shutdownC)
-	}()
+	go hello.StartHelloWorldServer(log, helloListener, shutdownC)
 	o.server = helloListener
 
 	o.httpService.url = &url.URL{
@@ -218,10 +216,8 @@ func (o *statusCode) String() string {
 }
 
 func (o *statusCode) start(
-	wg *sync.WaitGroup,
 	log *zerolog.Logger,
-	shutdownC <-chan struct{},
-	errC chan error,
+	_ <-chan struct{},
 	cfg OriginRequestConfig,
 ) error {
 	return nil
@@ -296,6 +292,6 @@ func (mos MockOriginHTTPService) String() string {
 	return "MockOriginService"
 }
 
-func (mos MockOriginHTTPService) start(wg *sync.WaitGroup, log *zerolog.Logger, shutdownC <-chan struct{}, errC chan error, cfg OriginRequestConfig) error {
+func (mos MockOriginHTTPService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	return nil
 }
