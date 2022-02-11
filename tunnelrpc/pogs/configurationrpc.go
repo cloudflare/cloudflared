@@ -11,7 +11,7 @@ import (
 )
 
 type ConfigurationManager interface {
-	UpdateConfiguration(ctx context.Context, version int32, config []byte) (*UpdateConfigurationResponse, error)
+	UpdateConfiguration(ctx context.Context, version int32, config []byte) *UpdateConfigurationResponse
 }
 
 type ConfigurationManager_PogsImpl struct {
@@ -31,16 +31,12 @@ func (i ConfigurationManager_PogsImpl) UpdateConfiguration(p tunnelrpc.Configura
 		return err
 	}
 
-	updateResp, err := i.impl.UpdateConfiguration(p.Ctx, version, config)
-	if err != nil {
-		return err
-	}
-
 	result, err := p.Results.NewResult()
 	if err != nil {
 		return err
 	}
 
+	updateResp := i.impl.UpdateConfiguration(p.Ctx, version, config)
 	return updateResp.Marshal(result)
 }
 

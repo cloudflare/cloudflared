@@ -265,8 +265,8 @@ func (q *QUICConnection) UnregisterUdpSession(ctx context.Context, sessionID uui
 }
 
 // UpdateConfiguration is the RPC method invoked by edge when there is a new configuration
-func (q *QUICConnection) UpdateConfiguration(ctx context.Context, version int32, config []byte) (*tunnelpogs.UpdateConfigurationResponse, error) {
-	return nil, fmt.Errorf("TODO: TUN-5698")
+func (q *QUICConnection) UpdateConfiguration(ctx context.Context, version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
+	return q.orchestrator.UpdateConfig(version, config)
 }
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to

@@ -231,14 +231,18 @@ type mockConfigRPCServer struct {
 	config  []byte
 }
 
-func (s mockConfigRPCServer) UpdateConfiguration(_ context.Context, version int32, config []byte) (*tunnelpogs.UpdateConfigurationResponse, error) {
+func (s mockConfigRPCServer) UpdateConfiguration(_ context.Context, version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
 	if s.version != version {
-		return nil, fmt.Errorf("expect version %d, got %d", s.version, version)
+		return &tunnelpogs.UpdateConfigurationResponse{
+			Err: fmt.Errorf("expect version %d, got %d", s.version, version),
+		}
 	}
 	if !bytes.Equal(s.config, config) {
-		return nil, fmt.Errorf("expect config %v, got %v", s.config, config)
+		return &tunnelpogs.UpdateConfigurationResponse{
+			Err: fmt.Errorf("expect config %v, got %v", s.config, config),
+		}
 	}
-	return &tunnelpogs.UpdateConfigurationResponse{LastAppliedVersion: version}, nil
+	return &tunnelpogs.UpdateConfigurationResponse{LastAppliedVersion: version}
 }
 
 type mockRPCStream struct {
