@@ -1,6 +1,6 @@
 ---
 name: "Feature request \U0001F4A1"
-about: 'Suggest a feature or enhancement for cloudflared. '
+about: Suggest a feature or enhancement for cloudflared
 title: ''
 labels: awaiting reply, feature-request
 assignees: ''
