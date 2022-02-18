@@ -1,3 +1,16 @@
+2022.2.1
+- 2022-02-10 TUN-5184: Handle errors in bidrectional streaming (websocket#Stream) gracefully when 1 side has ended
+- 2022-02-14 Update issue templates
+- 2022-02-14 Update issue templates
+- 2022-02-11 TUN-5768: Update cloudflared license file
+- 2022-02-11 TUN-5698: Make ingress rules and warp routing dynamically configurable
+- 2022-02-14 TUN-5678: Adapt cloudflared to use new typed APIs
+- 2022-02-17 Revert "TUN-5678: Adapt cloudflared to use new typed APIs"
+- 2022-02-11 TUN-5697: Listen for UpdateConfiguration RPC in quic transport
+- 2022-02-04 TUN-5744: Add a test to make sure cloudflared uses scheme defined in ingress rule, not X-Forwarded-Proto header
+- 2022-02-07 TUN-5749: Refactor cloudflared to pave way for reconfigurable ingress - Split origin into supervisor and proxy packages - Create configManager to handle dynamic config
+- 2021-10-19 TUN-5184: Make sure outstanding websocket write is finished, and no more writes after shutdown
+
 2022.2.0
 - 2022-02-02 TUN-4947: Use http when talking to Unix sockets origins
 - 2022-02-02 TUN-5695: Define RPC method to update configuration
