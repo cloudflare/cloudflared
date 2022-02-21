@@ -1,14 +1,18 @@
 package tunnel
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudflare/cloudflared/cfapi"
+	"github.com/cloudflare/cloudflared/connection"
 )
 
 func Test_fmtConnections(t *testing.T) {
@@ -176,4 +180,25 @@ func Test_validateHostname(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_TunnelToken(t *testing.T) {
+	token, err := parseToken("aabc")
+	require.Error(t, err)
+	require.Nil(t, token)
+
+	expectedToken := &connection.TunnelToken{
+		AccountTag:   "abc",
+		TunnelSecret: []byte("secret"),
+		TunnelID:     uuid.New(),
+	}
+
+	tokenJsonStr, err := json.Marshal(expectedToken)
+	require.NoError(t, err)
+
+	token64 := base64.StdEncoding.EncodeToString(tokenJsonStr)
+
+	token, err = parseToken(token64)
+	require.NoError(t, err)
+	require.Equal(t, token, expectedToken)
 }

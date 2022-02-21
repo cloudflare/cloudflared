@@ -5,7 +5,7 @@ import (
 )
 
 type TunnelClient interface {
-	CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error)
+	CreateTunnel(name string, tunnelSecret []byte) (*TunnelWithToken, error)
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	DeleteTunnel(tunnelID uuid.UUID) error
 	ListTunnels(filter *TunnelFilter) ([]*Tunnel, error)

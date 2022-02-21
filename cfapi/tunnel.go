@@ -23,6 +23,11 @@ type Tunnel struct {
 	Connections []Connection `json:"connections"`
 }
 
+type TunnelWithToken struct {
+	Tunnel
+	Token string `json:"token"`
+}
+
 type Connection struct {
 	ColoName           string    `json:"colo_name"`
 	ID                 uuid.UUID `json:"id"`
@@ -63,7 +68,7 @@ func (cp CleanupParams) encode() string {
 	return cp.queryParams.Encode()
 }
 
-func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, error) {
+func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*TunnelWithToken, error) {
 	if name == "" {
 		return nil, errors.New("tunnel name required")
 	}
@@ -83,7 +88,11 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*Tunnel, er
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return unmarshalTunnel(resp.Body)
+		var tunnel TunnelWithToken
+		if serdeErr := parseResponse(resp.Body, &tunnel); err != nil {
+			return nil, serdeErr
+		}
+		return &tunnel, nil
 	case http.StatusConflict:
 		return nil, ErrTunnelNameConflict
 	}

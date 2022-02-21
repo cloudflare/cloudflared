@@ -220,7 +220,9 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 	}
 	fmt.Println(" Keep this file secret. To revoke these credentials, delete the tunnel.")
 	fmt.Printf("\nCreated tunnel %s with id %s\n", tunnel.Name, tunnel.ID)
-	return tunnel, nil
+	fmt.Printf("\nTunnel Token: %s\n", tunnel.Token)
+
+	return &tunnel.Tunnel, nil
 }
 
 func (sc *subcommandContext) list(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
@@ -299,6 +301,12 @@ func (sc *subcommandContext) run(tunnelID uuid.UUID) error {
 		}
 		return err
 	}
+
+	return sc.runWithCredentials(credentials)
+}
+
+func (sc *subcommandContext) runWithCredentials(credentials connection.Credentials) error {
+	sc.log.Info().Str(LogFieldTunnelID, credentials.TunnelID.String()).Msg("Starting tunnel")
 
 	return StartServer(
 		sc.c,

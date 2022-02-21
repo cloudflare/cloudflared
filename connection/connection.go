@@ -50,6 +50,21 @@ func (c *Credentials) Auth() pogs.TunnelAuth {
 	}
 }
 
+// TunnelToken are Credentials but encoded with custom fields namings.
+type TunnelToken struct {
+	AccountTag   string    `json:"a"`
+	TunnelSecret []byte    `json:"s"`
+	TunnelID     uuid.UUID `json:"t"`
+}
+
+func (t TunnelToken) Credentials() Credentials {
+	return Credentials{
+		AccountTag:   t.AccountTag,
+		TunnelSecret: t.TunnelSecret,
+		TunnelID:     t.TunnelID,
+	}
+}
+
 type ClassicTunnelProperties struct {
 	Hostname   string
 	OriginCert []byte
