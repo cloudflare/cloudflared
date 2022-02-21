@@ -185,7 +185,6 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 		AccountTag:   credential.cert.AccountID,
 		TunnelSecret: tunnelSecret,
 		TunnelID:     tunnel.ID,
-		TunnelName:   name,
 	}
 	usedCertPath := false
 	if credentialsFilePath == "" {
@@ -370,7 +369,7 @@ func (sc *subcommandContext) findID(input string) (uuid.UUID, error) {
 	// Look up name in the credentials file.
 	credFinder := newStaticPath(sc.c.String(CredFileFlag), sc.fs)
 	if credentials, err := sc.readTunnelCredentials(credFinder); err == nil {
-		if credentials.TunnelID != uuid.Nil && input == credentials.TunnelName {
+		if credentials.TunnelID != uuid.Nil {
 			return credentials.TunnelID, nil
 		}
 	}

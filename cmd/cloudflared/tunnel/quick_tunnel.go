@@ -55,7 +55,6 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		AccountTag:   data.Result.AccountTag,
 		TunnelSecret: data.Result.Secret,
 		TunnelID:     tunnelID,
-		TunnelName:   data.Result.Name,
 	}
 
 	url := data.Result.Hostname

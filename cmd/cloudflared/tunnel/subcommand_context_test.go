@@ -116,7 +116,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 				AccountTag:   accountTag,
 				TunnelID:     tunnelID,
 				TunnelSecret: secret,
-				TunnelName:   name,
 			},
 		},
 		{
@@ -161,7 +160,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 				AccountTag:   accountTag,
 				TunnelID:     tunnelID,
 				TunnelSecret: secret,
-				TunnelName:   name,
 			},
 		},
 	}
