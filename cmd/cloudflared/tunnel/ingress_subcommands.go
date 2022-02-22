@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -11,6 +12,15 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
+
+const ingressDataJSONFlagName = "json"
+
+var ingressDataJSON = &cli.StringFlag{
+	Name:    ingressDataJSONFlagName,
+	Aliases: []string{"j"},
+	Usage:   `Accepts data in the form of json as an input rather than read from a file`,
+	EnvVars: []string{"TUNNEL_INGRESS_VALIDATE_JSON"},
+}
 
 func buildIngressSubcommand() *cli.Command {
 	return &cli.Command{
@@ -49,6 +59,7 @@ func buildValidateIngressCommand() *cli.Command {
 		Usage:       "Validate the ingress configuration ",
 		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
 		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
+		Flags:       []cli.Flag{ingressDataJSON},
 	}
 }
 
@@ -69,12 +80,11 @@ func buildTestURLCommand() *cli.Command {
 
 // validateIngressCommand check the syntax of the ingress rules in the cloudflared config file
 func validateIngressCommand(c *cli.Context, warnings string) error {
-	conf := config.GetConfiguration()
-	if conf.Source() == "" {
-		fmt.Println("No configuration file was found. Please create one, or use the --config flag to specify its filepath. You can use the help command to learn more about configuration files")
-		return nil
+	conf, err := getConfiguration(c)
+	if err != nil {
+		return err
 	}
-	fmt.Println("Validating rules from", conf.Source())
+
 	if _, err := ingress.ParseIngress(conf); err != nil {
 		return errors.Wrap(err, "Validation failed")
 	}
@@ -88,6 +98,22 @@ func validateIngressCommand(c *cli.Context, warnings string) error {
 	}
 	fmt.Println("OK")
 	return nil
+}
+
+func getConfiguration(c *cli.Context) (*config.Configuration, error) {
+	var conf *config.Configuration
+	if c.IsSet(ingressDataJSONFlagName) {
+		ingressJSON := c.String(ingressDataJSONFlagName)
+		fmt.Println("Validating rules from cmdline flag --json")
+		err := json.Unmarshal([]byte(ingressJSON), &conf)
+		return conf, err
+	}
+	conf = config.GetConfiguration()
+	if conf.Source() == "" {
+		return nil, errors.New("No configuration file was found. Please create one, or use the --config flag to specify its filepath. You can use the help command to learn more about configuration files")
+	}
+	fmt.Println("Validating rules from", conf.Source())
+	return conf, nil
 }
 
 // testURLCommand checks which ingress rule matches the given URL.
