@@ -1,3 +1,7 @@
+2022.2.2
+- 2022-02-22 TUN-5754: Allow ingress validate to take plaintext option
+- 2022-02-17 TUN-5678: Cloudflared uses typed tunnel API
+
 2022.2.1
 - 2022-02-10 TUN-5184: Handle errors in bidrectional streaming (websocket#Stream) gracefully when 1 side has ended
 - 2022-02-14 Update issue templates
