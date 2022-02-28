@@ -33,9 +33,10 @@ type OriginService interface {
 	start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg OriginRequestConfig) error
 }
 
-// unixSocketPath is an OriginService representing a unix socket (which accepts HTTP)
+// unixSocketPath is an OriginService representing a unix socket (which accepts HTTP or HTTPS)
 type unixSocketPath struct {
 	path      string
+	scheme    string
 	transport *http.Transport
 }
 

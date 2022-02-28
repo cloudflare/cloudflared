@@ -26,8 +26,21 @@ ingress:
 `
 	ing, err := ParseIngress(MustReadIngress(rawYAML))
 	require.NoError(t, err)
-	_, ok := ing.Rules[0].Service.(*unixSocketPath)
+	s, ok := ing.Rules[0].Service.(*unixSocketPath)
 	require.True(t, ok)
+	require.Equal(t, "http", s.scheme)
+}
+
+func TestParseUnixSocketTLS(t *testing.T) {
+	rawYAML := `
+ingress:
+- service: unix+tls:/tmp/echo.sock
+`
+	ing, err := ParseIngress(MustReadIngress(rawYAML))
+	require.NoError(t, err)
+	s, ok := ing.Rules[0].Service.(*unixSocketPath)
+	require.True(t, ok)
+	require.Equal(t, "https", s.scheme)
 }
 
 func Test_parseIngress(t *testing.T) {
