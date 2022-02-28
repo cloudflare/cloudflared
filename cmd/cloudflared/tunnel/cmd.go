@@ -724,43 +724,43 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    ingress.Socks5Flag,
-			Usage:   "specify if this tunnel is running as a SOCK5 Server",
+			Usage:   legacyTunnelFlag("specify if this tunnel is running as a SOCK5 Server"),
 			EnvVars: []string{"TUNNEL_SOCKS"},
 			Value:   false,
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   ingress.ProxyConnectTimeoutFlag,
-			Usage:  "HTTP proxy timeout for establishing a new connection",
+			Usage:  legacyTunnelFlag("HTTP proxy timeout for establishing a new connection"),
 			Value:  time.Second * 30,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   ingress.ProxyTLSTimeoutFlag,
-			Usage:  "HTTP proxy timeout for completing a TLS handshake",
+			Usage:  legacyTunnelFlag("HTTP proxy timeout for completing a TLS handshake"),
 			Value:  time.Second * 10,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   ingress.ProxyTCPKeepAliveFlag,
-			Usage:  "HTTP proxy TCP keepalive duration",
+			Usage:  legacyTunnelFlag("HTTP proxy TCP keepalive duration"),
 			Value:  time.Second * 30,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   ingress.ProxyNoHappyEyeballsFlag,
-			Usage:  "HTTP proxy should disable \"happy eyeballs\" for IPv4/v6 fallback",
+			Usage:  legacyTunnelFlag("HTTP proxy should disable \"happy eyeballs\" for IPv4/v6 fallback"),
 			Hidden: shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:   ingress.ProxyKeepAliveConnectionsFlag,
-			Usage:  "HTTP proxy maximum keepalive connection pool size",
+			Usage:  legacyTunnelFlag("HTTP proxy maximum keepalive connection pool size"),
 			Value:  100,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   ingress.ProxyKeepAliveTimeoutFlag,
-			Usage:  "HTTP proxy timeout for closing an idle connection",
+			Usage:  legacyTunnelFlag("HTTP proxy timeout for closing an idle connection"),
 			Value:  time.Second * 90,
 			Hidden: shouldHide,
 		}),
@@ -778,13 +778,13 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    ingress.HTTPHostHeaderFlag,
-			Usage:   "Sets the HTTP Host header for the local webserver.",
+			Usage:   legacyTunnelFlag("Sets the HTTP Host header for the local webserver."),
 			EnvVars: []string{"TUNNEL_HTTP_HOST_HEADER"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    ingress.OriginServerNameFlag,
-			Usage:   "Hostname on the origin server certificate.",
+			Usage:   legacyTunnelFlag("Hostname on the origin server certificate."),
 			EnvVars: []string{"TUNNEL_ORIGIN_SERVER_NAME"},
 			Hidden:  shouldHide,
 		}),
@@ -796,24 +796,33 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    tlsconfig.OriginCAPoolFlag,
-			Usage:   "Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare.",
+			Usage:   legacyTunnelFlag("Path to the CA for the certificate of your origin. This option should be used only if your certificate is not signed by Cloudflare."),
 			EnvVars: []string{"TUNNEL_ORIGIN_CA_POOL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    ingress.NoTLSVerifyFlag,
-			Usage:   "Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted. Note: The connection from your machine to Cloudflare's Edge is still encrypted.",
+			Usage:   legacyTunnelFlag("Disables TLS verification of the certificate presented by your origin. Will allow any certificate from the origin to be accepted. Note: The connection from your machine to Cloudflare's Edge is still encrypted."),
 			EnvVars: []string{"NO_TLS_VERIFY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    ingress.NoChunkedEncodingFlag,
-			Usage:   "Disables chunked transfer encoding; useful if you are running a WSGI server.",
+			Usage:   legacyTunnelFlag("Disables chunked transfer encoding; useful if you are running a WSGI server."),
 			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 			Hidden:  shouldHide,
 		}),
 	}
 	return append(flags, sshFlags(shouldHide)...)
+}
+
+func legacyTunnelFlag(msg string) string {
+	return fmt.Sprintf(
+		"%s This flag only takes effect if you define your origin with `--url` and if you do not use ingress rules."+
+			" The recommended way is to rely on ingress rules and define this property under `originRequest` as per"+
+			" https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/configuration-file/ingress",
+		msg,
+	)
 }
 
 func sshFlags(shouldHide bool) []cli.Flag {
