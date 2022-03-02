@@ -53,7 +53,7 @@ func (wc *tcpOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWri
 	wc.streamHandler(wsConn, wc.conn, log)
 	cancel()
 	// Makes sure wsConn stops sending ping before terminating the stream
-	wsConn.WaitForShutdown()
+	wsConn.Close()
 }
 
 func (wc *tcpOverWSConnection) Close() {
@@ -73,21 +73,8 @@ func (sp *socksProxyOverWSConnection) Stream(ctx context.Context, tunnelConn io.
 	socks.StreamNetHandler(wsConn, sp.accessPolicy, log)
 	cancel()
 	// Makes sure wsConn stops sending ping before terminating the stream
-	wsConn.WaitForShutdown()
+	wsConn.Close()
 }
 
 func (sp *socksProxyOverWSConnection) Close() {
-}
-
-// wsProxyConnection represents a bidirectional stream for a websocket connection to the origin
-type wsProxyConnection struct {
-	rwc io.ReadWriteCloser
-}
-
-func (conn *wsProxyConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	websocket.Stream(tunnelConn, conn.rwc, log)
-}
-
-func (conn *wsProxyConnection) Close() {
-	conn.rwc.Close()
 }

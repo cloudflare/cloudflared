@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cfapi"
@@ -115,7 +116,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 				AccountTag:   accountTag,
 				TunnelID:     tunnelID,
 				TunnelSecret: secret,
-				TunnelName:   name,
 			},
 		},
 		{
@@ -160,7 +160,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 				AccountTag:   accountTag,
 				TunnelID:     tunnelID,
 				TunnelSecret: secret,
-				TunnelName:   name,
 			},
 		},
 	}
@@ -318,6 +317,51 @@ func Test_subcommandContext_Delete(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("subcommandContext.findCredentials() = %v, want %v", got, tt.want)
 				return
+			}
+		})
+	}
+}
+
+func Test_subcommandContext_ValidateIngressCommand(t *testing.T) {
+	var tests = []struct {
+		name        string
+		c           *cli.Context
+		wantErr     bool
+		expectedErr error
+	}{
+		{
+			name: "read a valid configuration from data",
+			c: func() *cli.Context {
+				data := `{ "warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}`
+				flagSet := flag.NewFlagSet("json", flag.PanicOnError)
+				flagSet.String(ingressDataJSONFlagName, data, "")
+				c := cli.NewContext(cli.NewApp(), flagSet, nil)
+				_ = c.Set(ingressDataJSONFlagName, data)
+				return c
+			}(),
+		},
+		{
+			name: "read an invalid configuration with multiple mistakes",
+			c: func() *cli.Context {
+				data := `{ "ingress" : [ {"hostname": "test", "service": "localhost:8000" } , {"service": "http_status:invalid_status"} ]}`
+				flagSet := flag.NewFlagSet("json", flag.PanicOnError)
+				flagSet.String(ingressDataJSONFlagName, data, "")
+				c := cli.NewContext(cli.NewApp(), flagSet, nil)
+				_ = c.Set(ingressDataJSONFlagName, data)
+				return c
+			}(),
+			wantErr:     true,
+			expectedErr: errors.New("Validation failed: localhost:8000 is an invalid address, please make sure it has a scheme and a hostname"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateIngressCommand(tt.c, "")
+			if tt.wantErr {
+				assert.Equal(t, tt.expectedErr.Error(), err.Error())
+			} else {
+				assert.Nil(t, err)
 			}
 		})
 	}

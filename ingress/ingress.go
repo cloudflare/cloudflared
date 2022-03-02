@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -145,13 +144,11 @@ func (ing Ingress) IsSingleRule() bool {
 
 // StartOrigins will start any origin services managed by cloudflared, e.g. proxy servers or Hello World.
 func (ing Ingress) StartOrigins(
-	wg *sync.WaitGroup,
 	log *zerolog.Logger,
 	shutdownC <-chan struct{},
-	errC chan error,
 ) error {
 	for _, rule := range ing.Rules {
-		if err := rule.Service.start(wg, log, shutdownC, errC, rule.Config); err != nil {
+		if err := rule.Service.start(log, shutdownC, rule.Config); err != nil {
 			return errors.Wrapf(err, "Error starting local service %s", rule.Service)
 		}
 	}
@@ -163,7 +160,7 @@ func (ing Ingress) CatchAll() *Rule {
 	return &ing.Rules[len(ing.Rules)-1]
 }
 
-func validate(ingress []config.UnvalidatedIngressRule, defaults OriginRequestConfig) (Ingress, error) {
+func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginRequestConfig) (Ingress, error) {
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
 		cfg := setConfig(defaults, r.OriginRequest)
@@ -290,7 +287,7 @@ func ParseIngress(conf *config.Configuration) (Ingress, error) {
 	if len(conf.Ingress) == 0 {
 		return Ingress{}, ErrNoIngressRules
 	}
-	return validate(conf.Ingress, originRequestFromYAML(conf.OriginRequest))
+	return validateIngress(conf.Ingress, originRequestFromConfig(conf.OriginRequest))
 }
 
 func isHTTPService(url *url.URL) bool {

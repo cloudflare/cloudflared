@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -37,6 +38,34 @@ const (
 const (
 	socksProxy = "socks"
 )
+
+// RemoteConfig models ingress settings that can be managed remotely, for example through the dashboard.
+type RemoteConfig struct {
+	Ingress     Ingress
+	WarpRouting config.WarpRoutingConfig
+}
+
+type remoteConfigJSON struct {
+	GlobalOriginRequest config.OriginRequestConfig      `json:"originRequest"`
+	IngressRules        []config.UnvalidatedIngressRule `json:"ingress"`
+	WarpRouting         config.WarpRoutingConfig        `json:"warp-routing"`
+}
+
+func (rc *RemoteConfig) UnmarshalJSON(b []byte) error {
+	var rawConfig remoteConfigJSON
+	if err := json.Unmarshal(b, &rawConfig); err != nil {
+		return err
+	}
+	ingress, err := validateIngress(rawConfig.IngressRules, originRequestFromConfig(rawConfig.GlobalOriginRequest))
+	if err != nil {
+		return err
+	}
+
+	rc.Ingress = ingress
+	rc.WarpRouting = rawConfig.WarpRouting
+
+	return nil
+}
 
 func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	var connectTimeout time.Duration = defaultConnectTimeout
@@ -119,7 +148,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	}
 }
 
-func originRequestFromYAML(y config.OriginRequestConfig) OriginRequestConfig {
+func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 	out := OriginRequestConfig{
 		ConnectTimeout:       defaultConnectTimeout,
 		TLSTimeout:           defaultTLSTimeout,
@@ -128,50 +157,58 @@ func originRequestFromYAML(y config.OriginRequestConfig) OriginRequestConfig {
 		KeepAliveTimeout:     defaultKeepAliveTimeout,
 		ProxyAddress:         defaultProxyAddress,
 	}
-	if y.ConnectTimeout != nil {
-		out.ConnectTimeout = *y.ConnectTimeout
+	if c.ConnectTimeout != nil {
+		out.ConnectTimeout = *c.ConnectTimeout
 	}
-	if y.TLSTimeout != nil {
-		out.TLSTimeout = *y.TLSTimeout
+	if c.TLSTimeout != nil {
+		out.TLSTimeout = *c.TLSTimeout
 	}
-	if y.TCPKeepAlive != nil {
-		out.TCPKeepAlive = *y.TCPKeepAlive
+	if c.TCPKeepAlive != nil {
+		out.TCPKeepAlive = *c.TCPKeepAlive
 	}
-	if y.NoHappyEyeballs != nil {
-		out.NoHappyEyeballs = *y.NoHappyEyeballs
+	if c.NoHappyEyeballs != nil {
+		out.NoHappyEyeballs = *c.NoHappyEyeballs
 	}
-	if y.KeepAliveConnections != nil {
-		out.KeepAliveConnections = *y.KeepAliveConnections
+	if c.KeepAliveConnections != nil {
+		out.KeepAliveConnections = *c.KeepAliveConnections
 	}
-	if y.KeepAliveTimeout != nil {
-		out.KeepAliveTimeout = *y.KeepAliveTimeout
+	if c.KeepAliveTimeout != nil {
+		out.KeepAliveTimeout = *c.KeepAliveTimeout
 	}
-	if y.HTTPHostHeader != nil {
-		out.HTTPHostHeader = *y.HTTPHostHeader
+	if c.HTTPHostHeader != nil {
+		out.HTTPHostHeader = *c.HTTPHostHeader
 	}
-	if y.OriginServerName != nil {
-		out.OriginServerName = *y.OriginServerName
+	if c.OriginServerName != nil {
+		out.OriginServerName = *c.OriginServerName
 	}
-	if y.CAPool != nil {
-		out.CAPool = *y.CAPool
+	if c.CAPool != nil {
+		out.CAPool = *c.CAPool
 	}
-	if y.NoTLSVerify != nil {
-		out.NoTLSVerify = *y.NoTLSVerify
+	if c.NoTLSVerify != nil {
+		out.NoTLSVerify = *c.NoTLSVerify
 	}
-	if y.DisableChunkedEncoding != nil {
-		out.DisableChunkedEncoding = *y.DisableChunkedEncoding
+	if c.DisableChunkedEncoding != nil {
+		out.DisableChunkedEncoding = *c.DisableChunkedEncoding
 	}
-	if y.BastionMode != nil {
-		out.BastionMode = *y.BastionMode
+	if c.BastionMode != nil {
+		out.BastionMode = *c.BastionMode
 	}
-	if y.ProxyAddress != nil {
-		out.ProxyAddress = *y.ProxyAddress
+	if c.ProxyAddress != nil {
+		out.ProxyAddress = *c.ProxyAddress
 	}
-	if y.ProxyPort != nil {
-		out.ProxyPort = *y.ProxyPort
+	if c.ProxyPort != nil {
+		out.ProxyPort = *c.ProxyPort
 	}
-	if y.ProxyType != nil {
-		out.ProxyType = *y.ProxyType
+	if c.ProxyType != nil {
+		out.ProxyType = *c.ProxyType
+	}
+	if len(c.IPRules) > 0 {
+		for _, r := range c.IPRules {
+			rule, err := ipaccess.NewRuleByCIDR(r.Prefix, r.Ports, r.Allow)
+			if err == nil {
+				out.IPRules = append(out.IPRules, rule)
+			}
+		}
 	}
 	return out
 }
@@ -188,10 +225,10 @@ type OriginRequestConfig struct {
 	TCPKeepAlive time.Duration `yaml:"tcpKeepAlive"`
 	// HTTP proxy should disable "happy eyeballs" for IPv4/v6 fallback
 	NoHappyEyeballs bool `yaml:"noHappyEyeballs"`
-	// HTTP proxy maximum keepalive connection pool size
-	KeepAliveConnections int `yaml:"keepAliveConnections"`
 	// HTTP proxy timeout for closing an idle connection
 	KeepAliveTimeout time.Duration `yaml:"keepAliveTimeout"`
+	// HTTP proxy maximum keepalive connection pool size
+	KeepAliveConnections int `yaml:"keepAliveConnections"`
 	// Sets the HTTP Host header for the local webserver.
 	HTTPHostHeader string `yaml:"httpHostHeader"`
 	// Hostname on the origin server certificate.
@@ -308,6 +345,19 @@ func (defaults *OriginRequestConfig) setProxyType(overrides config.OriginRequest
 	}
 }
 
+func (defaults *OriginRequestConfig) setIPRules(overrides config.OriginRequestConfig) {
+	if val := overrides.IPRules; len(val) > 0 {
+		ipAccessRule := make([]ipaccess.Rule, len(overrides.IPRules))
+		for i, r := range overrides.IPRules {
+			rule, err := ipaccess.NewRuleByCIDR(r.Prefix, r.Ports, r.Allow)
+			if err == nil {
+				ipAccessRule[i] = rule
+			}
+		}
+		defaults.IPRules = ipAccessRule
+	}
+}
+
 // SetConfig gets config for the requests that cloudflared sends to origins.
 // Each field has a setter method which sets a value for the field by trying to find:
 //   1. The user config for this rule
@@ -332,5 +382,6 @@ func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfi
 	cfg.setProxyPort(overrides)
 	cfg.setProxyAddress(overrides)
 	cfg.setProxyType(overrides)
+	cfg.setIPRules(overrides)
 	return cfg
 }

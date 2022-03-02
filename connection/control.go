@@ -16,9 +16,9 @@ type RPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) Na
 type controlStream struct {
 	observer *Observer
 
-	connectedFuse     ConnectedFuse
-	namedTunnelConfig *NamedTunnelConfig
-	connIndex         uint8
+	connectedFuse         ConnectedFuse
+	namedTunnelProperties *NamedTunnelProperties
+	connIndex             uint8
 
 	newRPCClientFunc RPCClientFunc
 
@@ -39,7 +39,7 @@ type ControlStreamHandler interface {
 func NewControlStream(
 	observer *Observer,
 	connectedFuse ConnectedFuse,
-	namedTunnelConfig *NamedTunnelConfig,
+	namedTunnelConfig *NamedTunnelProperties,
 	connIndex uint8,
 	newRPCClientFunc RPCClientFunc,
 	gracefulShutdownC <-chan struct{},
@@ -49,13 +49,13 @@ func NewControlStream(
 		newRPCClientFunc = newRegistrationRPCClient
 	}
 	return &controlStream{
-		observer:          observer,
-		connectedFuse:     connectedFuse,
-		namedTunnelConfig: namedTunnelConfig,
-		newRPCClientFunc:  newRPCClientFunc,
-		connIndex:         connIndex,
-		gracefulShutdownC: gracefulShutdownC,
-		gracePeriod:       gracePeriod,
+		observer:              observer,
+		connectedFuse:         connectedFuse,
+		namedTunnelProperties: namedTunnelConfig,
+		newRPCClientFunc:      newRPCClientFunc,
+		connIndex:             connIndex,
+		gracefulShutdownC:     gracefulShutdownC,
+		gracePeriod:           gracePeriod,
 	}
 }
 
@@ -66,7 +66,7 @@ func (c *controlStream) ServeControlStream(
 ) error {
 	rpcClient := c.newRPCClientFunc(ctx, rw, c.observer.log)
 
-	if err := rpcClient.RegisterConnection(ctx, c.namedTunnelConfig, connOptions, c.connIndex, c.observer); err != nil {
+	if err := rpcClient.RegisterConnection(ctx, c.namedTunnelProperties, connOptions, c.connIndex, c.observer); err != nil {
 		rpcClient.Close()
 		return err
 	}

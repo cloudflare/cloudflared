@@ -1,4 +1,4 @@
-package origin
+package proxy
 
 import (
 	"bytes"
@@ -31,8 +31,7 @@ import (
 )
 
 var (
-	testTags                 = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
-	unusedWarpRoutingService = (*ingress.WarpRoutingService)(nil)
+	testTags = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
 )
 
 type mockHTTPRespWriter struct {
@@ -131,17 +130,14 @@ func TestProxySingleOrigin(t *testing.T) {
 	ingressRule, err := ingress.NewSingleOrigin(cliCtx, allowURLFromArgs)
 	require.NoError(t, err)
 
-	var wg sync.WaitGroup
-	errC := make(chan error)
-	require.NoError(t, ingressRule.StartOrigins(&wg, &log, ctx.Done(), errC))
+	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingressRule, unusedWarpRoutingService, testTags, &log)
+	proxy := NewOriginProxy(ingressRule, false, testTags, &log)
 	t.Run("testProxyHTTP", testProxyHTTP(proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
 	t.Run("testProxySSEAllData", testProxySSEAllData(proxy))
 	cancel()
-	wg.Wait()
 }
 
 func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
@@ -341,11 +337,9 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 	log := zerolog.Nop()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	errC := make(chan error)
-	var wg sync.WaitGroup
-	require.NoError(t, ingress.StartOrigins(&wg, &log, ctx.Done(), errC))
+	require.NoError(t, ingress.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingress, unusedWarpRoutingService, testTags, &log)
+	proxy := NewOriginProxy(ingress, false, testTags, &log)
 
 	for _, test := range tests {
 		responseWriter := newMockHTTPRespWriter()
@@ -363,7 +357,6 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 		}
 	}
 	cancel()
-	wg.Wait()
 }
 
 type mockAPI struct{}
@@ -394,7 +387,7 @@ func TestProxyError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	proxy := NewOriginProxy(ing, unusedWarpRoutingService, testTags, &log)
+	proxy := NewOriginProxy(ing, false, testTags, &log)
 
 	responseWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
@@ -634,10 +627,9 @@ func TestConnections(t *testing.T) {
 			test.args.originService(t, ln)
 
 			ingressRule := createSingleIngressConfig(t, test.args.ingressServiceScheme+ln.Addr().String())
-			var wg sync.WaitGroup
-			errC := make(chan error)
-			ingressRule.StartOrigins(&wg, logger, ctx.Done(), errC)
-			proxy := NewOriginProxy(ingressRule, test.args.warpRoutingService, testTags, logger)
+			ingressRule.StartOrigins(logger, ctx.Done())
+			proxy := NewOriginProxy(ingressRule, true, testTags, logger)
+			proxy.warpRouting = test.args.warpRoutingService
 
 			dest := ln.Addr().String()
 			req, err := http.NewRequest(

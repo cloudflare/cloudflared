@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package origin
+package proxy
 
 import (
 	"io/ioutil"

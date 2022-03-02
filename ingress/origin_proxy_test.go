@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -132,10 +131,8 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 	httpService := &httpService{
 		url: originURL,
 	}
-	var wg sync.WaitGroup
 	shutdownC := make(chan struct{})
-	errC := make(chan error)
-	require.NoError(t, httpService.start(&wg, testLogger, shutdownC, errC, cfg))
+	require.NoError(t, httpService.start(testLogger, shutdownC, cfg))
 
 	req, err := http.NewRequest(http.MethodGet, originURL.String(), nil)
 	require.NoError(t, err)
@@ -147,7 +144,46 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 	respBody, err := ioutil.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, respBody, []byte(originURL.Host))
+}
 
+// TestHTTPServiceUsesIngressRuleScheme makes sure httpService uses scheme defined in ingress rule and not by eyeball request
+func TestHTTPServiceUsesIngressRuleScheme(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		require.NotNil(t, r.TLS)
+		// Echo the X-Forwarded-Proto header for assertions
+		w.Write([]byte(r.Header.Get("X-Forwarded-Proto")))
+	}
+	origin := httptest.NewTLSServer(http.HandlerFunc(handler))
+	defer origin.Close()
+
+	originURL, err := url.Parse(origin.URL)
+	require.NoError(t, err)
+	require.Equal(t, "https", originURL.Scheme)
+
+	cfg := OriginRequestConfig{
+		NoTLSVerify: true,
+	}
+	httpService := &httpService{
+		url: originURL,
+	}
+	shutdownC := make(chan struct{})
+	require.NoError(t, httpService.start(testLogger, shutdownC, cfg))
+
+	// Tunnel uses scheme defined in the service field of the ingress rule, independent of the X-Forwarded-Proto header
+	protos := []string{"https", "http", "dne"}
+	for _, p := range protos {
+		req, err := http.NewRequest(http.MethodGet, originURL.String(), nil)
+		require.NoError(t, err)
+		req.Header.Add("X-Forwarded-Proto", p)
+
+		resp, err := httpService.RoundTrip(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		respBody, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, respBody, []byte(p))
+	}
 }
 
 func tcpListenRoutine(listener net.Listener, closeChan chan struct{}) {

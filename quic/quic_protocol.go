@@ -17,8 +17,8 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-// The first 6 bytes of the stream is used to distinguish the type of stream. It ensures whoever performs a handshake does
-// not write data before writing the metadata.
+// ProtocolSignature defines the first 6 bytes of the stream, which is used to distinguish the type of stream. It
+// ensures whoever performs a handshake does not write data before writing the metadata.
 type ProtocolSignature [6]byte
 
 var (
@@ -29,12 +29,15 @@ var (
 	RPCStreamProtocolSignature = ProtocolSignature{0x52, 0xBB, 0x82, 0x5C, 0xDB, 0x65}
 )
 
-const protocolVersionLength = 2
-
 type protocolVersion string
 
 const (
 	protocolV1 protocolVersion = "01"
+
+	protocolVersionLength = 2
+
+	HandshakeIdleTimeout = 5 * time.Second
+	MaxIdleTimeout       = 15 * time.Second
 )
 
 // RequestServerStream is a stream to serve requests
@@ -122,7 +125,7 @@ func (rcs *RequestClientStream) ReadConnectResponseData() (*ConnectResponse, err
 		return nil, err
 	}
 	if signature != DataStreamProtocolSignature {
-		return nil, fmt.Errorf("Wrong protocol signature %v", signature)
+		return nil, fmt.Errorf("wrong protocol signature %v", signature)
 	}
 
 	// This is a NO-OP for now. We could cause a branching if we wanted to use multiple versions.
@@ -154,13 +157,13 @@ func NewRPCServerStream(stream io.ReadWriteCloser, protocol ProtocolSignature) (
 	return &RPCServerStream{stream}, nil
 }
 
-func (s *RPCServerStream) Serve(sessionManager tunnelpogs.SessionManager, logger *zerolog.Logger) error {
+func (s *RPCServerStream) Serve(sessionManager tunnelpogs.SessionManager, configManager tunnelpogs.ConfigurationManager, logger *zerolog.Logger) error {
 	// RPC logs are very robust, create a new logger that only logs error to reduce noise
 	rpcLogger := logger.Level(zerolog.ErrorLevel)
 	rpcTransport := tunnelrpc.NewTransportLogger(&rpcLogger, rpc.StreamTransport(s))
 	defer rpcTransport.Close()
 
-	main := tunnelpogs.SessionManager_ServerToClient(sessionManager)
+	main := tunnelpogs.CloudflaredServer_ServerToClient(sessionManager, configManager)
 	rpcConn := rpc.NewConn(
 		rpcTransport,
 		rpc.MainInterface(main.Client),
@@ -220,7 +223,7 @@ func writeSignature(stream io.Writer, signature ProtocolSignature) error {
 
 // RPCClientStream is a stream to call methods of SessionManager
 type RPCClientStream struct {
-	client    tunnelpogs.SessionManager_PogsClient
+	client    tunnelpogs.CloudflaredServer_PogsClient
 	transport rpc.Transport
 }
 
@@ -238,7 +241,7 @@ func NewRPCClientStream(ctx context.Context, stream io.ReadWriteCloser, logger *
 		tunnelrpc.ConnLog(logger),
 	)
 	return &RPCClientStream{
-		client:    tunnelpogs.SessionManager_PogsClient{Client: conn.Bootstrap(ctx), Conn: conn},
+		client:    tunnelpogs.NewCloudflaredServer_PogsClient(conn.Bootstrap(ctx), conn),
 		transport: transport,
 	}, nil
 }
@@ -253,6 +256,10 @@ func (rcs *RPCClientStream) RegisterUdpSession(ctx context.Context, sessionID uu
 
 func (rcs *RPCClientStream) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
 	return rcs.client.UnregisterUdpSession(ctx, sessionID, message)
+}
+
+func (rcs *RPCClientStream) UpdateConfiguration(ctx context.Context, version int32, config []byte) (*tunnelpogs.UpdateConfigurationResponse, error) {
+	return rcs.client.UpdateConfiguration(ctx, version, config)
 }
 
 func (rcs *RPCClientStream) Close() {

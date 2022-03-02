@@ -152,3 +152,18 @@ interface SessionManager {
     registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16, closeAfterIdleHint: Int64) -> (result :RegisterUdpSessionResponse);
     unregisterUdpSession @1 (sessionId :Data, message: Text) -> ();
 }
+
+struct UpdateConfigurationResponse {
+    # Latest configuration that was applied successfully. The err field might be populated at the same time to indicate
+    # that cloudflared is using an older configuration because the latest cannot be applied
+    latestAppliedVersion @0 :Int32;
+    # Any error encountered when trying to apply the last configuration
+    err @1 :Text;
+}
+
+# ConfigurationManager defines RPC to manage cloudflared configuration remotely
+interface ConfigurationManager {
+    updateConfiguration @0 (version :Int32, config :Data) -> (result: UpdateConfigurationResponse);
+}
+
+interface CloudflaredServer extends(SessionManager, ConfigurationManager) {}

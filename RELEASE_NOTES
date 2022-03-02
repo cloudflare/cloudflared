@@ -1,3 +1,26 @@
+2022.2.2
+- 2022-02-22 TUN-5754: Allow ingress validate to take plaintext option
+- 2022-02-17 TUN-5678: Cloudflared uses typed tunnel API
+
+2022.2.1
+- 2022-02-10 TUN-5184: Handle errors in bidrectional streaming (websocket#Stream) gracefully when 1 side has ended
+- 2022-02-14 Update issue templates
+- 2022-02-14 Update issue templates
+- 2022-02-11 TUN-5768: Update cloudflared license file
+- 2022-02-11 TUN-5698: Make ingress rules and warp routing dynamically configurable
+- 2022-02-14 TUN-5678: Adapt cloudflared to use new typed APIs
+- 2022-02-17 Revert "TUN-5678: Adapt cloudflared to use new typed APIs"
+- 2022-02-11 TUN-5697: Listen for UpdateConfiguration RPC in quic transport
+- 2022-02-04 TUN-5744: Add a test to make sure cloudflared uses scheme defined in ingress rule, not X-Forwarded-Proto header
+- 2022-02-07 TUN-5749: Refactor cloudflared to pave way for reconfigurable ingress - Split origin into supervisor and proxy packages - Create configManager to handle dynamic config
+- 2021-10-19 TUN-5184: Make sure outstanding websocket write is finished, and no more writes after shutdown
+
+2022.2.0
+- 2022-02-02 TUN-4947: Use http when talking to Unix sockets origins
+- 2022-02-02 TUN-5695: Define RPC method to update configuration
+- 2022-01-27 TUN-5621: Correctly manage QUIC stream closing
+- 2022-01-28 TUN-5702: Allow to deserialize config from JSON
+
 2022.1.3
 - 2022-01-21 TUN-5477: Unhide vnet commands
 - 2022-01-24 TUN-5669: Change network command to vnet

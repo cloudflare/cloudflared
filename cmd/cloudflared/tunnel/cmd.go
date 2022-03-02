@@ -31,8 +31,9 @@ import (
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
-	"github.com/cloudflare/cloudflared/origin"
+	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
 )
@@ -223,7 +224,7 @@ func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
 func StartServer(
 	c *cli.Context,
 	info *cliutil.BuildInfo,
-	namedTunnel *connection.NamedTunnelConfig,
+	namedTunnel *connection.NamedTunnelProperties,
 	log *zerolog.Logger,
 	isUIEnabled bool,
 ) error {
@@ -333,7 +334,7 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, ingressRules, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
+	tunnelConfig, dynamicConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
@@ -353,11 +354,12 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, log)
 	}()
 
-	if err := ingressRules.StartOrigins(&wg, log, ctx.Done(), errC); err != nil {
+	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	if err != nil {
 		return err
 	}
 
-	reconnectCh := make(chan origin.ReconnectSignal, 1)
+	reconnectCh := make(chan supervisor.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {
 		log.Info().Msg("Enabling control through stdin")
 		go stdinControl(reconnectCh, log)
@@ -369,7 +371,7 @@ func StartServer(
 			wg.Done()
 			log.Info().Msg("Tunnel server stopped")
 		}()
-		errC <- origin.StartTunnelDaemon(ctx, tunnelConfig, connectedSignal, reconnectCh, graceShutdownC)
+		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, reconnectCh, graceShutdownC)
 	}()
 
 	if isUIEnabled {
@@ -377,7 +379,7 @@ func StartServer(
 			info.Version(),
 			hostname,
 			metricsListener.Addr().String(),
-			&ingressRules,
+			dynamicConfig.Ingress,
 			tunnelConfig.HAConnections,
 		)
 		app := tunnelUI.Launch(ctx, log, logTransport)
@@ -998,7 +1000,7 @@ func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
 	}
 }
 
-func stdinControl(reconnectCh chan origin.ReconnectSignal, log *zerolog.Logger) {
+func stdinControl(reconnectCh chan supervisor.ReconnectSignal, log *zerolog.Logger) {
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -1009,7 +1011,7 @@ func stdinControl(reconnectCh chan origin.ReconnectSignal, log *zerolog.Logger) 
 			case "":
 				break
 			case "reconnect":
-				var reconnect origin.ReconnectSignal
+				var reconnect supervisor.ReconnectSignal
 				if len(parts) > 1 {
 					var err error
 					if reconnect.Delay, err = time.ParseDuration(parts[1]); err != nil {

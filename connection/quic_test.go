@@ -3,14 +3,9 @@ package connection
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,7 +28,7 @@ import (
 )
 
 var (
-	testTLSServerConfig = generateTLSConfig()
+	testTLSServerConfig = quicpogs.GenerateTLSConfig()
 	testQUICConfig      = &quic.Config{
 		KeepAlive:       true,
 		EnableDatagrams: true,
@@ -52,7 +47,7 @@ func TestQUICServer(t *testing.T) {
 
 	// This is simply a sample websocket frame message.
 	wsBuf := &bytes.Buffer{}
-	wsutil.WriteClientText(wsBuf, []byte("Hello"))
+	wsutil.WriteClientBinary(wsBuf, []byte("Hello"))
 
 	var tests = []struct {
 		desc             string
@@ -84,7 +79,7 @@ func TestQUICServer(t *testing.T) {
 		},
 		{
 			desc:           "test http body request streaming",
-			dest:           "/echo_body",
+			dest:           "/slow_echo_body",
 			connectionType: quicpogs.ConnectionTypeHTTP,
 			metadata: []quicpogs.Metadata{
 				{
@@ -109,7 +104,7 @@ func TestQUICServer(t *testing.T) {
 		},
 		{
 			desc:           "test ws proxy",
-			dest:           "/ok",
+			dest:           "/ws/echo",
 			connectionType: quicpogs.ConnectionTypeWebsocket,
 			metadata: []quicpogs.Metadata{
 				{
@@ -130,7 +125,7 @@ func TestQUICServer(t *testing.T) {
 				},
 			},
 			message:          wsBuf.Bytes(),
-			expectedResponse: []byte{0x81, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
+			expectedResponse: []byte{0x82, 0x5, 0x48, 0x65, 0x6c, 0x6c, 0x6f},
 		},
 		{
 			desc:             "test tcp proxy",
@@ -195,8 +190,9 @@ func quicServer(
 	session, err := earlyListener.Accept(ctx)
 	require.NoError(t, err)
 
-	stream, err := session.OpenStreamSync(context.Background())
+	quicStream, err := session.OpenStreamSync(context.Background())
 	require.NoError(t, err)
+	stream := quicpogs.NewSafeStreamCloser(quicStream)
 
 	reqClientStream := quicpogs.RequestClientStream{ReadWriteCloser: stream}
 	err = reqClientStream.WriteConnectRequestData(dest, connectionType, metadata...)
@@ -207,40 +203,18 @@ func quicServer(
 
 	if message != nil {
 		// ALPN successful. Write data.
-		_, err := stream.Write([]byte(message))
+		_, err := stream.Write(message)
 		require.NoError(t, err)
 	}
 
 	response := make([]byte, len(expectedResponse))
-	stream.Read(response)
-	require.NoError(t, err)
+	_, err = stream.Read(response)
+	if err != io.EOF {
+		require.NoError(t, err)
+	}
 
 	// For now it is an echo server. Verify if the same data is returned.
 	assert.Equal(t, expectedResponse, response)
-}
-
-// Setup a bare-bones TLS config for the server
-func generateTLSConfig() *tls.Config {
-	key, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		panic(err)
-	}
-	template := x509.Certificate{SerialNumber: big.NewInt(1)}
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
-	if err != nil {
-		panic(err)
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		panic(err)
-	}
-	return &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		NextProtos:   []string{"argotunnel"},
-	}
 }
 
 type mockOriginProxyWithRequest struct{}
@@ -259,11 +233,14 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Reque
 	}
 
 	if isWebsocket {
-		return wsEndpoint(w, r)
+		return wsEchoEndpoint(w, r)
 	}
 	switch r.URL.Path {
 	case "/ok":
 		originRespEndpoint(w, http.StatusOK, []byte(http.StatusText(http.StatusOK)))
+	case "/slow_echo_body":
+		time.Sleep(5)
+		fallthrough
 	case "/echo_body":
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
@@ -583,12 +560,12 @@ func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.
 	if closeType != closedByRemote {
 		// Session was not closed by remote, so closeUDPSession should be invoked to unregister from remote
 		unregisterFromEdgeChan := make(chan struct{})
-		rpcServer := &mockSessionRPCServer{
+		sessionRPCServer := &mockSessionRPCServer{
 			sessionID:            sessionID,
 			unregisterReason:     expectedReason,
 			calledUnregisterChan: unregisterFromEdgeChan,
 		}
-		go runMockSessionRPCServer(ctx, edgeQUICSession, rpcServer, t)
+		go runRPCServer(ctx, edgeQUICSession, sessionRPCServer, nil, t)
 
 		<-unregisterFromEdgeChan
 	}
@@ -604,7 +581,7 @@ const (
 	closedByTimeout
 )
 
-func runMockSessionRPCServer(ctx context.Context, session quic.Session, rpcServer *mockSessionRPCServer, t *testing.T) {
+func runRPCServer(ctx context.Context, session quic.Session, sessionRPCServer tunnelpogs.SessionManager, configRPCServer tunnelpogs.ConfigurationManager, t *testing.T) {
 	stream, err := session.AcceptStream(ctx)
 	require.NoError(t, err)
 
@@ -619,7 +596,7 @@ func runMockSessionRPCServer(ctx context.Context, session quic.Session, rpcServe
 	assert.NoError(t, err)
 
 	log := zerolog.New(os.Stdout)
-	err = rpcServerStream.Serve(rpcServer, &log)
+	err = rpcServerStream.Serve(sessionRPCServer, configRPCServer, &log)
 	assert.NoError(t, err)
 }
 
@@ -641,7 +618,6 @@ func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionI
 		return fmt.Errorf("expect unregister reason %s, got %s", s.unregisterReason, reason)
 	}
 	close(s.calledUnregisterChan)
-	fmt.Println("unregister from edge")
 	return nil
 }
 
@@ -651,13 +627,12 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection 
 		NextProtos:         []string{"argotunnel"},
 	}
 	// Start a mock httpProxy
-	originProxy := &mockOriginProxyWithRequest{}
 	log := zerolog.New(os.Stdout)
 	qc, err := NewQUICConnection(
 		testQUICConfig,
 		udpListenerAddr,
 		tlsClientConfig,
-		originProxy,
+		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
 		&tunnelpogs.ConnectionOptions{},
 		fakeControlStream{},
 		&log,

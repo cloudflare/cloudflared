@@ -1,4 +1,4 @@
-package origin
+package supervisor
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -38,6 +39,7 @@ const (
 type Supervisor struct {
 	cloudflaredUUID   uuid.UUID
 	config            *TunnelConfig
+	orchestrator      *orchestration.Orchestrator
 	edgeIPs           *edgediscovery.Edge
 	tunnelErrors      chan tunnelError
 	tunnelsConnecting map[int]chan struct{}
@@ -64,7 +66,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrator, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
 	cloudflaredUUID, err := uuid.NewRandom()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
@@ -88,6 +90,7 @@ func NewSupervisor(config *TunnelConfig, reconnectCh chan ReconnectSignal, grace
 	return &Supervisor{
 		cloudflaredUUID:            cloudflaredUUID,
 		config:                     config,
+		orchestrator:               orchestrator,
 		edgeIPs:                    edgeIPs,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
@@ -243,6 +246,7 @@ func (s *Supervisor) startFirstTunnel(
 		ctx,
 		s.reconnectCredentialManager,
 		s.config,
+		s.orchestrator,
 		addr,
 		s.log,
 		firstConnIndex,
@@ -277,6 +281,7 @@ func (s *Supervisor) startFirstTunnel(
 			ctx,
 			s.reconnectCredentialManager,
 			s.config,
+			s.orchestrator,
 			addr,
 			s.log,
 			firstConnIndex,
@@ -311,6 +316,7 @@ func (s *Supervisor) startTunnel(
 		ctx,
 		s.reconnectCredentialManager,
 		s.config,
+		s.orchestrator,
 		addr,
 		s.log,
 		uint8(index),
@@ -380,7 +386,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 	defer rpcClient.Close()
 
 	const arbitraryConnectionID = uint8(0)
-	registrationOptions := s.config.RegistrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
+	registrationOptions := s.config.registrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
 	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
 	return rpcClient.Authenticate(ctx, s.config.ClassicTunnel, registrationOptions)
 }

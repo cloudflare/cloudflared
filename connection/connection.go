@@ -25,13 +25,12 @@ const (
 
 var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
 
-type Config struct {
-	OriginProxy     OriginProxy
-	GracePeriod     time.Duration
-	ReplaceExisting bool
+type Orchestrator interface {
+	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
+	GetOriginProxy() (OriginProxy, error)
 }
 
-type NamedTunnelConfig struct {
+type NamedTunnelProperties struct {
 	Credentials    Credentials
 	Client         pogs.ClientInfo
 	QuickTunnelUrl string
@@ -42,7 +41,6 @@ type Credentials struct {
 	AccountTag   string
 	TunnelSecret []byte
 	TunnelID     uuid.UUID
-	TunnelName   string
 }
 
 func (c *Credentials) Auth() pogs.TunnelAuth {
@@ -52,7 +50,22 @@ func (c *Credentials) Auth() pogs.TunnelAuth {
 	}
 }
 
-type ClassicTunnelConfig struct {
+// TunnelToken are Credentials but encoded with custom fields namings.
+type TunnelToken struct {
+	AccountTag   string    `json:"a"`
+	TunnelSecret []byte    `json:"s"`
+	TunnelID     uuid.UUID `json:"t"`
+}
+
+func (t TunnelToken) Credentials() Credentials {
+	return Credentials{
+		AccountTag:   t.AccountTag,
+		TunnelSecret: t.TunnelSecret,
+		TunnelID:     t.TunnelID,
+	}
+}
+
+type ClassicTunnelProperties struct {
 	Hostname   string
 	OriginCert []byte
 	// feature-flag to use new edge reconnect tokens

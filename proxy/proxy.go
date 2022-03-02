@@ -1,4 +1,4 @@
-package origin
+package proxy
 
 import (
 	"bufio"
@@ -38,17 +38,22 @@ type Proxy struct {
 // NewOriginProxy returns a new instance of the Proxy struct.
 func NewOriginProxy(
 	ingressRules ingress.Ingress,
-	warpRouting *ingress.WarpRoutingService,
+	warpRoutingEnabled bool,
 	tags []tunnelpogs.Tag,
 	log *zerolog.Logger,
 ) *Proxy {
-	return &Proxy{
+	proxy := &Proxy{
 		ingressRules: ingressRules,
-		warpRouting:  warpRouting,
 		tags:         tags,
 		log:          log,
 		bufferPool:   newBufferPool(512 * 1024),
 	}
+	if warpRoutingEnabled {
+		proxy.warpRouting = ingress.NewWarpRoutingService()
+		log.Info().Msgf("Warp-routing is enabled")
+	}
+
+	return proxy
 }
 
 // ProxyHTTP further depends on ingress rules to establish a connection with the origin service. This may be
