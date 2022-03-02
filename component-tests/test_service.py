@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import pathlib
 import platform
 import subprocess
 from contextlib import contextmanager
@@ -9,7 +10,7 @@ import pytest
 
 import test_logging
 from conftest import CfdModes
-from util import start_cloudflared, wait_tunnel_ready
+from util import start_cloudflared, wait_tunnel_ready, write_config
 
 
 def select_platform(plat):
@@ -45,6 +46,21 @@ class TestServiceMode:
 
     @select_platform("Darwin")
     @pytest.mark.skipif(os.path.exists(default_config_file()), reason=f"There is already a config file in default path")
+    def test_launchd_service_with_token(self, tmp_path, component_tests_config):
+        log_file = tmp_path / test_logging.default_log_file
+        additional_config = {
+            "logfile": str(log_file),
+        }
+        config = component_tests_config(additional_config=additional_config)
+
+        # service install doesn't install the config file but in this case we want to use some default settings
+        # so we write the base config without the tunnel credentials and ID
+        write_config(pathlib.Path(default_config_dir()), config.base_config())
+
+        self.launchd_service_scenario(config, use_token=True)
+
+    @select_platform("Darwin")
+    @pytest.mark.skipif(os.path.exists(default_config_file()), reason=f"There is already a config file in default path")
     def test_launchd_service_rotating_log(self, tmp_path, component_tests_config):
         log_dir = tmp_path / "logs"
         additional_config = {
@@ -60,12 +76,13 @@ class TestServiceMode:
 
         self.launchd_service_scenario(config, assert_rotating_log)
 
-    def launchd_service_scenario(self, config, extra_assertions):
-        with self.run_service(Path(default_config_dir()), config):
+    def launchd_service_scenario(self, config, extra_assertions=None, use_token=False):
+        with self.run_service(Path(default_config_dir()), config, use_token=use_token):
             self.launchctl_cmd("list")
             self.launchctl_cmd("start")
             wait_tunnel_ready(tunnel_url=config.get_url())
-            extra_assertions()
+            if extra_assertions is not None:
+                extra_assertions()
             self.launchctl_cmd("stop")
 
         os.remove(default_config_file())
@@ -105,12 +122,30 @@ class TestServiceMode:
 
         self.sysv_service_scenario(config, tmp_path, assert_rotating_log)
 
-    def sysv_service_scenario(self, config, tmp_path, extra_assertions):
-        with self.run_service(tmp_path, config, root=True):
+    @select_platform("Linux")
+    @pytest.mark.skipif(os.path.exists("/etc/cloudflared/config.yml"),
+                        reason=f"There is already a config file in default path")
+    def test_sysv_service_with_token(self, tmp_path, component_tests_config):
+        additional_config = {
+            "loglevel": "debug",
+        }
+
+        config = component_tests_config(additional_config=additional_config)
+
+        # service install doesn't install the config file but in this case we want to use some default settings
+        # so we write the base config without the tunnel credentials and ID
+        config_path = write_config(tmp_path, config.base_config())
+        subprocess.run(["sudo", "cp", config_path, "/etc/cloudflared/config.yml"], check=True)
+
+        self.sysv_service_scenario(config, tmp_path, use_token=True)
+
+    def sysv_service_scenario(self, config, tmp_path, extra_assertions=None, use_token=False):
+        with self.run_service(tmp_path, config, root=True, use_token=use_token):
             self.sysv_cmd("start")
             self.sysv_cmd("status")
             wait_tunnel_ready(tunnel_url=config.get_url())
-            extra_assertions()
+            if extra_assertions is not None:
+                extra_assertions()
             self.sysv_cmd("stop")
 
         # Service install copies config file to /etc/cloudflared/config.yml
@@ -118,14 +153,19 @@ class TestServiceMode:
         self.sysv_cmd("status", success=False)
 
     @contextmanager
-    def run_service(self, tmp_path, config, root=False):
+    def run_service(self, tmp_path, config, root=False, use_token=False):
+        args = ["service", "install"]
+
+        if use_token:
+            args.append(config.get_token())
+
         try:
             service = start_cloudflared(
-                tmp_path, config, cfd_args=["service", "install"], cfd_pre_args=[], capture_output=False, root=root)
+                tmp_path, config, cfd_args=args, cfd_pre_args=[], capture_output=False, root=root, skip_config_flag=use_token)
             yield service
         finally:
             start_cloudflared(
-                tmp_path, config, cfd_args=["service", "uninstall"], cfd_pre_args=[], capture_output=False, root=root)
+                tmp_path, config, cfd_args=["service", "uninstall"], cfd_pre_args=[], capture_output=False, root=root, skip_config_flag=use_token)
 
     def launchctl_cmd(self, action, success=True):
         cmd = subprocess.run(

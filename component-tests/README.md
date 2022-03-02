@@ -14,7 +14,7 @@ classic_hostname: "classic-tunnel-component-tests.example.com"
 origincert: "/Users/tunnel/.cloudflared/cert.pem"
 ingress:
 - hostname: named-tunnel-component-tests.example.com
-  service: http_status:200
+  service: hello_world
 - service: http_status:404
 ```
 

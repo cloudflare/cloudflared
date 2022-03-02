@@ -21,9 +21,14 @@ def write_config(directory, config):
 
 
 def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False,
-                      allow_input=False, capture_output=True, root=False):
-    config_path = write_config(directory, config.full_config)
+                      allow_input=False, capture_output=True, root=False, skip_config_flag=False):
+
+    config_path = None
+    if not skip_config_flag:
+        config_path = write_config(directory, config.full_config)
+
     cmd = cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root)
+
     if new_process:
         return run_cloudflared_background(cmd, allow_input, capture_output)
     # By setting check=True, it will raise an exception if the process exits with non-zero exit code
@@ -36,7 +41,10 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
         cmd += ["sudo"]
     cmd += [config.cloudflared_binary]
     cmd += cfd_pre_args
-    cmd += ["--config", str(config_path)]
+
+    if config_path is not None:
+        cmd += ["--config", str(config_path)]
+
     cmd += cfd_args
     LOGGER.info(f"Run cmd {cmd} with config {config}")
     return cmd
