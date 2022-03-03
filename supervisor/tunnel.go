@@ -180,7 +180,7 @@ func ServeTunnelLoop(
 		if !ok {
 			return err
 		}
-		connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
+		connLog.Logger().Info().Msgf("Retrying connection in up to %s", duration)
 
 		select {
 		case <-ctx.Done():
