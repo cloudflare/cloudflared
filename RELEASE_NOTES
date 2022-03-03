@@ -1,3 +1,12 @@
+2022.3.0
+- 2022-03-02 TUN-5680: Adapt component tests for new service install based on token
+- 2022-02-21 TUN-5682: Remove name field from credentials
+- 2022-02-21 TUN-5681: Add support for running tunnel using Token
+- 2022-02-28 TUN-5824: Update updater no-update-in-shell link
+- 2022-02-28 TUN-5823: Warn about legacy flags that are ignored when ingress rules are used
+- 2022-02-28 TUN-5737: Support https protocol over unix socket origin
+- 2022-02-23 TUN-5679: Add support for service install using Tunnel Token
+
 2022.2.2
 - 2022-02-22 TUN-5754: Allow ingress validate to take plaintext option
 - 2022-02-17 TUN-5678: Cloudflared uses typed tunnel API
