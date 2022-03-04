@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -77,7 +78,7 @@ func unidirectionalStream(dst io.Writer, src io.Reader, dir string, status *bidi
 			// exited. In such case, we stop a possible panic from propagating upstream.
 			if r := recover(); r != nil {
 				// We handle such unexpected errors only when we detect that one side of the streaming is done.
-				log.Debug().Msgf("Handled gracefully error %v in Streaming for %s", r, dir)
+				log.Debug().Msgf("Gracefully handled error %v in Streaming for %s, error %s", r, dir, debug.Stack())
 			}
 		}
 	}()

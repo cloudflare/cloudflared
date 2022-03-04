@@ -332,7 +332,8 @@ func proxyHTTP(t *testing.T, originProxy connection.OriginProxy, hostname string
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	respWriter, err := connection.NewHTTP2RespWriter(req, w, connection.TypeHTTP)
+	log := zerolog.Nop()
+	respWriter, err := connection.NewHTTP2RespWriter(req, w, connection.TypeHTTP, &log)
 	require.NoError(t, err)
 
 	err = originProxy.ProxyHTTP(respWriter, req, false)
@@ -358,7 +359,8 @@ func proxyTCP(t *testing.T, originProxy connection.OriginProxy, originAddr strin
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s", originAddr), reqBody)
 	require.NoError(t, err)
 
-	respWriter, err := connection.NewHTTP2RespWriter(req, w, connection.TypeTCP)
+	log := zerolog.Nop()
+	respWriter, err := connection.NewHTTP2RespWriter(req, w, connection.TypeTCP, &log)
 	require.NoError(t, err)
 
 	tcpReq := &connection.TCPRequest{
@@ -578,7 +580,8 @@ func TestPersistentConnection(t *testing.T) {
 		// ProxyHTTP will add Connection, Upgrade and Sec-Websocket-Version headers
 		req.Header.Add("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
 
-		respWriter, err := connection.NewHTTP2RespWriter(req, wsRespReadWriter, connection.TypeWebsocket)
+		log := zerolog.Nop()
+		respWriter, err := connection.NewHTTP2RespWriter(req, wsRespReadWriter, connection.TypeWebsocket, &log)
 		require.NoError(t, err)
 
 		err = originProxy.ProxyHTTP(respWriter, req, true)
