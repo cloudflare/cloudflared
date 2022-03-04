@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +24,7 @@ const (
 	InternalTCPProxySrcHeader = "Cf-Cloudflared-Proxy-Src"
 	WebsocketUpgrade          = "websocket"
 	ControlStreamUpgrade      = "control-stream"
+	ConfigurationUpdate       = "update-configuration"
 )
 
 var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
@@ -120,6 +122,13 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			respWriter.WriteErrorResponse()
 		}
 
+	case TypeConfiguration:
+		fmt.Println("TYPE CONFIGURATION?")
+		if err := c.handleConfigurationUpdate(respWriter, r); err != nil {
+			c.log.Error().Err(err)
+			respWriter.WriteErrorResponse()
+		}
+
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
 		if err := originProxy.ProxyHTTP(respWriter, r, connType == TypeWebsocket); err != nil {
@@ -150,6 +159,26 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.log.Error().Err(err)
 		respWriter.WriteErrorResponse()
 	}
+}
+
+// ConfigurationUpdateBody is the representation followed by the edge to send updates to cloudflared.
+type ConfigurationUpdateBody struct {
+	Version int32             `json:"version"`
+	Config  gojson.RawMessage `json:"config"`
+}
+
+func (c *HTTP2Connection) handleConfigurationUpdate(respWriter *http2RespWriter, r *http.Request) error {
+	var configBody ConfigurationUpdateBody
+	if err := json.NewDecoder(r.Body).Decode(&configBody); err != nil {
+		return err
+	}
+	resp := c.orchestrator.UpdateConfig(configBody.Version, configBody.Config)
+	bdy, err := json.Marshal(resp)
+	if err != nil {
+		return err
+	}
+	_, err = respWriter.Write(bdy)
+	return err
 }
 
 func (c *HTTP2Connection) close() {
@@ -258,6 +287,8 @@ func (rp *http2RespWriter) Close() error {
 
 func determineHTTP2Type(r *http.Request) Type {
 	switch {
+	case isConfigurationUpdate(r):
+		return TypeConfiguration
 	case isWebsocketUpgrade(r):
 		return TypeWebsocket
 	case IsTCPStream(r):
@@ -289,6 +320,10 @@ func isControlStreamUpgrade(r *http.Request) bool {
 
 func isWebsocketUpgrade(r *http.Request) bool {
 	return r.Header.Get(InternalUpgradeHeader) == WebsocketUpgrade
+}
+
+func isConfigurationUpdate(r *http.Request) bool {
+	return r.Header.Get(InternalUpgradeHeader) == ConfigurationUpdate
 }
 
 // IsTCPStream discerns if the connection request needs a tcp stream proxy.
