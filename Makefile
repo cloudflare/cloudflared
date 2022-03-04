@@ -3,6 +3,8 @@ MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut 
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
 #e.g. w3.0.1 or w4.2.10. It trims off the w character when creating the MSI.
 
+GO_SUMTYPE := go run -mod=vendor github.com/sudarshan-reddy/go-sumtype
+
 ifeq ($(ORIGINAL_NAME), true)
 	# Used for builds that want FIPS compilation but want the artifacts generated to still have the original name.
 	BINARY_NAME := cloudflared
@@ -271,11 +273,7 @@ quic-deps:
 .PHONY: vet
 vet:
 	go vet -mod=vendor ./...
-	# go get github.com/sudarshan-reddy/go-sumtype (don't do this in build directory or this will cause vendor issues)
-	# Note: If you have github.com/BurntSushi/go-sumtype then you might have to use the repo above instead
-	# for now because it uses an older version of golang.org/x/tools.
-	which go-sumtype
-	go-sumtype $$(go list -mod=vendor ./...)
+	$(GO_SUMTYPE) $$(go list -mod=vendor ./...)
 
 .PHONY: goimports
 goimports:

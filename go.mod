@@ -41,6 +41,7 @@ require (
 	github.com/rs/zerolog v1.20.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/stretchr/testify v1.7.0
+	github.com/sudarshan-reddy/go-sumtype v0.0.0-20210827105221-82eca7e5abb1
 	github.com/urfave/cli/v2 v2.3.0
 	go.uber.org/automaxprocs v1.4.0
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
