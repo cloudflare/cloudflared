@@ -342,7 +342,7 @@ func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadClose
 	//   * there is no transfer-encoding=chunked already set.
 	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
 	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
-		req.Body = nil
+		req.Body = http.NoBody
 	}
 	stripWebsocketUpgradeHeader(req)
 	return req, err

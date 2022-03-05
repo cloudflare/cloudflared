@@ -345,7 +345,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 				},
 				ContentLength: 0,
 				Host:          "cf.host",
-				Body:          nil,
+				Body:          http.NoBody,
 			},
 			body: io.NopCloser(&bytes.Buffer{}),
 		},

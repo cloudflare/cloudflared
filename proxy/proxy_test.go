@@ -60,6 +60,11 @@ func (w *mockHTTPRespWriter) Read(data []byte) (int, error) {
 	return 0, fmt.Errorf("mockHTTPRespWriter doesn't implement io.Reader")
 }
 
+// respHeaders is a test function to read respHeaders
+func (w *mockHTTPRespWriter) headers() http.Header {
+	return w.Header()
+}
+
 type mockWSRespWriter struct {
 	*mockHTTPRespWriter
 	writeNotification chan []byte
@@ -555,6 +560,24 @@ func TestConnections(t *testing.T) {
 			},
 		},
 		{
+			// Send (unexpected) HTTP when origin expects WS (to unwrap for raw TCP)
+			name: "http-(ws)tcp proxy",
+			args: args{
+				ingressServiceScheme:  "tcp://",
+				originService:         runEchoTCPService,
+				eyeballResponseWriter: newMockHTTPRespWriter(),
+				eyeballRequestBody:    http.NoBody,
+				connectionType:        connection.TypeHTTP,
+				requestHeaders: map[string][]string{
+					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
+				},
+			},
+			want: want{
+				message: []byte{},
+				headers: map[string][]string{},
+			},
+		},
+		{
 			name: "tcp-tcp proxy without warpRoutingService enabled",
 			args: args{
 				ingressServiceScheme:  "tcp://",
@@ -650,8 +673,8 @@ func TestConnections(t *testing.T) {
 				}()
 			}
 			if test.args.connectionType == connection.TypeTCP {
-				rws := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
-				err = proxy.ProxyTCP(ctx, rws, &connection.TCPRequest{Dest: dest})
+				rwa := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
+				err = proxy.ProxyTCP(ctx, rwa, &connection.TCPRequest{Dest: dest})
 			} else {
 				err = proxy.ProxyHTTP(respWriter, req, test.args.connectionType == connection.TypeWebsocket)
 			}
