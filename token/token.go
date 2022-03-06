@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-oidc/jose"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/retry"
@@ -46,24 +46,9 @@ type signalHandler struct {
 	signals    []os.Signal
 }
 
-type jwtPayload struct {
-	Aud   []string `json:"aud"`
-	Email string   `json:"email"`
-	Exp   int      `json:"exp"`
-	Iat   int      `json:"iat"`
-	Nbf   int      `json:"nbf"`
-	Iss   string   `json:"iss"`
-	Type  string   `json:"type"`
-	Subt  string   `json:"sub"`
-}
-
 type transferServiceResponse struct {
 	AppToken string `json:"app_token"`
 	OrgToken string `json:"org_token"`
-}
-
-func (p jwtPayload) isExpired() bool {
-	return int(time.Now().Unix()) > p.Exp
 }
 
 func (s *signalHandler) register(handler func()) {
@@ -337,21 +322,8 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	token, err := getTokenIfExists(path)
-	if err != nil {
-		return "", err
-	}
-	var payload jwtPayload
-	err = json.Unmarshal(token.Payload, &payload)
-	if err != nil {
-		return "", err
-	}
 
-	if payload.isExpired() {
-		err := os.Remove(path)
-		return "", err
-	}
-	return token.Encode(), nil
+	return getTokenIfExists(path)
 }
 
 func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
@@ -359,39 +331,37 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	token, err := getTokenIfExists(path)
-	if err != nil {
-		return "", err
-	}
-	var payload jwtPayload
-	err = json.Unmarshal(token.Payload, &payload)
+
+	return getTokenIfExists(path)
+}
+
+// GetTokenIfExists will return the token from local storage if it exists
+// and not expired. Expired tokens will be removed.
+func getTokenIfExists(path string) (string, error) {
+	content, err := ioutil.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
 
-	if payload.isExpired() {
+	token, err := jwt.ParseSigned(string(content))
+	if err != nil {
+		return "", err
+	}
+
+	claims := jwt.Claims{}
+	if err := token.UnsafeClaimsWithoutVerification(&claims); err != nil {
+		return "", err
+	}
+
+	if claims.Expiry == nil || claims.Expiry.Time().Before(time.Now()) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.Encode(), nil
 
+	return string(content), nil
 }
 
-// GetTokenIfExists will return the token from local storage if it exists and not expired
-func getTokenIfExists(path string) (*jose.JWT, error) {
-	content, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	token, err := jose.ParseJWT(string(content))
-	if err != nil {
-		return nil, err
-	}
-
-	return &token, nil
-}
-
-// RemoveTokenIfExists removes the a token from local storage if it exists
+// RemoveTokenIfExists removes the token from local storage if it exists
 func RemoveTokenIfExists(appInfo *AppInfo) error {
 	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
 	if err != nil {
