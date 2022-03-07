@@ -80,6 +80,7 @@ const (
 	TypeTCP
 	TypeControlStream
 	TypeHTTP
+	TypeConfiguration
 )
 
 // ShouldFlush returns whether this kind of connection should actively flush data

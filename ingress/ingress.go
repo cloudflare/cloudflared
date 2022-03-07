@@ -126,7 +126,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 		if err != nil {
 			return nil, errors.Wrap(err, "Error validating --unix-socket")
 		}
-		return &unixSocketPath{path: path}, nil
+		return &unixSocketPath{path: path, scheme: "http"}, nil
 	}
 	u, err := url.Parse("http://localhost:8080")
 	return &httpService{url: u}, err
@@ -169,7 +169,10 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 		if prefix := "unix:"; strings.HasPrefix(r.Service, prefix) {
 			// No validation necessary for unix socket filepath services
 			path := strings.TrimPrefix(r.Service, prefix)
-			service = &unixSocketPath{path: path}
+			service = &unixSocketPath{path: path, scheme: "http"}
+		} else if prefix := "unix+tls:"; strings.HasPrefix(r.Service, prefix) {
+			path := strings.TrimPrefix(r.Service, prefix)
+			service = &unixSocketPath{path: path, scheme: "https"}
 		} else if prefix := "http_status:"; strings.HasPrefix(r.Service, prefix) {
 			status, err := strconv.Atoi(strings.TrimPrefix(r.Service, prefix))
 			if err != nil {

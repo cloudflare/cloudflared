@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -23,6 +24,7 @@ const (
 	InternalTCPProxySrcHeader = "Cf-Cloudflared-Proxy-Src"
 	WebsocketUpgrade          = "websocket"
 	ControlStreamUpgrade      = "control-stream"
+	ConfigurationUpdate       = "update-configuration"
 )
 
 var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
@@ -100,7 +102,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	connType := determineHTTP2Type(r)
 	handleMissingRequestParts(connType, r)
 
-	respWriter, err := NewHTTP2RespWriter(r, w, connType)
+	respWriter, err := NewHTTP2RespWriter(r, w, connType, c.log)
 	if err != nil {
 		c.observer.log.Error().Msg(err.Error())
 		return
@@ -116,6 +118,13 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case TypeControlStream:
 		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions); err != nil {
 			c.controlStreamErr = err
+			c.log.Error().Err(err)
+			respWriter.WriteErrorResponse()
+		}
+
+	case TypeConfiguration:
+		fmt.Println("TYPE CONFIGURATION?")
+		if err := c.handleConfigurationUpdate(respWriter, r); err != nil {
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
 		}
@@ -152,6 +161,26 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ConfigurationUpdateBody is the representation followed by the edge to send updates to cloudflared.
+type ConfigurationUpdateBody struct {
+	Version int32             `json:"version"`
+	Config  gojson.RawMessage `json:"config"`
+}
+
+func (c *HTTP2Connection) handleConfigurationUpdate(respWriter *http2RespWriter, r *http.Request) error {
+	var configBody ConfigurationUpdateBody
+	if err := json.NewDecoder(r.Body).Decode(&configBody); err != nil {
+		return err
+	}
+	resp := c.orchestrator.UpdateConfig(configBody.Version, configBody.Config)
+	bdy, err := json.Marshal(resp)
+	if err != nil {
+		return err
+	}
+	_, err = respWriter.Write(bdy)
+	return err
+}
+
 func (c *HTTP2Connection) close() {
 	// Wait for all serve HTTP handlers to return
 	c.activeRequestsWG.Wait()
@@ -163,14 +192,16 @@ type http2RespWriter struct {
 	w           http.ResponseWriter
 	flusher     http.Flusher
 	shouldFlush bool
+	log         *zerolog.Logger
 }
 
-func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (*http2RespWriter, error) {
+func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, log *zerolog.Logger) (*http2RespWriter, error) {
 	flusher, isFlusher := w.(http.Flusher)
 	if !isFlusher {
 		respWriter := &http2RespWriter{
-			r: r.Body,
-			w: w,
+			r:   r.Body,
+			w:   w,
+			log: log,
 		}
 		respWriter.WriteErrorResponse()
 		return nil, fmt.Errorf("%T doesn't implement http.Flusher", w)
@@ -181,6 +212,7 @@ func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type) (
 		w:           w,
 		flusher:     flusher,
 		shouldFlush: connType.shouldFlush(),
+		log:         log,
 	}, nil
 }
 
@@ -239,7 +271,7 @@ func (rp *http2RespWriter) Write(p []byte) (n int, err error) {
 		// Implementer of OriginClient should make sure it doesn't write to the connection after Proxy returns
 		// Register a recover routine just in case.
 		if r := recover(); r != nil {
-			println(fmt.Sprintf("Recover from http2 response writer panic, error %s", debug.Stack()))
+			rp.log.Debug().Msgf("Recover from http2 response writer panic, error %s", debug.Stack())
 		}
 	}()
 	n, err = rp.w.Write(p)
@@ -255,6 +287,8 @@ func (rp *http2RespWriter) Close() error {
 
 func determineHTTP2Type(r *http.Request) Type {
 	switch {
+	case isConfigurationUpdate(r):
+		return TypeConfiguration
 	case isWebsocketUpgrade(r):
 		return TypeWebsocket
 	case IsTCPStream(r):
@@ -286,6 +320,10 @@ func isControlStreamUpgrade(r *http.Request) bool {
 
 func isWebsocketUpgrade(r *http.Request) bool {
 	return r.Header.Get(InternalUpgradeHeader) == WebsocketUpgrade
+}
+
+func isConfigurationUpdate(r *http.Request) bool {
+	return r.Header.Get(InternalUpgradeHeader) == ConfigurationUpdate
 }
 
 // IsTCPStream discerns if the connection request needs a tcp stream proxy.

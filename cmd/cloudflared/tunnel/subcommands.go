@@ -644,7 +644,7 @@ func runCommand(c *cli.Context) error {
 
 	// Check if token is provided and if not use default tunnelID flag method
 	if tokenStr := c.String(TunnelTokenFlag); tokenStr != "" {
-		if token, err := parseToken(tokenStr); err == nil {
+		if token, err := ParseToken(tokenStr); err == nil {
 			return sc.runWithCredentials(token.Credentials())
 		}
 
@@ -663,7 +663,7 @@ func runCommand(c *cli.Context) error {
 	}
 }
 
-func parseToken(tokenStr string) (*connection.TunnelToken, error) {
+func ParseToken(tokenStr string) (*connection.TunnelToken, error) {
 	content, err := base64.StdEncoding.DecodeString(tokenStr)
 	if err != nil {
 		return nil, err

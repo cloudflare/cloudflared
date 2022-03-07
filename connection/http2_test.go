@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -51,6 +52,41 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		controlStream,
 		&log,
 	), edgeConn
+}
+
+func TestHTTP2ConfigurationSet(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		http2Conn.Serve(ctx)
+	}()
+
+	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	require.NoError(t, err)
+
+	endpoint := fmt.Sprintf("http://localhost:8080/ok")
+	reqBody := []byte(`{
+"version": 2, 
+"config": {"warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}}
+`)
+	reader := bytes.NewReader(reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, reader)
+	require.NoError(t, err)
+	req.Header.Set(InternalUpgradeHeader, ConfigurationUpdate)
+
+	resp, err := edgeHTTP2Conn.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	bdy, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
+	cancel()
+	wg.Wait()
+
 }
 
 func TestServeHTTP(t *testing.T) {
