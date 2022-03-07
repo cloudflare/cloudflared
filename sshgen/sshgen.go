@@ -15,10 +15,10 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/coreos/go-oidc/jose"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
+	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"
@@ -87,18 +87,18 @@ func SignCert(token, pubKey string) (string, error) {
 		return "", errors.New("invalid token")
 	}
 
-	jwt, err := jose.ParseJWT(token)
+	object, err := jwt.ParseSigned(token)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse JWT")
 	}
 
-	claims, err := jwt.Claims()
-	if err != nil {
+	claims := jwt.Claims{}
+	if err := object.UnsafeClaimsWithoutVerification(&claims); err != nil {
 		return "", errors.Wrap(err, "failed to retrieve JWT claims")
 	}
 
-	issuer, _, err := claims.StringClaim("iss")
-	if err != nil {
+	issuer := claims.Issuer
+	if issuer == "" {
 		return "", errors.Wrap(err, "failed to retrieve JWT iss")
 	}
 

@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,11 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/go-oidc/jose"
-	"github.com/stretchr/testify/assert"
+	jose "gopkg.in/square/go-jose.v2"
+	jwt "gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -38,7 +40,7 @@ type signingArguments struct {
 
 func TestCertGenSuccess(t *testing.T) {
 	url, _ := url.Parse("https://cf-test-access.com/testpath")
-	token := tokenGenerator()
+	token := tokenGenerator(t)
 
 	fullName, err := cfpath.GenerateSSHCertFilePathFromURL(url, keyName)
 	assert.NoError(t, err)
@@ -96,23 +98,26 @@ func TestCertGenSuccess(t *testing.T) {
 	}
 }
 
-func tokenGenerator() string {
-	iat := time.Now().Unix()
-	exp := time.Now().Add(time.Minute * 5).Unix()
-	claims := jose.Claims{}
-	claims.Add("aud", audTest)
-	claims.Add("iat", iat)
-	claims.Add("nonce", nonceTest)
-	claims.Add("exp", exp)
-
+func tokenGenerator(t *testing.T) string {
 	k, err := rsa.GenerateKey(rand.Reader, 512)
-	if err != nil {
-		return ""
-	}
-	signer := jose.NewSignerRSA("asdf", *k)
-	token, terr := jose.NewSignedJWT(claims, signer)
-	if terr != nil {
-		return ""
-	}
-	return token.Encode()
+	require.NoError(t, err)
+
+	opts := jose.SignerOptions{}
+	signer, err := jose.NewSigner(
+		jose.SigningKey{
+			Algorithm: jose.RS256,
+			Key:       k,
+		},
+		opts.WithType("JWT"),
+	)
+	require.NoError(t, err)
+
+	token, err := jwt.Signed(signer).Claims(&jwt.Claims{
+		Audience: []string{audTest},
+		Expiry:   jwt.NewNumericDate(time.Now().Add(time.Minute * 5)),
+		IssuedAt: jwt.NewNumericDate(time.Now()),
+	}).CompactSerialize()
+	require.NoError(t, err)
+
+	return token
 }

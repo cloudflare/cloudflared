@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/pkg/errors"
 	"golang.org/x/net/idna"
-	"gopkg.in/coreos/go-oidc.v2"
 )
 
 const (
