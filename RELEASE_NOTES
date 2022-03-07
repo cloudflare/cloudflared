@@ -1,3 +1,9 @@
+2022.3.1
+- 2022-03-04 TUN-5837: Log panic recovery in http2 logic with debug level log
+- 2022-03-04  TUN-5696: HTTP/2 Configuration Update
+- 2022-03-04 TUN-5836: Avoid websocket#Stream function from crashing cloudflared with unexpected memory access
+- 2022-03-05 TUN-5836: QUIC transport no longer sets body to nil in any condition
+
 2022.3.0
 - 2022-03-02 TUN-5680: Adapt component tests for new service install based on token
 - 2022-02-21 TUN-5682: Remove name field from credentials
