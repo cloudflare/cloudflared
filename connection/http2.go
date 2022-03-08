@@ -123,7 +123,6 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case TypeConfiguration:
-		fmt.Println("TYPE CONFIGURATION?")
 		if err := c.handleConfigurationUpdate(respWriter, r); err != nil {
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
