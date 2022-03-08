@@ -150,7 +150,7 @@ define build_package
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) \
 		--description 'Cloudflare Tunnel daemon' \
 		--vendor 'Cloudflare' \
-		--license 'Cloudflare Service Agreement' \
+		--license 'Apache License Version 2.0' \
 		--url 'https://github.com/cloudflare/cloudflared' \
 		-m 'Cloudflare <support@cloudflare.com>' \
 		-a $(TARGET_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
