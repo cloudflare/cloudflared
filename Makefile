@@ -23,6 +23,9 @@ endif
 
 DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"
+ifdef PACKAGE_MANAGER
+	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=$(PACKAGE_MANAGER)"
+endif
 
 LINK_FLAGS :=
 ifeq ($(FIPS), true)
@@ -37,10 +40,11 @@ ifneq ($(GO_BUILD_TAGS),)
 	GO_BUILD_TAGS := -tags "$(GO_BUILD_TAGS)"
 endif
 
-IMPORT_PATH   := github.com/cloudflare/cloudflared
-PACKAGE_DIR   := $(CURDIR)/packaging
-INSTALL_BINDIR := /usr/bin/
-MAN_DIR := /usr/share/man/man1/
+IMPORT_PATH    := github.com/cloudflare/cloudflared
+PACKAGE_DIR    := $(CURDIR)/packaging
+PREFIX         := /usr
+INSTALL_BINDIR := $(PREFIX)/bin/
+INSTALL_MANDIR := $(PREFIX)/share/man/man1/
 
 LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
@@ -141,12 +145,20 @@ publish-deb: cloudflared-deb
 publish-rpm: cloudflared-rpm
 	$(call publish_package,rpm,yum)
 
+cloudflared.1: cloudflared_man_template
+	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > cloudflared.1
+
+install: cloudflared cloudflared.1
+	mkdir -p $(DESTDIR)$(INSTALL_BINDIR) $(DESTDIR)$(INSTALL_MANDIR)
+	install -m755 cloudflared $(DESTDIR)$(INSTALL_BINDIR)/cloudflared
+	install -m644 cloudflared.1 $(DESTDIR)$(INSTALL_MANDIR)/cloudflared.1
+
 # When we build packages, the package name will be FIPS-aware.
 # But we keep the binary installed by it to be named "cloudflared" regardless.
 define build_package
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
-	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > $(PACKAGE_DIR)/cloudflared.1
+	cp cloudflared.1 $(PACKAGE_DIR)/cloudflared.1
 	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) \
 		--description 'Cloudflare Tunnel daemon' \
 		--vendor 'Cloudflare' \
@@ -154,19 +166,19 @@ define build_package
 		--url 'https://github.com/cloudflare/cloudflared' \
 		-m 'Cloudflare <support@cloudflare.com>' \
 		-a $(TARGET_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
-		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(MAN_DIR)
+		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(INSTALL_MANDIR)
 endef
 
 .PHONY: cloudflared-deb
-cloudflared-deb: cloudflared
+cloudflared-deb: cloudflared cloudflared.1
 	$(call build_package,deb)
 
 .PHONY: cloudflared-rpm
-cloudflared-rpm: cloudflared
+cloudflared-rpm: cloudflared cloudflared.1
 	$(call build_package,rpm)
 
 .PHONY: cloudflared-pkg
-cloudflared-pkg: cloudflared
+cloudflared-pkg: cloudflared cloudflared.1
 	$(call build_package,osxpkg)
 
 .PHONY: cloudflared-msi
