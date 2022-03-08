@@ -1,4 +1,39 @@
-**Experimental**: This is a new format for release notes. The format and availability is subject to change.
+## 2022.3.1
+### Bug Fixes
+- Various fixes to the reliability of `quic` protocol, including an edge case that could lead to cloudflared crashing.
+
+## 2022.3.0
+### New Features
+- It is now possible to configure Ingress Rules to point to an origin served by unix socket with either HTTP or HTTPS.
+If the origin starts with `unix:/` then we assume HTTP (existing behavior). Otherwise, the origin can start with
+`unix+tls:/` for HTTPS.
+
+## 2022.2.1
+### New Features
+- This project now has a new LICENSE that is more compliant with open source purposes.
+
+### Bug Fixes
+- Various fixes to the reliability of `quic` protocol.
+
+## 2022.1.3
+### New Features
+- New `cloudflared tunnel vnet` commands to allow for private routing to be virtualized. This means that the same CIDR
+can now be used to point to two different Tunnels with `cloudflared tunnel route ip` command. More information will be
+made available on blog.cloudflare.com and developers.cloudflare.com/cloudflare-one once the feature is globally available.
+
+### Bug Fixes
+- Correctly handle proxying UDP datagrams with no payload.
+- Bug fix for origins that use Server-Sent Events (SSE).
+
+## 2022.1.0
+### Improvements
+- If a specific `protocol` property is defined (e.g. for `quic`), cloudflared no longer falls back to an older protocol
+(such as `http2`) in face of connectivity errors. This is important because some features are only supported in a specific
+protocol (e.g. UDP proxying only works for `quic`). Hence, if a user chooses a protocol, cloudflared now adheres to it
+no matter what.
+
+### Bug Fixes
+- Stopping cloudflared running with `quic` protocol now respects graceful shutdown.
 
 ## 2021.12.2
 ### Bug Fixes
