@@ -58,7 +58,7 @@ func TestUpdateConfiguration(t *testing.T) {
 {
 	"unknown_field": "not_deserialized",
     "originRequest": {
-        "connectTimeout": 90000000000,
+        "connectTimeout": 90,
 		"noHappyEyeballs": true
     },
     "ingress": [
@@ -68,7 +68,7 @@ func TestUpdateConfiguration(t *testing.T) {
             "service": "http://192.16.19.1:443",
             "originRequest": {
                 "noTLSVerify": true,
-                "connectTimeout": 10000000000
+                "connectTimeout": 10
             }
         },
 		{
@@ -76,7 +76,7 @@ func TestUpdateConfiguration(t *testing.T) {
             "service": "http://172.32.20.6:80",
             "originRequest": {
                 "noTLSVerify": true,
-                "connectTimeout": 30000000000
+                "connectTimeout": 30
             }
         },
         {
@@ -192,7 +192,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 		configJSONV1 = []byte(fmt.Sprintf(`
 {
     "originRequest": {
-        "connectTimeout": 90000000000,
+        "connectTimeout": 90,
 		"noHappyEyeballs": true
     },
     "ingress": [
@@ -201,7 +201,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
             "service": "%s",
             "originRequest": {
 				"httpHostHeader": "%s",
-                "connectTimeout": 10000000000
+                "connectTimeout": 10
             }
         },
         {

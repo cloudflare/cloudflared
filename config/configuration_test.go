@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -110,14 +111,13 @@ counters:
 
 }
 
-func TestUnmarshalOriginRequestConfig(t *testing.T) {
-	raw := []byte(`
+var rawConfig = []byte(`
 {
-	"connectTimeout": 10000000000,
-	"tlsTimeout": 30000000000,
-	"tcpKeepAlive": 30000000000,
+	"connectTimeout": 10,
+	"tlsTimeout": 30,
+	"tcpKeepAlive": 30,
 	"noHappyEyeballs": true,
-	"keepAliveTimeout": 60000000000,
+	"keepAliveTimeout": 60,
 	"keepAliveConnections": 10,
 	"httpHostHeader": "app.tunnel.com",
 	"originServerName": "app.tunnel.com",
@@ -142,13 +142,41 @@ func TestUnmarshalOriginRequestConfig(t *testing.T) {
 	]
 }
 `)
+
+func TestMarshalUnmarshalOriginRequest(t *testing.T) {
+	testCases := []struct {
+		name          string
+		marshalFunc   func(in interface{}) (out []byte, err error)
+		unMarshalFunc func(in []byte, out interface{}) (err error)
+		baseUnit      time.Duration
+	}{
+		{"json", json.Marshal, json.Unmarshal, time.Second},
+		{"yaml", yaml.Marshal, yaml.Unmarshal, time.Nanosecond},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertConfig(t, tc.marshalFunc, tc.unMarshalFunc, tc.baseUnit)
+		})
+	}
+}
+
+func assertConfig(
+	t *testing.T,
+	marshalFunc func(in interface{}) (out []byte, err error),
+	unMarshalFunc func(in []byte, out interface{}) (err error),
+	baseUnit time.Duration,
+) {
 	var config OriginRequestConfig
-	assert.NoError(t, json.Unmarshal(raw, &config))
-	assert.Equal(t, time.Second*10, *config.ConnectTimeout)
-	assert.Equal(t, time.Second*30, *config.TLSTimeout)
-	assert.Equal(t, time.Second*30, *config.TCPKeepAlive)
+	var config2 OriginRequestConfig
+
+	assert.NoError(t, unMarshalFunc(rawConfig, &config))
+
+	assert.Equal(t, baseUnit*10, config.ConnectTimeout.Duration)
+	assert.Equal(t, baseUnit*30, config.TLSTimeout.Duration)
+	assert.Equal(t, baseUnit*30, config.TCPKeepAlive.Duration)
 	assert.Equal(t, true, *config.NoHappyEyeballs)
-	assert.Equal(t, time.Second*60, *config.KeepAliveTimeout)
+	assert.Equal(t, baseUnit*60, config.KeepAliveTimeout.Duration)
 	assert.Equal(t, 10, *config.KeepAliveConnections)
 	assert.Equal(t, "app.tunnel.com", *config.HTTPHostHeader)
 	assert.Equal(t, "app.tunnel.com", *config.OriginServerName)
@@ -176,4 +204,12 @@ func TestUnmarshalOriginRequestConfig(t *testing.T) {
 		},
 	}
 	assert.Equal(t, ipRules, config.IPRules)
+
+	// validate that serializing and deserializing again matches the deserialization from raw string
+	result, err := marshalFunc(config)
+	require.NoError(t, err)
+	err = unMarshalFunc(result, &config2)
+	require.NoError(t, err)
+
+	require.Equal(t, config2, config)
 }

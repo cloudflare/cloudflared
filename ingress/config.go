@@ -158,13 +158,13 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 		ProxyAddress:         defaultProxyAddress,
 	}
 	if c.ConnectTimeout != nil {
-		out.ConnectTimeout = *c.ConnectTimeout
+		out.ConnectTimeout = c.ConnectTimeout.Duration
 	}
 	if c.TLSTimeout != nil {
-		out.TLSTimeout = *c.TLSTimeout
+		out.TLSTimeout = c.TLSTimeout.Duration
 	}
 	if c.TCPKeepAlive != nil {
-		out.TCPKeepAlive = *c.TCPKeepAlive
+		out.TCPKeepAlive = c.TCPKeepAlive.Duration
 	}
 	if c.NoHappyEyeballs != nil {
 		out.NoHappyEyeballs = *c.NoHappyEyeballs
@@ -173,7 +173,7 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 		out.KeepAliveConnections = *c.KeepAliveConnections
 	}
 	if c.KeepAliveTimeout != nil {
-		out.KeepAliveTimeout = *c.KeepAliveTimeout
+		out.KeepAliveTimeout = c.KeepAliveTimeout.Duration
 	}
 	if c.HTTPHostHeader != nil {
 		out.HTTPHostHeader = *c.HTTPHostHeader
@@ -257,13 +257,13 @@ type OriginRequestConfig struct {
 
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {
 	if val := overrides.ConnectTimeout; val != nil {
-		defaults.ConnectTimeout = *val
+		defaults.ConnectTimeout = val.Duration
 	}
 }
 
 func (defaults *OriginRequestConfig) setTLSTimeout(overrides config.OriginRequestConfig) {
 	if val := overrides.TLSTimeout; val != nil {
-		defaults.TLSTimeout = *val
+		defaults.TLSTimeout = val.Duration
 	}
 }
 
@@ -281,13 +281,13 @@ func (defaults *OriginRequestConfig) setKeepAliveConnections(overrides config.Or
 
 func (defaults *OriginRequestConfig) setKeepAliveTimeout(overrides config.OriginRequestConfig) {
 	if val := overrides.KeepAliveTimeout; val != nil {
-		defaults.KeepAliveTimeout = *val
+		defaults.KeepAliveTimeout = val.Duration
 	}
 }
 
 func (defaults *OriginRequestConfig) setTCPKeepAlive(overrides config.OriginRequestConfig) {
 	if val := overrides.TCPKeepAlive; val != nil {
-		defaults.TCPKeepAlive = *val
+		defaults.TCPKeepAlive = val.Duration
 	}
 }
 
