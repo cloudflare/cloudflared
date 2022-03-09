@@ -95,6 +95,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 		Int32("version", version).
 		Str("config", string(config)).
 		Msg("Updated to new configuration")
+	configVersion.Set(float64(version))
 	return &tunnelpogs.UpdateConfigurationResponse{
 		LastAppliedVersion: o.currentVersion,
 	}
