@@ -32,6 +32,7 @@ const (
 	dialTimeout              = 15 * time.Second
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
+	FeatureAllowRemoteConfig = "allow_remote_config"
 )
 
 type TunnelConfig struct {
