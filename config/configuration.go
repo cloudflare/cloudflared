@@ -411,7 +411,7 @@ type CustomDuration struct {
 	time.Duration
 }
 
-func (s *CustomDuration) MarshalJSON() ([]byte, error) {
+func (s CustomDuration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.Duration.Seconds())
 }
 

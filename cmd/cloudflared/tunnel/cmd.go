@@ -340,6 +340,11 @@ func StartServer(
 		return err
 	}
 
+	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	if err != nil {
+		return err
+	}
+
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
 		log.Err(err).Msg("Error opening metrics server listener")
@@ -351,13 +356,8 @@ func StartServer(
 		defer wg.Done()
 		readinessServer := metrics.NewReadyServer(log)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, log)
+		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, orchestrator, log)
 	}()
-
-	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
-	if err != nil {
-		return err
-	}
 
 	reconnectCh := make(chan supervisor.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {

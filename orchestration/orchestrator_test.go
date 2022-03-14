@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/proxy"
@@ -99,7 +100,7 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.Equal(t, "http://192.16.19.1:443", configV2.Ingress.Rules[0].Service.String())
 	require.Len(t, configV2.Ingress.Rules, 3)
 	// originRequest of this ingress rule overrides global default
-	require.Equal(t, time.Second*10, configV2.Ingress.Rules[0].Config.ConnectTimeout)
+	require.Equal(t, config.CustomDuration{Duration: time.Second * 10}, configV2.Ingress.Rules[0].Config.ConnectTimeout)
 	require.Equal(t, true, configV2.Ingress.Rules[0].Config.NoTLSVerify)
 	// Inherited from global default
 	require.Equal(t, true, configV2.Ingress.Rules[0].Config.NoHappyEyeballs)
@@ -108,14 +109,14 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.True(t, configV2.Ingress.Rules[1].Matches("jira.tunnel.org", "/users"))
 	require.Equal(t, "http://172.32.20.6:80", configV2.Ingress.Rules[1].Service.String())
 	// originRequest of this ingress rule overrides global default
-	require.Equal(t, time.Second*30, configV2.Ingress.Rules[1].Config.ConnectTimeout)
+	require.Equal(t, config.CustomDuration{Duration: time.Second * 30}, configV2.Ingress.Rules[1].Config.ConnectTimeout)
 	require.Equal(t, true, configV2.Ingress.Rules[1].Config.NoTLSVerify)
 	// Inherited from global default
 	require.Equal(t, true, configV2.Ingress.Rules[1].Config.NoHappyEyeballs)
 	// Validate ingress rule 2, it's the catch-all rule
 	require.True(t, configV2.Ingress.Rules[2].Matches("blogs.tunnel.io", "/2022/02/10"))
 	// Inherited from global default
-	require.Equal(t, time.Second*90, configV2.Ingress.Rules[2].Config.ConnectTimeout)
+	require.Equal(t, config.CustomDuration{Duration: time.Second * 90}, configV2.Ingress.Rules[2].Config.ConnectTimeout)
 	require.Equal(t, false, configV2.Ingress.Rules[2].Config.NoTLSVerify)
 	require.Equal(t, true, configV2.Ingress.Rules[2].Config.NoHappyEyeballs)
 	require.True(t, configV2.WarpRoutingEnabled)

@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -9,18 +10,18 @@ import (
 // service running on the given URL.
 type Rule struct {
 	// Requests for this hostname will be proxied to this rule's service.
-	Hostname string
+	Hostname string `json:"hostname"`
 
 	// Path is an optional regex that can specify path-driven ingress rules.
-	Path *regexp.Regexp
+	Path *Regexp `json:"path"`
 
 	// A (probably local) address. Requests for a hostname which matches this
 	// rule's hostname pattern will be proxied to the service running on this
 	// address.
-	Service OriginService
+	Service OriginService `json:"service"`
 
 	// Configure the request cloudflared sends to this specific origin.
-	Config OriginRequestConfig
+	Config OriginRequestConfig `json:"originRequest"`
 }
 
 // MultiLineString is for outputting rules in a human-friendly way when Cloudflared
@@ -32,9 +33,9 @@ func (r Rule) MultiLineString() string {
 		out.WriteString(r.Hostname)
 		out.WriteRune('\n')
 	}
-	if r.Path != nil {
+	if r.Path != nil && r.Path.Regexp != nil {
 		out.WriteString("\tpath: ")
-		out.WriteString(r.Path.String())
+		out.WriteString(r.Path.Regexp.String())
 		out.WriteRune('\n')
 	}
 	out.WriteString("\tservice: ")
@@ -45,6 +46,18 @@ func (r Rule) MultiLineString() string {
 // Matches checks if the rule matches a given hostname/path combination.
 func (r *Rule) Matches(hostname, path string) bool {
 	hostMatch := r.Hostname == "" || r.Hostname == "*" || matchHost(r.Hostname, hostname)
-	pathMatch := r.Path == nil || r.Path.MatchString(path)
+	pathMatch := r.Path == nil || r.Path.Regexp == nil || r.Path.Regexp.MatchString(path)
 	return hostMatch && pathMatch
+}
+
+// Regexp adds unmarshalling from json for regexp.Regexp
+type Regexp struct {
+	*regexp.Regexp
+}
+
+func (r *Regexp) MarshalJSON() ([]byte, error) {
+	if r.Regexp == nil {
+		return json.Marshal(nil)
+	}
+	return json.Marshal(r.Regexp.String())
 }

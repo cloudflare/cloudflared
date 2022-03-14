@@ -65,7 +65,7 @@ func TestUnmarshalRemoteConfigOverridesGlobal(t *testing.T) {
 	err := json.Unmarshal(rawConfig, &remoteConfig)
 	require.NoError(t, err)
 	require.True(t, remoteConfig.Ingress.Rules[0].Config.NoTLSVerify)
-	require.True(t, remoteConfig.Ingress.defaults.NoHappyEyeballs)
+	require.True(t, remoteConfig.Ingress.Defaults.NoHappyEyeballs)
 }
 
 func TestOriginRequestConfigOverrides(t *testing.T) {
@@ -74,11 +74,11 @@ func TestOriginRequestConfigOverrides(t *testing.T) {
 		// root-level configuration.
 		actual0 := ing.Rules[0].Config
 		expected0 := OriginRequestConfig{
-			ConnectTimeout:         1 * time.Minute,
-			TLSTimeout:             1 * time.Second,
-			TCPKeepAlive:           1 * time.Second,
+			ConnectTimeout:         config.CustomDuration{Duration: 1 * time.Minute},
+			TLSTimeout:             config.CustomDuration{Duration: 1 * time.Second},
+			TCPKeepAlive:           config.CustomDuration{Duration: 1 * time.Second},
 			NoHappyEyeballs:        true,
-			KeepAliveTimeout:       1 * time.Second,
+			KeepAliveTimeout:       config.CustomDuration{Duration: 1 * time.Second},
 			KeepAliveConnections:   1,
 			HTTPHostHeader:         "abc",
 			OriginServerName:       "a1",
@@ -99,11 +99,11 @@ func TestOriginRequestConfigOverrides(t *testing.T) {
 		// Rule 1 overrode all the root-level config.
 		actual1 := ing.Rules[1].Config
 		expected1 := OriginRequestConfig{
-			ConnectTimeout:         2 * time.Minute,
-			TLSTimeout:             2 * time.Second,
-			TCPKeepAlive:           2 * time.Second,
+			ConnectTimeout:         config.CustomDuration{Duration: 2 * time.Minute},
+			TLSTimeout:             config.CustomDuration{Duration: 2 * time.Second},
+			TCPKeepAlive:           config.CustomDuration{Duration: 2 * time.Second},
 			NoHappyEyeballs:        false,
-			KeepAliveTimeout:       2 * time.Second,
+			KeepAliveTimeout:       config.CustomDuration{Duration: 2 * time.Second},
 			KeepAliveConnections:   2,
 			HTTPHostHeader:         "def",
 			OriginServerName:       "b2",
@@ -286,11 +286,11 @@ func TestOriginRequestConfigDefaults(t *testing.T) {
 		// Rule 1 overrode all defaults.
 		actual1 := ing.Rules[1].Config
 		expected1 := OriginRequestConfig{
-			ConnectTimeout:         2 * time.Minute,
-			TLSTimeout:             2 * time.Second,
-			TCPKeepAlive:           2 * time.Second,
+			ConnectTimeout:         config.CustomDuration{Duration: 2 * time.Minute},
+			TLSTimeout:             config.CustomDuration{Duration: 2 * time.Second},
+			TCPKeepAlive:           config.CustomDuration{Duration: 2 * time.Second},
 			NoHappyEyeballs:        false,
-			KeepAliveTimeout:       2 * time.Second,
+			KeepAliveTimeout:       config.CustomDuration{Duration: 2 * time.Second},
 			KeepAliveConnections:   2,
 			HTTPHostHeader:         "def",
 			OriginServerName:       "b2",
