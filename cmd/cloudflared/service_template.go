@@ -43,6 +43,10 @@ func (st *ServiceTemplate) Generate(args *ServiceTemplateArgs) error {
 	if err != nil {
 		return err
 	}
+	if _, err = os.Stat(resolvedPath); err == nil {
+		return fmt.Errorf("cloudflared service is already installed at %s", resolvedPath)
+	}
+
 	var buffer bytes.Buffer
 	err = tmpl.Execute(&buffer, args)
 	if err != nil {
