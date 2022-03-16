@@ -1,3 +1,15 @@
+2022.3.2
+- 2022-03-10 TUN-5833: Create constant for allow-remote-config
+- 2022-03-15 TUN-5867: Return error if service was already installed
+- 2022-03-16 TUN-5833: Send feature `allow_remote_config` if Tunnel is run with --token
+- 2022-03-08 TUN-5849: Remove configuration debug log
+- 2022-03-08 TUN-5850: Update CHANGES.md with latest releases
+- 2022-03-08 TUN-5851: Update all references to point to Apache License 2.0
+- 2022-03-07 TUN-5853 Add "install" make target and build package manager info into executable
+- 2022-03-08 TUN-5801: Add custom wrapper for OriginConfig for JSON serde
+- 2022-03-09 TUN-5703: Add prometheus metric for current configuration version
+- 2022-02-05 CC-796: Remove dependency on unsupported version of go-oidc
+
 2022.3.1
 - 2022-03-04 TUN-5837: Log panic recovery in http2 logic with debug level log
 - 2022-03-04  TUN-5696: HTTP/2 Configuration Update
