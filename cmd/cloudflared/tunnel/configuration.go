@@ -191,6 +191,10 @@ func prepareTunnelConfig(
 		}
 		log.Info().Msgf("Generated Connector ID: %s", clientUUID)
 		features := append(c.StringSlice("features"), supervisor.FeatureSerializedHeaders)
+		if c.IsSet(TunnelTokenFlag) {
+			features = append(features, supervisor.FeatureAllowRemoteConfig)
+			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API")
+		}
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
 			Features: dedup(features),

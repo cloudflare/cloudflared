@@ -220,7 +220,6 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 	}
 	fmt.Println(" Keep this file secret. To revoke these credentials, delete the tunnel.")
 	fmt.Printf("\nCreated tunnel %s with id %s\n", tunnel.Name, tunnel.ID)
-	fmt.Printf("\nTunnel Token: %s\n", tunnel.Token)
 
 	return &tunnel.Tunnel, nil
 }
