@@ -212,12 +212,14 @@ func installWindowsService(c *cli.Context) error {
 		s.Delete()
 		return errors.Wrap(err, "Cannot install event logger")
 	}
+
 	err = configRecoveryOption(s.Handle)
 	if err != nil {
 		log.Err(err).Msg("Cannot set service recovery actions")
 		log.Info().Msgf("See %s to manually configure service recovery actions", windowsServiceUrl)
 	}
-	return nil
+
+	return s.Start()
 }
 
 func uninstallWindowsService(c *cli.Context) error {
@@ -236,6 +238,14 @@ func uninstallWindowsService(c *cli.Context) error {
 		return fmt.Errorf("Service %s is not installed", windowsServiceName)
 	}
 	defer s.Close()
+
+	if status, err := s.Query(); err == nil && status.State == svc.Running {
+		log.Info().Msg("Stopping Cloudflare Tunnel agent service")
+		if _, err := s.Control(svc.Stop); err != nil {
+			log.Info().Err(err).Msg("Failed to stop Cloudflare Tunnel agent service, you may need to stop it manually to complete uninstall.")
+		}
+	}
+
 	err = s.Delete()
 	if err != nil {
 		return errors.Wrap(err, "Cannot delete service")
