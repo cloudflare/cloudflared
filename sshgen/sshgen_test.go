@@ -4,6 +4,8 @@
 package sshgen
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,9 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/go-oidc/jose"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"
@@ -96,25 +97,22 @@ func TestCertGenSuccess(t *testing.T) {
 }
 
 func tokenGenerator() string {
-	iat := time.Now()
-	exp := time.Now().Add(time.Minute * 5)
+	iat := time.Now().Unix()
+	exp := time.Now().Add(time.Minute * 5).Unix()
+	claims := jose.Claims{}
+	claims.Add("aud", audTest)
+	claims.Add("iat", iat)
+	claims.Add("nonce", nonceTest)
+	claims.Add("exp", exp)
 
-	claims := jwt.Claims{
-		Audience: jwt.Audience{audTest},
-		IssuedAt: jwt.NewNumericDate(iat),
-		Expiry:   jwt.NewNumericDate(exp),
-	}
-
-	key := []byte("secret")
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: key}, (&jose.SignerOptions{}).WithType("JWT"))
+	k, err := rsa.GenerateKey(rand.Reader, 512)
 	if err != nil {
-		panic(err)
+		return ""
 	}
-
-	signedToken, err := jwt.Signed(signer).Claims(claims).CompactSerialize()
-	if err != nil {
-		panic(err)
+	signer := jose.NewSignerRSA("asdf", *k)
+	token, terr := jose.NewSignedJWT(claims, signer)
+	if terr != nil {
+		return ""
 	}
-
-	return signedToken
+	return token.Encode()
 }

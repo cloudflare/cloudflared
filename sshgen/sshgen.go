@@ -15,10 +15,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/coreos/go-oidc/jose"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
-	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"
@@ -87,33 +87,37 @@ func SignCert(token, pubKey string) (string, error) {
 		return "", errors.New("invalid token")
 	}
 
-	parsedToken, err := jwt.ParseSigned(token)
+	jwt, err := jose.ParseJWT(token)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse JWT")
 	}
 
-	claims := jwt.Claims{}
-	err = parsedToken.UnsafeClaimsWithoutVerification(&claims)
+	claims, err := jwt.Claims()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to retrieve JWT claims")
+	}
+
+	issuer, _, err := claims.StringClaim("iss")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to retrieve JWT iss")
 	}
 
 	buf, err := json.Marshal(&signPayload{
 		PublicKey: pubKey,
 		JWT:       token,
-		Issuer:    claims.Issuer,
+		Issuer:    issuer,
 	})
 	if err != nil {
 		return "", errors.Wrap(err, "failed to marshal signPayload")
 	}
 	var res *http.Response
 	if mockRequest != nil {
-		res, err = mockRequest(claims.Issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
+		res, err = mockRequest(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
 	} else {
 		client := http.Client{
 			Timeout: 10 * time.Second,
 		}
-		res, err = client.Post(claims.Issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
+		res, err = client.Post(issuer+signEndpoint, "application/json", bytes.NewBuffer(buf))
 	}
 
 	if err != nil {

@@ -216,7 +216,6 @@ func NewMultiEncrypter(enc ContentEncryption, rcpts []Recipient, opts *Encrypter
 
 	if opts != nil {
 		encrypter.compressionAlg = opts.Compression
-		encrypter.extraHeaders = opts.ExtraHeaders
 	}
 
 	for _, recipient := range rcpts {
