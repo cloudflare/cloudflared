@@ -1,3 +1,8 @@
+## 2022.3.3
+### Bug Fixes
+- `cloudflared service install` now starts the underlying agent service on Windows operating system (similarly to the
+behaviour in Linux and MacOS).
+
 ## 2022.3.1
 ### Bug Fixes
 - Various fixes to the reliability of `quic` protocol, including an edge case that could lead to cloudflared crashing.
