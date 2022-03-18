@@ -26,8 +26,8 @@ import (
 
 const (
 	windowsServiceName        = "Cloudflared"
-	windowsServiceDescription = "Cloudflare Tunnel agent"
-	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/run-as-service#windows"
+	windowsServiceDescription = "Cloudflared agent"
+	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/as-a-service/windows/"
 
 	recoverActionDelay      = time.Second * 20
 	failureCountResetPeriod = time.Hour * 24
@@ -46,16 +46,16 @@ const (
 func runApp(app *cli.App, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
-		Usage: "Manages the Cloudflare Tunnel Windows service",
+		Usage: "Manages the cloudflared Windows service",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "install",
-				Usage:  "Install Cloudflare Tunnel as a Windows service",
+				Usage:  "Install cloudflared as a Windows service",
 				Action: cliutil.ConfiguredAction(installWindowsService),
 			},
 			{
 				Name:   "uninstall",
-				Usage:  "Uninstall the Cloudflare Tunnel service",
+				Usage:  "Uninstall the cloudflared service",
 				Action: cliutil.ConfiguredAction(uninstallWindowsService),
 			},
 		},
@@ -177,7 +177,7 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 func installWindowsService(c *cli.Context) error {
 	zeroLogger := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
-	zeroLogger.Info().Msg("Installing Cloudflare Tunnel Windows service")
+	zeroLogger.Info().Msg("Installing cloudflared Windows service")
 	exepath, err := os.Executable()
 	if err != nil {
 		return errors.Wrap(err, "Cannot find path name that start the process")
@@ -206,7 +206,7 @@ func installWindowsService(c *cli.Context) error {
 		return errors.Wrap(err, "Cannot install service")
 	}
 	defer s.Close()
-	log.Info().Msg("Cloudflare Tunnel agent service is installed")
+	log.Info().Msg("cloudflared agent service is installed")
 	err = eventlog.InstallAsEventCreate(windowsServiceName, eventlog.Error|eventlog.Warning|eventlog.Info)
 	if err != nil {
 		s.Delete()
@@ -219,7 +219,11 @@ func installWindowsService(c *cli.Context) error {
 		log.Info().Msgf("See %s to manually configure service recovery actions", windowsServiceUrl)
 	}
 
-	return s.Start()
+	err = s.Start()
+	if err == nil {
+		log.Info().Msg("Agent service for cloudflared installed successfully")
+	}
+	return err
 }
 
 func uninstallWindowsService(c *cli.Context) error {
@@ -227,7 +231,7 @@ func uninstallWindowsService(c *cli.Context) error {
 		With().
 		Str(LogFieldWindowsServiceName, windowsServiceName).Logger()
 
-	log.Info().Msg("Uninstalling Cloudflare Tunnel Windows Service")
+	log.Info().Msg("Uninstalling cloudflared agent service")
 	m, err := mgr.Connect()
 	if err != nil {
 		return errors.Wrap(err, "Cannot establish a connection to the service control manager")
@@ -235,22 +239,22 @@ func uninstallWindowsService(c *cli.Context) error {
 	defer m.Disconnect()
 	s, err := m.OpenService(windowsServiceName)
 	if err != nil {
-		return fmt.Errorf("Service %s is not installed", windowsServiceName)
+		return fmt.Errorf("Agent service %s is not installed, so it could not be uninstalled", windowsServiceName)
 	}
 	defer s.Close()
 
 	if status, err := s.Query(); err == nil && status.State == svc.Running {
-		log.Info().Msg("Stopping Cloudflare Tunnel agent service")
+		log.Info().Msg("Stopping cloudflared agent service")
 		if _, err := s.Control(svc.Stop); err != nil {
-			log.Info().Err(err).Msg("Failed to stop Cloudflare Tunnel agent service, you may need to stop it manually to complete uninstall.")
+			log.Info().Err(err).Msg("Failed to stop cloudflared agent service, you may need to stop it manually to complete uninstall.")
 		}
 	}
 
 	err = s.Delete()
 	if err != nil {
-		return errors.Wrap(err, "Cannot delete service")
+		return errors.Wrap(err, "Cannot delete agent service")
 	}
-	log.Info().Msg("Cloudflare Tunnel agent service is uninstalled")
+	log.Info().Msg("Agent service for cloudflared was uninstalled successfully")
 	err = eventlog.Remove(windowsServiceName)
 	if err != nil {
 		return errors.Wrap(err, "Cannot remove event logger")

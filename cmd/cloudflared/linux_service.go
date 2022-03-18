@@ -19,16 +19,16 @@ import (
 func runApp(app *cli.App, graceShutdownC chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
-		Usage: "Manages the Cloudflare Tunnel system service",
+		Usage: "Manages the cloudflared system service",
 		Subcommands: []*cli.Command{
 			{
 				Name:   "install",
-				Usage:  "Install Cloudflare Tunnel as a system service",
+				Usage:  "Install cloudflared as a system service",
 				Action: cliutil.ConfiguredAction(installLinuxService),
 			},
 			{
 				Name:   "uninstall",
-				Usage:  "Uninstall the Cloudflare Tunnel service",
+				Usage:  "Uninstall the cloudflared service",
 				Action: cliutil.ConfiguredAction(uninstallLinuxService),
 			},
 		},
@@ -49,7 +49,7 @@ var systemdTemplates = []ServiceTemplate{
 	{
 		Path: "/etc/systemd/system/cloudflared.service",
 		Content: `[Unit]
-Description=Cloudflare Tunnel
+Description=cloudflared
 After=network.target
 
 [Service]
@@ -66,7 +66,7 @@ WantedBy=multi-user.target
 	{
 		Path: "/etc/systemd/system/cloudflared-update.service",
 		Content: `[Unit]
-Description=Update Cloudflare Tunnel
+Description=Update cloudflared
 After=network.target
 
 [Service]
@@ -76,7 +76,7 @@ ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 11 ]; then s
 	{
 		Path: "/etc/systemd/system/cloudflared-update.timer",
 		Content: `[Unit]
-Description=Update Cloudflare Tunnel
+Description=Update cloudflared
 
 [Timer]
 OnCalendar=daily
@@ -93,7 +93,7 @@ var sysvTemplate = ServiceTemplate{
 	Content: `#!/bin/sh
 # For RedHat and cousins:
 # chkconfig: 2345 99 01
-# description: Cloudflare Tunnel agent
+# description: cloudflared
 # processname: {{.Path}}
 ### BEGIN INIT INFO
 # Provides:          {{.Path}}
@@ -101,8 +101,8 @@ var sysvTemplate = ServiceTemplate{
 # Required-Stop:
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Cloudflare Tunnel
-# Description:       Cloudflare Tunnel agent
+# Short-Description: cloudflared
+# Description:       cloudflared agent
 ### END INIT INFO
 name=$(basename $(readlink -f $0))
 cmd="{{.Path}} --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s{{ range .ExtraArgs }} {{ . }}{{ end }}"
@@ -212,11 +212,16 @@ func installLinuxService(c *cli.Context) error {
 	switch {
 	case isSystemd():
 		log.Info().Msgf("Using Systemd")
-		return installSystemd(&templateArgs, log)
+		err = installSystemd(&templateArgs, log)
 	default:
 		log.Info().Msgf("Using SysV")
-		return installSysv(&templateArgs, log)
+		err = installSysv(&templateArgs, log)
 	}
+
+	if err == nil {
+		log.Info().Msg("Linux service for cloudflared installed successfully")
+	}
+	return err
 }
 
 func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
@@ -271,7 +276,7 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 		log.Err(err).Msg("systemctl start cloudflared-update.timer error")
 		return err
 	}
-	log.Info().Msg("systemctl daemon-reload")
+	log.Info().Msg("running systemctl daemon-reload")
 	return runCommand("systemctl", "daemon-reload")
 }
 
@@ -301,14 +306,20 @@ func installSysv(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
 func uninstallLinuxService(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
+	var err error
 	switch {
 	case isSystemd():
 		log.Info().Msg("Using Systemd")
-		return uninstallSystemd(log)
+		err = uninstallSystemd(log)
 	default:
 		log.Info().Msg("Using SysV")
-		return uninstallSysv(log)
+		err = uninstallSysv(log)
 	}
+
+	if err == nil {
+		log.Info().Msg("Linux service for cloudflared uninstalled successfully")
+	}
+	return err
 }
 
 func uninstallSystemd(log *zerolog.Logger) error {
@@ -326,7 +337,6 @@ func uninstallSystemd(log *zerolog.Logger) error {
 			return err
 		}
 	}
-	log.Info().Msgf("Successfully uninstalled cloudflared service from systemd")
 	return nil
 }
 
@@ -345,6 +355,5 @@ func uninstallSysv(log *zerolog.Logger) error {
 			continue
 		}
 	}
-	log.Info().Msgf("Successfully uninstalled cloudflared service from sysv")
 	return nil
 }
