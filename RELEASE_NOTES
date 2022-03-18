@@ -1,3 +1,10 @@
+2022.3.3
+- 2022-03-17 TUN-5893: Start windows service on install, stop on uninstall. Previously user had to manually start the service after running 'cloudflared tunnel install' and stop the service before running uninstall command.
+- 2022-03-17 Revert "CC-796: Remove dependency on unsupported version of go-oidc"
+- 2022-03-18 TUN-5881: Clarify success (or lack thereof) of (un)installing cloudflared service
+- 2022-03-18 CC-796: Remove dependency on unsupported version of go-oidc
+- 2022-03-18 TUN-5907: Change notes for 2022.3.3
+
 2022.3.2
 - 2022-03-10 TUN-5833: Create constant for allow-remote-config
 - 2022-03-15 TUN-5867: Return error if service was already installed
