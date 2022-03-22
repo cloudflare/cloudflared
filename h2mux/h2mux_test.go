@@ -986,7 +986,7 @@ func TestLongSiteWithDictionaries(t *testing.T) {
 
 		originMuxMetrics := muxPair.OriginMux.Metrics()
 		if q > CompressionNone && CompressionIsSupported() && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
-			t.Fatalf("Cross-stream compression (%d) is expected to give a better compression ratio: %d <= %d", q, originMuxMetrics.CompBytesBefore.Value(), 10*originMuxMetrics.CompBytesAfter.Value())
+			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
 		}
 	}
 }
