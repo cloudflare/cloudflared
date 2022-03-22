@@ -192,8 +192,10 @@ stretch: &stretch
     builddeps:
       - openssh-client
       - s3cmd
+      - jq
     post-cache:
       - .teamcity/update-homebrew.sh
+      - .teamcity/update-homebrew-core.sh
   github-message-release:
     build_dir: *build_dir
     builddeps:
