@@ -1,3 +1,9 @@
+## 2022.3.4
+### New Features
+- It is now possible to retrieve the credentials that allow to run a Tunnel in case you forgot/lost them. This is
+achievable with: `cloudflared tunnel token --cred-file /path/to/file.json TUNNEL`. This new feature only works for
+Tunnels created with cloudflared version 2022.3.0 or more recent.
+
 ## 2022.3.3
 ### Bug Fixes
 - `cloudflared service install` now starts the underlying agent service on Windows operating system (similarly to the

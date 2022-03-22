@@ -116,6 +116,23 @@ func (r *RESTClient) GetTunnel(tunnelID uuid.UUID) (*Tunnel, error) {
 	return nil, r.statusCodeToError("get tunnel", resp)
 }
 
+func (r *RESTClient) GetTunnelToken(tunnelID uuid.UUID) (token string, err error) {
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/token", tunnelID))
+	resp, err := r.sendRequest("GET", endpoint, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		err = parseResponse(resp.Body, &token)
+		return token, err
+	}
+
+	return "", r.statusCodeToError("get tunnel token", resp)
+}
+
 func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
 	endpoint := r.baseEndpoints.accountLevel
 	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v", tunnelID))

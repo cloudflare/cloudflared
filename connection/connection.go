@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -63,6 +65,15 @@ func (t TunnelToken) Credentials() Credentials {
 		TunnelSecret: t.TunnelSecret,
 		TunnelID:     t.TunnelID,
 	}
+}
+
+func (t TunnelToken) Encode() (string, error) {
+	val, err := json.Marshal(t)
+	if err != nil {
+		return "", errors.Wrap(err, "could not JSON encode token")
+	}
+
+	return base64.StdEncoding.EncodeToString(val), nil
 }
 
 type ClassicTunnelProperties struct {

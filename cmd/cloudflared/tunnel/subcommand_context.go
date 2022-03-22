@@ -341,6 +341,21 @@ func (sc *subcommandContext) cleanupConnections(tunnelIDs []uuid.UUID) error {
 	return nil
 }
 
+func (sc *subcommandContext) getTunnelTokenCredentials(tunnelID uuid.UUID) (*connection.TunnelToken, error) {
+	client, err := sc.client()
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := client.GetTunnelToken(tunnelID)
+	if err != nil {
+		sc.log.Err(err).Msgf("Could not get the Token for the given Tunnel %v", tunnelID)
+		return nil, err
+	}
+
+	return ParseToken(token)
+}
+
 func (sc *subcommandContext) route(tunnelID uuid.UUID, r cfapi.HostnameRoute) (cfapi.HostnameRouteResult, error) {
 	client, err := sc.client()
 	if err != nil {

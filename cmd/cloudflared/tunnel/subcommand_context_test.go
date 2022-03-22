@@ -216,6 +216,10 @@ func (d *deleteMockTunnelStore) GetTunnel(tunnelID uuid.UUID) (*cfapi.Tunnel, er
 	return &tunnel.tunnel, nil
 }
 
+func (d *deleteMockTunnelStore) GetTunnelToken(tunnelID uuid.UUID) (string, error) {
+	return "token", nil
+}
+
 func (d *deleteMockTunnelStore) DeleteTunnel(tunnelID uuid.UUID) error {
 	tunnel, ok := d.mockTunnels[tunnelID]
 	if !ok {
