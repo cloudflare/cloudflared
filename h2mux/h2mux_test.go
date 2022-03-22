@@ -823,7 +823,7 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 		}
 
 		originMuxMetrics := muxPair.OriginMux.Metrics()
-		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
+		if q > CompressionNone && CompressionIsSupported() && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
 			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
 		}
 	}
@@ -952,7 +952,7 @@ func TestSampleSiteWithDictionaries(t *testing.T) {
 		}
 
 		originMuxMetrics := muxPair.OriginMux.Metrics()
-		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
+		if q > CompressionNone && CompressionIsSupported() && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
 			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
 		}
 	}
@@ -985,8 +985,8 @@ func TestLongSiteWithDictionaries(t *testing.T) {
 		assert.NoError(t, errGroup.Wait())
 
 		originMuxMetrics := muxPair.OriginMux.Metrics()
-		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
-			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
+		if q > CompressionNone && CompressionIsSupported() && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
+			t.Fatalf("Cross-stream compression (%d) is expected to give a better compression ratio: %d <= %d", q, originMuxMetrics.CompBytesBefore.Value(), 10*originMuxMetrics.CompBytesAfter.Value())
 		}
 	}
 }
