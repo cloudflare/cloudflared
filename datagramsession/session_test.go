@@ -111,8 +111,8 @@ func TestReadFromDstSessionPreventClosed(t *testing.T) {
 }
 
 func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool) {
-	const closeAfterIdle = time.Millisecond * 100
-	const activeTime = time.Millisecond * 500
+	const closeAfterIdle = time.Millisecond * 500
+	const activeTime = time.Millisecond * 1000
 
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
@@ -129,8 +129,10 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 	ctx, cancel := context.WithCancel(context.Background())
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		session.Serve(ctx, closeAfterIdle)
-		if time.Now().Before(startTime.Add(activeTime)) {
+		closed, err := session.Serve(ctx, closeAfterIdle)
+		require.False(t, closed) // session not closed by remote
+		require.EqualError(t, err, SessionIdleErr(closeAfterIdle).Error())
+		if time.Now().Before(activeUntil) {
 			return fmt.Errorf("session closed while it's still active")
 		}
 		return nil
