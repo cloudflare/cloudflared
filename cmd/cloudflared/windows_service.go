@@ -191,7 +191,7 @@ func installWindowsService(c *cli.Context) error {
 	log := zeroLogger.With().Str(LogFieldWindowsServiceName, windowsServiceName).Logger()
 	if err == nil {
 		s.Close()
-		return fmt.Errorf("Service %s already exists", windowsServiceName)
+		return fmt.Errorf(serviceAlreadyExistsWarn(windowsServiceName))
 	}
 	extraArgs, err := getServiceExtraArgsFromCliArgs(c, &log)
 	if err != nil {
