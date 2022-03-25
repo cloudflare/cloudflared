@@ -43,11 +43,12 @@ const (
 	serviceConfigFile     = "config.yml"
 	serviceCredentialFile = "cert.pem"
 	serviceConfigPath     = serviceConfigDir + "/" + serviceConfigFile
+	cloudflaredService    = "cloudflared.service"
 )
 
 var systemdTemplates = []ServiceTemplate{
 	{
-		Path: "/etc/systemd/system/cloudflared.service",
+		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredService),
 		Content: `[Unit]
 Description=cloudflared
 After=network.target
@@ -268,16 +269,19 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 			return err
 		}
 	}
-	if err := runCommand("systemctl", "enable", "cloudflared.service"); err != nil {
-		log.Err(err).Msg("systemctl enable cloudflared.service error")
+	if err := runCommand("systemctl", "enable", cloudflaredService); err != nil {
+		log.Err(err).Msgf("systemctl enable %s error", cloudflaredService)
 		return err
 	}
 	if err := runCommand("systemctl", "start", "cloudflared-update.timer"); err != nil {
 		log.Err(err).Msg("systemctl start cloudflared-update.timer error")
 		return err
 	}
-	log.Info().Msg("running systemctl daemon-reload")
-	return runCommand("systemctl", "daemon-reload")
+	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+		log.Err(err).Msg("systemctl daemon-reload error")
+		return err
+	}
+	return runCommand("systemctl", "start", cloudflaredService)
 }
 
 func installSysv(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
@@ -300,7 +304,7 @@ func installSysv(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
 			continue
 		}
 	}
-	return nil
+	return runCommand("service", "cloudflared", "start")
 }
 
 func uninstallLinuxService(c *cli.Context) error {
@@ -323,8 +327,12 @@ func uninstallLinuxService(c *cli.Context) error {
 }
 
 func uninstallSystemd(log *zerolog.Logger) error {
-	if err := runCommand("systemctl", "disable", "cloudflared.service"); err != nil {
-		log.Err(err).Msg("systemctl disable cloudflared.service error")
+	if err := runCommand("systemctl", "disable", cloudflaredService); err != nil {
+		log.Err(err).Msgf("systemctl disable %s error", cloudflaredService)
+		return err
+	}
+	if err := runCommand("systemctl", "stop", cloudflaredService); err != nil {
+		log.Err(err).Msgf("systemctl stop %s error", cloudflaredService)
 		return err
 	}
 	if err := runCommand("systemctl", "stop", "cloudflared-update.timer"); err != nil {
@@ -337,10 +345,18 @@ func uninstallSystemd(log *zerolog.Logger) error {
 			return err
 		}
 	}
+	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+		log.Err(err).Msg("systemctl daemon-reload error")
+		return err
+	}
 	return nil
 }
 
 func uninstallSysv(log *zerolog.Logger) error {
+	if err := runCommand("service", "cloudflared", "stop"); err != nil {
+		log.Err(err).Msg("service cloudflared stop error")
+		return err
+	}
 	if err := sysvTemplate.Remove(); err != nil {
 		log.Err(err).Msg("error removing service template")
 		return err

@@ -95,10 +95,10 @@ func runCommand(command string, args ...string) error {
 		return fmt.Errorf("error starting %s: %v", command, err)
 	}
 
-	_, _ = ioutil.ReadAll(stderr)
+	output, _ := ioutil.ReadAll(stderr)
 	err = cmd.Wait()
 	if err != nil {
-		return fmt.Errorf("%s returned with error: %v", command, err)
+		return fmt.Errorf("%s %v returned with error code %v due to: %v", command, args, err, string(output))
 	}
 	return nil
 }

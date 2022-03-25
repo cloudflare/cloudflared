@@ -4,10 +4,14 @@
 achievable with: `cloudflared tunnel token --cred-file /path/to/file.json TUNNEL`. This new feature only works for
 Tunnels created with cloudflared version 2022.3.0 or more recent.
 
+### Bug Fixes
+- `cloudflared service install` now starts the underlying agent service on Linux operating system (similarly to the
+behaviour in Windows and MacOS).
+
 ## 2022.3.3
 ### Bug Fixes
 - `cloudflared service install` now starts the underlying agent service on Windows operating system (similarly to the
-behaviour in Linux and MacOS).
+behaviour in MacOS).
 
 ## 2022.3.1
 ### Bug Fixes
