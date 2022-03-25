@@ -193,6 +193,7 @@ stretch: &stretch
       - openssh-client
       - s3cmd
       - jq
+      - build-essential
     post-cache:
       - .teamcity/update-homebrew.sh
       - .teamcity/update-homebrew-core.sh
