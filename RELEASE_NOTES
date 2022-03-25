@@ -1,3 +1,11 @@
+2022.3.4
+- 2022-03-22 TUN-5918: Clean up text in cloudflared tunnel --help
+- 2022-03-22 TUN-5895 run brew bump-formula-pr on release
+- 2022-03-22 TUN-5915: New cloudflared command to allow to retrieve the token credentials for a Tunnel
+- 2022-03-24 TUN-5933: Better messaging to help user when installing service if it is already installed
+- 2022-03-25 TUN-5954: Start cloudflared service in Linux too similarly to other OSs
+- 2022-03-14 TUN-5869: Add configuration endpoint in metrics server
+
 2022.3.3
 - 2022-03-17 TUN-5893: Start windows service on install, stop on uninstall. Previously user had to manually start the service after running 'cloudflared tunnel install' and stop the service before running uninstall command.
 - 2022-03-17 Revert "CC-796: Remove dependency on unsupported version of go-oidc"
