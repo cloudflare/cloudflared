@@ -120,6 +120,28 @@ func TestManagerServe(t *testing.T) {
 	<-serveDone
 }
 
+func TestTimeout(t *testing.T) {
+	const (
+		testTimeout = time.Millisecond * 50
+	)
+	log := zerolog.Nop()
+	transport := &mockQUICTransport{
+		reqChan:  newDatagramChannel(1),
+		respChan: newDatagramChannel(1),
+	}
+	mg := NewManager(transport, &log)
+	mg.timeout = testTimeout
+	ctx := context.Background()
+	sessionID := uuid.New()
+	// session manager is not running, so event loop is not running and therefore calling the APIs should timeout
+	session, err := mg.RegisterSession(ctx, sessionID, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, session)
+
+	err = mg.UnregisterSession(ctx, sessionID, "session gone", true)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
 type mockOrigin struct {
 	expectMsgCount int
 	expectedMsg    []byte
