@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
@@ -31,14 +32,16 @@ import (
 )
 
 const LogFieldOriginCertPath = "originCertPath"
+const secretValue = "*****"
 
 var (
 	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
-	quickStartUrl   = developerPortal + "/quickstart/quickstart/"
 	serviceUrl      = developerPortal + "/reference/service/"
 	argumentsUrl    = developerPortal + "/reference/arguments/"
 
 	LogFieldHostname = "hostname"
+
+	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -65,7 +68,11 @@ func generateRandomClientID(log *zerolog.Logger) (string, error) {
 func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 	flags := make(map[string]interface{})
 	for _, flag := range c.FlagNames() {
-		flags[flag] = c.Generic(flag)
+		if isSecretFlag(flag) {
+			flags[flag] = secretValue
+		} else {
+			flags[flag] = c.Generic(flag)
+		}
 	}
 
 	if len(flags) > 0 {
@@ -79,13 +86,37 @@ func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 		if strings.Contains(env, "TUNNEL_") {
 			vars := strings.Split(env, "=")
 			if len(vars) == 2 {
-				envs[vars[0]] = vars[1]
+				if isSecretEnvVar(vars[0]) {
+					envs[vars[0]] = secretValue
+				} else {
+					envs[vars[0]] = vars[1]
+				}
 			}
 		}
 	}
 	if len(envs) > 0 {
 		log.Info().Msgf("Environmental variables %v", envs)
 	}
+}
+
+func isSecretFlag(key string) bool {
+	for _, flag := range secretFlags {
+		if flag.Name == key {
+			return true
+		}
+	}
+	return false
+}
+
+func isSecretEnvVar(key string) bool {
+	for _, flag := range secretFlags {
+		for _, secretEnvVar := range flag.EnvVars {
+			if secretEnvVar == key {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelProperties) bool {

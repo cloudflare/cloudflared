@@ -1,3 +1,8 @@
+## 2022.4.0
+### Bug Fixes
+- `cloudflared tunnel run` no longer logs the Tunnel token or JSON credentials in clear text as those are the secret
+that allows to run the Tunnel.
+
 ## 2022.3.4
 ### New Features
 - It is now possible to retrieve the credentials that allow to run a Tunnel in case you forgot/lost them. This is
