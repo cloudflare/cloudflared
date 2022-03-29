@@ -82,11 +82,14 @@ func (p *Proxy) ProxyHTTP(
 
 	if rule.Location != "" {
 		fmt.Println(fmt.Sprintf("before: req.URL.Path: %s", req.URL.Path))
+
 		parts := strings.Split(req.URL.Path, "/")
 		fmt.Println("parts:", parts)
+
 		if len(parts) > 1 {
 			parts[1] = rule.Location
 		}
+
 		req.URL.Path = path.Clean(strings.Join(parts, "/"))
 		fmt.Println(fmt.Sprintf("after: req.URL.Path: %s", req.URL.Path))
 	}
