@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -77,6 +78,14 @@ func (p *Proxy) ProxyHTTP(
 		rule:    ruleNum,
 	}
 	p.logRequest(req, logFields)
+
+	fmt.Println(fmt.Sprintf("before: req.URL.Path: %s", req.URL.Path))
+	parts := strings.Split(req.URL.Path, "/")
+	if len(parts) > 0 {
+		parts[0] = rule.Location
+	}
+	req.URL.Path = strings.Join(parts, "/")
+	fmt.Println(fmt.Sprintf("after: req.URL.Path: %s", req.URL.Path))
 
 	switch originProxy := rule.Service.(type) {
 	case ingress.HTTPOriginProxy:

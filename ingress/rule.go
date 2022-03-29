@@ -20,6 +20,9 @@ type Rule struct {
 	// address.
 	Service OriginService `json:"service"`
 
+	// Location is an optional string that can specify the Service path (overwriting the Hostname path).
+	Location string `json:"location"`
+
 	// Configure the request cloudflared sends to this specific origin.
 	Config OriginRequestConfig `json:"originRequest"`
 }

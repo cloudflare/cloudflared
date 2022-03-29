@@ -180,6 +180,7 @@ type UnvalidatedIngressRule struct {
 	Hostname      string              `json:"hostname"`
 	Path          string              `json:"path"`
 	Service       string              `json:"service"`
+	Location      string              `json:"location"`
 	OriginRequest OriginRequestConfig `yaml:"originRequest" json:"originRequest"`
 }
 

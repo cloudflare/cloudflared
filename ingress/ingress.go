@@ -244,6 +244,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			Hostname: r.Hostname,
 			Service:  service,
 			Path:     pathRegexp,
+			Location: r.Location,
 			Config:   cfg,
 		}
 	}
