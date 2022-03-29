@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 
@@ -81,10 +82,11 @@ func (p *Proxy) ProxyHTTP(
 
 	fmt.Println(fmt.Sprintf("before: req.URL.Path: %s", req.URL.Path))
 	parts := strings.Split(req.URL.Path, "/")
-	if len(parts) > 0 {
-		parts[0] = rule.Location
+	fmt.Println("parts:", parts)
+	if len(parts) > 1 {
+		parts[1] = rule.Location
 	}
-	req.URL.Path = strings.Join(parts, "/")
+	req.URL.Path = path.Clean(strings.Join(parts, "/"))
 	fmt.Println(fmt.Sprintf("after: req.URL.Path: %s", req.URL.Path))
 
 	switch originProxy := rule.Service.(type) {
