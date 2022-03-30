@@ -27,3 +27,6 @@ USER nonroot
 # command / entrypoint of container
 ENTRYPOINT ["cloudflared", "--no-autoupdate"]
 CMD ["version"]
+
+# expose metrics server
+EXPOSE 2000
