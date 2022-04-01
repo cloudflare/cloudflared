@@ -171,17 +171,15 @@ func ServeTunnelLoop(
 			protocolFallback.protocol,
 			gracefulShutdownC,
 		)
-		if !recoverable {
-			return err
-		}
 
-		config.Observer.SendReconnect(connIndex)
-
-		duration, ok := protocolFallback.GetMaxBackoffDuration(ctx)
-		if !ok {
-			return err
+		if recoverable {
+			duration, ok := protocolFallback.GetMaxBackoffDuration(ctx)
+			if !ok {
+				return err
+			}
+			config.Observer.SendReconnect(connIndex)
+			connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
 		}
-		connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
 
 		select {
 		case <-ctx.Done():
@@ -189,6 +187,10 @@ func ServeTunnelLoop(
 		case <-gracefulShutdownC:
 			return nil
 		case <-protocolFallback.BackoffTimer():
+			if !recoverable {
+				return err
+			}
+
 			if !selectNextProtocol(
 				connLog.Logger(),
 				protocolFallback,
