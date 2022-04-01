@@ -114,7 +114,8 @@ func (ed *Edge) GetDifferentAddr(connIndex int) (*allregions.EdgeAddr, error) {
 		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	log.Debug().Msg("edgediscovery - GetDifferentAddr: Giving connection its new address")
+	log.Debug().Msgf("edgediscovery - GetDifferentAddr: Giving connection its new address: %v from the address list: %v",
+		addr, ed.regions.AvailableAddrs())
 	return addr, nil
 }
 
