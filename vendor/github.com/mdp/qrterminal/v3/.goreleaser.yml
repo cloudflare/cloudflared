@@ -1,0 +1,57 @@
+# This is an example goreleaser.yaml file with some sane defaults.
+# Make sure to check the documentation at http://goreleaser.com
+before:
+  hooks:
+    # you may remove this if you don't use vgo
+    - go mod download
+    # you may remove this if you don't need go generate
+    - go generate ./...
+builds:
+- 
+  main: ./cmd/qrterminal/main.go
+  binary: qrterminal
+  env:
+    - CGO_ENABLED=0
+  goarch:
+    - amd64
+    - 386
+    - arm
+  goos:
+    - linux
+    - darwin
+    - windows
+  ignore:
+    - goos: darwin
+      goarch: 386
+    - goos: windows
+      goarch: arm
+  
+archives:
+- replacements:
+    386: i386
+    amd64: x86_64
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
+brew:
+  name: qrterminal
+  github:
+    owner: mdp
+    name: homebrew-tap
+  commit_author:
+    name: mdp
+    email: m@mdp.im
+  homepage: https://github.com/mdp/qrterminal
+  description: 'Create and display QR codes on the command line'
+dockers:
+  -
+    image_templates:
+      - "mpercival/qrterminal:latest"
+      - "mpercival/qrterminal:{{ .Tag }}"

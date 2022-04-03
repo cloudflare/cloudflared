@@ -1,0 +1,18 @@
+#!/bin/bash
+
+source $HOME/.config/goreleaser.env
+
+if [ -x "$(command -v goreleaser)" ]; then
+  goreleaser @$
+else
+  GO_SRC="/app"
+  docker run --rm \
+    -v $PWD:$GO_SRC \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -w $GO_SRC \
+    -e GITHUB_TOKEN=$GITHUB_TOKEN \
+    -e DOCKER_USERNAME=$DOCKER_USERNAME \
+    -e DOCKER_PASSWORD=$DOCKER_PASSWORD \
+    goreleaser/goreleaser $@
+fi
+

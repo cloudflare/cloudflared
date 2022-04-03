@@ -218,7 +218,7 @@ func getTokensFromEdge(appURL *url.URL, appTokenPath, orgTokenPath string, useHo
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	resourceData, err := RunTransfer(appURL, keyName, keyName, "", true, useHostOnly, log)
+	resourceData, err := RunTransfer(appURL, keyName, keyName, "", true, useHostOnly, false, log)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run transfer service")
 	}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mdp/qrterminal/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
@@ -25,7 +26,7 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func RunTransfer(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
+func RunTransfer(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, outputQrCode bool, log *zerolog.Logger) ([]byte, error) {
 	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -37,10 +38,16 @@ func RunTransfer(transferURL *url.URL, resourceName, key, value string, shouldEn
 
 	// See AUTH-1423 for why we use stderr (the way git wraps ssh)
 	err = OpenBrowser(requestURL)
+	qrcode := ""
+	if outputQrCode {
+		buf := new(bytes.Buffer)
+		qrterminal.GenerateHalfBlock(requestURL, qrterminal.H, buf)
+		qrcode = fmt.Sprintf("%s\n", buf.String())
+	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Please open the following URL and log in with your Cloudflare account:\n\n%s\n\nLeave cloudflared running to download the %s automatically.\n", requestURL, resourceName)
+		fmt.Fprintf(os.Stderr, "Please open the following URL and log in with your Cloudflare account:\n\n%s%s\n\nLeave cloudflared running to download the %s automatically.\n", qrcode, requestURL, resourceName)
 	} else {
-		fmt.Fprintf(os.Stderr, "A browser window should have opened at the following URL:\n\n%s\n\nIf the browser failed to open, please visit the URL above directly in your browser.\n", requestURL)
+		fmt.Fprintf(os.Stderr, "A browser window should have opened at the following URL:\n\n%s%s\n\nIf the browser failed to open, please visit the URL above directly in your browser.\n", qrcode, requestURL)
 	}
 
 	var resourceData []byte

@@ -23,13 +23,22 @@ const (
 	callbackStoreURL = "https://login.cloudflareaccess.org/"
 )
 
+var (
+	outputQrcodeFlag = &cli.BoolFlag{
+		Name:    "output-qr-code",
+		Usage:   "Output a QR Code containing a link to tunnel login authorization workflow",
+		Aliases: []string{"qr"},
+	}
+)
+
 func buildLoginSubcommand(hidden bool) *cli.Command {
 	return &cli.Command{
 		Name:      "login",
 		Action:    cliutil.ConfiguredAction(login),
 		Usage:     "Generate a configuration file with your login details",
-		ArgsUsage: " ",
+		UsageText: "cloudflared tunnel [tunnel command options] login [subcommand options]",
 		Hidden:    hidden,
+		Flags:     []cli.Flag{outputQrcodeFlag},
 	}
 }
 
@@ -57,6 +66,7 @@ func login(c *cli.Context) error {
 		callbackStoreURL,
 		false,
 		false,
+		c.Bool("output-qr-code"),
 		log,
 	)
 	if err != nil {
