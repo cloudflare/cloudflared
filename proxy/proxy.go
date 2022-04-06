@@ -10,11 +10,13 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -59,16 +61,18 @@ func NewOriginProxy(
 // a simple roundtrip or a tcp/websocket dial depending on ingres rule setup.
 func (p *Proxy) ProxyHTTP(
 	w connection.ResponseWriter,
-	req *http.Request,
+	tr *tracing.TracedRequest,
 	isWebsocket bool,
 ) error {
 	incrementRequests()
 	defer decrementConcurrentRequests()
 
+	req := tr.Request
 	cfRay := connection.FindCfRayHeader(req)
 	lbProbe := connection.IsLBProbeRequest(req)
 	p.appendTagHeaders(req)
 
+	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match")
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	logFields := logFields{
 		cfRay:   cfRay,
@@ -76,6 +80,8 @@ func (p *Proxy) ProxyHTTP(
 		rule:    ruleNum,
 	}
 	p.logRequest(req, logFields)
+	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
+	ruleSpan.End()
 
 	switch originProxy := rule.Service.(type) {
 	case ingress.HTTPOriginProxy:
@@ -92,7 +98,6 @@ func (p *Proxy) ProxyHTTP(
 			return err
 		}
 		return nil
-
 	case ingress.StreamBasedOriginProxy:
 		dest, err := getDestFromRule(rule, req)
 		if err != nil {

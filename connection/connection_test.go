@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -55,9 +56,10 @@ type mockOriginProxy struct{}
 
 func (moc *mockOriginProxy) ProxyHTTP(
 	w ResponseWriter,
-	req *http.Request,
+	tr *tracing.TracedRequest,
 	isWebsocket bool,
 ) error {
+	req := tr.Request
 	if isWebsocket {
 		switch req.URL.Path {
 		case "/ws/echo":

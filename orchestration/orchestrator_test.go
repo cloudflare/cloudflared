@@ -21,6 +21,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/proxy"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -353,7 +354,7 @@ func proxyHTTP(originProxy connection.OriginProxy, hostname string) (*http.Respo
 		return nil, err
 	}
 
-	err = originProxy.ProxyHTTP(respWriter, req, false)
+	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), false)
 	if err != nil {
 		return nil, err
 	}
@@ -604,7 +605,7 @@ func TestPersistentConnection(t *testing.T) {
 		respWriter, err := connection.NewHTTP2RespWriter(req, wsRespReadWriter, connection.TypeWebsocket, &log)
 		require.NoError(t, err)
 
-		err = originProxy.ProxyHTTP(respWriter, req, true)
+		err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), true)
 		require.NoError(t, err)
 	}()
 
