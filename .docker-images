@@ -2,6 +2,8 @@ images:
   - name: cloudflared
     dockerfile: Dockerfile
     context: .
+    versions: 
+      - latest
     registries:
     - name: docker.io/cloudflare
       user: env:DOCKER_USER

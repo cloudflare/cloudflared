@@ -214,6 +214,9 @@ func prepareTunnelConfig(
 		ingressRules  ingress.Ingress
 		classicTunnel *connection.ClassicTunnelProperties
 	)
+
+	transportProtocol := c.String("protocol")
+
 	cfg := config.GetConfiguration()
 	if isNamedTunnel {
 		clientUUID, err := uuid.NewRandom()
@@ -223,8 +226,11 @@ func prepareTunnelConfig(
 		log.Info().Msgf("Generated Connector ID: %s", clientUUID)
 		features := append(c.StringSlice("features"), supervisor.FeatureSerializedHeaders)
 		if c.IsSet(TunnelTokenFlag) {
+			if transportProtocol == connection.AutoSelectFlag {
+				transportProtocol = connection.QUIC.String()
+			}
 			features = append(features, supervisor.FeatureAllowRemoteConfig)
-			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API")
+			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
 		}
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
@@ -268,7 +274,7 @@ func prepareTunnelConfig(
 	}
 
 	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
-	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), warpRoutingEnabled, namedTunnel, edgediscovery.ProtocolPercentage, supervisor.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, edgediscovery.ProtocolPercentage, supervisor.ResolveTTL, log)
 	if err != nil {
 		return nil, nil, err
 	}
