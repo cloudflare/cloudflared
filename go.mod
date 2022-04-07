@@ -98,3 +98,6 @@ require (
 replace github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d
 
 replace github.com/lucas-clemente/quic-go => github.com/chungthuang/quic-go v0.24.1-0.20220110095058-981dc498cb62
+
+// Avoid 'CVE-2022-21698'
+replace github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
