@@ -1,3 +1,17 @@
+2022.4.0
+- 2022-04-01 TUN-5973: Add backoff for non-recoverable errors as well
+- 2022-04-05 TUN-5992: Use QUIC protocol for remotely managed tunnels when protocol is unspecified
+- 2022-04-06 Update Makefile
+- 2022-04-06 TUN-5995: Update prometheus to 1.12.1 to avoid vulnerabilities
+- 2022-04-07 TUN-5995: Force prometheus v1.12.1 usage
+- 2022-04-07 TUN-4130: cloudflared docker images now have a latest tag
+- 2022-03-30 TUN-5842: Fix flaky TestConcurrentUpdateAndRead by making sure resources are released
+- 2022-03-30 carrier: fix dropped errors
+- 2022-03-25 TUN-5959: tidy go.mod
+- 2022-03-25 TUN-5958: Fix release to homebrew core
+- 2022-03-28 TUN-5960: Do not log the tunnel token or json credentials
+- 2022-03-28 TUN-5956: Add timeout to session manager APIs
+
 2022.3.4
 - 2022-03-22 TUN-5918: Clean up text in cloudflared tunnel --help
 - 2022-03-22 TUN-5895 run brew bump-formula-pr on release
