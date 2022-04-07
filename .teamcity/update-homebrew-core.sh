@@ -20,4 +20,4 @@ brew update --force --quiet
 chmod -R go-w "$(brew --prefix)/share/zsh"
 
 # bump formula pr
-brew bump-formula-pr cloudflared
+brew bump-formula-pr cloudflared --version="$VERSION"
