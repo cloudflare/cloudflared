@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxTraceAmount = 20
+	MaxTraceAmount = 20
 )
 
 var (
@@ -46,7 +46,7 @@ func (mc *InMemoryOtlpClient) UploadTraces(_ context.Context, protoSpans []*trac
 	defer mc.mu.Unlock()
 	// Catch to make sure too many traces aren't being added to response header.
 	// Returning nil makes sure we don't fail to send the traces we already recorded.
-	if len(mc.spans)+len(protoSpans) > maxTraceAmount {
+	if len(mc.spans)+len(protoSpans) > MaxTraceAmount {
 		return nil
 	}
 	mc.spans = append(mc.spans, protoSpans...)

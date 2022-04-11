@@ -12,7 +12,7 @@ import (
 
 func TestNewCfTracer(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://localhost", nil)
-	req.Header.Add(tracerContextName, "14cb070dde8e51fc5ae8514e69ba42ca:b38f1bf5eae406f3:0:1")
+	req.Header.Add(TracerContextName, "14cb070dde8e51fc5ae8514e69ba42ca:b38f1bf5eae406f3:0:1")
 	tr := NewTracedRequest(req)
 	assert.NotNil(t, tr)
 	assert.IsType(t, tracesdk.NewTracerProvider(), tr.TracerProvider)
@@ -21,8 +21,8 @@ func TestNewCfTracer(t *testing.T) {
 
 func TestNewCfTracerMultiple(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://localhost", nil)
-	req.Header.Add(tracerContextName, "1241ce3ecdefc68854e8514e69ba42ca:b38f1bf5eae406f3:0:1")
-	req.Header.Add(tracerContextName, "14cb070dde8e51fc5ae8514e69ba42ca:b38f1bf5eae406f3:0:1")
+	req.Header.Add(TracerContextName, "1241ce3ecdefc68854e8514e69ba42ca:b38f1bf5eae406f3:0:1")
+	req.Header.Add(TracerContextName, "14cb070dde8e51fc5ae8514e69ba42ca:b38f1bf5eae406f3:0:1")
 	tr := NewTracedRequest(req)
 	assert.NotNil(t, tr)
 	assert.IsType(t, tracesdk.NewTracerProvider(), tr.TracerProvider)
@@ -31,7 +31,7 @@ func TestNewCfTracerMultiple(t *testing.T) {
 
 func TestNewCfTracerNilHeader(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://localhost", nil)
-	req.Header[http.CanonicalHeaderKey(tracerContextName)] = nil
+	req.Header[http.CanonicalHeaderKey(TracerContextName)] = nil
 	tr := NewTracedRequest(req)
 	assert.NotNil(t, tr)
 	assert.IsType(t, trace.NewNoopTracerProvider(), tr.TracerProvider)
@@ -41,7 +41,7 @@ func TestNewCfTracerNilHeader(t *testing.T) {
 func TestNewCfTracerInvalidHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://localhost", nil)
 	for _, test := range [][]string{nil, {""}} {
-		req.Header[http.CanonicalHeaderKey(tracerContextName)] = test
+		req.Header[http.CanonicalHeaderKey(TracerContextName)] = test
 		tr := NewTracedRequest(req)
 		assert.NotNil(t, tr)
 		assert.IsType(t, trace.NewNoopTracerProvider(), tr.TracerProvider)

@@ -108,12 +108,12 @@ func TestSpansNil(t *testing.T) {
 
 func TestSpansTooManySpans(t *testing.T) {
 	client := &InMemoryOtlpClient{}
-	for i := 0; i < maxTraceAmount+1; i++ {
+	for i := 0; i < MaxTraceAmount+1; i++ {
 		spans := createResourceSpans([]*tracepb.Span{createOtlpSpan(traceId)})
 		err := client.UploadTraces(context.Background(), spans)
 		assert.NoError(t, err)
 	}
-	assert.Len(t, client.spans, maxTraceAmount)
+	assert.Len(t, client.spans, MaxTraceAmount)
 	_, err := client.Spans()
 	assert.NoError(t, err)
 }

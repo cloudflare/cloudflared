@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cfio"
@@ -72,7 +74,8 @@ func (p *Proxy) ProxyHTTP(
 	lbProbe := connection.IsLBProbeRequest(req)
 	p.appendTagHeaders(req)
 
-	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match")
+	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
+		trace.WithAttributes(attribute.String("req-host", req.Host)))
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	logFields := logFields{
 		cfRay:   cfRay,
@@ -167,7 +170,7 @@ func (p *Proxy) proxyHTTPRequest(
 ) error {
 	roundTripReq := tr.Request
 	if isWebsocket {
-		roundTripReq = tr.Request.Clone(tr.Request.Context())
+		roundTripReq = tr.Clone(tr.Request.Context())
 		roundTripReq.Header.Set("Connection", "Upgrade")
 		roundTripReq.Header.Set("Upgrade", "websocket")
 		roundTripReq.Header.Set("Sec-Websocket-Version", "13")
@@ -191,10 +194,13 @@ func (p *Proxy) proxyHTTPRequest(
 		roundTripReq.Header.Set("User-Agent", "")
 	}
 
+	_, ttfbSpan := tr.Tracer().Start(tr.Context(), "ttfb_origin")
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
+		tracing.EndWithStatus(ttfbSpan, codes.Error, "")
 		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
 	}
+	tracing.EndWithStatus(ttfbSpan, codes.Ok, resp.Status)
 	defer resp.Body.Close()
 
 	// Add spans to response header (if available)
