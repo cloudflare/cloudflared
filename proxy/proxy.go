@@ -87,7 +87,7 @@ func (p *Proxy) ProxyHTTP(
 	case ingress.HTTPOriginProxy:
 		if err := p.proxyHTTPRequest(
 			w,
-			req,
+			tr,
 			originProxy,
 			isWebsocket,
 			rule.Config.DisableChunkedEncoding,
@@ -159,15 +159,15 @@ func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
 // ProxyHTTPRequest proxies requests of underlying type http and websocket to the origin service.
 func (p *Proxy) proxyHTTPRequest(
 	w connection.ResponseWriter,
-	req *http.Request,
+	tr *tracing.TracedRequest,
 	httpService ingress.HTTPOriginProxy,
 	isWebsocket bool,
 	disableChunkedEncoding bool,
 	fields logFields,
 ) error {
-	roundTripReq := req
+	roundTripReq := tr.Request
 	if isWebsocket {
-		roundTripReq = req.Clone(req.Context())
+		roundTripReq = tr.Request.Clone(tr.Request.Context())
 		roundTripReq.Header.Set("Connection", "Upgrade")
 		roundTripReq.Header.Set("Upgrade", "websocket")
 		roundTripReq.Header.Set("Sec-Websocket-Version", "13")
@@ -177,7 +177,7 @@ func (p *Proxy) proxyHTTPRequest(
 		// Support for WSGI Servers by switching transfer encoding from chunked to gzip/deflate
 		if disableChunkedEncoding {
 			roundTripReq.TransferEncoding = []string{"gzip", "deflate"}
-			cLength, err := strconv.Atoi(req.Header.Get("Content-Length"))
+			cLength, err := strconv.Atoi(tr.Request.Header.Get("Content-Length"))
 			if err == nil {
 				roundTripReq.ContentLength = int64(cLength)
 			}
@@ -197,6 +197,9 @@ func (p *Proxy) proxyHTTPRequest(
 	}
 	defer resp.Body.Close()
 
+	// Add spans to response header (if available)
+	tr.AddSpans(resp.Header, p.log)
+
 	err = w.WriteRespHeaders(resp.StatusCode, resp.Header)
 	if err != nil {
 		return errors.Wrap(err, "Error writing response header")
@@ -211,7 +214,7 @@ func (p *Proxy) proxyHTTPRequest(
 
 		eyeballStream := &bidirectionalStream{
 			writer: w,
-			reader: req.Body,
+			reader: tr.Request.Body,
 		}
 
 		websocket.Stream(eyeballStream, rwc, p.log)

@@ -16,7 +16,8 @@ const (
 )
 
 var (
-	errNoTraces = errors.New("no traces recorded to be exported")
+	errNoTraces   = errors.New("no traces recorded to be exported")
+	errNoopTracer = errors.New("noop tracer has no traces")
 )
 
 type InMemoryClient interface {
@@ -86,5 +87,5 @@ func (mc *NoopOtlpClient) UploadTraces(_ context.Context, _ []*tracepb.ResourceS
 
 // Spans always returns no traces error
 func (mc *NoopOtlpClient) Spans() (string, error) {
-	return "", errNoTraces
+	return "", errNoopTracer
 }

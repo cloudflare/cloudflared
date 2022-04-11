@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/rs/zerolog"
 	otelContrib "go.opentelemetry.io/contrib/propagators/Jaeger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,11 +24,14 @@ const (
 
 	tracerContextName         = "cf-trace-id"
 	tracerContextNameOverride = "uber-trace-id"
+
+	IntCloudflaredTracingHeader = "cf-int-cloudflared-tracing"
 )
 
 var (
-	Http2TransportAttribute = trace.WithAttributes(TransportAttributeKey.String("http2"))
-	QuicTransportAttribute  = trace.WithAttributes(TransportAttributeKey.String("quic"))
+	CanonicalCloudflaredTracingHeader = http.CanonicalHeaderKey(IntCloudflaredTracingHeader)
+	Http2TransportAttribute           = trace.WithAttributes(TransportAttributeKey.String("http2"))
+	QuicTransportAttribute            = trace.WithAttributes(TransportAttributeKey.String("quic"))
 
 	TransportAttributeKey = attribute.Key("transport")
 	TrafficAttributeKey   = attribute.Key("traffic")
@@ -75,8 +79,26 @@ func (cft *TracedRequest) Tracer() trace.Tracer {
 }
 
 // Spans returns the spans as base64 encoded protobuf otlp traces.
-func (cft *TracedRequest) Spans() (string, error) {
-	return cft.exporter.Spans()
+func (cft *TracedRequest) AddSpans(headers http.Header, log *zerolog.Logger) {
+	enc, err := cft.exporter.Spans()
+	switch err {
+	case nil:
+		break
+	case errNoTraces:
+		log.Error().Err(err).Msgf("expected traces to be available")
+		return
+	case errNoopTracer:
+		return // noop tracer has no traces
+	default:
+		log.Error().Err(err)
+		return
+	}
+	// No need to add header if no traces
+	if enc == "" {
+		log.Error().Msgf("no traces provided and no error from exporter")
+		return
+	}
+	headers[CanonicalCloudflaredTracingHeader] = []string{enc}
 }
 
 // EndWithStatus will set a status for the span and then end it.
