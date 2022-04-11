@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -32,7 +33,6 @@ type Proxy struct {
 	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
-	bufferPool   *bufferPool
 }
 
 // NewOriginProxy returns a new instance of the Proxy struct.
@@ -46,7 +46,6 @@ func NewOriginProxy(
 		ingressRules: ingressRules,
 		tags:         tags,
 		log:          log,
-		bufferPool:   newBufferPool(512 * 1024),
 	}
 	if warpRoutingEnabled {
 		proxy.warpRouting = ingress.NewWarpRoutingService()
@@ -218,11 +217,7 @@ func (p *Proxy) proxyHTTPRequest(
 		p.log.Debug().Msg("Detected Server-Side Events from Origin")
 		p.writeEventStream(w, resp.Body)
 	} else {
-		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
-		// compression generates dictionary on first write
-		buf := p.bufferPool.Get()
-		defer p.bufferPool.Put(buf)
-		_, _ = io.CopyBuffer(w, resp.Body, buf)
+		_, _ = cfio.Copy(w, resp.Body)
 	}
 
 	p.logOriginResponse(resp, fields)
