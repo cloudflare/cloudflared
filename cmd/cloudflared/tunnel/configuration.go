@@ -216,6 +216,7 @@ func prepareTunnelConfig(
 	)
 
 	transportProtocol := c.String("protocol")
+	protocolFetcher := edgediscovery.ProtocolPercentage
 
 	cfg := config.GetConfiguration()
 	if isNamedTunnel {
@@ -227,7 +228,20 @@ func prepareTunnelConfig(
 		features := append(c.StringSlice("features"), supervisor.FeatureSerializedHeaders)
 		if c.IsSet(TunnelTokenFlag) {
 			if transportProtocol == connection.AutoSelectFlag {
-				transportProtocol = connection.QUIC.String()
+				protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
+					// If the Tunnel is remotely managed and no protocol is set, we prefer QUIC, but still allow fall-back.
+					preferQuic := []edgediscovery.ProtocolPercent{
+						{
+							Protocol:   connection.QUIC.String(),
+							Percentage: 100,
+						},
+						{
+							Protocol:   connection.HTTP2.String(),
+							Percentage: 100,
+						},
+					}
+					return preferQuic, nil
+				}
 			}
 			features = append(features, supervisor.FeatureAllowRemoteConfig)
 			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
@@ -274,7 +288,7 @@ func prepareTunnelConfig(
 	}
 
 	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, edgediscovery.ProtocolPercentage, supervisor.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log)
 	if err != nil {
 		return nil, nil, err
 	}

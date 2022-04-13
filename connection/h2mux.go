@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -233,7 +234,7 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		return err
 	}
 
-	err = originProxy.ProxyHTTP(respWriter, req, sourceConnectionType == TypeWebsocket)
+	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), sourceConnectionType == TypeWebsocket)
 	if err != nil {
 		respWriter.WriteErrorResponse()
 	}

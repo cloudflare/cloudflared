@@ -15,6 +15,8 @@ import (
 	"github.com/getsentry/raven-go"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/cfio"
 )
 
 // IsWebSocketUpgrade checks to see if the request is a WebSocket connection.
@@ -146,7 +148,7 @@ func copyData(dst io.Writer, src io.Reader, dir string) (written int64, err erro
 		}
 		return copyBuffer(dst, src, dir)
 	} else {
-		return io.Copy(dst, src)
+		return cfio.Copy(dst, src)
 	}
 }
 

@@ -12,10 +12,13 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -34,7 +37,6 @@ type Proxy struct {
 	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
-	bufferPool   *bufferPool
 }
 
 // NewOriginProxy returns a new instance of the Proxy struct.
@@ -48,7 +50,6 @@ func NewOriginProxy(
 		ingressRules: ingressRules,
 		tags:         tags,
 		log:          log,
-		bufferPool:   newBufferPool(512 * 1024),
 	}
 	if warpRoutingEnabled {
 		proxy.warpRouting = ingress.NewWarpRoutingService()
@@ -62,16 +63,18 @@ func NewOriginProxy(
 // a simple roundtrip or a tcp/websocket dial depending on ingres rule setup.
 func (p *Proxy) ProxyHTTP(
 	w connection.ResponseWriter,
-	req *http.Request,
+	tr *tracing.TracedRequest,
 	isWebsocket bool,
 ) error {
 	incrementRequests()
 	defer decrementConcurrentRequests()
 
+	req := tr.Request
 	cfRay := connection.FindCfRayHeader(req)
 	lbProbe := connection.IsLBProbeRequest(req)
 	p.appendTagHeaders(req)
 
+	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match")
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	logFields := logFields{
 		cfRay:   cfRay,
@@ -79,6 +82,8 @@ func (p *Proxy) ProxyHTTP(
 		rule:    ruleNum,
 	}
 	p.logRequest(req, logFields)
+	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
+	ruleSpan.End()
 
 	if rule.Location != "" {
 		fmt.Println(fmt.Sprintf("before: req.URL.Path: %s", req.URL.Path))
@@ -109,7 +114,6 @@ func (p *Proxy) ProxyHTTP(
 			return err
 		}
 		return nil
-
 	case ingress.StreamBasedOriginProxy:
 		dest, err := getDestFromRule(rule, req)
 		if err != nil {
@@ -234,11 +238,7 @@ func (p *Proxy) proxyHTTPRequest(
 		p.log.Debug().Msg("Detected Server-Side Events from Origin")
 		p.writeEventStream(w, resp.Body)
 	} else {
-		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
-		// compression generates dictionary on first write
-		buf := p.bufferPool.Get()
-		defer p.bufferPool.Put(buf)
-		_, _ = io.CopyBuffer(w, resp.Body, buf)
+		_, _ = cfio.Copy(w, resp.Body)
 	}
 
 	p.logOriginResponse(resp, fields)

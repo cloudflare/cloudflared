@@ -235,6 +235,15 @@ func selectNextProtocol(
 	_, hasFallback := selector.Fallback()
 
 	if protocolBackoff.ReachedMaxRetries() || (hasFallback && isNetworkActivityTimeout) {
+		if isNetworkActivityTimeout {
+			connLog.Warn().Msg("If this log occurs persistently, and cloudflared is unable to connect to " +
+				"Cloudflare Network with `quic` protocol, then most likely your machine/network is getting its egress " +
+				"UDP to port 7844 (or others) blocked or dropped. Make sure to allow egress connectivity as per " +
+				"https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/ports-and-ips/\n" +
+				"If you are using private routing to this Tunnel, then UDP (and Private DNS Resolution) will not work" +
+				"unless your cloudflared can connect with Cloudflare Network with `quic`.")
+		}
+
 		fallback, hasFallback := selector.Fallback()
 		if !hasFallback {
 			return false

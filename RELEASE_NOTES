@@ -1,3 +1,10 @@
+2022.4.1
+- 2022-04-11 TUN-6035: Reduce buffer size when proxying data
+- 2022-04-11 TUN-6038: Reduce buffer size used for proxying data
+- 2022-04-11 TUN-6043: Allow UI-managed Tunnels to fallback from QUIC but warn about that
+- 2022-04-07 TUN-6000 add version argument to bump-formula-pr
+- 2022-04-06 TUN-5989: Add in-memory otlp exporter
+
 2022.4.0
 - 2022-04-01 TUN-5973: Add backoff for non-recoverable errors as well
 - 2022-04-05 TUN-5992: Use QUIC protocol for remotely managed tunnels when protocol is unspecified
