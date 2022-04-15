@@ -135,6 +135,7 @@ func configureClient(hostname string, maxUpstreamConnections int) *http.Client {
 		MaxIdleConns:       1,
 		MaxConnsPerHost:    maxUpstreamConnections,
 		Proxy:              http.ProxyFromEnvironment,
+		ForceAttemptHTTP2:  true,
 	}
 	_ = http2.ConfigureTransport(transport)
 
