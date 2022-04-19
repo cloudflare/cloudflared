@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection"
@@ -264,9 +265,9 @@ func (s *Supervisor) startFirstTunnel(
 		switch err.(type) {
 		case nil:
 			return
-		// try the next address if it was a dialError(network problem) or
+		// try the next address if it was a quic.IdleTimeoutError, dialError(network problem) or
 		// dupConnRegisterTunnelError
-		case edgediscovery.DialError, connection.DupConnRegisterTunnelError:
+		case *quic.IdleTimeoutError, edgediscovery.DialError, connection.DupConnRegisterTunnelError:
 			edgeErrors++
 		default:
 			return
