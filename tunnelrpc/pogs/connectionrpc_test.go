@@ -129,6 +129,11 @@ type testConnectionRegistrationServer struct {
 	err     error
 }
 
+func (t *testConnectionRegistrationServer) UpdateLocalConfiguration(ctx context.Context, config []byte) error {
+	// do nothing at this point
+	return nil
+}
+
 func (t *testConnectionRegistrationServer) RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error) {
 	if auth.AccountTag != testAccountTag {
 		panic("bad account tag: " + auth.AccountTag)

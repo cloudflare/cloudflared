@@ -18,6 +18,7 @@ import (
 type RegistrationServer interface {
 	RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error)
 	UnregisterConnection(ctx context.Context)
+	UpdateLocalConfiguration(ctx context.Context, config []byte) error
 }
 
 type RegistrationServer_PogsImpl struct {
@@ -86,6 +87,17 @@ func (i RegistrationServer_PogsImpl) UnregisterConnection(p tunnelrpc.Registrati
 
 	i.impl.UnregisterConnection(p.Ctx)
 	return nil
+}
+
+func (i RegistrationServer_PogsImpl) UpdateLocalConfiguration(c tunnelrpc.RegistrationServer_updateLocalConfiguration) error {
+	server.Ack(c.Options)
+
+	configBytes, err := c.Params.Config()
+	if err != nil {
+		return err
+	}
+
+	return i.impl.UpdateLocalConfiguration(c.Ctx, configBytes)
 }
 
 type RegistrationServer_PogsClient struct {
