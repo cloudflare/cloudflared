@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudflare/cloudflared/validation"
 )
@@ -392,7 +392,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	// Parse it again, with strict mode, to find warnings.
 	if file, err := os.Open(configFile); err == nil {
 		decoder := yaml.NewDecoder(file)
-		decoder.SetStrict(true)
+		decoder.KnownFields(true)
 		var unusedConfig configFileSettings
 		if err := decoder.Decode(&unusedConfig); err != nil {
 			warnings = err.Error()
