@@ -9,7 +9,7 @@ import (
 	"runtime"
 
 	"github.com/rs/zerolog"
-	otelContrib "go.opentelemetry.io/contrib/propagators/Jaeger"
+	otelContrib "go.opentelemetry.io/contrib/propagators/jaeger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
