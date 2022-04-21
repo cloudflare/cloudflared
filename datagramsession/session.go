@@ -39,20 +39,6 @@ type Session struct {
 	log          *zerolog.Logger
 }
 
-func newSession(id uuid.UUID, transport transport, dstConn io.ReadWriteCloser, log *zerolog.Logger) *Session {
-	return &Session{
-		ID:        id,
-		transport: transport,
-		dstConn:   dstConn,
-		// activeAtChan has low capacity. It can be full when there are many concurrent read/write. markActive() will
-		// drop instead of blocking because last active time only needs to be an approximation
-		activeAtChan: make(chan time.Time, 2),
-		// capacity is 2 because close() and dstToTransport routine in Serve() can write to this channel
-		closeChan: make(chan error, 2),
-		log:       log,
-	}
-}
-
 func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (closedByRemote bool, err error) {
 	go func() {
 		// QUIC implementation copies data to another buffer before returning https://github.com/lucas-clemente/quic-go/blob/v0.24.0/session.go#L1967-L1975
