@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-oidc/jose"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"gopkg.in/square/go-jose.v2"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/retry"
@@ -342,7 +342,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 		return "", err
 	}
 	var payload jwtPayload
-	err = json.Unmarshal(token.Payload, &payload)
+	err = json.Unmarshal(token.UnsafePayloadWithoutVerification(), &payload)
 	if err != nil {
 		return "", err
 	}
@@ -351,7 +351,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.Encode(), nil
+	return token.CompactSerialize()
 }
 
 func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
@@ -364,7 +364,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 		return "", err
 	}
 	var payload jwtPayload
-	err = json.Unmarshal(token.Payload, &payload)
+	err = json.Unmarshal(token.UnsafePayloadWithoutVerification(), &payload)
 	if err != nil {
 		return "", err
 	}
@@ -373,22 +373,21 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.Encode(), nil
+	return token.CompactSerialize()
 
 }
 
 // GetTokenIfExists will return the token from local storage if it exists and not expired
-func getTokenIfExists(path string) (*jose.JWT, error) {
+func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	token, err := jose.ParseJWT(string(content))
+	token, err := jose.ParseSigned(string(content))
 	if err != nil {
 		return nil, err
 	}
-
-	return &token, nil
+	return token, nil
 }
 
 // RemoveTokenIfExists removes the a token from local storage if it exists

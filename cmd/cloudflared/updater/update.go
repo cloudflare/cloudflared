@@ -30,7 +30,8 @@ const (
 )
 
 var (
-	version string
+	version                string
+	BuiltForPackageManager = ""
 )
 
 // BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
@@ -118,7 +119,11 @@ func Update(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	if wasInstalledFromPackageManager() {
-		log.Error().Msg("cloudflared was installed by a package manager. Please update using the same method.")
+		packageManagerName := "a package manager"
+		if BuiltForPackageManager != "" {
+			packageManagerName = BuiltForPackageManager
+		}
+		log.Error().Msg(fmt.Sprintf("cloudflared was installed by %s. Please update using the same method.", packageManagerName))
 		return nil
 	}
 
@@ -281,7 +286,7 @@ func supportAutoUpdate(log *zerolog.Logger) bool {
 
 func wasInstalledFromPackageManager() bool {
 	ok, _ := config.FileExists(filepath.Join(config.DefaultUnixConfigLocation, isManagedInstallFile))
-	return ok
+	return len(BuiltForPackageManager) != 0 || ok
 }
 
 func isRunningFromTerminal() bool {

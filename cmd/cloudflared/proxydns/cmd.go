@@ -73,7 +73,7 @@ func Run(c *cli.Context) error {
 		log.Fatal().Err(err).Msg("Failed to open the metrics listener")
 	}
 
-	go metrics.ServeMetrics(metricsListener, nil, nil, "", log)
+	go metrics.ServeMetrics(metricsListener, nil, nil, "", nil, log)
 
 	listener, err := tunneldns.CreateListener(
 		c.String("address"),

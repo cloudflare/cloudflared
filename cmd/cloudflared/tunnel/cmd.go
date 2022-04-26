@@ -109,6 +109,7 @@ func Commands() []*cli.Command {
 		buildIngressSubcommand(),
 		buildDeleteCommand(),
 		buildCleanupCommand(),
+		buildTokenCommand(),
 		// for compatibility, allow following as tunnel subcommands
 		proxydns.Command(true),
 		cliutil.RemovedCommand("db-connect"),
@@ -127,26 +128,34 @@ func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 		Name:      "tunnel",
 		Action:    cliutil.ConfiguredAction(TunnelCommand),
 		Category:  "Tunnel",
-		Usage:     "Make a locally-running web service accessible over the internet using Cloudflare Tunnel.",
+		Usage:     "Use Cloudflare Tunnel to expose private services to the Internet or to Cloudflare connected private users.",
 		ArgsUsage: " ",
-		Description: `Cloudflare Tunnel asks you to specify a hostname on a Cloudflare-powered
-		domain you control and a local address. Traffic from that hostname is routed
-		(optionally via a Cloudflare Load Balancer) to this machine and appears on the
-		specified port where it can be served.
+		Description: `    Cloudflare Tunnel allows to expose private services without opening any ingress port on this machine. It can expose:
+  A) Locally reachable HTTP-based private services to the Internet on DNS with Cloudflare as authority (which you can
+then protect with Cloudflare Access).
+  B) Locally reachable TCP/UDP-based private services to Cloudflare connected private users in the same account, e.g.,
+those enrolled to a Zero Trust WARP Client.
 
-		This feature requires your Cloudflare account be subscribed to the Cloudflare Smart Routing feature.
+You can manage your Tunnels via dash.teams.cloudflare.com. This approach will only require you to run a single command
+later in each machine where you wish to run a Tunnel.
 
-		To use, begin by calling login to download a certificate:
+Alternatively, you can manage your Tunnels via the command line. Begin by obtaining a certificate to be able to do so:
 
-			$ cloudflared tunnel login
+	$ cloudflared tunnel login
 
-		With your certificate installed you can then launch your first tunnel,
-		replacing my.site.com with a subdomain of your site:
+With your certificate installed you can then get started with Tunnels:
 
-			$ cloudflared tunnel --hostname my.site.com --url http://localhost:8080
+	$ cloudflared tunnel create my-first-tunnel
+	$ cloudflared tunnel route dns my-first-tunnel my-first-tunnel.mydomain.com
+	$ cloudflared tunnel run --hello-world my-first-tunnel
 
-		If you have a web server running on port 8080 (in this example), it will be available on
-		the internet!`,
+You can now access my-first-tunnel.mydomain.com and be served an example page by your local cloudflared process.
+
+For exposing local TCP/UDP services by IP to your privately connected users, check out:
+
+	$ cloudflared tunnel route ip --help
+
+See https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/ for more info.`,
 		Subcommands: subcommands,
 		Flags:       tunnelFlags(false),
 	}
@@ -340,6 +349,11 @@ func StartServer(
 		return err
 	}
 
+	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	if err != nil {
+		return err
+	}
+
 	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
 	if err != nil {
 		log.Err(err).Msg("Error opening metrics server listener")
@@ -351,13 +365,8 @@ func StartServer(
 		defer wg.Done()
 		readinessServer := metrics.NewReadyServer(log)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, log)
+		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, orchestrator, log)
 	}()
-
-	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
-	if err != nil {
-		return err
-	}
 
 	reconnectCh := make(chan supervisor.ReconnectSignal, 1)
 	if c.IsSet("stdin-control") {

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -219,9 +220,10 @@ func quicServer(
 
 type mockOriginProxyWithRequest struct{}
 
-func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, r *http.Request, isWebsocket bool) error {
+func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, tr *tracing.TracedRequest, isWebsocket bool) error {
 	// These are a series of crude tests to ensure the headers and http related data is transferred from
 	// metadata.
+	r := tr.Request
 	if r.Method == "" {
 		return errors.New("method not sent")
 	}
@@ -345,7 +347,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 				},
 				ContentLength: 0,
 				Host:          "cf.host",
-				Body:          nil,
+				Body:          http.NoBody,
 			},
 			body: io.NopCloser(&bytes.Buffer{}),
 		},
@@ -478,7 +480,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 			req, err := buildHTTPRequest(test.connectRequest, test.body)
 			assert.NoError(t, err)
 			test.req = test.req.WithContext(req.Context())
-			assert.Equal(t, test.req, req)
+			assert.Equal(t, test.req, req.Request)
 		})
 	}
 }

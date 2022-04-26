@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -123,7 +124,6 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case TypeConfiguration:
-		fmt.Println("TYPE CONFIGURATION?")
 		if err := c.handleConfigurationUpdate(respWriter, r); err != nil {
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
@@ -131,7 +131,9 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
-		if err := originProxy.ProxyHTTP(respWriter, r, connType == TypeWebsocket); err != nil {
+		// Check for tracing on request
+		tr := tracing.NewTracedRequest(r)
+		if err := originProxy.ProxyHTTP(respWriter, tr, connType == TypeWebsocket); err != nil {
 			err := fmt.Errorf("Failed to proxy HTTP: %w", err)
 			c.log.Error().Err(err)
 			respWriter.WriteErrorResponse()
@@ -227,6 +229,12 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 			// This header has meaning in HTTP/2 and will be used by the edge,
 			// so it should be sent *also* as an HTTP/2 response header.
 			dest[name] = values
+		}
+
+		if h2name == tracing.IntCloudflaredTracingHeader {
+			// Add cf-int-cloudflared-tracing header outside of serialized userHeaders
+			rp.w.Header()[tracing.CanonicalCloudflaredTracingHeader] = values
+			continue
 		}
 
 		if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {

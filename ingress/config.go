@@ -11,14 +11,16 @@ import (
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
-const (
-	defaultConnectTimeout       = 30 * time.Second
-	defaultTLSTimeout           = 10 * time.Second
-	defaultTCPKeepAlive         = 30 * time.Second
-	defaultKeepAliveConnections = 100
-	defaultKeepAliveTimeout     = 90 * time.Second
-	defaultProxyAddress         = "127.0.0.1"
+var (
+	defaultConnectTimeout   = config.CustomDuration{Duration: 30 * time.Second}
+	defaultTLSTimeout       = config.CustomDuration{Duration: 10 * time.Second}
+	defaultTCPKeepAlive     = config.CustomDuration{Duration: 30 * time.Second}
+	defaultKeepAliveTimeout = config.CustomDuration{Duration: 90 * time.Second}
+)
 
+const (
+	defaultProxyAddress           = "127.0.0.1"
+	defaultKeepAliveConnections   = 100
 	SSHServerFlag                 = "ssh-server"
 	Socks5Flag                    = "socks5"
 	ProxyConnectTimeoutFlag       = "proxy-connect-timeout"
@@ -68,12 +70,12 @@ func (rc *RemoteConfig) UnmarshalJSON(b []byte) error {
 }
 
 func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
-	var connectTimeout time.Duration = defaultConnectTimeout
-	var tlsTimeout time.Duration = defaultTLSTimeout
-	var tcpKeepAlive time.Duration = defaultTCPKeepAlive
+	var connectTimeout config.CustomDuration = defaultConnectTimeout
+	var tlsTimeout config.CustomDuration = defaultTLSTimeout
+	var tcpKeepAlive config.CustomDuration = defaultTCPKeepAlive
 	var noHappyEyeballs bool
 	var keepAliveConnections int = defaultKeepAliveConnections
-	var keepAliveTimeout time.Duration = defaultKeepAliveTimeout
+	var keepAliveTimeout config.CustomDuration = defaultKeepAliveTimeout
 	var httpHostHeader string
 	var originServerName string
 	var caPool string
@@ -84,13 +86,13 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	var proxyPort uint
 	var proxyType string
 	if flag := ProxyConnectTimeoutFlag; c.IsSet(flag) {
-		connectTimeout = c.Duration(flag)
+		connectTimeout = config.CustomDuration{Duration: c.Duration(flag)}
 	}
 	if flag := ProxyTLSTimeoutFlag; c.IsSet(flag) {
-		tlsTimeout = c.Duration(flag)
+		tlsTimeout = config.CustomDuration{Duration: c.Duration(flag)}
 	}
 	if flag := ProxyTCPKeepAliveFlag; c.IsSet(flag) {
-		tcpKeepAlive = c.Duration(flag)
+		tcpKeepAlive = config.CustomDuration{Duration: c.Duration(flag)}
 	}
 	if flag := ProxyNoHappyEyeballsFlag; c.IsSet(flag) {
 		noHappyEyeballs = c.Bool(flag)
@@ -99,7 +101,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 		keepAliveConnections = c.Int(flag)
 	}
 	if flag := ProxyKeepAliveTimeoutFlag; c.IsSet(flag) {
-		keepAliveTimeout = c.Duration(flag)
+		keepAliveTimeout = config.CustomDuration{Duration: c.Duration(flag)}
 	}
 	if flag := HTTPHostHeaderFlag; c.IsSet(flag) {
 		httpHostHeader = c.String(flag)
@@ -218,41 +220,41 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 // Note: To specify a time.Duration in go-yaml, use e.g. "3s" or "24h".
 type OriginRequestConfig struct {
 	// HTTP proxy timeout for establishing a new connection
-	ConnectTimeout time.Duration `yaml:"connectTimeout"`
+	ConnectTimeout config.CustomDuration `yaml:"connectTimeout" json:"connectTimeout"`
 	// HTTP proxy timeout for completing a TLS handshake
-	TLSTimeout time.Duration `yaml:"tlsTimeout"`
+	TLSTimeout config.CustomDuration `yaml:"tlsTimeout" json:"tlsTimeout"`
 	// HTTP proxy TCP keepalive duration
-	TCPKeepAlive time.Duration `yaml:"tcpKeepAlive"`
+	TCPKeepAlive config.CustomDuration `yaml:"tcpKeepAlive" json:"tcpKeepAlive"`
 	// HTTP proxy should disable "happy eyeballs" for IPv4/v6 fallback
-	NoHappyEyeballs bool `yaml:"noHappyEyeballs"`
+	NoHappyEyeballs bool `yaml:"noHappyEyeballs" json:"noHappyEyeballs"`
 	// HTTP proxy timeout for closing an idle connection
-	KeepAliveTimeout time.Duration `yaml:"keepAliveTimeout"`
+	KeepAliveTimeout config.CustomDuration `yaml:"keepAliveTimeout" json:"keepAliveTimeout"`
 	// HTTP proxy maximum keepalive connection pool size
-	KeepAliveConnections int `yaml:"keepAliveConnections"`
+	KeepAliveConnections int `yaml:"keepAliveConnections" json:"keepAliveConnections"`
 	// Sets the HTTP Host header for the local webserver.
-	HTTPHostHeader string `yaml:"httpHostHeader"`
+	HTTPHostHeader string `yaml:"httpHostHeader" json:"httpHostHeader"`
 	// Hostname on the origin server certificate.
-	OriginServerName string `yaml:"originServerName"`
+	OriginServerName string `yaml:"originServerName" json:"originServerName"`
 	// Path to the CA for the certificate of your origin.
 	// This option should be used only if your certificate is not signed by Cloudflare.
-	CAPool string `yaml:"caPool"`
+	CAPool string `yaml:"caPool" json:"caPool"`
 	// Disables TLS verification of the certificate presented by your origin.
 	// Will allow any certificate from the origin to be accepted.
 	// Note: The connection from your machine to Cloudflare's Edge is still encrypted.
-	NoTLSVerify bool `yaml:"noTLSVerify"`
+	NoTLSVerify bool `yaml:"noTLSVerify" json:"noTLSVerify"`
 	// Disables chunked transfer encoding.
 	// Useful if you are running a WSGI server.
-	DisableChunkedEncoding bool `yaml:"disableChunkedEncoding"`
+	DisableChunkedEncoding bool `yaml:"disableChunkedEncoding" json:"disableChunkedEncoding"`
 	// Runs as jump host
-	BastionMode bool `yaml:"bastionMode"`
+	BastionMode bool `yaml:"bastionMode" json:"bastionMode"`
 	// Listen address for the proxy.
-	ProxyAddress string `yaml:"proxyAddress"`
+	ProxyAddress string `yaml:"proxyAddress" json:"proxyAddress"`
 	// Listen port for the proxy.
-	ProxyPort uint `yaml:"proxyPort"`
+	ProxyPort uint `yaml:"proxyPort" json:"proxyPort"`
 	// What sort of proxy should be started
-	ProxyType string `yaml:"proxyType"`
+	ProxyType string `yaml:"proxyType" json:"proxyType"`
 	// IP rules for the proxy service
-	IPRules []ipaccess.Rule `yaml:"ipRules"`
+	IPRules []ipaccess.Rule `yaml:"ipRules" json:"ipRules"`
 }
 
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {

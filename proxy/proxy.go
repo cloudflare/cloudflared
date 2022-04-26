@@ -10,10 +10,15 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -32,7 +37,6 @@ type Proxy struct {
 	warpRouting  *ingress.WarpRoutingService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
-	bufferPool   *bufferPool
 }
 
 // NewOriginProxy returns a new instance of the Proxy struct.
@@ -46,7 +50,6 @@ func NewOriginProxy(
 		ingressRules: ingressRules,
 		tags:         tags,
 		log:          log,
-		bufferPool:   newBufferPool(512 * 1024),
 	}
 	if warpRoutingEnabled {
 		proxy.warpRouting = ingress.NewWarpRoutingService()
@@ -60,16 +63,19 @@ func NewOriginProxy(
 // a simple roundtrip or a tcp/websocket dial depending on ingres rule setup.
 func (p *Proxy) ProxyHTTP(
 	w connection.ResponseWriter,
-	req *http.Request,
+	tr *tracing.TracedRequest,
 	isWebsocket bool,
 ) error {
 	incrementRequests()
 	defer decrementConcurrentRequests()
 
+	req := tr.Request
 	cfRay := connection.FindCfRayHeader(req)
 	lbProbe := connection.IsLBProbeRequest(req)
 	p.appendTagHeaders(req)
 
+	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
+		trace.WithAttributes(attribute.String("req-host", req.Host)))
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
 	logFields := logFields{
 		cfRay:   cfRay,
@@ -77,12 +83,14 @@ func (p *Proxy) ProxyHTTP(
 		rule:    ruleNum,
 	}
 	p.logRequest(req, logFields)
+	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
+	ruleSpan.End()
 
 	switch originProxy := rule.Service.(type) {
 	case ingress.HTTPOriginProxy:
 		if err := p.proxyHTTPRequest(
 			w,
-			req,
+			tr,
 			originProxy,
 			isWebsocket,
 			rule.Config.DisableChunkedEncoding,
@@ -93,7 +101,6 @@ func (p *Proxy) ProxyHTTP(
 			return err
 		}
 		return nil
-
 	case ingress.StreamBasedOriginProxy:
 		dest, err := getDestFromRule(rule, req)
 		if err != nil {
@@ -155,15 +162,15 @@ func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
 // ProxyHTTPRequest proxies requests of underlying type http and websocket to the origin service.
 func (p *Proxy) proxyHTTPRequest(
 	w connection.ResponseWriter,
-	req *http.Request,
+	tr *tracing.TracedRequest,
 	httpService ingress.HTTPOriginProxy,
 	isWebsocket bool,
 	disableChunkedEncoding bool,
 	fields logFields,
 ) error {
-	roundTripReq := req
+	roundTripReq := tr.Request
 	if isWebsocket {
-		roundTripReq = req.Clone(req.Context())
+		roundTripReq = tr.Clone(tr.Request.Context())
 		roundTripReq.Header.Set("Connection", "Upgrade")
 		roundTripReq.Header.Set("Upgrade", "websocket")
 		roundTripReq.Header.Set("Sec-Websocket-Version", "13")
@@ -173,7 +180,7 @@ func (p *Proxy) proxyHTTPRequest(
 		// Support for WSGI Servers by switching transfer encoding from chunked to gzip/deflate
 		if disableChunkedEncoding {
 			roundTripReq.TransferEncoding = []string{"gzip", "deflate"}
-			cLength, err := strconv.Atoi(req.Header.Get("Content-Length"))
+			cLength, err := strconv.Atoi(tr.Request.Header.Get("Content-Length"))
 			if err == nil {
 				roundTripReq.ContentLength = int64(cLength)
 			}
@@ -187,11 +194,17 @@ func (p *Proxy) proxyHTTPRequest(
 		roundTripReq.Header.Set("User-Agent", "")
 	}
 
+	_, ttfbSpan := tr.Tracer().Start(tr.Context(), "ttfb_origin")
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
+		tracing.EndWithStatus(ttfbSpan, codes.Error, "")
 		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
 	}
+	tracing.EndWithStatus(ttfbSpan, codes.Ok, resp.Status)
 	defer resp.Body.Close()
+
+	// Add spans to response header (if available)
+	tr.AddSpans(resp.Header, p.log)
 
 	err = w.WriteRespHeaders(resp.StatusCode, resp.Header)
 	if err != nil {
@@ -207,7 +220,7 @@ func (p *Proxy) proxyHTTPRequest(
 
 		eyeballStream := &bidirectionalStream{
 			writer: w,
-			reader: req.Body,
+			reader: tr.Request.Body,
 		}
 
 		websocket.Stream(eyeballStream, rwc, p.log)
@@ -218,11 +231,7 @@ func (p *Proxy) proxyHTTPRequest(
 		p.log.Debug().Msg("Detected Server-Side Events from Origin")
 		p.writeEventStream(w, resp.Body)
 	} else {
-		// Use CopyBuffer, because Copy only allocates a 32KiB buffer, and cross-stream
-		// compression generates dictionary on first write
-		buf := p.bufferPool.Get()
-		defer p.bufferPool.Put(buf)
-		_, _ = io.CopyBuffer(w, resp.Body, buf)
+		_, _ = cfio.Copy(w, resp.Body)
 	}
 
 	p.logOriginResponse(resp, fields)

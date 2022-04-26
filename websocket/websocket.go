@@ -12,8 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/raven-go"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/cfio"
 )
 
 // IsWebSocketUpgrade checks to see if the request is a WebSocket connection.
@@ -72,13 +75,25 @@ func unidirectionalStream(dst io.Writer, src io.Reader, dir string, status *bidi
 		// close. In such case, if the other direction did not stop (due to application level stopping, e.g., if a
 		// server/origin listens forever until closure), it may read/write from the underlying ReadWriter (backed by
 		// the Edge<->cloudflared transport) in an unexpected state.
-
-		if status.isAnyDone() {
-			// Because of this, we set this recover() logic, which kicks-in *only* if any stream is known to have
-			// exited. In such case, we stop a possible panic from propagating upstream.
-			if r := recover(); r != nil {
+		// Because of this, we set this recover() logic.
+		if r := recover(); r != nil {
+			if status.isAnyDone() {
 				// We handle such unexpected errors only when we detect that one side of the streaming is done.
 				log.Debug().Msgf("Gracefully handled error %v in Streaming for %s, error %s", r, dir, debug.Stack())
+			} else {
+				// Otherwise, this is unexpected, but we prevent the program from crashing anyway.
+				log.Warn().Msgf("Gracefully handled unexpected error %v in Streaming for %s, error %s", r, dir, debug.Stack())
+
+				tags := make(map[string]string)
+				tags["root"] = "websocket.stream"
+				tags["dir"] = dir
+				switch rval := r.(type) {
+				case error:
+					raven.CaptureError(rval, tags)
+				default:
+					rvalStr := fmt.Sprint(rval)
+					raven.CaptureMessage(rvalStr, tags)
+				}
 			}
 		}
 	}()
@@ -133,7 +148,7 @@ func copyData(dst io.Writer, src io.Reader, dir string) (written int64, err erro
 		}
 		return copyBuffer(dst, src, dir)
 	} else {
-		return io.Copy(dst, src)
+		return cfio.Copy(dst, src)
 	}
 }
 

@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"math"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 
+	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
 )
@@ -65,6 +68,15 @@ func (t TunnelToken) Credentials() Credentials {
 	}
 }
 
+func (t TunnelToken) Encode() (string, error) {
+	val, err := json.Marshal(t)
+	if err != nil {
+		return "", errors.Wrap(err, "could not JSON encode token")
+	}
+
+	return base64.StdEncoding.EncodeToString(val), nil
+}
+
 type ClassicTunnelProperties struct {
 	Hostname   string
 	OriginCert []byte
@@ -110,7 +122,7 @@ func (t Type) String() string {
 
 // OriginProxy is how data flows from cloudflared to the origin services running behind it.
 type OriginProxy interface {
-	ProxyHTTP(w ResponseWriter, req *http.Request, isWebsocket bool) error
+	ProxyHTTP(w ResponseWriter, tr *tracing.TracedRequest, isWebsocket bool) error
 	ProxyTCP(ctx context.Context, rwa ReadWriteAcker, req *TCPRequest) error
 }
 

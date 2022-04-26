@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -181,13 +182,13 @@ func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) 
 	}
 	switch connectRequest.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
-		req, err := buildHTTPRequest(connectRequest, stream)
+		tracedReq, err := buildHTTPRequest(connectRequest, stream)
 		if err != nil {
 			return err
 		}
 
 		w := newHTTPResponseAdapter(stream)
-		return originProxy.ProxyHTTP(w, req, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
+		return originProxy.ProxyHTTP(w, tracedReq, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
 		rwa := &streamReadWriteAcker{stream}
 		return originProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
@@ -305,7 +306,7 @@ func (hrw httpResponseAdapter) WriteErrorResponse(err error) {
 	hrw.WriteConnectResponseData(err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
-func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadCloser) (*http.Request, error) {
+func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadCloser) (*tracing.TracedRequest, error) {
 	metadata := connectRequest.MetadataMap()
 	dest := connectRequest.Dest
 	method := metadata[HTTPMethodKey]
@@ -342,10 +343,13 @@ func buildHTTPRequest(connectRequest *quicpogs.ConnectRequest, body io.ReadClose
 	//   * there is no transfer-encoding=chunked already set.
 	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
 	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
-		req.Body = nil
+		req.Body = http.NoBody
 	}
 	stripWebsocketUpgradeHeader(req)
-	return req, err
+
+	// Check for tracing on request
+	tracedReq := tracing.NewTracedRequest(req)
+	return tracedReq, err
 }
 
 func setContentLength(req *http.Request) error {

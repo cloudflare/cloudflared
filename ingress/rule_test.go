@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"encoding/json"
 	"io"
 	"net/http/httptest"
 	"net/url"
@@ -8,12 +9,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/config"
 )
 
 func Test_rule_matches(t *testing.T) {
 	type fields struct {
 		Hostname string
-		Path     *regexp.Regexp
+		Path     *Regexp
 		Service  OriginService
 	}
 	type args struct {
@@ -99,10 +102,32 @@ func Test_rule_matches(t *testing.T) {
 			name: "Hostname and path",
 			fields: fields{
 				Hostname: "*.example.com",
-				Path:     regexp.MustCompile("/static/.*\\.html"),
+				Path:     &Regexp{Regexp: regexp.MustCompile("/static/.*\\.html")},
 			},
 			args: args{
 				requestURL: MustParseURL(t, "https://www.example.com/static/index.html"),
+			},
+			want: true,
+		},
+		{
+			name: "Hostname and empty Regex",
+			fields: fields{
+				Hostname: "example.com",
+				Path:     &Regexp{},
+			},
+			args: args{
+				requestURL: MustParseURL(t, "https://example.com/"),
+			},
+			want: true,
+		},
+		{
+			name: "Hostname and nil path",
+			fields: fields{
+				Hostname: "example.com",
+				Path:     nil,
+			},
+			args: args{
+				requestURL: MustParseURL(t, "https://example.com/"),
 			},
 			want: true,
 		},
@@ -143,4 +168,53 @@ func TestStaticHTTPStatus(t *testing.T) {
 	}
 	sendReq()
 	sendReq()
+}
+
+func TestMarshalJSON(t *testing.T) {
+	localhost8000 := MustParseURL(t, "https://localhost:8000")
+	defaultConfig := setConfig(originRequestFromConfig(config.OriginRequestConfig{}), config.OriginRequestConfig{})
+	tests := []struct {
+		name     string
+		path     *Regexp
+		expected string
+		want     bool
+	}{
+		{
+			name:     "Nil",
+			path:     nil,
+			expected: `{"hostname":"example.com","path":null,"service":"https://localhost:8000","originRequest":{"connectTimeout":30,"tlsTimeout":10,"tcpKeepAlive":30,"noHappyEyeballs":false,"keepAliveTimeout":90,"keepAliveConnections":100,"httpHostHeader":"","originServerName":"","caPool":"","noTLSVerify":false,"disableChunkedEncoding":false,"bastionMode":false,"proxyAddress":"127.0.0.1","proxyPort":0,"proxyType":"","ipRules":null}}`,
+			want:     true,
+		},
+		{
+			name:     "Nil regex",
+			path:     &Regexp{Regexp: nil},
+			expected: `{"hostname":"example.com","path":null,"service":"https://localhost:8000","originRequest":{"connectTimeout":30,"tlsTimeout":10,"tcpKeepAlive":30,"noHappyEyeballs":false,"keepAliveTimeout":90,"keepAliveConnections":100,"httpHostHeader":"","originServerName":"","caPool":"","noTLSVerify":false,"disableChunkedEncoding":false,"bastionMode":false,"proxyAddress":"127.0.0.1","proxyPort":0,"proxyType":"","ipRules":null}}`,
+			want:     true,
+		},
+		{
+			name:     "Empty",
+			path:     &Regexp{Regexp: regexp.MustCompile("")},
+			expected: `{"hostname":"example.com","path":"","service":"https://localhost:8000","originRequest":{"connectTimeout":30,"tlsTimeout":10,"tcpKeepAlive":30,"noHappyEyeballs":false,"keepAliveTimeout":90,"keepAliveConnections":100,"httpHostHeader":"","originServerName":"","caPool":"","noTLSVerify":false,"disableChunkedEncoding":false,"bastionMode":false,"proxyAddress":"127.0.0.1","proxyPort":0,"proxyType":"","ipRules":null}}`,
+			want:     true,
+		},
+		{
+			name:     "Basic",
+			path:     &Regexp{Regexp: regexp.MustCompile("/echo")},
+			expected: `{"hostname":"example.com","path":"/echo","service":"https://localhost:8000","originRequest":{"connectTimeout":30,"tlsTimeout":10,"tcpKeepAlive":30,"noHappyEyeballs":false,"keepAliveTimeout":90,"keepAliveConnections":100,"httpHostHeader":"","originServerName":"","caPool":"","noTLSVerify":false,"disableChunkedEncoding":false,"bastionMode":false,"proxyAddress":"127.0.0.1","proxyPort":0,"proxyType":"","ipRules":null}}`,
+			want:     true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Rule{
+				Hostname: "example.com",
+				Service:  &httpService{url: localhost8000},
+				Path:     tt.path,
+				Config:   defaultConfig,
+			}
+			bytes, err := json.Marshal(r)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, string(bytes))
+		})
+	}
 }

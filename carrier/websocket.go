@@ -55,6 +55,9 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 	}
 
 	dump, err := httputil.DumpRequest(req, false)
+	if err != nil {
+		return nil, err
+	}
 	log.Debug().Msgf("Websocket request: %s", string(dump))
 
 	dialer := &websocket.Dialer{
@@ -182,6 +185,9 @@ func createAccessWebSocketStream(options *StartOptions, log *zerolog.Logger) (*w
 	}
 
 	dump, err := httputil.DumpRequest(req, false)
+	if err != nil {
+		return nil, nil, err
+	}
 	log.Debug().Msgf("Access Websocket request: %s", string(dump))
 
 	conn, resp, err := clientConnect(req, nil)

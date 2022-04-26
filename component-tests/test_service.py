@@ -141,12 +141,10 @@ class TestServiceMode:
 
     def sysv_service_scenario(self, config, tmp_path, extra_assertions=None, use_token=False):
         with self.run_service(tmp_path, config, root=True, use_token=use_token):
-            self.sysv_cmd("start")
             self.sysv_cmd("status")
             wait_tunnel_ready(tunnel_url=config.get_url())
             if extra_assertions is not None:
                 extra_assertions()
-            self.sysv_cmd("stop")
 
         # Service install copies config file to /etc/cloudflared/config.yml
         subprocess.run(["sudo", "rm", "/etc/cloudflared/config.yml"])

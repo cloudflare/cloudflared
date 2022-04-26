@@ -19,7 +19,7 @@ const (
 	edgeH2TLSServerName = "h2.cftunnel.com"
 	// edgeQUICServerName is the server name to establish quic connection with edge.
 	edgeQUICServerName = "quic.cftunnel.com"
-	autoSelectFlag     = "auto"
+	AutoSelectFlag     = "auto"
 )
 
 var (
@@ -247,7 +247,7 @@ func selectNamedTunnelProtocols(
 
 	// If the user does not pick (hopefully the majority) then we use the one derived from the TXT DNS record and
 	// fallback on failures.
-	if protocolFlag == autoSelectFlag {
+	if protocolFlag == AutoSelectFlag {
 		return newAutoProtocolSelector(protocol, []Protocol{QUIC, HTTP2, H2mux}, threshold, fetchFunc, ttl, log), nil
 	}
 
@@ -272,7 +272,7 @@ func selectWarpRoutingProtocols(
 
 	// If the user does not pick (hopefully the majority) then we use the one derived from the TXT DNS record and
 	// fallback on failures.
-	if protocolFlag == autoSelectFlag {
+	if protocolFlag == AutoSelectFlag {
 		return newAutoProtocolSelector(protocol, []Protocol{QUICWarp, HTTP2Warp}, threshold, fetchFunc, ttl, log), nil
 	}
 

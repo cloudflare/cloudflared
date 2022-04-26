@@ -482,12 +482,12 @@ func TestSingleOriginSetsConfig(t *testing.T) {
 	ingress, err := NewSingleOrigin(cliCtx, allowURLFromArgs)
 	require.NoError(t, err)
 
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.ConnectTimeout)
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.TLSTimeout)
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.TCPKeepAlive)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.ConnectTimeout)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.TLSTimeout)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.TCPKeepAlive)
 	assert.True(t, ingress.Rules[0].Config.NoHappyEyeballs)
 	assert.Equal(t, 10, ingress.Rules[0].Config.KeepAliveConnections)
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.KeepAliveTimeout)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.KeepAliveTimeout)
 	assert.Equal(t, "example.com:8080", ingress.Rules[0].Config.HTTPHostHeader)
 	assert.Equal(t, "example.com", ingress.Rules[0].Config.OriginServerName)
 	assert.Equal(t, "/etc/certs/ca.pem", ingress.Rules[0].Config.CAPool)
@@ -508,7 +508,7 @@ func TestFindMatchingRule(t *testing.T) {
 			},
 			{
 				Hostname: "tunnel-b.example.com",
-				Path:     mustParsePath(t, "/health"),
+				Path:     MustParsePath(t, "/health"),
 			},
 			{
 				Hostname: "*",
@@ -591,10 +591,10 @@ func TestIsHTTPService(t *testing.T) {
 	}
 }
 
-func mustParsePath(t *testing.T, path string) *regexp.Regexp {
+func MustParsePath(t *testing.T, path string) *Regexp {
 	regexp, err := regexp.Compile(path)
 	assert.NoError(t, err)
-	return regexp
+	return &Regexp{Regexp: regexp}
 }
 
 func MustParseURL(t *testing.T, rawURL string) *url.URL {

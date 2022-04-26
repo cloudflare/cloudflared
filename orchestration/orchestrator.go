@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/proxy"
@@ -95,6 +96,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 		Int32("version", version).
 		Str("config", string(config)).
 		Msg("Updated to new configuration")
+	configVersion.Set(float64(version))
 	return &tunnelpogs.UpdateConfigurationResponse{
 		LastAppliedVersion: o.currentVersion,
 	}
@@ -127,6 +129,32 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRoutingEn
 	}
 	o.proxyShutdownC = proxyShutdownC
 	return nil
+}
+
+// GetConfigJSON returns the current version and configuration as JSON
+func (o *Orchestrator) GetConfigJSON() ([]byte, error) {
+	o.lock.RLock()
+	defer o.lock.RUnlock()
+	var currentConfiguration = struct {
+		Version int32 `json:"version"`
+		Config  struct {
+			Ingress       []ingress.Rule              `json:"ingress"`
+			WarpRouting   config.WarpRoutingConfig    `json:"warp-routing"`
+			OriginRequest ingress.OriginRequestConfig `json:"originRequest"`
+		} `json:"config"`
+	}{
+		Version: o.currentVersion,
+		Config: struct {
+			Ingress       []ingress.Rule              `json:"ingress"`
+			WarpRouting   config.WarpRoutingConfig    `json:"warp-routing"`
+			OriginRequest ingress.OriginRequestConfig `json:"originRequest"`
+		}{
+			Ingress:       o.config.Ingress.Rules,
+			WarpRouting:   config.WarpRoutingConfig{Enabled: o.config.WarpRoutingEnabled},
+			OriginRequest: o.config.Ingress.Defaults,
+		},
+	}
+	return json.Marshal(currentConfiguration)
 }
 
 // GetOriginProxy returns an interface to proxy to origin. It satisfies connection.ConfigManager interface

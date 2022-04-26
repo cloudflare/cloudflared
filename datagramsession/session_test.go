@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -41,12 +40,9 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
-	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(1),
-		respChan: newDatagramChannel(1),
-	}
-	log := zerolog.Nop()
-	session := newSession(sessionID, transport, cfdConn, &log)
+
+	mg, _ := newTestManager(1)
+	session := mg.newSession(sessionID, cfdConn)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sessionDone := make(chan struct{})
@@ -117,12 +113,9 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
-	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(100),
-		respChan: newDatagramChannel(100),
-	}
-	log := zerolog.Nop()
-	session := newSession(sessionID, transport, cfdConn, &log)
+
+	mg, _ := newTestManager(100)
+	session := mg.newSession(sessionID, cfdConn)
 
 	startTime := time.Now()
 	activeUntil := startTime.Add(activeTime)
@@ -184,7 +177,8 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 
 func TestMarkActiveNotBlocking(t *testing.T) {
 	const concurrentCalls = 50
-	session := newSession(uuid.New(), nil, nil, nil)
+	mg, _ := newTestManager(1)
+	session := mg.newSession(uuid.New(), nil)
 	var wg sync.WaitGroup
 	wg.Add(concurrentCalls)
 	for i := 0; i < concurrentCalls; i++ {
@@ -199,12 +193,9 @@ func TestMarkActiveNotBlocking(t *testing.T) {
 func TestZeroBytePayload(t *testing.T) {
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
-	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(1),
-		respChan: newDatagramChannel(1),
-	}
-	log := zerolog.Nop()
-	session := newSession(sessionID, transport, cfdConn, &log)
+
+	mg, transport := newTestManager(1)
+	session := mg.newSession(sessionID, cfdConn)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errGroup, ctx := errgroup.WithContext(ctx)

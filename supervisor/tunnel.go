@@ -32,6 +32,7 @@ const (
 	dialTimeout              = 15 * time.Second
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
+	FeatureAllowRemoteConfig = "allow_remote_config"
 )
 
 type TunnelConfig struct {
@@ -170,17 +171,15 @@ func ServeTunnelLoop(
 			protocolFallback.protocol,
 			gracefulShutdownC,
 		)
-		if !recoverable {
-			return err
-		}
 
-		config.Observer.SendReconnect(connIndex)
-
-		duration, ok := protocolFallback.GetMaxBackoffDuration(ctx)
-		if !ok {
-			return err
+		if recoverable {
+			duration, ok := protocolFallback.GetMaxBackoffDuration(ctx)
+			if !ok {
+				return err
+			}
+			config.Observer.SendReconnect(connIndex)
+			connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
 		}
-		connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
 
 		select {
 		case <-ctx.Done():
@@ -188,6 +187,10 @@ func ServeTunnelLoop(
 		case <-gracefulShutdownC:
 			return nil
 		case <-protocolFallback.BackoffTimer():
+			if !recoverable {
+				return err
+			}
+
 			if !selectNextProtocol(
 				connLog.Logger(),
 				protocolFallback,
@@ -232,6 +235,15 @@ func selectNextProtocol(
 	_, hasFallback := selector.Fallback()
 
 	if protocolBackoff.ReachedMaxRetries() || (hasFallback && isNetworkActivityTimeout) {
+		if isNetworkActivityTimeout {
+			connLog.Warn().Msg("If this log occurs persistently, and cloudflared is unable to connect to " +
+				"Cloudflare Network with `quic` protocol, then most likely your machine/network is getting its egress " +
+				"UDP to port 7844 (or others) blocked or dropped. Make sure to allow egress connectivity as per " +
+				"https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/ports-and-ips/\n" +
+				"If you are using private routing to this Tunnel, then UDP (and Private DNS Resolution) will not work" +
+				"unless your cloudflared can connect with Cloudflare Network with `quic`.")
+		}
+
 		fallback, hasFallback := selector.Fallback()
 		if !hasFallback {
 			return false

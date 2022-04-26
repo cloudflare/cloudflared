@@ -64,8 +64,8 @@ func matchHost(ruleHost, reqHost string) bool {
 
 // Ingress maps eyeball requests to origins.
 type Ingress struct {
-	Rules    []Rule
-	defaults OriginRequestConfig
+	Rules    []Rule              `json:"ingress"`
+	Defaults OriginRequestConfig `json:"originRequest"`
 }
 
 // NewSingleOrigin constructs an Ingress set with only one rule, constructed from
@@ -86,7 +86,7 @@ func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 				Config:  setConfig(defaults, config.OriginRequestConfig{}),
 			},
 		},
-		defaults: defaults,
+		Defaults: defaults,
 	}
 	return ing, err
 }
@@ -180,7 +180,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			}
 			srv := newStatusCode(status)
 			service = &srv
-		} else if r.Service == "hello_world" || r.Service == "hello-world" || r.Service == "helloworld" {
+		} else if r.Service == HelloWorldService || r.Service == "hello-world" || r.Service == "helloworld" {
 			service = new(helloWorld)
 		} else if r.Service == ServiceSocksProxy {
 			rules := make([]ipaccess.Rule, len(r.OriginRequest.IPRules))
@@ -230,23 +230,24 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			return Ingress{}, err
 		}
 
-		var pathRegex *regexp.Regexp
+		var pathRegexp *Regexp
 		if r.Path != "" {
 			var err error
-			pathRegex, err = regexp.Compile(r.Path)
+			regex, err := regexp.Compile(r.Path)
 			if err != nil {
 				return Ingress{}, errors.Wrapf(err, "Rule #%d has an invalid regex", i+1)
 			}
+			pathRegexp = &Regexp{Regexp: regex}
 		}
 
 		rules[i] = Rule{
 			Hostname: r.Hostname,
 			Service:  service,
-			Path:     pathRegex,
+			Path:     pathRegexp,
 			Config:   cfg,
 		}
 	}
-	return Ingress{Rules: rules, defaults: defaults}, nil
+	return Ingress{Rules: rules, Defaults: defaults}, nil
 }
 
 func validateHostname(r config.UnvalidatedIngressRule, ruleIndex, totalRules int) error {

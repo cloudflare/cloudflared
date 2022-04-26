@@ -10,6 +10,7 @@ cscope.*
 /cloudflared.exe
 /cloudflared.msi
 /cloudflared-x86-64*
+/cloudflared.1
 /packaging
 .DS_Store
 *-session.log

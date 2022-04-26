@@ -27,6 +27,7 @@ import (
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -58,6 +59,11 @@ func (w *mockHTTPRespWriter) WriteRespHeaders(status int, header http.Header) er
 
 func (w *mockHTTPRespWriter) Read(data []byte) (int, error) {
 	return 0, fmt.Errorf("mockHTTPRespWriter doesn't implement io.Reader")
+}
+
+// respHeaders is a test function to read respHeaders
+func (w *mockHTTPRespWriter) headers() http.Header {
+	return w.Header()
 }
 
 type mockWSRespWriter struct {
@@ -146,7 +152,7 @@ func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, "http://localhost:8080", nil)
 		require.NoError(t, err)
 
-		err = proxy.ProxyHTTP(responseWriter, req, false)
+		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false)
 		require.NoError(t, err)
 		for _, tag := range testTags {
 			assert.Equal(t, tag.Value, req.Header.Get(TagHeaderNamePrefix+tag.Name))
@@ -173,7 +179,7 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 
 		errGroup, ctx := errgroup.WithContext(ctx)
 		errGroup.Go(func() error {
-			err = proxy.ProxyHTTP(responseWriter, req, true)
+			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), true)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusSwitchingProtocols, responseWriter.Code)
@@ -234,7 +240,7 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = proxy.ProxyHTTP(responseWriter, req, false)
+			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusOK, responseWriter.Code)
@@ -346,7 +352,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 		req, err := http.NewRequest(http.MethodGet, test.url, nil)
 		require.NoError(t, err)
 
-		err = proxy.ProxyHTTP(responseWriter, req, false)
+		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false)
 		require.NoError(t, err)
 
 		assert.Equal(t, test.expectedStatus, responseWriter.Code)
@@ -393,7 +399,7 @@ func TestProxyError(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
 	assert.NoError(t, err)
 
-	assert.Error(t, proxy.ProxyHTTP(responseWriter, req, false))
+	assert.Error(t, proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false))
 }
 
 type replayer struct {
@@ -555,6 +561,24 @@ func TestConnections(t *testing.T) {
 			},
 		},
 		{
+			// Send (unexpected) HTTP when origin expects WS (to unwrap for raw TCP)
+			name: "http-(ws)tcp proxy",
+			args: args{
+				ingressServiceScheme:  "tcp://",
+				originService:         runEchoTCPService,
+				eyeballResponseWriter: newMockHTTPRespWriter(),
+				eyeballRequestBody:    http.NoBody,
+				connectionType:        connection.TypeHTTP,
+				requestHeaders: map[string][]string{
+					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
+				},
+			},
+			want: want{
+				message: []byte{},
+				headers: map[string][]string{},
+			},
+		},
+		{
 			name: "tcp-tcp proxy without warpRoutingService enabled",
 			args: args{
 				ingressServiceScheme:  "tcp://",
@@ -650,10 +674,10 @@ func TestConnections(t *testing.T) {
 				}()
 			}
 			if test.args.connectionType == connection.TypeTCP {
-				rws := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
-				err = proxy.ProxyTCP(ctx, rws, &connection.TCPRequest{Dest: dest})
+				rwa := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
+				err = proxy.ProxyTCP(ctx, rwa, &connection.TCPRequest{Dest: dest})
 			} else {
-				err = proxy.ProxyHTTP(respWriter, req, test.args.connectionType == connection.TypeWebsocket)
+				err = proxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), test.args.connectionType == connection.TypeWebsocket)
 			}
 
 			cancel()

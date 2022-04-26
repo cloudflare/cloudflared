@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
@@ -31,14 +32,16 @@ import (
 )
 
 const LogFieldOriginCertPath = "originCertPath"
+const secretValue = "*****"
 
 var (
 	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
-	quickStartUrl   = developerPortal + "/quickstart/quickstart/"
 	serviceUrl      = developerPortal + "/reference/service/"
 	argumentsUrl    = developerPortal + "/reference/arguments/"
 
 	LogFieldHostname = "hostname"
+
+	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -65,7 +68,11 @@ func generateRandomClientID(log *zerolog.Logger) (string, error) {
 func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 	flags := make(map[string]interface{})
 	for _, flag := range c.FlagNames() {
-		flags[flag] = c.Generic(flag)
+		if isSecretFlag(flag) {
+			flags[flag] = secretValue
+		} else {
+			flags[flag] = c.Generic(flag)
+		}
 	}
 
 	if len(flags) > 0 {
@@ -79,13 +86,37 @@ func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 		if strings.Contains(env, "TUNNEL_") {
 			vars := strings.Split(env, "=")
 			if len(vars) == 2 {
-				envs[vars[0]] = vars[1]
+				if isSecretEnvVar(vars[0]) {
+					envs[vars[0]] = secretValue
+				} else {
+					envs[vars[0]] = vars[1]
+				}
 			}
 		}
 	}
 	if len(envs) > 0 {
 		log.Info().Msgf("Environmental variables %v", envs)
 	}
+}
+
+func isSecretFlag(key string) bool {
+	for _, flag := range secretFlags {
+		if flag.Name == key {
+			return true
+		}
+	}
+	return false
+}
+
+func isSecretEnvVar(key string) bool {
+	for _, flag := range secretFlags {
+		for _, secretEnvVar := range flag.EnvVars {
+			if secretEnvVar == key {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelProperties) bool {
@@ -183,6 +214,10 @@ func prepareTunnelConfig(
 		ingressRules  ingress.Ingress
 		classicTunnel *connection.ClassicTunnelProperties
 	)
+
+	transportProtocol := c.String("protocol")
+	protocolFetcher := edgediscovery.ProtocolPercentage
+
 	cfg := config.GetConfiguration()
 	if isNamedTunnel {
 		clientUUID, err := uuid.NewRandom()
@@ -191,6 +226,26 @@ func prepareTunnelConfig(
 		}
 		log.Info().Msgf("Generated Connector ID: %s", clientUUID)
 		features := append(c.StringSlice("features"), supervisor.FeatureSerializedHeaders)
+		if c.IsSet(TunnelTokenFlag) {
+			if transportProtocol == connection.AutoSelectFlag {
+				protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
+					// If the Tunnel is remotely managed and no protocol is set, we prefer QUIC, but still allow fall-back.
+					preferQuic := []edgediscovery.ProtocolPercent{
+						{
+							Protocol:   connection.QUIC.String(),
+							Percentage: 100,
+						},
+						{
+							Protocol:   connection.HTTP2.String(),
+							Percentage: 100,
+						},
+					}
+					return preferQuic, nil
+				}
+			}
+			features = append(features, supervisor.FeatureAllowRemoteConfig)
+			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
+		}
 		namedTunnel.Client = tunnelpogs.ClientInfo{
 			ClientID: clientUUID[:],
 			Features: dedup(features),
@@ -233,7 +288,7 @@ func prepareTunnelConfig(
 	}
 
 	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
-	protocolSelector, err := connection.NewProtocolSelector(c.String("protocol"), warpRoutingEnabled, namedTunnel, edgediscovery.ProtocolPercentage, supervisor.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log)
 	if err != nil {
 		return nil, nil, err
 	}

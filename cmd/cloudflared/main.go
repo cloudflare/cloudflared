@@ -21,6 +21,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
+	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/watcher"
 )
 
@@ -69,7 +70,7 @@ func main() {
 	app.Copyright = fmt.Sprintf(
 		`(c) %d Cloudflare Inc.
    Your installation of cloudflared software constitutes a symbol of your signature indicating that you accept
-   the terms of the Cloudflare License (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/license),
+   the terms of the Apache License Version 2.0 (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/license),
    Terms (https://www.cloudflare.com/terms/) and Privacy Policy (https://www.cloudflare.com/privacypolicy/).`,
 		time.Now().Year(),
 	)
@@ -86,6 +87,7 @@ func main() {
 	tunnel.Init(bInfo, graceShutdownC) // we need this to support the tunnel sub command...
 	access.Init(graceShutdownC)
 	updater.Init(Version)
+	tracing.Init(Version)
 	runApp(app, graceShutdownC)
 }
 

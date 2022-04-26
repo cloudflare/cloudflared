@@ -134,7 +134,7 @@ var (
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "protocol",
-		Value:   "auto",
+		Value:   connection.AutoSelectFlag,
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", connection.AvailableProtocolFlagMessage),
 		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
@@ -712,6 +712,59 @@ func cleanupCommand(c *cli.Context) error {
 	}
 
 	return sc.cleanupConnections(tunnelIDs)
+}
+
+func buildTokenCommand() *cli.Command {
+	return &cli.Command{
+		Name:               "token",
+		Action:             cliutil.ConfiguredAction(tokenCommand),
+		Usage:              "Fetch the credentials token for an existing tunnel (by name or UUID) that allows to run it",
+		UsageText:          "cloudflared tunnel [tunnel command options] token [subcommand options] TUNNEL",
+		Description:        "cloudflared tunnel token will fetch the credentials token for a given tunnel (by its name or UUID), which is then used to run the tunnel. This command fails if the tunnel does not exist or has been deleted. Use the flag `cloudflared tunnel token --cred-file /my/path/file.json TUNNEL` to output the token to the credentials JSON file. Note: this command only works for Tunnels created since cloudflared version 2022.3.0",
+		Flags:              []cli.Flag{credentialsFileFlagCLIOnly},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func tokenCommand(c *cli.Context) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
+	if c.NArg() != 1 {
+		return cliutil.UsageError(`"cloudflared tunnel token" requires exactly 1 argument, the name or UUID of tunnel to fetch the credentials token for.`)
+	}
+	tunnelID, err := sc.findID(c.Args().First())
+	if err != nil {
+		return errors.Wrap(err, "error parsing tunnel ID")
+	}
+
+	token, err := sc.getTunnelTokenCredentials(tunnelID)
+	if err != nil {
+		return err
+	}
+
+	if path := c.String(CredFileFlag); path != "" {
+		credentials := token.Credentials()
+		err := writeTunnelCredentials(path, &credentials)
+		if err != nil {
+			return errors.Wrapf(err, "error writing token credentials to JSON file in path %s", path)
+		}
+
+		return nil
+	}
+
+	encodedToken, err := token.Encode()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s", encodedToken)
+	return nil
 }
 
 func buildRouteCommand() *cli.Command {
