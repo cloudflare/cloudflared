@@ -224,8 +224,9 @@ func (a *TunnelAuth) UnmarshalCapnproto(s tunnelrpc.TunnelAuth) error {
 }
 
 type ConnectionDetails struct {
-	UUID     uuid.UUID
-	Location string
+	UUID                    uuid.UUID
+	Location                string
+	TunnelIsRemotelyManaged bool
 }
 
 func (details *ConnectionDetails) MarshalCapnproto(s tunnelrpc.ConnectionDetails) error {
@@ -235,6 +236,7 @@ func (details *ConnectionDetails) MarshalCapnproto(s tunnelrpc.ConnectionDetails
 	if err := s.SetLocationName(details.Location); err != nil {
 		return err
 	}
+	s.SetTunnelIsRemotelyManaged(details.TunnelIsRemotelyManaged)
 
 	return nil
 }
@@ -252,6 +254,7 @@ func (details *ConnectionDetails) UnmarshalCapnproto(s tunnelrpc.ConnectionDetai
 	if err != nil {
 		return err
 	}
+	details.TunnelIsRemotelyManaged = s.TunnelIsRemotelyManaged()
 
 	return err
 }
