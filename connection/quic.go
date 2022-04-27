@@ -111,7 +111,7 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 
 func (q *QUICConnection) serveControlStream(ctx context.Context, controlStream quic.Stream) error {
 	// This blocks until the control plane is done.
-	err := q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions)
+	err := q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions, q.orchestrator)
 	if err != nil {
 		// Not wrapping error here to be consistent with the http2 message.
 		return err

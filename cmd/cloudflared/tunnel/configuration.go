@@ -43,6 +43,8 @@ var (
 
 	secretFlags     = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 	defaultFeatures = []string{supervisor.FeatureAllowRemoteConfig, supervisor.FeatureSerializedHeaders}
+
+	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq"}
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -348,11 +350,24 @@ func prepareTunnelConfig(
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
 	}
-	dynamicConfig := &orchestration.Config{
+	orchestratorConfig := &orchestration.Config{
 		Ingress:            &ingressRules,
 		WarpRoutingEnabled: warpRoutingEnabled,
+		ConfigurationFlags: parseConfigFlags(c),
 	}
-	return tunnelConfig, dynamicConfig, nil
+	return tunnelConfig, orchestratorConfig, nil
+}
+
+func parseConfigFlags(c *cli.Context) map[string]string {
+	result := make(map[string]string)
+
+	for _, flag := range configFlags {
+		if v := c.String(flag); c.IsSet(flag) && v != "" {
+			result[flag] = v
+		}
+	}
+
+	return result
 }
 
 func gracePeriod(c *cli.Context) (time.Duration, error) {

@@ -175,6 +175,24 @@ func (c RegistrationServer_PogsClient) RegisterConnection(ctx context.Context, a
 	return nil, newRPCError("unknown result which %d", result.Which())
 }
 
+func (c RegistrationServer_PogsClient) SendLocalConfiguration(ctx context.Context, config []byte) error {
+	client := tunnelrpc.TunnelServer{Client: c.Client}
+	promise := client.UpdateLocalConfiguration(ctx, func(p tunnelrpc.RegistrationServer_updateLocalConfiguration_Params) error {
+		if err := p.SetConfig(config); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	_, err := promise.Struct()
+	if err != nil {
+		return wrapRPCError(err)
+	}
+
+	return nil
+}
+
 func (c RegistrationServer_PogsClient) UnregisterConnection(ctx context.Context) error {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.UnregisterConnection(ctx, func(p tunnelrpc.RegistrationServer_unregisterConnection_Params) error {

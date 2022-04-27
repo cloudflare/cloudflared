@@ -99,3 +99,15 @@ func (ipr *Rule) PortsString() string {
 	}
 	return "all"
 }
+
+func (ipr *Rule) Ports() []int {
+	return ipr.ports
+}
+
+func (ipr *Rule) RulePolicy() bool {
+	return ipr.allow
+}
+
+func (ipr *Rule) StringCIDR() string {
+	return ipr.ipNet.String()
+}

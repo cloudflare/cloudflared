@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -639,6 +640,19 @@ func TestPersistentConnection(t *testing.T) {
 	wsReqWriter.Close()
 	tcpReqWriter.Close()
 	wg.Wait()
+}
+
+func TestSerializeLocalConfig(t *testing.T) {
+	c := &newLocalConfig{
+		RemoteConfig: ingress.RemoteConfig{
+			Ingress:     ingress.Ingress{},
+			WarpRouting: config.WarpRoutingConfig{},
+		},
+		ConfigurationFlags: map[string]string{"a": "b"},
+	}
+
+	result, _ := json.Marshal(c)
+	fmt.Println(string(result))
 }
 
 func wsEcho(w http.ResponseWriter, r *http.Request) {

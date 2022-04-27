@@ -42,6 +42,10 @@ type mockOrchestrator struct {
 	originProxy OriginProxy
 }
 
+func (mcr *mockOrchestrator) GetConfigJSON() ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (*mockOrchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
 	return &tunnelpogs.UpdateConfigurationResponse{
 		LastAppliedVersion: version,
