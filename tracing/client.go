@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	maxTraceAmount = 20
+	MaxTraceAmount = 20
 )
 
 var (
-	errNoTraces = errors.New("no traces recorded to be exported")
+	errNoTraces   = errors.New("no traces recorded to be exported")
+	errNoopTracer = errors.New("noop tracer has no traces")
 )
 
 type InMemoryClient interface {
@@ -45,7 +46,7 @@ func (mc *InMemoryOtlpClient) UploadTraces(_ context.Context, protoSpans []*trac
 	defer mc.mu.Unlock()
 	// Catch to make sure too many traces aren't being added to response header.
 	// Returning nil makes sure we don't fail to send the traces we already recorded.
-	if len(mc.spans)+len(protoSpans) > maxTraceAmount {
+	if len(mc.spans)+len(protoSpans) > MaxTraceAmount {
 		return nil
 	}
 	mc.spans = append(mc.spans, protoSpans...)
@@ -86,5 +87,5 @@ func (mc *NoopOtlpClient) UploadTraces(_ context.Context, _ []*tracepb.ResourceS
 
 // Spans always returns no traces error
 func (mc *NoopOtlpClient) Spans() (string, error) {
-	return "", errNoTraces
+	return "", errNoopTracer
 }

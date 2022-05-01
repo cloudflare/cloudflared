@@ -121,6 +121,8 @@ struct ConnectionDetails {
     uuid @0 :Data;
     # airport code of the colo where this connection landed
     locationName @1 :Text;
+    # tells if the tunnel is remotely managed
+    tunnelIsRemotelyManaged @2: Bool;
 }
 
 struct TunnelAuth {
@@ -131,6 +133,7 @@ struct TunnelAuth {
 interface RegistrationServer {
     registerConnection @0 (auth :TunnelAuth, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
     unregisterConnection @1 () -> ();
+    updateLocalConfiguration @2 (config :Data) -> ();
 }
 
 interface TunnelServer extends (RegistrationServer) {

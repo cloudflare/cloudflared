@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,12 +22,8 @@ func TestManagerServe(t *testing.T) {
 		msgs                = 50
 		remoteUnregisterMsg = "eyeball closed connection"
 	)
-	log := zerolog.Nop()
-	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(1),
-		respChan: newDatagramChannel(1),
-	}
-	mg := NewManager(transport, &log)
+
+	mg, transport := newTestManager(1)
 
 	eyeballTracker := make(map[uuid.UUID]*datagramChannel)
 	for i := 0; i < sessions; i++ {
@@ -124,12 +121,8 @@ func TestTimeout(t *testing.T) {
 	const (
 		testTimeout = time.Millisecond * 50
 	)
-	log := zerolog.Nop()
-	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(1),
-		respChan: newDatagramChannel(1),
-	}
-	mg := NewManager(transport, &log)
+
+	mg, _ := newTestManager(1)
 	mg.timeout = testTimeout
 	ctx := context.Background()
 	sessionID := uuid.New()
@@ -140,6 +133,47 @@ func TestTimeout(t *testing.T) {
 
 	err = mg.UnregisterSession(ctx, sessionID, "session gone", true)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestCloseTransportCloseSessions(t *testing.T) {
+	mg, transport := newTestManager(1)
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := mg.Serve(ctx)
+		require.Error(t, err)
+	}()
+
+	cfdConn, eyeballConn := net.Pipe()
+	session, err := mg.RegisterSession(ctx, uuid.New(), cfdConn)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := eyeballConn.Write([]byte(t.Name()))
+		require.NoError(t, err)
+		transport.close()
+	}()
+
+	closedByRemote, err := session.Serve(ctx, time.Minute)
+	require.True(t, closedByRemote)
+	require.Error(t, err)
+
+	wg.Wait()
+}
+
+func newTestManager(capacity uint) (*manager, *mockQUICTransport) {
+	log := zerolog.Nop()
+	transport := &mockQUICTransport{
+		reqChan:  newDatagramChannel(capacity),
+		respChan: newDatagramChannel(capacity),
+	}
+	return NewManager(transport, &log), transport
 }
 
 type mockOrigin struct {

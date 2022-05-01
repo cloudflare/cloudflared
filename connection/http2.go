@@ -231,6 +231,12 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 			dest[name] = values
 		}
 
+		if h2name == tracing.IntCloudflaredTracingHeader {
+			// Add cf-int-cloudflared-tracing header outside of serialized userHeaders
+			rp.w.Header()[tracing.CanonicalCloudflaredTracingHeader] = values
+			continue
+		}
+
 		if !IsControlResponseHeader(h2name) || IsWebsocketClientHeader(h2name) {
 			// User headers, on the other hand, must all be serialized so that
 			// HTTP/2 header validation won't be applied to HTTP/1 header values

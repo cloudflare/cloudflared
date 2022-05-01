@@ -41,7 +41,8 @@ var (
 
 	LogFieldHostname = "hostname"
 
-	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
+	secretFlags     = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
+	defaultFeatures = []string{supervisor.FeatureAllowRemoteConfig, supervisor.FeatureSerializedHeaders}
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -225,7 +226,7 @@ func prepareTunnelConfig(
 			return nil, nil, errors.Wrap(err, "can't generate connector UUID")
 		}
 		log.Info().Msgf("Generated Connector ID: %s", clientUUID)
-		features := append(c.StringSlice("features"), supervisor.FeatureSerializedHeaders)
+		features := append(c.StringSlice("features"), defaultFeatures...)
 		if c.IsSet(TunnelTokenFlag) {
 			if transportProtocol == connection.AutoSelectFlag {
 				protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
@@ -243,7 +244,6 @@ func prepareTunnelConfig(
 					return preferQuic, nil
 				}
 			}
-			features = append(features, supervisor.FeatureAllowRemoteConfig)
 			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
 		}
 		namedTunnel.Client = tunnelpogs.ClientInfo{
