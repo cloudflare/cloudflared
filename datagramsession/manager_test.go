@@ -255,7 +255,10 @@ func (rc *datagramChannel) Send(ctx context.Context, sessionID uuid.UUID, payloa
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-rc.closedChan:
-		return fmt.Errorf("datagram channel closed")
+		return &errClosedSession{
+			message:  fmt.Errorf("datagram channel closed").Error(),
+			byRemote: true,
+		}
 	case rc.datagramChan <- &newDatagram{sessionID: sessionID, payload: payload}:
 		return nil
 	}
@@ -266,7 +269,11 @@ func (rc *datagramChannel) Receive(ctx context.Context) (uuid.UUID, []byte, erro
 	case <-ctx.Done():
 		return uuid.Nil, nil, ctx.Err()
 	case <-rc.closedChan:
-		return uuid.Nil, nil, fmt.Errorf("datagram channel closed")
+		err := &errClosedSession{
+			message:  fmt.Errorf("datagram channel closed").Error(),
+			byRemote: true,
+		}
+		return uuid.Nil, nil, err
 	case msg := <-rc.datagramChan:
 		return msg.sessionID, msg.payload, nil
 	}
