@@ -61,7 +61,7 @@ class PkgCreator:
 
         origin - name of your package (String)
         label - label of your package (could be same as the name) (String)
-        flavor - flavor you want this to be distributed for (List of Strings)
+        release - release you want this to be distributed for (List of Strings)
         components - could be a channel like main/stable/beta
         archs - Architecture (List of Strings)
         description - (String)
@@ -71,20 +71,20 @@ class PkgCreator:
             file_path,
             origin,
             label,
-            flavors,
+            releases,
             archs,
             components, 
             description,
             gpg_key_id ):
         with open(file_path, "w") as distributions_file:
-            for flavor in flavors:
+            for release in releases:
                 distributions_file.write(f"Origin: {origin}\n")
                 distributions_file.write(f"Label: {label}\n")
-                distributions_file.write(f"Codename: {flavor}\n")
+                distributions_file.write(f"Codename: {release}\n")
                 archs_list = " ".join(archs)
                 distributions_file.write(f"Architectures: {archs_list}\n")
                 distributions_file.write(f"Components: {components}\n")
-                distributions_file.write(f"Description: {description} - {flavor}\n")
+                distributions_file.write(f"Description: {description} - {release}\n")
                 distributions_file.write(f"SignWith: {gpg_key_id}\n")
                 distributions_file.write("\n")
         return distributions_file
@@ -97,9 +97,9 @@ class PkgCreator:
         db and pool contain information and metadata about builds. We can ignore these.
         dist: contains all the pkgs and signed releases that are necessary for an apt download.
     """
-    def create_deb_pkgs(self, flavor, deb_file):
+    def create_deb_pkgs(self, release, deb_file):
         self._clean_build_resources()
-        subprocess.call(("reprepro", "includedeb", flavor, deb_file))
+        subprocess.call(("reprepro", "includedeb", release, deb_file))
 
     """
         This is mostly useful to clear previously built db, dist and pool resources.
@@ -139,24 +139,24 @@ def upload_from_directories(pkg_uploader, directory, release, binary):
 
     release_version: is the cloudflared release version.
 """
-def create_deb_packaging(pkg_creator, pkg_uploader, flavors, gpg_key_id, binary_name, archs, package_component, release_version):
+def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary_name, archs, package_component, release_version):
     # set configuration for package creation.
     print(f"initialising configuration for {binary_name} , {archs}")
     pkg_creator.create_distribution_conf(
     "./conf/distributions",
     binary_name,
     binary_name,
-    flavors,
+    releases,
     archs,
     package_component,
     f"apt repository for {binary_name}",
     gpg_key_id)
 
     # create deb pkgs
-    for flavor in flavors:
+    for release in releases:
         for arch in archs:
-            print(f"creating deb pkgs for {flavor} and {arch}...")
-            pkg_creator.create_deb_pkgs(flavor, f"./built_artifacts/cloudflared-linux-{arch}.deb")
+            print(f"creating deb pkgs for {release} and {arch}...")
+            pkg_creator.create_deb_pkgs(release, f"./built_artifacts/cloudflared-linux-{arch}.deb")
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "dists", None, binary_name)
@@ -182,5 +182,7 @@ if __name__ == "__main__":
     pkg_uploader = PkgUploader(tunnel_account_id, bucket_name, client_id, client_secret)
 
     archs = ["amd64", "386", "arm64"]
-    flavors = ["bullseye", "buster", "bionic"]
-    create_deb_packaging(pkg_creator, pkg_uploader, flavors, gpg_key_id, "cloudflared", archs, "main", release_version)
+    debian_releases = ["bookworm", "bullseye", "buster"]
+    ubuntu_releases = ["jammy", "impish", "focal", "bionic"]
+    deb_based_releases = debian_releases + ubuntu_releases
+    create_deb_packaging(pkg_creator, pkg_uploader, deb_based_releases, gpg_key_id, "cloudflared", archs, "main", release_version)
