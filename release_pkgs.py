@@ -10,6 +10,7 @@
 """
 import subprocess
 import os
+import argparse
 import logging
 from hashlib import sha256
 
@@ -166,23 +167,59 @@ def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary
     upload_from_directories(pkg_uploader, "dists", release_version, binary_name)
     upload_from_directories(pkg_uploader, "pool", release_version, binary_name)
 
-#TODO: https://jira.cfops.it/browse/TUN-6146 will extract this into it's own command line script.
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Creates linux releases and uploads them in a packaged format"
+    )
+
+    parser.add_argument(
+            "--bucket", default=os.environ.get("R2_BUCKET_NAME"), help="R2 Bucket name"
+    )
+    parser.add_argument(
+            "--id", default=os.environ.get("R2_CLIENT_ID"), help="R2 Client ID"
+    )
+    parser.add_argument(
+            "--secret", default=os.environ.get("R2_CLIENT_SECRET"), help="R2 Client Secret"
+    )
+    parser.add_argument(
+            "--account", default=os.environ.get("R2_ACCOUNT_ID"), help="R2 Account Tag"
+    )
+    parser.add_argument(
+            "--release-tag", default=os.environ.get("RELEASE_VERSION"), help="Release version you want your pkgs to be\
+            prefixed with"
+    )
+
+    parser.add_argument(
+           "--binary", default=os.environ.get("BINARY_NAME"), help="The name of the binary the packages are for"
+    )
+
+    parser.add_argument(
+            "--gpg-key-id", default=os.environ.get("GPG_KEY_ID"), help="gpg key ID that's being used to sign release\
+            packages."
+    )
+
+    parser.add_argument(
+            "--deb-based-releases", default=["bookworm", "bullseye", "buster", "jammy", "impish", "focal", "bionic"],
+            help="list of debian based releases that need to be packaged for"
+    )
+
+    parser.add_argument(
+            "--archs", default=["amd64", "386", "arm64"], help="list of architectures we want to package for. Note that\
+            it is the caller's responsiblity to ensure that these debs are already present in a directory. This script\
+            will not build binaries or create their debs."
+            )
+    args = parser.parse_args()
+
+    return args
+
 if __name__ == "__main__":
-    # initialise pkg creator
+    try:
+        args = parse_args()
+    except Exception as e:
+        logging.exception(e)
+        exit(1)
+
     pkg_creator = PkgCreator()
-   
-    # initialise pkg uploader
-    bucket_name = os.getenv('R2_BUCKET_NAME')
-    client_id = os.getenv('R2_CLIENT_ID')
-    client_secret = os.getenv('R2_CLIENT_SECRET')
-    tunnel_account_id = os.getenv('R2_ACCOUNT_ID')
-    release_version = os.getenv('RELEASE_VERSION')
-    gpg_key_id = os.getenv('GPG_KEY_ID')
-
-    pkg_uploader = PkgUploader(tunnel_account_id, bucket_name, client_id, client_secret)
-
-    archs = ["amd64", "386", "arm64"]
-    debian_releases = ["bookworm", "bullseye", "buster"]
-    ubuntu_releases = ["jammy", "impish", "focal", "bionic"]
-    deb_based_releases = debian_releases + ubuntu_releases
-    create_deb_packaging(pkg_creator, pkg_uploader, deb_based_releases, gpg_key_id, "cloudflared", archs, "main", release_version)
+    pkg_uploader = PkgUploader(args.account, args.bucket, args.id, args.secret)
+    create_deb_packaging(pkg_creator, pkg_uploader, args.deb_based_releases, args.gpg_key_id, args.binary, 
+            args.archs, "main", args.release_tag)
