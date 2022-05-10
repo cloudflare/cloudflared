@@ -43,7 +43,7 @@ Once installed, you can authenticate `cloudflared` into your Cloudflare account 
 * Route traffic to that Tunnel:
   * Via public [DNS records in Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/routing-to-tunnel/dns)
   * Or via a public hostname guided by a [Cloudflare Load Balancer](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/routing-to-tunnel/lb)
-  * Or from [WARP client private traffic](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/private-networks)
+  * Or from [WARP client private traffic](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/)
 
 
 ## TryCloudflare
