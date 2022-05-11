@@ -1,3 +1,12 @@
+2022.5.1
+- 2022-05-06 TUN-6146: Release_pkgs is now a generic command line script
+- 2022-05-06 TUN-6185: Fix tcpOverWSOriginService not using original scheme for String representation
+- 2022-05-05 TUN-6175: Simply debian packaging by structural upload
+- 2022-05-05 TUN-5945: Added support for Ubuntu releases
+- 2022-05-04 TUN-6054: Create and upload deb packages to R2
+- 2022-05-03 TUN-6161: Set git user/email for brew core release
+- 2022-05-03 TUN-6166: Fix mocked QUIC transport for UDP proxy manager to return expected error
+- 2022-04-27 TUN-6016: Push local managed tunnels configuration to the edge
 2022.5.0
 - 2022-05-02 TUN-6158: Update golang.org/x/crypto
 - 2022-04-20 VULN-8383 Bump yaml.v2 to yaml.v3
