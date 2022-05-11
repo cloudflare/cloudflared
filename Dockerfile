@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM golang:1.17.1 as build
+FROM --platform=$BUILDPLATFORM golang:1.17.5 as build
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -23,10 +23,18 @@ RUN set -e \
     && ruby docker-env.rb
 
 FROM --platform=$TARGETPLATFORM alpine:edge
+
+# ref: https://github.com/crazy-max/docker-cloudflared/blob/master/Dockerfile#L25
+ENV TUNNEL_METRICS="0.0.0.0:49312" 
+    # TUNNEL_DNS_ADDRESS="0.0.0.0" \
+    # TUNNEL_DNS_PORT="53" \
+    # TUNNEL_DNS_UPSTREAM="https://1.1.1.1/dns-query,https://1.0.0.1/dns-query"
+
 COPY --from=build /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/cloudflared
 
+# ref: https://pkgs.alpinelinux.org/contents?file=dig
 RUN set -e \
-    && apk add --no-cache ca-certificates nano
+    && apk add --no-cache ca-certificates nano curl bind-tools
 
 WORKDIR /root
 
@@ -35,6 +43,9 @@ EXPOSE 53/udp
 # ref: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/ports-and-ips/
 EXPOSE 443
 EXPOSE 7844
+EXPOSE 7844/udp
 
 # Don't set entrypoint, user need edit config file
 CMD ["/bin/sh"]
+
+HEALTHCHECK CMD (curl --fail http://127.0.0.1:49312/ready || dig +short @127.0.0.1 -p 53 cloudflare.com A) || exit 1
