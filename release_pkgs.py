@@ -12,6 +12,7 @@ import subprocess
 import os
 import argparse
 import logging
+import shutil
 from hashlib import sha256
 
 import boto3
@@ -100,13 +101,38 @@ class PkgCreator:
     """
     def create_deb_pkgs(self, release, deb_file):
         self._clean_build_resources()
-        subprocess.call(("reprepro", "includedeb", release, deb_file))
+        subprocess.call(("reprepro", "includedeb", release, deb_file), timeout=120)
 
     """
         This is mostly useful to clear previously built db, dist and pool resources.
     """
     def _clean_build_resources(self):
-        subprocess.call(("reprepro", "clearvanished"))
+        subprocess.call(("reprepro", "clearvanished"), timeout=120)
+
+    # TODO https://jira.cfops.it/browse/TUN-6209 : Sign these packages.
+    def create_rpm_pkgs(self, artifacts_path):
+        self._setup_rpm_pkg_directories(artifacts_path)
+        subprocess.call(("createrepo", "./rpm"), timeout=120)
+
+    """
+        sets up the RPM directories in the following format:
+        - rpm 
+           - aarch64
+           - x86_64
+           - 386
+
+        this assumes the assets are in the format <prefix>-<aarch64/x86_64/386>.rpm
+    """
+    def _setup_rpm_pkg_directories(self, artifacts_path, archs=["aarch64", "x86_64", "386"]):
+        for arch in archs:
+            for root, _ , files in os.walk(artifacts_path):
+                for file in files:
+                    if file.endswith(f"{arch}.rpm"):
+                        new_dir = f"./rpm/{arch}"
+                        os.makedirs(new_dir, exist_ok=True)
+                        old_path = os.path.join(root, file)
+                        new_path = os.path.join(new_dir, file)
+                        shutil.copyfile(old_path, new_path)
 
 """
     Walks through a directory and uploads it's assets to R2.
@@ -167,6 +193,17 @@ def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary
     upload_from_directories(pkg_uploader, "dists", release_version, binary_name)
     upload_from_directories(pkg_uploader, "pool", release_version, binary_name)
 
+def create_rpm_packaging(pkg_creator, pkg_uploader, artifacts_path, release_version, binary_name):
+    print(f"creating rpm pkgs...")
+    pkg_creator.create_rpm_pkgs(artifacts_path)
+
+    print("uploading latest to r2...")
+    upload_from_directories(pkg_uploader, "rpm", None, binary_name)
+
+    print(f"uploading versioned release {release_version} to r2...")
+    upload_from_directories(pkg_uploader, "rpm", release_version, binary_name)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Creates linux releases and uploads them in a packaged format"
@@ -223,3 +260,5 @@ if __name__ == "__main__":
     pkg_uploader = PkgUploader(args.account, args.bucket, args.id, args.secret)
     create_deb_packaging(pkg_creator, pkg_uploader, args.deb_based_releases, args.gpg_key_id, args.binary, 
             args.archs, "main", args.release_tag)
+    
+    create_rpm_packaging(pkg_creator, pkg_uploader, "./built_artifacts", args.release_tag, args.binary )

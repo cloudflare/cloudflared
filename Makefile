@@ -261,6 +261,10 @@ github-release: cloudflared
 github-release-built-pkgs:
 	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION)
 
+.PHONY: release-pkgs-linux
+release-pkgs-linux:
+	python3 ./release_pkgs.py
+
 .PHONY: github-message
 github-message:
 	python3 github_message.py --release-version $(VERSION)
