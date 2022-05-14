@@ -1,3 +1,25 @@
+2022.5.1
+- 2022-05-06 TUN-6146: Release_pkgs is now a generic command line script
+- 2022-05-06 TUN-6185: Fix tcpOverWSOriginService not using original scheme for String representation
+- 2022-05-05 TUN-6175: Simply debian packaging by structural upload
+- 2022-05-05 TUN-5945: Added support for Ubuntu releases
+- 2022-05-04 TUN-6054: Create and upload deb packages to R2
+- 2022-05-03 TUN-6161: Set git user/email for brew core release
+- 2022-05-03 TUN-6166: Fix mocked QUIC transport for UDP proxy manager to return expected error
+- 2022-04-27 TUN-6016: Push local managed tunnels configuration to the edge
+2022.5.0
+- 2022-05-02 TUN-6158: Update golang.org/x/crypto
+- 2022-04-20 VULN-8383 Bump yaml.v2 to yaml.v3
+- 2022-04-21 TUN-6123: For a given connection with edge, close all datagram sessions through this connection when it's closed
+- 2022-04-20 TUN-6015: Add RPC method for pushing local config
+- 2022-04-21 TUN-6130: Fix vendoring due to case sensitive typo in package
+- 2022-04-27 TUN-6142: Add tunnel details support to RPC
+- 2022-04-28 TUN-6014: Add remote config flag as default feature
+- 2022-04-12 TUN-6000: Another fix for publishing to brew core
+- 2022-04-11 TUN-5990: Add otlp span export to response header
+- 2022-04-19 TUN-6070: First connection retries other edge IPs if the error is quic timeout(likely due to firewall blocking UDP)
+- 2022-04-11 TUN-6030: Add ttfb span for origin http request
+
 2022.4.1
 - 2022-04-11 TUN-6035: Reduce buffer size when proxying data
 - 2022-04-11 TUN-6038: Reduce buffer size used for proxying data

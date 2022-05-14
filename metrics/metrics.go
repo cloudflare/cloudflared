@@ -23,7 +23,7 @@ const (
 )
 
 type orchestrator interface {
-	GetConfigJSON() ([]byte, error)
+	GetVersionedConfigJSON() ([]byte, error)
 }
 
 func newMetricsHandler(
@@ -47,7 +47,7 @@ func newMetricsHandler(
 	})
 	if orchestrator != nil {
 		router.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-			json, err := orchestrator.GetConfigJSON()
+			json, err := orchestrator.GetVersionedConfigJSON()
 			if err != nil {
 				w.WriteHeader(500)
 				_, _ = fmt.Fprintf(w, "ERR: %v", err)

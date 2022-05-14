@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gobwas/ws/wsutil"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,18 +167,26 @@ type mockNamedTunnelRPCClient struct {
 	unregistered chan struct{}
 }
 
+func (mc mockNamedTunnelRPCClient) SendLocalConfiguration(c context.Context, config []byte, observer *Observer) error {
+	return nil
+}
+
 func (mc mockNamedTunnelRPCClient) RegisterConnection(
 	c context.Context,
 	properties *NamedTunnelProperties,
 	options *tunnelpogs.ConnectionOptions,
 	connIndex uint8,
 	observer *Observer,
-) error {
+) (*tunnelpogs.ConnectionDetails, error) {
 	if mc.shouldFail != nil {
-		return mc.shouldFail
+		return nil, mc.shouldFail
 	}
 	close(mc.registered)
-	return nil
+	return &tunnelpogs.ConnectionDetails{
+		Location:                "LIS",
+		UUID:                    uuid.New(),
+		TunnelIsRemotelyManaged: false,
+	}, nil
 }
 
 func (mc mockNamedTunnelRPCClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
@@ -477,7 +486,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 
 	select {
 	case <-rpcClientFactory.registered:
-		break //ok
+		break // ok
 	case <-time.Tick(time.Second):
 		t.Fatal("timeout out waiting for registration")
 	}
@@ -487,7 +496,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 
 	select {
 	case <-rpcClientFactory.unregistered:
-		break //ok
+		break // ok
 	case <-time.Tick(time.Second):
 		t.Fatal("timeout out waiting for unregistered signal")
 	}

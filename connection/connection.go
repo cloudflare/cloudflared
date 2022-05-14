@@ -30,6 +30,7 @@ var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, 
 
 type Orchestrator interface {
 	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
+	GetConfigJSON() ([]byte, error)
 	GetOriginProxy() (OriginProxy, error)
 }
 

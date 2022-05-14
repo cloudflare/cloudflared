@@ -19,8 +19,8 @@ eval "$(tmp/homebrew/bin/brew shellenv)"
 brew update --force --quiet
 chmod -R go-w "$(brew --prefix)/share/zsh"
 
-git config user.name "cloudflare-warp-bot"
-git config user.email "warp-bot@cloudflare.com"
+git config --global user.name "cloudflare-warp-bot"
+git config --global user.email "warp-bot@cloudflare.com"
 
 # bump formula pr
-brew bump-formula-pr cloudflared --version="$VERSION"
+brew bump-formula-pr cloudflared --version="$VERSION" --no-browse

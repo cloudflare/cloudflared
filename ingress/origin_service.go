@@ -109,6 +109,7 @@ func (o rawTCPService) MarshalJSON() ([]byte, error) {
 // tcpOverWSService models TCP origins serving eyeballs connecting over websocket, such as
 // cloudflared access commands.
 type tcpOverWSService struct {
+	scheme        string
 	dest          string
 	isBastion     bool
 	streamHandler streamHandlerFunc
@@ -130,7 +131,8 @@ func newTCPOverWSService(url *url.URL) *tcpOverWSService {
 		addPortIfMissing(url, 7864) // just a random port since there isn't a default in this case
 	}
 	return &tcpOverWSService{
-		dest: url.Host,
+		scheme: url.Scheme,
+		dest:   url.Host,
 	}
 }
 
@@ -160,7 +162,12 @@ func (o *tcpOverWSService) String() string {
 	if o.isBastion {
 		return ServiceBastion
 	}
-	return o.dest
+
+	if o.scheme != "" {
+		return fmt.Sprintf("%s://%s", o.scheme, o.dest)
+	} else {
+		return o.dest
+	}
 }
 
 func (o *tcpOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {

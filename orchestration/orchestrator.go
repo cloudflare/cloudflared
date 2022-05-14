@@ -54,7 +54,7 @@ func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag,
 	return o, nil
 }
 
-// Update creates a new proxy with the new ingress rules
+// UpdateConfig creates a new proxy with the new ingress rules
 func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
 	o.lock.Lock()
 	defer o.lock.Unlock()
@@ -63,12 +63,12 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 		o.log.Debug().
 			Int32("current_version", o.currentVersion).
 			Int32("received_version", version).
-			Msg("Current version is equal or newer than receivied version")
+			Msg("Current version is equal or newer than received version")
 		return &tunnelpogs.UpdateConfigurationResponse{
 			LastAppliedVersion: o.currentVersion,
 		}
 	}
-	var newConf newConfig
+	var newConf newRemoteConfig
 	if err := json.Unmarshal(config, &newConf); err != nil {
 		o.log.Err(err).
 			Int32("version", version).
@@ -131,8 +131,24 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRoutingEn
 	return nil
 }
 
-// GetConfigJSON returns the current version and configuration as JSON
+// GetConfigJSON returns the current json serialization of the config as the edge understands it
 func (o *Orchestrator) GetConfigJSON() ([]byte, error) {
+	o.lock.RLock()
+	defer o.lock.RUnlock()
+
+	c := &newLocalConfig{
+		RemoteConfig: ingress.RemoteConfig{
+			Ingress:     *o.config.Ingress,
+			WarpRouting: config.WarpRoutingConfig{Enabled: o.config.WarpRoutingEnabled},
+		},
+		ConfigurationFlags: o.config.ConfigurationFlags,
+	}
+
+	return json.Marshal(c)
+}
+
+// GetVersionedConfigJSON returns the current version and configuration as JSON
+func (o *Orchestrator) GetVersionedConfigJSON() ([]byte, error) {
 	o.lock.RLock()
 	defer o.lock.RUnlock()
 	var currentConfiguration = struct {

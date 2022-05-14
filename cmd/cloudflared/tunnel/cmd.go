@@ -343,13 +343,13 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, dynamicConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
+	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
 	}
 
-	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, tunnelConfig.Log)
 	if err != nil {
 		return err
 	}
@@ -388,7 +388,7 @@ func StartServer(
 			info.Version(),
 			hostname,
 			metricsListener.Addr().String(),
-			dynamicConfig.Ingress,
+			orchestratorConfig.Ingress,
 			tunnelConfig.HAConnections,
 		)
 		app := tunnelUI.Launch(ctx, log, logTransport)

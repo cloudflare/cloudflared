@@ -40,14 +40,19 @@ stretch: &stretch
       - libffi-dev
       - python3-setuptools
       - python3-pip
+      - reprepro
+      - createrepo
     pre-cache: &github_release_pkgs_pre_cache
       - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
       - chmod a+x /usr/local/bin/wixl
       - pip3 install pynacl==1.4.0
       - pip3 install pygithub==1.55
+      - pip3 install boto3==1.22.9
     post-cache:
       # build all packages (except macos and FIPS) and move them to /cfsetup/built_artifacts
       - ./build-packages.sh
+      # publish packages to linux repos
+      # TODO TUN-6180: Uncomment this - make release-pkgs-linux
       # release the packages built and moved to /cfsetup/built_artifacts
       - make github-release-built-pkgs
   # handle FIPS separately so that we built with gofips compiler

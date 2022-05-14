@@ -47,18 +47,26 @@ type RemoteConfig struct {
 	WarpRouting config.WarpRoutingConfig
 }
 
-type remoteConfigJSON struct {
-	GlobalOriginRequest config.OriginRequestConfig      `json:"originRequest"`
+type RemoteConfigJSON struct {
+	GlobalOriginRequest *config.OriginRequestConfig     `json:"originRequest,omitempty"`
 	IngressRules        []config.UnvalidatedIngressRule `json:"ingress"`
 	WarpRouting         config.WarpRoutingConfig        `json:"warp-routing"`
 }
 
 func (rc *RemoteConfig) UnmarshalJSON(b []byte) error {
-	var rawConfig remoteConfigJSON
+	var rawConfig RemoteConfigJSON
+
 	if err := json.Unmarshal(b, &rawConfig); err != nil {
 		return err
 	}
-	ingress, err := validateIngress(rawConfig.IngressRules, originRequestFromConfig(rawConfig.GlobalOriginRequest))
+
+	// if nil, just assume the default values.
+	globalOriginRequestConfig := rawConfig.GlobalOriginRequest
+	if globalOriginRequestConfig == nil {
+		globalOriginRequestConfig = &config.OriginRequestConfig{}
+	}
+
+	ingress, err := validateIngress(rawConfig.IngressRules, originRequestFromConfig(*globalOriginRequestConfig))
 	if err != nil {
 		return err
 	}
@@ -386,4 +394,92 @@ func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfi
 	cfg.setProxyType(overrides)
 	cfg.setIPRules(overrides)
 	return cfg
+}
+
+func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig {
+	var connectTimeout *config.CustomDuration
+	var tlsTimeout *config.CustomDuration
+	var tcpKeepAlive *config.CustomDuration
+	var keepAliveConnections *int
+	var keepAliveTimeout *config.CustomDuration
+	var proxyAddress *string
+
+	if c.ConnectTimeout != defaultConnectTimeout {
+		connectTimeout = &c.ConnectTimeout
+	}
+	if c.TLSTimeout != defaultTLSTimeout {
+		tlsTimeout = &c.TLSTimeout
+	}
+	if c.TCPKeepAlive != defaultTCPKeepAlive {
+		tcpKeepAlive = &c.TCPKeepAlive
+	}
+	if c.KeepAliveConnections != defaultKeepAliveConnections {
+		keepAliveConnections = &c.KeepAliveConnections
+	}
+	if c.KeepAliveTimeout != defaultKeepAliveTimeout {
+		keepAliveTimeout = &c.KeepAliveTimeout
+	}
+	if c.ProxyAddress != defaultProxyAddress {
+		proxyAddress = &c.ProxyAddress
+	}
+
+	return config.OriginRequestConfig{
+		ConnectTimeout:         connectTimeout,
+		TLSTimeout:             tlsTimeout,
+		TCPKeepAlive:           tcpKeepAlive,
+		NoHappyEyeballs:        defaultBoolToNil(c.NoHappyEyeballs),
+		KeepAliveConnections:   keepAliveConnections,
+		KeepAliveTimeout:       keepAliveTimeout,
+		HTTPHostHeader:         emptyStringToNil(c.HTTPHostHeader),
+		OriginServerName:       emptyStringToNil(c.OriginServerName),
+		CAPool:                 emptyStringToNil(c.CAPool),
+		NoTLSVerify:            defaultBoolToNil(c.NoTLSVerify),
+		DisableChunkedEncoding: defaultBoolToNil(c.DisableChunkedEncoding),
+		BastionMode:            defaultBoolToNil(c.BastionMode),
+		ProxyAddress:           proxyAddress,
+		ProxyPort:              zeroUIntToNil(c.ProxyPort),
+		ProxyType:              emptyStringToNil(c.ProxyType),
+		IPRules:                convertToRawIPRules(c.IPRules),
+	}
+}
+
+func convertToRawIPRules(ipRules []ipaccess.Rule) []config.IngressIPRule {
+	result := make([]config.IngressIPRule, 0)
+	for _, r := range ipRules {
+		cidr := r.StringCIDR()
+
+		newRule := config.IngressIPRule{
+			Prefix: &cidr,
+			Ports:  r.Ports(),
+			Allow:  r.RulePolicy(),
+		}
+
+		result = append(result, newRule)
+	}
+
+	return result
+}
+
+func defaultBoolToNil(b bool) *bool {
+	if b == false {
+		return nil
+	}
+
+	return &b
+}
+
+func emptyStringToNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+
+	return &s
+}
+
+func zeroUIntToNil(v uint) *uint {
+	if v == 0 {
+		return nil
+	}
+
+	return &v
 }
