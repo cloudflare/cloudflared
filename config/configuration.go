@@ -177,11 +177,11 @@ func ValidateUrl(c *cli.Context, allowURLFromArgs bool) (*url.URL, error) {
 }
 
 type UnvalidatedIngressRule struct {
-	Hostname      string              `json:"hostname,omitempty"`
-	Path          string              `json:"path,omitempty"`
-	Service       string              `json:"service,omitempty"`
-	Location      string              `json:"location,omitempty"`
-	OriginRequest OriginRequestConfig `yaml:"originRequest" json:"originRequest"`
+	Hostname      string              `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	Path          string              `yaml:"path,omitempty" json:"path,omitempty"`
+	Service       string              `yaml:"service,omitempty" json:"service,omitempty"`
+	Location      string              `yaml:"location,omitempty" json:"location,omitempty"`
+	OriginRequest OriginRequestConfig `yaml:"originRequest,omitempty" yaml:"originRequest" json:"originRequest"`
 }
 
 // OriginRequestConfig is a set of optional fields that users may set to
@@ -193,41 +193,41 @@ type UnvalidatedIngressRule struct {
 // - To specify a time.Duration in json, use int64 of the nanoseconds
 type OriginRequestConfig struct {
 	// HTTP proxy timeout for establishing a new connection
-	ConnectTimeout *CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
+	ConnectTimeout *CustomDuration `yaml:"connectTimeout,omitempty" json:"connectTimeout,omitempty"`
 	// HTTP proxy timeout for completing a TLS handshake
-	TLSTimeout *CustomDuration `yaml:"tlsTimeout" json:"tlsTimeout,omitempty"`
+	TLSTimeout *CustomDuration `yaml:"tlsTimeout,omitempty" json:"tlsTimeout,omitempty"`
 	// HTTP proxy TCP keepalive duration
-	TCPKeepAlive *CustomDuration `yaml:"tcpKeepAlive" json:"tcpKeepAlive,omitempty"`
+	TCPKeepAlive *CustomDuration `yaml:"tcpKeepAlive,omitempty" json:"tcpKeepAlive,omitempty"`
 	// HTTP proxy should disable "happy eyeballs" for IPv4/v6 fallback
-	NoHappyEyeballs *bool `yaml:"noHappyEyeballs" json:"noHappyEyeballs,omitempty"`
+	NoHappyEyeballs *bool `yaml:"noHappyEyeballs,omitempty" json:"noHappyEyeballs,omitempty"`
 	// HTTP proxy maximum keepalive connection pool size
-	KeepAliveConnections *int `yaml:"keepAliveConnections" json:"keepAliveConnections,omitempty"`
+	KeepAliveConnections *int `yaml:"keepAliveConnections,omitempty" json:"keepAliveConnections,omitempty"`
 	// HTTP proxy timeout for closing an idle connection
-	KeepAliveTimeout *CustomDuration `yaml:"keepAliveTimeout" json:"keepAliveTimeout,omitempty"`
+	KeepAliveTimeout *CustomDuration `yaml:"keepAliveTimeout,omitempty" json:"keepAliveTimeout,omitempty"`
 	// Sets the HTTP Host header for the local webserver.
-	HTTPHostHeader *string `yaml:"httpHostHeader" json:"httpHostHeader,omitempty"`
+	HTTPHostHeader *string `yaml:"httpHostHeader,omitempty" json:"httpHostHeader,omitempty"`
 	// Hostname on the origin server certificate.
-	OriginServerName *string `yaml:"originServerName" json:"originServerName,omitempty"`
+	OriginServerName *string `yaml:"originServerName,omitempty" json:"originServerName,omitempty"`
 	// Path to the CA for the certificate of your origin.
 	// This option should be used only if your certificate is not signed by Cloudflare.
-	CAPool *string `yaml:"caPool" json:"caPool,omitempty"`
+	CAPool *string `yaml:"caPool,omitempty" json:"caPool,omitempty"`
 	// Disables TLS verification of the certificate presented by your origin.
 	// Will allow any certificate from the origin to be accepted.
 	// Note: The connection from your machine to Cloudflare's Edge is still encrypted.
-	NoTLSVerify *bool `yaml:"noTLSVerify" json:"noTLSVerify,omitempty"`
+	NoTLSVerify *bool `yaml:"noTLSVerify,omitempty" json:"noTLSVerify,omitempty"`
 	// Disables chunked transfer encoding.
 	// Useful if you are running a WSGI server.
-	DisableChunkedEncoding *bool `yaml:"disableChunkedEncoding" json:"disableChunkedEncoding,omitempty"`
+	DisableChunkedEncoding *bool `yaml:"disableChunkedEncoding,omitempty" json:"disableChunkedEncoding,omitempty"`
 	// Runs as jump host
-	BastionMode *bool `yaml:"bastionMode" json:"bastionMode,omitempty"`
+	BastionMode *bool `yaml:"bastionMode,omitempty" json:"bastionMode,omitempty"`
 	// Listen address for the proxy.
-	ProxyAddress *string `yaml:"proxyAddress" json:"proxyAddress,omitempty"`
+	ProxyAddress *string `yaml:"proxyAddress,omitempty" json:"proxyAddress,omitempty"`
 	// Listen port for the proxy.
-	ProxyPort *uint `yaml:"proxyPort" json:"proxyPort,omitempty"`
+	ProxyPort *uint `yaml:"proxyPort,omitempty" json:"proxyPort,omitempty"`
 	// Valid options are 'socks' or empty.
-	ProxyType *string `yaml:"proxyType" json:"proxyType,omitempty"`
+	ProxyType *string `yaml:"proxyType,omitempty" json:"proxyType,omitempty"`
 	// IP rules for the proxy service
-	IPRules []IngressIPRule `yaml:"ipRules" json:"ipRules,omitempty"`
+	IPRules []IngressIPRule `yaml:"ipRules,omitempty" json:"ipRules,omitempty"`
 }
 
 type IngressIPRule struct {
