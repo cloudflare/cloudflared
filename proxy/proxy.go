@@ -203,6 +203,11 @@ func (p *Proxy) proxyHTTPRequest(
 	tracing.EndWithStatus(ttfbSpan, codes.Ok, resp.Status)
 	defer resp.Body.Close()
 
+	// resp headers can be nil
+	if resp.Header == nil {
+		resp.Header = make(http.Header)
+	}
+
 	// Add spans to response header (if available)
 	tr.AddSpans(resp.Header, p.log)
 

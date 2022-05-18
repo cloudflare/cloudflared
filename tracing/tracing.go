@@ -103,6 +103,11 @@ func (cft *TracedRequest) Tracer() trace.Tracer {
 
 // Spans returns the spans as base64 encoded protobuf otlp traces.
 func (cft *TracedRequest) AddSpans(headers http.Header, log *zerolog.Logger) {
+	if headers == nil {
+		log.Error().Msgf("provided headers map is nil")
+		return
+	}
+
 	enc, err := cft.exporter.Spans()
 	switch err {
 	case nil:
@@ -121,6 +126,7 @@ func (cft *TracedRequest) AddSpans(headers http.Header, log *zerolog.Logger) {
 		log.Error().Msgf("no traces provided and no error from exporter")
 		return
 	}
+
 	headers[CanonicalCloudflaredTracingHeader] = []string{enc}
 }
 
