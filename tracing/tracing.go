@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"runtime"
@@ -29,6 +30,9 @@ const (
 	TracerContextNameOverride = "uber-trace-id"
 
 	IntCloudflaredTracingHeader = "cf-int-cloudflared-tracing"
+
+	MaxErrorDescriptionLen = 100
+	traceHttpStatusCodeKey = "upstreamStatusCode"
 )
 
 var (
@@ -130,12 +134,35 @@ func (cft *TracedRequest) AddSpans(headers http.Header, log *zerolog.Logger) {
 	headers[CanonicalCloudflaredTracingHeader] = []string{enc}
 }
 
-// EndWithStatus will set a status for the span and then end it.
-func EndWithStatus(span trace.Span, code codes.Code, status string) {
+// EndWithErrorStatus will set a status for the span and then end it.
+func EndWithErrorStatus(span trace.Span, err error) {
+	endSpan(span, -1, codes.Error, err)
+}
+
+// EndWithStatusCode will set a status for the span and then end it.
+func EndWithStatusCode(span trace.Span, statusCode int) {
+	endSpan(span, statusCode, codes.Ok, nil)
+}
+
+// EndWithErrorStatus will set a status for the span and then end it.
+func endSpan(span trace.Span, upstreamStatusCode int, spanStatusCode codes.Code, err error) {
 	if span == nil {
 		return
 	}
-	span.SetStatus(code, status)
+
+	if upstreamStatusCode > 0 {
+		span.SetAttributes(attribute.Int(traceHttpStatusCodeKey, upstreamStatusCode))
+	}
+
+	// add error to status buf cap description
+	errDescription := ""
+	if err != nil {
+		errDescription = err.Error()
+		l := int(math.Min(float64(len(errDescription)), MaxErrorDescriptionLen))
+		errDescription = errDescription[:l]
+	}
+
+	span.SetStatus(spanStatusCode, errDescription)
 	span.End()
 }
 

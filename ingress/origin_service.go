@@ -238,20 +238,15 @@ func (o helloWorld) MarshalJSON() ([]byte, error) {
 // statusCode is an OriginService that just responds with a given HTTP status.
 // Typical use-case is "user wants the catch-all rule to just respond 404".
 type statusCode struct {
-	resp *http.Response
+	code int
 }
 
 func newStatusCode(status int) statusCode {
-	resp := &http.Response{
-		StatusCode: status,
-		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		Body:       new(NopReadCloser),
-	}
-	return statusCode{resp: resp}
+	return statusCode{code: status}
 }
 
 func (o *statusCode) String() string {
-	return fmt.Sprintf("http_status:%d", o.resp.StatusCode)
+	return fmt.Sprintf("http_status:%d", o.code)
 }
 
 func (o *statusCode) start(

@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudflare/cloudflared/carrier"
@@ -197,10 +196,11 @@ func (p *Proxy) proxyHTTPRequest(
 	_, ttfbSpan := tr.Tracer().Start(tr.Context(), "ttfb_origin")
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
-		tracing.EndWithStatus(ttfbSpan, codes.Error, "")
+		tracing.EndWithErrorStatus(ttfbSpan, err)
 		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
 	}
-	tracing.EndWithStatus(ttfbSpan, codes.Ok, resp.Status)
+
+	tracing.EndWithStatusCode(ttfbSpan, resp.StatusCode)
 	defer resp.Body.Close()
 
 	// resp headers can be nil

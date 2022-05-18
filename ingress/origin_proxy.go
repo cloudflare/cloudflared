@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 
@@ -49,7 +50,13 @@ func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
-	return o.resp, nil
+	resp := &http.Response{
+		StatusCode: o.code,
+		Status:     fmt.Sprintf("%d %s", o.code, http.StatusText(o.code)),
+		Body:       new(NopReadCloser),
+	}
+
+	return resp, nil
 }
 
 func (o *rawTCPService) EstablishConnection(dest string) (OriginConnection, error) {
