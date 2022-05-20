@@ -13,7 +13,7 @@ import (
 
 const (
 	// Used to discover HA origintunneld servers
-	srvService = "origintunneld"
+	srvService = "v2-origintunneld"
 	srvProto   = "tcp"
 	srvName    = "argotunnel.com"
 
@@ -115,6 +115,9 @@ func edgeDiscovery(log *zerolog.Logger, srvService string) ([][]*EdgeAddr, error
 		if err != nil {
 			return nil, err
 		}
+		for _, e := range edgeAddrs {
+			log.Debug().Msgf("Edge Address: %+v", *e)
+		}
 		resolvedAddrPerCNAME = append(resolvedAddrPerCNAME, edgeAddrs)
 	}
 
@@ -187,7 +190,6 @@ func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*EdgeAddr) {
 			UDP:       udpAddr,
 			IPVersion: version,
 		})
-
 	}
 	return
 }

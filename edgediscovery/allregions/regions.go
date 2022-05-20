@@ -18,7 +18,7 @@ type Regions struct {
 // ------------------------------------
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
-func ResolveEdge(log *zerolog.Logger, region string) (*Regions, error) {
+func ResolveEdge(log *zerolog.Logger, region string, overrideIPVersion ConfigIPVersion) (*Regions, error) {
 	edgeAddrs, err := edgeDiscovery(log, getRegionalServiceName(region))
 	if err != nil {
 		return nil, err
@@ -27,8 +27,8 @@ func ResolveEdge(log *zerolog.Logger, region string) (*Regions, error) {
 		return nil, fmt.Errorf("expected at least 2 Cloudflare Regions regions, but SRV only returned %v", len(edgeAddrs))
 	}
 	return &Regions{
-		region1: NewRegion(edgeAddrs[0]),
-		region2: NewRegion(edgeAddrs[1]),
+		region1: NewRegion(edgeAddrs[0], overrideIPVersion),
+		region2: NewRegion(edgeAddrs[1], overrideIPVersion),
 	}, nil
 }
 
@@ -56,8 +56,8 @@ func NewNoResolve(addrs []*EdgeAddr) *Regions {
 	}
 
 	return &Regions{
-		region1: NewRegion(region1),
-		region2: NewRegion(region2),
+		region1: NewRegion(region1, Auto),
+		region2: NewRegion(region2, Auto),
 	}
 }
 
@@ -95,14 +95,12 @@ func (rs *Regions) GetUnusedAddr(excluding *EdgeAddr, connID int) *EdgeAddr {
 // getAddrs tries to grab address form `first` region, then `second` region
 // this is an unrolled loop over 2 element array
 func getAddrs(excluding *EdgeAddr, connID int, first *Region, second *Region) *EdgeAddr {
-	addr := first.GetUnusedIP(excluding)
+	addr := first.AssignAnyAddress(connID, excluding)
 	if addr != nil {
-		first.Use(addr, connID)
 		return addr
 	}
-	addr = second.GetUnusedIP(excluding)
+	addr = second.AssignAnyAddress(connID, excluding)
 	if addr != nil {
-		second.Use(addr, connID)
 		return addr
 	}
 
@@ -116,18 +114,18 @@ func (rs *Regions) AvailableAddrs() int {
 
 // GiveBack the address so that other connections can use it.
 // Returns true if the address is in this edge.
-func (rs *Regions) GiveBack(addr *EdgeAddr) bool {
-	if found := rs.region1.GiveBack(addr); found {
+func (rs *Regions) GiveBack(addr *EdgeAddr, hasConnectivityError bool) bool {
+	if found := rs.region1.GiveBack(addr, hasConnectivityError); found {
 		return found
 	}
-	return rs.region2.GiveBack(addr)
+	return rs.region2.GiveBack(addr, hasConnectivityError)
 }
 
 // Return regionalized service name if `region` isn't empty, otherwise return the global service name for origintunneld
 func getRegionalServiceName(region string) string {
 	if region != "" {
-		return region + "-" + srvService // Example: `us-origintunneld`
+		return region + "-" + srvService // Example: `us-v2-origintunneld`
 	}
 
-	return srvService // Global service is just `origintunneld`
+	return srvService // Global service is just `v2-origintunneld`
 }

@@ -1,134 +1,215 @@
 package allregions
 
 import (
-	"net"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-var (
-	addr0 = EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.0"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.0"),
-			Port: 8000,
-			Zone: "",
-		},
+func makeRegions(addrs []*EdgeAddr, mode ConfigIPVersion) Regions {
+	r1addrs := make([]*EdgeAddr, 0)
+	r2addrs := make([]*EdgeAddr, 0)
+	for i, addr := range addrs {
+		if i%2 == 0 {
+			r1addrs = append(r1addrs, addr)
+		} else {
+			r2addrs = append(r2addrs, addr)
+		}
 	}
-	addr1 = EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.1"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.1"),
-			Port: 8000,
-			Zone: "",
-		},
-	}
-	addr2 = EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.2"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.2"),
-			Port: 8000,
-			Zone: "",
-		},
-	}
-	addr3 = EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.3"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.3"),
-			Port: 8000,
-			Zone: "",
-		},
-	}
-)
-
-func makeRegions() Regions {
-	r1 := NewRegion([]*EdgeAddr{&addr0, &addr1})
-	r2 := NewRegion([]*EdgeAddr{&addr2, &addr3})
+	r1 := NewRegion(r1addrs, mode)
+	r2 := NewRegion(r2addrs, mode)
 	return Regions{region1: r1, region2: r2}
 }
 
 func TestRegions_AddrUsedBy(t *testing.T) {
-	rs := makeRegions()
-	addr1 := rs.GetUnusedAddr(nil, 1)
-	assert.Equal(t, addr1, rs.AddrUsedBy(1))
-	addr2 := rs.GetUnusedAddr(nil, 2)
-	assert.Equal(t, addr2, rs.AddrUsedBy(2))
-	addr3 := rs.GetUnusedAddr(nil, 3)
-	assert.Equal(t, addr3, rs.AddrUsedBy(3))
+	tests := []struct {
+		name  string
+		addrs []*EdgeAddr
+		mode  ConfigIPVersion
+	}{
+		{
+			name:  "IPv4 addresses with IPv4Only",
+			addrs: v4Addrs,
+			mode:  IPv4Only,
+		},
+		{
+			name:  "IPv6 addresses with IPv6Only",
+			addrs: v6Addrs,
+			mode:  IPv6Only,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := makeRegions(tt.addrs, tt.mode)
+			addr1 := rs.GetUnusedAddr(nil, 1)
+			assert.Equal(t, addr1, rs.AddrUsedBy(1))
+			addr2 := rs.GetUnusedAddr(nil, 2)
+			assert.Equal(t, addr2, rs.AddrUsedBy(2))
+			addr3 := rs.GetUnusedAddr(nil, 3)
+			assert.Equal(t, addr3, rs.AddrUsedBy(3))
+		})
+	}
 }
 
 func TestRegions_Giveback_Region1(t *testing.T) {
-	rs := makeRegions()
-	rs.region1.Use(&addr0, 0)
-	rs.region1.Use(&addr1, 1)
-	rs.region2.Use(&addr2, 2)
-	rs.region2.Use(&addr3, 3)
+	tests := []struct {
+		name  string
+		addrs []*EdgeAddr
+		mode  ConfigIPVersion
+	}{
+		{
+			name:  "IPv4 addresses with IPv4Only",
+			addrs: v4Addrs,
+			mode:  IPv4Only,
+		},
+		{
+			name:  "IPv6 addresses with IPv6Only",
+			addrs: v6Addrs,
+			mode:  IPv6Only,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := makeRegions(tt.addrs, tt.mode)
+			addr := rs.region1.AssignAnyAddress(0, nil)
+			rs.region1.AssignAnyAddress(1, nil)
+			rs.region2.AssignAnyAddress(2, nil)
+			rs.region2.AssignAnyAddress(3, nil)
 
-	assert.Equal(t, 0, rs.AvailableAddrs())
+			assert.Equal(t, 0, rs.AvailableAddrs())
 
-	rs.GiveBack(&addr0)
-	assert.Equal(t, &addr0, rs.GetUnusedAddr(nil, 3))
+			rs.GiveBack(addr, false)
+			assert.Equal(t, addr, rs.GetUnusedAddr(nil, 0))
+		})
+	}
 }
 
 func TestRegions_Giveback_Region2(t *testing.T) {
-	rs := makeRegions()
-	rs.region1.Use(&addr0, 0)
-	rs.region1.Use(&addr1, 1)
-	rs.region2.Use(&addr2, 2)
-	rs.region2.Use(&addr3, 3)
+	tests := []struct {
+		name  string
+		addrs []*EdgeAddr
+		mode  ConfigIPVersion
+	}{
+		{
+			name:  "IPv4 addresses with IPv4Only",
+			addrs: v4Addrs,
+			mode:  IPv4Only,
+		},
+		{
+			name:  "IPv6 addresses with IPv6Only",
+			addrs: v6Addrs,
+			mode:  IPv6Only,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := makeRegions(tt.addrs, tt.mode)
+			rs.region1.AssignAnyAddress(0, nil)
+			rs.region1.AssignAnyAddress(1, nil)
+			addr := rs.region2.AssignAnyAddress(2, nil)
+			rs.region2.AssignAnyAddress(3, nil)
 
-	assert.Equal(t, 0, rs.AvailableAddrs())
+			assert.Equal(t, 0, rs.AvailableAddrs())
 
-	rs.GiveBack(&addr2)
-	assert.Equal(t, &addr2, rs.GetUnusedAddr(nil, 2))
+			rs.GiveBack(addr, false)
+			assert.Equal(t, addr, rs.GetUnusedAddr(nil, 2))
+		})
+	}
 }
 
 func TestRegions_GetUnusedAddr_OneAddrLeft(t *testing.T) {
-	rs := makeRegions()
+	tests := []struct {
+		name  string
+		addrs []*EdgeAddr
+		mode  ConfigIPVersion
+	}{
+		{
+			name:  "IPv4 addresses with IPv4Only",
+			addrs: v4Addrs,
+			mode:  IPv4Only,
+		},
+		{
+			name:  "IPv6 addresses with IPv6Only",
+			addrs: v6Addrs,
+			mode:  IPv6Only,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := makeRegions(tt.addrs, tt.mode)
+			rs.region1.AssignAnyAddress(0, nil)
+			rs.region1.AssignAnyAddress(1, nil)
+			rs.region2.AssignAnyAddress(2, nil)
+			addr := rs.region2.active.GetUnusedIP(nil)
 
-	rs.region1.Use(&addr0, 0)
-	rs.region1.Use(&addr1, 1)
-	rs.region2.Use(&addr2, 2)
-
-	assert.Equal(t, 1, rs.AvailableAddrs())
-	assert.Equal(t, &addr3, rs.GetUnusedAddr(nil, 3))
+			assert.Equal(t, 1, rs.AvailableAddrs())
+			assert.Equal(t, addr, rs.GetUnusedAddr(nil, 3))
+		})
+	}
 }
 
 func TestRegions_GetUnusedAddr_Excluding_Region1(t *testing.T) {
-	rs := makeRegions()
+	tests := []struct {
+		name  string
+		addrs []*EdgeAddr
+		mode  ConfigIPVersion
+	}{
+		{
+			name:  "IPv4 addresses with IPv4Only",
+			addrs: v4Addrs,
+			mode:  IPv4Only,
+		},
+		{
+			name:  "IPv6 addresses with IPv6Only",
+			addrs: v6Addrs,
+			mode:  IPv6Only,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := makeRegions(tt.addrs, tt.mode)
 
-	rs.region1.Use(&addr0, 0)
-	rs.region1.Use(&addr1, 1)
+			rs.region1.AssignAnyAddress(0, nil)
+			rs.region1.AssignAnyAddress(1, nil)
+			addr := rs.region2.active.GetUnusedIP(nil)
+			a2 := rs.region2.active.GetUnusedIP(addr)
 
-	assert.Equal(t, 2, rs.AvailableAddrs())
-	assert.Equal(t, &addr3, rs.GetUnusedAddr(&addr2, 3))
+			assert.Equal(t, 2, rs.AvailableAddrs())
+			assert.Equal(t, addr, rs.GetUnusedAddr(a2, 3))
+		})
+	}
 }
 
 func TestRegions_GetUnusedAddr_Excluding_Region2(t *testing.T) {
-	rs := makeRegions()
+	tests := []struct {
+		name  string
+		addrs []*EdgeAddr
+		mode  ConfigIPVersion
+	}{
+		{
+			name:  "IPv4 addresses with IPv4Only",
+			addrs: v4Addrs,
+			mode:  IPv4Only,
+		},
+		{
+			name:  "IPv6 addresses with IPv6Only",
+			addrs: v6Addrs,
+			mode:  IPv6Only,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := makeRegions(tt.addrs, tt.mode)
 
-	rs.region2.Use(&addr2, 0)
-	rs.region2.Use(&addr3, 1)
+			rs.region2.AssignAnyAddress(0, nil)
+			rs.region2.AssignAnyAddress(1, nil)
+			addr := rs.region1.active.GetUnusedIP(nil)
+			a2 := rs.region1.active.GetUnusedIP(addr)
 
-	assert.Equal(t, 2, rs.AvailableAddrs())
-	assert.Equal(t, &addr1, rs.GetUnusedAddr(&addr0, 1))
+			assert.Equal(t, 2, rs.AvailableAddrs())
+			assert.Equal(t, addr, rs.GetUnusedAddr(a2, 1))
+		})
+	}
 }
 
 func TestNewNoResolveBalancesRegions(t *testing.T) {
