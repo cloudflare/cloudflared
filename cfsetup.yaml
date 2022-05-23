@@ -48,6 +48,7 @@ stretch: &stretch
       - pip3 install pynacl==1.4.0
       - pip3 install pygithub==1.55
       - pip3 install boto3==1.22.9
+      - pip3 install gnupg==2.3.1
     post-cache:
       # build all packages (except macos and FIPS) and move them to /cfsetup/built_artifacts
       - ./build-packages.sh

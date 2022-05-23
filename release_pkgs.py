@@ -11,10 +11,12 @@
 import subprocess
 import os
 import argparse
+import base64
 import logging
 import shutil
 from hashlib import sha256
 
+import gnupg
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
@@ -133,6 +135,20 @@ class PkgCreator:
                         old_path = os.path.join(root, file)
                         new_path = os.path.join(new_dir, file)
                         shutil.copyfile(old_path, new_path)
+    
+    """
+        imports gpg keys into the system so reprepro and createrepo can use it to sign packages.
+        it returns the GPG ID after a successful import
+    """
+    def import_gpg_keys(self, private_key, public_key):
+        gpg = gnupg.GPG()
+        private_key = base64.b64decode(private_key)
+        gpg.import_keys(private_key)
+        public_key = base64.b64decode(public_key)
+        gpg.import_keys(public_key)
+        data = gpg.list_keys(secret=True)
+        return (data[0]["fingerprint"])
+
 
 """
     Walks through a directory and uploads it's assets to R2.
@@ -231,8 +247,13 @@ def parse_args():
     )
 
     parser.add_argument(
-            "--gpg-key-id", default=os.environ.get("GPG_KEY_ID"), help="gpg key ID that's being used to sign release\
-            packages."
+            "--gpg-private-key", default=os.environ.get("LINUX_SIGNING_PRIVATE_KEY"), help="GPG private key to sign the\
+            packages"
+    )
+
+    parser.add_argument(
+            "--gpg-public-key", default=os.environ.get("LINUX_SIGNING_PUBLIC_KEY"), help="GPG public key used for\
+            signing packages"
     )
 
     parser.add_argument(
@@ -257,8 +278,10 @@ if __name__ == "__main__":
         exit(1)
 
     pkg_creator = PkgCreator()
+    gpg_key_id = pkg_creator.import_gpg_keys(args.gpg_private_key, args.gpg_public_key)
+
     pkg_uploader = PkgUploader(args.account, args.bucket, args.id, args.secret)
-    create_deb_packaging(pkg_creator, pkg_uploader, args.deb_based_releases, args.gpg_key_id, args.binary, 
-            args.archs, "main", args.release_tag)
+    create_deb_packaging(pkg_creator, pkg_uploader, args.deb_based_releases, gpg_key_id, args.binary, args.archs,
+            "main", args.release_tag)
     
     create_rpm_packaging(pkg_creator, pkg_uploader, "./built_artifacts", args.release_tag, args.binary )
