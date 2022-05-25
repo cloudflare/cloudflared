@@ -52,10 +52,10 @@ stretch: &stretch
     post-cache:
       # build all packages (except macos and FIPS) and move them to /cfsetup/built_artifacts
       - ./build-packages.sh
-      # publish packages to linux repos
-      # TODO TUN-6180: Uncomment this - make release-pkgs-linux
       # release the packages built and moved to /cfsetup/built_artifacts
       - make github-release-built-pkgs
+      # publish packages to linux repos
+      - make release-pkgs-linux
   # handle FIPS separately so that we built with gofips compiler
   github-fips-release-pkgs:
     build_dir: *build_dir
