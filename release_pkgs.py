@@ -12,6 +12,7 @@ from subprocess import Popen, PIPE
 import os
 import argparse
 import base64
+from pathlib import Path
 import logging
 import shutil
 from hashlib import sha256
@@ -50,7 +51,7 @@ class PkgUploader:
             config=config,
         )
 
-        print(f"uploading asset: {filename} to {upload_file_path}...")
+        print(f"uploading asset: {filename} to {upload_file_path} in bucket{self.bucket_name}...")
         try:
             r2.upload_file(filename, self.bucket_name, upload_file_path)
         except ClientError as e:
@@ -80,7 +81,7 @@ class PkgCreator:
             components, 
             description,
             gpg_key_id ):
-        with open(file_path, "w") as distributions_file:
+        with open(file_path, "w+") as distributions_file:
             for release in releases:
                 distributions_file.write(f"Origin: {origin}\n")
                 distributions_file.write(f"Label: {label}\n")
@@ -219,6 +220,7 @@ def upload_from_directories(pkg_uploader, directory, release, binary):
 def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary_name, archs, package_component, release_version):
     # set configuration for package creation.
     print(f"initialising configuration for {binary_name} , {archs}")
+    Path("./conf").mkdir(parents=True, exist_ok=True)
     pkg_creator.create_distribution_conf(
     "./conf/distributions",
     binary_name,
@@ -262,7 +264,7 @@ def parse_args():
     )
 
     parser.add_argument(
-            "--bucket", default=os.environ.get("R2_BUCKET_NAME"), help="R2 Bucket name"
+            "--bucket", default=os.environ.get("R2_BUCKET"), help="R2 Bucket name"
     )
     parser.add_argument(
             "--id", default=os.environ.get("R2_CLIENT_ID"), help="R2 Client ID"
