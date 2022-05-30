@@ -6,11 +6,16 @@ import (
 	"net"
 )
 
-type UDPProxy struct {
+type UDPProxy interface {
 	io.ReadWriteCloser
+	LocalAddr() net.Addr
 }
 
-func DialUDP(dstIP net.IP, dstPort uint16) (*UDPProxy, error) {
+type udpProxy struct {
+	*net.UDPConn
+}
+
+func DialUDP(dstIP net.IP, dstPort uint16) (UDPProxy, error) {
 	dstAddr := &net.UDPAddr{
 		IP:   dstIP,
 		Port: int(dstPort),
@@ -23,5 +28,5 @@ func DialUDP(dstIP net.IP, dstPort uint16) (*UDPProxy, error) {
 		return nil, fmt.Errorf("unable to create UDP proxy to origin (%v:%v): %w", dstIP, dstPort, err)
 	}
 
-	return &UDPProxy{udpConn}, nil
+	return &udpProxy{udpConn}, nil
 }

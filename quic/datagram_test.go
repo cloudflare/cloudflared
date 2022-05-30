@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -71,7 +72,8 @@ func TestMaxDatagramPayload(t *testing.T) {
 			return err
 		}
 
-		muxer, err := NewDatagramMuxer(quicSession)
+		logger := zerolog.Nop()
+		muxer, err := NewDatagramMuxer(quicSession, &logger)
 		if err != nil {
 			return err
 		}
@@ -96,7 +98,8 @@ func TestMaxDatagramPayload(t *testing.T) {
 		quicSession, err := quic.DialAddrEarly(quicListener.Addr().String(), tlsClientConfig, quicConfig)
 		require.NoError(t, err)
 
-		muxer, err := NewDatagramMuxer(quicSession)
+		logger := zerolog.Nop()
+		muxer, err := NewDatagramMuxer(quicSession, &logger)
 		if err != nil {
 			return err
 		}

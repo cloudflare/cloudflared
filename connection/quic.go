@@ -58,7 +58,7 @@ func NewQUICConnection(
 		return nil, fmt.Errorf("failed to dial to edge: %w", err)
 	}
 
-	datagramMuxer, err := quicpogs.NewDatagramMuxer(session)
+	datagramMuxer, err := quicpogs.NewDatagramMuxer(session, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 
 	go q.serveUDPSession(session, closeAfterIdleHint)
 
-	q.logger.Debug().Msgf("Registered session %v, %v, %v", sessionID, dstIP, dstPort)
+	q.logger.Debug().Str("sessionID", sessionID.String()).Str("src", originProxy.LocalAddr().String()).Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).Msgf("Registered session")
 	return nil
 }
 

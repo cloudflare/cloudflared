@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -13,18 +14,14 @@ const (
 )
 
 type DatagramMuxer struct {
-	ID      uuid.UUID
 	session quic.Session
+	logger  *zerolog.Logger
 }
 
-func NewDatagramMuxer(quicSession quic.Session) (*DatagramMuxer, error) {
-	muxerID, err := uuid.NewRandom()
-	if err != nil {
-		return nil, err
-	}
+func NewDatagramMuxer(quicSession quic.Session, logger *zerolog.Logger) (*DatagramMuxer, error) {
 	return &DatagramMuxer{
-		ID:      muxerID,
 		session: quicSession,
+		logger:  logger,
 	}, nil
 }
 
@@ -42,6 +39,7 @@ func (dm *DatagramMuxer) SendTo(sessionID uuid.UUID, payload []byte) error {
 	if err := dm.session.SendMessage(msgWithID); err != nil {
 		return errors.Wrap(err, "Failed to send datagram back to edge")
 	}
+	dm.logger.Debug().Str("sessionID", sessionID.String()).Int("bytes", len(payload)).Msg("Send datagram back to edge")
 	return nil
 }
 
@@ -53,7 +51,12 @@ func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
 	if err != nil {
 		return uuid.Nil, nil, err
 	}
-	return extractSessionID(msg)
+	sessionID, payload, err := extractSessionID(msg)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	dm.logger.Debug().Str("sessionID", sessionID.String()).Int("bytes", len(payload)).Msg("Received datagram from edge")
+	return sessionID, payload, nil
 }
 
 // Maximum application payload to send to / receive from QUIC datagram frame
