@@ -29,6 +29,8 @@ type Manager interface {
 	RegisterSession(ctx context.Context, sessionID uuid.UUID, dstConn io.ReadWriteCloser) (*Session, error)
 	// UnregisterSession stops tracking the session and terminates it
 	UnregisterSession(ctx context.Context, sessionID uuid.UUID, message string, byRemote bool) error
+	// UpdateLogger updates the logger used by the Manager
+	UpdateLogger(log *zerolog.Logger)
 }
 
 type manager struct {
@@ -55,6 +57,11 @@ func NewManager(transport transport, log *zerolog.Logger) *manager {
 		log:          log,
 		timeout:      defaultReqTimeout,
 	}
+}
+
+func (m *manager) UpdateLogger(log *zerolog.Logger) {
+	// Benign data race, no problem if the old pointer is read or not concurrently.
+	m.log = log
 }
 
 func (m *manager) Serve(ctx context.Context) error {
