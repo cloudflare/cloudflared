@@ -1,3 +1,7 @@
+2022.5.3
+- 2022-05-30 TUN-6308: Add debug logs to see if packets are sent/received from edge
+- 2022-05-30 TUN-6301: Allow to update logger used by UDP session manager
+
 2022.5.2
 - 2022-05-23 TUN-6270: Import gpg keys from environment variables
 - 2022-05-24 TUN-6209: Improve feedback process if release_pkgs to deb and rpm fail
