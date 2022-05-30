@@ -85,9 +85,6 @@ github.com/facebookgo/grace/gracenet
 # github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568
 ## explicit
 github.com/flynn/go-shlex
-# github.com/francoispqt/gojay v1.2.13
-## explicit; go 1.12
-github.com/francoispqt/gojay
 # github.com/fsnotify/fsnotify v1.4.9
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify
@@ -218,7 +215,6 @@ github.com/lucas-clemente/quic-go/internal/qtls
 github.com/lucas-clemente/quic-go/internal/utils
 github.com/lucas-clemente/quic-go/internal/wire
 github.com/lucas-clemente/quic-go/logging
-github.com/lucas-clemente/quic-go/qlog
 github.com/lucas-clemente/quic-go/quicvarint
 # github.com/lucasb-eyer/go-colorful v1.0.3
 ## explicit; go 1.12
@@ -596,7 +592,7 @@ gopkg.in/tomb.v1
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+# gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
 # zombiezen.com/go/capnproto2 v2.18.0+incompatible

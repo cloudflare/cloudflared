@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 )
 
 func TestConfigFileSettings(t *testing.T) {
@@ -111,7 +111,7 @@ counters:
 
 }
 
-var rawConfig = []byte(`
+var rawJsonConfig = []byte(`
 {
 	"connectTimeout": 10,
 	"tlsTimeout": 30,
@@ -148,15 +148,14 @@ func TestMarshalUnmarshalOriginRequest(t *testing.T) {
 		name          string
 		marshalFunc   func(in interface{}) (out []byte, err error)
 		unMarshalFunc func(in []byte, out interface{}) (err error)
-		baseUnit      time.Duration
 	}{
-		{"json", json.Marshal, json.Unmarshal, time.Second},
-		{"yaml", yaml.Marshal, yaml.Unmarshal, time.Nanosecond},
+		{"json", json.Marshal, json.Unmarshal},
+		{"yaml", yaml.Marshal, yaml.Unmarshal},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertConfig(t, tc.marshalFunc, tc.unMarshalFunc, tc.baseUnit)
+			assertConfig(t, tc.marshalFunc, tc.unMarshalFunc)
 		})
 	}
 }
@@ -165,18 +164,17 @@ func assertConfig(
 	t *testing.T,
 	marshalFunc func(in interface{}) (out []byte, err error),
 	unMarshalFunc func(in []byte, out interface{}) (err error),
-	baseUnit time.Duration,
 ) {
 	var config OriginRequestConfig
 	var config2 OriginRequestConfig
 
-	assert.NoError(t, unMarshalFunc(rawConfig, &config))
+	assert.NoError(t, json.Unmarshal(rawJsonConfig, &config))
 
-	assert.Equal(t, baseUnit*10, config.ConnectTimeout.Duration)
-	assert.Equal(t, baseUnit*30, config.TLSTimeout.Duration)
-	assert.Equal(t, baseUnit*30, config.TCPKeepAlive.Duration)
+	assert.Equal(t, time.Second*10, config.ConnectTimeout.Duration)
+	assert.Equal(t, time.Second*30, config.TLSTimeout.Duration)
+	assert.Equal(t, time.Second*30, config.TCPKeepAlive.Duration)
 	assert.Equal(t, true, *config.NoHappyEyeballs)
-	assert.Equal(t, baseUnit*60, config.KeepAliveTimeout.Duration)
+	assert.Equal(t, time.Second*60, config.KeepAliveTimeout.Duration)
 	assert.Equal(t, 10, *config.KeepAliveConnections)
 	assert.Equal(t, "app.tunnel.com", *config.HTTPHostHeader)
 	assert.Equal(t, "app.tunnel.com", *config.OriginServerName)
