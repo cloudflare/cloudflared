@@ -1,3 +1,17 @@
+2022.5.2
+- 2022-05-23 TUN-6270: Import gpg keys from environment variables
+- 2022-05-24 TUN-6209: Improve feedback process if release_pkgs to deb and rpm fail
+- 2022-05-24 TUN-6280: Don't wrap qlog connection tracer for gatethering QUIC metrics since we're not writing qlog files.
+- 2022-05-25 TUN-6209: Sign RPM packages
+- 2022-05-25 TUN-6285: Upload pkg assets to repos when cloudflared is released.
+- 2022-05-24 TUN-6282: Upgrade golang to 1.17.10, go-boring to 1.17.9
+- 2022-05-26 TUN-6292: Debug builds for cloudflared
+- 2022-05-28 TUN-6304: Fixed some file permission issues
+- 2022-05-11 TUN-6197: Publish to brew core should not try to open the browser
+- 2022-05-12 TUN-5943: Add RPM support
+- 2022-05-18 TUN-6248: Fix panic in cloudflared during tracing when origin doesn't provide header map
+- 2022-05-18 TUN-6250: Add upstream response status code to tracing span attributes
+
 2022.5.1
 - 2022-05-06 TUN-6146: Release_pkgs is now a generic command line script
 - 2022-05-06 TUN-6185: Fix tcpOverWSOriginService not using original scheme for String representation
