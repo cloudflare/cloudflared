@@ -120,6 +120,26 @@ class PkgCreator:
 
         self._sign_repomd()
 
+    """
+        creates a <binary>.repo file with details like so
+        [cloudflared-stable]
+        name=cloudflared-stable
+        baseurl=https://pkg.cloudflare.com/cloudflared/rpm
+        enabled=1
+        type=rpm
+        gpgcheck=1
+        gpgkey=https://pkg.cloudflare.com/cloudflare-main.gpg
+    """
+    def create_repo_file(self, file_path, binary_name, baseurl, gpgkey_url):
+        with open(file_path, "w+") as repo_file:
+            repo_file.write(f"[{binary_name}-stable]")
+            repo_file.write(f"{binary_name}-stable")
+            repo_file.write(f"baseurl={baseurl}/rpm")
+            repo_file.write("enabled=1")
+            repo_file.write("type=rpm")
+            repo_file.write("gpgcheck=1")
+            repo_file.write(f"gpgkey={gpgkey_url}")
+
     def _sign_rpms(self, file_path):
         p = Popen(["rpm" , "--define", f"_gpg_name {gpg_key_name}", "--addsign", file_path], stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
@@ -246,9 +266,19 @@ def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary
         upload_from_directories(pkg_uploader, "dists", release_version, binary_name)
         upload_from_directories(pkg_uploader, "pool", release_version, binary_name)
 
-def create_rpm_packaging(pkg_creator, pkg_uploader, artifacts_path, release_version, binary_name, gpg_key_name):
+def create_rpm_packaging(
+        pkg_creator,
+        pkg_uploader,
+        artifacts_path,
+        release_version,
+        binary_name,
+        gpg_key_name,
+        base_url,
+        gpg_key_url,
+):
     print(f"creating rpm pkgs...")
     pkg_creator.create_rpm_pkgs(artifacts_path, gpg_key_name)
+    pkg_creator.create_repo_file(artifacts_path, binary_name, base_url, gpg_key_url)
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "rpm", None, binary_name)
@@ -295,6 +325,15 @@ def parse_args():
     )
 
     parser.add_argument(
+            "--gpg-public-key-url", default=os.environ.get("GPG_PUBLIC_KEY_URL"), help="GPG public key url that\
+            downloaders can use to verify signing"
+    )
+
+    parser.add_argument(
+            "--pkg-upload-url", default=os.environ.get("PKG_URL"), help="URL to be used by downloaders"
+    )
+
+    parser.add_argument(
             "--deb-based-releases", default=["bookworm", "bullseye", "buster", "jammy", "impish", "focal", "bionic"],
             help="list of debian based releases that need to be packaged for"
     )
@@ -324,4 +363,13 @@ if __name__ == "__main__":
     create_deb_packaging(pkg_creator, pkg_uploader, args.deb_based_releases, gpg_key_id, args.binary, args.archs,
             "main", args.release_tag)
     
-    create_rpm_packaging(pkg_creator, pkg_uploader, "./built_artifacts", args.release_tag, args.binary, gpg_key_name)
+    create_rpm_packaging(
+            pkg_creator,
+            pkg_uploader,
+            "./built_artifacts",
+            args.release_tag,
+            args.binary,
+            gpg_key_name,
+            args.gpg_public_key_url,
+            args.pkg_upload_url,
+            )
