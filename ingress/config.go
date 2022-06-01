@@ -35,6 +35,7 @@ const (
 	NoChunkedEncodingFlag         = "no-chunked-encoding"
 	ProxyAddressFlag              = "proxy-address"
 	ProxyPortFlag                 = "proxy-port"
+	Http2OriginFlag               = "http2-origin"
 )
 
 const (
@@ -93,6 +94,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 	var proxyAddress = defaultProxyAddress
 	var proxyPort uint
 	var proxyType string
+	var http2Origin bool
 	if flag := ProxyConnectTimeoutFlag; c.IsSet(flag) {
 		connectTimeout = config.CustomDuration{Duration: c.Duration(flag)}
 	}
@@ -136,9 +138,13 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		proxyPort = uint(c.Int(flag))
 	}
+	if flag := Http2OriginFlag; c.IsSet(flag) {
+		http2Origin = c.Bool(flag)
+	}
 	if c.IsSet(Socks5Flag) {
 		proxyType = socksProxy
 	}
+
 	return OriginRequestConfig{
 		ConnectTimeout:         connectTimeout,
 		TLSTimeout:             tlsTimeout,
@@ -155,6 +161,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 		ProxyAddress:           proxyAddress,
 		ProxyPort:              proxyPort,
 		ProxyType:              proxyType,
+		Http2Origin:            http2Origin,
 	}
 }
 
@@ -263,6 +270,8 @@ type OriginRequestConfig struct {
 	ProxyType string `yaml:"proxyType" json:"proxyType"`
 	// IP rules for the proxy service
 	IPRules []ipaccess.Rule `yaml:"ipRules" json:"ipRules"`
+	// Attempt to connect to origin with HTTP/2
+	Http2Origin bool `yaml:"http2Origin" json:"http2Origin"`
 }
 
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {
