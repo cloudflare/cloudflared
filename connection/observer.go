@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"net"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -8,6 +9,7 @@ import (
 
 const (
 	LogFieldLocation          = "location"
+	LogFieldIPAddress         = "ip"
 	observerChannelBufferSize = 16
 )
 
@@ -41,11 +43,12 @@ func (o *Observer) RegisterSink(sink EventSink) {
 	o.addSinkChan <- sink
 }
 
-func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
+func (o *Observer) logServerInfo(connIndex uint8, location string, address net.IP, msg string) {
 	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
 	o.log.Info().
 		Uint8(LogFieldConnIndex, connIndex).
 		Str(LogFieldLocation, location).
+		IPAddr(LogFieldIPAddress, address).
 		Msg(msg)
 	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }

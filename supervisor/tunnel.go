@@ -43,6 +43,7 @@ type TunnelConfig struct {
 	CloseConnOnce   *sync.Once // Used to close connectedSignal no more than once
 	EdgeAddrs       []string
 	Region          string
+	EdgeIPVersion   allregions.ConfigIPVersion
 	HAConnections   int
 	IncidentLookup  IncidentLookup
 	IsAutoupdated   bool

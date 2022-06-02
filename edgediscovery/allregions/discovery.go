@@ -32,10 +32,40 @@ var (
 	netLookupIP  = net.LookupIP
 )
 
+// ConfigIPVersion is the selection of IP versions from config
+type ConfigIPVersion int8
+
+const (
+	Auto     ConfigIPVersion = 2
+	IPv4Only ConfigIPVersion = 4
+	IPv6Only ConfigIPVersion = 6
+)
+
+// IPVersion is the IP version of an EdgeAddr
+type EdgeIPVersion int8
+
+const (
+	V4 EdgeIPVersion = 4
+	V6 EdgeIPVersion = 6
+)
+
+// String returns the enum's constant name.
+func (c EdgeIPVersion) String() string {
+	switch c {
+	case V4:
+		return "4"
+	case V6:
+		return "6"
+	default:
+		return ""
+	}
+}
+
 // EdgeAddr is a representation of possible ways to refer an edge location.
 type EdgeAddr struct {
-	TCP *net.TCPAddr
-	UDP *net.UDPAddr
+	TCP       *net.TCPAddr
+	UDP       *net.UDPAddr
+	IPVersion EdgeIPVersion
 }
 
 // If the call to net.LookupSRV fails, try to fall back to DoT from Cloudflare directly.
@@ -120,9 +150,14 @@ func resolveSRV(srv *net.SRV) ([]*EdgeAddr, error) {
 	}
 	addrs := make([]*EdgeAddr, len(ips))
 	for i, ip := range ips {
+		version := V6
+		if ip.To4() != nil {
+			version = V4
+		}
 		addrs[i] = &EdgeAddr{
-			TCP: &net.TCPAddr{IP: ip, Port: int(srv.Port)},
-			UDP: &net.UDPAddr{IP: ip, Port: int(srv.Port)},
+			TCP:       &net.TCPAddr{IP: ip, Port: int(srv.Port)},
+			UDP:       &net.UDPAddr{IP: ip, Port: int(srv.Port)},
+			IPVersion: version,
 		}
 	}
 	return addrs, nil
@@ -143,9 +178,14 @@ func ResolveAddrs(addrs []string, log *zerolog.Logger) (resolved []*EdgeAddr) {
 			log.Error().Str(logFieldAddress, addr).Err(err).Msg("failed to resolve to UDP address")
 			continue
 		}
+		version := V6
+		if udpAddr.IP.To4() != nil {
+			version = V4
+		}
 		resolved = append(resolved, &EdgeAddr{
-			TCP: tcpAddr,
-			UDP: udpAddr,
+			TCP:       tcpAddr,
+			UDP:       udpAddr,
+			IPVersion: version,
 		})
 
 	}

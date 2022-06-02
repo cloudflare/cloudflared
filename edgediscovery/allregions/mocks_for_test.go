@@ -36,7 +36,7 @@ func newMockAddrs(port uint16, numRegions uint8, numAddrsPerRegion uint8) mockAd
 				IP:   net.ParseIP(fmt.Sprintf("10.0.%v.%v", r, a)),
 				Port: int(port),
 			}
-			addrs = append(addrs, &EdgeAddr{tcpAddr, udpAddr})
+			addrs = append(addrs, &EdgeAddr{tcpAddr, udpAddr, V4})
 		}
 		addrMap[srv] = addrs
 		numAddrs += len(addrs)

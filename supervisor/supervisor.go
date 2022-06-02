@@ -63,7 +63,6 @@ var errEarlyShutdown = errors.New("shutdown started")
 
 type tunnelError struct {
 	index int
-	addr  *allregions.EdgeAddr
 	err   error
 }
 
@@ -235,7 +234,7 @@ func (s *Supervisor) startFirstTunnel(
 	)
 	const firstConnIndex = 0
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: firstConnIndex, addr: addr, err: err}
+		s.tunnelErrors <- tunnelError{index: firstConnIndex, err: err}
 	}()
 
 	addr, err = s.edgeIPs.GetAddr(firstConnIndex)
@@ -306,7 +305,7 @@ func (s *Supervisor) startTunnel(
 		err  error
 	)
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: index, addr: addr, err: err}
+		s.tunnelErrors <- tunnelError{index: index, err: err}
 	}()
 
 	addr, err = s.edgeIPs.GetDifferentAddr(index)
