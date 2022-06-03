@@ -55,7 +55,7 @@ func NewQUICConnection(
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
-		return nil, EdgeQuicDialError{Cause: err}
+		return nil, fmt.Errorf("failed to dial to edge: %w", err)
 	}
 
 	datagramMuxer, err := quicpogs.NewDatagramMuxer(session, logger)
