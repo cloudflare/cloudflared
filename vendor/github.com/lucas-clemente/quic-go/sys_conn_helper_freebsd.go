@@ -6,8 +6,7 @@ package quic
 import "golang.org/x/sys/unix"
 
 const (
-	msgTypeIPTOS            = unix.IP_RECVTOS
-	disablePathMTUDiscovery = false
+	msgTypeIPTOS = unix.IP_RECVTOS
 )
 
 const (

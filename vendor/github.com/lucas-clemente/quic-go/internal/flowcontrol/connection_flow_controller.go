@@ -19,11 +19,12 @@ type connectionFlowController struct {
 var _ ConnectionFlowController = &connectionFlowController{}
 
 // NewConnectionFlowController gets a new flow controller for the connection
-// It is created before we receive the peer's transport paramenters, thus it starts with a sendWindow of 0.
+// It is created before we receive the peer's transport parameters, thus it starts with a sendWindow of 0.
 func NewConnectionFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	queueWindowUpdate func(),
+	allowWindowIncrease func(size protocol.ByteCount) bool,
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
 ) ConnectionFlowController {
@@ -33,6 +34,7 @@ func NewConnectionFlowController(
 			receiveWindow:        receiveWindow,
 			receiveWindowSize:    receiveWindow,
 			maxReceiveWindowSize: maxReceiveWindow,
+			allowWindowIncrease:  allowWindowIncrease,
 			logger:               logger,
 		},
 		queueWindowUpdate: queueWindowUpdate,
@@ -85,13 +87,16 @@ func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCoun
 	c.mutex.Lock()
 	if inc > c.receiveWindowSize {
 		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB, in response to stream flow control window increase", c.receiveWindowSize/(1<<10))
-		c.receiveWindowSize = utils.MinByteCount(inc, c.maxReceiveWindowSize)
+		newSize := utils.MinByteCount(inc, c.maxReceiveWindowSize)
+		if delta := newSize - c.receiveWindowSize; delta > 0 && c.allowWindowIncrease(delta) {
+			c.receiveWindowSize = newSize
+		}
 		c.startNewAutoTuningEpoch(time.Now())
 	}
 	c.mutex.Unlock()
 }
 
-// The flow controller is reset when 0-RTT is rejected.
+// Reset rests the flow controller. This happens when 0-RTT is rejected.
 // All stream data is invalidated, it's if we had never opened a stream and never sent any data.
 // At that point, we only have sent stream data, but we didn't have the keys to open 1-RTT keys yet.
 func (c *connectionFlowController) Reset() error {

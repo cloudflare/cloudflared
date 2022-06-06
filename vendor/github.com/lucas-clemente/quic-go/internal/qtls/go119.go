@@ -3,4 +3,4 @@
 
 package qtls
 
-var _ int = "quic-go doesn't build on Go 1.19 yet."
+var _ int = "The version of quic-go you're using can't be built on Go 1.19 yet. For more details, please see https://github.com/lucas-clemente/quic-go/wiki/quic-go-and-Go-versions."

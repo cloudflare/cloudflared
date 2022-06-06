@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ import (
 var (
 	testTLSServerConfig = GenerateTLSConfig()
 	testQUICConfig      = &quic.Config{
-		KeepAlive:       true,
+		KeepAlivePeriod: 5 * time.Second,
 		EnableDatagrams: true,
 	}
 	exchanges       = 1000

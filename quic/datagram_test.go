@@ -56,7 +56,7 @@ func TestMaxDatagramPayload(t *testing.T) {
 	payload := make([]byte, maxDatagramPayloadSize)
 
 	quicConfig := &quic.Config{
-		KeepAlive:            true,
+		KeepAlivePeriod:      5 * time.Millisecond,
 		EnableDatagrams:      true,
 		MaxDatagramFrameSize: MaxDatagramFrameSize,
 	}

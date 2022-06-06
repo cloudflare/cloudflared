@@ -68,14 +68,14 @@ const (
 	TimerTypePTO
 )
 
-// TimeoutReason is the reason why a session is closed
+// TimeoutReason is the reason why a connection is closed
 type TimeoutReason uint8
 
 const (
-	// TimeoutReasonHandshake is used when the session is closed due to a handshake timeout
+	// TimeoutReasonHandshake is used when the connection is closed due to a handshake timeout
 	// This reason is not defined in the qlog draft, but very useful for debugging.
 	TimeoutReasonHandshake TimeoutReason = iota
-	// TimeoutReasonIdle is used when the session is closed due to an idle timeout
+	// TimeoutReasonIdle is used when the connection is closed due to an idle timeout
 	// This reason is not defined in the qlog draft, but very useful for debugging.
 	TimeoutReasonIdle
 )
@@ -87,7 +87,7 @@ const (
 	CongestionStateSlowStart CongestionState = iota
 	// CongestionStateCongestionAvoidance is the slow start phase of Reno / Cubic
 	CongestionStateCongestionAvoidance
-	// CongestionStateCongestionAvoidance is the recovery phase of Reno / Cubic
+	// CongestionStateRecovery is the recovery phase of Reno / Cubic
 	CongestionStateRecovery
 	// CongestionStateApplicationLimited means that the congestion controller is application limited
 	CongestionStateApplicationLimited

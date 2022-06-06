@@ -31,7 +31,7 @@ import (
 var (
 	testTLSServerConfig = quicpogs.GenerateTLSConfig()
 	testQUICConfig      = &quic.Config{
-		KeepAlive:       true,
+		KeepAlivePeriod: 5 * time.Second,
 		EnableDatagrams: true,
 	}
 )
@@ -502,7 +502,7 @@ func TestServeUDPSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Establish QUIC connection with edge
-	edgeQUICSessionChan := make(chan quic.Session)
+	edgeQUICSessionChan := make(chan quic.Connection)
 	go func() {
 		earlyListener, err := quic.Listen(udpListener, testTLSServerConfig, testQUICConfig)
 		require.NoError(t, err)
@@ -522,7 +522,7 @@ func TestServeUDPSession(t *testing.T) {
 	cancel()
 }
 
-func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.Session, closeType closeReason, expectedReason string, t *testing.T) {
+func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
 	var (
 		payload = []byte(t.Name())
 	)
@@ -583,7 +583,7 @@ const (
 	closedByTimeout
 )
 
-func runRPCServer(ctx context.Context, session quic.Session, sessionRPCServer tunnelpogs.SessionManager, configRPCServer tunnelpogs.ConfigurationManager, t *testing.T) {
+func runRPCServer(ctx context.Context, session quic.Connection, sessionRPCServer tunnelpogs.SessionManager, configRPCServer tunnelpogs.ConfigurationManager, t *testing.T) {
 	stream, err := session.AcceptStream(ctx)
 	require.NoError(t, err)
 

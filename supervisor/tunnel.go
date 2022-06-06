@@ -550,9 +550,9 @@ func ServeQUIC(
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout:  quicpogs.HandshakeIdleTimeout,
 		MaxIdleTimeout:        quicpogs.MaxIdleTimeout,
+		KeepAlivePeriod:       quicpogs.MaxIdlePingPeriod,
 		MaxIncomingStreams:    connection.MaxConcurrentStreams,
 		MaxIncomingUniStreams: connection.MaxConcurrentStreams,
-		KeepAlive:             true,
 		EnableDatagrams:       true,
 		MaxDatagramFrameSize:  quicpogs.MaxDatagramFrameSize,
 		Tracer:                quicpogs.NewClientTracer(connLogger.Logger(), connIndex),

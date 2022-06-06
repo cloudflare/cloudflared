@@ -35,7 +35,7 @@ const (
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session              quic.Session
+	session              quic.Connection
 	logger               *zerolog.Logger
 	orchestrator         Orchestrator
 	sessionManager       datagramsession.Manager

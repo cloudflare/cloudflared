@@ -64,7 +64,13 @@ func (h *sendQueue) Run() error {
 			shouldClose = true
 		case p := <-h.queue:
 			if err := h.conn.Write(p.Data); err != nil {
-				return err
+				// This additional check enables:
+				// 1. Checking for "datagram too large" message from the kernel, as such,
+				// 2. Path MTU discovery,and
+				// 3. Eventual detection of loss PingFrame.
+				if !isMsgSizeErr(err) {
+					return err
+				}
 			}
 			p.Release()
 			select {

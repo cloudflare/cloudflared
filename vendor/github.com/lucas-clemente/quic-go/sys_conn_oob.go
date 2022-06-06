@@ -64,7 +64,7 @@ type oobConn struct {
 	buffers  [batchSize]*packetBuffer
 }
 
-var _ connection = &oobConn{}
+var _ rawConn = &oobConn{}
 
 func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	rawConn, err := c.SyscallConn()

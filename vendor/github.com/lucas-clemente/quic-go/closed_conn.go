@@ -7,15 +7,15 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-// A closedLocalSession is a session that we closed locally.
-// When receiving packets for such a session, we need to retransmit the packet containing the CONNECTION_CLOSE frame,
+// A closedLocalConn is a connection that we closed locally.
+// When receiving packets for such a connection, we need to retransmit the packet containing the CONNECTION_CLOSE frame,
 // with an exponential backoff.
-type closedLocalSession struct {
+type closedLocalConn struct {
 	conn            sendConn
 	connClosePacket []byte
 
 	closeOnce sync.Once
-	closeChan chan struct{} // is closed when the session is closed or destroyed
+	closeChan chan struct{} // is closed when the connection is closed or destroyed
 
 	receivedPackets chan *receivedPacket
 	counter         uint64 // number of packets received
@@ -25,16 +25,16 @@ type closedLocalSession struct {
 	logger utils.Logger
 }
 
-var _ packetHandler = &closedLocalSession{}
+var _ packetHandler = &closedLocalConn{}
 
-// newClosedLocalSession creates a new closedLocalSession and runs it.
-func newClosedLocalSession(
+// newClosedLocalConn creates a new closedLocalConn and runs it.
+func newClosedLocalConn(
 	conn sendConn,
 	connClosePacket []byte,
 	perspective protocol.Perspective,
 	logger utils.Logger,
 ) packetHandler {
-	s := &closedLocalSession{
+	s := &closedLocalConn{
 		conn:            conn,
 		connClosePacket: connClosePacket,
 		perspective:     perspective,
@@ -46,7 +46,7 @@ func newClosedLocalSession(
 	return s
 }
 
-func (s *closedLocalSession) run() {
+func (s *closedLocalConn) run() {
 	for {
 		select {
 		case p := <-s.receivedPackets:
@@ -57,14 +57,14 @@ func (s *closedLocalSession) run() {
 	}
 }
 
-func (s *closedLocalSession) handlePacket(p *receivedPacket) {
+func (s *closedLocalConn) handlePacket(p *receivedPacket) {
 	select {
 	case s.receivedPackets <- p:
 	default:
 	}
 }
 
-func (s *closedLocalSession) handlePacketImpl(_ *receivedPacket) {
+func (s *closedLocalConn) handlePacketImpl(_ *receivedPacket) {
 	s.counter++
 	// exponential backoff
 	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
@@ -79,34 +79,34 @@ func (s *closedLocalSession) handlePacketImpl(_ *receivedPacket) {
 	}
 }
 
-func (s *closedLocalSession) shutdown() {
+func (s *closedLocalConn) shutdown() {
 	s.destroy(nil)
 }
 
-func (s *closedLocalSession) destroy(error) {
+func (s *closedLocalConn) destroy(error) {
 	s.closeOnce.Do(func() {
 		close(s.closeChan)
 	})
 }
 
-func (s *closedLocalSession) getPerspective() protocol.Perspective {
+func (s *closedLocalConn) getPerspective() protocol.Perspective {
 	return s.perspective
 }
 
-// A closedRemoteSession is a session that was closed remotely.
-// For such a session, we might receive reordered packets that were sent before the CONNECTION_CLOSE.
+// A closedRemoteConn is a connection that was closed remotely.
+// For such a connection, we might receive reordered packets that were sent before the CONNECTION_CLOSE.
 // We can just ignore those packets.
-type closedRemoteSession struct {
+type closedRemoteConn struct {
 	perspective protocol.Perspective
 }
 
-var _ packetHandler = &closedRemoteSession{}
+var _ packetHandler = &closedRemoteConn{}
 
-func newClosedRemoteSession(pers protocol.Perspective) packetHandler {
-	return &closedRemoteSession{perspective: pers}
+func newClosedRemoteConn(pers protocol.Perspective) packetHandler {
+	return &closedRemoteConn{perspective: pers}
 }
 
-func (s *closedRemoteSession) handlePacket(*receivedPacket)         {}
-func (s *closedRemoteSession) shutdown()                            {}
-func (s *closedRemoteSession) destroy(error)                        {}
-func (s *closedRemoteSession) getPerspective() protocol.Perspective { return s.perspective }
+func (s *closedRemoteConn) handlePacket(*receivedPacket)         {}
+func (s *closedRemoteConn) shutdown()                            {}
+func (s *closedRemoteConn) destroy(error)                        {}
+func (s *closedRemoteConn) getPerspective() protocol.Perspective { return s.perspective }

@@ -28,7 +28,6 @@ linters:
     - ineffassign
     - misspell
     - prealloc
-    - scopelint
     - staticcheck
     - stylecheck
     - structcheck

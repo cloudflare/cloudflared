@@ -14,7 +14,7 @@ const InitialPacketSizeIPv6 = 1232
 // MaxCongestionWindowPackets is the maximum congestion window in packet.
 const MaxCongestionWindowPackets = 10000
 
-// MaxUndecryptablePackets limits the number of undecryptable packets that are queued in the session.
+// MaxUndecryptablePackets limits the number of undecryptable packets that are queued in the connection.
 const MaxUndecryptablePackets = 32
 
 // ConnectionFlowControlMultiplier determines how much larger the connection flow control windows needs to be relative to any stream's flow control window
@@ -45,8 +45,8 @@ const DefaultMaxIncomingUniStreams = 100
 // MaxServerUnprocessedPackets is the max number of packets stored in the server that are not yet processed.
 const MaxServerUnprocessedPackets = 1024
 
-// MaxSessionUnprocessedPackets is the max number of packets stored in each session that are not yet processed.
-const MaxSessionUnprocessedPackets = 256
+// MaxConnUnprocessedPackets is the max number of packets stored in each connection that are not yet processed.
+const MaxConnUnprocessedPackets = 256
 
 // SkipPacketInitialPeriod is the initial period length used for packet number skipping to prevent an Optimistic ACK attack.
 // Every time a packet number is skipped, the period is doubled, up to SkipPacketMaxPeriod.
@@ -55,7 +55,7 @@ const SkipPacketInitialPeriod PacketNumber = 256
 // SkipPacketMaxPeriod is the maximum period length used for packet number skipping.
 const SkipPacketMaxPeriod PacketNumber = 128 * 1024
 
-// MaxAcceptQueueSize is the maximum number of sessions that the server queues for accepting.
+// MaxAcceptQueueSize is the maximum number of connections that the server queues for accepting.
 // If the queue is full, new connection attempts will be rejected.
 const MaxAcceptQueueSize = 32
 
@@ -112,7 +112,7 @@ const DefaultHandshakeTimeout = 10 * time.Second
 // It should be shorter than the time that NATs clear their mapping.
 const MaxKeepAliveInterval = 20 * time.Second
 
-// RetiredConnectionIDDeleteTimeout is the time we keep closed sessions around in order to retransmit the CONNECTION_CLOSE.
+// RetiredConnectionIDDeleteTimeout is the time we keep closed connections around in order to retransmit the CONNECTION_CLOSE.
 // after this time all information about the old connection will be deleted
 const RetiredConnectionIDDeleteTimeout = 5 * time.Second
 
@@ -189,7 +189,7 @@ const Max0RTTQueueingDuration = 100 * time.Millisecond
 const Max0RTTQueues = 32
 
 // Max0RTTQueueLen is the maximum number of 0-RTT packets that we buffer for each connection.
-// When a new session is created, all buffered packets are passed to the session immediately.
-// To avoid blocking, this value has to be smaller than MaxSessionUnprocessedPackets.
-// To avoid packets being dropped as undecryptable by the session, this value has to be smaller than MaxUndecryptablePackets.
+// When a new connection is created, all buffered packets are passed to the connection immediately.
+// To avoid blocking, this value has to be smaller than MaxConnUnprocessedPackets.
+// To avoid packets being dropped as undecryptable by the connection, this value has to be smaller than MaxUndecryptablePackets.
 const Max0RTTQueueLen = 31

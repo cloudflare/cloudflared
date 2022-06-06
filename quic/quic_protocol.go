@@ -37,7 +37,8 @@ const (
 	protocolVersionLength = 2
 
 	HandshakeIdleTimeout = 5 * time.Second
-	MaxIdleTimeout       = 15 * time.Second
+	MaxIdleTimeout       = 5 * time.Second
+	MaxIdlePingPeriod    = 1 * time.Second
 )
 
 // RequestServerStream is a stream to serve requests

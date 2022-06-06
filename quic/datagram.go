@@ -14,11 +14,11 @@ const (
 )
 
 type DatagramMuxer struct {
-	session quic.Session
+	session quic.Connection
 	logger  *zerolog.Logger
 }
 
-func NewDatagramMuxer(quicSession quic.Session, logger *zerolog.Logger) (*DatagramMuxer, error) {
+func NewDatagramMuxer(quicSession quic.Connection, logger *zerolog.Logger) (*DatagramMuxer, error) {
 	return &DatagramMuxer{
 		session: quicSession,
 		logger:  logger,

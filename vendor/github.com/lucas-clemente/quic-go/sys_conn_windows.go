@@ -12,24 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const (
-	disablePathMTUDiscovery = true
-	IP_DONTFRAGMENT         = 14
-)
-
-func newConn(c OOBCapablePacketConn) (connection, error) {
-	rawConn, err := c.SyscallConn()
-	if err != nil {
-		return nil, fmt.Errorf("couldn't get syscall.RawConn: %w", err)
-	}
-	if err := rawConn.Control(func(fd uintptr) {
-		// This should succeed if the connection is a IPv4 or a dual-stack connection.
-		// It will fail for IPv6 connections.
-		// TODO: properly handle error.
-		_ = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IP, IP_DONTFRAGMENT, 1)
-	}); err != nil {
-		return nil, err
-	}
+func newConn(c OOBCapablePacketConn) (rawConn, error) {
 	return &basicConn{PacketConn: c}, nil
 }
 
