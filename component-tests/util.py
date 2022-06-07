@@ -1,8 +1,11 @@
 import logging
 import os
+import platform
 import subprocess
 from contextlib import contextmanager
 from time import sleep
+
+import pytest
 
 import requests
 import yaml
@@ -11,6 +14,10 @@ from retrying import retry
 from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 
 LOGGER = logging.getLogger(__name__)
+
+def select_platform(plat):
+    return pytest.mark.skipif(
+        platform.system() != plat, reason=f"Only runs on {plat}")
 
 
 def write_config(directory, config):
@@ -107,6 +114,17 @@ def check_tunnel_not_connected():
         resp = requests.get(url, timeout=1)
         assert resp.status_code == 503, f"Expect {url} returns 503, got {resp.status_code}"
     # cloudflared might already terminate
+    except requests.exceptions.ConnectionError as e:
+        LOGGER.warning(f"Failed to connect to {url}, error: {e}")
+
+
+def get_tunnel_connector_id():
+    url = f'http://localhost:{METRICS_PORT}/ready'
+
+    try:
+        resp = requests.get(url, timeout=1)
+        return resp.json()["connectorId"]
+    # cloudflared might already terminated
     except requests.exceptions.ConnectionError as e:
         LOGGER.warning(f"Failed to connect to {url}, error: {e}")
 
