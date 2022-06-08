@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudflare/cloudflared/tunnelstate"
-
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 func TestReadyServer_makeResponse(t *testing.T) {
@@ -66,7 +66,7 @@ func TestReadyServer_makeResponse(t *testing.T) {
 
 func TestReadinessEventHandling(t *testing.T) {
 	nopLogger := zerolog.Nop()
-	rs := NewReadyServer(&nopLogger)
+	rs := NewReadyServer(&nopLogger, uuid.Nil)
 
 	// start not ok
 	code, ready := rs.makeResponse()
