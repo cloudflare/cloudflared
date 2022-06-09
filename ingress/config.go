@@ -227,6 +227,9 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 			}
 		}
 	}
+	if c.Http2Origin != nil {
+		out.Http2Origin = *c.Http2Origin
+	}
 	return out
 }
 
@@ -377,6 +380,12 @@ func (defaults *OriginRequestConfig) setIPRules(overrides config.OriginRequestCo
 	}
 }
 
+func (defaults *OriginRequestConfig) setHttp2Origin(overrides config.OriginRequestConfig) {
+	if val := overrides.Http2Origin; val != nil {
+		defaults.Http2Origin = *val
+	}
+}
+
 // SetConfig gets config for the requests that cloudflared sends to origins.
 // Each field has a setter method which sets a value for the field by trying to find:
 //   1. The user config for this rule
@@ -402,6 +411,7 @@ func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfi
 	cfg.setProxyAddress(overrides)
 	cfg.setProxyType(overrides)
 	cfg.setIPRules(overrides)
+	cfg.setHttp2Origin(overrides)
 	return cfg
 }
 
@@ -449,6 +459,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 		ProxyPort:              zeroUIntToNil(c.ProxyPort),
 		ProxyType:              emptyStringToNil(c.ProxyType),
 		IPRules:                convertToRawIPRules(c.IPRules),
+		Http2Origin:            defaultBoolToNil(c.Http2Origin),
 	}
 }
 
