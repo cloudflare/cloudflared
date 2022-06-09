@@ -28,6 +28,7 @@ const (
 	LogFieldCFRay         = "cfRay"
 	LogFieldRule          = "ingressRule"
 	LogFieldOriginService = "originService"
+	LogFieldFlowID        = "flowID"
 )
 
 // Proxy represents a means to Proxy between cloudflared and the origin services.
@@ -96,7 +97,7 @@ func (p *Proxy) ProxyHTTP(
 			logFields,
 		); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
-			p.logRequestError(err, cfRay, rule, srv)
+			p.logRequestError(err, cfRay, "", rule, srv)
 			return err
 		}
 		return nil
@@ -109,7 +110,7 @@ func (p *Proxy) ProxyHTTP(
 		rws := connection.NewHTTPResponseReadWriterAcker(w, req)
 		if err := p.proxyStream(req.Context(), rws, dest, originProxy, logFields); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
-			p.logRequestError(err, cfRay, rule, srv)
+			p.logRequestError(err, cfRay, "", rule, srv)
 			return err
 		}
 		return nil
@@ -140,12 +141,16 @@ func (p *Proxy) ProxyTCP(
 		cfRay:   req.CFRay,
 		lbProbe: req.LBProbe,
 		rule:    ingress.ServiceWarpRouting,
+		flowID:  req.FlowID,
 	}
 
+	p.log.Debug().Str(LogFieldFlowID, req.FlowID).Msg("tcp proxy stream started")
 	if err := p.proxyStream(serveCtx, rwa, req.Dest, p.warpRouting.Proxy, logFields); err != nil {
-		p.logRequestError(err, req.CFRay, "", ingress.ServiceWarpRouting)
+		p.logRequestError(err, req.CFRay, req.FlowID, "", ingress.ServiceWarpRouting)
 		return err
 	}
+
+	p.log.Debug().Str(LogFieldFlowID, req.FlowID).Msg("tcp proxy stream finished successfully")
 
 	return nil
 }
@@ -317,6 +322,7 @@ type logFields struct {
 	cfRay   string
 	lbProbe bool
 	rule    interface{}
+	flowID  string
 }
 
 func (p *Proxy) logRequest(r *http.Request, fields logFields) {
@@ -360,11 +366,14 @@ func (p *Proxy) logOriginResponse(resp *http.Response, fields logFields) {
 	}
 }
 
-func (p *Proxy) logRequestError(err error, cfRay string, rule, service string) {
+func (p *Proxy) logRequestError(err error, cfRay string, flowID string, rule, service string) {
 	requestErrors.Inc()
 	log := p.log.Error().Err(err)
 	if cfRay != "" {
 		log = log.Str(LogFieldCFRay, cfRay)
+	}
+	if flowID != "" {
+		log = log.Str(LogFieldFlowID, flowID)
 	}
 	if rule != "" {
 		log = log.Str(LogFieldRule, rule)

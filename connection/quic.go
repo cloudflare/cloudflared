@@ -31,6 +31,8 @@ const (
 	HTTPMethodKey = "HttpMethod"
 	// HTTPHostKey is used to get or set http Method in QUIC ALPN if the underlying proxy connection type is HTTP.
 	HTTPHostKey = "HttpHost"
+
+	QUICMetadataFlowID = "FlowID"
 )
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
@@ -180,6 +182,7 @@ func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) 
 	if err != nil {
 		return err
 	}
+
 	switch connectRequest.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
 		tracedReq, err := buildHTTPRequest(connectRequest, stream)
@@ -191,7 +194,9 @@ func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) 
 		return originProxy.ProxyHTTP(w, tracedReq, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
 	case quicpogs.ConnectionTypeTCP:
 		rwa := &streamReadWriteAcker{stream}
-		return originProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest})
+		metadata := connectRequest.MetadataMap()
+		return originProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest,
+			FlowID: metadata[QUICMetadataFlowID]})
 	}
 	return nil
 }
