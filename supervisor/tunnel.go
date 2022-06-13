@@ -141,10 +141,11 @@ type DefaultAddrFallback struct {
 func (f DefaultAddrFallback) ShouldGetNewAddress(err error) (needsNewAddress bool, isConnectivityError bool) {
 	switch err.(type) {
 	case nil: // maintain current IP address
-	// Try the next address if it was a quic.IdleTimeoutError or
-	// dupConnRegisterTunnelError
+	// DupConnRegisterTunnelError should indicate to get a new address immediately
+	case connection.DupConnRegisterTunnelError:
+		return true, false
+	// Try the next address if it was a quic.IdleTimeoutError
 	case *quic.IdleTimeoutError,
-		connection.DupConnRegisterTunnelError,
 		edgediscovery.DialError,
 		*connection.EdgeQuicDialError:
 		// Wait for two failures before falling back to a new address
