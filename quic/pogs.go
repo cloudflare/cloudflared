@@ -1,6 +1,8 @@
 package quic
 
 import (
+	"fmt"
+
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 
@@ -15,6 +17,18 @@ const (
 	ConnectionTypeWebsocket
 	ConnectionTypeTCP
 )
+
+func (c ConnectionType) String() string {
+	switch c {
+	case ConnectionTypeHTTP:
+		return "http"
+	case ConnectionTypeWebsocket:
+		return "ws"
+	case ConnectionTypeTCP:
+		return "tcp"
+	}
+	panic(fmt.Sprintf("invalid ConnectionType: %d", c))
+}
 
 // ConnectRequest is the representation of metadata sent at the start of a QUIC application handshake.
 type ConnectRequest struct {

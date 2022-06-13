@@ -160,7 +160,7 @@ func (q *QUICConnection) handleStream(stream io.ReadWriteCloser) error {
 	case quicpogs.DataStreamProtocolSignature:
 		reqServerStream, err := quicpogs.NewRequestServerStream(stream, signature)
 		if err != nil {
-			return nil
+			return err
 		}
 		return q.handleDataStream(reqServerStream)
 	case quicpogs.RPCStreamProtocolSignature:
@@ -175,30 +175,41 @@ func (q *QUICConnection) handleStream(stream io.ReadWriteCloser) error {
 }
 
 func (q *QUICConnection) handleDataStream(stream *quicpogs.RequestServerStream) error {
-	connectRequest, err := stream.ReadConnectRequestData()
+	request, err := stream.ReadConnectRequestData()
 	if err != nil {
 		return err
 	}
 
+	if err := q.dispatchRequest(stream, err, request); err != nil {
+		_ = stream.WriteConnectResponseData(err)
+		q.logger.Err(err).Str("type", request.Type.String()).Str("dest", request.Dest).Msg("Request failed")
+	}
+
+	return nil
+}
+
+func (q *QUICConnection) dispatchRequest(stream *quicpogs.RequestServerStream, err error, request *quicpogs.ConnectRequest) error {
 	originProxy, err := q.orchestrator.GetOriginProxy()
 	if err != nil {
 		return err
 	}
 
-	switch connectRequest.Type {
+	switch request.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
-		tracedReq, err := buildHTTPRequest(connectRequest, stream)
+		tracedReq, err := buildHTTPRequest(request, stream)
 		if err != nil {
 			return err
 		}
-
 		w := newHTTPResponseAdapter(stream)
-		return originProxy.ProxyHTTP(w, tracedReq, connectRequest.Type == quicpogs.ConnectionTypeWebsocket)
+		return originProxy.ProxyHTTP(w, tracedReq, request.Type == quicpogs.ConnectionTypeWebsocket)
+
 	case quicpogs.ConnectionTypeTCP:
 		rwa := &streamReadWriteAcker{stream}
-		metadata := connectRequest.MetadataMap()
-		return originProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{Dest: connectRequest.Dest,
-			FlowID: metadata[QUICMetadataFlowID]})
+		metadata := request.MetadataMap()
+		return originProxy.ProxyTCP(context.Background(), rwa, &TCPRequest{
+			Dest:   request.Dest,
+			FlowID: metadata[QUICMetadataFlowID],
+		})
 	}
 	return nil
 }
