@@ -23,7 +23,9 @@ func TestConfigFileSettings(t *testing.T) {
 			Service:  "https://localhost:8001",
 		}
 		warpRouting = WarpRoutingConfig{
-			Enabled: true,
+			Enabled:        true,
+			ConnectTimeout: &CustomDuration{Duration: 2 * time.Second},
+			TCPKeepAlive:   &CustomDuration{Duration: 10 * time.Second},
 		}
 	)
 	rawYAML := `
@@ -48,6 +50,9 @@ ingress:
    service: https://localhost:8001
 warp-routing: 
   enabled: true
+  connectTimeout: 2s
+  tcpKeepAlive: 10s
+
 retries: 5
 grace-period: 30s
 percentage: 3.14

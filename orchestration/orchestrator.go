@@ -47,7 +47,7 @@ func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag,
 		log:            log,
 		shutdownC:      ctx.Done(),
 	}
-	if err := o.updateIngress(*config.Ingress, config.WarpRoutingEnabled); err != nil {
+	if err := o.updateIngress(*config.Ingress, config.WarpRouting); err != nil {
 		return nil, err
 	}
 	go o.waitToCloseLastProxy()
@@ -80,7 +80,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 		}
 	}
 
-	if err := o.updateIngress(newConf.Ingress, newConf.WarpRouting.Enabled); err != nil {
+	if err := o.updateIngress(newConf.Ingress, newConf.WarpRouting); err != nil {
 		o.log.Err(err).
 			Int32("version", version).
 			Str("config", string(config)).
@@ -103,7 +103,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 }
 
 // The caller is responsible to make sure there is no concurrent access
-func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRoutingEnabled bool) error {
+func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting ingress.WarpRoutingConfig) error {
 	select {
 	case <-o.shutdownC:
 		return fmt.Errorf("cloudflared already shutdown")
@@ -118,10 +118,10 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRoutingEn
 	if err := ingressRules.StartOrigins(o.log, proxyShutdownC); err != nil {
 		return errors.Wrap(err, "failed to start origin")
 	}
-	newProxy := proxy.NewOriginProxy(ingressRules, warpRoutingEnabled, o.tags, o.log)
+	newProxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.log)
 	o.proxy.Store(newProxy)
 	o.config.Ingress = &ingressRules
-	o.config.WarpRoutingEnabled = warpRoutingEnabled
+	o.config.WarpRouting = warpRouting
 
 	// If proxyShutdownC is nil, there is no previous running proxy
 	if o.proxyShutdownC != nil {
@@ -139,7 +139,7 @@ func (o *Orchestrator) GetConfigJSON() ([]byte, error) {
 	c := &newLocalConfig{
 		RemoteConfig: ingress.RemoteConfig{
 			Ingress:     *o.config.Ingress,
-			WarpRouting: config.WarpRoutingConfig{Enabled: o.config.WarpRoutingEnabled},
+			WarpRouting: o.config.WarpRouting,
 		},
 		ConfigurationFlags: o.config.ConfigurationFlags,
 	}
@@ -166,7 +166,7 @@ func (o *Orchestrator) GetVersionedConfigJSON() ([]byte, error) {
 			OriginRequest ingress.OriginRequestConfig `json:"originRequest"`
 		}{
 			Ingress:       o.config.Ingress.Rules,
-			WarpRouting:   config.WarpRoutingConfig{Enabled: o.config.WarpRoutingEnabled},
+			WarpRouting:   o.config.WarpRouting.RawConfig(),
 			OriginRequest: o.config.Ingress.Defaults,
 		},
 	}

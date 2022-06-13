@@ -274,7 +274,7 @@ func TestOriginRequestConfigDefaults(t *testing.T) {
 		// Rule 0 didn't override anything, so it inherits the cloudflared defaults
 		actual0 := ing.Rules[0].Config
 		expected0 := OriginRequestConfig{
-			ConnectTimeout:       defaultConnectTimeout,
+			ConnectTimeout:       defaultHTTPConnectTimeout,
 			TLSTimeout:           defaultTLSTimeout,
 			TCPKeepAlive:         defaultTCPKeepAlive,
 			KeepAliveConnections: defaultKeepAliveConnections,
@@ -404,7 +404,7 @@ func TestDefaultConfigFromCLI(t *testing.T) {
 	c := cli.NewContext(nil, set, nil)
 
 	expected := OriginRequestConfig{
-		ConnectTimeout:       defaultConnectTimeout,
+		ConnectTimeout:       defaultHTTPConnectTimeout,
 		TLSTimeout:           defaultTLSTimeout,
 		TCPKeepAlive:         defaultTCPKeepAlive,
 		KeepAliveConnections: defaultKeepAliveConnections,

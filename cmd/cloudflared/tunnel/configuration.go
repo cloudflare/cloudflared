@@ -358,7 +358,7 @@ func prepareTunnelConfig(
 	}
 	orchestratorConfig := &orchestration.Config{
 		Ingress:            &ingressRules,
-		WarpRoutingEnabled: warpRoutingEnabled,
+		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
 		ConfigurationFlags: parseConfigFlags(c),
 	}
 	return tunnelConfig, orchestratorConfig, nil

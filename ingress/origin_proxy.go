@@ -1,26 +1,20 @@
 package ingress
 
 import (
+	"context"
 	"fmt"
-	"net"
 	"net/http"
-
-	"github.com/pkg/errors"
-)
-
-var (
-	errUnsupportedConnectionType = errors.New("internal error: unsupported connection type")
 )
 
 // HTTPOriginProxy can be implemented by origin services that want to proxy http requests.
 type HTTPOriginProxy interface {
-	// RoundTrip is how cloudflared proxies eyeball requests to the actual origin services
+	// RoundTripper is how cloudflared proxies eyeball requests to the actual origin services
 	http.RoundTripper
 }
 
 // StreamBasedOriginProxy can be implemented by origin services that want to proxy ws/TCP.
 type StreamBasedOriginProxy interface {
-	EstablishConnection(dest string) (OriginConnection, error)
+	EstablishConnection(ctx context.Context, dest string) (OriginConnection, error)
 }
 
 func (o *unixSocketPath) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -59,8 +53,8 @@ func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func (o *rawTCPService) EstablishConnection(dest string) (OriginConnection, error) {
-	conn, err := net.Dial("tcp", dest)
+func (o *rawTCPService) EstablishConnection(ctx context.Context, dest string) (OriginConnection, error) {
+	conn, err := o.dialer.DialContext(ctx, "tcp", dest)
 	if err != nil {
 		return nil, err
 	}
@@ -71,13 +65,13 @@ func (o *rawTCPService) EstablishConnection(dest string) (OriginConnection, erro
 	return originConn, nil
 }
 
-func (o *tcpOverWSService) EstablishConnection(dest string) (OriginConnection, error) {
+func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string) (OriginConnection, error) {
 	var err error
 	if !o.isBastion {
 		dest = o.dest
 	}
 
-	conn, err := net.Dial("tcp", dest)
+	conn, err := o.dialer.DialContext(ctx, "tcp", dest)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +83,6 @@ func (o *tcpOverWSService) EstablishConnection(dest string) (OriginConnection, e
 
 }
 
-func (o *socksProxyOverWSService) EstablishConnection(dest string) (OriginConnection, error) {
+func (o *socksProxyOverWSService) EstablishConnection(_ctx context.Context, _dest string) (OriginConnection, error) {
 	return o.conn, nil
 }

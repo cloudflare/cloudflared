@@ -91,7 +91,8 @@ func (o httpService) MarshalJSON() ([]byte, error) {
 // rawTCPService dials TCP to the destination specified by the client
 // It's used by warp routing
 type rawTCPService struct {
-	name string
+	name   string
+	dialer net.Dialer
 }
 
 func (o *rawTCPService) String() string {
@@ -113,6 +114,7 @@ type tcpOverWSService struct {
 	dest          string
 	isBastion     bool
 	streamHandler streamHandlerFunc
+	dialer        net.Dialer
 }
 
 type socksProxyOverWSService struct {
@@ -176,6 +178,8 @@ func (o *tcpOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg Ori
 	} else {
 		o.streamHandler = DefaultStreamHandler
 	}
+	o.dialer.Timeout = cfg.ConnectTimeout.Duration
+	o.dialer.KeepAlive = cfg.TCPKeepAlive.Duration
 	return nil
 }
 

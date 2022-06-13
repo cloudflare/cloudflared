@@ -32,7 +32,12 @@ import (
 )
 
 var (
-	testTags = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
+	testTags        = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
+	noWarpRouting   = ingress.WarpRoutingConfig{}
+	testWarpRouting = ingress.WarpRoutingConfig{
+		Enabled:        true,
+		ConnectTimeout: config.CustomDuration{Duration: time.Second},
+	}
 )
 
 type mockHTTPRespWriter struct {
@@ -138,7 +143,7 @@ func TestProxySingleOrigin(t *testing.T) {
 
 	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingressRule, false, testTags, &log)
+	proxy := NewOriginProxy(ingressRule, noWarpRouting, testTags, &log)
 	t.Run("testProxyHTTP", testProxyHTTP(proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
@@ -345,7 +350,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 	ctx, cancel := context.WithCancel(context.Background())
 	require.NoError(t, ingress.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingress, false, testTags, &log)
+	proxy := NewOriginProxy(ingress, noWarpRouting, testTags, &log)
 
 	for _, test := range tests {
 		responseWriter := newMockHTTPRespWriter()
@@ -393,7 +398,7 @@ func TestProxyError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	proxy := NewOriginProxy(ing, false, testTags, &log)
+	proxy := NewOriginProxy(ing, noWarpRouting, testTags, &log)
 
 	responseWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
@@ -509,7 +514,7 @@ func TestConnections(t *testing.T) {
 				originService:         runEchoTCPService,
 				eyeballResponseWriter: newTCPRespWriter(replayer),
 				eyeballRequestBody:    newTCPRequestBody([]byte("test2")),
-				warpRoutingService:    ingress.NewWarpRoutingService(),
+				warpRoutingService:    ingress.NewWarpRoutingService(testWarpRouting),
 				connectionType:        connection.TypeTCP,
 				requestHeaders: map[string][]string{
 					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
@@ -526,7 +531,7 @@ func TestConnections(t *testing.T) {
 				originService:        runEchoWSService,
 				// eyeballResponseWriter gets set after roundtrip dial.
 				eyeballRequestBody: newPipedWSRequestBody([]byte("test3")),
-				warpRoutingService: ingress.NewWarpRoutingService(),
+				warpRoutingService: ingress.NewWarpRoutingService(testWarpRouting),
 				requestHeaders: map[string][]string{
 					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
 				},
@@ -652,7 +657,7 @@ func TestConnections(t *testing.T) {
 
 			ingressRule := createSingleIngressConfig(t, test.args.ingressServiceScheme+ln.Addr().String())
 			ingressRule.StartOrigins(logger, ctx.Done())
-			proxy := NewOriginProxy(ingressRule, true, testTags, logger)
+			proxy := NewOriginProxy(ingressRule, testWarpRouting, testTags, logger)
 			proxy.warpRouting = test.args.warpRoutingService
 
 			dest := ln.Addr().String()

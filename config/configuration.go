@@ -244,7 +244,9 @@ type Configuration struct {
 }
 
 type WarpRoutingConfig struct {
-	Enabled bool `yaml:"enabled" json:"enabled"`
+	Enabled        bool            `yaml:"enabled" json:"enabled"`
+	ConnectTimeout *CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
+	TCPKeepAlive   *CustomDuration `yaml:"tcpKeepAlive" json:"tcpKeepAlive,omitempty"`
 }
 
 type configFileSettings struct {

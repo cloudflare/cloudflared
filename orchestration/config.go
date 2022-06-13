@@ -19,8 +19,8 @@ type newLocalConfig struct {
 
 // Config is the original config as read and parsed by cloudflared.
 type Config struct {
-	Ingress            *ingress.Ingress
-	WarpRoutingEnabled bool
+	Ingress     *ingress.Ingress
+	WarpRouting ingress.WarpRoutingConfig
 
 	// Extra settings used to configure this instance but that are not eligible for remotely management
 	// ie. (--protocol, --loglevel, ...)
@@ -37,7 +37,7 @@ func (rc *newLocalConfig) MarshalJSON() ([]byte, error) {
 			// UI doesn't support top level configs, so we reconcile to individual ingress configs.
 			GlobalOriginRequest: nil,
 			IngressRules:        convertToUnvalidatedIngressRules(rc.RemoteConfig.Ingress),
-			WarpRouting:         rc.RemoteConfig.WarpRouting,
+			WarpRouting:         rc.RemoteConfig.WarpRouting.RawConfig(),
 		},
 	}
 

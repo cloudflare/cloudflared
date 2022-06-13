@@ -48,8 +48,7 @@ var (
 // - receiving an old version is noop
 func TestUpdateConfiguration(t *testing.T) {
 	initConfig := &Config{
-		Ingress:            &ingress.Ingress{},
-		WarpRoutingEnabled: false,
+		Ingress: &ingress.Ingress{},
 	}
 	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, &testLogger)
 	require.NoError(t, err)
@@ -87,7 +86,8 @@ func TestUpdateConfiguration(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": true
+        "enabled": true,
+        "connectTimeout": 10
     }
 }	
 `)
@@ -121,7 +121,8 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.Equal(t, config.CustomDuration{Duration: time.Second * 90}, configV2.Ingress.Rules[2].Config.ConnectTimeout)
 	require.Equal(t, false, configV2.Ingress.Rules[2].Config.NoTLSVerify)
 	require.Equal(t, true, configV2.Ingress.Rules[2].Config.NoHappyEyeballs)
-	require.True(t, configV2.WarpRoutingEnabled)
+	require.True(t, configV2.WarpRouting.Enabled)
+	require.Equal(t, configV2.WarpRouting.ConnectTimeout.Duration, 10*time.Second)
 
 	originProxyV2, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
@@ -164,7 +165,7 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.Len(t, configV10.Ingress.Rules, 1)
 	require.True(t, configV10.Ingress.Rules[0].Matches("blogs.tunnel.io", "/2022/02/10"))
 	require.Equal(t, ingress.HelloWorldService, configV10.Ingress.Rules[0].Service.String())
-	require.False(t, configV10.WarpRoutingEnabled)
+	require.False(t, configV10.WarpRouting.Enabled)
 
 	originProxyV10, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
@@ -246,8 +247,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 		appliedV2 = make(chan struct{})
 
 		initConfig = &Config{
-			Ingress:            &ingress.Ingress{},
-			WarpRoutingEnabled: false,
+			Ingress: &ingress.Ingress{},
 		}
 	)
 
@@ -476,8 +476,7 @@ func TestClosePreviousProxies(t *testing.T) {
 }
 `)
 		initConfig = &Config{
-			Ingress:            &ingress.Ingress{},
-			WarpRoutingEnabled: false,
+			Ingress: &ingress.Ingress{},
 		}
 	)
 
@@ -534,8 +533,7 @@ func TestPersistentConnection(t *testing.T) {
 	)
 	msg := t.Name()
 	initConfig := &Config{
-		Ingress:            &ingress.Ingress{},
-		WarpRoutingEnabled: false,
+		Ingress: &ingress.Ingress{},
 	}
 	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, &testLogger)
 	require.NoError(t, err)
@@ -645,8 +643,7 @@ func TestPersistentConnection(t *testing.T) {
 func TestSerializeLocalConfig(t *testing.T) {
 	c := &newLocalConfig{
 		RemoteConfig: ingress.RemoteConfig{
-			Ingress:     ingress.Ingress{},
-			WarpRouting: config.WarpRoutingConfig{},
+			Ingress: ingress.Ingress{},
 		},
 		ConfigurationFlags: map[string]string{"a": "b"},
 	}

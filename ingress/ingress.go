@@ -97,8 +97,16 @@ type WarpRoutingService struct {
 	Proxy StreamBasedOriginProxy
 }
 
-func NewWarpRoutingService() *WarpRoutingService {
-	return &WarpRoutingService{Proxy: &rawTCPService{name: ServiceWarpRouting}}
+func NewWarpRoutingService(config WarpRoutingConfig) *WarpRoutingService {
+	svc := &rawTCPService{
+		name: ServiceWarpRouting,
+		dialer: net.Dialer{
+			Timeout:   config.ConnectTimeout.Duration,
+			KeepAlive: config.TCPKeepAlive.Duration,
+		},
+	}
+
+	return &WarpRoutingService{Proxy: svc}
 }
 
 // Get a single origin service from the CLI/config.

@@ -42,7 +42,7 @@ type Proxy struct {
 // NewOriginProxy returns a new instance of the Proxy struct.
 func NewOriginProxy(
 	ingressRules ingress.Ingress,
-	warpRoutingEnabled bool,
+	warpRouting ingress.WarpRoutingConfig,
 	tags []tunnelpogs.Tag,
 	log *zerolog.Logger,
 ) *Proxy {
@@ -51,8 +51,8 @@ func NewOriginProxy(
 		tags:         tags,
 		log:          log,
 	}
-	if warpRoutingEnabled {
-		proxy.warpRouting = ingress.NewWarpRoutingService()
+	if warpRouting.Enabled {
+		proxy.warpRouting = ingress.NewWarpRoutingService(warpRouting)
 		log.Info().Msgf("Warp-routing is enabled")
 	}
 
@@ -108,7 +108,7 @@ func (p *Proxy) ProxyHTTP(
 		}
 
 		rws := connection.NewHTTPResponseReadWriterAcker(w, req)
-		if err := p.proxyStream(req.Context(), rws, dest, originProxy, logFields); err != nil {
+		if err := p.proxyStream(req.Context(), rws, dest, originProxy); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
 			p.logRequestError(err, cfRay, "", rule, srv)
 			return err
@@ -137,15 +137,9 @@ func (p *Proxy) ProxyTCP(
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	logFields := logFields{
-		cfRay:   req.CFRay,
-		lbProbe: req.LBProbe,
-		rule:    ingress.ServiceWarpRouting,
-		flowID:  req.FlowID,
-	}
-
 	p.log.Debug().Str(LogFieldFlowID, req.FlowID).Msg("tcp proxy stream started")
-	if err := p.proxyStream(serveCtx, rwa, req.Dest, p.warpRouting.Proxy, logFields); err != nil {
+
+	if err := p.proxyStream(serveCtx, rwa, req.Dest, p.warpRouting.Proxy); err != nil {
 		p.logRequestError(err, req.CFRay, req.FlowID, "", ingress.ServiceWarpRouting)
 		return err
 	}
@@ -255,9 +249,8 @@ func (p *Proxy) proxyStream(
 	rwa connection.ReadWriteAcker,
 	dest string,
 	connectionProxy ingress.StreamBasedOriginProxy,
-	fields logFields,
 ) error {
-	originConn, err := connectionProxy.EstablishConnection(dest)
+	originConn, err := connectionProxy.EstablishConnection(ctx, dest)
 	if err != nil {
 		return err
 	}

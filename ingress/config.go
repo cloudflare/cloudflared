@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	defaultConnectTimeout   = config.CustomDuration{Duration: 30 * time.Second}
-	defaultTLSTimeout       = config.CustomDuration{Duration: 10 * time.Second}
-	defaultTCPKeepAlive     = config.CustomDuration{Duration: 30 * time.Second}
-	defaultKeepAliveTimeout = config.CustomDuration{Duration: 90 * time.Second}
+	defaultHTTPConnectTimeout        = config.CustomDuration{Duration: 30 * time.Second}
+	defaultWarpRoutingConnectTimeout = config.CustomDuration{Duration: 5 * time.Second}
+	defaultTLSTimeout                = config.CustomDuration{Duration: 10 * time.Second}
+	defaultTCPKeepAlive              = config.CustomDuration{Duration: 30 * time.Second}
+	defaultKeepAliveTimeout          = config.CustomDuration{Duration: 90 * time.Second}
 )
 
 const (
@@ -41,10 +42,44 @@ const (
 	socksProxy = "socks"
 )
 
+type WarpRoutingConfig struct {
+	Enabled        bool                  `yaml:"enabled" json:"enabled"`
+	ConnectTimeout config.CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
+	TCPKeepAlive   config.CustomDuration `yaml:"tcpKeepAlive" json:"tcpKeepAlive,omitempty"`
+}
+
+func NewWarpRoutingConfig(raw *config.WarpRoutingConfig) WarpRoutingConfig {
+	cfg := WarpRoutingConfig{
+		Enabled:        raw.Enabled,
+		ConnectTimeout: defaultWarpRoutingConnectTimeout,
+		TCPKeepAlive:   defaultTCPKeepAlive,
+	}
+	if raw.ConnectTimeout != nil {
+		cfg.ConnectTimeout = *raw.ConnectTimeout
+	}
+	if raw.TCPKeepAlive != nil {
+		cfg.TCPKeepAlive = *raw.TCPKeepAlive
+	}
+	return cfg
+}
+
+func (c *WarpRoutingConfig) RawConfig() config.WarpRoutingConfig {
+	raw := config.WarpRoutingConfig{
+		Enabled: c.Enabled,
+	}
+	if c.ConnectTimeout.Duration != defaultWarpRoutingConnectTimeout.Duration {
+		raw.ConnectTimeout = &c.ConnectTimeout
+	}
+	if c.TCPKeepAlive.Duration != defaultTCPKeepAlive.Duration {
+		raw.TCPKeepAlive = &c.TCPKeepAlive
+	}
+	return raw
+}
+
 // RemoteConfig models ingress settings that can be managed remotely, for example through the dashboard.
 type RemoteConfig struct {
 	Ingress     Ingress
-	WarpRouting config.WarpRoutingConfig
+	WarpRouting WarpRoutingConfig
 }
 
 type RemoteConfigJSON struct {
@@ -72,18 +107,18 @@ func (rc *RemoteConfig) UnmarshalJSON(b []byte) error {
 	}
 
 	rc.Ingress = ingress
-	rc.WarpRouting = rawConfig.WarpRouting
+	rc.WarpRouting = NewWarpRoutingConfig(&rawConfig.WarpRouting)
 
 	return nil
 }
 
 func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
-	var connectTimeout config.CustomDuration = defaultConnectTimeout
-	var tlsTimeout config.CustomDuration = defaultTLSTimeout
-	var tcpKeepAlive config.CustomDuration = defaultTCPKeepAlive
+	var connectTimeout = defaultHTTPConnectTimeout
+	var tlsTimeout = defaultTLSTimeout
+	var tcpKeepAlive = defaultTCPKeepAlive
 	var noHappyEyeballs bool
-	var keepAliveConnections int = defaultKeepAliveConnections
-	var keepAliveTimeout config.CustomDuration = defaultKeepAliveTimeout
+	var keepAliveConnections = defaultKeepAliveConnections
+	var keepAliveTimeout = defaultKeepAliveTimeout
 	var httpHostHeader string
 	var originServerName string
 	var caPool string
@@ -160,7 +195,7 @@ func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
 
 func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 	out := OriginRequestConfig{
-		ConnectTimeout:       defaultConnectTimeout,
+		ConnectTimeout:       defaultHTTPConnectTimeout,
 		TLSTimeout:           defaultTLSTimeout,
 		TCPKeepAlive:         defaultTCPKeepAlive,
 		KeepAliveConnections: defaultKeepAliveConnections,
@@ -404,7 +439,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 	var keepAliveTimeout *config.CustomDuration
 	var proxyAddress *string
 
-	if c.ConnectTimeout != defaultConnectTimeout {
+	if c.ConnectTimeout != defaultHTTPConnectTimeout {
 		connectTimeout = &c.ConnectTimeout
 	}
 	if c.TLSTimeout != defaultTLSTimeout {

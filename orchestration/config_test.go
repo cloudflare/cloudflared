@@ -3,16 +3,17 @@ package orchestration
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ingress"
 )
 
 // TestNewLocalConfig_MarshalJSON tests that we are able to converte a compiled and validated config back
 // into an "unvalidated" format which is compatible with Remote Managed configurations.
 func TestNewLocalConfig_MarshalJSON(t *testing.T) {
-
 	rawConfig := []byte(`
 	{
 		"originRequest": {
@@ -57,7 +58,11 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 					]
 				}
 			}
-		]
+		],
+        "warp-routing": {
+			"enabled": true,
+			"connectTimeout": 1
+        }
 	}
 	`)
 
@@ -73,10 +78,18 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 	jsonSerde, err := json.Marshal(c)
 	require.NoError(t, err)
 
-	var config ingress.RemoteConfig
-	err = json.Unmarshal(jsonSerde, &config)
+	var remoteConfig ingress.RemoteConfig
+	err = json.Unmarshal(jsonSerde, &remoteConfig)
 	require.NoError(t, err)
 
-	require.Equal(t, config.WarpRouting.Enabled, false)
-	require.Equal(t, config.Ingress.Rules, expectedConfig.Ingress.Rules)
+	require.Equal(t, remoteConfig.WarpRouting, ingress.WarpRoutingConfig{
+		Enabled: true,
+		ConnectTimeout: config.CustomDuration{
+			Duration: time.Second,
+		},
+		TCPKeepAlive: config.CustomDuration{
+			Duration: 30 * time.Second, // default value is 30 seconds
+		},
+	})
+	require.Equal(t, remoteConfig.Ingress.Rules, expectedConfig.Ingress.Rules)
 }
