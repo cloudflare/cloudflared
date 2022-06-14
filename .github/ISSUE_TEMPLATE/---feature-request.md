@@ -1,9 +1,9 @@
 ---
-name: "Feature request \U0001F4A1"
+name: "\U0001F4A1 Feature request"
 about: Suggest a feature or enhancement for cloudflared
-title: ''
-labels: awaiting reply, feature-request
-assignees: ''
+title: "\U0001F4A1"
+labels: 'Priority: Normal, Type: Feature Request'
+assignees: abelinkinbio, sssilver
 
 ---
 

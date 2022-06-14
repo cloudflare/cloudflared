@@ -1,9 +1,9 @@
 ---
-name: "Bug report \U0001F41B"
+name: "\U0001F41B Bug report"
 about: Create a report to help us improve cloudflared
-title: ''
-labels: awaiting reply, bug
-assignees: ''
+title: "\U0001F41B"
+labels: 'Priority: Normal, Type: Bug'
+assignees: abelinkinbio
 
 ---
 
