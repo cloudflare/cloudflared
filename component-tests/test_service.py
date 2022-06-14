@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import pathlib
+import platform
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,7 +10,12 @@ import pytest
 
 import test_logging
 from conftest import CfdModes
-from util import select_platform, start_cloudflared, wait_tunnel_ready, write_config
+from util import start_cloudflared, wait_tunnel_ready, write_config
+
+
+def select_platform(plat):
+    return pytest.mark.skipif(
+        platform.system() != plat, reason=f"Only runs on {plat}")
 
 
 def default_config_dir():
