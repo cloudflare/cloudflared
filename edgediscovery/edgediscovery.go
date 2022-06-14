@@ -11,10 +11,9 @@ import (
 
 const (
 	LogFieldConnIndex = "connIndex"
-	LogFieldIPAddress = "ip"
 )
 
-var ErrNoAddressesLeft = fmt.Errorf("there are no free edge addresses left")
+var errNoAddressesLeft = fmt.Errorf("there are no free edge addresses left")
 
 // Edge finds addresses on the Cloudflare edge and hands them out to connections.
 type Edge struct {
@@ -29,8 +28,8 @@ type Edge struct {
 
 // ResolveEdge runs the initial discovery of the Cloudflare edge, finding Addrs that can be allocated
 // to connections.
-func ResolveEdge(log *zerolog.Logger, region string, edgeIpVersion allregions.ConfigIPVersion) (*Edge, error) {
-	regions, err := allregions.ResolveEdge(log, region, edgeIpVersion)
+func ResolveEdge(log *zerolog.Logger, region string) (*Edge, error) {
+	regions, err := allregions.ResolveEdge(log, region)
 	if err != nil {
 		return new(Edge), err
 	}
@@ -52,6 +51,15 @@ func StaticEdge(log *zerolog.Logger, hostnames []string) (*Edge, error) {
 	}, nil
 }
 
+// MockEdge creates a Cloudflare Edge from arbitrary TCP addresses. Used for testing.
+func MockEdge(log *zerolog.Logger, addrs []*allregions.EdgeAddr) *Edge {
+	regions := allregions.NewNoResolve(addrs)
+	return &Edge{
+		log:     log,
+		regions: regions,
+	}
+}
+
 // ------------------------------------
 // Methods
 // ------------------------------------
@@ -62,7 +70,7 @@ func (ed *Edge) GetAddrForRPC() (*allregions.EdgeAddr, error) {
 	defer ed.Unlock()
 	addr := ed.regions.GetAnyAddress()
 	if addr == nil {
-		return nil, ErrNoAddressesLeft
+		return nil, errNoAddressesLeft
 	}
 	return addr, nil
 }
@@ -83,17 +91,14 @@ func (ed *Edge) GetAddr(connIndex int) (*allregions.EdgeAddr, error) {
 	addr := ed.regions.GetUnusedAddr(nil, connIndex)
 	if addr == nil {
 		log.Debug().Msg("edgediscovery - GetAddr: No addresses left to give proxy connection")
-		return nil, ErrNoAddressesLeft
+		return nil, errNoAddressesLeft
 	}
-	log = ed.log.With().
-		Int(LogFieldConnIndex, connIndex).
-		IPAddr(LogFieldIPAddress, addr.UDP.IP).Logger()
-	log.Debug().Msgf("edgediscovery - GetAddr: Giving connection its new address")
+	log.Debug().Msg("edgediscovery - GetAddr: Giving connection its new address")
 	return addr, nil
 }
 
 // GetDifferentAddr gives back the proxy connection's edge Addr and uses a new one.
-func (ed *Edge) GetDifferentAddr(connIndex int, hasConnectivityError bool) (*allregions.EdgeAddr, error) {
+func (ed *Edge) GetDifferentAddr(connIndex int) (*allregions.EdgeAddr, error) {
 	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
 
 	ed.Lock()
@@ -101,18 +106,16 @@ func (ed *Edge) GetDifferentAddr(connIndex int, hasConnectivityError bool) (*all
 
 	oldAddr := ed.regions.AddrUsedBy(connIndex)
 	if oldAddr != nil {
-		ed.regions.GiveBack(oldAddr, hasConnectivityError)
+		ed.regions.GiveBack(oldAddr)
 	}
 	addr := ed.regions.GetUnusedAddr(oldAddr, connIndex)
 	if addr == nil {
 		log.Debug().Msg("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection")
 		// note: if oldAddr were not nil, it will become available on the next iteration
-		return nil, ErrNoAddressesLeft
+		return nil, errNoAddressesLeft
 	}
-	log = ed.log.With().
-		Int(LogFieldConnIndex, connIndex).
-		IPAddr(LogFieldIPAddress, addr.UDP.IP).Logger()
-	log.Debug().Msgf("edgediscovery - GetDifferentAddr: Giving connection its new address from the address list: %v", ed.regions.AvailableAddrs())
+	log.Debug().Msgf("edgediscovery - GetDifferentAddr: Giving connection its new address: %v from the address list: %v",
+		addr, ed.regions.AvailableAddrs())
 	return addr, nil
 }
 
@@ -125,11 +128,9 @@ func (ed *Edge) AvailableAddrs() int {
 
 // GiveBack the address so that other connections can use it.
 // Returns true if the address is in this edge.
-func (ed *Edge) GiveBack(addr *allregions.EdgeAddr, hasConnectivityError bool) bool {
+func (ed *Edge) GiveBack(addr *allregions.EdgeAddr) bool {
 	ed.Lock()
 	defer ed.Unlock()
-	log := ed.log.With().
-		IPAddr(LogFieldIPAddress, addr.UDP.IP).Logger()
-	log.Debug().Msgf("edgediscovery - GiveBack: Address now unused")
-	return ed.regions.GiveBack(addr, hasConnectivityError)
+	ed.log.Debug().Msg("edgediscovery - GiveBack: Address now unused")
+	return ed.regions.GiveBack(addr)
 }

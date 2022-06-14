@@ -11,113 +11,56 @@ import (
 )
 
 var (
-	testLogger = zerolog.Nop()
-	v4Addrs    = []*allregions.EdgeAddr{&addr0, &addr1, &addr2, &addr3}
-	v6Addrs    = []*allregions.EdgeAddr{&addr4, &addr5, &addr6, &addr7}
-	addr0      = allregions.EdgeAddr{
+	addr0 = allregions.EdgeAddr{
 		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.0"),
+			IP:   net.ParseIP("123.0.0.0"),
 			Port: 8000,
 			Zone: "",
 		},
 		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.0"),
+			IP:   net.ParseIP("123.0.0.0"),
 			Port: 8000,
 			Zone: "",
 		},
-		IPVersion: allregions.V4,
 	}
 	addr1 = allregions.EdgeAddr{
 		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.1"),
+			IP:   net.ParseIP("123.0.0.1"),
 			Port: 8000,
 			Zone: "",
 		},
 		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.1"),
+			IP:   net.ParseIP("123.0.0.1"),
 			Port: 8000,
 			Zone: "",
 		},
-		IPVersion: allregions.V4,
 	}
 	addr2 = allregions.EdgeAddr{
 		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.2"),
+			IP:   net.ParseIP("123.0.0.2"),
 			Port: 8000,
 			Zone: "",
 		},
 		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.2"),
+			IP:   net.ParseIP("123.0.0.2"),
 			Port: 8000,
 			Zone: "",
 		},
-		IPVersion: allregions.V4,
 	}
 	addr3 = allregions.EdgeAddr{
 		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("123.4.5.3"),
+			IP:   net.ParseIP("123.0.0.3"),
 			Port: 8000,
 			Zone: "",
 		},
 		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("123.4.5.3"),
+			IP:   net.ParseIP("123.0.0.3"),
 			Port: 8000,
 			Zone: "",
 		},
-		IPVersion: allregions.V4,
 	}
-	addr4 = allregions.EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("2606:4700:a0::1"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("2606:4700:a0::1"),
-			Port: 8000,
-			Zone: "",
-		},
-		IPVersion: allregions.V6,
-	}
-	addr5 = allregions.EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("2606:4700:a0::2"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("2606:4700:a0::2"),
-			Port: 8000,
-			Zone: "",
-		},
-		IPVersion: allregions.V6,
-	}
-	addr6 = allregions.EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("2606:4700:a0::3"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("2606:4700:a0::3"),
-			Port: 8000,
-			Zone: "",
-		},
-		IPVersion: allregions.V6,
-	}
-	addr7 = allregions.EdgeAddr{
-		TCP: &net.TCPAddr{
-			IP:   net.ParseIP("2606:4700:a0::4"),
-			Port: 8000,
-			Zone: "",
-		},
-		UDP: &net.UDPAddr{
-			IP:   net.ParseIP("2606:4700:a0::4"),
-			Port: 8000,
-			Zone: "",
-		},
-		IPVersion: allregions.V6,
-	}
+
+	testLogger = zerolog.Nop()
 )
 
 func TestGiveBack(t *testing.T) {
@@ -132,7 +75,7 @@ func TestGiveBack(t *testing.T) {
 	assert.Equal(t, 3, edge.AvailableAddrs())
 
 	// Get it back
-	edge.GiveBack(addr, false)
+	edge.GiveBack(addr)
 	assert.Equal(t, 4, edge.AvailableAddrs())
 }
 
@@ -164,7 +107,7 @@ func TestGetAddrForRPC(t *testing.T) {
 	assert.Equal(t, 4, edge.AvailableAddrs())
 
 	// Get it back
-	edge.GiveBack(addr, false)
+	edge.GiveBack(addr)
 	assert.Equal(t, 4, edge.AvailableAddrs())
 }
 
@@ -179,13 +122,13 @@ func TestOnePerRegion(t *testing.T) {
 	assert.NotNil(t, a1)
 
 	// if the first address is bad, get the second one
-	a2, err := edge.GetDifferentAddr(connID, false)
+	a2, err := edge.GetDifferentAddr(connID)
 	assert.NoError(t, err)
 	assert.NotNil(t, a2)
 	assert.NotEqual(t, a1, a2)
 
 	// now that second one is bad, get the first one again
-	a3, err := edge.GetDifferentAddr(connID, false)
+	a3, err := edge.GetDifferentAddr(connID)
 	assert.NoError(t, err)
 	assert.Equal(t, a1, a3)
 }
@@ -201,11 +144,11 @@ func TestOnlyOneAddrLeft(t *testing.T) {
 	assert.NotNil(t, addr)
 
 	// If that edge address is "bad", there's no alternative address.
-	_, err = edge.GetDifferentAddr(connID, false)
+	_, err = edge.GetDifferentAddr(connID)
 	assert.Error(t, err)
 
 	// previously bad address should become available again on next iteration.
-	addr, err = edge.GetDifferentAddr(connID, false)
+	addr, err = edge.GetDifferentAddr(connID)
 	assert.NoError(t, err)
 	assert.NotNil(t, addr)
 }
@@ -247,17 +190,8 @@ func TestGetDifferentAddr(t *testing.T) {
 	assert.Equal(t, 3, edge.AvailableAddrs())
 
 	// If the same connection requests another address, it should get the same one.
-	addr2, err := edge.GetDifferentAddr(connID, false)
+	addr2, err := edge.GetDifferentAddr(connID)
 	assert.NoError(t, err)
 	assert.NotEqual(t, addr, addr2)
 	assert.Equal(t, 3, edge.AvailableAddrs())
-}
-
-// MockEdge creates a Cloudflare Edge from arbitrary TCP addresses. Used for testing.
-func MockEdge(log *zerolog.Logger, addrs []*allregions.EdgeAddr) *Edge {
-	regions := allregions.NewNoResolve(addrs)
-	return &Edge{
-		log:     log,
-		regions: regions,
-	}
 }
