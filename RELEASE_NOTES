@@ -1,3 +1,26 @@
+2022.6.0
+- 2022-06-14 Revert "TUN-6010: Add component tests for --edge-ip-version"
+- 2022-06-14 Revert "TUN-6373: Add edge-ip-version to remotely pushed configuration"
+- 2022-06-14 Revert "TUN-6384: Correct duplicate connection error to fetch new IP first"
+- 2022-06-14 Revert "TUN-6007: Implement new edge discovery algorithm"
+- 2022-06-13 TUN-6385: Don't share err between acceptStream loop and per-stream goroutines
+- 2022-06-13 TUN-6384: Correct duplicate connection error to fetch new IP first
+- 2022-06-13 TUN-6373: Add edge-ip-version to remotely pushed configuration
+- 2022-06-13 TUN-6380: Enforce connect and keep-alive timeouts for TCP connections in both WARP routing and websocket based TCP proxy.
+- 2022-06-11 Update issue templates
+- 2022-06-11 Amendment to previous PR
+- 2022-06-09 TUN-6347: Add TCP stream logs with FlowID
+- 2022-06-08 TUN-6361: Add cloudflared arm builds to pkging as well
+- 2022-06-07 TUN-6357: Add connector id to ready check endpoint
+- 2022-06-07 TUN-6010: Add component tests for --edge-ip-version
+- 2022-06-06 TUN-6191: Update quic-go to v0.27.1 and with custom patch to allow keep alive period to be configurable
+- 2022-06-03 TUN-6343: Fix QUIC->HTTP2 fallback
+- 2022-06-02 TUN-6339: Add config for IPv6 support
+- 2022-06-02 TUN-6341: Fix default config value for edge-ip-version
+- 2022-06-01 TUN-6323: Add Xenial and Trusty for Ubuntu pkging
+- 2022-05-31 TUN-6210: Add cloudflared.repo to make it easy for yum installs
+- 2022-05-30 TUN-6293: Update yaml v3 to latest hotfix
+- 2022-05-20 TUN-6007: Implement new edge discovery algorithm
 2022.5.3
 - 2022-05-30 TUN-6308: Add debug logs to see if packets are sent/received from edge
 - 2022-05-30 TUN-6301: Allow to update logger used by UDP session manager
