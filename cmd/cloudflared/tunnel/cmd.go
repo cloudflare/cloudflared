@@ -837,6 +837,13 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    ingress.Http2OriginFlag,
+			Usage:   "Enables HTTP/2 origin servers.",
+			EnvVars: []string{"TUNNEL_ORIGIN_ENABLE_HTTP2"},
+			Hidden:  shouldHide,
+			Value:   false,
+		}),
 	}
 	return append(flags, sshFlags(shouldHide)...)
 }

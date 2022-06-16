@@ -290,6 +290,7 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerol
 		TLSHandshakeTimeout:   cfg.TLSTimeout.Duration,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: cfg.NoTLSVerify},
+		ForceAttemptHTTP2:     cfg.Http2Origin,
 	}
 	if _, isHelloWorld := service.(*helloWorld); !isHelloWorld && cfg.OriginServerName != "" {
 		httpTransport.TLSClientConfig.ServerName = cfg.OriginServerName

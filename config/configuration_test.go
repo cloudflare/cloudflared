@@ -144,7 +144,8 @@ var rawJsonConfig = []byte(`
 			"ports": [443, 4443],
 			"allow": true
 		}
-	]
+	],
+	"http2Origin": true
 }
 `)
 
@@ -191,6 +192,7 @@ func assertConfig(
 	assert.Equal(t, true, *config.NoTLSVerify)
 	assert.Equal(t, uint(9000), *config.ProxyPort)
 	assert.Equal(t, "socks", *config.ProxyType)
+	assert.Equal(t, true, *config.Http2Origin)
 
 	privateV4 := "10.0.0.0/8"
 	privateV6 := "fc00::/7"
