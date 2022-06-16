@@ -6,6 +6,8 @@ ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     TARGET_GOOS=${TARGET_GOOS} \
     TARGET_GOARCH=${TARGET_GOARCH}
+    
+LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
