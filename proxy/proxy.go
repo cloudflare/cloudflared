@@ -196,6 +196,9 @@ func (p *Proxy) proxyHTTPRequest(
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
 		tracing.EndWithErrorStatus(ttfbSpan, err)
+		if err := roundTripReq.Context().Err(); err != nil {
+			return errors.Wrap(err, "Incoming request ended abruptly")
+		}
 		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
 	}
 
