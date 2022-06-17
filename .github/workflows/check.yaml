@@ -12,8 +12,6 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: ${{ matrix.go-version }}
-    - name: Install go-sumtype
-      run: go get github.com/sudarshan-reddy/go-sumtype
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Test

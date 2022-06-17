@@ -153,7 +153,6 @@ stretch: &stretch
       - gotest-to-teamcity
     pre-cache: &test_pre_cache
       - go get golang.org/x/tools/cmd/goimports
-      - go get github.com/sudarshan-reddy/go-sumtype@v0.0.0-20210827105221-82eca7e5abb1
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
