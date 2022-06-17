@@ -1,3 +1,12 @@
+2022.6.2
+- 2022-06-13 TUN-6381: Write error data on QUIC stream when we fail to talk to the origin; separate logging for protocol errors vs. origin errors.
+- 2022-06-17 TUN-6414: Remove go-sumtype from cloudflared build process
+- 2022-06-01 Add Http2Origin option to force HTTP/2 origin connections
+- 2022-06-02 fix ingress rules unit test
+- 2022-06-09 Update remaining OriginRequestConfig functions for Http2Origins
+- 2022-05-31 Add image source label to docker container.
+- 2022-05-10 Warp Private Network link updated
+
 2022.6.1
 - 2022-06-14 TUN-6395: Fix writing RPM repo data
 
