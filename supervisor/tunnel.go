@@ -194,15 +194,10 @@ type EdgeTunnelServer struct {
 	connAwareLogger *ConnAwareLogger
 }
 
-func (e EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, connectedSignal *signal.Signal) error {
+func (e EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolFallback *protocolFallback, connectedSignal *signal.Signal) error {
 	haConnections.Inc()
 	defer haConnections.Dec()
 
-	protocolFallback := &protocolFallback{
-		retry.BackoffHandler{MaxRetries: e.config.Retries},
-		e.config.ProtocolSelector.Current(),
-		false,
-	}
 	connectedFuse := h2mux.NewBooleanFuse()
 	go func() {
 		if connectedFuse.Await() {
@@ -214,7 +209,7 @@ func (e EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, connectedS
 
 	// Fetch IP address to associated connection index
 	addr, err := e.edgeAddrs.GetAddr(int(connIndex))
-	switch err {
+	switch err.(type) {
 	case nil: // no error
 	case edgediscovery.ErrNoAddressesLeft:
 		return err
@@ -262,7 +257,9 @@ func (e EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, connectedS
 	// establishing a connection to the edge and if so, rotate the IP address.
 	yes, hasConnectivityError := e.edgeAddrHandler.ShouldGetNewAddress(err)
 	if yes {
-		e.edgeAddrs.GetDifferentAddr(int(connIndex), hasConnectivityError)
+		if _, err := e.edgeAddrs.GetDifferentAddr(int(connIndex), hasConnectivityError); err != nil {
+			return err
+		}
 	}
 
 	select {
@@ -461,6 +458,7 @@ func serveTunnel(
 		connectedFuse,
 		config.NamedTunnel,
 		connIndex,
+		addr.UDP.IP,
 		nil,
 		gracefulShutdownC,
 		config.GracePeriod,

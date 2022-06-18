@@ -3,6 +3,7 @@ package connection
 import (
 	"context"
 	"io"
+	"net"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -19,6 +20,7 @@ type controlStream struct {
 	connectedFuse         ConnectedFuse
 	namedTunnelProperties *NamedTunnelProperties
 	connIndex             uint8
+	edgeAddress           net.IP
 
 	newRPCClientFunc RPCClientFunc
 
@@ -45,6 +47,7 @@ func NewControlStream(
 	connectedFuse ConnectedFuse,
 	namedTunnelConfig *NamedTunnelProperties,
 	connIndex uint8,
+	edgeAddress net.IP,
 	newRPCClientFunc RPCClientFunc,
 	gracefulShutdownC <-chan struct{},
 	gracePeriod time.Duration,
@@ -58,6 +61,7 @@ func NewControlStream(
 		namedTunnelProperties: namedTunnelConfig,
 		newRPCClientFunc:      newRPCClientFunc,
 		connIndex:             connIndex,
+		edgeAddress:           edgeAddress,
 		gracefulShutdownC:     gracefulShutdownC,
 		gracePeriod:           gracePeriod,
 	}
@@ -71,7 +75,7 @@ func (c *controlStream) ServeControlStream(
 ) error {
 	rpcClient := c.newRPCClientFunc(ctx, rw, c.observer.log)
 
-	registrationDetails, err := rpcClient.RegisterConnection(ctx, c.namedTunnelProperties, connOptions, c.connIndex, c.observer)
+	registrationDetails, err := rpcClient.RegisterConnection(ctx, c.namedTunnelProperties, connOptions, c.connIndex, c.edgeAddress, c.observer)
 	if err != nil {
 		rpcClient.Close()
 		return err

@@ -1,7 +1,6 @@
 package edgediscovery
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -14,7 +13,13 @@ const (
 	LogFieldIPAddress = "ip"
 )
 
-var ErrNoAddressesLeft = fmt.Errorf("there are no free edge addresses left")
+var errNoAddressesLeft = ErrNoAddressesLeft{}
+
+type ErrNoAddressesLeft struct{}
+
+func (e ErrNoAddressesLeft) Error() string {
+	return "there are no free edge addresses left to resolve to"
+}
 
 // Edge finds addresses on the Cloudflare edge and hands them out to connections.
 type Edge struct {
@@ -62,7 +67,7 @@ func (ed *Edge) GetAddrForRPC() (*allregions.EdgeAddr, error) {
 	defer ed.Unlock()
 	addr := ed.regions.GetAnyAddress()
 	if addr == nil {
-		return nil, ErrNoAddressesLeft
+		return nil, errNoAddressesLeft
 	}
 	return addr, nil
 }
@@ -83,7 +88,7 @@ func (ed *Edge) GetAddr(connIndex int) (*allregions.EdgeAddr, error) {
 	addr := ed.regions.GetUnusedAddr(nil, connIndex)
 	if addr == nil {
 		log.Debug().Msg("edgediscovery - GetAddr: No addresses left to give proxy connection")
-		return nil, ErrNoAddressesLeft
+		return nil, errNoAddressesLeft
 	}
 	log = ed.log.With().
 		Int(LogFieldConnIndex, connIndex).
@@ -107,7 +112,7 @@ func (ed *Edge) GetDifferentAddr(connIndex int, hasConnectivityError bool) (*all
 	if addr == nil {
 		log.Debug().Msg("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection")
 		// note: if oldAddr were not nil, it will become available on the next iteration
-		return nil, ErrNoAddressesLeft
+		return nil, errNoAddressesLeft
 	}
 	log = ed.log.With().
 		Int(LogFieldConnIndex, connIndex).

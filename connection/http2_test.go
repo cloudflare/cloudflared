@@ -41,6 +41,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		connIndex,
 		nil,
 		nil,
+		nil,
 		1*time.Second,
 	)
 	return NewHTTP2Connection(
@@ -176,6 +177,7 @@ func (mc mockNamedTunnelRPCClient) RegisterConnection(
 	properties *NamedTunnelProperties,
 	options *tunnelpogs.ConnectionOptions,
 	connIndex uint8,
+	edgeAddress net.IP,
 	observer *Observer,
 ) (*tunnelpogs.ConnectionDetails, error) {
 	if mc.shouldFail != nil {
@@ -360,6 +362,7 @@ func TestServeControlStream(t *testing.T) {
 		mockConnectedFuse{},
 		&NamedTunnelProperties{},
 		1,
+		nil,
 		rpcClientFactory.newMockRPCClient,
 		nil,
 		1*time.Second,
@@ -410,6 +413,7 @@ func TestFailRegistration(t *testing.T) {
 		mockConnectedFuse{},
 		&NamedTunnelProperties{},
 		http2Conn.connIndex,
+		nil,
 		rpcClientFactory.newMockRPCClient,
 		nil,
 		1*time.Second,
@@ -456,6 +460,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 		mockConnectedFuse{},
 		&NamedTunnelProperties{},
 		http2Conn.connIndex,
+		nil,
 		rpcClientFactory.newMockRPCClient,
 		shutdownC,
 		1*time.Second,

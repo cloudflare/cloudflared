@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection"
@@ -37,13 +39,14 @@ const (
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
 // reconnects them if they disconnect.
 type Supervisor struct {
-	cloudflaredUUID   uuid.UUID
-	config            *TunnelConfig
-	orchestrator      *orchestration.Orchestrator
-	edgeIPs           *edgediscovery.Edge
-	edgeTunnelServer  EdgeTunnelServer
-	tunnelErrors      chan tunnelError
-	tunnelsConnecting map[int]chan struct{}
+	cloudflaredUUID         uuid.UUID
+	config                  *TunnelConfig
+	orchestrator            *orchestration.Orchestrator
+	edgeIPs                 *edgediscovery.Edge
+	edgeTunnelServer        EdgeTunnelServer
+	tunnelErrors            chan tunnelError
+	tunnelsConnecting       map[int]chan struct{}
+	tunnelsProtocolFallback map[int]*protocolFallback
 	// nextConnectedIndex and nextConnectedSignal are used to wait for all
 	// currently-connecting tunnels to finish connecting so we can reset backoff timer
 	nextConnectedIndex  int
@@ -72,8 +75,10 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
 	}
 
+	isStaticEdge := len(config.EdgeAddrs) > 0
+
 	var edgeIPs *edgediscovery.Edge
-	if len(config.EdgeAddrs) > 0 {
+	if isStaticEdge { // static edge addresses
 		edgeIPs, err = edgediscovery.StaticEdge(config.Log, config.EdgeAddrs)
 	} else {
 		edgeIPs, err = edgediscovery.ResolveEdge(config.Log, config.Region, config.EdgeIPVersion)
@@ -86,7 +91,9 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	log := NewConnAwareLogger(config.Log, config.Observer)
 
 	var edgeAddrHandler EdgeAddrHandler
-	if config.EdgeIPVersion == allregions.IPv6Only || config.EdgeIPVersion == allregions.Auto {
+	if isStaticEdge { // static edge addresses
+		edgeAddrHandler = &IPAddrFallback{}
+	} else if config.EdgeIPVersion == allregions.IPv6Only || config.EdgeIPVersion == allregions.Auto {
 		edgeAddrHandler = &IPAddrFallback{}
 	} else { // IPv4Only
 		edgeAddrHandler = &DefaultAddrFallback{}
@@ -117,6 +124,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		edgeTunnelServer:           edgeTunnelServer,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
+		tunnelsProtocolFallback:    map[int]*protocolFallback{},
 		log:                        log,
 		logTransport:               config.LogTransport,
 		reconnectCredentialManager: reconnectCredentialManager,
@@ -178,6 +186,10 @@ func (s *Supervisor) Run(
 					tunnelsActive++
 					continue
 				}
+				// Make sure we don't continue if there is no more fallback allowed
+				if _, retry := s.tunnelsProtocolFallback[tunnelError.index].GetMaxBackoffDuration(ctx); !retry {
+					continue
+				}
 				s.log.ConnAwareLogger().Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
@@ -232,6 +244,11 @@ func (s *Supervisor) initialize(
 		s.log.Logger().Info().Msgf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
 		s.config.HAConnections = availableAddrs
 	}
+	s.tunnelsProtocolFallback[0] = &protocolFallback{
+		retry.BackoffHandler{MaxRetries: s.config.Retries},
+		s.config.ProtocolSelector.Current(),
+		false,
+	}
 
 	go s.startFirstTunnel(ctx, connectedSignal)
 
@@ -249,6 +266,11 @@ func (s *Supervisor) initialize(
 
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
+		s.tunnelsProtocolFallback[i] = &protocolFallback{
+			retry.BackoffHandler{MaxRetries: s.config.Retries},
+			s.config.ProtocolSelector.Current(),
+			false,
+		}
 		ch := signal.New(make(chan struct{}))
 		go s.startTunnel(ctx, i, ch)
 		time.Sleep(registrationInterval)
@@ -266,21 +288,44 @@ func (s *Supervisor) startFirstTunnel(
 		err error
 	)
 	const firstConnIndex = 0
+	isStaticEdge := len(s.config.EdgeAddrs) > 0
 	defer func() {
 		s.tunnelErrors <- tunnelError{index: firstConnIndex, err: err}
 	}()
 
-	err = s.edgeTunnelServer.Serve(ctx, firstConnIndex, connectedSignal)
-
 	// If the first tunnel disconnects, keep restarting it.
-	for s.unusedIPs() {
+	for {
+		err = s.edgeTunnelServer.Serve(ctx, firstConnIndex, s.tunnelsProtocolFallback[firstConnIndex], connectedSignal)
 		if ctx.Err() != nil {
 			return
 		}
 		if err == nil {
 			return
 		}
-		err = s.edgeTunnelServer.Serve(ctx, firstConnIndex, connectedSignal)
+		// Make sure we don't continue if there is no more fallback allowed
+		if _, retry := s.tunnelsProtocolFallback[firstConnIndex].GetMaxBackoffDuration(ctx); !retry {
+			return
+		}
+		// Try again for Unauthorized errors because we hope them to be
+		// transient due to edge propagation lag on new Tunnels.
+		if strings.Contains(err.Error(), "Unauthorized") {
+			continue
+		}
+		switch err.(type) {
+		case edgediscovery.ErrNoAddressesLeft:
+			// If your provided addresses are not available, we will keep trying regardless.
+			if !isStaticEdge {
+				return
+			}
+		case connection.DupConnRegisterTunnelError,
+			*quic.IdleTimeoutError,
+			edgediscovery.DialError,
+			*connection.EdgeQuicDialError:
+			// Try again for these types of errors
+		default:
+			// Uncaught errors should bail startup
+			return
+		}
 	}
 }
 
@@ -298,7 +343,7 @@ func (s *Supervisor) startTunnel(
 		s.tunnelErrors <- tunnelError{index: index, err: err}
 	}()
 
-	err = s.edgeTunnelServer.Serve(ctx, uint8(index), connectedSignal)
+	err = s.edgeTunnelServer.Serve(ctx, uint8(index), s.tunnelsProtocolFallback[index], connectedSignal)
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {
