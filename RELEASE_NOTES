@@ -1,3 +1,6 @@
+2022.6.3
+- 2022-06-20 TUN-6362: Add armhf support to cloudflare packaging
+
 2022.6.2
 - 2022-06-13 TUN-6381: Write error data on QUIC stream when we fail to talk to the origin; separate logging for protocol errors vs. origin errors.
 - 2022-06-17 TUN-6414: Remove go-sumtype from cloudflared build process
