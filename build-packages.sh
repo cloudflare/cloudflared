@@ -17,10 +17,18 @@ for arch in ${windowsArchs[@]}; do
 done
 
 
-linuxArchs=("386" "amd64" "arm" "arm64")
+linuxArchs=("386" "amd64" "arm" "armhf" "arm64")
 export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do
+    unset TARGET_ARM
     export TARGET_ARCH=$arch
+    
+    ## Support for armhf builds 
+    if [[ $arch == armhf ]] ; then
+        export TARGET_ARCH=arm
+        export TARGET_ARM=7 
+    fi
+    
     make cloudflared-deb
     mv cloudflared\_$VERSION\_$arch.deb $ARTIFACT_DIR/cloudflared-linux-$arch.deb
 

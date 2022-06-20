@@ -98,6 +98,16 @@ else
 	TARGET_PUBLIC_REPO ?= $(FLAVOR)
 endif
 
+ifneq ($(TARGET_ARM), )
+	ARM_COMMAND := GOARM=$(TARGET_ARM)
+endif
+
+ifeq ($(TARGET_ARM), 7) 
+	PACKAGE_ARCH := armhf
+else
+	PACKAGE_ARCH := $(TARGET_ARCH)
+endif
+
 .PHONY: all
 all: cloudflared test
 
@@ -111,7 +121,7 @@ ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
 	cp -f fips/fips.go.linux-amd64 cmd/cloudflared/fips.go
 endif
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) go build -v -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -v -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
 ifeq ($(FIPS), true)
 	rm -f cmd/cloudflared/fips.go
 	./check-fips.sh cloudflared
@@ -171,7 +181,7 @@ define build_package
 		--license 'Apache License Version 2.0' \
 		--url 'https://github.com/cloudflare/cloudflared' \
 		-m 'Cloudflare <support@cloudflare.com>' \
-		-a $(TARGET_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
+	    -a $(PACKAGE_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
 		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(INSTALL_MANDIR)
 endef
 

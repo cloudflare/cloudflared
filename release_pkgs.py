@@ -354,7 +354,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--archs", default=["amd64", "386", "arm64", "arm"], help="list of architectures we want to package for. Note that\
+        "--archs", default=["amd64", "386", "arm64", "arm", "armhf"], help="list of architectures we want to package for. Note that\
             it is the caller's responsiblity to ensure that these debs are already present in a directory. This script\
             will not build binaries or create their debs."
     )
