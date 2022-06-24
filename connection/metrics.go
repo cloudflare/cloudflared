@@ -367,7 +367,7 @@ func initTunnelMetrics() *tunnelMetrics {
 			Name:      "server_locations",
 			Help:      "Where each tunnel is connected to. 1 means current location, 0 means previous locations.",
 		},
-		[]string{"connection_id", "location"},
+		[]string{"connection_id", "edge_location"},
 	)
 	prometheus.MustRegister(serverLocations)
 
