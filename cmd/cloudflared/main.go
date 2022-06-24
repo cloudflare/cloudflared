@@ -21,6 +21,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/overwatch"
+	"github.com/cloudflare/cloudflared/token"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/watcher"
 )
@@ -85,9 +86,10 @@ func main() {
 	app.Commands = commands(cli.ShowVersion)
 
 	tunnel.Init(bInfo, graceShutdownC) // we need this to support the tunnel sub command...
-	access.Init(graceShutdownC)
+	access.Init(graceShutdownC, Version)
 	updater.Init(Version)
 	tracing.Init(Version)
+	token.Init(Version)
 	runApp(app, graceShutdownC)
 }
 

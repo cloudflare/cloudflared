@@ -56,11 +56,13 @@ const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
 
 var (
 	shutdownC chan struct{}
+	userAgent = "DEV"
 )
 
 // Init will initialize and store vars from the main program
-func Init(shutdown chan struct{}) {
+func Init(shutdown chan struct{}, version string) {
 	shutdownC = shutdown
+	userAgent = fmt.Sprintf("cloudflared/%s", version)
 }
 
 // Flags return the global flags for Access related commands (hopefully none)
@@ -505,7 +507,7 @@ func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, err
 	if err != nil {
 		return false, errors.Wrap(err, "Could not create access request")
 	}
-
+	req.Header.Set("User-Agent", userAgent)
 	// Do not follow redirects
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

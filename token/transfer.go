@@ -113,7 +113,12 @@ func transferRequest(requestURL string, log *zerolog.Logger) ([]byte, string, er
 
 // poll the endpoint for the request resource, waiting for the user interaction
 func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, string, error) {
-	resp, err := client.Get(requestURL)
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
 	}

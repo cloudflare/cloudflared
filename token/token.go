@@ -29,6 +29,10 @@ const (
 	AccessLoginWorkerPath = "/cdn-cgi/access/login"
 )
 
+var (
+	userAgent = "DEV"
+)
+
 type AppInfo struct {
 	AuthDomain string
 	AppAUD     string
@@ -142,6 +146,10 @@ func (l *lock) Release() error {
 func isTokenLocked(lockFilePath string) bool {
 	exists, err := config.FileExists(lockFilePath)
 	return exists && err == nil
+}
+
+func Init(version string) {
+	userAgent = fmt.Sprintf("cloudflared/%s", version)
 }
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
@@ -261,6 +269,7 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create app info request")
 	}
+	appInfoReq.Header.Add("User-Agent", userAgent)
 	resp, err := client.Do(appInfoReq)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get app info")
@@ -311,6 +320,7 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create app token request")
 	}
+	appTokenRequest.Header.Add("User-Agent", userAgent)
 	resp, err := client.Do(appTokenRequest)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get app token")
