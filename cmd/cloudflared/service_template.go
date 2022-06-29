@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"text/template"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -52,10 +53,17 @@ func (st *ServiceTemplate) Generate(args *ServiceTemplateArgs) error {
 	if err != nil {
 		return fmt.Errorf("error generating %s: %v", st.Path, err)
 	}
-	fileMode := os.FileMode(0644)
+	fileMode := os.FileMode(0o644)
 	if st.FileMode != 0 {
 		fileMode = st.FileMode
 	}
+
+	plistFolder := path.Dir(resolvedPath)
+	err = os.MkdirAll(plistFolder, 0o755)
+	if err != nil {
+		return fmt.Errorf("error creating %s: %v", plistFolder, err)
+	}
+
 	err = ioutil.WriteFile(resolvedPath, buffer.Bytes(), fileMode)
 	if err != nil {
 		return fmt.Errorf("error writing %s: %v", resolvedPath, err)
