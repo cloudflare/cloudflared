@@ -2,10 +2,12 @@
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
 FROM golang:1.17.1 as builder
+ARG TARGET_GOOS
+ARG TARGET_GOARCH
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
-    TARGET_GOOS=${TARGET_GOOS} \
-    TARGET_GOARCH=${TARGET_GOARCH}
+    TARGET_OS=${TARGET_GOOS} \
+    TARGET_ARCH=${TARGET_GOARCH}
     
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
