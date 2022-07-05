@@ -1,3 +1,15 @@
+2022.7.0
+- 2022-07-05 TUN-6499: Remove log that is per datagram
+- 2022-06-24 TUN-6460: Rename metric label location to edge_location
+- 2022-06-24 TUN-6459: Add cloudflared user-agent to access calls
+- 2022-06-17 TUN-6427: Differentiate between upstream request closed/canceled and failed origin requests
+- 2022-06-17 TUN-6388: Fix first tunnel connection not retrying
+- 2022-06-13 TUN-6384: Correct duplicate connection error to fetch new IP first
+- 2022-06-13 TUN-6373: Add edge-ip-version to remotely pushed configuration
+- 2022-06-07 TUN-6010: Add component tests for --edge-ip-version
+- 2022-05-20 TUN-6007: Implement new edge discovery algorithm
+- 2022-02-18 Ensure service install directories are created before writing file
+
 2022.6.3
 - 2022-06-20 TUN-6362: Add armhf support to cloudflare packaging
 
