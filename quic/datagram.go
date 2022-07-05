@@ -39,7 +39,6 @@ func (dm *DatagramMuxer) SendTo(sessionID uuid.UUID, payload []byte) error {
 	if err := dm.session.SendMessage(msgWithID); err != nil {
 		return errors.Wrap(err, "Failed to send datagram back to edge")
 	}
-	dm.logger.Debug().Str("sessionID", sessionID.String()).Int("bytes", len(payload)).Msg("Send datagram back to edge")
 	return nil
 }
 
@@ -55,7 +54,6 @@ func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
 	if err != nil {
 		return uuid.Nil, nil, err
 	}
-	dm.logger.Debug().Str("sessionID", sessionID.String()).Int("bytes", len(payload)).Msg("Received datagram from edge")
 	return sessionID, payload, nil
 }
 
