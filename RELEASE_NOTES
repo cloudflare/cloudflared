@@ -1,3 +1,6 @@
+2022.7.1
+- 2022-07-06 TUN-6503: Fix transport fallback from QUIC in face of dial error "no network activity"
+
 2022.7.0
 - 2022-07-05 TUN-6499: Remove log that is per datagram
 - 2022-06-24 TUN-6460: Rename metric label location to edge_location
