@@ -412,8 +412,7 @@ func ServeTunnel(
 			}
 			return err.Cause, !err.Permanent
 		case *connection.EdgeQuicDialError:
-			// Don't retry connection for a dial error
-			return err, false
+			return err, true
 		case ReconnectSignal:
 			connLog.Logger().Info().
 				IPAddr(connection.LogFieldIPAddress, addr.UDP.IP).
