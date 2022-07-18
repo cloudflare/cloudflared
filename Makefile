@@ -150,7 +150,7 @@ test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
 cloudflared.1: cloudflared_man_template
-	cat cloudflared_man_template | sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' > cloudflared.1
+	sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' cloudflared_man_template > cloudflared.1
 
 install: cloudflared cloudflared.1
 	mkdir -p $(DESTDIR)$(INSTALL_BINDIR) $(DESTDIR)$(INSTALL_MANDIR)
