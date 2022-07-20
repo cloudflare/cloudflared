@@ -296,6 +296,7 @@ func curl(c *cli.Context) error {
 // run kicks off a shell task and pipe the results to the respective std pipes
 func run(cmd string, args ...string) error {
 	c := exec.Command(cmd, args...)
+	c.Stdin = os.Stdin
 	stderr, err := c.StderrPipe()
 	if err != nil {
 		return err
