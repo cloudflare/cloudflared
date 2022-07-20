@@ -18,7 +18,6 @@ type Observer struct {
 	logTransport    *zerolog.Logger
 	metrics         *tunnelMetrics
 	tunnelEventChan chan Event
-	uiEnabled       bool
 	addSinkChan     chan EventSink
 }
 
@@ -26,12 +25,11 @@ type EventSink interface {
 	OnTunnelEvent(event Event)
 }
 
-func NewObserver(log, logTransport *zerolog.Logger, uiEnabled bool) *Observer {
+func NewObserver(log, logTransport *zerolog.Logger) *Observer {
 	o := &Observer{
 		log:             log,
 		logTransport:    logTransport,
 		metrics:         newTunnelMetrics(),
-		uiEnabled:       uiEnabled,
 		tunnelEventChan: make(chan Event, observerChannelBufferSize),
 		addSinkChan:     make(chan EventSink, observerChannelBufferSize),
 	}

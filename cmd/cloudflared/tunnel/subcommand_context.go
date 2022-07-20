@@ -31,10 +31,9 @@ func (e errInvalidJSONCredential) Error() string {
 // subcommandContext carries structs shared between subcommands, to reduce number of arguments needed to
 // pass between subcommands, and make sure they are only initialized once
 type subcommandContext struct {
-	c           *cli.Context
-	log         *zerolog.Logger
-	isUIEnabled bool
-	fs          fileSystem
+	c   *cli.Context
+	log *zerolog.Logger
+	fs  fileSystem
 
 	// These fields should be accessed using their respective Getter
 	tunnelstoreClient cfapi.Client
@@ -42,16 +41,10 @@ type subcommandContext struct {
 }
 
 func newSubcommandContext(c *cli.Context) (*subcommandContext, error) {
-	isUIEnabled := c.IsSet(uiFlag) && c.String("name") != ""
-
-	// If UI is enabled, terminal log output should be disabled -- log should be written into a UI log window instead
-	log := logger.CreateLoggerFromContext(c, isUIEnabled)
-
 	return &subcommandContext{
-		c:           c,
-		log:         log,
-		isUIEnabled: isUIEnabled,
-		fs:          realFileSystem{},
+		c:   c,
+		log: logger.CreateLoggerFromContext(c, logger.EnableTerminalLog),
+		fs:  realFileSystem{},
 	}, nil
 }
 
@@ -312,7 +305,6 @@ func (sc *subcommandContext) runWithCredentials(credentials connection.Credentia
 		buildInfo,
 		&connection.NamedTunnelProperties{Credentials: credentials},
 		sc.log,
-		sc.isUIEnabled,
 	)
 }
 

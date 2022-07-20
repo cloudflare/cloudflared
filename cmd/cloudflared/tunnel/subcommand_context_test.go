@@ -35,7 +35,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 	type fields struct {
 		c                 *cli.Context
 		log               *zerolog.Logger
-		isUIEnabled       bool
 		fs                fileSystem
 		tunnelstoreClient cfapi.Client
 		userCredential    *userCredential
@@ -168,7 +167,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 			sc := &subcommandContext{
 				c:                 tt.fields.c,
 				log:               tt.fields.log,
-				isUIEnabled:       tt.fields.isUIEnabled,
 				fs:                tt.fields.fs,
 				tunnelstoreClient: tt.fields.tunnelstoreClient,
 				userCredential:    tt.fields.userCredential,
@@ -307,7 +305,6 @@ func Test_subcommandContext_Delete(t *testing.T) {
 			sc := &subcommandContext{
 				c:                 tt.fields.c,
 				log:               tt.fields.log,
-				isUIEnabled:       tt.fields.isUIEnabled,
 				fs:                tt.fields.fs,
 				tunnelstoreClient: tt.fields.tunnelstoreClient,
 				userCredential:    tt.fields.userCredential,

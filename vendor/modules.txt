@@ -88,61 +88,6 @@ github.com/flynn/go-shlex
 # github.com/fsnotify/fsnotify v1.4.9
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify
-# github.com/gdamore/encoding v1.0.0
-## explicit; go 1.9
-github.com/gdamore/encoding
-# github.com/gdamore/tcell v1.3.0
-## explicit; go 1.12
-github.com/gdamore/tcell
-github.com/gdamore/tcell/terminfo
-github.com/gdamore/tcell/terminfo/a/adm3a
-github.com/gdamore/tcell/terminfo/a/aixterm
-github.com/gdamore/tcell/terminfo/a/alacritty
-github.com/gdamore/tcell/terminfo/a/ansi
-github.com/gdamore/tcell/terminfo/a/aterm
-github.com/gdamore/tcell/terminfo/b/beterm
-github.com/gdamore/tcell/terminfo/b/bsdos_pc
-github.com/gdamore/tcell/terminfo/base
-github.com/gdamore/tcell/terminfo/c/cygwin
-github.com/gdamore/tcell/terminfo/d/d200
-github.com/gdamore/tcell/terminfo/d/d210
-github.com/gdamore/tcell/terminfo/d/dtterm
-github.com/gdamore/tcell/terminfo/dynamic
-github.com/gdamore/tcell/terminfo/e/emacs
-github.com/gdamore/tcell/terminfo/e/eterm
-github.com/gdamore/tcell/terminfo/extended
-github.com/gdamore/tcell/terminfo/g/gnome
-github.com/gdamore/tcell/terminfo/h/hpterm
-github.com/gdamore/tcell/terminfo/h/hz1500
-github.com/gdamore/tcell/terminfo/k/konsole
-github.com/gdamore/tcell/terminfo/k/kterm
-github.com/gdamore/tcell/terminfo/l/linux
-github.com/gdamore/tcell/terminfo/p/pcansi
-github.com/gdamore/tcell/terminfo/r/rxvt
-github.com/gdamore/tcell/terminfo/s/screen
-github.com/gdamore/tcell/terminfo/s/simpleterm
-github.com/gdamore/tcell/terminfo/s/sun
-github.com/gdamore/tcell/terminfo/t/termite
-github.com/gdamore/tcell/terminfo/t/tvi910
-github.com/gdamore/tcell/terminfo/t/tvi912
-github.com/gdamore/tcell/terminfo/t/tvi921
-github.com/gdamore/tcell/terminfo/t/tvi925
-github.com/gdamore/tcell/terminfo/t/tvi950
-github.com/gdamore/tcell/terminfo/t/tvi970
-github.com/gdamore/tcell/terminfo/v/vt100
-github.com/gdamore/tcell/terminfo/v/vt102
-github.com/gdamore/tcell/terminfo/v/vt220
-github.com/gdamore/tcell/terminfo/v/vt320
-github.com/gdamore/tcell/terminfo/v/vt400
-github.com/gdamore/tcell/terminfo/v/vt420
-github.com/gdamore/tcell/terminfo/v/vt52
-github.com/gdamore/tcell/terminfo/w/wy50
-github.com/gdamore/tcell/terminfo/w/wy60
-github.com/gdamore/tcell/terminfo/w/wy99_ansi
-github.com/gdamore/tcell/terminfo/x/xfce
-github.com/gdamore/tcell/terminfo/x/xnuppc
-github.com/gdamore/tcell/terminfo/x/xterm
-github.com/gdamore/tcell/terminfo/x/xterm_kitty
 # github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
 ## explicit
 github.com/getsentry/raven-go
@@ -216,9 +161,6 @@ github.com/lucas-clemente/quic-go/internal/utils
 github.com/lucas-clemente/quic-go/internal/wire
 github.com/lucas-clemente/quic-go/logging
 github.com/lucas-clemente/quic-go/quicvarint
-# github.com/lucasb-eyer/go-colorful v1.0.3
-## explicit; go 1.12
-github.com/lucasb-eyer/go-colorful
 # github.com/marten-seemann/qtls-go1-16 v0.1.5
 ## explicit; go 1.16
 github.com/marten-seemann/qtls-go1-16
@@ -234,9 +176,6 @@ github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.12
 ## explicit; go 1.12
 github.com/mattn/go-isatty
-# github.com/mattn/go-runewidth v0.0.8
-## explicit; go 1.9
-github.com/mattn/go-runewidth
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 ## explicit
 github.com/matttproud/golang_protobuf_extensions/pbutil
@@ -318,12 +257,6 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/rivo/tview v0.0.0-20200712113419-c65badfc3d92
-## explicit; go 1.12
-github.com/rivo/tview
-# github.com/rivo/uniseg v0.1.0
-## explicit; go 1.12
-github.com/rivo/uniseg
 # github.com/rs/zerolog v1.20.0
 ## explicit
 github.com/rs/zerolog
@@ -447,8 +380,6 @@ golang.org/x/sys/windows/svc/mgr
 golang.org/x/term
 # golang.org/x/text v0.3.7
 ## explicit; go 1.17
-golang.org/x/text/encoding
-golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi

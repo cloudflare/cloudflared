@@ -25,7 +25,6 @@ import (
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -218,7 +217,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, buildInfo, nil, sc.log, sc.isUIEnabled)
+	return StartServer(sc.c, buildInfo, nil, sc.log)
 }
 
 func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
@@ -236,7 +235,6 @@ func StartServer(
 	info *cliutil.BuildInfo,
 	namedTunnel *connection.NamedTunnelProperties,
 	log *zerolog.Logger,
-	isUIEnabled bool,
 ) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
@@ -331,9 +329,9 @@ func StartServer(
 		return fmt.Errorf(errText)
 	}
 
-	logTransport := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
+	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
 
-	observer := connection.NewObserver(log, logTransport, isUIEnabled)
+	observer := connection.NewObserver(log, logTransport)
 
 	// Send Quick Tunnel URL to UI if applicable
 	var quickTunnelURL string
@@ -391,18 +389,6 @@ func StartServer(
 		}()
 		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, reconnectCh, graceShutdownC)
 	}()
-
-	if isUIEnabled {
-		tunnelUI := ui.NewUIModel(
-			info.Version(),
-			hostname,
-			metricsListener.Addr().String(),
-			orchestratorConfig.Ingress,
-			tunnelConfig.HAConnections,
-		)
-		app := tunnelUI.Launch(ctx, log, logTransport)
-		observer.RegisterSink(app)
-	}
 
 	gracePeriod, err := gracePeriod(c)
 	if err != nil {
@@ -663,9 +649,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   uiFlag,
-			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
+			Usage:  "(depreciated) Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
 			Value:  false,
-			Hidden: shouldHide,
+			Hidden: true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:   "quick-service",
