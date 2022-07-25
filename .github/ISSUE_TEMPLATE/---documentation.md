@@ -3,7 +3,6 @@ name: "\U0001F4DD Documentation"
 about: Request new or updated documentation for cloudflared
 title: "\U0001F4DD"
 labels: 'Priority: Normal, Type: Documentation'
-assignees: abelinkinbio, ranbel
 
 ---
 
