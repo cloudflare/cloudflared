@@ -63,7 +63,7 @@ func NewOriginProxy(
 // a simple roundtrip or a tcp/websocket dial depending on ingres rule setup.
 func (p *Proxy) ProxyHTTP(
 	w connection.ResponseWriter,
-	tr *tracing.TracedRequest,
+	tr *tracing.TracedHTTPRequest,
 	isWebsocket bool,
 ) error {
 	incrementRequests()
@@ -108,7 +108,7 @@ func (p *Proxy) ProxyHTTP(
 		}
 
 		rws := connection.NewHTTPResponseReadWriterAcker(w, req)
-		if err := p.proxyStream(req.Context(), rws, dest, originProxy); err != nil {
+		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, originProxy); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
 			p.logRequestError(err, cfRay, "", rule, srv)
 			return err
@@ -137,9 +137,11 @@ func (p *Proxy) ProxyTCP(
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	tracedCtx := tracing.NewTracedContext(serveCtx, req.CfTraceID, p.log)
+
 	p.log.Debug().Str(LogFieldFlowID, req.FlowID).Msg("tcp proxy stream started")
 
-	if err := p.proxyStream(serveCtx, rwa, req.Dest, p.warpRouting.Proxy); err != nil {
+	if err := p.proxyStream(tracedCtx, rwa, req.Dest, p.warpRouting.Proxy); err != nil {
 		p.logRequestError(err, req.CFRay, req.FlowID, "", ingress.ServiceWarpRouting)
 		return err
 	}
@@ -160,7 +162,7 @@ func ruleField(ing ingress.Ingress, ruleNum int) (ruleID string, srv string) {
 // ProxyHTTPRequest proxies requests of underlying type http and websocket to the origin service.
 func (p *Proxy) proxyHTTPRequest(
 	w connection.ResponseWriter,
-	tr *tracing.TracedRequest,
+	tr *tracing.TracedHTTPRequest,
 	httpService ingress.HTTPOriginProxy,
 	isWebsocket bool,
 	disableChunkedEncoding bool,
@@ -211,7 +213,7 @@ func (p *Proxy) proxyHTTPRequest(
 	}
 
 	// Add spans to response header (if available)
-	tr.AddSpans(resp.Header, p.log)
+	tr.AddSpans(resp.Header)
 
 	err = w.WriteRespHeaders(resp.StatusCode, resp.Header)
 	if err != nil {
@@ -248,17 +250,23 @@ func (p *Proxy) proxyHTTPRequest(
 // proxyStream proxies type TCP and other underlying types if the connection is defined as a stream oriented
 // ingress rule.
 func (p *Proxy) proxyStream(
-	ctx context.Context,
+	tr *tracing.TracedContext,
 	rwa connection.ReadWriteAcker,
 	dest string,
 	connectionProxy ingress.StreamBasedOriginProxy,
 ) error {
+	ctx := tr.Context
+	_, connectSpan := tr.Tracer().Start(ctx, "stream_connect")
 	originConn, err := connectionProxy.EstablishConnection(ctx, dest)
 	if err != nil {
+		tracing.EndWithErrorStatus(connectSpan, err)
 		return err
 	}
+	connectSpan.End()
 
-	if err := rwa.AckConnection(); err != nil {
+	encodedSpans := tr.GetSpans()
+
+	if err := rwa.AckConnection(encodedSpans); err != nil {
 		return err
 	}
 

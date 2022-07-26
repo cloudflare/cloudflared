@@ -355,7 +355,7 @@ func proxyHTTP(originProxy connection.OriginProxy, hostname string) (*http.Respo
 		return nil, err
 	}
 
-	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), false)
+	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, &log), false)
 	if err != nil {
 		return nil, err
 	}
@@ -604,7 +604,7 @@ func TestPersistentConnection(t *testing.T) {
 		respWriter, err := connection.NewHTTP2RespWriter(req, wsRespReadWriter, connection.TypeWebsocket, &log)
 		require.NoError(t, err)
 
-		err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), true)
+		err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, &log), true)
 		require.NoError(t, err)
 	}()
 

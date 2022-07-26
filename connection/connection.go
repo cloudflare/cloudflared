@@ -123,23 +123,24 @@ func (t Type) String() string {
 
 // OriginProxy is how data flows from cloudflared to the origin services running behind it.
 type OriginProxy interface {
-	ProxyHTTP(w ResponseWriter, tr *tracing.TracedRequest, isWebsocket bool) error
+	ProxyHTTP(w ResponseWriter, tr *tracing.TracedHTTPRequest, isWebsocket bool) error
 	ProxyTCP(ctx context.Context, rwa ReadWriteAcker, req *TCPRequest) error
 }
 
 // TCPRequest defines the input format needed to perform a TCP proxy.
 type TCPRequest struct {
-	Dest    string
-	CFRay   string
-	LBProbe bool
-	FlowID  string
+	Dest      string
+	CFRay     string
+	LBProbe   bool
+	FlowID    string
+	CfTraceID string
 }
 
 // ReadWriteAcker is a readwriter with the ability to Acknowledge to the downstream (edge) that the origin has
 // accepted the connection.
 type ReadWriteAcker interface {
 	io.ReadWriter
-	AckConnection() error
+	AckConnection(tracePropagation string) error
 }
 
 // HTTPResponseReadWriteAcker is an HTTP implementation of ReadWriteAcker.
@@ -168,7 +169,7 @@ func (h *HTTPResponseReadWriteAcker) Write(p []byte) (int, error) {
 
 // AckConnection acks an HTTP connection by sending a switch protocols status code that enables the caller to
 // upgrade to streams.
-func (h *HTTPResponseReadWriteAcker) AckConnection() error {
+func (h *HTTPResponseReadWriteAcker) AckConnection(tracePropagation string) error {
 	resp := &http.Response{
 		Status:        switchingProtocolText,
 		StatusCode:    http.StatusSwitchingProtocols,
@@ -177,6 +178,10 @@ func (h *HTTPResponseReadWriteAcker) AckConnection() error {
 
 	if secWebsocketKey := h.req.Header.Get("Sec-WebSocket-Key"); secWebsocketKey != "" {
 		resp.Header = websocket.NewResponseHeader(h.req)
+	}
+
+	if tracePropagation != "" {
+		resp.Header.Add(tracing.CanonicalCloudflaredTracingHeader, tracePropagation)
 	}
 
 	return h.w.WriteRespHeaders(resp.StatusCode, resp.Header)
