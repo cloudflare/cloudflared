@@ -557,6 +557,7 @@ func ServeH2mux(
 		connIndex,
 		config.Observer,
 		gracefulShutdownC,
+		config.Log,
 	)
 	if err != nil {
 		if !recoverable {

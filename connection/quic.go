@@ -197,7 +197,7 @@ func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.R
 
 	switch request.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
-		tracedReq, err := buildHTTPRequest(ctx, request, stream)
+		tracedReq, err := buildHTTPRequest(ctx, request, stream, q.logger)
 		if err != nil {
 			return err
 		}
@@ -208,8 +208,9 @@ func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.R
 		rwa := &streamReadWriteAcker{stream}
 		metadata := request.MetadataMap()
 		return originProxy.ProxyTCP(ctx, rwa, &TCPRequest{
-			Dest:   request.Dest,
-			FlowID: metadata[QUICMetadataFlowID],
+			Dest:      request.Dest,
+			FlowID:    metadata[QUICMetadataFlowID],
+			CfTraceID: metadata[tracing.TracerContextName],
 		})
 	}
 	return nil
@@ -296,8 +297,12 @@ type streamReadWriteAcker struct {
 }
 
 // AckConnection acks response back to the proxy.
-func (s *streamReadWriteAcker) AckConnection() error {
-	return s.WriteConnectResponseData(nil)
+func (s *streamReadWriteAcker) AckConnection(tracePropagation string) error {
+	metadata := quicpogs.Metadata{
+		Key: tracing.CanonicalCloudflaredTracingHeader,
+		Val: tracePropagation,
+	}
+	return s.WriteConnectResponseData(nil, metadata)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.
@@ -325,7 +330,12 @@ func (hrw httpResponseAdapter) WriteErrorResponse(err error) {
 	hrw.WriteConnectResponseData(err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
-func buildHTTPRequest(ctx context.Context, connectRequest *quicpogs.ConnectRequest, body io.ReadCloser) (*tracing.TracedRequest, error) {
+func buildHTTPRequest(
+	ctx context.Context,
+	connectRequest *quicpogs.ConnectRequest,
+	body io.ReadCloser,
+	log *zerolog.Logger,
+) (*tracing.TracedHTTPRequest, error) {
 	metadata := connectRequest.MetadataMap()
 	dest := connectRequest.Dest
 	method := metadata[HTTPMethodKey]
@@ -367,7 +377,7 @@ func buildHTTPRequest(ctx context.Context, connectRequest *quicpogs.ConnectReque
 	stripWebsocketUpgradeHeader(req)
 
 	// Check for tracing on request
-	tracedReq := tracing.NewTracedRequest(req)
+	tracedReq := tracing.NewTracedHTTPRequest(req, log)
 	return tracedReq, err
 }
 

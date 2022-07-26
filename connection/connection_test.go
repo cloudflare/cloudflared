@@ -30,6 +30,8 @@ var (
 	testLargeResp = make([]byte, largeFileSize)
 )
 
+var _ ReadWriteAcker = (*HTTPResponseReadWriteAcker)(nil)
+
 type testRequest struct {
 	name           string
 	endpoint       string
@@ -60,7 +62,7 @@ type mockOriginProxy struct{}
 
 func (moc *mockOriginProxy) ProxyHTTP(
 	w ResponseWriter,
-	tr *tracing.TracedRequest,
+	tr *tracing.TracedHTTPRequest,
 	isWebsocket bool,
 ) error {
 	req := tr.Request
