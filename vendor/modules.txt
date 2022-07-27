@@ -523,7 +523,7 @@ gopkg.in/tomb.v1
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# gopkg.in/yaml.v3 v3.0.1
+# gopkg.in/yaml.v3 v3.0.1 => gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
 # zombiezen.com/go/capnproto2 v2.18.0+incompatible
@@ -545,3 +545,4 @@ zombiezen.com/go/capnproto2/std/capnp/rpc
 # github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d
 # github.com/lucas-clemente/quic-go => github.com/chungthuang/quic-go v0.27.1-0.20220607112311-13144fbde8da
 # github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
+# gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1

@@ -103,3 +103,5 @@ replace github.com/lucas-clemente/quic-go => github.com/chungthuang/quic-go v0.2
 
 // Avoid 'CVE-2022-21698'
 replace github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
+
+replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
