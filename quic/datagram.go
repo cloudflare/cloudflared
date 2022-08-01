@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -13,53 +14,88 @@ const (
 	sessionIDLen = len(uuid.UUID{})
 )
 
+type SessionDatagram struct {
+	ID      uuid.UUID
+	Payload []byte
+}
+
+type BaseDatagramMuxer interface {
+	// MuxSession suffix the session ID to the payload so the other end of the QUIC connection can demultiplex the
+	// payload from multiple datagram sessions
+	MuxSession(sessionID uuid.UUID, payload []byte) error
+	// ServeReceive starts a loop to receive datagrams from the QUIC connection
+	ServeReceive(ctx context.Context) error
+}
+
 type DatagramMuxer struct {
-	session quic.Connection
-	logger  *zerolog.Logger
+	session   quic.Connection
+	logger    *zerolog.Logger
+	demuxChan chan<- *SessionDatagram
 }
 
-func NewDatagramMuxer(quicSession quic.Connection, logger *zerolog.Logger) (*DatagramMuxer, error) {
+func NewDatagramMuxer(quicSession quic.Connection, log *zerolog.Logger, demuxChan chan<- *SessionDatagram) *DatagramMuxer {
+	logger := log.With().Uint8("datagramVersion", 1).Logger()
 	return &DatagramMuxer{
-		session: quicSession,
-		logger:  logger,
-	}, nil
+		session:   quicSession,
+		logger:    &logger,
+		demuxChan: demuxChan,
+	}
 }
 
-// SendTo suffix the session ID to the payload so the other end of the QUIC session can demultiplex
-// the payload from multiple datagram sessions
-func (dm *DatagramMuxer) SendTo(sessionID uuid.UUID, payload []byte) error {
-	if len(payload) > maxDatagramPayloadSize {
+// Maximum application payload to send to / receive from QUIC datagram frame
+func (dm *DatagramMuxer) mtu() int {
+	return maxDatagramPayloadSize
+}
+
+func (dm *DatagramMuxer) MuxSession(sessionID uuid.UUID, payload []byte) error {
+	if len(payload) > dm.mtu() {
 		// TODO: TUN-5302 return ICMP packet too big message
-		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.MTU())
+		// drop packet for now, eventually reply with ICMP for PMTUD
+		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.mtu())
 	}
-	msgWithID, err := suffixSessionID(sessionID, payload)
+	payloadWithMetadata, err := suffixSessionID(sessionID, payload)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix session ID to datagram, it will be dropped")
 	}
-	if err := dm.session.SendMessage(msgWithID); err != nil {
+	if err := dm.session.SendMessage(payloadWithMetadata); err != nil {
 		return errors.Wrap(err, "Failed to send datagram back to edge")
 	}
 	return nil
 }
 
-// ReceiveFrom extracts datagram session ID, then sends the session ID and payload to session manager
-// which determines how to proxy to the origin. It assumes the datagram session has already been
-// registered with session manager through other side channel
-func (dm *DatagramMuxer) ReceiveFrom() (uuid.UUID, []byte, error) {
-	msg, err := dm.session.ReceiveMessage()
-	if err != nil {
-		return uuid.Nil, nil, err
+func (dm *DatagramMuxer) ServeReceive(ctx context.Context) error {
+	for {
+		// Extracts datagram session ID, then sends the session ID and payload to receiver
+		// which determines how to proxy to the origin. It assumes the datagram session has already been
+		// registered with receiver through other side channel
+		msg, err := dm.session.ReceiveMessage()
+		if err != nil {
+			return err
+		}
+		if err := dm.demux(ctx, msg); err != nil {
+			dm.logger.Error().Err(err).Msg("Failed to demux datagram")
+			if err == context.Canceled {
+				return err
+			}
+		}
 	}
-	sessionID, payload, err := extractSessionID(msg)
-	if err != nil {
-		return uuid.Nil, nil, err
-	}
-	return sessionID, payload, nil
 }
 
-// Maximum application payload to send to / receive from QUIC datagram frame
-func (dm *DatagramMuxer) MTU() int {
-	return maxDatagramPayloadSize
+func (dm *DatagramMuxer) demux(ctx context.Context, msg []byte) error {
+	sessionID, payload, err := extractSessionID(msg)
+	if err != nil {
+		return err
+	}
+	sessionDatagram := SessionDatagram{
+		ID:      sessionID,
+		Payload: payload,
+	}
+	select {
+	case dm.demuxChan <- &sessionDatagram:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Each QUIC datagram should be suffixed with session ID.

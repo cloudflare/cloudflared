@@ -33,6 +33,7 @@ const (
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
 	FeatureAllowRemoteConfig = "allow_remote_config"
+	FeatureDatagramV2        = "support_datagram_v2"
 )
 
 type TunnelConfig struct {

@@ -42,9 +42,3 @@ func (sc *errClosedSession) Error() string {
 		return fmt.Sprintf("session closed by local due to %s", sc.message)
 	}
 }
-
-// newDatagram is an event when transport receives new datagram
-type newDatagram struct {
-	sessionID uuid.UUID
-	payload   []byte
-}

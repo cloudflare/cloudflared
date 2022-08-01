@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lucas-clemente/quic-go"
 	"github.com/rs/zerolog"
-	"golang.org/x/sync/errgroup"
+
+	quicpogs "github.com/cloudflare/cloudflared/quic"
 )
 
 const (
@@ -36,26 +36,25 @@ type Manager interface {
 type manager struct {
 	registrationChan   chan *registerSessionEvent
 	unregistrationChan chan *unregisterSessionEvent
-	datagramChan       chan *newDatagram
-	closedChan         chan struct{}
-	transport          transport
+	sendFunc           transportSender
+	receiveChan        <-chan *quicpogs.SessionDatagram
+	closedChan         <-chan struct{}
 	sessions           map[uuid.UUID]*Session
 	log                *zerolog.Logger
 	// timeout waiting for an API to finish. This can be overriden in test
 	timeout time.Duration
 }
 
-func NewManager(transport transport, log *zerolog.Logger) *manager {
+func NewManager(log *zerolog.Logger, sendF transportSender, receiveChan <-chan *quicpogs.SessionDatagram) *manager {
 	return &manager{
 		registrationChan:   make(chan *registerSessionEvent),
 		unregistrationChan: make(chan *unregisterSessionEvent),
-		// datagramChan is buffered, so it can read more datagrams from transport while the event loop is processing other events
-		datagramChan: make(chan *newDatagram, requestChanCapacity),
-		closedChan:   make(chan struct{}),
-		transport:    transport,
-		sessions:     make(map[uuid.UUID]*Session),
-		log:          log,
-		timeout:      defaultReqTimeout,
+		sendFunc:           sendF,
+		receiveChan:        receiveChan,
+		closedChan:         make(chan struct{}),
+		sessions:           make(map[uuid.UUID]*Session),
+		log:                log,
+		timeout:            defaultReqTimeout,
 	}
 }
 
@@ -65,49 +64,21 @@ func (m *manager) UpdateLogger(log *zerolog.Logger) {
 }
 
 func (m *manager) Serve(ctx context.Context) error {
-	errGroup, ctx := errgroup.WithContext(ctx)
-	errGroup.Go(func() error {
-		for {
-			sessionID, payload, err := m.transport.ReceiveFrom()
-			if err != nil {
-				if aerr, ok := err.(*quic.ApplicationError); ok && uint64(aerr.ErrorCode) == uint64(quic.NoError) {
-					return nil
-				} else {
-					return err
-				}
-			}
-			datagram := &newDatagram{
-				sessionID: sessionID,
-				payload:   payload,
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			// Only the event loop routine can update/lookup the sessions map to avoid concurrent access
-			// Send the datagram to the event loop. It will find the session to send to
-			case m.datagramChan <- datagram:
-			}
+	for {
+		select {
+		case <-ctx.Done():
+			m.shutdownSessions(ctx.Err())
+			return ctx.Err()
+		// receiveChan is buffered, so the transport can read more datagrams from transport while the event loop is
+		// processing other events
+		case datagram := <-m.receiveChan:
+			m.sendToSession(datagram)
+		case registration := <-m.registrationChan:
+			m.registerSession(ctx, registration)
+		case unregistration := <-m.unregistrationChan:
+			m.unregisterSession(unregistration)
 		}
-	})
-	errGroup.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case datagram := <-m.datagramChan:
-				m.sendToSession(datagram)
-			case registration := <-m.registrationChan:
-				m.registerSession(ctx, registration)
-			// TODO: TUN-5422: Unregister inactive session upon timeout
-			case unregistration := <-m.unregistrationChan:
-				m.unregisterSession(unregistration)
-			}
-		}
-	})
-	err := errGroup.Wait()
-	close(m.closedChan)
-	m.shutdownSessions(err)
-	return err
+	}
 }
 
 func (m *manager) shutdownSessions(err error) {
@@ -149,16 +120,17 @@ func (m *manager) registerSession(ctx context.Context, registration *registerSes
 }
 
 func (m *manager) newSession(id uuid.UUID, dstConn io.ReadWriteCloser) *Session {
+	logger := m.log.With().Str("sessionID", id.String()).Logger()
 	return &Session{
-		ID:        id,
-		transport: m.transport,
-		dstConn:   dstConn,
+		ID:       id,
+		sendFunc: m.sendFunc,
+		dstConn:  dstConn,
 		// activeAtChan has low capacity. It can be full when there are many concurrent read/write. markActive() will
 		// drop instead of blocking because last active time only needs to be an approximation
 		activeAtChan: make(chan time.Time, 2),
 		// capacity is 2 because close() and dstToTransport routine in Serve() can write to this channel
 		closeChan: make(chan error, 2),
-		log:       m.log,
+		log:       &logger,
 	}
 }
 
@@ -191,16 +163,13 @@ func (m *manager) unregisterSession(unregistration *unregisterSessionEvent) {
 	}
 }
 
-func (m *manager) sendToSession(datagram *newDatagram) {
-	session, ok := m.sessions[datagram.sessionID]
+func (m *manager) sendToSession(datagram *quicpogs.SessionDatagram) {
+	session, ok := m.sessions[datagram.ID]
 	if !ok {
-		m.log.Error().Str("sessionID", datagram.sessionID.String()).Msg("session not found")
+		m.log.Error().Str("sessionID", datagram.ID.String()).Msg("session not found")
 		return
 	}
 	// session writes to destination over a connected UDP socket, which should not be blocking, so this call doesn't
 	// need to run in another go routine
-	_, err := session.transportToDst(datagram.payload)
-	if err != nil {
-		m.log.Err(err).Str("sessionID", datagram.sessionID.String()).Msg("Failed to write payload to session")
-	}
+	session.transportToDst(datagram.Payload)
 }

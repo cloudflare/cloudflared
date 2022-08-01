@@ -33,14 +33,19 @@ const (
 	HTTPHostKey = "HttpHost"
 
 	QUICMetadataFlowID = "FlowID"
+	// emperically this capacity has been working well
+	demuxChanCapacity = 16
 )
 
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
-	session              quic.Connection
-	logger               *zerolog.Logger
-	orchestrator         Orchestrator
-	sessionManager       datagramsession.Manager
+	session      quic.Connection
+	logger       *zerolog.Logger
+	orchestrator Orchestrator
+	// sessionManager tracks active sessions. It receives datagrams from quic connection via datagramMuxer
+	sessionManager datagramsession.Manager
+	// datagramMuxer mux/demux datagrams from quic connection
+	datagramMuxer        *quicpogs.DatagramMuxer
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
 }
@@ -60,18 +65,16 @@ func NewQUICConnection(
 		return nil, &EdgeQuicDialError{Cause: err}
 	}
 
-	datagramMuxer, err := quicpogs.NewDatagramMuxer(session, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	sessionManager := datagramsession.NewManager(datagramMuxer, logger)
+	demuxChan := make(chan *quicpogs.SessionDatagram, demuxChanCapacity)
+	datagramMuxer := quicpogs.NewDatagramMuxer(session, logger, demuxChan)
+	sessionManager := datagramsession.NewManager(logger, datagramMuxer.MuxSession, demuxChan)
 
 	return &QUICConnection{
 		session:              session,
 		orchestrator:         orchestrator,
 		logger:               logger,
 		sessionManager:       sessionManager,
+		datagramMuxer:        datagramMuxer,
 		controlStreamHandler: controlStreamHandler,
 		connOptions:          connOptions,
 	}, nil
@@ -106,6 +109,11 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 	errGroup.Go(func() error {
 		defer cancel()
 		return q.sessionManager.Serve(ctx)
+	})
+
+	errGroup.Go(func() error {
+		defer cancel()
+		return q.datagramMuxer.ServeReceive(ctx)
 	})
 
 	return errGroup.Wait()

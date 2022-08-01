@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -52,9 +53,29 @@ func TestSuffixSessionIDError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestMaxDatagramPayload(t *testing.T) {
-	payload := make([]byte, maxDatagramPayloadSize)
+func TestDatagram(t *testing.T) {
+	maxPayload := make([]byte, maxDatagramPayloadSize)
+	noPayloadSession := uuid.New()
+	maxPayloadSession := uuid.New()
+	sessionToPayload := []*SessionDatagram{
+		{
+			ID:      noPayloadSession,
+			Payload: make([]byte, 0),
+		},
+		{
+			ID:      maxPayloadSession,
+			Payload: maxPayload,
+		},
+	}
+	flowPayloads := [][]byte{
+		maxPayload,
+	}
 
+	testDatagram(t, 1, sessionToPayload, nil)
+	testDatagram(t, 2, sessionToPayload, flowPayloads)
+}
+
+func testDatagram(t *testing.T, version uint8, sessionToPayloads []*SessionDatagram, packetPayloads [][]byte) {
 	quicConfig := &quic.Config{
 		KeepAlivePeriod:      5 * time.Millisecond,
 		EnableDatagrams:      true,
@@ -62,6 +83,8 @@ func TestMaxDatagramPayload(t *testing.T) {
 	}
 	quicListener := newQUICListener(t, quicConfig)
 	defer quicListener.Close()
+
+	logger := zerolog.Nop()
 
 	errGroup, ctx := errgroup.WithContext(context.Background())
 	// Run edge side of datagram muxer
@@ -72,22 +95,32 @@ func TestMaxDatagramPayload(t *testing.T) {
 			return err
 		}
 
-		logger := zerolog.Nop()
-		muxer, err := NewDatagramMuxer(quicSession, &logger)
-		if err != nil {
-			return err
+		sessionDemuxChan := make(chan *SessionDatagram, 16)
+
+		switch version {
+		case 1:
+			muxer := NewDatagramMuxer(quicSession, &logger, sessionDemuxChan)
+			muxer.ServeReceive(ctx)
+		case 2:
+			packetDemuxChan := make(chan []byte, len(packetPayloads))
+			muxer := NewDatagramMuxerV2(quicSession, &logger, sessionDemuxChan, packetDemuxChan)
+			muxer.ServeReceive(ctx)
+
+			for _, expectedPayload := range packetPayloads {
+				require.Equal(t, expectedPayload, <-packetDemuxChan)
+			}
+		default:
+			return fmt.Errorf("unknown datagram version %d", version)
 		}
 
-		sessionID, receivedPayload, err := muxer.ReceiveFrom()
-		if err != nil {
-			return err
+		for _, expectedPayload := range sessionToPayloads {
+			actualPayload := <-sessionDemuxChan
+			require.Equal(t, expectedPayload, actualPayload)
 		}
-		require.Equal(t, testSessionID, sessionID)
-		require.True(t, bytes.Equal(payload, receivedPayload))
-
 		return nil
 	})
 
+	largePayload := make([]byte, MaxDatagramFrameSize)
 	// Run cloudflared side of datagram muxer
 	errGroup.Go(func() error {
 		tlsClientConfig := &tls.Config{
@@ -97,24 +130,35 @@ func TestMaxDatagramPayload(t *testing.T) {
 		// Establish quic connection
 		quicSession, err := quic.DialAddrEarly(quicListener.Addr().String(), tlsClientConfig, quicConfig)
 		require.NoError(t, err)
-
-		logger := zerolog.Nop()
-		muxer, err := NewDatagramMuxer(quicSession, &logger)
-		if err != nil {
-			return err
-		}
+		defer quicSession.CloseWithError(0, "")
 
 		// Wait a few milliseconds for MTU discovery to take place
 		time.Sleep(time.Millisecond * 100)
-		err = muxer.SendTo(testSessionID, payload)
-		if err != nil {
-			return err
+
+		var muxer BaseDatagramMuxer
+		switch version {
+		case 1:
+			muxer = NewDatagramMuxer(quicSession, &logger, nil)
+		case 2:
+			muxerV2 := NewDatagramMuxerV2(quicSession, &logger, nil, nil)
+			for _, payload := range packetPayloads {
+				require.NoError(t, muxerV2.MuxPacket(payload))
+			}
+			// Payload larger than transport MTU, should not be sent
+			require.Error(t, muxerV2.MuxPacket(largePayload))
+			muxer = muxerV2
+		default:
+			return fmt.Errorf("unknown datagram version %d", version)
 		}
 
-		// Payload larger than transport MTU, should return an error
-		largePayload := make([]byte, MaxDatagramFrameSize)
-		err = muxer.SendTo(testSessionID, largePayload)
-		require.Error(t, err)
+		for _, sessionDatagram := range sessionToPayloads {
+			require.NoError(t, muxer.MuxSession(sessionDatagram.ID, sessionDatagram.Payload))
+		}
+		// Payload larger than transport MTU, should not be sent
+		require.Error(t, muxer.MuxSession(testSessionID, largePayload))
+
+		// Wait for edge to finish receiving the messages
+		time.Sleep(time.Millisecond * 100)
 
 		return nil
 	})
@@ -153,4 +197,36 @@ func generateTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"argotunnel"},
 	}
+}
+
+type sessionMuxer interface {
+	SendToSession(sessionID uuid.UUID, payload []byte) error
+}
+
+type mockSessionReceiver struct {
+	expectedSessionToPayload map[uuid.UUID][]byte
+	receivedCount            int
+}
+
+func (msr *mockSessionReceiver) ReceiveDatagram(sessionID uuid.UUID, payload []byte) error {
+	expectedPayload := msr.expectedSessionToPayload[sessionID]
+	if !bytes.Equal(expectedPayload, payload) {
+		return fmt.Errorf("expect %v to have payload %s, got %s", sessionID, string(expectedPayload), string(payload))
+	}
+	msr.receivedCount++
+	return nil
+}
+
+type mockFlowReceiver struct {
+	expectedPayloads [][]byte
+	receivedCount    int
+}
+
+func (mfr *mockFlowReceiver) ReceiveFlow(payload []byte) error {
+	expectedPayload := mfr.expectedPayloads[mfr.receivedCount]
+	if !bytes.Equal(expectedPayload, payload) {
+		return fmt.Errorf("expect flow %d to have payload %s, got %s", mfr.receivedCount, string(expectedPayload), string(payload))
+	}
+	mfr.receivedCount++
+	return nil
 }

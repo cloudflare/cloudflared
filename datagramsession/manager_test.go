@@ -14,22 +14,30 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
+
+	quicpogs "github.com/cloudflare/cloudflared/quic"
+)
+
+var (
+	nopLogger = zerolog.Nop()
 )
 
 func TestManagerServe(t *testing.T) {
 	const (
-		sessions            = 20
-		msgs                = 50
+		sessions            = 2
+		msgs                = 5
 		remoteUnregisterMsg = "eyeball closed connection"
 	)
 
-	mg, transport := newTestManager(1)
-
-	eyeballTracker := make(map[uuid.UUID]*datagramChannel)
-	for i := 0; i < sessions; i++ {
-		sessionID := uuid.New()
-		eyeballTracker[sessionID] = newDatagramChannel(1)
+	requestChan := make(chan *quicpogs.SessionDatagram)
+	transport := mockQUICTransport{
+		sessions: make(map[uuid.UUID]chan []byte),
 	}
+	for i := 0; i < sessions; i++ {
+		transport.sessions[uuid.New()] = make(chan []byte)
+	}
+
+	mg := NewManager(&nopLogger, transport.MuxSession, requestChan)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	serveDone := make(chan struct{})
@@ -38,52 +46,41 @@ func TestManagerServe(t *testing.T) {
 		close(serveDone)
 	}(ctx)
 
-	go func(ctx context.Context) {
-		for {
-			sessionID, payload, err := transport.respChan.Receive(ctx)
-			if err != nil {
-				require.Equal(t, context.Canceled, err)
-				return
-			}
-			respChan := eyeballTracker[sessionID]
-			require.NoError(t, respChan.Send(ctx, sessionID, payload))
-		}
-	}(ctx)
-
 	errGroup, ctx := errgroup.WithContext(ctx)
-	for sID, receiver := range eyeballTracker {
+	for sessionID, eyeballRespChan := range transport.sessions {
 		// Assign loop variables to local variables
-		sessionID := sID
-		eyeballRespReceiver := receiver
+		sID := sessionID
+		payload := testPayload(sID)
+		expectResp := testResponse(payload)
+
+		cfdConn, originConn := net.Pipe()
+
+		origin := mockOrigin{
+			expectMsgCount: msgs,
+			expectedMsg:    payload,
+			expectedResp:   expectResp,
+			conn:           originConn,
+		}
+
+		eyeball := mockEyeballSession{
+			id:               sID,
+			expectedMsgCount: msgs,
+			expectedMsg:      payload,
+			expectedResponse: expectResp,
+			respReceiver:     eyeballRespChan,
+		}
+
+		// Assign loop variables to local variables
 		errGroup.Go(func() error {
-			payload := testPayload(sessionID)
-			expectResp := testResponse(payload)
-
-			cfdConn, originConn := net.Pipe()
-
-			origin := mockOrigin{
-				expectMsgCount: msgs,
-				expectedMsg:    payload,
-				expectedResp:   expectResp,
-				conn:           originConn,
-			}
-			eyeball := mockEyeball{
-				expectMsgCount:  msgs,
-				expectedMsg:     expectResp,
-				expectSessionID: sessionID,
-				respReceiver:    eyeballRespReceiver,
-			}
-
+			session, err := mg.RegisterSession(ctx, sID, cfdConn)
+			require.NoError(t, err)
 			reqErrGroup, reqCtx := errgroup.WithContext(ctx)
 			reqErrGroup.Go(func() error {
 				return origin.serve()
 			})
 			reqErrGroup.Go(func() error {
-				return eyeball.serve(reqCtx)
+				return eyeball.serve(reqCtx, requestChan)
 			})
-
-			session, err := mg.RegisterSession(ctx, sessionID, cfdConn)
-			require.NoError(t, err)
 
 			sessionDone := make(chan struct{})
 			go func() {
@@ -97,23 +94,17 @@ func TestManagerServe(t *testing.T) {
 				close(sessionDone)
 			}()
 
-			for i := 0; i < msgs; i++ {
-				require.NoError(t, transport.newRequest(ctx, sessionID, testPayload(sessionID)))
-			}
-
 			// Make sure eyeball and origin have received all messages before unregistering the session
 			require.NoError(t, reqErrGroup.Wait())
 
-			require.NoError(t, mg.UnregisterSession(ctx, sessionID, remoteUnregisterMsg, true))
+			require.NoError(t, mg.UnregisterSession(ctx, sID, remoteUnregisterMsg, true))
 			<-sessionDone
-
 			return nil
 		})
 	}
 
 	require.NoError(t, errGroup.Wait())
 	cancel()
-	transport.close()
 	<-serveDone
 }
 
@@ -122,7 +113,7 @@ func TestTimeout(t *testing.T) {
 		testTimeout = time.Millisecond * 50
 	)
 
-	mg, _ := newTestManager(1)
+	mg := NewManager(&nopLogger, nil, nil)
 	mg.timeout = testTimeout
 	ctx := context.Background()
 	sessionID := uuid.New()
@@ -135,9 +126,51 @@ func TestTimeout(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
-func TestCloseTransportCloseSessions(t *testing.T) {
-	mg, transport := newTestManager(1)
-	ctx := context.Background()
+func TestUnregisterSessionCloseSession(t *testing.T) {
+	sessionID := uuid.New()
+	payload := []byte(t.Name())
+	sender := newMockTransportSender(sessionID, payload)
+	mg := NewManager(&nopLogger, sender.muxSession, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	managerDone := make(chan struct{})
+	go func() {
+		err := mg.Serve(ctx)
+		require.Error(t, err)
+		close(managerDone)
+	}()
+
+	cfdConn, originConn := net.Pipe()
+	session, err := mg.RegisterSession(ctx, sessionID, cfdConn)
+	require.NoError(t, err)
+	require.NotNil(t, session)
+
+	unregisteredChan := make(chan struct{})
+	go func() {
+		_, err := originConn.Write(payload)
+		require.NoError(t, err)
+
+		err = mg.UnregisterSession(ctx, sessionID, "eyeball closed session", true)
+		require.NoError(t, err)
+
+		close(unregisteredChan)
+	}()
+
+	closedByRemote, err := session.Serve(ctx, time.Minute)
+	require.True(t, closedByRemote)
+	require.Error(t, err)
+
+	<-unregisteredChan
+	cancel()
+	<-managerDone
+}
+
+func TestManagerCtxDoneCloseSessions(t *testing.T) {
+	sessionID := uuid.New()
+	payload := []byte(t.Name())
+	sender := newMockTransportSender(sessionID, payload)
+	mg := NewManager(&nopLogger, sender.muxSession, nil)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -147,33 +180,24 @@ func TestCloseTransportCloseSessions(t *testing.T) {
 		require.Error(t, err)
 	}()
 
-	cfdConn, eyeballConn := net.Pipe()
-	session, err := mg.RegisterSession(ctx, uuid.New(), cfdConn)
+	cfdConn, originConn := net.Pipe()
+	session, err := mg.RegisterSession(ctx, sessionID, cfdConn)
 	require.NoError(t, err)
 	require.NotNil(t, session)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, err := eyeballConn.Write([]byte(t.Name()))
+		_, err := originConn.Write(payload)
 		require.NoError(t, err)
-		transport.close()
+		cancel()
 	}()
 
 	closedByRemote, err := session.Serve(ctx, time.Minute)
-	require.True(t, closedByRemote)
+	require.False(t, closedByRemote)
 	require.Error(t, err)
 
 	wg.Wait()
-}
-
-func newTestManager(capacity uint) (*manager, *mockQUICTransport) {
-	log := zerolog.Nop()
-	transport := &mockQUICTransport{
-		reqChan:  newDatagramChannel(capacity),
-		respChan: newDatagramChannel(capacity),
-	}
-	return NewManager(transport, &log), transport
 }
 
 type mockOrigin struct {
@@ -197,7 +221,6 @@ func (mo *mockOrigin) serve() error {
 		if !bytes.Equal(readBuffer[:n], mo.expectedMsg) {
 			return fmt.Errorf("Expect %v, read %v", mo.expectedMsg, readBuffer[:n])
 		}
-
 		_, err = mo.conn.Write(mo.expectedResp)
 		if err != nil {
 			return err
@@ -214,72 +237,35 @@ func testResponse(msg []byte) []byte {
 	return []byte(fmt.Sprintf("Response to %v", msg))
 }
 
-type mockEyeball struct {
-	expectMsgCount  int
-	expectedMsg     []byte
-	expectSessionID uuid.UUID
-	respReceiver    *datagramChannel
+type mockQUICTransport struct {
+	sessions map[uuid.UUID]chan []byte
 }
 
-func (me *mockEyeball) serve(ctx context.Context) error {
-	for i := 0; i < me.expectMsgCount; i++ {
-		sessionID, msg, err := me.respReceiver.Receive(ctx)
-		if err != nil {
-			return err
-		}
-		if sessionID != me.expectSessionID {
-			return fmt.Errorf("Expect session %s, got %s", me.expectSessionID, sessionID)
-		}
-		if !bytes.Equal(msg, me.expectedMsg) {
-			return fmt.Errorf("Expect %v, read %v", me.expectedMsg, msg)
-		}
-	}
+func (me *mockQUICTransport) MuxSession(id uuid.UUID, payload []byte) error {
+	session := me.sessions[id]
+	session <- payload
 	return nil
 }
 
-// datagramChannel is a channel for Datagram with wrapper to send/receive with context
-type datagramChannel struct {
-	datagramChan chan *newDatagram
-	closedChan   chan struct{}
+type mockEyeballSession struct {
+	id               uuid.UUID
+	expectedMsgCount int
+	expectedMsg      []byte
+	expectedResponse []byte
+	respReceiver     <-chan []byte
 }
 
-func newDatagramChannel(capacity uint) *datagramChannel {
-	return &datagramChannel{
-		datagramChan: make(chan *newDatagram, capacity),
-		closedChan:   make(chan struct{}),
-	}
-}
-
-func (rc *datagramChannel) Send(ctx context.Context, sessionID uuid.UUID, payload []byte) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-rc.closedChan:
-		return &errClosedSession{
-			message:  fmt.Errorf("datagram channel closed").Error(),
-			byRemote: true,
+func (me *mockEyeballSession) serve(ctx context.Context, requestChan chan *quicpogs.SessionDatagram) error {
+	for i := 0; i < me.expectedMsgCount; i++ {
+		requestChan <- &quicpogs.SessionDatagram{
+			ID:      me.id,
+			Payload: me.expectedMsg,
 		}
-	case rc.datagramChan <- &newDatagram{sessionID: sessionID, payload: payload}:
-		return nil
-	}
-}
-
-func (rc *datagramChannel) Receive(ctx context.Context) (uuid.UUID, []byte, error) {
-	select {
-	case <-ctx.Done():
-		return uuid.Nil, nil, ctx.Err()
-	case <-rc.closedChan:
-		err := &errClosedSession{
-			message:  fmt.Errorf("datagram channel closed").Error(),
-			byRemote: true,
+		resp := <-me.respReceiver
+		if !bytes.Equal(resp, me.expectedResponse) {
+			return fmt.Errorf("Expect %v, read %v", me.expectedResponse, resp)
 		}
-		return uuid.Nil, nil, err
-	case msg := <-rc.datagramChan:
-		return msg.sessionID, msg.payload, nil
+		fmt.Println("Resp", resp)
 	}
-}
-
-func (rc *datagramChannel) Close() {
-	// No need to close msgChan, it will be garbage collect once there is no reference to it
-	close(rc.closedChan)
+	return nil
 }

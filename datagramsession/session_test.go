@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
+
+	quicpogs "github.com/cloudflare/cloudflared/quic"
 )
 
 // TestCloseSession makes sure a session will stop after context is done
@@ -41,7 +44,8 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
 
-	mg, _ := newTestManager(1)
+	log := zerolog.Nop()
+	mg := NewManager(&log, nil, nil)
 	session := mg.newSession(sessionID, cfdConn)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,7 +118,9 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
 
-	mg, _ := newTestManager(100)
+	respChan := make(chan *quicpogs.SessionDatagram)
+	sender := newMockTransportSender(sessionID, payload)
+	mg := NewManager(&nopLogger, sender.muxSession, respChan)
 	session := mg.newSession(sessionID, cfdConn)
 
 	startTime := time.Now()
@@ -177,7 +183,7 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 
 func TestMarkActiveNotBlocking(t *testing.T) {
 	const concurrentCalls = 50
-	mg, _ := newTestManager(1)
+	mg := NewManager(&nopLogger, nil, nil)
 	session := mg.newSession(uuid.New(), nil)
 	var wg sync.WaitGroup
 	wg.Add(concurrentCalls)
@@ -190,11 +196,16 @@ func TestMarkActiveNotBlocking(t *testing.T) {
 	wg.Wait()
 }
 
+// Some UDP application might send 0-size payload.
 func TestZeroBytePayload(t *testing.T) {
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 
-	mg, transport := newTestManager(1)
+	sender := sendOnceTransportSender{
+		baseSender: newMockTransportSender(sessionID, make([]byte, 0)),
+		sentChan:   make(chan struct{}),
+	}
+	mg := NewManager(&nopLogger, sender.muxSession, nil)
 	session := mg.newSession(sessionID, cfdConn)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -215,11 +226,39 @@ func TestZeroBytePayload(t *testing.T) {
 		return nil
 	})
 
-	receivedSessionID, payload, err := transport.respChan.Receive(ctx)
-	require.NoError(t, err)
-	require.Len(t, payload, 0)
-	require.Equal(t, sessionID, receivedSessionID)
-
+	<-sender.sentChan
 	cancel()
 	require.NoError(t, errGroup.Wait())
+}
+
+type mockTransportSender struct {
+	expectedSessionID uuid.UUID
+	expectedPayload   []byte
+}
+
+func newMockTransportSender(expectedSessionID uuid.UUID, expectedPayload []byte) *mockTransportSender {
+	return &mockTransportSender{
+		expectedSessionID: expectedSessionID,
+		expectedPayload:   expectedPayload,
+	}
+}
+
+func (mts *mockTransportSender) muxSession(sessionID uuid.UUID, payload []byte) error {
+	if sessionID != mts.expectedSessionID {
+		return fmt.Errorf("Expect session %s, got %s", mts.expectedSessionID, sessionID)
+	}
+	if !bytes.Equal(payload, mts.expectedPayload) {
+		return fmt.Errorf("Expect %v, read %v", mts.expectedPayload, payload)
+	}
+	return nil
+}
+
+type sendOnceTransportSender struct {
+	baseSender *mockTransportSender
+	sentChan   chan struct{}
+}
+
+func (sots *sendOnceTransportSender) muxSession(sessionID uuid.UUID, payload []byte) error {
+	defer close(sots.sentChan)
+	return sots.baseSender.muxSession(sessionID, payload)
 }
