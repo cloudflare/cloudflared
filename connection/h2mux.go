@@ -69,7 +69,6 @@ func NewH2muxConnection(
 	connIndex uint8,
 	observer *Observer,
 	gracefulShutdownC <-chan struct{},
-	log *zerolog.Logger,
 ) (*h2muxConnection, error, bool) {
 	h := &h2muxConnection{
 		orchestrator:      orchestrator,
@@ -80,7 +79,6 @@ func NewH2muxConnection(
 		observer:          observer,
 		gracefulShutdownC: gracefulShutdownC,
 		newRPCClientFunc:  newRegistrationRPCClient,
-		log:               log,
 	}
 
 	// Establish a muxed connection with the edge
@@ -236,7 +234,7 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		return err
 	}
 
-	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, h.log), sourceConnectionType == TypeWebsocket)
+	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), sourceConnectionType == TypeWebsocket)
 	if err != nil {
 		respWriter.WriteErrorResponse()
 	}

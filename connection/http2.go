@@ -132,7 +132,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
 		// Check for tracing on request
-		tr := tracing.NewTracedHTTPRequest(r, c.log)
+		tr := tracing.NewTracedRequest(r)
 		if err := originProxy.ProxyHTTP(respWriter, tr, connType == TypeWebsocket); err != nil {
 			err := fmt.Errorf("Failed to proxy HTTP: %w", err)
 			c.log.Error().Err(err)

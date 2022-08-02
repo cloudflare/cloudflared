@@ -157,8 +157,7 @@ func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, "http://localhost:8080", nil)
 		require.NoError(t, err)
 
-		log := zerolog.Nop()
-		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
+		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false)
 		require.NoError(t, err)
 		for _, tag := range testTags {
 			assert.Equal(t, tag.Value, req.Header.Get(TagHeaderNamePrefix+tag.Name))
@@ -185,8 +184,7 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 
 		errGroup, ctx := errgroup.WithContext(ctx)
 		errGroup.Go(func() error {
-			log := zerolog.Nop()
-			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), true)
+			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), true)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusSwitchingProtocols, responseWriter.Code)
@@ -247,8 +245,7 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			log := zerolog.Nop()
-			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
+			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusOK, responseWriter.Code)
@@ -360,7 +357,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 		req, err := http.NewRequest(http.MethodGet, test.url, nil)
 		require.NoError(t, err)
 
-		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
+		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false)
 		require.NoError(t, err)
 
 		assert.Equal(t, test.expectedStatus, responseWriter.Code)
@@ -407,7 +404,7 @@ func TestProxyError(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
 	assert.NoError(t, err)
 
-	assert.Error(t, proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false))
+	assert.Error(t, proxy.ProxyHTTP(responseWriter, tracing.NewTracedRequest(req), false))
 }
 
 type replayer struct {
@@ -685,8 +682,7 @@ func TestConnections(t *testing.T) {
 				rwa := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
 				err = proxy.ProxyTCP(ctx, rwa, &connection.TCPRequest{Dest: dest})
 			} else {
-				log := zerolog.Nop()
-				err = proxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, &log), test.args.connectionType == connection.TypeWebsocket)
+				err = proxy.ProxyHTTP(respWriter, tracing.NewTracedRequest(req), test.args.connectionType == connection.TypeWebsocket)
 			}
 
 			cancel()

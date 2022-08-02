@@ -36,8 +36,6 @@ var (
 	}
 )
 
-var _ ReadWriteAcker = (*streamReadWriteAcker)(nil)
-
 // TestQUICServer tests if a quic server accepts and responds to a quic client with the acceptance protocol.
 // It also serves as a demonstration for communication with the QUIC connection started by a cloudflared.
 func TestQUICServer(t *testing.T) {
@@ -222,7 +220,7 @@ func quicServer(
 
 type mockOriginProxyWithRequest struct{}
 
-func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, tr *tracing.TracedHTTPRequest, isWebsocket bool) error {
+func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, tr *tracing.TracedRequest, isWebsocket bool) error {
 	// These are a series of crude tests to ensure the headers and http related data is transferred from
 	// metadata.
 	r := tr.Request
@@ -477,10 +475,9 @@ func TestBuildHTTPRequest(t *testing.T) {
 		},
 	}
 
-	log := zerolog.Nop()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			req, err := buildHTTPRequest(context.Background(), test.connectRequest, test.body, &log)
+			req, err := buildHTTPRequest(context.Background(), test.connectRequest, test.body)
 			assert.NoError(t, err)
 			test.req = test.req.WithContext(req.Context())
 			assert.Equal(t, test.req, req.Request)
@@ -489,7 +486,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 }
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
-	rwa.AckConnection("")
+	rwa.AckConnection()
 	io.Copy(rwa, rwa)
 	return nil
 }
