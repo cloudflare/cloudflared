@@ -232,6 +232,10 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			} else {
 				service = newTCPOverWSService(u)
 			}
+
+			if u.Hostname() == r.Hostname {
+				return Ingress{}, fmt.Errorf("Cyclic Ingress configuration: Hostname:%s points to service:%s.", r.Hostname, r.Service)
+			}
 		}
 
 		if err := validateHostname(r, i, len(ingress)); err != nil {
