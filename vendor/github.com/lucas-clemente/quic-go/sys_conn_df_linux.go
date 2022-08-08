@@ -7,9 +7,8 @@ import (
 	"errors"
 	"syscall"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lucas-clemente/quic-go/internal/utils"
+	"golang.org/x/sys/unix"
 )
 
 func setDF(rawConn syscall.RawConn) error {
@@ -30,7 +29,7 @@ func setDF(rawConn syscall.RawConn) error {
 	case errDFIPv4 != nil && errDFIPv6 == nil:
 		utils.DefaultLogger.Debugf("Setting DF for IPv6.")
 	case errDFIPv4 != nil && errDFIPv6 != nil:
-		utils.DefaultLogger.Errorf("setting DF failed for both IPv4 and IPv6")
+		return errors.New("setting DF failed for both IPv4 and IPv6")
 	}
 	return nil
 }

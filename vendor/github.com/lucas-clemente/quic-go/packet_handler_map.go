@@ -104,6 +104,7 @@ func setReceiveBuffer(c net.PacketConn, logger utils.Logger) error {
 	}
 	if size >= protocol.DesiredReceiveBufferSize {
 		logger.Debugf("Conn has receive buffer of %d kiB (wanted: at least %d kiB)", size/1024, protocol.DesiredReceiveBufferSize/1024)
+		return nil
 	}
 	if err := conn.SetReadBuffer(protocol.DesiredReceiveBufferSize); err != nil {
 		return fmt.Errorf("failed to increase receive buffer size: %w", err)

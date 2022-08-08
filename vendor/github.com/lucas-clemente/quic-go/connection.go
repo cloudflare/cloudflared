@@ -190,6 +190,7 @@ type connection struct {
 	clientHelloWritten    <-chan *wire.TransportParameters
 	earlyConnReadyChan    chan struct{}
 	handshakeCompleteChan chan struct{} // is closed when the handshake completes
+	sentFirstPacket       bool
 	handshakeComplete     bool
 	handshakeConfirmed    bool
 
@@ -1522,6 +1523,12 @@ func (s *connection) handleCloseError(closeErr *closeError) {
 		s.connIDGenerator.RemoveAll()
 		return
 	}
+	// Don't send out any CONNECTION_CLOSE if this is an error that occurred
+	// before we even sent out the first packet.
+	if s.perspective == protocol.PerspectiveClient && !s.sentFirstPacket {
+		s.connIDGenerator.RemoveAll()
+		return
+	}
 	connClosePacket, err := s.sendConnectionClose(e)
 	if err != nil {
 		s.logger.Debugf("Error sending CONNECTION_CLOSE: %s", err)
@@ -1763,6 +1770,7 @@ func (s *connection) sendPacket() (bool, error) {
 		if err != nil || packet == nil {
 			return false, err
 		}
+		s.sentFirstPacket = true
 		s.logCoalescedPacket(packet)
 		for _, p := range packet.packets {
 			if s.firstAckElicitingPacketAfterIdleSentTime.IsZero() && p.IsAckEliciting() {

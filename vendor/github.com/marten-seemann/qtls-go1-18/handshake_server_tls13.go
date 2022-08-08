@@ -777,6 +777,7 @@ func (hs *serverHandshakeStateTLS13) sendSessionTickets() error {
 	if err != nil {
 		return err
 	}
+
 	if _, err := c.writeRecord(recordTypeHandshake, m.marshal()); err != nil {
 		return err
 	}

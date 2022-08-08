@@ -9,9 +9,15 @@ import (
 	"github.com/lucas-clemente/quic-go/internal/utils"
 )
 
-func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte) cipher.AEAD {
-	key := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic key", suite.KeyLen)
-	iv := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic iv", suite.IVLen())
+func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, v protocol.VersionNumber) cipher.AEAD {
+	keyLabel := hkdfLabelKeyV1
+	ivLabel := hkdfLabelIVV1
+	if v == protocol.Version2 {
+		keyLabel = hkdfLabelKeyV2
+		ivLabel = hkdfLabelIVV2
+	}
+	key := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, keyLabel, suite.KeyLen)
+	iv := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, ivLabel, suite.IVLen())
 	return suite.AEAD(key, iv)
 }
 

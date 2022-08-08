@@ -11,6 +11,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/binary"
 	"errors"
 	"io"
 	"time"
@@ -232,6 +233,20 @@ func (c *Conn) getSessionTicketMsg(appData []byte) (*newSessionTicketMsgTLS13, e
 		return nil, err
 	}
 	m.lifetime = uint32(maxSessionTicketLifetime / time.Second)
+
+	// ticket_age_add is a random 32-bit value. See RFC 8446, section 4.6.1
+	// The value is not stored anywhere; we never need to check the ticket age
+	// because 0-RTT is not supported.
+	ageAdd := make([]byte, 4)
+	_, err = c.config.rand().Read(ageAdd)
+	if err != nil {
+		return nil, err
+	}
+	m.ageAdd = binary.LittleEndian.Uint32(ageAdd)
+
+	// ticket_nonce, which must be unique per connection, is always left at
+	// zero because we only ever send one ticket per connection.
+
 	if c.extraConfig != nil {
 		m.maxEarlyData = c.extraConfig.MaxEarlyData
 	}

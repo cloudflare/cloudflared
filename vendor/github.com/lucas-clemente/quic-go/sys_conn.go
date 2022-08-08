@@ -30,9 +30,13 @@ func wrapConn(pc net.PacketConn) (rawConn, error) {
 		if err != nil {
 			return nil, err
 		}
-		err = setDF(rawConn)
-		if err != nil {
-			return nil, err
+
+		if _, ok := pc.LocalAddr().(*net.UDPAddr); ok {
+			// Only set DF on sockets that we expect to be able to handle that configuration.
+			err = setDF(rawConn)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	c, ok := pc.(OOBCapablePacketConn)

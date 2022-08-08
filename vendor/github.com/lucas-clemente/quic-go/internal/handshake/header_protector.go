@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/chacha20"
 
+	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/qtls"
 )
 
@@ -17,12 +18,20 @@ type headerProtector interface {
 	DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte)
 }
 
-func newHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
+func hkdfHeaderProtectionLabel(v protocol.VersionNumber) string {
+	if v == protocol.Version2 {
+		return "quicv2 hp"
+	}
+	return "quic hp"
+}
+
+func newHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool, v protocol.VersionNumber) headerProtector {
+	hkdfLabel := hkdfHeaderProtectionLabel(v)
 	switch suite.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
-		return newAESHeaderProtector(suite, trafficSecret, isLongHeader)
+		return newAESHeaderProtector(suite, trafficSecret, isLongHeader, hkdfLabel)
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
-		return newChaChaHeaderProtector(suite, trafficSecret, isLongHeader)
+		return newChaChaHeaderProtector(suite, trafficSecret, isLongHeader, hkdfLabel)
 	default:
 		panic(fmt.Sprintf("Invalid cipher suite id: %d", suite.ID))
 	}
@@ -36,8 +45,8 @@ type aesHeaderProtector struct {
 
 var _ headerProtector = &aesHeaderProtector{}
 
-func newAESHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
-	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
+func newAESHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
+	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
 	block, err := aes.NewCipher(hpKey)
 	if err != nil {
 		panic(fmt.Sprintf("error creating new AES cipher: %s", err))
@@ -81,8 +90,8 @@ type chachaHeaderProtector struct {
 
 var _ headerProtector = &chachaHeaderProtector{}
 
-func newChaChaHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool) headerProtector {
-	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, "quic hp", suite.KeyLen)
+func newChaChaHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
+	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
 
 	p := &chachaHeaderProtector{
 		isLongHeader: isLongHeader,

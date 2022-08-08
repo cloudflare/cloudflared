@@ -20,6 +20,9 @@ import (
 	"github.com/lucas-clemente/quic-go/logging"
 )
 
+// ErrServerClosed is returned by the Listener or EarlyListener's Accept method after a call to Close.
+var ErrServerClosed = errors.New("quic: Server closed")
+
 // packetHandler handles packets
 type packetHandler interface {
 	handlePacket(*receivedPacket)
@@ -284,7 +287,7 @@ func (s *baseServer) Close() error {
 		return nil
 	}
 	if s.serverError == nil {
-		s.serverError = errors.New("server closed")
+		s.serverError = ErrServerClosed
 	}
 	// If the server was started with ListenAddr, we created the packet conn.
 	// We need to close it in order to make the go routine reading from that conn return.
@@ -648,11 +651,7 @@ func (s *baseServer) sendError(remoteAddr net.Addr, hdr *wire.Header, sealer han
 
 func (s *baseServer) sendVersionNegotiationPacket(p *receivedPacket, hdr *wire.Header) {
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation", hdr.Version)
-	data, err := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
-	if err != nil {
-		s.logger.Debugf("Error composing Version Negotiation: %s", err)
-		return
-	}
+	data := wire.ComposeVersionNegotiation(hdr.SrcConnectionID, hdr.DestConnectionID, s.config.Versions)
 	if s.config.Tracer != nil {
 		s.config.Tracer.SentPacket(
 			p.remoteAddr,
