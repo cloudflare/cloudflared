@@ -407,16 +407,6 @@ ingress:
 `},
 			wantErr: true,
 		},
-		{
-			name: "Cyclic hostname definition",
-			args: args{rawYAML: `
-ingress:
- - hostname: "test.example.com"
-   service: https://test.example.com
- - service: http_status_404
-`},
-			wantErr: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
