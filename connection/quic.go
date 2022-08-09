@@ -147,7 +147,11 @@ func (q *QUICConnection) runStream(quicStream quic.Stream) {
 	stream := quicpogs.NewSafeStreamCloser(quicStream)
 	defer stream.Close()
 
-	if err := q.handleStream(ctx, stream); err != nil {
+	// we are going to fuse readers/writers from stream <- cloudflared -> origin, and we want to guarantee that
+	// code executed in the code path of handleStream don't trigger an earlier close to the downstream stream.
+	// So, we wrap the stream with a no-op closer and only this method can actually close the stream.
+	noCloseStream := &nopCloserReadWriter{stream}
+	if err := q.handleStream(ctx, noCloseStream); err != nil {
 		q.logger.Err(err).Msg("Failed to handle QUIC stream")
 	}
 }
@@ -394,4 +398,12 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
+}
+
+type nopCloserReadWriter struct {
+	io.ReadWriteCloser
+}
+
+func (n *nopCloserReadWriter) Close() error {
+	return nil
 }
