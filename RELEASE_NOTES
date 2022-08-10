@@ -1,3 +1,19 @@
+2022.8.0
+- 2022-08-10 TUN-6637: Upgrade quic-go
+- 2022-08-10 TUN-6646: Add support to SafeStreamCloser to close only write side of stream
+- 2022-08-09 TUN-6642: Fix unexpected close of quic stream triggered by upstream origin close
+- 2022-08-09 TUN-6639: Validate cyclic ingress configuration
+- 2022-08-08 TUN-6637: Upgrade go version and quic-go
+- 2022-08-08 TUN-6639: Validate cyclic ingress configuration
+- 2022-08-04 EDGEPLAT-3918: build cloudflared for Bookworm
+- 2022-08-02 Revert "TUN-6576: Consume cf-trace-id from incoming TCP requests to create root span"
+- 2022-07-27 TUN-6601: Update gopkg.in/yaml.v3 references in modules
+- 2022-07-26 TUN-6576: Consume cf-trace-id from incoming TCP requests to create root span
+- 2022-07-26 TUN-6576: Consume cf-trace-id from incoming TCP requests to create root span
+- 2022-07-25 TUN-6598: Remove auto assignees on github issues
+- 2022-07-20 TUN-6583: Remove legacy --ui flag
+- 2022-07-20 cURL supports stdin and uses os pipes directly without copying
+- 2022-07-07 TUN-6517: Use QUIC stream context while proxying HTTP requests and TCP connections
 2022.7.1
 - 2022-07-06 TUN-6503: Fix transport fallback from QUIC in face of dial error "no network activity"
 
