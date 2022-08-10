@@ -146,7 +146,7 @@ github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc
 github.com/json-iterator/go
 # github.com/kylelemons/godebug v1.1.0
 ## explicit; go 1.11
-# github.com/lucas-clemente/quic-go v0.28.1 => github.com/chungthuang/quic-go v0.27.1-0.20220808144024-f036dcbe387e
+# github.com/lucas-clemente/quic-go v0.28.1 => github.com/chungthuang/quic-go v0.27.1-0.20220809135021-ca330f1dec9f
 ## explicit; go 1.16
 github.com/lucas-clemente/quic-go
 github.com/lucas-clemente/quic-go/internal/ackhandler
@@ -546,6 +546,6 @@ zombiezen.com/go/capnproto2/schemas
 zombiezen.com/go/capnproto2/server
 zombiezen.com/go/capnproto2/std/capnp/rpc
 # github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d
-# github.com/lucas-clemente/quic-go => github.com/chungthuang/quic-go v0.27.1-0.20220808144024-f036dcbe387e
+# github.com/lucas-clemente/quic-go => github.com/chungthuang/quic-go v0.27.1-0.20220809135021-ca330f1dec9f
 # github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
 # gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1

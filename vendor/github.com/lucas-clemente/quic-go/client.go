@@ -43,8 +43,7 @@ type client struct {
 }
 
 var (
-	// make it possible to mock connection ID generation in the tests
-	generateConnectionID           = protocol.GenerateConnectionID
+	// make it possible to mock connection ID for initial generation in the tests
 	generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
 )
 
@@ -193,7 +192,7 @@ func dialContext(
 		return nil, err
 	}
 	config = populateClientConfig(config, createdPacketConn)
-	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDLength, config.StatelessResetKey, config.Tracer)
+	packetHandlers, err := getMultiplexer().AddConn(pconn, config.ConnectionIDGenerator.ConnectionIDLen(), config.StatelessResetKey, config.Tracer)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +255,7 @@ func newClient(
 		}
 	}
 
-	srcConnID, err := generateConnectionID(config.ConnectionIDLength)
+	srcConnID, err := config.ConnectionIDGenerator.GenerateConnectionID()
 	if err != nil {
 		return nil, err
 	}
