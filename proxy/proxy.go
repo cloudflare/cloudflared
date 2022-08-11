@@ -256,7 +256,7 @@ func (p *Proxy) proxyStream(
 	connectionProxy ingress.StreamBasedOriginProxy,
 ) error {
 	ctx := tr.Context
-	_, connectSpan := tr.Tracer().Start(ctx, "stream_connect")
+	_, connectSpan := tr.Tracer().Start(ctx, "stream-connect")
 	originConn, err := connectionProxy.EstablishConnection(ctx, dest)
 	if err != nil {
 		tracing.EndWithErrorStatus(connectSpan, err)

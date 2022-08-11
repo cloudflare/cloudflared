@@ -174,6 +174,7 @@ func (h *HTTPResponseReadWriteAcker) AckConnection(tracePropagation string) erro
 		Status:        switchingProtocolText,
 		StatusCode:    http.StatusSwitchingProtocols,
 		ContentLength: -1,
+		Header:        http.Header{},
 	}
 
 	if secWebsocketKey := h.req.Header.Get("Sec-WebSocket-Key"); secWebsocketKey != "" {

@@ -525,6 +525,7 @@ func TestConnections(t *testing.T) {
 			},
 			want: want{
 				message: []byte("echo-test2"),
+				headers: http.Header{},
 			},
 		},
 		{
@@ -544,6 +545,7 @@ func TestConnections(t *testing.T) {
 				message: []byte("echo-test3"),
 				// We expect no headers here because they are sent back via
 				// the stream.
+				headers: http.Header{},
 			},
 		},
 		{

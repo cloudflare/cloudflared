@@ -149,9 +149,10 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		rws := NewHTTPResponseReadWriterAcker(respWriter, r)
 		if err := originProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
-			Dest:    host,
-			CFRay:   FindCfRayHeader(r),
-			LBProbe: IsLBProbeRequest(r),
+			Dest:      host,
+			CFRay:     FindCfRayHeader(r),
+			LBProbe:   IsLBProbeRequest(r),
+			CfTraceID: r.Header.Get(tracing.TracerContextName),
 		}); err != nil {
 			respWriter.WriteErrorResponse()
 		}
