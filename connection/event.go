@@ -5,7 +5,6 @@ type Event struct {
 	Index     uint8
 	EventType Status
 	Location  string
-	Protocol  Protocol
 	URL       string
 }
 
