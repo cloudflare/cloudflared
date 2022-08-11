@@ -12,9 +12,9 @@ type ConnAwareLogger struct {
 	logger  *zerolog.Logger
 }
 
-func NewConnAwareLogger(logger *zerolog.Logger, observer *connection.Observer) *ConnAwareLogger {
+func NewConnAwareLogger(logger *zerolog.Logger, tracker *tunnelstate.ConnTracker, observer *connection.Observer) *ConnAwareLogger {
 	connAwareLogger := &ConnAwareLogger{
-		tracker: tunnelstate.NewConnTracker(logger),
+		tracker: tracker,
 		logger:  logger,
 	}
 

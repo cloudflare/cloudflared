@@ -19,6 +19,7 @@ import (
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 const (
@@ -88,7 +89,9 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	}
 
 	reconnectCredentialManager := newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections)
-	log := NewConnAwareLogger(config.Log, config.Observer)
+
+	tracker := tunnelstate.NewConnTracker(config.Log)
+	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
 
 	var edgeAddrHandler EdgeAddrHandler
 	if isStaticEdge { // static edge addresses
@@ -106,6 +109,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		credentialManager: reconnectCredentialManager,
 		edgeAddrs:         edgeIPs,
 		edgeAddrHandler:   edgeAddrHandler,
+		tracker:           tracker,
 		reconnectCh:       reconnectCh,
 		gracefulShutdownC: gracefulShutdownC,
 		connAwareLogger:   log,

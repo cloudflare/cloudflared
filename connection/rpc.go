@@ -117,9 +117,6 @@ func (rsc *registrationServerClient) RegisterConnection(
 
 	observer.metrics.regSuccess.WithLabelValues("registerConnection").Inc()
 
-	observer.logServerInfo(connIndex, conn.Location, edgeAddress, fmt.Sprintf("Connection %s registered", conn.UUID))
-	observer.sendConnectedEvent(connIndex, conn.Location)
-
 	return conn, nil
 }
 
@@ -293,9 +290,13 @@ func (h *h2muxConnection) registerNamedTunnel(
 	rpcClient := h.newRPCClientFunc(ctx, stream, h.observer.log)
 	defer rpcClient.Close()
 
-	if _, err = rpcClient.RegisterConnection(ctx, namedTunnel, connOptions, h.connIndex, nil, h.observer); err != nil {
+	registrationDetails, err := rpcClient.RegisterConnection(ctx, namedTunnel, connOptions, h.connIndex, nil, h.observer)
+	if err != nil {
 		return err
 	}
+	h.observer.logServerInfo(h.connIndex, registrationDetails.Location, nil, fmt.Sprintf("Connection %s registered", registrationDetails.UUID))
+	h.observer.sendConnectedEvent(h.connIndex, H2mux, registrationDetails.Location)
+
 	return nil
 }
 

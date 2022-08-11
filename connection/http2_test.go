@@ -43,6 +43,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		nil,
 		nil,
 		1*time.Second,
+		HTTP2,
 	)
 	return NewHTTP2Connection(
 		cfdConn,
@@ -366,6 +367,7 @@ func TestServeControlStream(t *testing.T) {
 		rpcClientFactory.newMockRPCClient,
 		nil,
 		1*time.Second,
+		HTTP2,
 	)
 	http2Conn.controlStreamHandler = controlStream
 
@@ -417,6 +419,7 @@ func TestFailRegistration(t *testing.T) {
 		rpcClientFactory.newMockRPCClient,
 		nil,
 		1*time.Second,
+		HTTP2,
 	)
 	http2Conn.controlStreamHandler = controlStream
 
@@ -464,6 +467,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 		rpcClientFactory.newMockRPCClient,
 		shutdownC,
 		1*time.Second,
+		HTTP2,
 	)
 
 	http2Conn.controlStreamHandler = controlStream
