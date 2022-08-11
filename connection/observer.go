@@ -55,8 +55,8 @@ func (o *Observer) sendRegisteringEvent(connIndex uint8) {
 	o.sendEvent(Event{Index: connIndex, EventType: RegisteringTunnel})
 }
 
-func (o *Observer) sendConnectedEvent(connIndex uint8, location string) {
-	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
+func (o *Observer) sendConnectedEvent(connIndex uint8, protocol Protocol, location string) {
+	o.sendEvent(Event{Index: connIndex, EventType: Connected, Protocol: protocol, Location: location})
 }
 
 func (o *Observer) SendURL(url string) {

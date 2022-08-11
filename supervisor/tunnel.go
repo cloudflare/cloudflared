@@ -26,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 const (
@@ -190,6 +191,7 @@ type EdgeTunnelServer struct {
 	edgeAddrs         *edgediscovery.Edge
 	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
+	tracker           *tunnelstate.ConnTracker
 
 	connAwareLogger *ConnAwareLogger
 }
@@ -269,6 +271,12 @@ func (e EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolFa
 		return nil
 	case <-protocolFallback.BackoffTimer():
 		if !recoverable {
+			return err
+		}
+
+		// If a single connection has connected with the current protocol, we know we know we don't have to fallback
+		// to a different protocol.
+		if e.tracker.HasConnectedWith(e.config.ProtocolSelector.Current()) {
 			return err
 		}
 
@@ -461,6 +469,7 @@ func serveTunnel(
 		nil,
 		gracefulShutdownC,
 		config.GracePeriod,
+		protocol,
 	)
 
 	switch protocol {

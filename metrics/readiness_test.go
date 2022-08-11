@@ -14,7 +14,7 @@ import (
 
 func TestReadyServer_makeResponse(t *testing.T) {
 	type fields struct {
-		isConnected map[int]bool
+		isConnected map[uint8]tunnelstate.ConnectionInfo
 	}
 	tests := []struct {
 		name                 string
@@ -25,11 +25,11 @@ func TestReadyServer_makeResponse(t *testing.T) {
 		{
 			name: "One connection online => HTTP 200",
 			fields: fields{
-				isConnected: map[int]bool{
-					0: false,
-					1: false,
-					2: true,
-					3: false,
+				isConnected: map[uint8]tunnelstate.ConnectionInfo{
+					0: {IsConnected: false},
+					1: {IsConnected: false},
+					2: {IsConnected: true},
+					3: {IsConnected: false},
 				},
 			},
 			wantOK:               true,
@@ -38,11 +38,11 @@ func TestReadyServer_makeResponse(t *testing.T) {
 		{
 			name: "No connections online => no HTTP 200",
 			fields: fields{
-				isConnected: map[int]bool{
-					0: false,
-					1: false,
-					2: false,
-					3: false,
+				isConnected: map[uint8]tunnelstate.ConnectionInfo{
+					0: {IsConnected: false},
+					1: {IsConnected: false},
+					2: {IsConnected: false},
+					3: {IsConnected: false},
 				},
 			},
 			wantReadyConnections: 0,

@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"time"
@@ -21,6 +22,7 @@ type controlStream struct {
 	namedTunnelProperties *NamedTunnelProperties
 	connIndex             uint8
 	edgeAddress           net.IP
+	protocol              Protocol
 
 	newRPCClientFunc RPCClientFunc
 
@@ -51,6 +53,7 @@ func NewControlStream(
 	newRPCClientFunc RPCClientFunc,
 	gracefulShutdownC <-chan struct{},
 	gracePeriod time.Duration,
+	protocol Protocol,
 ) ControlStreamHandler {
 	if newRPCClientFunc == nil {
 		newRPCClientFunc = newRegistrationRPCClient
@@ -64,6 +67,7 @@ func NewControlStream(
 		edgeAddress:           edgeAddress,
 		gracefulShutdownC:     gracefulShutdownC,
 		gracePeriod:           gracePeriod,
+		protocol:              protocol,
 	}
 }
 
@@ -80,6 +84,9 @@ func (c *controlStream) ServeControlStream(
 		rpcClient.Close()
 		return err
 	}
+
+	c.observer.logServerInfo(c.connIndex, registrationDetails.Location, c.edgeAddress, fmt.Sprintf("Connection %s registered", registrationDetails.UUID))
+	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location)
 	c.connectedFuse.Connected()
 
 	// if conn index is 0 and tunnel is not remotely managed, then send local ingress rules configuration

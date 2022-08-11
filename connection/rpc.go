@@ -2,7 +2,6 @@ package connection
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"time"
@@ -116,9 +115,6 @@ func (rsc *registrationServerClient) RegisterConnection(
 	}
 
 	observer.metrics.regSuccess.WithLabelValues("registerConnection").Inc()
-
-	observer.logServerInfo(connIndex, conn.Location, edgeAddress, fmt.Sprintf("Connection %s registered", conn.UUID))
-	observer.sendConnectedEvent(connIndex, conn.Location)
 
 	return conn, nil
 }
