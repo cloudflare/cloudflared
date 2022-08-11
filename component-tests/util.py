@@ -61,13 +61,15 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
 def run_cloudflared_background(cmd, allow_input, capture_output):
     output = subprocess.PIPE if capture_output else subprocess.DEVNULL
     stdin = subprocess.PIPE if allow_input else None
+    cfd = None
     try:
         cfd = subprocess.Popen(cmd, stdin=stdin, stdout=output, stderr=output)
         yield cfd
     finally:
-        cfd.terminate()
-        if capture_output:
-            LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
+        if cfd:
+            cfd.terminate()
+            if capture_output:
+                LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
 
 
 def wait_tunnel_ready(tunnel_url=None, require_min_connections=1, cfd_logs=None):
