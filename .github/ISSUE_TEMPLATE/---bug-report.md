@@ -15,6 +15,10 @@ Steps to reproduce the behavior:
 2. Run '....'
 3. See error
 
+If it's an issue with Cloudflare Tunnel:
+4. Tunnel ID : 
+5. cloudflared config: 
+
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
