@@ -259,6 +259,10 @@ type h2muxRespWriter struct {
 	*h2mux.MuxedStream
 }
 
+func (rp *h2muxRespWriter) AddTrailer(trailerName, trailerValue string) {
+	// do nothing. we don't support trailers over h2mux
+}
+
 func (rp *h2muxRespWriter) WriteRespHeaders(status int, header http.Header) error {
 	headers := H1ResponseToH2ResponseHeaders(status, header)
 	headers = append(headers, h2mux.Header{Name: ResponseMetaHeader, Value: responseMetaHeaderOrigin})

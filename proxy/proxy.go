@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -29,6 +28,8 @@ const (
 	LogFieldRule          = "ingressRule"
 	LogFieldOriginService = "originService"
 	LogFieldFlowID        = "flowID"
+
+	trailerHeaderName = "Trailer"
 )
 
 // Proxy represents a means to Proxy between cloudflared and the origin services.
@@ -207,15 +208,16 @@ func (p *Proxy) proxyHTTPRequest(
 	tracing.EndWithStatusCode(ttfbSpan, resp.StatusCode)
 	defer resp.Body.Close()
 
-	// resp headers can be nil
-	if resp.Header == nil {
-		resp.Header = make(http.Header)
+	headers := make(http.Header, len(resp.Header))
+	// copy headers
+	for k, v := range resp.Header {
+		headers[k] = v
 	}
 
 	// Add spans to response header (if available)
-	tr.AddSpans(resp.Header)
+	tr.AddSpans(headers)
 
-	err = w.WriteRespHeaders(resp.StatusCode, resp.Header)
+	err = w.WriteRespHeaders(resp.StatusCode, headers)
 	if err != nil {
 		return errors.Wrap(err, "Error writing response header")
 	}
@@ -236,12 +238,10 @@ func (p *Proxy) proxyHTTPRequest(
 		return nil
 	}
 
-	if connection.IsServerSentEvent(resp.Header) {
-		p.log.Debug().Msg("Detected Server-Side Events from Origin")
-		p.writeEventStream(w, resp.Body)
-	} else {
-		_, _ = cfio.Copy(w, resp.Body)
-	}
+	_, _ = cfio.Copy(w, resp.Body)
+
+	// copy trailers
+	copyTrailers(w, resp)
 
 	p.logOriginResponse(resp, fields)
 	return nil
@@ -296,26 +296,6 @@ func (wr *bidirectionalStream) Write(p []byte) (n int, err error) {
 	return wr.writer.Write(p)
 }
 
-func (p *Proxy) writeEventStream(w connection.ResponseWriter, respBody io.ReadCloser) {
-	reader := bufio.NewReader(respBody)
-	for {
-		line, readErr := reader.ReadBytes('\n')
-
-		// We first try to write whatever we read even if an error occurred
-		// The reason for doing it is to guarantee we really push everything to the eyeball side
-		// before returning
-		if len(line) > 0 {
-			if _, writeErr := w.Write(line); writeErr != nil {
-				return
-			}
-		}
-
-		if readErr != nil {
-			return
-		}
-	}
-}
-
 func (p *Proxy) appendTagHeaders(r *http.Request) {
 	for _, tag := range p.tags {
 		r.Header.Add(TagHeaderNamePrefix+tag.Name, tag.Value)
@@ -327,6 +307,14 @@ type logFields struct {
 	lbProbe bool
 	rule    interface{}
 	flowID  string
+}
+
+func copyTrailers(w connection.ResponseWriter, response *http.Response) {
+	for trailerHeader, trailerValues := range response.Trailer {
+		for _, trailerValue := range trailerValues {
+			w.AddTrailer(trailerHeader, trailerValue)
+		}
+	}
 }
 
 func (p *Proxy) logRequest(r *http.Request, fields logFields) {

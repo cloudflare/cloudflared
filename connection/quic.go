@@ -329,6 +329,10 @@ func newHTTPResponseAdapter(s *quicpogs.RequestServerStream) httpResponseAdapter
 	return httpResponseAdapter{s}
 }
 
+func (hrw httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
+	// we do not support trailers over QUIC
+}
+
 func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
 	metadata := make([]quicpogs.Metadata, 0)
 	metadata = append(metadata, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(status)})

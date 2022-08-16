@@ -191,11 +191,12 @@ func (c *HTTP2Connection) close() {
 }
 
 type http2RespWriter struct {
-	r           io.Reader
-	w           http.ResponseWriter
-	flusher     http.Flusher
-	shouldFlush bool
-	log         *zerolog.Logger
+	r             io.Reader
+	w             http.ResponseWriter
+	flusher       http.Flusher
+	shouldFlush   bool
+	statusWritten bool
+	log           *zerolog.Logger
 }
 
 func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, log *zerolog.Logger) (*http2RespWriter, error) {
@@ -219,11 +220,20 @@ func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, l
 	}, nil
 }
 
+func (rp *http2RespWriter) AddTrailer(trailerName, trailerValue string) {
+	if !rp.statusWritten {
+		rp.log.Warn().Msg("Tried to add Trailer to response before status written. Ignoring...")
+		return
+	}
+
+	rp.w.Header().Add(http2.TrailerPrefix+trailerName, trailerValue)
+}
+
 func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) error {
 	dest := rp.w.Header()
 	userHeaders := make(http.Header, len(header))
 	for name, values := range header {
-		// Since these are http2 headers, they're required to be lowercase
+		// lowercase headers for simplicity check
 		h2name := strings.ToLower(name)
 
 		if h2name == "content-length" {
@@ -234,7 +244,7 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 
 		if h2name == tracing.IntCloudflaredTracingHeader {
 			// Add cf-int-cloudflared-tracing header outside of serialized userHeaders
-			rp.w.Header()[tracing.CanonicalCloudflaredTracingHeader] = values
+			dest[tracing.CanonicalCloudflaredTracingHeader] = values
 			continue
 		}
 
@@ -247,18 +257,21 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 
 	// Perform user header serialization and set them in the single header
 	dest.Set(CanonicalResponseUserHeaders, SerializeHeaders(userHeaders))
+
 	rp.setResponseMetaHeader(responseMetaHeaderOrigin)
 	// HTTP2 removes support for 101 Switching Protocols https://tools.ietf.org/html/rfc7540#section-8.1.1
 	if status == http.StatusSwitchingProtocols {
 		status = http.StatusOK
 	}
 	rp.w.WriteHeader(status)
-	if IsServerSentEvent(header) {
+	if shouldFlush(header) {
 		rp.shouldFlush = true
 	}
 	if rp.shouldFlush {
 		rp.flusher.Flush()
 	}
+
+	rp.statusWritten = true
 	return nil
 }
 

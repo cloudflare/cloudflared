@@ -24,9 +24,16 @@ const (
 	LogFieldConnIndex      = "connIndex"
 	MaxGracePeriod         = time.Minute * 3
 	MaxConcurrentStreams   = math.MaxUint32
+
+	contentTypeHeader = "content-type"
+	sseContentType    = "text/event-stream"
+	grpcContentType   = "application/grpc"
 )
 
-var switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
+var (
+	switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
+	flushableContentTypes = []string{sseContentType, grpcContentType}
+)
 
 type Orchestrator interface {
 	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
@@ -190,6 +197,7 @@ func (h *HTTPResponseReadWriteAcker) AckConnection(tracePropagation string) erro
 
 type ResponseWriter interface {
 	WriteRespHeaders(status int, header http.Header) error
+	AddTrailer(trailerName, trailerValue string)
 	io.Writer
 }
 
@@ -198,10 +206,18 @@ type ConnectedFuse interface {
 	IsConnected() bool
 }
 
-func IsServerSentEvent(headers http.Header) bool {
-	if contentType := headers.Get("content-type"); contentType != "" {
-		return strings.HasPrefix(strings.ToLower(contentType), "text/event-stream")
+// Helper method to let the caller know what content-types should require a flush on every
+// write to a ResponseWriter.
+func shouldFlush(headers http.Header) bool {
+	if contentType := headers.Get(contentTypeHeader); contentType != "" {
+		contentType = strings.ToLower(contentType)
+		for _, c := range flushableContentTypes {
+			if strings.HasPrefix(contentType, c) {
+				return true
+			}
+		}
 	}
+
 	return false
 }
 

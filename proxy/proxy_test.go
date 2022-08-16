@@ -22,6 +22,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cloudflare/cloudflared/cfio"
+
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
@@ -60,6 +62,10 @@ func (w *mockHTTPRespWriter) WriteRespHeaders(status int, header http.Header) er
 		w.Header()[header] = val
 	}
 	return nil
+}
+
+func (w *mockHTTPRespWriter) AddTrailer(trailerName, trailerValue string) {
+	// do nothing
 }
 
 func (w *mockHTTPRespWriter) Read(data []byte) (int, error) {
@@ -117,7 +123,10 @@ func newMockSSERespWriter() *mockSSERespWriter {
 }
 
 func (w *mockSSERespWriter) Write(data []byte) (int, error) {
-	w.writeNotification <- data
+	newData := make([]byte, len(data))
+	copy(newData, data)
+
+	w.writeNotification <- newData
 	return len(data), nil
 }
 
@@ -256,11 +265,8 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 
 		for i := 0; i < pushCount; i++ {
 			line := responseWriter.ReadBytes()
-			expect := fmt.Sprintf("%d\n", i)
+			expect := fmt.Sprintf("%d\n\n", i)
 			require.Equal(t, []byte(expect), line, fmt.Sprintf("Expect to read %v, got %v", expect, line))
-
-			line = responseWriter.ReadBytes()
-			require.Equal(t, []byte("\n"), line, fmt.Sprintf("Expect to read '\n', got %v", line))
 		}
 
 		cancel()
@@ -276,7 +282,7 @@ func testProxySSEAllData(proxy *Proxy) func(t *testing.T) {
 		responseWriter := newMockSSERespWriter()
 
 		// responseWriter uses an unbuffered channel, so we call in a different go-routine
-		go proxy.writeEventStream(responseWriter, eyeballReader)
+		go cfio.Copy(responseWriter, eyeballReader)
 
 		result := string(<-responseWriter.writeNotification)
 		require.Equal(t, "data\r\r", result)
@@ -825,6 +831,10 @@ func (w *wsRespWriter) WriteRespHeaders(status int, header http.Header) error {
 	return nil
 }
 
+func (w *wsRespWriter) AddTrailer(trailerName, trailerValue string) {
+	// do nothing
+}
+
 // respHeaders is a test function to read respHeaders
 func (w *wsRespWriter) headers() http.Header {
 	// Removing indeterminstic header because it cannot be asserted.
@@ -850,6 +860,10 @@ func (m *mockTCPRespWriter) Read(p []byte) (n int, err error) {
 
 func (m *mockTCPRespWriter) Write(p []byte) (n int, err error) {
 	return m.w.Write(p)
+}
+
+func (w *mockTCPRespWriter) AddTrailer(trailerName, trailerValue string) {
+	// do nothing
 }
 
 func (m *mockTCPRespWriter) WriteRespHeaders(status int, header http.Header) error {
