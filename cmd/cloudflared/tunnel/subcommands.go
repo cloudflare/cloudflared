@@ -801,7 +801,7 @@ Further information about managing Cloudflare WARP traffic to your tunnel is ava
 				Name:        "lb",
 				Action:      cliutil.ConfiguredAction(routeLbCommand),
 				Usage:       "Use this tunnel as a load balancer origin, creating pool and load balancer if necessary",
-				UsageText:   "cloudflared tunnel route dns [TUNNEL] [HOSTNAME] [LB-POOL]",
+				UsageText:   "cloudflared tunnel route lb [TUNNEL] [HOSTNAME] [LB-POOL]",
 				Description: `Creates Load Balancer with an origin pool that points to the tunnel.`,
 			},
 			buildRouteIPSubcommand(),
