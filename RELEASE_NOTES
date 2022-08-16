@@ -1,3 +1,13 @@
+2022.8.1
+- 2022-08-15 TUN-6617: Updated CHANGES.md for protocol stickiness
+- 2022-08-12 EDGEPLAT-3918: bump go and go-boring to 1.18.5
+- 2022-08-12 TUN-6652: Publish dockerfile for both amd64 and arm64
+- 2022-08-11 TUN-6617: Dont fallback to http2 if QUIC conn was successful.
+- 2022-08-11 TUN-6617: Dont fallback to http2 if QUIC conn was successful.
+- 2022-08-11 Revert "TUN-6617: Dont fallback to http2 if QUIC conn was successful."
+- 2022-08-11 TUN-6617: Dont fallback to http2 if QUIC conn was successful.
+- 2022-08-01 TUN-6584: Define QUIC datagram v2 format to support proxying IP packets
+
 2022.8.0
 - 2022-08-10 TUN-6637: Upgrade quic-go
 - 2022-08-10 TUN-6646: Add support to SafeStreamCloser to close only write side of stream
