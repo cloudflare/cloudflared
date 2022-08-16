@@ -1,3 +1,6 @@
+2022.8.2
+- 2022-08-16 TUN-6656: Docker for arm64 should not be deployed in an amd64 container
+
 2022.8.1
 - 2022-08-15 TUN-6617: Updated CHANGES.md for protocol stickiness
 - 2022-08-12 EDGEPLAT-3918: bump go and go-boring to 1.18.5
