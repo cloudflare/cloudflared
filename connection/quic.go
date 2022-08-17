@@ -47,7 +47,7 @@ type QUICConnection struct {
 	// sessionManager tracks active sessions. It receives datagrams from quic connection via datagramMuxer
 	sessionManager datagramsession.Manager
 	// datagramMuxer mux/demux datagrams from quic connection
-	datagramMuxer        *quicpogs.DatagramMuxer
+	datagramMuxer        quicpogs.BaseDatagramMuxer
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
 }
@@ -67,9 +67,9 @@ func NewQUICConnection(
 		return nil, &EdgeQuicDialError{Cause: err}
 	}
 
-	demuxChan := make(chan *packet.Session, demuxChanCapacity)
-	datagramMuxer := quicpogs.NewDatagramMuxer(session, logger, demuxChan)
-	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, demuxChan)
+	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
+	datagramMuxer := quicpogs.NewDatagramMuxer(session, logger, sessionDemuxChan)
+	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
 
 	return &QUICConnection{
 		session:              session,
