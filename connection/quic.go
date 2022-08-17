@@ -20,6 +20,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/packet"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -66,9 +67,9 @@ func NewQUICConnection(
 		return nil, &EdgeQuicDialError{Cause: err}
 	}
 
-	demuxChan := make(chan *quicpogs.SessionDatagram, demuxChanCapacity)
+	demuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := quicpogs.NewDatagramMuxer(session, logger, demuxChan)
-	sessionManager := datagramsession.NewManager(logger, datagramMuxer.MuxSession, demuxChan)
+	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, demuxChan)
 
 	return &QUICConnection{
 		session:              session,

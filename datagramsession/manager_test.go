@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 var (
@@ -29,7 +29,7 @@ func TestManagerServe(t *testing.T) {
 		remoteUnregisterMsg = "eyeball closed connection"
 	)
 
-	requestChan := make(chan *quicpogs.SessionDatagram)
+	requestChan := make(chan *packet.Session)
 	transport := mockQUICTransport{
 		sessions: make(map[uuid.UUID]chan []byte),
 	}
@@ -241,9 +241,9 @@ type mockQUICTransport struct {
 	sessions map[uuid.UUID]chan []byte
 }
 
-func (me *mockQUICTransport) MuxSession(id uuid.UUID, payload []byte) error {
-	session := me.sessions[id]
-	session <- payload
+func (me *mockQUICTransport) MuxSession(session *packet.Session) error {
+	s := me.sessions[session.ID]
+	s <- session.Payload
 	return nil
 }
 
@@ -255,9 +255,9 @@ type mockEyeballSession struct {
 	respReceiver     <-chan []byte
 }
 
-func (me *mockEyeballSession) serve(ctx context.Context, requestChan chan *quicpogs.SessionDatagram) error {
+func (me *mockEyeballSession) serve(ctx context.Context, requestChan chan *packet.Session) error {
 	for i := 0; i < me.expectedMsgCount; i++ {
-		requestChan <- &quicpogs.SessionDatagram{
+		requestChan <- &packet.Session{
 			ID:      me.id,
 			Payload: me.expectedMsg,
 		}

@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -18,6 +17,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 var (
@@ -57,7 +58,7 @@ func TestDatagram(t *testing.T) {
 	maxPayload := make([]byte, maxDatagramPayloadSize)
 	noPayloadSession := uuid.New()
 	maxPayloadSession := uuid.New()
-	sessionToPayload := []*SessionDatagram{
+	sessionToPayload := []*packet.Session{
 		{
 			ID:      noPayloadSession,
 			Payload: make([]byte, 0),
@@ -75,7 +76,7 @@ func TestDatagram(t *testing.T) {
 	testDatagram(t, 2, sessionToPayload, flowPayloads)
 }
 
-func testDatagram(t *testing.T, version uint8, sessionToPayloads []*SessionDatagram, packetPayloads [][]byte) {
+func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Session, packetPayloads [][]byte) {
 	quicConfig := &quic.Config{
 		KeepAlivePeriod:      5 * time.Millisecond,
 		EnableDatagrams:      true,
@@ -95,7 +96,7 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*SessionDatag
 			return err
 		}
 
-		sessionDemuxChan := make(chan *SessionDatagram, 16)
+		sessionDemuxChan := make(chan *packet.Session, 16)
 
 		switch version {
 		case 1:
@@ -151,11 +152,14 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*SessionDatag
 			return fmt.Errorf("unknown datagram version %d", version)
 		}
 
-		for _, sessionDatagram := range sessionToPayloads {
-			require.NoError(t, muxer.MuxSession(sessionDatagram.ID, sessionDatagram.Payload))
+		for _, session := range sessionToPayloads {
+			require.NoError(t, muxer.SendToSession(session))
 		}
 		// Payload larger than transport MTU, should not be sent
-		require.Error(t, muxer.MuxSession(testSessionID, largePayload))
+		require.Error(t, muxer.SendToSession(&packet.Session{
+			ID:      testSessionID,
+			Payload: largePayload,
+		}))
 
 		// Wait for edge to finish receiving the messages
 		time.Sleep(time.Millisecond * 100)
@@ -197,36 +201,4 @@ func generateTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"argotunnel"},
 	}
-}
-
-type sessionMuxer interface {
-	SendToSession(sessionID uuid.UUID, payload []byte) error
-}
-
-type mockSessionReceiver struct {
-	expectedSessionToPayload map[uuid.UUID][]byte
-	receivedCount            int
-}
-
-func (msr *mockSessionReceiver) ReceiveDatagram(sessionID uuid.UUID, payload []byte) error {
-	expectedPayload := msr.expectedSessionToPayload[sessionID]
-	if !bytes.Equal(expectedPayload, payload) {
-		return fmt.Errorf("expect %v to have payload %s, got %s", sessionID, string(expectedPayload), string(payload))
-	}
-	msr.receivedCount++
-	return nil
-}
-
-type mockFlowReceiver struct {
-	expectedPayloads [][]byte
-	receivedCount    int
-}
-
-func (mfr *mockFlowReceiver) ReceiveFlow(payload []byte) error {
-	expectedPayload := mfr.expectedPayloads[mfr.receivedCount]
-	if !bytes.Equal(expectedPayload, payload) {
-		return fmt.Errorf("expect flow %d to have payload %s, got %s", mfr.receivedCount, string(expectedPayload), string(payload))
-	}
-	mfr.receivedCount++
-	return nil
 }

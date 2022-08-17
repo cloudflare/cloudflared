@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 type datagramV2Type byte
@@ -33,14 +34,14 @@ func (dm *DatagramMuxerV2) mtu() int {
 type DatagramMuxerV2 struct {
 	session          quic.Connection
 	logger           *zerolog.Logger
-	sessionDemuxChan chan<- *SessionDatagram
+	sessionDemuxChan chan<- *packet.Session
 	packetDemuxChan  chan<- []byte
 }
 
 func NewDatagramMuxerV2(
 	quicSession quic.Connection,
 	log *zerolog.Logger,
-	sessionDemuxChan chan<- *SessionDatagram,
+	sessionDemuxChan chan<- *packet.Session,
 	packetDemuxChan chan<- []byte) *DatagramMuxerV2 {
 	logger := log.With().Uint8("datagramVersion", 2).Logger()
 	return &DatagramMuxerV2{
@@ -53,12 +54,12 @@ func NewDatagramMuxerV2(
 
 // MuxSession suffix the session ID and datagram version to the payload so the other end of the QUIC connection can
 // demultiplex the payload from multiple datagram sessions
-func (dm *DatagramMuxerV2) MuxSession(sessionID uuid.UUID, payload []byte) error {
-	if len(payload) > dm.mtu() {
+func (dm *DatagramMuxerV2) SendToSession(session *packet.Session) error {
+	if len(session.Payload) > dm.mtu() {
 		// TODO: TUN-5302 return ICMP packet too big message
-		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.mtu())
+		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(session.Payload), dm.mtu())
 	}
-	msgWithID, err := suffixSessionID(sessionID, payload)
+	msgWithID, err := suffixSessionID(session.ID, session.Payload)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix session ID to datagram, it will be dropped")
 	}
@@ -113,7 +114,7 @@ func (dm *DatagramMuxerV2) demux(ctx context.Context, msgWithType []byte) error 
 		if err != nil {
 			return err
 		}
-		sessionDatagram := SessionDatagram{
+		sessionDatagram := packet.Session{
 			ID:      sessionID,
 			Payload: payload,
 		}

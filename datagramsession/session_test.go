@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 // TestCloseSession makes sure a session will stop after context is done
@@ -118,7 +118,7 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
 
-	respChan := make(chan *quicpogs.SessionDatagram)
+	respChan := make(chan *packet.Session)
 	sender := newMockTransportSender(sessionID, payload)
 	mg := NewManager(&nopLogger, sender.muxSession, respChan)
 	session := mg.newSession(sessionID, cfdConn)
@@ -243,12 +243,12 @@ func newMockTransportSender(expectedSessionID uuid.UUID, expectedPayload []byte)
 	}
 }
 
-func (mts *mockTransportSender) muxSession(sessionID uuid.UUID, payload []byte) error {
-	if sessionID != mts.expectedSessionID {
-		return fmt.Errorf("Expect session %s, got %s", mts.expectedSessionID, sessionID)
+func (mts *mockTransportSender) muxSession(session *packet.Session) error {
+	if session.ID != mts.expectedSessionID {
+		return fmt.Errorf("Expect session %s, got %s", mts.expectedSessionID, session.ID)
 	}
-	if !bytes.Equal(payload, mts.expectedPayload) {
-		return fmt.Errorf("Expect %v, read %v", mts.expectedPayload, payload)
+	if !bytes.Equal(session.Payload, mts.expectedPayload) {
+		return fmt.Errorf("Expect %v, read %v", mts.expectedPayload, session.Payload)
 	}
 	return nil
 }
@@ -258,7 +258,7 @@ type sendOnceTransportSender struct {
 	sentChan   chan struct{}
 }
 
-func (sots *sendOnceTransportSender) muxSession(sessionID uuid.UUID, payload []byte) error {
+func (sots *sendOnceTransportSender) muxSession(session *packet.Session) error {
 	defer close(sots.sentChan)
-	return sots.baseSender.muxSession(sessionID, payload)
+	return sots.baseSender.muxSession(session)
 }

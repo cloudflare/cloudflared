@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 const (
@@ -19,7 +21,7 @@ func SessionIdleErr(timeout time.Duration) error {
 	return fmt.Errorf("session idle for %v", timeout)
 }
 
-type transportSender func(sessionID uuid.UUID, payload []byte) error
+type transportSender func(session *packet.Session) error
 
 // Session is a bidirectional pipe of datagrams between transport and dstConn
 // Destination can be a connection with origin or with eyeball
@@ -101,7 +103,11 @@ func (s *Session) dstToTransport(buffer []byte) (closeSession bool, err error) {
 	s.markActive()
 	// https://pkg.go.dev/io#Reader suggests caller should always process n > 0 bytes
 	if n > 0 || err == nil {
-		if sendErr := s.sendFunc(s.ID, buffer[:n]); sendErr != nil {
+		session := packet.Session{
+			ID:      s.ID,
+			Payload: buffer[:n],
+		}
+		if sendErr := s.sendFunc(&session); sendErr != nil {
 			return false, sendErr
 		}
 	}

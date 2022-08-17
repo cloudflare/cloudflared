@@ -8,21 +8,18 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 const (
 	sessionIDLen = len(uuid.UUID{})
 )
 
-type SessionDatagram struct {
-	ID      uuid.UUID
-	Payload []byte
-}
-
 type BaseDatagramMuxer interface {
-	// MuxSession suffix the session ID to the payload so the other end of the QUIC connection can demultiplex the
-	// payload from multiple datagram sessions
-	MuxSession(sessionID uuid.UUID, payload []byte) error
+	// SendToSession suffix the session ID to the payload so the other end of the QUIC connection can demultiplex the
+	// payload from multiple datagram sessions.
+	SendToSession(session *packet.Session) error
 	// ServeReceive starts a loop to receive datagrams from the QUIC connection
 	ServeReceive(ctx context.Context) error
 }
@@ -30,10 +27,10 @@ type BaseDatagramMuxer interface {
 type DatagramMuxer struct {
 	session   quic.Connection
 	logger    *zerolog.Logger
-	demuxChan chan<- *SessionDatagram
+	demuxChan chan<- *packet.Session
 }
 
-func NewDatagramMuxer(quicSession quic.Connection, log *zerolog.Logger, demuxChan chan<- *SessionDatagram) *DatagramMuxer {
+func NewDatagramMuxer(quicSession quic.Connection, log *zerolog.Logger, demuxChan chan<- *packet.Session) *DatagramMuxer {
 	logger := log.With().Uint8("datagramVersion", 1).Logger()
 	return &DatagramMuxer{
 		session:   quicSession,
@@ -47,13 +44,13 @@ func (dm *DatagramMuxer) mtu() int {
 	return maxDatagramPayloadSize
 }
 
-func (dm *DatagramMuxer) MuxSession(sessionID uuid.UUID, payload []byte) error {
-	if len(payload) > dm.mtu() {
+func (dm *DatagramMuxer) SendToSession(session *packet.Session) error {
+	if len(session.Payload) > dm.mtu() {
 		// TODO: TUN-5302 return ICMP packet too big message
 		// drop packet for now, eventually reply with ICMP for PMTUD
-		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(payload), dm.mtu())
+		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(session.Payload), dm.mtu())
 	}
-	payloadWithMetadata, err := suffixSessionID(sessionID, payload)
+	payloadWithMetadata, err := suffixSessionID(session.ID, session.Payload)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix session ID to datagram, it will be dropped")
 	}
@@ -86,7 +83,7 @@ func (dm *DatagramMuxer) demux(ctx context.Context, msg []byte) error {
 	if err != nil {
 		return err
 	}
-	sessionDatagram := SessionDatagram{
+	sessionDatagram := packet.Session{
 		ID:      sessionID,
 		Payload: payload,
 	}

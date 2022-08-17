@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 const (
@@ -37,7 +37,7 @@ type manager struct {
 	registrationChan   chan *registerSessionEvent
 	unregistrationChan chan *unregisterSessionEvent
 	sendFunc           transportSender
-	receiveChan        <-chan *quicpogs.SessionDatagram
+	receiveChan        <-chan *packet.Session
 	closedChan         <-chan struct{}
 	sessions           map[uuid.UUID]*Session
 	log                *zerolog.Logger
@@ -45,7 +45,7 @@ type manager struct {
 	timeout time.Duration
 }
 
-func NewManager(log *zerolog.Logger, sendF transportSender, receiveChan <-chan *quicpogs.SessionDatagram) *manager {
+func NewManager(log *zerolog.Logger, sendF transportSender, receiveChan <-chan *packet.Session) *manager {
 	return &manager{
 		registrationChan:   make(chan *registerSessionEvent),
 		unregistrationChan: make(chan *unregisterSessionEvent),
@@ -163,7 +163,7 @@ func (m *manager) unregisterSession(unregistration *unregisterSessionEvent) {
 	}
 }
 
-func (m *manager) sendToSession(datagram *quicpogs.SessionDatagram) {
+func (m *manager) sendToSession(datagram *packet.Session) {
 	session, ok := m.sessions[datagram.ID]
 	if !ok {
 		m.log.Error().Str("sessionID", datagram.ID.String()).Msg("session not found")
