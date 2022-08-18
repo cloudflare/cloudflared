@@ -2,19 +2,17 @@ package packet
 
 import (
 	"errors"
-	"net"
 	"net/netip"
 	"sync"
 )
-
-type flowID string
 
 var (
 	ErrFlowNotFound = errors.New("flow not found")
 )
 
-func newFlowID(ip net.IP) flowID {
-	return flowID(ip.String())
+// FlowID represents a key type that can be used by FlowTracker
+type FlowID interface {
+	ID() string
 }
 
 type Flow struct {
@@ -37,32 +35,29 @@ type FlowResponder interface {
 	SendPacket(pk RawPacket) error
 }
 
-// SrcFlowTracker tracks flow from the perspective of eyeball to origin
-// flowID is the source IP
-type SrcFlowTracker struct {
+// FlowTracker tracks flow from the perspective of eyeball to origin
+type FlowTracker struct {
 	lock  sync.RWMutex
-	flows map[flowID]*Flow
+	flows map[FlowID]*Flow
 }
 
-func NewSrcFlowTracker() *SrcFlowTracker {
-	return &SrcFlowTracker{
-		flows: make(map[flowID]*Flow),
+func NewFlowTracker() *FlowTracker {
+	return &FlowTracker{
+		flows: make(map[FlowID]*Flow),
 	}
 }
 
-func (sft *SrcFlowTracker) Get(srcIP net.IP) (*Flow, bool) {
+func (sft *FlowTracker) Get(id FlowID) (*Flow, bool) {
 	sft.lock.RLock()
 	defer sft.lock.RUnlock()
-	id := newFlowID(srcIP)
 	flow, ok := sft.flows[id]
 	return flow, ok
 }
 
 // Registers a flow. If shouldReplace = true, replace the current flow
-func (sft *SrcFlowTracker) Register(flow *Flow, shouldReplace bool) (replaced bool) {
+func (sft *FlowTracker) Register(id FlowID, flow *Flow, shouldReplace bool) (replaced bool) {
 	sft.lock.Lock()
 	defer sft.lock.Unlock()
-	id := flowID(flow.Src.String())
 	currentFlow, ok := sft.flows[id]
 	if !ok {
 		sft.flows[id] = flow
@@ -77,10 +72,9 @@ func (sft *SrcFlowTracker) Register(flow *Flow, shouldReplace bool) (replaced bo
 }
 
 // Unregisters a flow. If force = true, delete it even if it maps to a different flow
-func (sft *SrcFlowTracker) Unregister(flow *Flow, force bool) (forceDeleted bool) {
+func (sft *FlowTracker) Unregister(id FlowID, flow *Flow, force bool) (forceDeleted bool) {
 	sft.lock.Lock()
 	defer sft.lock.Unlock()
-	id := flowID(flow.Src.String())
 	currentFlow, ok := sft.flows[id]
 	if !ok {
 		return false

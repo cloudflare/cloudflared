@@ -682,6 +682,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection 
 		&tunnelpogs.ConnectionOptions{},
 		fakeControlStream{},
 		&log,
+		nil,
 	)
 	require.NoError(t, err)
 	return qc

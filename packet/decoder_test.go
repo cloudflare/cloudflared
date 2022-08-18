@@ -43,11 +43,11 @@ func TestDecodeIP(t *testing.T) {
 		p, err := encoder.Encode(&udp)
 		require.NoError(t, err)
 
-		ipPacket, err := ipDecoder.Decode(p.Data)
+		ipPacket, err := ipDecoder.Decode(p)
 		require.NoError(t, err)
 		assertIPLayer(t, &udp.IP, ipPacket)
 
-		icmpPacket, err := icmpDecoder.Decode(p.Data)
+		icmpPacket, err := icmpDecoder.Decode(p)
 		require.Error(t, err)
 		require.Nil(t, icmpPacket)
 	}
@@ -137,14 +137,14 @@ func TestDecodeICMP(t *testing.T) {
 		p, err := encoder.Encode(test.packet)
 		require.NoError(t, err)
 
-		ipPacket, err := ipDecoder.Decode(p.Data)
+		ipPacket, err := ipDecoder.Decode(p)
 		require.NoError(t, err)
 		if ipPacket.Src.Is4() {
 			assertIPLayer(t, &ipv4Packet, ipPacket)
 		} else {
 			assertIPLayer(t, &ipv6Packet, ipPacket)
 		}
-		icmpPacket, err := icmpDecoder.Decode(p.Data)
+		icmpPacket, err := icmpDecoder.Decode(p)
 		require.NoError(t, err)
 		require.Equal(t, ipPacket, icmpPacket.IP)
 
@@ -202,11 +202,11 @@ func TestDecodeBadPackets(t *testing.T) {
 	ipDecoder := NewIPDecoder()
 	icmpDecoder := NewICMPDecoder()
 	for _, test := range tests {
-		ipPacket, err := ipDecoder.Decode(test.packet)
+		ipPacket, err := ipDecoder.Decode(RawPacket{Data: test.packet})
 		require.Error(t, err)
 		require.Nil(t, ipPacket)
 
-		icmpPacket, err := icmpDecoder.Decode(test.packet)
+		icmpPacket, err := icmpDecoder.Decode(RawPacket{Data: test.packet})
 		require.Error(t, err)
 		require.Nil(t, icmpPacket)
 	}

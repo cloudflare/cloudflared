@@ -75,9 +75,9 @@ func NewIPDecoder() *IPDecoder {
 	}
 }
 
-func (pd *IPDecoder) Decode(packet []byte) (*IP, error) {
+func (pd *IPDecoder) Decode(packet RawPacket) (*IP, error) {
 	// Should decode to IP layer
-	decoded, err := pd.decodeByVersion(packet)
+	decoded, err := pd.decodeByVersion(packet.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -139,9 +139,9 @@ func NewICMPDecoder() *ICMPDecoder {
 	}
 }
 
-func (pd *ICMPDecoder) Decode(packet []byte) (*ICMP, error) {
+func (pd *ICMPDecoder) Decode(packet RawPacket) (*ICMP, error) {
 	// Should decode to IP and optionally ICMP layer
-	decoded, err := pd.decodeByVersion(packet)
+	decoded, err := pd.decodeByVersion(packet.Data)
 	if err != nil {
 		return nil, err
 	}

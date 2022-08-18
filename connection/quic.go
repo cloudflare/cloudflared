@@ -48,6 +48,7 @@ type QUICConnection struct {
 	sessionManager datagramsession.Manager
 	// datagramMuxer mux/demux datagrams from quic connection
 	datagramMuxer        quicpogs.BaseDatagramMuxer
+	packetRouter         *packetRouter
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
 }
@@ -61,6 +62,7 @@ func NewQUICConnection(
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler ControlStreamHandler,
 	logger *zerolog.Logger,
+	icmpProxy ingress.ICMPProxy,
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
@@ -68,7 +70,20 @@ func NewQUICConnection(
 	}
 
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
-	datagramMuxer := quicpogs.NewDatagramMuxer(session, logger, sessionDemuxChan)
+	var (
+		datagramMuxer quicpogs.BaseDatagramMuxer
+		pr            *packetRouter
+	)
+	if icmpProxy != nil {
+		pr = &packetRouter{
+			muxer:     quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan),
+			icmpProxy: icmpProxy,
+			logger:    logger,
+		}
+		datagramMuxer = pr.muxer
+	} else {
+		datagramMuxer = quicpogs.NewDatagramMuxer(session, logger, sessionDemuxChan)
+	}
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
 
 	return &QUICConnection{
@@ -77,6 +92,7 @@ func NewQUICConnection(
 		logger:               logger,
 		sessionManager:       sessionManager,
 		datagramMuxer:        datagramMuxer,
+		packetRouter:         pr,
 		controlStreamHandler: controlStreamHandler,
 		connOptions:          connOptions,
 	}, nil
@@ -117,6 +133,12 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 		defer cancel()
 		return q.datagramMuxer.ServeReceive(ctx)
 	})
+	if q.packetRouter != nil {
+		errGroup.Go(func() error {
+			defer cancel()
+			return q.packetRouter.serve(ctx)
+		})
+	}
 
 	return errGroup.Wait()
 }
@@ -303,6 +325,32 @@ func (q *QUICConnection) UnregisterUdpSession(ctx context.Context, sessionID uui
 // UpdateConfiguration is the RPC method invoked by edge when there is a new configuration
 func (q *QUICConnection) UpdateConfiguration(ctx context.Context, version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
 	return q.orchestrator.UpdateConfig(version, config)
+}
+
+type packetRouter struct {
+	muxer     *quicpogs.DatagramMuxerV2
+	icmpProxy ingress.ICMPProxy
+	logger    *zerolog.Logger
+}
+
+func (pr *packetRouter) serve(ctx context.Context) error {
+	icmpDecoder := packet.NewICMPDecoder()
+	for {
+		pk, err := pr.muxer.ReceivePacket(ctx)
+		if err != nil {
+			return err
+		}
+		icmpPacket, err := icmpDecoder.Decode(pk)
+		if err != nil {
+			pr.logger.Err(err).Msg("Failed to decode ICMP packet from quic datagram")
+			continue
+		}
+
+		if err := pr.icmpProxy.Request(icmpPacket, pr.muxer); err != nil {
+			pr.logger.Err(err).Str("src", icmpPacket.Src.String()).Str("dst", icmpPacket.Dst.String()).Msg("Failed to send ICMP packet")
+			continue
+		}
+	}
 }
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to

@@ -145,7 +145,7 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Sessi
 				received, err := muxer.ReceivePacket(ctx)
 				require.NoError(t, err)
 
-				receivedICMP, err := icmpDecoder.Decode(received.Data)
+				receivedICMP, err := icmpDecoder.Decode(received)
 				require.NoError(t, err)
 				require.Equal(t, pk.IP, receivedICMP.IP)
 				require.Equal(t, pk.Type, receivedICMP.Type)

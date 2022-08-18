@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -44,7 +46,7 @@ type Supervisor struct {
 	config                  *TunnelConfig
 	orchestrator            *orchestration.Orchestrator
 	edgeIPs                 *edgediscovery.Edge
-	edgeTunnelServer        EdgeTunnelServer
+	edgeTunnelServer        *EdgeTunnelServer
 	tunnelErrors            chan tunnelError
 	tunnelsConnecting       map[int]chan struct{}
 	tunnelsProtocolFallback map[int]*protocolFallback
@@ -114,6 +116,15 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		gracefulShutdownC: gracefulShutdownC,
 		connAwareLogger:   log,
 	}
+	if useDatagramV2(config) {
+		// For non-privileged datagram-oriented ICMP endpoints, network must be "udp4" or "udp6"
+		// TODO: TUN-6654 listen for IPv6 and decide if it should listen on specific IP
+		icmpProxy, err := ingress.NewICMPProxy("udp4", net.IPv4zero, config.Log)
+		if err != nil {
+			return nil, err
+		}
+		edgeTunnelServer.icmpProxy = icmpProxy
+	}
 
 	useReconnectToken := false
 	if config.ClassicTunnel != nil {
@@ -125,7 +136,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		config:                     config,
 		orchestrator:               orchestrator,
 		edgeIPs:                    edgeIPs,
-		edgeTunnelServer:           edgeTunnelServer,
+		edgeTunnelServer:           &edgeTunnelServer,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
 		tunnelsProtocolFallback:    map[int]*protocolFallback{},
@@ -142,6 +153,14 @@ func (s *Supervisor) Run(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) error {
+	if s.edgeTunnelServer.icmpProxy != nil {
+		go func() {
+			if err := s.edgeTunnelServer.icmpProxy.ListenResponse(ctx); err != nil {
+				s.log.Logger().Err(err).Msg("icmp proxy terminated")
+			}
+		}()
+	}
+
 	if err := s.initialize(ctx, connectedSignal); err != nil {
 		if err == errEarlyShutdown {
 			return nil
@@ -412,4 +431,16 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 	registrationOptions := s.config.registrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
 	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
 	return rpcClient.Authenticate(ctx, s.config.ClassicTunnel, registrationOptions)
+}
+
+func useDatagramV2(config *TunnelConfig) bool {
+	if config.NamedTunnel == nil {
+		return false
+	}
+	for _, feature := range config.NamedTunnel.Client.Features {
+		if feature == FeatureDatagramV2 {
+			return true
+		}
+	}
+	return false
 }
