@@ -30,6 +30,17 @@ var (
 	// DefaultUnixLogLocation is the primary location to find log files
 	DefaultUnixLogLocation = "/var/log/cloudflared"
 
+	// Default paths and env to determin the correct user config dir
+	LinuxUserConfigDirEnv   = "XDG_CONFIG_HOME"
+	LinuxUserConfigDir      = "~/.config"
+	WindowsUserConfigDirEnv = "%LOCALAPPDATA%"
+	WindowsUserConfigDir    = "~/AppData/Local"
+	DarwinUserConfigDir     = "~/Library/Application Support"
+
+	// App and Vendor ID used in the filepath
+	AppID    = "cloudflared"
+	VendorID = "cloudflare"
+
 	// Launchd doesn't set root env variables, so there is default
 	// Windows default config dir was ~/cloudflare-warp in documentation; let's keep it compatible
 	defaultUserConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp"}
@@ -79,8 +90,31 @@ func DefaultConfigPath() string {
 
 // DefaultConfigSearchDirectories returns the default folder locations of the config
 func DefaultConfigSearchDirectories() []string {
+	var defaultDir string
+	// Build the default filepath
+	switch runtime.GOOS {
+	case "windows":
+		defaultDir = os.Getenv(WindowsUserConfigDirEnv)
+		if defaultDir == "" {
+			defaultDir = WindowsUserConfigDir
+		}
+		defaultDir = filepath.Join(defaultDir, VendorID, AppID)
+	case "linux":
+		defaultDir = os.Getenv(LinuxUserConfigDirEnv)
+		if defaultDir == "" {
+			defaultDir = LinuxUserConfigDir
+		}
+		defaultDir = filepath.Join(defaultDir, AppID)
+	case "darwin":
+		defaultDir = filepath.Join(DarwinUserConfigDir, "com."+VendorID+"."+AppID)
+	}
+
 	dirs := make([]string, len(defaultUserConfigDirs))
 	copy(dirs, defaultUserConfigDirs)
+	if defaultDir != "" {
+		dirs = append([]string{defaultDir}, dirs...)
+	}
+
 	if runtime.GOOS != "windows" {
 		dirs = append(dirs, defaultNixConfigDirs...)
 	}
