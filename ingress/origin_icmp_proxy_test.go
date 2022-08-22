@@ -24,12 +24,13 @@ var (
 // TestICMPProxyEcho makes sure we can send ICMP echo via the Request method and receives response via the
 // ListenResponse method
 func TestICMPProxyEcho(t *testing.T) {
-	skipWindows(t)
+	skipNonDarwin(t)
 	const (
 		echoID = 36571
 		endSeq = 100
 	)
-	proxy, err := NewICMPProxy("udp4", localhostIP.AsSlice(), &noopLogger)
+
+	proxy, err := NewICMPProxy(localhostIP.AsSlice(), &noopLogger)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -71,7 +72,7 @@ func TestICMPProxyEcho(t *testing.T) {
 
 // TestICMPProxyRejectNotEcho makes sure it rejects messages other than echo
 func TestICMPProxyRejectNotEcho(t *testing.T) {
-	skipWindows(t)
+	skipNonDarwin(t)
 	msgs := []icmp.Message{
 		{
 			Type: ipv4.ICMPTypeDestinationUnreachable,
@@ -96,7 +97,7 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 			},
 		},
 	}
-	proxy, err := NewICMPProxy("udp4", localhostIP.AsSlice(), &noopLogger)
+	proxy, err := NewICMPProxy(localhostIP.AsSlice(), &noopLogger)
 	require.NoError(t, err)
 
 	responder := echoFlowResponder{
@@ -116,8 +117,8 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 	}
 }
 
-func skipWindows(t *testing.T) {
-	if runtime.GOOS == "windows" {
+func skipNonDarwin(t *testing.T) {
+	if runtime.GOOS != "darwin" {
 		t.Skip("Cannot create non-privileged datagram-oriented ICMP endpoint on Windows")
 	}
 }
@@ -146,5 +147,5 @@ func (efr *echoFlowResponder) validate(t *testing.T, echoReq *packet.ICMP) {
 	require.Equal(t, 0, decoded.Code)
 	require.NotZero(t, decoded.Checksum)
 	// TODO: TUN-6586: Enable this validation when ICMP echo ID matches on Linux
-	//require.Equal(t, echoReq.Body, decoded.Body)
+	require.Equal(t, echoReq.Body, decoded.Body)
 }

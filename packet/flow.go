@@ -2,6 +2,7 @@ package packet
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 	"sync"
 )
@@ -12,7 +13,9 @@ var (
 
 // FlowID represents a key type that can be used by FlowTracker
 type FlowID interface {
-	ID() string
+	// Type returns the name of the type that implements the FlowID
+	Type() string
+	fmt.Stringer
 }
 
 type Flow struct {

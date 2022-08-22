@@ -119,11 +119,12 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	if useDatagramV2(config) {
 		// For non-privileged datagram-oriented ICMP endpoints, network must be "udp4" or "udp6"
 		// TODO: TUN-6654 listen for IPv6 and decide if it should listen on specific IP
-		icmpProxy, err := ingress.NewICMPProxy("udp4", net.IPv4zero, config.Log)
+		icmpProxy, err := ingress.NewICMPProxy(net.IPv4zero, config.Log)
 		if err != nil {
-			return nil, err
+			log.Logger().Warn().Err(err).Msg("Failed to create icmp proxy, will continue to use datagram v1")
+		} else {
+			edgeTunnelServer.icmpProxy = icmpProxy
 		}
-		edgeTunnelServer.icmpProxy = icmpProxy
 	}
 
 	useReconnectToken := false
