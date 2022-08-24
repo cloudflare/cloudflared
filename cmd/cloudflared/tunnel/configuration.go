@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	mathRand "math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,6 +221,19 @@ func prepareTunnelConfig(
 	)
 
 	transportProtocol := c.String("protocol")
+
+	needPQ := c.Bool("post-quantum")
+	if needPQ {
+		if FipsEnabled {
+			return nil, nil, fmt.Errorf("post-quantum not supported in FIPS mode")
+		}
+		// Error if the user tries to force a non-quic transport protocol
+		if transportProtocol != connection.AutoSelectFlag && transportProtocol != connection.QUIC.String() {
+			return nil, nil, fmt.Errorf("post-quantum is only supported with the quic transport")
+		}
+		transportProtocol = connection.QUIC.String()
+	}
+
 	protocolFetcher := edgediscovery.ProtocolPercentage
 
 	cfg := config.GetConfiguration()
@@ -230,6 +244,9 @@ func prepareTunnelConfig(
 		}
 		log.Info().Msgf("Generated Connector ID: %s", clientUUID)
 		features := append(c.StringSlice("features"), defaultFeatures...)
+		if needPQ {
+			features = append(features, supervisor.FeaturePostQuantum)
+		}
 		if c.IsSet(TunnelTokenFlag) {
 			if transportProtocol == connection.AutoSelectFlag {
 				protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
@@ -291,7 +308,7 @@ func prepareTunnelConfig(
 	}
 
 	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log, c.Bool("post-quantum"))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -330,6 +347,15 @@ func prepareTunnelConfig(
 		return nil, nil, err
 	}
 
+	var pqKexIdx int
+	if needPQ {
+		pqKexIdx = mathRand.Intn(len(supervisor.PQKexes))
+		log.Info().Msgf(
+			"Using experimental hybrid post-quantum key agreement %s",
+			supervisor.PQKexNames[supervisor.PQKexes[pqKexIdx]],
+		)
+	}
+
 	tunnelConfig := &supervisor.TunnelConfig{
 		GracePeriod:     gracePeriod,
 		ReplaceExisting: c.Bool("force"),
@@ -355,6 +381,8 @@ func prepareTunnelConfig(
 		MuxerConfig:      muxerConfig,
 		ProtocolSelector: protocolSelector,
 		EdgeTLSConfigs:   edgeTLSConfigs,
+		NeedPQ:           needPQ,
+		PQKexIdx:         pqKexIdx,
 	}
 	orchestratorConfig := &orchestration.Config{
 		Ingress:            &ingressRules,

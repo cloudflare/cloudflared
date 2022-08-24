@@ -36,6 +36,7 @@ const (
 	FeatureQuickReconnects   = "quick_reconnects"
 	FeatureAllowRemoteConfig = "allow_remote_config"
 	FeatureDatagramV2        = "support_datagram_v2"
+	FeaturePostQuantum       = "postquantum"
 )
 
 type TunnelConfig struct {
@@ -58,6 +59,11 @@ type TunnelConfig struct {
 	ReportedVersion string
 	Retries         uint
 	RunFromTerminal bool
+
+	NeedPQ bool
+
+	// Index into PQKexes of post-quantum kex to use if NeedPQ is set.
+	PQKexIdx int
 
 	NamedTunnel      *connection.NamedTunnelProperties
 	ClassicTunnel    *connection.ClassicTunnelProperties
@@ -524,6 +530,9 @@ func (e *EdgeTunnelServer) serveH2mux(
 	connIndex uint8,
 	connectedFuse *connectedFuse,
 ) error {
+	if e.config.NeedPQ {
+		return unrecoverableError{errors.New("H2Mux transport does not support post-quantum")}
+	}
 	connLog.Logger().Debug().Msgf("Connecting via h2mux")
 	// Returns error from parsing the origin URL or handshake errors
 	handler, err, recoverable := connection.NewH2muxConnection(
@@ -575,6 +584,10 @@ func (e *EdgeTunnelServer) serveHTTP2(
 	controlStreamHandler connection.ControlStreamHandler,
 	connIndex uint8,
 ) error {
+	if e.config.NeedPQ {
+		return unrecoverableError{errors.New("HTTP/2 transport does not support post-quantum")}
+	}
+
 	connLog.Logger().Debug().Msgf("Connecting via http2")
 	h2conn := connection.NewHTTP2Connection(
 		tlsServerConn,
@@ -613,6 +626,22 @@ func (e *EdgeTunnelServer) serveQUIC(
 	connIndex uint8,
 ) (err error, recoverable bool) {
 	tlsConfig := e.config.EdgeTLSConfigs[connection.QUIC]
+
+	if e.config.NeedPQ {
+		// If the user passes the -post-quantum flag, we override
+		// CurvePreferences to only support hybrid post-quantum key agreements.
+		cs := make([]tls.CurveID, len(PQKexes))
+		copy(cs, PQKexes[:])
+
+		// It is unclear whether Kyber512 or Kyber768 will become the standard.
+		// Kyber768 is a bit bigger (and doesn't fit in one initial
+		// datagram anymore). We're enabling both, but pick randomly which
+		// one to put first. (TLS will use the first one in the list
+		// and allows a fallback to the second.)
+		cs[0], cs[e.config.PQKexIdx] = cs[e.config.PQKexIdx], cs[0]
+		tlsConfig.CurvePreferences = cs
+	}
+
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout:  quicpogs.HandshakeIdleTimeout,
 		MaxIdleTimeout:        quicpogs.MaxIdleTimeout,
@@ -634,6 +663,10 @@ func (e *EdgeTunnelServer) serveQUIC(
 		connLogger.Logger(),
 		e.icmpProxy)
 	if err != nil {
+		if e.config.NeedPQ {
+			handlePQTunnelError(err, e.config)
+		}
+
 		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
 		return err, true
 	}
