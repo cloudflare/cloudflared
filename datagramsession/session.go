@@ -2,6 +2,7 @@ package datagramsession
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -49,10 +50,10 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 		readBuffer := make([]byte, maxPacketSize)
 		for {
 			if closeSession, err := s.dstToTransport(readBuffer); err != nil {
-				if err != net.ErrClosed {
-					s.log.Error().Err(err).Msg("Failed to send session payload from destination to transport")
+				if errors.Is(err, net.ErrClosed) {
+					s.log.Debug().Msg("Destination connection closed")
 				} else {
-					s.log.Debug().Msg("Session cannot read from destination because the connection is closed")
+					s.log.Error().Err(err).Msg("Failed to send session payload from destination to transport")
 				}
 				if closeSession {
 					s.closeChan <- err
