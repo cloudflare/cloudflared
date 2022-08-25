@@ -268,7 +268,7 @@ func (s *Supervisor) initialize(
 		s.config.HAConnections = availableAddrs
 	}
 	s.tunnelsProtocolFallback[0] = &protocolFallback{
-		retry.BackoffHandler{MaxRetries: s.config.Retries},
+		retry.BackoffHandler{MaxRetries: s.config.Retries, RetryForever: true},
 		s.config.ProtocolSelector.Current(),
 		false,
 	}
@@ -290,7 +290,7 @@ func (s *Supervisor) initialize(
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
 		s.tunnelsProtocolFallback[i] = &protocolFallback{
-			retry.BackoffHandler{MaxRetries: s.config.Retries},
+			retry.BackoffHandler{MaxRetries: s.config.Retries, RetryForever: true},
 			s.config.ProtocolSelector.Current(),
 			false,
 		}
