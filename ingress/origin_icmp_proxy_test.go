@@ -24,19 +24,19 @@ var (
 // TestICMPProxyEcho makes sure we can send ICMP echo via the Request method and receives response via the
 // ListenResponse method
 func TestICMPProxyEcho(t *testing.T) {
-	skipNonDarwin(t)
+	onlyDarwinOrLinux(t)
 	const (
 		echoID = 36571
 		endSeq = 100
 	)
 
-	proxy, err := NewICMPProxy(localhostIP.AsSlice(), &noopLogger)
+	proxy, err := NewICMPProxy(localhostIP, &noopLogger)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		proxy.ListenResponse(ctx)
+		proxy.Serve(ctx)
 		close(proxyDone)
 	}()
 
@@ -72,7 +72,7 @@ func TestICMPProxyEcho(t *testing.T) {
 
 // TestICMPProxyRejectNotEcho makes sure it rejects messages other than echo
 func TestICMPProxyRejectNotEcho(t *testing.T) {
-	skipNonDarwin(t)
+	onlyDarwinOrLinux(t)
 	msgs := []icmp.Message{
 		{
 			Type: ipv4.ICMPTypeDestinationUnreachable,
@@ -97,7 +97,7 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 			},
 		},
 	}
-	proxy, err := NewICMPProxy(localhostIP.AsSlice(), &noopLogger)
+	proxy, err := NewICMPProxy(localhostIP, &noopLogger)
 	require.NoError(t, err)
 
 	responder := echoFlowResponder{
@@ -117,8 +117,8 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 	}
 }
 
-func skipNonDarwin(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+func onlyDarwinOrLinux(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		t.Skip("Cannot create non-privileged datagram-oriented ICMP endpoint on Windows")
 	}
 }
@@ -146,6 +146,5 @@ func (efr *echoFlowResponder) validate(t *testing.T, echoReq *packet.ICMP) {
 	require.Equal(t, ipv4.ICMPTypeEchoReply, decoded.Type)
 	require.Equal(t, 0, decoded.Code)
 	require.NotZero(t, decoded.Checksum)
-	// TODO: TUN-6586: Enable this validation when ICMP echo ID matches on Linux
 	require.Equal(t, echoReq.Body, decoded.Body)
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -117,9 +117,12 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		connAwareLogger:   log,
 	}
 	if useDatagramV2(config) {
-		// For non-privileged datagram-oriented ICMP endpoints, network must be "udp4" or "udp6"
 		// TODO: TUN-6654 listen for IPv6 and decide if it should listen on specific IP
-		icmpProxy, err := ingress.NewICMPProxy(net.IPv4zero, config.Log)
+		listenIP, err := netip.ParseAddr("0.0.0.0")
+		if err != nil {
+			return nil, err
+		}
+		icmpProxy, err := ingress.NewICMPProxy(listenIP, config.Log)
 		if err != nil {
 			log.Logger().Warn().Err(err).Msg("Failed to create icmp proxy, will continue to use datagram v1")
 		} else {
@@ -156,7 +159,7 @@ func (s *Supervisor) Run(
 ) error {
 	if s.edgeTunnelServer.icmpProxy != nil {
 		go func() {
-			if err := s.edgeTunnelServer.icmpProxy.ListenResponse(ctx); err != nil {
+			if err := s.edgeTunnelServer.icmpProxy.Serve(ctx); err != nil {
 				s.log.Logger().Err(err).Msg("icmp proxy terminated")
 			}
 		}()

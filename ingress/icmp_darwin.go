@@ -27,7 +27,6 @@ type icmpProxy struct {
 	echoIDTracker  *echoIDTracker
 	conn           *icmp.PacketConn
 	logger         *zerolog.Logger
-	encoder        *packet.Encoder
 }
 
 // echoIDTracker tracks which ID has been assigned. It first loops through assignment from lastAssignment to then end,
@@ -112,13 +111,8 @@ func (snf echoFlowID) String() string {
 	return strconv.FormatUint(uint64(snf), 10)
 }
 
-func newICMPProxy(listenIP net.IP, logger *zerolog.Logger) (ICMPProxy, error) {
-	network := "udp6"
-	if listenIP.To4() != nil {
-		network = "udp4"
-	}
-	// Opens a non-privileged ICMP socket
-	conn, err := icmp.ListenPacket(network, listenIP.String())
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger) (ICMPProxy, error) {
+	conn, err := newICMPConn(listenIP)
 	if err != nil {
 		return nil, err
 	}
@@ -127,11 +121,13 @@ func newICMPProxy(listenIP net.IP, logger *zerolog.Logger) (ICMPProxy, error) {
 		echoIDTracker:  newEchoIDTracker(),
 		conn:           conn,
 		logger:         logger,
-		encoder:        packet.NewEncoder(),
 	}, nil
 }
 
 func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) error {
+	if pk == nil {
+		return errPacketNil
+	}
 	switch body := pk.Message.Body.(type) {
 	case *icmp.Echo:
 		return ip.sendICMPEchoRequest(pk, body, responder)
@@ -140,12 +136,14 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) er
 	}
 }
 
-func (ip *icmpProxy) ListenResponse(ctx context.Context) error {
+// Serve listens for responses to the requests until context is done
+func (ip *icmpProxy) Serve(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		ip.conn.Close()
 	}()
-	buf := make([]byte, 1500)
+	buf := make([]byte, mtu)
+	encoder := packet.NewEncoder()
 	for {
 		n, src, err := ip.conn.ReadFrom(buf)
 		if err != nil {
@@ -159,7 +157,7 @@ func (ip *icmpProxy) ListenResponse(ctx context.Context) error {
 		}
 		switch body := msg.Body.(type) {
 		case *icmp.Echo:
-			if err := ip.handleEchoResponse(msg, body); err != nil {
+			if err := ip.handleEchoResponse(encoder, msg, body); err != nil {
 				ip.logger.Error().Err(err).
 					Str("src", src.String()).
 					Str("flowID", echoFlowID(body.ID).String()).
@@ -206,7 +204,7 @@ func (ip *icmpProxy) sendICMPEchoRequest(pk *packet.ICMP, echo *icmp.Echo, respo
 	return err
 }
 
-func (ip *icmpProxy) handleEchoResponse(msg *icmp.Message, echo *icmp.Echo) error {
+func (ip *icmpProxy) handleEchoResponse(encoder *packet.Encoder, msg *icmp.Message, echo *icmp.Echo) error {
 	flowID := echoFlowID(echo.ID)
 	flow, ok := ip.srcFlowTracker.Get(flowID)
 	if !ok {
@@ -220,7 +218,7 @@ func (ip *icmpProxy) handleEchoResponse(msg *icmp.Message, echo *icmp.Echo) erro
 		},
 		Message: msg,
 	}
-	serializedPacket, err := ip.encoder.Encode(&icmpPacket)
+	serializedPacket, err := encoder.Encode(&icmpPacket)
 	if err != nil {
 		return errors.Wrap(err, "Failed to encode ICMP message")
 	}

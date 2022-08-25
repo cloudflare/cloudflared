@@ -1,15 +1,15 @@
-//go:build !darwin
+//go:build !darwin && !linux
 
 package ingress
 
 import (
 	"fmt"
-	"net"
+	"net/netip"
 	"runtime"
 
 	"github.com/rs/zerolog"
 )
 
-func newICMPProxy(listenIP net.IP, logger *zerolog.Logger) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger) (ICMPProxy, error) {
 	return nil, fmt.Errorf("ICMP proxy is not implemented on %s", runtime.GOOS)
 }
