@@ -58,7 +58,7 @@ func NewDatagramMuxerV2(
 // demultiplex the payload from multiple datagram sessions
 func (dm *DatagramMuxerV2) SendToSession(session *packet.Session) error {
 	if len(session.Payload) > dm.mtu() {
-		// TODO: TUN-5302 return ICMP packet too big message
+		packetTooBigDropped.Inc()
 		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(session.Payload), dm.mtu())
 	}
 	msgWithID, err := suffixSessionID(session.ID, session.Payload)

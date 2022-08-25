@@ -144,6 +144,13 @@ var (
 	}
 	registerClient = sync.Once{}
 	registerServer = sync.Once{}
+
+	packetTooBigDropped = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: perspectiveString(logging.PerspectiveClient),
+		Name:      "packet_too_big_dropped",
+		Help:      "Count of packets received from origin that are too big to send to the edge and are dropped as a result",
+	})
 )
 
 // MetricsCollector abstracts the difference between client and server metrics from connTracer
@@ -264,6 +271,7 @@ func newClientCollector(index uint8) MetricsCollector {
 			clientMetrics.minRTT,
 			clientMetrics.latestRTT,
 			clientMetrics.smoothedRTT,
+			packetTooBigDropped,
 		)
 	})
 	return &clientCollector{

@@ -46,8 +46,7 @@ func (dm *DatagramMuxer) mtu() int {
 
 func (dm *DatagramMuxer) SendToSession(session *packet.Session) error {
 	if len(session.Payload) > dm.mtu() {
-		// TODO: TUN-5302 return ICMP packet too big message
-		// drop packet for now, eventually reply with ICMP for PMTUD
+		packetTooBigDropped.Inc()
 		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(session.Payload), dm.mtu())
 	}
 	payloadWithMetadata, err := suffixSessionID(session.ID, session.Payload)
