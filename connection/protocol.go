@@ -209,8 +209,8 @@ func NewProtocolSelector(
 
 	threshold := switchThreshold(namedTunnel.Credentials.AccountTag)
 	fetchedProtocol, err := getProtocol([]Protocol{QUIC, HTTP2}, fetchFunc, threshold)
-	if err != nil {
-		log.Err(err).Msg("Unable to lookup protocol. Defaulting to `http2`. If this fails, you can set `--protocol h2mux` in your cloudflared command.")
+	if err != nil && protocolFlag == "auto" {
+		log.Err(err).Msg("Unable to lookup protocol. Defaulting to `http2`. If this fails, you can attempt `--protocol quic` instead.")
 		return &staticProtocolSelector{
 			current: HTTP2,
 		}, nil
