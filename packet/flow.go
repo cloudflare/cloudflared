@@ -64,7 +64,7 @@ func (sft *FlowTracker) Register(id FlowID, flow *Flow, shouldReplace bool) (rep
 		return false
 	}
 
-	if shouldReplace && isSameFlow(currentFlow, flow) {
+	if shouldReplace && !isSameFlow(currentFlow, flow) {
 		sft.flows[id] = flow
 		return true
 	}
