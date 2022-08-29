@@ -21,7 +21,7 @@ const (
 const (
 	typeIDLen = 1
 	// Same as sessionDemuxChan capacity
-	packetChanCapacity = 16
+	packetChanCapacity = 128
 )
 
 func suffixType(b []byte, datagramType datagramV2Type) ([]byte, error) {

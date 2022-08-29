@@ -58,12 +58,11 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) er
 	if pk == nil {
 		return errPacketNil
 	}
-	switch body := pk.Message.Body.(type) {
-	case *icmp.Echo:
-		return ip.sendICMPEchoRequest(pk, body, responder)
-	default:
-		return fmt.Errorf("sending ICMP %s is not implemented", pk.Type)
+	echo, err := getICMPEcho(pk)
+	if err != nil {
+		return err
 	}
+	return ip.sendICMPEchoRequest(pk, echo, responder)
 }
 
 func (ip *icmpProxy) Serve(ctx context.Context) error {

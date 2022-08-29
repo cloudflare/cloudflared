@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"runtime"
 	"testing"
 
 	"github.com/google/gopacket/layers"
@@ -28,7 +27,6 @@ var (
 // is allowed in ping_group_range. See the following gist for how to do that:
 // https://github.com/ValentinBELYN/icmplib/blob/main/docs/6-use-icmplib-without-privileges.md
 func TestICMPProxyEcho(t *testing.T) {
-	onlyDarwinOrLinux(t)
 	const (
 		echoID = 36571
 		endSeq = 100
@@ -46,7 +44,7 @@ func TestICMPProxyEcho(t *testing.T) {
 
 	responder := echoFlowResponder{
 		decoder:  packet.NewICMPDecoder(),
-		respChan: make(chan []byte),
+		respChan: make(chan []byte, 1),
 	}
 
 	ip := packet.IP{
@@ -76,7 +74,6 @@ func TestICMPProxyEcho(t *testing.T) {
 
 // TestICMPProxyRejectNotEcho makes sure it rejects messages other than echo
 func TestICMPProxyRejectNotEcho(t *testing.T) {
-	onlyDarwinOrLinux(t)
 	msgs := []icmp.Message{
 		{
 			Type: ipv4.ICMPTypeDestinationUnreachable,
@@ -118,12 +115,6 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 			Message: &m,
 		}
 		require.Error(t, proxy.Request(&pk, &responder))
-	}
-}
-
-func onlyDarwinOrLinux(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skip("Cannot create non-privileged datagram-oriented ICMP endpoint on Windows")
 	}
 }
 

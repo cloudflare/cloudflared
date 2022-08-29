@@ -15,6 +15,7 @@ import (
 const (
 	defaultCloseAfterIdle = time.Second * 15
 	mtu                   = 1500
+	icmpTimeoutMs         = 1000
 )
 
 var (
@@ -41,4 +42,12 @@ func newICMPConn(listenIP netip.Addr) (*icmp.PacketConn, error) {
 		network = "udp4"
 	}
 	return icmp.ListenPacket(network, listenIP.String())
+}
+
+func getICMPEcho(pk *packet.ICMP) (*icmp.Echo, error) {
+	echo, ok := pk.Message.Body.(*icmp.Echo)
+	if !ok {
+		return nil, fmt.Errorf("expect ICMP echo, got %s", pk.Type)
+	}
+	return echo, nil
 }
