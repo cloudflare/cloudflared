@@ -1,3 +1,18 @@
+2022.8.3
+- 2022-08-26 TUN-6708: Fix replace flow logic
+- 2022-08-25 TUN-6705: Tunnel should retry connections forever
+- 2022-08-25 TUN-6704: Honor protocol flag when edge discovery is unreachable
+- 2022-08-25 TUN-6699: Add metric for packet too big dropped
+- 2022-08-24 TUN-6691: Properly error check for net.ErrClosed
+- 2022-08-22 TUN-6679: Allow client side of quic request to close body
+- 2022-08-22 TUN-6586: Change ICMP proxy to only build for Darwin and use echo ID to track flows
+- 2022-08-18 TUN-6530: Implement ICMPv4 proxy
+- 2022-08-17 TUN-6666: Define packet package
+- 2022-08-17 TUN-6667: DatagramMuxerV2 provides a method to receive RawPacket
+- 2022-08-16 TUN-6657: Ask for Tunnel ID and Configuration on Bug Report
+- 2022-08-16 TUN-6676: Add suport for trailers in http2 connections
+- 2022-08-11 TUN-6575: Consume cf-trace-id from incoming http2 TCP requests
+
 2022.8.2
 - 2022-08-16 TUN-6656: Docker for arm64 should not be deployed in an amd64 container
 
