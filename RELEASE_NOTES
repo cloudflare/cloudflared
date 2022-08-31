@@ -1,3 +1,8 @@
+2022.8.4
+- 2022-08-31 TUN-6717: Update Github action to run with Go 1.19
+- 2022-08-31 TUN-6720: Remove forcibly closing connection during reconnect signal
+- 2022-08-29 Release 2022.8.3
+
 2022.8.3
 - 2022-08-26 TUN-6708: Fix replace flow logic
 - 2022-08-25 TUN-6705: Tunnel should retry connections forever
