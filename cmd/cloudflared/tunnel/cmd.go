@@ -375,7 +375,7 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, orchestrator, log)
 	}()
 
-	reconnectCh := make(chan supervisor.ReconnectSignal, 1)
+	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int("ha-connections"))
 	if c.IsSet("stdin-control") {
 		log.Info().Msg("Enabling control through stdin")
 		go stdinControl(reconnectCh, log)

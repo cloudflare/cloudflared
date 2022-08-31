@@ -546,7 +546,13 @@ func (e *EdgeTunnelServer) serveH2mux(
 	})
 
 	errGroup.Go(func() error {
-		return listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
+		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
+		if err != nil {
+			// forcefully break the connection (this is only used for testing)
+			// errgroup will return context canceled for the handler.ServeClassicTunnel
+			connLog.Logger().Debug().Msg("Forcefully breaking h2mux connection")
+		}
+		return err
 	})
 
 	return errGroup.Wait()
@@ -580,8 +586,8 @@ func (e *EdgeTunnelServer) serveHTTP2(
 		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
 		if err != nil {
 			// forcefully break the connection (this is only used for testing)
+			// errgroup will return context canceled for the h2conn.Serve
 			connLog.Logger().Debug().Msg("Forcefully breaking http2 connection")
-			_ = tlsServerConn.Close()
 		}
 		return err
 	})
@@ -636,8 +642,8 @@ func (e *EdgeTunnelServer) serveQUIC(
 		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
 		if err != nil {
 			// forcefully break the connection (this is only used for testing)
+			// errgroup will return context canceled for the quicConn.Serve
 			connLogger.Logger().Debug().Msg("Forcefully breaking quic connection")
-			quicConn.Close()
 		}
 		return err
 	})

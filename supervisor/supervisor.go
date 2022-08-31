@@ -295,8 +295,7 @@ func (s *Supervisor) initialize(
 			s.config.ProtocolSelector.Current(),
 			false,
 		}
-		ch := signal.New(make(chan struct{}))
-		go s.startTunnel(ctx, i, ch)
+		go s.startTunnel(ctx, i, s.newConnectedTunnelSignal(i))
 		time.Sleep(registrationInterval)
 	}
 	return nil
