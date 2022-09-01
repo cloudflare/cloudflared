@@ -1,3 +1,7 @@
+## 2022.9.0
+### New Features
+- cloudflared now rejects ingress rules with invalid http status codes for http_status.
+
 ## 2022.8.1
 ### New Features
 - cloudflared now remembers if it connected to a certain protocol successfully. If it did, it does not fall back to a lower
