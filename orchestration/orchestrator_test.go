@@ -500,7 +500,8 @@ func TestClosePreviousProxies(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusTeapot, resp.StatusCode)
 
-	// The hello-world server in config v1 should have been stopped
+	// The hello-world server in config v1 should have been stopped. We wait a bit since it's closed asynchronously.
+	time.Sleep(time.Millisecond * 10)
 	resp, err = proxyHTTP(originProxyV1, hostname)
 	require.Error(t, err)
 	require.Nil(t, resp)
