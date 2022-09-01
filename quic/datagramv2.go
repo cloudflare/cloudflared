@@ -14,14 +14,15 @@ import (
 type datagramV2Type byte
 
 const (
-	udp datagramV2Type = iota
+	typeIDLen                = 1
+	udp       datagramV2Type = iota
 	ip
 	// Same as sessionDemuxChan capacity
 	packetChanCapacity = 16
 )
 
 func suffixType(b []byte, datagramType datagramV2Type) ([]byte, error) {
-	if len(b)+1 > MaxDatagramFrameSize {
+	if len(b)+typeIDLen > MaxDatagramFrameSize {
 		return nil, fmt.Errorf("datagram size %d exceeds max frame size %d", len(b), MaxDatagramFrameSize)
 	}
 	b = append(b, byte(datagramType))
@@ -114,11 +115,11 @@ func (dm *DatagramMuxerV2) ReceivePacket(ctx context.Context) (packet.RawPacket,
 }
 
 func (dm *DatagramMuxerV2) demux(ctx context.Context, msgWithType []byte) error {
-	if len(msgWithType) < 1 {
-		return fmt.Errorf("QUIC datagram should have at least 1 byte")
+	if len(msgWithType) < typeIDLen {
+		return fmt.Errorf("QUIC datagram should have at least %d byte", typeIDLen)
 	}
-	msgType := datagramV2Type(msgWithType[len(msgWithType)-1])
-	msg := msgWithType[0 : len(msgWithType)-1]
+	msgType := datagramV2Type(msgWithType[len(msgWithType)-typeIDLen])
+	msg := msgWithType[0 : len(msgWithType)-typeIDLen]
 	switch msgType {
 	case udp:
 		return dm.handleSession(ctx, msg)
