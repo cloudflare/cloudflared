@@ -302,7 +302,7 @@ quic-deps:
 
 .PHONY: vet
 vet:
-	go vet -mod=vendor ./...
+	go vet -v -mod=vendor ./...
 
 .PHONY: goimports
 goimports:
