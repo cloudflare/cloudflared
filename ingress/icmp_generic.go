@@ -10,6 +10,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
 	return nil, fmt.Errorf("ICMP proxy is not implemented on %s", runtime.GOOS)
 }

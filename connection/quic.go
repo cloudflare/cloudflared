@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -346,11 +347,29 @@ func (pr *packetRouter) serve(ctx context.Context) error {
 			continue
 		}
 
-		if err := pr.icmpProxy.Request(icmpPacket, pr.muxer); err != nil {
-			pr.logger.Err(err).Str("src", icmpPacket.Src.String()).Str("dst", icmpPacket.Dst.String()).Msg("Failed to send ICMP packet")
+		flowPipe := muxerResponder{muxer: pr.muxer}
+		if err := pr.icmpProxy.Request(icmpPacket, &flowPipe); err != nil {
+			pr.logger.Err(err).
+				Str("src", icmpPacket.Src.String()).
+				Str("dst", icmpPacket.Dst.String()).
+				Interface("type", icmpPacket.Type).
+				Msg("Failed to send ICMP packet")
 			continue
 		}
 	}
+}
+
+// muxerResponder wraps DatagramMuxerV2 to satisfy the packet.FunnelUniPipe interface
+type muxerResponder struct {
+	muxer *quicpogs.DatagramMuxerV2
+}
+
+func (mr *muxerResponder) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
+	return mr.muxer.SendPacket(pk)
+}
+
+func (mr *muxerResponder) Close() error {
+	return nil
 }
 
 // streamReadWriteAcker is a light wrapper over QUIC streams with a callback to send response back to

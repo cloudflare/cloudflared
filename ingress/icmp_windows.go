@@ -15,6 +15,7 @@ import (
 	"runtime/debug"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/google/gopacket/layers"
@@ -143,7 +144,7 @@ type icmpProxy struct {
 	encoderPool sync.Pool
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
 	handle, _, err := IcmpCreateFile_proc.Call()
 	// Windows procedure calls always return non-nil error constructed from the result of GetLastError.
 	// Caller need to inspect the primary returned value
@@ -167,7 +168,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) error {
+func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
 	if pk == nil {
 		return errPacketNil
 	}
@@ -176,7 +177,7 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) er
 			ip.logger.Error().Interface("error", r).Msgf("Recover panic from sending icmp request/response, error %s", debug.Stack())
 		}
 	}()
-	echo, err := getICMPEcho(pk)
+	echo, err := getICMPEcho(pk.Message)
 	if err != nil {
 		return err
 	}
@@ -193,7 +194,7 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) er
 	return nil
 }
 
-func (ip *icmpProxy) handleEchoResponse(request *packet.ICMP, echoReq *icmp.Echo, resp *echoResp, responder packet.FlowResponder) error {
+func (ip *icmpProxy) handleEchoResponse(request *packet.ICMP, echoReq *icmp.Echo, resp *echoResp, responder packet.FunnelUniPipe) error {
 	var replyType icmp.Type
 	if request.Dst.Is4() {
 		replyType = ipv4.ICMPTypeEchoReply
@@ -222,7 +223,7 @@ func (ip *icmpProxy) handleEchoResponse(request *packet.ICMP, echoReq *icmp.Echo
 	if err != nil {
 		return err
 	}
-	return responder.SendPacket(serializedPacket)
+	return responder.SendPacket(request.Src, serializedPacket)
 }
 
 func (ip *icmpProxy) encodeICMPReply(pk *packet.ICMP) (packet.RawPacket, error) {
@@ -262,7 +263,7 @@ func (ip *icmpProxy) icmpSendEcho(dst netip.Addr, echo *icmp.Echo) (*echoResp, e
 	}
 	replyCount, _, err := IcmpSendEcho_proc.Call(ip.handle, uintptr(inAddr), uintptr(unsafe.Pointer(&echo.Data[0])),
 		uintptr(dataSize), noIPHeaderOption, uintptr(unsafe.Pointer(&replyBuf[0])),
-		replySize, icmpTimeoutMs)
+		replySize, icmpRequestTimeoutMs)
 	if replyCount == 0 {
 		// status is returned in 5th to 8th byte of reply buffer
 		if status, err := unmarshalIPStatus(replyBuf[4:8]); err == nil {

@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/netip"
 	"testing"
 
@@ -47,26 +48,48 @@ func TestICMPProxyEcho(t *testing.T) {
 		respChan: make(chan []byte, 1),
 	}
 
-	ip := packet.IP{
-		Src:      localhostIP,
-		Dst:      localhostIP,
-		Protocol: layers.IPProtocolICMPv4,
+	ips := []packet.IP{
+		{
+			Src:      localhostIP,
+			Dst:      localhostIP,
+			Protocol: layers.IPProtocolICMPv4,
+		},
 	}
-	for i := 0; i < endSeq; i++ {
-		pk := packet.ICMP{
-			IP: &ip,
-			Message: &icmp.Message{
-				Type: ipv4.ICMPTypeEcho,
-				Code: 0,
-				Body: &icmp.Echo{
-					ID:   echoID,
-					Seq:  i,
-					Data: []byte(fmt.Sprintf("icmp echo seq %d", i)),
-				},
-			},
+
+	addrs, err := net.InterfaceAddrs()
+	require.NoError(t, err)
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok {
+			ip := ipnet.IP
+			if !ipnet.IP.IsLoopback() && ip.IsPrivate() && ip.To4() != nil {
+				localIP := netip.MustParseAddr(ipnet.IP.String())
+				ips = append(ips, packet.IP{
+					Src:      localIP,
+					Dst:      localIP,
+					Protocol: layers.IPProtocolICMPv4,
+				})
+				break
+			}
 		}
-		require.NoError(t, proxy.Request(&pk, &responder))
-		responder.validate(t, &pk)
+	}
+
+	for seq := 0; seq < endSeq; seq++ {
+		for i, ip := range ips {
+			pk := packet.ICMP{
+				IP: &ip,
+				Message: &icmp.Message{
+					Type: ipv4.ICMPTypeEcho,
+					Code: 0,
+					Body: &icmp.Echo{
+						ID:   echoID + i,
+						Seq:  seq,
+						Data: []byte(fmt.Sprintf("icmp echo seq %d", seq)),
+					},
+				},
+			}
+			require.NoError(t, proxy.Request(&pk, &responder))
+			responder.validate(t, &pk)
+		}
 	}
 	cancel()
 	<-proxyDone
@@ -123,10 +146,15 @@ type echoFlowResponder struct {
 	respChan chan []byte
 }
 
-func (efr *echoFlowResponder) SendPacket(pk packet.RawPacket) error {
+func (efr *echoFlowResponder) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
 	copiedPacket := make([]byte, len(pk.Data))
 	copy(copiedPacket, pk.Data)
 	efr.respChan <- copiedPacket
+	return nil
+}
+
+func (efr *echoFlowResponder) Close() error {
+	close(efr.respChan)
 	return nil
 }
 

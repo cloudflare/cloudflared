@@ -2,6 +2,11 @@
 
 package ingress
 
+// This file implements ICMPProxy for Darwin. It uses a non-privileged ICMP socket to send echo requests and listen for
+// echo replies. The source IP of the requests are rewritten to the bind IP of the socket and the socket reads all
+// messages, so we use echo ID to distinguish the replies. Each (source IP, destination IP, echo ID) is assigned a
+// unique echo ID.
+
 import (
 	"context"
 	"fmt"
@@ -10,9 +15,8 @@ import (
 	"net/netip"
 	"strconv"
 	"sync"
+	"time"
 
-	"github.com/google/gopacket/layers"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"golang.org/x/net/icmp"
 
@@ -20,13 +24,14 @@ import (
 )
 
 // TODO: TUN-6654 Extend support to IPv6
-// On Darwin, a non-privileged ICMP socket can read messages from all echo IDs, so we use it for all sources.
 type icmpProxy struct {
-	// TODO: TUN-6588 clean up flows
-	srcFlowTracker *packet.FlowTracker
-	echoIDTracker  *echoIDTracker
-	conn           *icmp.PacketConn
-	logger         *zerolog.Logger
+	srcFunnelTracker *packet.FunnelTracker
+	echoIDTracker    *echoIDTracker
+	conn             *icmp.PacketConn
+	// Response is handled in one-by-one, so encoder can be shared between funnels
+	encoder     *packet.Encoder
+	logger      *zerolog.Logger
+	idleTimeout time.Duration
 }
 
 // echoIDTracker tracks which ID has been assigned. It first loops through assignment from lastAssignment to then end,
@@ -92,8 +97,8 @@ func (eit *echoIDTracker) release(srcIP netip.Addr, id uint16) bool {
 	eit.lock.Lock()
 	defer eit.lock.Unlock()
 
-	currentID, ok := eit.srcIPMapping[srcIP]
-	if ok && id == currentID {
+	currentID, exists := eit.srcIPMapping[srcIP]
+	if exists && id == currentID {
 		delete(eit.srcIPMapping, srcIP)
 		eit.assignment[id] = false
 		return true
@@ -101,39 +106,68 @@ func (eit *echoIDTracker) release(srcIP netip.Addr, id uint16) bool {
 	return false
 }
 
-type echoFlowID uint16
+type echoFunnelID uint16
 
-func (snf echoFlowID) Type() string {
+func (snf echoFunnelID) Type() string {
 	return "echoID"
 }
 
-func (snf echoFlowID) String() string {
+func (snf echoFunnelID) String() string {
 	return strconv.FormatUint(uint64(snf), 10)
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
 	conn, err := newICMPConn(listenIP)
 	if err != nil {
 		return nil, err
 	}
 	return &icmpProxy{
-		srcFlowTracker: packet.NewFlowTracker(),
-		echoIDTracker:  newEchoIDTracker(),
-		conn:           conn,
-		logger:         logger,
+		srcFunnelTracker: packet.NewFunnelTracker(),
+		echoIDTracker:    newEchoIDTracker(),
+		encoder:          packet.NewEncoder(),
+		conn:             conn,
+		logger:           logger,
+		idleTimeout:      idleTimeout,
 	}, nil
 }
 
-func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FlowResponder) error {
+func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
 	if pk == nil {
 		return errPacketNil
 	}
-	switch body := pk.Message.Body.(type) {
-	case *icmp.Echo:
-		return ip.sendICMPEchoRequest(pk, body, responder)
-	default:
-		return fmt.Errorf("sending ICMP %s is not implemented", pk.Type)
+	// TODO: TUN-6744 assign unique flow per (src, echo ID)
+	echoID, exists := ip.echoIDTracker.get(pk.Src)
+	if !exists {
+		originalEcho, err := getICMPEcho(pk.Message)
+		if err != nil {
+			return err
+		}
+		echoID, exists = ip.echoIDTracker.assign(pk.Src)
+		if !exists {
+			return fmt.Errorf("failed to assign unique echo ID")
+		}
+		funnelID := echoFunnelID(echoID)
+		originSender := originSender{
+			conn:          ip.conn,
+			echoIDTracker: ip.echoIDTracker,
+			srcIP:         pk.Src,
+			echoID:        echoID,
+		}
+		icmpFlow := newICMPEchoFlow(pk.Src, &originSender, responder, int(echoID), originalEcho.ID, ip.encoder)
+		if replaced := ip.srcFunnelTracker.Register(funnelID, icmpFlow); replaced {
+			ip.logger.Info().Str("src", pk.Src.String()).Msg("Replaced funnel")
+		}
+		return icmpFlow.sendToDst(pk.Dst, pk.Message)
 	}
+	funnel, exists := ip.srcFunnelTracker.Get(echoFunnelID(echoID))
+	if !exists {
+		return packet.ErrFunnelNotFound
+	}
+	icmpFlow, err := toICMPEchoFlow(funnel)
+	if err != nil {
+		return err
+	}
+	return icmpFlow.sendToDst(pk.Dst, pk.Message)
 }
 
 // Serve listens for responses to the requests until context is done
@@ -142,88 +176,54 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 		<-ctx.Done()
 		ip.conn.Close()
 	}()
+	go func() {
+		ip.srcFunnelTracker.ScheduleCleanup(ctx, ip.idleTimeout)
+	}()
 	buf := make([]byte, mtu)
-	encoder := packet.NewEncoder()
 	for {
 		n, src, err := ip.conn.ReadFrom(buf)
 		if err != nil {
 			return err
 		}
-		// TODO: TUN-6654 Check for IPv6
-		msg, err := icmp.ParseMessage(int(layers.IPProtocolICMPv4), buf[:n])
-		if err != nil {
-			ip.logger.Error().Err(err).Str("src", src.String()).Msg("Failed to parse ICMP message")
-			continue
-		}
-		switch body := msg.Body.(type) {
-		case *icmp.Echo:
-			if err := ip.handleEchoResponse(encoder, msg, body); err != nil {
-				ip.logger.Error().Err(err).
-					Str("src", src.String()).
-					Str("flowID", echoFlowID(body.ID).String()).
-					Msg("Failed to handle ICMP response")
-				continue
-			}
-		default:
-			ip.logger.Warn().
-				Str("icmpType", fmt.Sprintf("%s", msg.Type)).
-				Msgf("Responding to this type of ICMP is not implemented")
+		if err := ip.handleResponse(src, buf[:n]); err != nil {
+			ip.logger.Err(err).Str("src", src.String()).Msg("Failed to handle ICMP response")
 			continue
 		}
 	}
 }
 
-func (ip *icmpProxy) sendICMPEchoRequest(pk *packet.ICMP, echo *icmp.Echo, responder packet.FlowResponder) error {
-	echoID, ok := ip.echoIDTracker.get(pk.Src)
-	if !ok {
-		echoID, ok = ip.echoIDTracker.assign(pk.Src)
-		if !ok {
-			return fmt.Errorf("failed to assign unique echo ID")
-		}
-		flowID := echoFlowID(echoID)
-		flow := packet.Flow{
-			Src:       pk.Src,
-			Dst:       pk.Dst,
-			Responder: responder,
-		}
-		if replaced := ip.srcFlowTracker.Register(flowID, &flow, true); replaced {
-			ip.logger.Info().Str("src", flow.Src.String()).Str("dst", flow.Dst.String()).Msg("Replaced flow")
-		}
-	}
-
-	echo.ID = int(echoID)
-	var pseudoHeader []byte = nil
-	serializedMsg, err := pk.Marshal(pseudoHeader)
+func (ip *icmpProxy) handleResponse(from net.Addr, rawMsg []byte) error {
+	reply, err := parseReply(from, rawMsg)
 	if err != nil {
-		return errors.Wrap(err, "Failed to encode ICMP message")
+		return err
 	}
-	// The address needs to be of type UDPAddr when conn is created without priviledge
-	_, err = ip.conn.WriteTo(serializedMsg, &net.UDPAddr{
-		IP: pk.Dst.AsSlice(),
+	funnel, exists := ip.srcFunnelTracker.Get(echoFunnelID(reply.echo.ID))
+	if !exists {
+		return packet.ErrFunnelNotFound
+	}
+	icmpFlow, err := toICMPEchoFlow(funnel)
+	if err != nil {
+		return err
+	}
+	return icmpFlow.returnToSrc(reply)
+}
+
+// originSender wraps icmp.PacketConn to implement packet.FunnelUniPipe interface
+type originSender struct {
+	conn          *icmp.PacketConn
+	echoIDTracker *echoIDTracker
+	srcIP         netip.Addr
+	echoID        uint16
+}
+
+func (os *originSender) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
+	_, err := os.conn.WriteTo(pk.Data, &net.UDPAddr{
+		IP: dst.AsSlice(),
 	})
 	return err
 }
 
-func (ip *icmpProxy) handleEchoResponse(encoder *packet.Encoder, msg *icmp.Message, echo *icmp.Echo) error {
-	flowID := echoFlowID(echo.ID)
-	flow, ok := ip.srcFlowTracker.Get(flowID)
-	if !ok {
-		return fmt.Errorf("flow not found")
-	}
-	icmpPacket := packet.ICMP{
-		IP: &packet.IP{
-			Src:      flow.Dst,
-			Dst:      flow.Src,
-			Protocol: layers.IPProtocol(msg.Type.Protocol()),
-		},
-		Message: msg,
-	}
-	serializedPacket, err := encoder.Encode(&icmpPacket)
-	if err != nil {
-		return errors.Wrap(err, "Failed to encode ICMP message")
-	}
-	if err := flow.Responder.SendPacket(serializedPacket); err != nil {
-		return errors.Wrap(err, "Failed to send packet to the edge")
-	}
+func (os *originSender) Close() error {
+	os.echoIDTracker.release(os.srcIP, os.echoID)
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/netip"
 	"testing"
+	"time"
 	"unsafe"
 
 	"golang.org/x/net/icmp"
@@ -72,7 +73,7 @@ func TestParseEchoReply(t *testing.T) {
 
 //  TestSendEchoErrors makes sure icmpSendEcho handles error cases
 func TestSendEchoErrors(t *testing.T) {
-	proxy, err := newICMPProxy(localhostIP, &noopLogger)
+	proxy, err := newICMPProxy(localhostIP, &noopLogger, time.Second)
 	require.NoError(t, err)
 	winProxy := proxy.(*icmpProxy)
 

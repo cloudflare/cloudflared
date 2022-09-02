@@ -13,14 +13,15 @@ import (
 )
 
 const (
-	defaultCloseAfterIdle = time.Second * 15
-	mtu                   = 1500
-	icmpTimeoutMs         = 1000
+	// funnelIdleTimeout controls how long to wait to close a funnel without send/return
+	funnelIdleTimeout = time.Second * 10
+	mtu               = 1500
+	// icmpRequestTimeoutMs controls how long to wait for a reply
+	icmpRequestTimeoutMs = 1000
 )
 
 var (
-	errFlowInactive = fmt.Errorf("flow is inactive")
-	errPacketNil    = fmt.Errorf("packet is nil")
+	errPacketNil = fmt.Errorf("packet is nil")
 )
 
 // ICMPProxy sends ICMP messages and listens for their responses
@@ -28,26 +29,17 @@ type ICMPProxy interface {
 	// Serve starts listening for responses to the requests until context is done
 	Serve(ctx context.Context) error
 	// Request sends an ICMP message
-	Request(pk *packet.ICMP, responder packet.FlowResponder) error
+	Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error
 }
 
 func NewICMPProxy(listenIP netip.Addr, logger *zerolog.Logger) (ICMPProxy, error) {
-	return newICMPProxy(listenIP, logger)
+	return newICMPProxy(listenIP, logger, funnelIdleTimeout)
 }
 
-// Opens a non-privileged ICMP socket on Linux and Darwin
-func newICMPConn(listenIP netip.Addr) (*icmp.PacketConn, error) {
-	network := "udp6"
-	if listenIP.Is4() {
-		network = "udp4"
-	}
-	return icmp.ListenPacket(network, listenIP.String())
-}
-
-func getICMPEcho(pk *packet.ICMP) (*icmp.Echo, error) {
-	echo, ok := pk.Message.Body.(*icmp.Echo)
+func getICMPEcho(msg *icmp.Message) (*icmp.Echo, error) {
+	echo, ok := msg.Body.(*icmp.Echo)
 	if !ok {
-		return nil, fmt.Errorf("expect ICMP echo, got %s", pk.Type)
+		return nil, fmt.Errorf("expect ICMP echo, got %s", msg.Type)
 	}
 	return echo, nil
 }
