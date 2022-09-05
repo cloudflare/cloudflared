@@ -14,9 +14,12 @@ import (
 type datagramV2Type byte
 
 const (
-	typeIDLen                = 1
-	udp       datagramV2Type = iota
+	udp datagramV2Type = iota
 	ip
+)
+
+const (
+	typeIDLen = 1
 	// Same as sessionDemuxChan capacity
 	packetChanCapacity = 16
 )
