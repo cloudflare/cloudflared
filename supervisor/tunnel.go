@@ -317,16 +317,11 @@ func selectNextProtocol(
 	selector connection.ProtocolSelector,
 	cause error,
 ) bool {
-	var idleTimeoutError *quic.IdleTimeoutError
-	isNetworkActivityTimeout := errors.As(cause, &idleTimeoutError)
-	edgeQuicDialError, ok := cause.(*connection.EdgeQuicDialError)
-	if !isNetworkActivityTimeout && ok {
-		isNetworkActivityTimeout = errors.As(edgeQuicDialError.Cause, &idleTimeoutError)
-	}
+	isQuicBroken := isQuicBroken(cause)
 	_, hasFallback := selector.Fallback()
 
-	if protocolBackoff.ReachedMaxRetries() || (hasFallback && isNetworkActivityTimeout) {
-		if isNetworkActivityTimeout {
+	if protocolBackoff.ReachedMaxRetries() || (hasFallback && isQuicBroken) {
+		if isQuicBroken {
 			connLog.Warn().Msg("If this log occurs persistently, and cloudflared is unable to connect to " +
 				"Cloudflare Network with `quic` protocol, then most likely your machine/network is getting its egress " +
 				"UDP to port 7844 (or others) blocked or dropped. Make sure to allow egress connectivity as per " +
@@ -353,6 +348,20 @@ func selectNextProtocol(
 		}
 	}
 	return true
+}
+
+func isQuicBroken(cause error) bool {
+	var idleTimeoutError *quic.IdleTimeoutError
+	if errors.As(cause, &idleTimeoutError) {
+		return true
+	}
+
+	var transportError *quic.TransportError
+	if errors.As(cause, &transportError) && strings.Contains(cause.Error(), "operation not permitted") {
+		return true
+	}
+
+	return false
 }
 
 // ServeTunnel runs a single tunnel connection, returns nil on graceful shutdown,

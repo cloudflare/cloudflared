@@ -23,6 +23,10 @@ var (
 
 // TestICMPProxyEcho makes sure we can send ICMP echo via the Request method and receives response via the
 // ListenResponse method
+//
+// Note: if this test fails on your device under Linux, then most likely you need to make sure that your user
+// is allowed in ping_group_range. See the following gist for how to do that:
+// https://github.com/ValentinBELYN/icmplib/blob/main/docs/6-use-icmplib-without-privileges.md
 func TestICMPProxyEcho(t *testing.T) {
 	onlyDarwinOrLinux(t)
 	const (
