@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/netip"
 	"strings"
 	"time"
 
@@ -117,12 +116,8 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		connAwareLogger:   log,
 	}
 	if useDatagramV2(config) {
-		// TODO: TUN-6654 listen for IPv6 and decide if it should listen on specific IP
-		listenIP, err := netip.ParseAddr("0.0.0.0")
-		if err != nil {
-			return nil, err
-		}
-		icmpProxy, err := ingress.NewICMPProxy(listenIP, config.Log)
+		// TODO: TUN-6701: Decouple upgrade of datagram v2 and using icmp proxy
+		icmpProxy, err := ingress.NewICMPProxy(config.Log)
 		if err != nil {
 			log.Logger().Warn().Err(err).Msg("Failed to create icmp proxy, will continue to use datagram v1")
 		} else {

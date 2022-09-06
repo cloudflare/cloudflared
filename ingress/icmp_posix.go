@@ -113,18 +113,21 @@ type echoReply struct {
 }
 
 func parseReply(from net.Addr, rawMsg []byte) (*echoReply, error) {
-	// TODO: TUN-6654 Check for IPv6
-	msg, err := icmp.ParseMessage(int(layers.IPProtocolICMPv4), rawMsg)
+	fromAddr, ok := netipAddr(from)
+	if !ok {
+		return nil, fmt.Errorf("cannot convert %s to netip.Addr", from)
+	}
+	proto := layers.IPProtocolICMPv4
+	if fromAddr.Is6() {
+		proto = layers.IPProtocolICMPv6
+	}
+	msg, err := icmp.ParseMessage(int(proto), rawMsg)
 	if err != nil {
 		return nil, err
 	}
 	echo, err := getICMPEcho(msg)
 	if err != nil {
 		return nil, err
-	}
-	fromAddr, ok := netipAddr(from)
-	if !ok {
-		return nil, fmt.Errorf("cannot convert %s to netip.Addr", from)
 	}
 	return &echoReply{
 		from: fromAddr,

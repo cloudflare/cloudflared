@@ -145,6 +145,9 @@ type icmpProxy struct {
 }
 
 func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
+	if listenIP.Is6() {
+		return nil, fmt.Errorf("ICMPv6 not implemented for Windows")
+	}
 	handle, _, err := IcmpCreateFile_proc.Call()
 	// Windows procedure calls always return non-nil error constructed from the result of GetLastError.
 	// Caller need to inspect the primary returned value

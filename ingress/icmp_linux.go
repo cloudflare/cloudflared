@@ -110,24 +110,24 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 func (ip *icmpProxy) listenResponse(flow *icmpEchoFlow, conn *icmp.PacketConn) error {
 	buf := make([]byte, mtu)
 	for {
-		n, src, err := conn.ReadFrom(buf)
+		n, from, err := conn.ReadFrom(buf)
 		if err != nil {
 			return err
 		}
-
-		if err := ip.handleResponse(flow, src, buf[:n]); err != nil {
-			ip.logger.Err(err).Str("dst", src.String()).Msg("Failed to handle ICMP response")
+		reply, err := parseReply(from, buf[:n])
+		if err != nil {
+			ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply")
+			continue
+		}
+		if !isEchoReply(reply.msg) {
+			ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
+			continue
+		}
+		if err := flow.returnToSrc(reply); err != nil {
+			ip.logger.Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 			continue
 		}
 	}
-}
-
-func (ip *icmpProxy) handleResponse(flow *icmpEchoFlow, from net.Addr, rawMsg []byte) error {
-	reply, err := parseReply(from, rawMsg)
-	if err != nil {
-		return err
-	}
-	return flow.returnToSrc(reply)
 }
 
 // originSender wraps icmp.PacketConn to implement packet.FunnelUniPipe interface

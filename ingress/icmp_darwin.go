@@ -23,7 +23,6 @@ import (
 	"github.com/cloudflare/cloudflared/packet"
 )
 
-// TODO: TUN-6654 Extend support to IPv6
 type icmpProxy struct {
 	srcFunnelTracker *packet.FunnelTracker
 	echoIDTracker    *echoIDTracker
@@ -180,25 +179,56 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 		ip.srcFunnelTracker.ScheduleCleanup(ctx, ip.idleTimeout)
 	}()
 	buf := make([]byte, mtu)
+	icmpDecoder := packet.NewICMPDecoder()
 	for {
-		n, src, err := ip.conn.ReadFrom(buf)
+		n, from, err := ip.conn.ReadFrom(buf)
 		if err != nil {
 			return err
 		}
-		if err := ip.handleResponse(src, buf[:n]); err != nil {
-			ip.logger.Err(err).Str("src", src.String()).Msg("Failed to handle ICMP response")
+		reply, err := parseReply(from, buf[:n])
+		if err != nil {
+			ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply, continue to parse as full packet")
+			// In unit test, we found out when the listener listens on 0.0.0.0, the socket reads the full packet after
+			// the second reply
+			if err := ip.handleFullPacket(icmpDecoder, buf[:n]); err != nil {
+				ip.logger.Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply as full packet")
+			}
+			continue
+		}
+		if !isEchoReply(reply.msg) {
+			ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
+			continue
+		}
+		if ip.sendReply(reply); err != nil {
+			ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 			continue
 		}
 	}
 }
 
-func (ip *icmpProxy) handleResponse(from net.Addr, rawMsg []byte) error {
-	reply, err := parseReply(from, rawMsg)
+func (ip *icmpProxy) handleFullPacket(decoder *packet.ICMPDecoder, rawPacket []byte) error {
+	icmpPacket, err := decoder.Decode(packet.RawPacket{Data: rawPacket})
 	if err != nil {
 		return err
 	}
-	funnel, exists := ip.srcFunnelTracker.Get(echoFunnelID(reply.echo.ID))
-	if !exists {
+	echo, err := getICMPEcho(icmpPacket.Message)
+	if err != nil {
+		return err
+	}
+	reply := echoReply{
+		from: icmpPacket.Src,
+		msg:  icmpPacket.Message,
+		echo: echo,
+	}
+	if ip.sendReply(&reply); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (ip *icmpProxy) sendReply(reply *echoReply) error {
+	funnel, ok := ip.srcFunnelTracker.Get(echoFunnelID(reply.echo.ID))
+	if !ok {
 		return packet.ErrFunnelNotFound
 	}
 	icmpFlow, err := toICMPEchoFlow(funnel)
