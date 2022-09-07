@@ -291,7 +291,7 @@ github-mac-upload:
 .PHONY: tunnelrpc-deps
 tunnelrpc-deps:
 	which capnp  # https://capnproto.org/install.html
-	which capnpc-go  # go get zombiezen.com/go/capnproto2/capnpc-go
+	which capnpc-go  # go install zombiezen.com/go/capnproto2/capnpc-go@latest
 	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
 
 .PHONY: quic-deps

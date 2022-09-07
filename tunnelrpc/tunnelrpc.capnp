@@ -148,12 +148,13 @@ interface TunnelServer extends (RegistrationServer) {
 
 struct RegisterUdpSessionResponse {
     err @0 :Text;
+    spans @1 :Data;
 }
 
 interface SessionManager {
     # Let the edge decide closeAfterIdle to make sure cloudflared doesn't close session before the edge closes its side
-    registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16, closeAfterIdleHint: Int64) -> (result :RegisterUdpSessionResponse);
-    unregisterUdpSession @1 (sessionId :Data, message: Text) -> ();
+    registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort :UInt16, closeAfterIdleHint :Int64, traceContext :Text = "") -> (result :RegisterUdpSessionResponse);
+    unregisterUdpSession @1 (sessionId :Data, message :Text) -> ();
 }
 
 struct UpdateConfigurationResponse {

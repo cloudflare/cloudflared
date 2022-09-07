@@ -258,7 +258,7 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
-func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) error {
+func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) error {
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
 	originProxy, err := ingress.DialUDP(dstIP, dstPort)

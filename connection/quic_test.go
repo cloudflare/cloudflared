@@ -652,7 +652,7 @@ type mockSessionRPCServer struct {
 	calledUnregisterChan chan struct{}
 }
 
-func (s mockSessionRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration) error {
+func (s mockSessionRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) error {
 	return fmt.Errorf("mockSessionRPCServer doesn't implement RegisterUdpSession")
 }
 
