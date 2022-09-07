@@ -1,3 +1,11 @@
+2022.9.0
+- 2022-09-05 TUN-6737: Fix datagramV2Type should be declared in its own block so it starts at 0
+- 2022-09-01 TUN-6725: Fix testProxySSEAllData
+- 2022-09-01 TUN-6726: Fix maxDatagramPayloadSize for Windows QUIC datagrams
+- 2022-09-01 TUN-6729: Fix flaky TestClosePreviousProxies
+- 2022-09-01 TUN-6728: Verify http status code ingress rule
+- 2022-08-25 TUN-6695: Implement ICMP proxy for linux
+
 2022.8.4
 - 2022-08-31 TUN-6717: Update Github action to run with Go 1.19
 - 2022-08-31 TUN-6720: Remove forcibly closing connection during reconnect signal
