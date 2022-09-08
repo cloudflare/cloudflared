@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -33,9 +32,6 @@ var (
 // https://github.com/ValentinBELYN/icmplib/blob/main/docs/6-use-icmplib-without-privileges.md
 func TestICMPProxyEcho(t *testing.T) {
 	testICMPProxyEcho(t, true)
-	if runtime.GOOS == "windows" {
-		t.Skip("TODO: TUN-6743: test ICMPv6 on Windows")
-	}
 	testICMPProxyEcho(t, false)
 }
 

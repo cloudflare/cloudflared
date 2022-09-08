@@ -71,9 +71,68 @@ func TestParseEchoReply(t *testing.T) {
 	}
 }
 
+// TestParseEchoV6Reply tests parsing raw bytes from icmp6SendEcho into echoV6Resp
+func TestParseEchoV6Reply(t *testing.T) {
+	dst := netip.MustParseAddr("2606:3600:4500::3333").As16()
+	var addr [8]uint16
+	for i := 0; i < 8; i++ {
+		addr[i] = binary.BigEndian.Uint16(dst[i*2 : i*2+2])
+	}
+
+	validReplyData := []byte(t.Name())
+	validReply := echoV6Reply{
+		Address: ipv6AddrEx{
+			addr: addr,
+		},
+		Status:        success,
+		RoundTripTime: 25,
+	}
+
+	destHostUnreachableReply := validReply
+	destHostUnreachableReply.Status = ipv6DestUnreachable
+
+	tests := []struct {
+		testCase      string
+		replyBuf      []byte
+		expectedReply *echoV6Reply
+		expectedData  []byte
+	}{
+		{
+			testCase: "empty buffer",
+		},
+		{
+			testCase: "status not success",
+			replyBuf: destHostUnreachableReply.marshal(t, []byte{}),
+		},
+		{
+			testCase:      "valid reply",
+			replyBuf:      validReply.marshal(t, validReplyData),
+			expectedReply: &validReply,
+			expectedData:  validReplyData,
+		},
+	}
+
+	for _, test := range tests {
+		resp, err := newEchoV6Resp(test.replyBuf, len(test.expectedData))
+		if test.expectedReply == nil {
+			require.Error(t, err)
+			require.Nil(t, resp)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, resp.reply, test.expectedReply)
+			require.True(t, bytes.Equal(resp.data, test.expectedData))
+		}
+	}
+}
+
 //  TestSendEchoErrors makes sure icmpSendEcho handles error cases
 func TestSendEchoErrors(t *testing.T) {
-	proxy, err := newICMPProxy(localhostIP, &noopLogger, time.Second)
+	testSendEchoErrors(t, netip.IPv4Unspecified())
+	testSendEchoErrors(t, netip.IPv6Unspecified())
+}
+
+func testSendEchoErrors(t *testing.T, listenIP netip.Addr) {
+	proxy, err := newICMPProxy(listenIP, &noopLogger, time.Second)
 	require.NoError(t, err)
 	winProxy := proxy.(*icmpProxy)
 
@@ -83,7 +142,10 @@ func TestSendEchoErrors(t *testing.T) {
 		Data: []byte(t.Name()),
 	}
 	documentIP := netip.MustParseAddr("192.0.2.200")
-	resp, err := winProxy.icmpSendEcho(documentIP, &echo)
+	if listenIP.Is6() {
+		documentIP = netip.MustParseAddr("2001:db8::1")
+	}
+	resp, err := winProxy.icmpEchoRoundtrip(documentIP, &echo)
 	require.Error(t, err)
 	require.Nil(t, resp)
 }
@@ -137,4 +199,37 @@ func marshalPointer(buf io.Writer, ptr uintptr) error {
 	default:
 		return fmt.Errorf("unexpected pointer size %d", size)
 	}
+}
+
+func (er *echoV6Reply) marshal(t *testing.T, data []byte) []byte {
+	buf := new(bytes.Buffer)
+
+	for _, field := range []any{
+		er.Address.port,
+		er.Address.flowInfoUpper,
+		er.Address.flowInfoLower,
+		er.Address.addr,
+		er.Address.scopeID,
+	} {
+		require.NoError(t, binary.Write(buf, endian, field))
+	}
+
+	padSize := buf.Len() % int(unsafe.Alignof(er))
+	padding := make([]byte, padSize)
+	n, err := buf.Write(padding)
+	require.NoError(t, err)
+	require.Equal(t, padSize, n)
+
+	for _, field := range []any{
+		er.Status,
+		er.RoundTripTime,
+	} {
+		require.NoError(t, binary.Write(buf, endian, field))
+	}
+
+	n, err = buf.Write(data)
+	require.NoError(t, err)
+	require.Equal(t, len(data), n)
+
+	return buf.Bytes()
 }

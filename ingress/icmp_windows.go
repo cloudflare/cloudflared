@@ -29,15 +29,23 @@ import (
 )
 
 const (
+	// Value defined in https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw
+	AF_INET6          = 23
 	icmpEchoReplyCode = 0
+	nullParameter     = uintptr(0)
 )
 
 var (
-	Iphlpapi            = syscall.NewLazyDLL("Iphlpapi.dll")
-	IcmpCreateFile_proc = Iphlpapi.NewProc("IcmpCreateFile")
-	IcmpSendEcho_proc   = Iphlpapi.NewProc("IcmpSendEcho")
-	echoReplySize       = unsafe.Sizeof(echoReply{})
-	endian              = binary.LittleEndian
+	Iphlpapi             = syscall.NewLazyDLL("Iphlpapi.dll")
+	IcmpCreateFile_proc  = Iphlpapi.NewProc("IcmpCreateFile")
+	Icmp6CreateFile_proc = Iphlpapi.NewProc("Icmp6CreateFile")
+	IcmpSendEcho_proc    = Iphlpapi.NewProc("IcmpSendEcho")
+	Icmp6SendEcho_proc   = Iphlpapi.NewProc("Icmp6SendEcho2")
+	echoReplySize        = unsafe.Sizeof(echoReply{})
+	echoV6ReplySize      = unsafe.Sizeof(echoV6Reply{})
+	icmpv6ErrMessageSize = 8
+	ioStatusBlockSize    = unsafe.Sizeof(ioStatusBlock{})
+	endian               = binary.LittleEndian
 )
 
 // IP_STATUS code, see https://docs.microsoft.com/en-us/windows/win32/api/ipexport/ns-ipexport-icmp_echo_reply32#members
@@ -66,6 +74,16 @@ const (
 	badDestination
 	// Can be returned for malformed ICMP packets
 	generalFailure = 11050
+)
+
+// Additional IP_STATUS codes for ICMPv6  https://docs.microsoft.com/en-us/windows/win32/api/ipexport/ns-ipexport-icmpv6_echo_reply_lh#members
+const (
+	ipv6DestUnreachable ipStatus = iota + 11040
+	ipv6TimeExceeded
+	ipv6BadHeader
+	ipv6UnrecognizedNextHeader
+	ipv6ICMPError
+	ipv6DestScopeMismatch
 )
 
 func (is ipStatus) String() string {
@@ -108,6 +126,18 @@ func (is ipStatus) String() string {
 		return "The IP option was too big"
 	case badDestination:
 		return "Bad destination"
+	case ipv6DestUnreachable:
+		return "IPv6 destination unreachable"
+	case ipv6TimeExceeded:
+		return "IPv6 time exceeded"
+	case ipv6BadHeader:
+		return "IPv6 bad IP header"
+	case ipv6UnrecognizedNextHeader:
+		return "IPv6 unrecognized next header"
+	case ipv6ICMPError:
+		return "IPv6 ICMP error"
+	case ipv6DestScopeMismatch:
+		return "IPv6 destination scope ID mismatch"
 	case generalFailure:
 		return "The ICMP packet might be malformed"
 	default:
@@ -136,27 +166,88 @@ type echoReply struct {
 	Options     ipOption
 }
 
+type echoV6Reply struct {
+	Address       ipv6AddrEx
+	Status        ipStatus
+	RoundTripTime uint32
+}
+
+// https://docs.microsoft.com/en-us/windows/win32/api/ipexport/ns-ipexport-ipv6_address_ex
+// All the fields are in network byte order. The memory alignment is 4 bytes
+type ipv6AddrEx struct {
+	port uint16
+	// flowInfo is uint32. Because of field alignment, when we cast reply buffer to ipv6AddrEx, it starts at the 5th byte
+	// But looking at the raw bytes, flowInfo starts at the 3rd byte. We device flowInfo into 2 uint16 so it's aligned
+	flowInfoUpper uint16
+	flowInfoLower uint16
+	addr          [8]uint16
+	scopeID       uint32
+}
+
+// https://docs.microsoft.com/en-us/windows/win32/winsock/sockaddr-2
+type sockAddrIn6 struct {
+	family int16
+	// Can't embed ipv6AddrEx, that changes the memory alignment
+	port     uint16
+	flowInfo uint32
+	addr     [16]byte
+	scopeID  uint32
+}
+
+func newSockAddrIn6(addr netip.Addr) (*sockAddrIn6, error) {
+	if !addr.Is6() {
+		return nil, fmt.Errorf("%s is not IPv6", addr)
+	}
+	return &sockAddrIn6{
+		family: AF_INET6,
+		port:   10,
+		addr:   addr.As16(),
+	}, nil
+}
+
+// https://docs.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/ns-wdm-_io_status_block#syntax
+type ioStatusBlock struct {
+	// The first field is an union of NTSTATUS and PVOID. NTSTATUS is int32 while PVOID depends on the platform.
+	// We model it as uintptr whose size depends on if the platform is 32-bit or 64-bit
+	// https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-erref/596a1078-e883-4972-9bbc-49e60bebca55
+	statusOrPointer uintptr
+	information     uintptr
+}
+
 type icmpProxy struct {
 	// An open handle that can send ICMP requests https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpcreatefile
 	handle uintptr
-	logger *zerolog.Logger
+	// This is a ICMPv6 if srcSocketAddr is not nil
+	srcSocketAddr *sockAddrIn6
+	logger        *zerolog.Logger
 	// A pool of reusable *packet.Encoder
 	encoderPool sync.Pool
 }
 
 func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
-	if listenIP.Is6() {
-		return nil, fmt.Errorf("ICMPv6 not implemented for Windows")
+	var (
+		srcSocketAddr *sockAddrIn6
+		handle        uintptr
+		err           error
+	)
+	if listenIP.Is4() {
+		handle, _, err = IcmpCreateFile_proc.Call()
+	} else {
+		srcSocketAddr, err = newSockAddrIn6(listenIP)
+		if err != nil {
+			return nil, err
+		}
+		handle, _, err = Icmp6CreateFile_proc.Call()
 	}
-	handle, _, err := IcmpCreateFile_proc.Call()
 	// Windows procedure calls always return non-nil error constructed from the result of GetLastError.
 	// Caller need to inspect the primary returned value
 	if syscall.Handle(handle) == syscall.InvalidHandle {
 		return nil, errors.Wrap(err, "invalid ICMP handle")
 	}
 	return &icmpProxy{
-		handle: handle,
-		logger: logger,
+		handle:        handle,
+		srcSocketAddr: srcSocketAddr,
+		logger:        logger,
 		encoderPool: sync.Pool{
 			New: func() any {
 				return packet.NewEncoder()
@@ -180,24 +271,25 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 			ip.logger.Error().Interface("error", r).Msgf("Recover panic from sending icmp request/response, error %s", debug.Stack())
 		}
 	}()
+
 	echo, err := getICMPEcho(pk.Message)
 	if err != nil {
 		return err
 	}
-
-	resp, err := ip.icmpSendEcho(pk.Dst, echo)
+	respData, err := ip.icmpEchoRoundtrip(pk.Dst, echo)
 	if err != nil {
-		return errors.Wrap(err, "failed to send/receive ICMP echo")
+		ip.logger.Err(err).Msg("ICMP echo roundtrip failed")
+		return err
 	}
 
-	err = ip.handleEchoResponse(pk, echo, resp, responder)
+	err = ip.handleEchoReply(pk, echo, respData, responder)
 	if err != nil {
 		return errors.Wrap(err, "failed to handle ICMP echo reply")
 	}
 	return nil
 }
 
-func (ip *icmpProxy) handleEchoResponse(request *packet.ICMP, echoReq *icmp.Echo, resp *echoResp, responder packet.FunnelUniPipe) error {
+func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, data []byte, responder packet.FunnelUniPipe) error {
 	var replyType icmp.Type
 	if request.Dst.Is4() {
 		replyType = ipv4.ICMPTypeEchoReply
@@ -217,7 +309,7 @@ func (ip *icmpProxy) handleEchoResponse(request *packet.ICMP, echoReq *icmp.Echo
 			Body: &icmp.Echo{
 				ID:   echoReq.ID,
 				Seq:  echoReq.Seq,
-				Data: resp.data,
+				Data: data,
 			},
 		},
 	}
@@ -239,10 +331,31 @@ func (ip *icmpProxy) encodeICMPReply(pk *packet.ICMP) (packet.RawPacket, error) 
 	return encoder.Encode(pk)
 }
 
+func (ip *icmpProxy) icmpEchoRoundtrip(dst netip.Addr, echo *icmp.Echo) ([]byte, error) {
+	if dst.Is6() {
+		if ip.srcSocketAddr == nil {
+			return nil, fmt.Errorf("cannot send ICMPv6 using ICMPv4 proxy")
+		}
+		resp, err := ip.icmp6SendEcho(dst, echo)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to send/receive ICMPv6 echo")
+		}
+		return resp.data, nil
+	}
+	if ip.srcSocketAddr != nil {
+		return nil, fmt.Errorf("cannot send ICMPv4 using ICMPv6 proxy")
+	}
+	resp, err := ip.icmpSendEcho(dst, echo)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to send/receive ICMPv4 echo")
+	}
+	return resp.data, nil
+}
+
 /*
 	Wrapper to call https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpsendecho
 	Parameters:
-	- IcmpHandle:
+	- IcmpHandle: Handle created by IcmpCreateFile
 	- DestinationAddress: IPv4 in the form of https://docs.microsoft.com/en-us/windows/win32/api/inaddr/ns-inaddr-in_addr#syntax
 	- RequestData: A pointer to echo data
 	- RequestSize: Number of bytes in buffer pointed by echo data
@@ -259,24 +372,40 @@ func (ip *icmpProxy) icmpSendEcho(dst netip.Addr, echo *icmp.Echo) (*echoResp, e
 	dataSize := len(echo.Data)
 	replySize := echoReplySize + uintptr(dataSize)
 	replyBuf := make([]byte, replySize)
-	noIPHeaderOption := uintptr(0)
+	noIPHeaderOption := nullParameter
 	inAddr, err := inAddrV4(dst)
 	if err != nil {
 		return nil, err
 	}
-	replyCount, _, err := IcmpSendEcho_proc.Call(ip.handle, uintptr(inAddr), uintptr(unsafe.Pointer(&echo.Data[0])),
-		uintptr(dataSize), noIPHeaderOption, uintptr(unsafe.Pointer(&replyBuf[0])),
-		replySize, icmpRequestTimeoutMs)
+	replyCount, _, err := IcmpSendEcho_proc.Call(
+		ip.handle,
+		uintptr(inAddr),
+		uintptr(unsafe.Pointer(&echo.Data[0])),
+		uintptr(dataSize),
+		noIPHeaderOption,
+		uintptr(unsafe.Pointer(&replyBuf[0])),
+		replySize,
+		icmpRequestTimeoutMs,
+	)
 	if replyCount == 0 {
 		// status is returned in 5th to 8th byte of reply buffer
-		if status, err := unmarshalIPStatus(replyBuf[4:8]); err == nil {
-			return nil, fmt.Errorf("received ip status: %s", status)
+		if status, parseErr := unmarshalIPStatus(replyBuf[4:8]); parseErr == nil && status != success {
+			return nil, errors.Wrapf(err, "received ip status: %s", status)
 		}
 		return nil, errors.Wrap(err, "did not receive ICMP echo reply")
 	} else if replyCount > 1 {
 		ip.logger.Warn().Msgf("Received %d ICMP echo replies, only sending 1 back", replyCount)
 	}
 	return newEchoResp(replyBuf)
+}
+
+// Third definition of https://docs.microsoft.com/en-us/windows/win32/api/inaddr/ns-inaddr-in_addr#syntax is address in uint32
+func inAddrV4(ip netip.Addr) (uint32, error) {
+	if !ip.Is4() {
+		return 0, fmt.Errorf("%s is not IPv4", ip)
+	}
+	v4 := ip.As4()
+	return endian.Uint32(v4[:]), nil
 }
 
 type echoResp struct {
@@ -304,13 +433,87 @@ func newEchoResp(replyBuf []byte) (*echoResp, error) {
 	}, nil
 }
 
-// Third definition of https://docs.microsoft.com/en-us/windows/win32/api/inaddr/ns-inaddr-in_addr#syntax is address in uint32
-func inAddrV4(ip netip.Addr) (uint32, error) {
-	if !ip.Is4() {
-		return 0, fmt.Errorf("%s is not IPv4", ip)
+/*
+	Wrapper to call https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmp6sendecho2
+	Parameters:
+	- IcmpHandle: Handle created by Icmp6CreateFile
+	- Event (optional): Event object to be signaled when a reply arrives
+	- ApcRoutine (optional): Routine to call when the calling thread is in an alertable thread and a reply arrives
+	- ApcContext (optional): Optional parameter to ApcRoutine
+	- SourceAddress: Source address of the request
+	- DestinationAddress: Destination address of the request
+	- RequestData: A pointer to echo data
+	- RequestSize: Number of bytes in buffer pointed by echo data
+	- RequestOptions (optional): A pointer to the IPv6 header options
+	- ReplyBuffer: A pointer to the buffer for echoReply, options and data
+	- ReplySize: Number of bytes allocated for ReplyBuffer
+	- Timeout: Timeout in milliseconds to wait for a reply
+	Returns:
+	- the number of replies in uint32
+	To retain the reference allocated objects, conversion from pointer to uintptr must happen as arguments to the
+	syscall function
+*/
+
+func (ip *icmpProxy) icmp6SendEcho(dst netip.Addr, echo *icmp.Echo) (*echoV6Resp, error) {
+	dstAddr, err := newSockAddrIn6(dst)
+	if err != nil {
+		return nil, err
 	}
-	v4 := ip.As4()
-	return endian.Uint32(v4[:]), nil
+	dataSize := len(echo.Data)
+	// Reply buffer needs to be big enough to hold an echoV6Reply, echo data, 8 bytes for ICMP error message
+	// and ioStatusBlock
+	replySize := echoV6ReplySize + uintptr(dataSize) + uintptr(icmpv6ErrMessageSize) + ioStatusBlockSize
+	replyBuf := make([]byte, replySize)
+	noEvent := nullParameter
+	noApcRoutine := nullParameter
+	noAppCtx := nullParameter
+	noIPHeaderOption := nullParameter
+	replyCount, _, err := Icmp6SendEcho_proc.Call(
+		ip.handle,
+		noEvent,
+		noApcRoutine,
+		noAppCtx,
+		uintptr(unsafe.Pointer(ip.srcSocketAddr)),
+		uintptr(unsafe.Pointer(dstAddr)),
+		uintptr(unsafe.Pointer(&echo.Data[0])),
+		uintptr(dataSize),
+		noIPHeaderOption,
+		uintptr(unsafe.Pointer(&replyBuf[0])),
+		replySize,
+		icmpRequestTimeoutMs,
+	)
+	if replyCount == 0 {
+		// status is in the 4 bytes after ipv6AddrEx. The reply buffer size is at least size of ipv6AddrEx + 4
+		if status, parseErr := unmarshalIPStatus(replyBuf[unsafe.Sizeof(ipv6AddrEx{}) : unsafe.Sizeof(ipv6AddrEx{})+4]); parseErr == nil && status != success {
+			return nil, fmt.Errorf("received ip status: %s", status)
+		}
+		return nil, errors.Wrap(err, "did not receive ICMP echo reply")
+	} else if replyCount > 1 {
+		ip.logger.Warn().Msgf("Received %d ICMP echo replies, only sending 1 back", replyCount)
+	}
+	return newEchoV6Resp(replyBuf, dataSize)
+}
+
+type echoV6Resp struct {
+	reply *echoV6Reply
+	data  []byte
+}
+
+func newEchoV6Resp(replyBuf []byte, dataSize int) (*echoV6Resp, error) {
+	if len(replyBuf) == 0 {
+		return nil, fmt.Errorf("reply buffer is empty")
+	}
+	reply := *(*echoV6Reply)(unsafe.Pointer(&replyBuf[0]))
+	if reply.Status != success {
+		return nil, fmt.Errorf("status %d", reply.Status)
+	}
+	if uintptr(len(replyBuf)) < unsafe.Sizeof(reply)+uintptr(dataSize) {
+		return nil, fmt.Errorf("reply buffer size %d is too small to hold reply size %d + data size %d", len(replyBuf), echoV6ReplySize, dataSize)
+	}
+	return &echoV6Resp{
+		reply: &reply,
+		data:  replyBuf[echoV6ReplySize : echoV6ReplySize+uintptr(dataSize)],
+	}, nil
 }
 
 func unmarshalIPStatus(replyBuf []byte) (ipStatus, error) {
