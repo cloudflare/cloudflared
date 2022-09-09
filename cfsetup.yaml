@@ -221,13 +221,13 @@ stretch: &stretch
       - build-essential
       - python3
       - genisoimage
-      - jetez
     pre-cache:
       - ln -s /usr/bin/genisoimage /usr/bin/mkisofs
     post-cache:
+      - export CGO_ENABLED=0
       - export GOOS=freebsd
       - export GOARCH=amd64
-      - make cloudflared-junos
+      - make cloudflared
   publish-junos:
     build_dir: *build_dir
     builddeps:
