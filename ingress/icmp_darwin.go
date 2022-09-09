@@ -37,9 +37,9 @@ type icmpProxy struct {
 // then from the beginning to lastAssignment.
 // ICMP echo are short lived. By the time an ID is revisited, it should have been released.
 type echoIDTracker struct {
-	lock sync.RWMutex
-	// maps the source IP to an echo ID obtained from assignment
-	srcIPMapping map[netip.Addr]uint16
+	lock sync.Mutex
+	// maps the source IP, destination IP and original echo ID to a unique echo ID obtained from assignment
+	mapping map[flow3Tuple]uint16
 	// assignment tracks if an ID is assigned using index as the ID
 	// The size of the array is math.MaxUint16 because echo ID is 2 bytes
 	assignment [math.MaxUint16]bool
@@ -49,20 +49,18 @@ type echoIDTracker struct {
 
 func newEchoIDTracker() *echoIDTracker {
 	return &echoIDTracker{
-		srcIPMapping: make(map[netip.Addr]uint16),
+		mapping: make(map[flow3Tuple]uint16),
 	}
 }
 
-func (eit *echoIDTracker) get(srcIP netip.Addr) (uint16, bool) {
-	eit.lock.RLock()
-	defer eit.lock.RUnlock()
-	id, ok := eit.srcIPMapping[srcIP]
-	return id, ok
-}
-
-func (eit *echoIDTracker) assign(srcIP netip.Addr) (uint16, bool) {
+// Get assignment or assign a new ID.
+func (eit *echoIDTracker) getOrAssign(key flow3Tuple) (id uint16, success bool) {
 	eit.lock.Lock()
 	defer eit.lock.Unlock()
+	id, exists := eit.mapping[key]
+	if exists {
+		return id, true
+	}
 
 	if eit.nextAssignment == math.MaxUint16 {
 		eit.nextAssignment = 0
@@ -71,14 +69,14 @@ func (eit *echoIDTracker) assign(srcIP netip.Addr) (uint16, bool) {
 	for i, assigned := range eit.assignment[eit.nextAssignment:] {
 		if !assigned {
 			echoID := uint16(i) + eit.nextAssignment
-			eit.set(srcIP, echoID)
+			eit.set(key, echoID)
 			return echoID, true
 		}
 	}
 	for i, assigned := range eit.assignment[0:eit.nextAssignment] {
 		if !assigned {
 			echoID := uint16(i)
-			eit.set(srcIP, echoID)
+			eit.set(key, echoID)
 			return echoID, true
 		}
 	}
@@ -86,20 +84,20 @@ func (eit *echoIDTracker) assign(srcIP netip.Addr) (uint16, bool) {
 }
 
 // Caller should hold the lock
-func (eit *echoIDTracker) set(srcIP netip.Addr, echoID uint16) {
-	eit.assignment[echoID] = true
-	eit.srcIPMapping[srcIP] = echoID
-	eit.nextAssignment = echoID + 1
+func (eit *echoIDTracker) set(key flow3Tuple, assignedEchoID uint16) {
+	eit.assignment[assignedEchoID] = true
+	eit.mapping[key] = assignedEchoID
+	eit.nextAssignment = assignedEchoID + 1
 }
 
-func (eit *echoIDTracker) release(srcIP netip.Addr, id uint16) bool {
+func (eit *echoIDTracker) release(key flow3Tuple, assigned uint16) bool {
 	eit.lock.Lock()
 	defer eit.lock.Unlock()
 
-	currentID, exists := eit.srcIPMapping[srcIP]
-	if exists && id == currentID {
-		delete(eit.srcIPMapping, srcIP)
-		eit.assignment[id] = false
+	currentEchoID, exists := eit.mapping[key]
+	if exists && assigned == currentEchoID {
+		delete(eit.mapping, key)
+		eit.assignment[assigned] = false
 		return true
 	}
 	return false
@@ -134,33 +132,46 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 	if pk == nil {
 		return errPacketNil
 	}
+	originalEcho, err := getICMPEcho(pk.Message)
+	if err != nil {
+		return err
+	}
+	echoIDTrackerKey := flow3Tuple{
+		srcIP:          pk.Src,
+		dstIP:          pk.Dst,
+		originalEchoID: originalEcho.ID,
+	}
 	// TODO: TUN-6744 assign unique flow per (src, echo ID)
-	echoID, exists := ip.echoIDTracker.get(pk.Src)
-	if !exists {
+	assignedEchoID, success := ip.echoIDTracker.getOrAssign(echoIDTrackerKey)
+	if !success {
+		return fmt.Errorf("failed to assign unique echo ID")
+	}
+	newFunnelFunc := func() (packet.Funnel, error) {
 		originalEcho, err := getICMPEcho(pk.Message)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		echoID, exists = ip.echoIDTracker.assign(pk.Src)
-		if !exists {
-			return fmt.Errorf("failed to assign unique echo ID")
-		}
-		funnelID := echoFunnelID(echoID)
 		originSender := originSender{
-			conn:          ip.conn,
-			echoIDTracker: ip.echoIDTracker,
-			srcIP:         pk.Src,
-			echoID:        echoID,
+			conn:             ip.conn,
+			echoIDTracker:    ip.echoIDTracker,
+			echoIDTrackerKey: echoIDTrackerKey,
+			assignedEchoID:   assignedEchoID,
 		}
-		icmpFlow := newICMPEchoFlow(pk.Src, &originSender, responder, int(echoID), originalEcho.ID, ip.encoder)
-		if replaced := ip.srcFunnelTracker.Register(funnelID, icmpFlow); replaced {
-			ip.logger.Info().Str("src", pk.Src.String()).Msg("Replaced funnel")
-		}
-		return icmpFlow.sendToDst(pk.Dst, pk.Message)
+		icmpFlow := newICMPEchoFlow(pk.Src, &originSender, responder, int(assignedEchoID), originalEcho.ID, ip.encoder)
+		return icmpFlow, nil
 	}
-	funnel, exists := ip.srcFunnelTracker.Get(echoFunnelID(echoID))
-	if !exists {
-		return packet.ErrFunnelNotFound
+	funnelID := echoFunnelID(assignedEchoID)
+	funnel, isNew, err := ip.srcFunnelTracker.GetOrRegister(funnelID, newFunnelFunc)
+	if err != nil {
+		return err
+	}
+	if isNew {
+		ip.logger.Debug().
+			Str("src", pk.Src.String()).
+			Str("dst", pk.Dst.String()).
+			Int("originalEchoID", originalEcho.ID).
+			Int("assignedEchoID", int(assignedEchoID)).
+			Msg("New flow")
 	}
 	icmpFlow, err := toICMPEchoFlow(funnel)
 	if err != nil {
@@ -199,7 +210,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 			ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
 			continue
 		}
-		if ip.sendReply(reply); err != nil {
+		if err := ip.sendReply(reply); err != nil {
 			ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 			continue
 		}
@@ -227,7 +238,8 @@ func (ip *icmpProxy) handleFullPacket(decoder *packet.ICMPDecoder, rawPacket []b
 }
 
 func (ip *icmpProxy) sendReply(reply *echoReply) error {
-	funnel, ok := ip.srcFunnelTracker.Get(echoFunnelID(reply.echo.ID))
+	funnelID := echoFunnelID(reply.echo.ID)
+	funnel, ok := ip.srcFunnelTracker.Get(funnelID)
 	if !ok {
 		return packet.ErrFunnelNotFound
 	}
@@ -240,10 +252,10 @@ func (ip *icmpProxy) sendReply(reply *echoReply) error {
 
 // originSender wraps icmp.PacketConn to implement packet.FunnelUniPipe interface
 type originSender struct {
-	conn          *icmp.PacketConn
-	echoIDTracker *echoIDTracker
-	srcIP         netip.Addr
-	echoID        uint16
+	conn             *icmp.PacketConn
+	echoIDTracker    *echoIDTracker
+	echoIDTrackerKey flow3Tuple
+	assignedEchoID   uint16
 }
 
 func (os *originSender) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
@@ -254,6 +266,6 @@ func (os *originSender) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
 }
 
 func (os *originSender) Close() error {
-	os.echoIDTracker.release(os.srcIP, os.echoID)
+	os.echoIDTracker.release(os.echoIDTrackerKey, os.assignedEchoID)
 	return nil
 }

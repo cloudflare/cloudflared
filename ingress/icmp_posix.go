@@ -32,17 +32,10 @@ func netipAddr(addr net.Addr) (netip.Addr, bool) {
 	return netip.AddrFromSlice(udpAddr.IP)
 }
 
-type flowID struct {
-	srcIP  netip.Addr
-	echoID int
-}
-
-func (fi *flowID) Type() string {
-	return "srcIP_echoID"
-}
-
-func (fi *flowID) String() string {
-	return fmt.Sprintf("%s:%d", fi.srcIP, fi.echoID)
+type flow3Tuple struct {
+	srcIP          netip.Addr
+	dstIP          netip.Addr
+	originalEchoID int
 }
 
 // icmpEchoFlow implements the packet.Funnel interface.

@@ -57,44 +57,56 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 	if pk == nil {
 		return errPacketNil
 	}
-	funnelID := srcIPFunnelID(pk.Src)
-	funnel, exists := ip.srcFunnelTracker.Get(funnelID)
-	if !exists {
-		originalEcho, err := getICMPEcho(pk.Message)
-		if err != nil {
-			return err
-		}
+	originalEcho, err := getICMPEcho(pk.Message)
+	if err != nil {
+		return err
+	}
+	newConnChan := make(chan *icmp.PacketConn, 1)
+	newFunnelFunc := func() (packet.Funnel, error) {
 		conn, err := newICMPConn(ip.listenIP)
 		if err != nil {
-			return errors.Wrap(err, "failed to open ICMP socket")
+			return nil, errors.Wrap(err, "failed to open ICMP socket")
 		}
+		newConnChan <- conn
 		localUDPAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 		if !ok {
-			return fmt.Errorf("ICMP listener address %s is not net.UDPAddr", conn.LocalAddr())
+			return nil, fmt.Errorf("ICMP listener address %s is not net.UDPAddr", conn.LocalAddr())
 		}
 		originSender := originSender{conn: conn}
 		echoID := localUDPAddr.Port
 		icmpFlow := newICMPEchoFlow(pk.Src, &originSender, responder, echoID, originalEcho.ID, packet.NewEncoder())
-		if replaced := ip.srcFunnelTracker.Register(funnelID, icmpFlow); replaced {
-			ip.logger.Info().Str("src", pk.Src.String()).Msg("Replaced funnel")
-		}
-		if err := icmpFlow.sendToDst(pk.Dst, pk.Message); err != nil {
-			return errors.Wrap(err, "failed to send ICMP echo request")
-		}
-		go func() {
-			defer ip.srcFunnelTracker.Unregister(funnelID, icmpFlow)
-			if err := ip.listenResponse(icmpFlow, conn); err != nil {
-				ip.logger.Err(err).
-					Str("funnelID", funnelID.String()).
-					Int("echoID", echoID).
-					Msg("Failed to listen for ICMP echo response")
-			}
-		}()
-		return nil
+		return icmpFlow, nil
+	}
+	funnelID := flow3Tuple{
+		srcIP:          pk.Src,
+		dstIP:          pk.Dst,
+		originalEchoID: originalEcho.ID,
+	}
+	funnel, isNew, err := ip.srcFunnelTracker.GetOrRegister(funnelID, newFunnelFunc)
+	if err != nil {
+		return err
 	}
 	icmpFlow, err := toICMPEchoFlow(funnel)
 	if err != nil {
 		return err
+	}
+	if isNew {
+		ip.logger.Debug().
+			Str("src", pk.Src.String()).
+			Str("dst", pk.Dst.String()).
+			Int("originalEchoID", originalEcho.ID).
+			Msg("New flow")
+		conn := <-newConnChan
+		go func() {
+			defer ip.srcFunnelTracker.Unregister(funnelID, icmpFlow)
+			if err := ip.listenResponse(icmpFlow, conn); err != nil {
+				ip.logger.Debug().Err(err).
+					Str("src", pk.Src.String()).
+					Str("dst", pk.Dst.String()).
+					Int("originalEchoID", originalEcho.ID).
+					Msg("Failed to listen for ICMP echo response")
+			}
+		}()
 	}
 	if err := icmpFlow.sendToDst(pk.Dst, pk.Message); err != nil {
 		return errors.Wrap(err, "failed to send ICMP echo request")
@@ -146,12 +158,11 @@ func (os *originSender) Close() error {
 	return os.conn.Close()
 }
 
-type srcIPFunnelID netip.Addr
-
-func (sifd srcIPFunnelID) Type() string {
-	return "srcIP"
+// Only linux uses flow3Tuple as FunnelID
+func (ft flow3Tuple) Type() string {
+	return "srcIP_dstIP_echoID"
 }
 
-func (sifd srcIPFunnelID) String() string {
-	return netip.Addr(sifd).String()
+func (ft flow3Tuple) String() string {
+	return fmt.Sprintf("%s:%s:%d", ft.srcIP, ft.dstIP, ft.originalEchoID)
 }

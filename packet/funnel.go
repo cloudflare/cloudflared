@@ -158,20 +158,19 @@ func (ft *FunnelTracker) Get(id FunnelID) (Funnel, bool) {
 }
 
 // Registers a funnel. It replaces the current funnel.
-func (ft *FunnelTracker) Register(id FunnelID, funnel Funnel) (replaced bool) {
+func (ft *FunnelTracker) GetOrRegister(id FunnelID, newFunnelFunc func() (Funnel, error)) (funnel Funnel, new bool, err error) {
 	ft.lock.Lock()
 	defer ft.lock.Unlock()
 	currentFunnel, exists := ft.funnels[id]
-	if !exists {
-		ft.funnels[id] = funnel
-		return false
+	if exists {
+		return currentFunnel, false, nil
 	}
-	replaced = !currentFunnel.Equal(funnel)
-	if replaced {
-		currentFunnel.Close()
+	newFunnel, err := newFunnelFunc()
+	if err != nil {
+		return nil, false, err
 	}
-	ft.funnels[id] = funnel
-	return replaced
+	ft.funnels[id] = newFunnel
+	return newFunnel, true, nil
 }
 
 // Unregisters a funnel if the funnel equals to the current funnel

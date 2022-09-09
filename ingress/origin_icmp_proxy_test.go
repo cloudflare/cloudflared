@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/gopacket/layers"
@@ -93,6 +94,91 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 			responder.validate(t, &pk)
 		}
 	}
+	cancel()
+	<-proxyDone
+}
+
+// TestConcurrentRequests makes sure icmpRouter can send concurrent requests to the same destination with different
+// echo ID. This simulates concurrent ping to the same destination.
+func TestConcurrentRequestsToSameDst(t *testing.T) {
+	const (
+		concurrentPings = 5
+		endSeq          = 5
+	)
+
+	router, err := NewICMPRouter(&noopLogger)
+	require.NoError(t, err)
+
+	proxyDone := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		router.Serve(ctx)
+		close(proxyDone)
+	}()
+
+	var wg sync.WaitGroup
+	// icmpv4 and icmpv6 each has concurrentPings
+	wg.Add(concurrentPings * 2)
+	for i := 0; i < concurrentPings; i++ {
+		echoID := 38451 + i
+		go func() {
+			defer wg.Done()
+			responder := echoFlowResponder{
+				decoder:  packet.NewICMPDecoder(),
+				respChan: make(chan []byte, 1),
+			}
+			for seq := 0; seq < endSeq; seq++ {
+				pk := &packet.ICMP{
+					IP: &packet.IP{
+						Src:      localhostIP,
+						Dst:      localhostIP,
+						Protocol: layers.IPProtocolICMPv4,
+						TTL:      packet.DefaultTTL,
+					},
+					Message: &icmp.Message{
+						Type: ipv4.ICMPTypeEcho,
+						Code: 0,
+						Body: &icmp.Echo{
+							ID:   echoID,
+							Seq:  seq,
+							Data: []byte(fmt.Sprintf("icmpv4 echo id %d, seq %d", echoID, seq)),
+						},
+					},
+				}
+				require.NoError(t, router.Request(pk, &responder))
+				responder.validate(t, pk)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			responder := echoFlowResponder{
+				decoder:  packet.NewICMPDecoder(),
+				respChan: make(chan []byte, 1),
+			}
+			for seq := 0; seq < endSeq; seq++ {
+				pk := &packet.ICMP{
+					IP: &packet.IP{
+						Src:      localhostIPv6,
+						Dst:      localhostIPv6,
+						Protocol: layers.IPProtocolICMPv6,
+						TTL:      packet.DefaultTTL,
+					},
+					Message: &icmp.Message{
+						Type: ipv6.ICMPTypeEchoRequest,
+						Code: 0,
+						Body: &icmp.Echo{
+							ID:   echoID,
+							Seq:  seq,
+							Data: []byte(fmt.Sprintf("icmpv6 echo id %d, seq %d", echoID, seq)),
+						},
+					},
+				}
+				require.NoError(t, router.Request(pk, &responder))
+				responder.validate(t, pk)
+			}
+		}()
+	}
+	wg.Wait()
 	cancel()
 	<-proxyDone
 }

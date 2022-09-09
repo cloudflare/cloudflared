@@ -315,21 +315,20 @@ func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, d
 		},
 	}
 
-	serializedPacket, err := ip.encodeICMPReply(&pk)
+	cachedEncoder := ip.encoderPool.Get()
+	// The encoded packet is a slice to of the encoder, so we shouldn't return the encoder back to the pool until
+	// the encoded packet is sent.
+	defer ip.encoderPool.Put(cachedEncoder)
+	encoder, ok := cachedEncoder.(*packet.Encoder)
+	if !ok {
+		return fmt.Errorf("encoderPool returned %T, expect *packet.Encoder", cachedEncoder)
+	}
+
+	serializedPacket, err := encoder.Encode(&pk)
 	if err != nil {
 		return err
 	}
 	return responder.SendPacket(request.Src, serializedPacket)
-}
-
-func (ip *icmpProxy) encodeICMPReply(pk *packet.ICMP) (packet.RawPacket, error) {
-	cachedEncoder := ip.encoderPool.Get()
-	defer ip.encoderPool.Put(cachedEncoder)
-	encoder, ok := cachedEncoder.(*packet.Encoder)
-	if !ok {
-		return packet.RawPacket{}, fmt.Errorf("encoderPool returned %T, expect *packet.Encoder", cachedEncoder)
-	}
-	return encoder.Encode(pk)
 }
 
 func (ip *icmpProxy) icmpEchoRoundtrip(dst netip.Addr, echo *icmp.Echo) ([]byte, error) {
