@@ -93,7 +93,7 @@ type TracedContext struct {
 	*cfdTracer
 }
 
-// NewTracedHTTPRequest creates a new tracer for the current HTTP request context.
+// NewTracedContext creates a new tracer for the current context.
 func NewTracedContext(ctx context.Context, traceContext string, log *zerolog.Logger) *TracedContext {
 	ctx, exists := extractTraceFromString(ctx, traceContext)
 	if !exists {
@@ -155,6 +155,24 @@ func (cft *cfdTracer) GetSpans() (enc string) {
 	return
 }
 
+// GetProtoSpans returns the spans as the otlp traces in protobuf byte array.
+func (cft *cfdTracer) GetProtoSpans() (proto []byte) {
+	proto, err := cft.exporter.ProtoSpans()
+	switch err {
+	case nil:
+		break
+	case errNoTraces:
+		cft.log.Trace().Err(err).Msgf("expected traces to be available")
+		return
+	case errNoopTracer:
+		return // noop tracer has no traces
+	default:
+		cft.log.Debug().Err(err)
+		return
+	}
+	return
+}
+
 // AddSpans assigns spans as base64 encoded protobuf otlp traces to provided
 // HTTP headers.
 func (cft *cfdTracer) AddSpans(headers http.Header) {
@@ -169,6 +187,11 @@ func (cft *cfdTracer) AddSpans(headers http.Header) {
 	}
 
 	headers[CanonicalCloudflaredTracingHeader] = []string{enc}
+}
+
+// End will set the OK status for the span and then end it.
+func End(span trace.Span) {
+	endSpan(span, -1, codes.Ok, nil)
 }
 
 // EndWithErrorStatus will set a status for the span and then end it.

@@ -17,6 +17,8 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
@@ -259,24 +261,42 @@ func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) er
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
-func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) error {
+func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*tunnelpogs.RegisterUdpSessionResponse, error) {
+	traceCtx := tracing.NewTracedContext(ctx, traceContext, q.logger)
+	ctx, registerSpan := traceCtx.Tracer().Start(traceCtx, "register-session", trace.WithAttributes(
+		attribute.String("session-id", sessionID.String()),
+		attribute.String("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)),
+	))
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
 	originProxy, err := ingress.DialUDP(dstIP, dstPort)
 	if err != nil {
 		q.logger.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
-		return err
+		tracing.EndWithErrorStatus(registerSpan, err)
+		return nil, err
 	}
+	registerSpan.SetAttributes(
+		attribute.Bool("socket-bind-success", true),
+		attribute.String("src", originProxy.LocalAddr().String()),
+	)
+
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
 		q.logger.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
-		return err
+		tracing.EndWithErrorStatus(registerSpan, err)
+		return nil, err
 	}
 
 	go q.serveUDPSession(session, closeAfterIdleHint)
 
 	q.logger.Debug().Str("sessionID", sessionID.String()).Str("src", originProxy.LocalAddr().String()).Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).Msgf("Registered session")
-	return nil
+	tracing.End(registerSpan)
+
+	resp := tunnelpogs.RegisterUdpSessionResponse{
+		Spans: traceCtx.GetProtoSpans(),
+	}
+
+	return &resp, nil
 }
 
 func (q *QUICConnection) serveUDPSession(session *datagramsession.Session, closeAfterIdleHint time.Duration) {

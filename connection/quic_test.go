@@ -26,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflared/datagramsession"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -554,7 +555,7 @@ func TestNopCloserReadWriterCloseAfterEOF(t *testing.T) {
 	require.Equal(t, n, 9)
 
 	// force another read to read eof
-	n, err = readerWriter.Read(buffer)
+	_, err = readerWriter.Read(buffer)
 	require.Equal(t, err, io.EOF)
 
 	// close
@@ -652,8 +653,8 @@ type mockSessionRPCServer struct {
 	calledUnregisterChan chan struct{}
 }
 
-func (s mockSessionRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) error {
-	return fmt.Errorf("mockSessionRPCServer doesn't implement RegisterUdpSession")
+func (s mockSessionRPCServer) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) (*pogs.RegisterUdpSessionResponse, error) {
+	return nil, fmt.Errorf("mockSessionRPCServer doesn't implement RegisterUdpSession")
 }
 
 func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, reason string) error {

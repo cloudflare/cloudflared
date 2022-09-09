@@ -14,7 +14,11 @@ import (
 )
 
 type SessionManager interface {
-	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) error
+	// RegisterUdpSession is the call provided to cloudflared to handle an incoming
+	// capnproto RegisterUdpSession request from the edge.
+	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*RegisterUdpSessionResponse, error)
+	// UnregisterUdpSession is the call provided to cloudflared to handle an incoming
+	// capnproto UnregisterUdpSession request from the edge.
 	UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error
 }
 
@@ -55,13 +59,14 @@ func (i SessionManager_PogsImpl) RegisterUdpSession(p tunnelrpc.SessionManager_r
 		return err
 	}
 
-	resp := RegisterUdpSessionResponse{}
-	registrationErr := i.impl.RegisterUdpSession(p.Ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
+	resp, registrationErr := i.impl.RegisterUdpSession(p.Ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
 	if registrationErr != nil {
+		// Make sure to assign a response even if one is not returned from register
+		if resp == nil {
+			resp = &RegisterUdpSessionResponse{}
+		}
 		resp.Err = registrationErr
 	}
-
-	// TUN-6689: Add spans to return path for RegisterUdpSession
 
 	result, err := p.Results.NewResult()
 	if err != nil {

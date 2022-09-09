@@ -230,23 +230,23 @@ type mockSessionRPCServer struct {
 	traceContext      string
 }
 
-func (s mockSessionRPCServer) RegisterUdpSession(_ context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) error {
+func (s mockSessionRPCServer) RegisterUdpSession(_ context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) (*tunnelpogs.RegisterUdpSessionResponse, error) {
 	if s.sessionID != sessionID {
-		return fmt.Errorf("expect session ID %s, got %s", s.sessionID, sessionID)
+		return nil, fmt.Errorf("expect session ID %s, got %s", s.sessionID, sessionID)
 	}
 	if !s.dstIP.Equal(dstIP) {
-		return fmt.Errorf("expect destination IP %s, got %s", s.dstIP, dstIP)
+		return nil, fmt.Errorf("expect destination IP %s, got %s", s.dstIP, dstIP)
 	}
 	if s.dstPort != dstPort {
-		return fmt.Errorf("expect destination port %d, got %d", s.dstPort, dstPort)
+		return nil, fmt.Errorf("expect destination port %d, got %d", s.dstPort, dstPort)
 	}
 	if s.closeIdleAfter != closeIdleAfter {
-		return fmt.Errorf("expect closeIdleAfter %d, got %d", s.closeIdleAfter, closeIdleAfter)
+		return nil, fmt.Errorf("expect closeIdleAfter %d, got %d", s.closeIdleAfter, closeIdleAfter)
 	}
 	if s.traceContext != traceContext {
-		return fmt.Errorf("expect traceContext %s, got %s", s.traceContext, traceContext)
+		return nil, fmt.Errorf("expect traceContext %s, got %s", s.traceContext, traceContext)
 	}
-	return nil
+	return &tunnelpogs.RegisterUdpSessionResponse{}, nil
 }
 
 func (s mockSessionRPCServer) UnregisterUdpSession(_ context.Context, sessionID uuid.UUID, message string) error {
