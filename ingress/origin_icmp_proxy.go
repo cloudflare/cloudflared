@@ -26,22 +26,14 @@ var (
 	errPacketNil = fmt.Errorf("packet is nil")
 )
 
-// ICMPProxy sends ICMP messages and listens for their responses
-type ICMPProxy interface {
-	// Serve starts listening for responses to the requests until context is done
-	Serve(ctx context.Context) error
-	// Request sends an ICMP message
-	Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error
-}
-
 type icmpRouter struct {
-	ipv4Proxy ICMPProxy
-	ipv6Proxy ICMPProxy
+	ipv4Proxy *icmpProxy
+	ipv6Proxy *icmpProxy
 }
 
-// NewICMPProxy doesn't return an error if either ipv4 proxy or ipv6 proxy can be created. The machine might only
+// NewICMPRouter doesn't return an error if either ipv4 proxy or ipv6 proxy can be created. The machine might only
 // support one of them
-func NewICMPProxy(logger *zerolog.Logger) (ICMPProxy, error) {
+func NewICMPRouter(logger *zerolog.Logger) (*icmpRouter, error) {
 	// TODO: TUN-6741: don't bind to all interface
 	ipv4Proxy, ipv4Err := newICMPProxy(netip.IPv4Unspecified(), logger, funnelIdleTimeout)
 	ipv6Proxy, ipv6Err := newICMPProxy(netip.IPv6Unspecified(), logger, funnelIdleTimeout)
@@ -49,11 +41,11 @@ func NewICMPProxy(logger *zerolog.Logger) (ICMPProxy, error) {
 		return nil, fmt.Errorf("cannot create ICMPv4 proxy: %v nor ICMPv6 proxy: %v", ipv4Err, ipv6Err)
 	}
 	if ipv4Err != nil {
-		logger.Warn().Err(ipv4Err).Msg("failed to create ICMPv4 proxy, only ICMPv6 proxy is created")
+		logger.Debug().Err(ipv4Err).Msg("failed to create ICMPv4 proxy, only ICMPv6 proxy is created")
 		ipv4Proxy = nil
 	}
 	if ipv6Err != nil {
-		logger.Warn().Err(ipv6Err).Msg("failed to create ICMPv6 proxy, only ICMPv4 proxy is created")
+		logger.Debug().Err(ipv6Err).Msg("failed to create ICMPv6 proxy, only ICMPv4 proxy is created")
 		ipv6Proxy = nil
 	}
 	return &icmpRouter{

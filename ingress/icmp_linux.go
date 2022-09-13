@@ -28,7 +28,7 @@ type icmpProxy struct {
 	idleTimeout      time.Duration
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
 	if err := testPermission(listenIP); err != nil {
 		return nil, err
 	}

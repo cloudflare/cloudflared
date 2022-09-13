@@ -115,7 +115,7 @@ func (snf echoFunnelID) String() string {
 	return strconv.FormatUint(uint64(snf), 10)
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
 	conn, err := newICMPConn(listenIP)
 	if err != nil {
 		return nil, err

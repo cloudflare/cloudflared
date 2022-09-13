@@ -224,7 +224,7 @@ type icmpProxy struct {
 	encoderPool sync.Pool
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (ICMPProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
 	var (
 		srcSocketAddr *sockAddrIn6
 		handle        uintptr
@@ -302,6 +302,7 @@ func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, d
 			Src:      request.Dst,
 			Dst:      request.Src,
 			Protocol: layers.IPProtocol(request.Type.Protocol()),
+			TTL:      packet.DefaultTTL,
 		},
 		Message: &icmp.Message{
 			Type: replyType,

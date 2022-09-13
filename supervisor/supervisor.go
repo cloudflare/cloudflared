@@ -117,11 +117,11 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	}
 	if useDatagramV2(config) {
 		// TODO: TUN-6701: Decouple upgrade of datagram v2 and using icmp proxy
-		icmpProxy, err := ingress.NewICMPProxy(config.Log)
+		icmpRouter, err := ingress.NewICMPRouter(config.Log)
 		if err != nil {
-			log.Logger().Warn().Err(err).Msg("Failed to create icmp proxy, will continue to use datagram v1")
+			log.Logger().Warn().Err(err).Msg("Failed to create icmp router, will continue to use datagram v1")
 		} else {
-			edgeTunnelServer.icmpProxy = icmpProxy
+			edgeTunnelServer.icmpRouter = icmpRouter
 		}
 	}
 
@@ -152,10 +152,10 @@ func (s *Supervisor) Run(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) error {
-	if s.edgeTunnelServer.icmpProxy != nil {
+	if s.edgeTunnelServer.icmpRouter != nil {
 		go func() {
-			if err := s.edgeTunnelServer.icmpProxy.Serve(ctx); err != nil {
-				s.log.Logger().Err(err).Msg("icmp proxy terminated")
+			if err := s.edgeTunnelServer.icmpRouter.Serve(ctx); err != nil {
+				s.log.Logger().Err(err).Msg("icmp router terminated")
 			}
 		}()
 	}

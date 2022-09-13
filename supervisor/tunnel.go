@@ -20,8 +20,8 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
+	"github.com/cloudflare/cloudflared/packet"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -200,7 +200,7 @@ type EdgeTunnelServer struct {
 	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
 	tracker           *tunnelstate.ConnTracker
-	icmpProxy         ingress.ICMPProxy
+	icmpRouter        packet.ICMPRouter
 
 	connAwareLogger *ConnAwareLogger
 }
@@ -661,7 +661,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		connOptions,
 		controlStreamHandler,
 		connLogger.Logger(),
-		e.icmpProxy)
+		e.icmpRouter)
 	if err != nil {
 		if e.config.NeedPQ {
 			handlePQTunnelError(err, e.config)

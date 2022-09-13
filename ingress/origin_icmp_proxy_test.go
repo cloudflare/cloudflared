@@ -30,24 +30,24 @@ var (
 // Note: if this test fails on your device under Linux, then most likely you need to make sure that your user
 // is allowed in ping_group_range. See the following gist for how to do that:
 // https://github.com/ValentinBELYN/icmplib/blob/main/docs/6-use-icmplib-without-privileges.md
-func TestICMPProxyEcho(t *testing.T) {
-	testICMPProxyEcho(t, true)
-	testICMPProxyEcho(t, false)
+func TestICMPRouterEcho(t *testing.T) {
+	testICMPRouterEcho(t, true)
+	testICMPRouterEcho(t, false)
 }
 
-func testICMPProxyEcho(t *testing.T, sendIPv4 bool) {
+func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 	const (
 		echoID = 36571
 		endSeq = 20
 	)
 
-	proxy, err := NewICMPProxy(&noopLogger)
+	router, err := NewICMPRouter(&noopLogger)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		proxy.Serve(ctx)
+		router.Serve(ctx)
 		close(proxyDone)
 	}()
 
@@ -67,6 +67,7 @@ func testICMPProxyEcho(t *testing.T, sendIPv4 bool) {
 			Src:      localIP,
 			Dst:      localIP,
 			Protocol: protocol,
+			TTL:      packet.DefaultTTL,
 		}
 	}
 
@@ -88,7 +89,7 @@ func testICMPProxyEcho(t *testing.T, sendIPv4 bool) {
 					},
 				},
 			}
-			require.NoError(t, proxy.Request(&pk, &responder))
+			require.NoError(t, router.Request(&pk, &responder))
 			responder.validate(t, &pk)
 		}
 	}
@@ -97,7 +98,7 @@ func testICMPProxyEcho(t *testing.T, sendIPv4 bool) {
 }
 
 // TestICMPProxyRejectNotEcho makes sure it rejects messages other than echo
-func TestICMPProxyRejectNotEcho(t *testing.T) {
+func TestICMPRouterRejectNotEcho(t *testing.T) {
 	msgs := []icmp.Message{
 		{
 			Type: ipv4.ICMPTypeDestinationUnreachable,
@@ -122,7 +123,7 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 			},
 		},
 	}
-	testICMPProxyRejectNotEcho(t, localhostIP, msgs)
+	testICMPRouterRejectNotEcho(t, localhostIP, msgs)
 	msgsV6 := []icmp.Message{
 		{
 			Type: ipv6.ICMPTypeDestinationUnreachable,
@@ -147,11 +148,11 @@ func TestICMPProxyRejectNotEcho(t *testing.T) {
 			},
 		},
 	}
-	testICMPProxyRejectNotEcho(t, localhostIPv6, msgsV6)
+	testICMPRouterRejectNotEcho(t, localhostIPv6, msgsV6)
 }
 
-func testICMPProxyRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.Message) {
-	proxy, err := NewICMPProxy(&noopLogger)
+func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.Message) {
+	router, err := NewICMPRouter(&noopLogger)
 	require.NoError(t, err)
 
 	responder := echoFlowResponder{
@@ -168,10 +169,11 @@ func testICMPProxyRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.M
 				Src:      srcDstIP,
 				Dst:      srcDstIP,
 				Protocol: protocol,
+				TTL:      packet.DefaultTTL,
 			},
 			Message: &m,
 		}
-		require.Error(t, proxy.Request(&pk, &responder))
+		require.Error(t, router.Request(&pk, &responder))
 	}
 }
 

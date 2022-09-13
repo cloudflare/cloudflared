@@ -134,7 +134,6 @@ func TestSendEchoErrors(t *testing.T) {
 func testSendEchoErrors(t *testing.T, listenIP netip.Addr) {
 	proxy, err := newICMPProxy(listenIP, &noopLogger, time.Second)
 	require.NoError(t, err)
-	winProxy := proxy.(*icmpProxy)
 
 	echo := icmp.Echo{
 		ID:   6193,
@@ -145,7 +144,7 @@ func testSendEchoErrors(t *testing.T, listenIP netip.Addr) {
 	if listenIP.Is6() {
 		documentIP = netip.MustParseAddr("2001:db8::1")
 	}
-	resp, err := winProxy.icmpEchoRoundtrip(documentIP, &echo)
+	resp, err := proxy.icmpEchoRoundtrip(documentIP, &echo)
 	require.Error(t, err)
 	require.Nil(t, resp)
 }

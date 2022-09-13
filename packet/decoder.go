@@ -16,8 +16,8 @@ func FindProtocol(p []byte) (layers.IPProtocol, error) {
 	}
 	switch version {
 	case 4:
-		if len(p) < ipv4HeaderLen {
-			return 0, fmt.Errorf("IPv4 packet should have at least %d bytes, got %d bytes", ipv4HeaderLen, len(p))
+		if len(p) < ipv4MinHeaderLen {
+			return 0, fmt.Errorf("IPv4 packet should have at least %d bytes, got %d bytes", ipv4MinHeaderLen, len(p))
 		}
 		// Protocol is in the 10th byte of IPv4 header
 		return layers.IPProtocol(p[9]), nil

@@ -7,12 +7,20 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 const (
-	defaultTTL    uint8 = 64
-	ipv4HeaderLen       = 20
-	ipv6HeaderLen       = 40
+	ipv4MinHeaderLen = 20
+	ipv6HeaderLen    = 40
+	ipv4MinMTU       = 576
+	ipv6MinMTU       = 1280
+	icmpHeaderLen    = 8
+	// https://www.rfc-editor.org/rfc/rfc792 and https://datatracker.ietf.org/doc/html/rfc4443#section-3.3 define 2 codes.
+	// 0 = ttl exceed in transit, 1 = fragment reassembly time exceeded
+	icmpTTLExceedInTransitCode       = 0
+	DefaultTTL                 uint8 = 255
 )
 
 // Packet represents an IP packet or a packet that is encapsulated by IP
@@ -28,6 +36,7 @@ type IP struct {
 	Src      netip.Addr
 	Dst      netip.Addr
 	Protocol layers.IPProtocol
+	TTL      uint8
 }
 
 func newIPv4(ipLayer *layers.IPv4) (*IP, error) {
@@ -43,6 +52,7 @@ func newIPv4(ipLayer *layers.IPv4) (*IP, error) {
 		Src:      src,
 		Dst:      dst,
 		Protocol: ipLayer.Protocol,
+		TTL:      ipLayer.TTL,
 	}, nil
 }
 
@@ -59,6 +69,7 @@ func newIPv6(ipLayer *layers.IPv6) (*IP, error) {
 		Src:      src,
 		Dst:      dst,
 		Protocol: ipLayer.NextHeader,
+		TTL:      ipLayer.HopLimit,
 	}, nil
 }
 
@@ -78,7 +89,7 @@ func (ip *IP) EncodeLayers() ([]gopacket.SerializableLayer, error) {
 				SrcIP:    ip.Src.AsSlice(),
 				DstIP:    ip.Dst.AsSlice(),
 				Protocol: layers.IPProtocol(ip.Protocol),
-				TTL:      defaultTTL,
+				TTL:      ip.TTL,
 			},
 		}, nil
 	} else {
@@ -88,7 +99,7 @@ func (ip *IP) EncodeLayers() ([]gopacket.SerializableLayer, error) {
 				SrcIP:      ip.Src.AsSlice(),
 				DstIP:      ip.Dst.AsSlice(),
 				NextHeader: layers.IPProtocol(ip.Protocol),
-				HopLimit:   defaultTTL,
+				HopLimit:   ip.TTL,
 			},
 		}, nil
 	}
@@ -112,4 +123,52 @@ func (i *ICMP) EncodeLayers() ([]gopacket.SerializableLayer, error) {
 	}
 	icmpLayer := gopacket.Payload(msg)
 	return append(ipLayers, icmpLayer), nil
+}
+
+func NewICMPTTLExceedPacket(originalIP *IP, originalPacket RawPacket, routerIP netip.Addr) *ICMP {
+	var (
+		protocol layers.IPProtocol
+		icmpType icmp.Type
+	)
+	if originalIP.Dst.Is4() {
+		protocol = layers.IPProtocolICMPv4
+		icmpType = ipv4.ICMPTypeTimeExceeded
+	} else {
+		protocol = layers.IPProtocolICMPv6
+		icmpType = ipv6.ICMPTypeTimeExceeded
+	}
+	return &ICMP{
+		IP: &IP{
+			Src:      routerIP,
+			Dst:      originalIP.Src,
+			Protocol: protocol,
+			TTL:      DefaultTTL,
+		},
+		Message: &icmp.Message{
+			Type: icmpType,
+			Code: icmpTTLExceedInTransitCode,
+			Body: &icmp.TimeExceeded{
+				Data: originalDatagram(originalPacket, originalIP.Dst.Is4()),
+			},
+		},
+	}
+}
+
+// originalDatagram returns a slice of the original datagram for ICMP error messages
+// https://www.rfc-editor.org/rfc/rfc1812#section-4.3.2.3 suggests to copy as much without exceeding 576 bytes.
+// https://datatracker.ietf.org/doc/html/rfc4443#section-3.3 suggests to copy as much without exceeding 1280 bytes
+func originalDatagram(originalPacket RawPacket, isIPv4 bool) []byte {
+	var upperBound int
+	if isIPv4 {
+		upperBound = ipv4MinMTU - ipv4MinHeaderLen - icmpHeaderLen
+		if upperBound > len(originalPacket.Data) {
+			upperBound = len(originalPacket.Data)
+		}
+	} else {
+		upperBound = ipv6MinMTU - ipv6HeaderLen - icmpHeaderLen
+		if upperBound > len(originalPacket.Data) {
+			upperBound = len(originalPacket.Data)
+		}
+	}
+	return originalPacket.Data[:upperBound]
 }

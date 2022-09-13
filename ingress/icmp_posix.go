@@ -96,6 +96,7 @@ func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) error {
 			Src:      reply.from,
 			Dst:      ief.Src,
 			Protocol: layers.IPProtocol(reply.msg.Type.Protocol()),
+			TTL:      packet.DefaultTTL,
 		},
 		Message: reply.msg,
 	}
