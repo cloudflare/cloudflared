@@ -198,7 +198,7 @@ cloudflared-pkg: cloudflared cloudflared.1
 	$(call build_package,osxpkg)
 
 .PHONY: cloudflared-msi
-cloudflared-msi: cloudflared
+cloudflared-msi:
 	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) --output cloudflared-$(VERSION)-$(TARGET_ARCH).msi cloudflared.wxs
 
 .PHONY: cloudflared-darwin-amd64.tgz
@@ -287,6 +287,13 @@ github-message:
 github-mac-upload:
 	python3 github_release.py --path artifacts/cloudflared-darwin-amd64.tgz --release-version $(VERSION) --name cloudflared-darwin-amd64.tgz
 	python3 github_release.py --path artifacts/cloudflared-amd64.pkg --release-version $(VERSION) --name cloudflared-amd64.pkg
+
+.PHONY: github-windows-upload
+github-windows-upload:
+	python3 github_release.py --path built_artifacts/cloudflared-windows-amd64.exe --release-version $(VERSION) --name cloudflared-windows-amd64.exe
+	python3 github_release.py --path built_artifacts/cloudflared-windows-amd64.msi --release-version $(VERSION) --name cloudflared-windows-amd64.msi
+	python3 github_release.py --path built_artifacts/cloudflared-windows-386.exe --release-version $(VERSION) --name cloudflared-windows-386.exe
+	python3 github_release.py --path built_artifacts/cloudflared-windows-386.msi --release-version $(VERSION) --name cloudflared-windows-386.msi
 
 .PHONY: tunnelrpc-deps
 tunnelrpc-deps:

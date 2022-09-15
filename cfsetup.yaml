@@ -133,7 +133,7 @@ stretch: &stretch
       - make publish-deb
   github-release-macos-amd64:
     build_dir: *build_dir
-    builddeps:
+    builddeps: &build_pygithub
       - *pinned_go
       - build-essential
       - python3-dev
@@ -145,6 +145,27 @@ stretch: &stretch
       - pip3 install pygithub==1.55
     post-cache:
       - make github-mac-upload
+  github-release-windows:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - python3-dev
+      - libffi-dev
+      - python3-setuptools
+      - python3-pip
+      - wget
+      # libmsi and libgcab are libraries the wixl binary depends on.
+      - libmsi-dev
+      - libgcab-dev
+    pre-cache:
+      - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
+      - chmod a+x /usr/local/bin/wixl
+      - pip3 install pynacl==1.4.0
+      - pip3 install pygithub==1.55
+    post-cache:
+      - .teamcity/package-windows.sh
+      - make github-windows-upload
   test:
     build_dir: *build_dir
     builddeps:
@@ -204,13 +225,7 @@ stretch: &stretch
       - .teamcity/update-homebrew-core.sh
   github-message-release:
     build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - build-essential
-      - python3-dev
-      - libffi-dev
-      - python3-setuptools
-      - python3-pip
+    builddeps: *build_pygithub
     pre-cache: *install_pygithub
     post-cache:
       - make github-message
