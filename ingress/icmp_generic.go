@@ -1,4 +1,4 @@
-//go:build !darwin && !linux && !windows
+//go:build !darwin && !linux && (!windows || !cgo)
 
 package ingress
 
@@ -14,7 +14,7 @@ import (
 	"github.com/cloudflare/cloudflared/packet"
 )
 
-var errICMPProxyNotImplemented = fmt.Errorf("ICMP proxy is not implemented on %s", runtime.GOOS)
+var errICMPProxyNotImplemented = fmt.Errorf("ICMP proxy is not implemented on %s %s", runtime.GOOS, runtime.GOARCH)
 
 type icmpProxy struct{}
 
