@@ -44,6 +44,7 @@ const (
 	serviceCredentialFile = "cert.pem"
 	serviceConfigPath     = serviceConfigDir + "/" + serviceConfigFile
 	cloudflaredService    = "cloudflared.service"
+	cloudflaredUser       = "cloudflared"
 )
 
 var systemdTemplates = []ServiceTemplate{
@@ -59,6 +60,7 @@ Type=notify
 ExecStart={{ .Path }} --no-autoupdate{{ range .ExtraArgs }} {{ . }}{{ end }}
 Restart=on-failure
 RestartSec=5s
+User={{ .User }}
 
 [Install]
 WantedBy=multi-user.target
@@ -194,6 +196,7 @@ func installLinuxService(c *cli.Context) error {
 	}
 	templateArgs := ServiceTemplateArgs{
 		Path: etPath,
+		User: cloudflaredUser,
 	}
 
 	var extraArgsFunc func(c *cli.Context, log *zerolog.Logger) ([]string, error)
@@ -269,6 +272,13 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 			return err
 		}
 	}
+	// Create the cloudflared user if it does not exist
+	if err := runCommand("grep", "-qw", fmt.Sprintf("^%s", cloudflaredUser), "/etc/passwd"); err != nil {
+		if err := runCommand("useradd", "--system", "--no-create-home", "--home-dir=/nonexistent", "--shell=/usr/sbin/nologin", cloudflaredUser); err != nil {
+			log.Err(err).Msgf("useradd %s error", cloudflaredUser)
+			return err
+		}
+	}
 	if err := runCommand("systemctl", "enable", cloudflaredService); err != nil {
 		log.Err(err).Msgf("systemctl enable %s error", cloudflaredService)
 		return err
@@ -339,6 +349,13 @@ func uninstallSystemd(log *zerolog.Logger) error {
 		log.Err(err).Msg("systemctl stop cloudflared-update.timer error")
 		return err
 	}
+	// Delete the cloudflared user if it exists
+	if err := runCommand("grep", "-qw", fmt.Sprintf("^%s", cloudflaredUser), "/etc/passwd"); err == nil {
+		if err := runCommand("userdel", cloudflaredUser); err != nil {
+			log.Err(err).Msgf("userdel %s error", cloudflaredUser)
+			return err
+		}
+    }
 	for _, serviceTemplate := range systemdTemplates {
 		if err := serviceTemplate.Remove(); err != nil {
 			log.Err(err).Msg("error removing service template")

@@ -25,6 +25,7 @@ type ServiceTemplate struct {
 type ServiceTemplateArgs struct {
 	Path      string
 	ExtraArgs []string
+	User string
 }
 
 func (st *ServiceTemplate) ResolvePath() (string, error) {
