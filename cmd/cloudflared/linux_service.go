@@ -273,7 +273,7 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 		}
 	}
 	// Create the cloudflared user if it does not exist
-	if err := runCommand("grep", "-qw", fmt.Sprintf("^%s", cloudflaredUser), "/etc/passwd"); err != nil {
+    if err := runCommand("grep", "-q", fmt.Sprintf("^%s:", cloudflaredUser), "/etc/passwd"); err != nil {
 		if err := runCommand("useradd", "--system", "--no-create-home", "--home-dir=/nonexistent", "--shell=/usr/sbin/nologin", cloudflaredUser); err != nil {
 			log.Err(err).Msgf("useradd %s error", cloudflaredUser)
 			return err
@@ -350,7 +350,7 @@ func uninstallSystemd(log *zerolog.Logger) error {
 		return err
 	}
 	// Delete the cloudflared user if it exists
-	if err := runCommand("grep", "-qw", fmt.Sprintf("^%s", cloudflaredUser), "/etc/passwd"); err == nil {
+    if err := runCommand("grep", "-q", fmt.Sprintf("^%s:", cloudflaredUser), "/etc/passwd"); err == nil {
 		if err := runCommand("userdel", cloudflaredUser); err != nil {
 			log.Err(err).Msgf("userdel %s error", cloudflaredUser)
 			return err
