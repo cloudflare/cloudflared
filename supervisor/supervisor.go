@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -155,7 +156,11 @@ func (s *Supervisor) Run(
 	if s.edgeTunnelServer.icmpRouter != nil {
 		go func() {
 			if err := s.edgeTunnelServer.icmpRouter.Serve(ctx); err != nil {
-				s.log.Logger().Err(err).Msg("icmp router terminated")
+				if errors.Is(err, net.ErrClosed) {
+					s.log.Logger().Info().Err(err).Msg("icmp router terminated")
+				} else {
+					s.log.Logger().Err(err).Msg("icmp router terminated")
+				}
 			}
 		}()
 	}

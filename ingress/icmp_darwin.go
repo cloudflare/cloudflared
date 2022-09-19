@@ -202,7 +202,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 			// In unit test, we found out when the listener listens on 0.0.0.0, the socket reads the full packet after
 			// the second reply
 			if err := ip.handleFullPacket(icmpDecoder, buf[:n]); err != nil {
-				ip.logger.Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply as full packet")
+				ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply as full packet")
 			}
 			continue
 		}
