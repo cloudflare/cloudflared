@@ -40,7 +40,16 @@ func NewCertReloader(certPath, keyPath string) (*CertReloader, error) {
 }
 
 // Cert returns the TLS certificate most recently read by the CertReloader.
+// This method works as a direct utility method for tls.Config#Cert.
 func (cr *CertReloader) Cert(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	cr.Lock()
+	defer cr.Unlock()
+	return cr.certificate, nil
+}
+
+// ClientCert returns the TLS certificate most recently read by the CertReloader.
+// This method works as a direct utility method for tls.Config#ClientCert.
+func (cr *CertReloader) ClientCert(certRequestInfo *tls.CertificateRequestInfo) (*tls.Certificate, error) {
 	cr.Lock()
 	defer cr.Unlock()
 	return cr.certificate, nil
