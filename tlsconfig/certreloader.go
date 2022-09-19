@@ -131,7 +131,10 @@ func CreateTunnelConfig(c *cli.Context, serverName string) (*tls.Config, error) 
 	}
 
 	if tlsConfig.RootCAs == nil {
-		rootCAPool := x509.NewCertPool()
+		rootCAPool, err := x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to get x509 system cert pool")
+		}
 		cfRootCA, err := GetCloudflareRootCA()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not append Cloudflare Root CAs to cloudflared certificate pool")
