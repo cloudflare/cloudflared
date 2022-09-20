@@ -70,6 +70,7 @@ type TunnelConfig struct {
 	MuxerConfig      *connection.MuxerConfig
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
+	PacketConfig     *packet.GlobalRouterConfig
 }
 
 func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
@@ -200,7 +201,6 @@ type EdgeTunnelServer struct {
 	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
 	tracker           *tunnelstate.ConnTracker
-	icmpRouter        packet.ICMPRouter
 
 	connAwareLogger *ConnAwareLogger
 }
@@ -661,7 +661,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		connOptions,
 		controlStreamHandler,
 		connLogger.Logger(),
-		e.icmpRouter)
+		e.config.PacketConfig)
 	if err != nil {
 		if e.config.NeedPQ {
 			handlePQTunnelError(err, e.config)

@@ -33,10 +33,9 @@ type icmpRouter struct {
 
 // NewICMPRouter doesn't return an error if either ipv4 proxy or ipv6 proxy can be created. The machine might only
 // support one of them
-func NewICMPRouter(logger *zerolog.Logger) (*icmpRouter, error) {
-	// TODO: TUN-6741: don't bind to all interface
-	ipv4Proxy, ipv4Err := newICMPProxy(netip.IPv4Unspecified(), logger, funnelIdleTimeout)
-	ipv6Proxy, ipv6Err := newICMPProxy(netip.IPv6Unspecified(), logger, funnelIdleTimeout)
+func NewICMPRouter(ipv4Addr, ipv6Addr netip.Addr, ipv6Zone string, logger *zerolog.Logger) (*icmpRouter, error) {
+	ipv4Proxy, ipv4Err := newICMPProxy(ipv4Addr, "", logger, funnelIdleTimeout)
+	ipv6Proxy, ipv6Err := newICMPProxy(ipv6Addr, ipv6Zone, logger, funnelIdleTimeout)
 	if ipv4Err != nil && ipv6Err != nil {
 		return nil, fmt.Errorf("cannot create ICMPv4 proxy: %v nor ICMPv6 proxy: %v", ipv4Err, ipv6Err)
 	}

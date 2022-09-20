@@ -11,11 +11,11 @@ import (
 	"github.com/cloudflare/cloudflared/packet"
 )
 
-type datagramV2Type byte
+type DatagramV2Type byte
 
 const (
-	udp datagramV2Type = iota
-	ip
+	DatagramTypeUDP DatagramV2Type = iota
+	DatagramTypeIP
 )
 
 const (
@@ -24,7 +24,7 @@ const (
 	packetChanCapacity = 128
 )
 
-func suffixType(b []byte, datagramType datagramV2Type) ([]byte, error) {
+func SuffixType(b []byte, datagramType DatagramV2Type) ([]byte, error) {
 	if len(b)+typeIDLen > MaxDatagramFrameSize {
 		return nil, fmt.Errorf("datagram size %d exceeds max frame size %d", len(b), MaxDatagramFrameSize)
 	}
@@ -65,11 +65,11 @@ func (dm *DatagramMuxerV2) SendToSession(session *packet.Session) error {
 		packetTooBigDropped.Inc()
 		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(session.Payload), dm.mtu())
 	}
-	msgWithID, err := suffixSessionID(session.ID, session.Payload)
+	msgWithID, err := SuffixSessionID(session.ID, session.Payload)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix session ID to datagram, it will be dropped")
 	}
-	msgWithIDAndType, err := suffixType(msgWithID, udp)
+	msgWithIDAndType, err := SuffixType(msgWithID, DatagramTypeUDP)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix datagram type, it will be dropped")
 	}
@@ -82,7 +82,7 @@ func (dm *DatagramMuxerV2) SendToSession(session *packet.Session) error {
 // SendPacket suffix the datagram type to the packet. The other end of the QUIC connection can demultiplex by parsing
 // the payload as IP and look at the source and destination.
 func (dm *DatagramMuxerV2) SendPacket(pk packet.RawPacket) error {
-	payloadWithVersion, err := suffixType(pk.Data, ip)
+	payloadWithVersion, err := SuffixType(pk.Data, DatagramTypeIP)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix datagram type, it will be dropped")
 	}
@@ -121,12 +121,12 @@ func (dm *DatagramMuxerV2) demux(ctx context.Context, msgWithType []byte) error 
 	if len(msgWithType) < typeIDLen {
 		return fmt.Errorf("QUIC datagram should have at least %d byte", typeIDLen)
 	}
-	msgType := datagramV2Type(msgWithType[len(msgWithType)-typeIDLen])
+	msgType := DatagramV2Type(msgWithType[len(msgWithType)-typeIDLen])
 	msg := msgWithType[0 : len(msgWithType)-typeIDLen]
 	switch msgType {
-	case udp:
+	case DatagramTypeUDP:
 		return dm.handleSession(ctx, msg)
-	case ip:
+	case DatagramTypeIP:
 		return dm.handlePacket(ctx, msg)
 	default:
 		return fmt.Errorf("Unexpected datagram type %d", msgType)

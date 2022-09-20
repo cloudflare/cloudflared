@@ -31,7 +31,7 @@ var (
 
 func TestSuffixThenRemoveSessionID(t *testing.T) {
 	msg := []byte(t.Name())
-	msgWithID, err := suffixSessionID(testSessionID, msg)
+	msgWithID, err := SuffixSessionID(testSessionID, msg)
 	require.NoError(t, err)
 	require.Len(t, msgWithID, len(msg)+sessionIDLen)
 
@@ -50,11 +50,11 @@ func TestRemoveSessionIDError(t *testing.T) {
 
 func TestSuffixSessionIDError(t *testing.T) {
 	msg := make([]byte, MaxDatagramFrameSize-sessionIDLen)
-	_, err := suffixSessionID(testSessionID, msg)
+	_, err := SuffixSessionID(testSessionID, msg)
 	require.NoError(t, err)
 
 	msg = make([]byte, MaxDatagramFrameSize-sessionIDLen+1)
-	_, err = suffixSessionID(testSessionID, msg)
+	_, err = SuffixSessionID(testSessionID, msg)
 	require.Error(t, err)
 }
 

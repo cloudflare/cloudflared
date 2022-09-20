@@ -2,6 +2,7 @@
 import json
 import os
 
+from constants import MAX_LOG_LINES
 from util import start_cloudflared, wait_tunnel_ready, send_requests
 
 # Rolling logger rotate log files after 1 MB
@@ -11,14 +12,24 @@ expect_message = "Starting Hello"
 
 
 def assert_log_to_terminal(cloudflared):
-    stderr = cloudflared.stderr.read(1500)
-    assert expect_message.encode() in stderr, f"{stderr} doesn't contain {expect_message}"
+    for _ in range(0, MAX_LOG_LINES):
+        line = cloudflared.stderr.readline()
+        if not line:
+            break
+        if expect_message.encode() in line:
+            return
+    raise Exception(f"terminal log doesn't contain {expect_message}")
 
 
 def assert_log_in_file(file):
     with open(file, "r") as f:
-        log = f.read(2000)
-        assert expect_message in log, f"{log} doesn't contain {expect_message}"
+        for _ in range(0, MAX_LOG_LINES):
+            line = f.readline()
+            if not line:
+                break
+            if expect_message in line:
+                return
+    raise Exception(f"log file doesn't contain {expect_message}")
 
 
 def assert_json_log(file):

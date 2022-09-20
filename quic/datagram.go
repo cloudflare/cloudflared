@@ -49,7 +49,7 @@ func (dm *DatagramMuxer) SendToSession(session *packet.Session) error {
 		packetTooBigDropped.Inc()
 		return fmt.Errorf("origin UDP payload has %d bytes, which exceeds transport MTU %d", len(session.Payload), dm.mtu())
 	}
-	payloadWithMetadata, err := suffixSessionID(session.ID, session.Payload)
+	payloadWithMetadata, err := SuffixSessionID(session.ID, session.Payload)
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix session ID to datagram, it will be dropped")
 	}
@@ -112,7 +112,7 @@ func extractSessionID(b []byte) (uuid.UUID, []byte, error) {
 
 // SuffixSessionID appends the session ID at the end of the payload. Suffix is more performant than prefix because
 // the payload slice might already have enough capacity to append the session ID at the end
-func suffixSessionID(sessionID uuid.UUID, b []byte) ([]byte, error) {
+func SuffixSessionID(sessionID uuid.UUID, b []byte) ([]byte, error) {
 	if len(b)+len(sessionID) > MaxDatagramFrameSize {
 		return nil, fmt.Errorf("datagram size exceed %d", MaxDatagramFrameSize)
 	}

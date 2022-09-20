@@ -113,11 +113,12 @@ func (snf echoFunnelID) String() string {
 	return strconv.FormatUint(uint64(snf), 10)
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
-	conn, err := newICMPConn(listenIP)
+func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
+	conn, err := newICMPConn(listenIP, zone)
 	if err != nil {
 		return nil, err
 	}
+	logger.Info().Msgf("Created ICMP proxy listening on %s", conn.LocalAddr())
 	return &icmpProxy{
 		srcFunnelTracker: packet.NewFunnelTracker(),
 		echoIDTracker:    newEchoIDTracker(),

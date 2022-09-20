@@ -26,6 +26,6 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	return errICMPProxyNotImplemented
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
+func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
 	return nil, errICMPProxyNotImplemented
 }

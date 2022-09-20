@@ -42,7 +42,7 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 		endSeq = 20
 	)
 
-	router, err := NewICMPRouter(&noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -106,7 +106,7 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 		endSeq          = 5
 	)
 
-	router, err := NewICMPRouter(&noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -238,7 +238,7 @@ func TestICMPRouterRejectNotEcho(t *testing.T) {
 }
 
 func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.Message) {
-	router, err := NewICMPRouter(&noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
 	require.NoError(t, err)
 
 	responder := echoFlowResponder{

@@ -65,7 +65,7 @@ func NewQUICConnection(
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler ControlStreamHandler,
 	logger *zerolog.Logger,
-	icmpRouter packet.ICMPRouter,
+	packetRouterConfig *packet.GlobalRouterConfig,
 ) (*QUICConnection, error) {
 	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
@@ -73,18 +73,13 @@ func NewQUICConnection(
 	}
 
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
-	var (
-		datagramMuxer quicpogs.BaseDatagramMuxer
-		pr            *packet.Router
-	)
-	if icmpRouter != nil {
-		datagramMuxerV2 := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
-		pr = packet.NewRouter(datagramMuxerV2, &returnPipe{muxer: datagramMuxerV2}, icmpRouter, logger)
-		datagramMuxer = datagramMuxerV2
-	} else {
-		datagramMuxer = quicpogs.NewDatagramMuxer(session, logger, sessionDemuxChan)
-	}
+	datagramMuxer := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
+
+	var pr *packet.Router
+	if packetRouterConfig != nil {
+		pr = packet.NewRouter(packetRouterConfig, datagramMuxer, &returnPipe{muxer: datagramMuxer}, logger)
+	}
 
 	return &QUICConnection{
 		session:              session,

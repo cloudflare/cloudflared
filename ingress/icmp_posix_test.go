@@ -24,7 +24,7 @@ func TestFunnelIdleTimeout(t *testing.T) {
 		startSeq    = 8129
 	)
 	logger := zerolog.New(os.Stderr)
-	proxy, err := newICMPProxy(localhostIP, &logger, idleTimeout)
+	proxy, err := newICMPProxy(localhostIP, "", &logger, idleTimeout)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

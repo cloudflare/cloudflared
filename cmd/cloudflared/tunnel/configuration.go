@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	mathRand "math/rand"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +22,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/packet"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -384,6 +387,12 @@ func prepareTunnelConfig(
 		NeedPQ:           needPQ,
 		PQKexIdx:         pqKexIdx,
 	}
+	packetConfig, err := newPacketConfig(c, log)
+	if err != nil {
+		log.Warn().Err(err).Msg("ICMP proxy feature is disabled")
+	} else {
+		tunnelConfig.PacketConfig = packetConfig
+	}
 	orchestratorConfig := &orchestration.Config{
 		Ingress:            &ingressRules,
 		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
@@ -452,4 +461,148 @@ func parseConfigIPVersion(version string) (v allregions.ConfigIPVersion, err err
 		err = fmt.Errorf("invalid value for edge-ip-version: %s", version)
 	}
 	return
+}
+
+func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*packet.GlobalRouterConfig, error) {
+	ipv4Src, err := determineICMPv4Src(c.String("icmpv4-src"), logger)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to determine IPv4 source address for ICMP proxy")
+	}
+	logger.Info().Msgf("ICMP proxy will use %s as source for IPv4", ipv4Src)
+
+	ipv6Src, zone, err := determineICMPv6Src(c.String("icmpv6-src"), logger, ipv4Src)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to determine IPv6 source address for ICMP proxy")
+	}
+	if zone != "" {
+		logger.Info().Msgf("ICMP proxy will use %s in zone %s as source for IPv6", ipv6Src, zone)
+	} else {
+		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
+	}
+
+	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, zone, logger)
+	if err != nil {
+		return nil, err
+	}
+	return &packet.GlobalRouterConfig{
+		ICMPRouter: icmpRouter,
+		IPv4Src:    ipv4Src,
+		IPv6Src:    ipv6Src,
+		Zone:       zone,
+	}, nil
+}
+
+func determineICMPv4Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Addr, error) {
+	if userDefinedSrc != "" {
+		addr, err := netip.ParseAddr(userDefinedSrc)
+		if err != nil {
+			return netip.Addr{}, err
+		}
+		if addr.Is4() {
+			return addr, nil
+		}
+		return netip.Addr{}, fmt.Errorf("expect IPv4, but %s is IPv6", userDefinedSrc)
+	}
+
+	addr, err := findLocalAddr(net.ParseIP("192.168.0.1"), 53)
+	if err != nil {
+		addr = netip.IPv4Unspecified()
+		logger.Debug().Err(err).Msgf("Failed to determine the IPv4 for this machine. It will use %s to send/listen for ICMPv4 echo", addr)
+	}
+	return addr, nil
+}
+
+type interfaceIP struct {
+	name string
+	ip   net.IP
+}
+
+func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger, ipv4Src netip.Addr) (addr netip.Addr, zone string, err error) {
+	if userDefinedSrc != "" {
+		userDefinedIP, zone, _ := strings.Cut(userDefinedSrc, "%")
+		addr, err := netip.ParseAddr(userDefinedIP)
+		if err != nil {
+			return netip.Addr{}, "", err
+		}
+		if addr.Is6() {
+			return addr, zone, nil
+		}
+		return netip.Addr{}, "", fmt.Errorf("expect IPv6, but %s is IPv4", userDefinedSrc)
+	}
+
+	// Loop through all the interfaces, the preference is
+	// 1. The interface where ipv4Src is in
+	// 2. Interface with IPv6 address
+	// 3. Unspecified interface
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return netip.IPv6Unspecified(), "", nil
+	}
+
+	interfacesWithIPv6 := make([]interfaceIP, 0)
+	for _, interf := range interfaces {
+		interfaceAddrs, err := interf.Addrs()
+		if err != nil {
+			continue
+		}
+
+		foundIPv4SrcInterface := false
+		for _, interfaceAddr := range interfaceAddrs {
+			if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
+				ip := ipnet.IP
+				if ip.Equal(ipv4Src.AsSlice()) {
+					foundIPv4SrcInterface = true
+				}
+				if ip.To4() == nil {
+					interfacesWithIPv6 = append(interfacesWithIPv6, interfaceIP{
+						name: interf.Name,
+						ip:   ip,
+					})
+				}
+			}
+		}
+		// Found the interface of ipv4Src. Loop through the addresses to see if there is an IPv6
+		if foundIPv4SrcInterface {
+			for _, interfaceAddr := range interfaceAddrs {
+				if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
+					ip := ipnet.IP
+					if ip.To4() == nil {
+						addr, err := netip.ParseAddr(ip.String())
+						if err == nil {
+							return addr, interf.Name, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	for _, interf := range interfacesWithIPv6 {
+		addr, err := netip.ParseAddr(interf.ip.String())
+		if err == nil {
+			return addr, interf.name, nil
+		}
+	}
+	logger.Debug().Err(err).Msgf("Failed to determine the IPv6 for this machine. It will use %s to send/listen for ICMPv6 echo", netip.IPv6Unspecified())
+
+	return netip.IPv6Unspecified(), "", nil
+}
+
+// FindLocalAddr tries to dial UDP and returns the local address picked by the OS
+func findLocalAddr(dst net.IP, port int) (netip.Addr, error) {
+	udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{
+		IP:   dst,
+		Port: port,
+	})
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	defer udpConn.Close()
+	localAddrPort, err := netip.ParseAddrPort(udpConn.LocalAddr().String())
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	localAddr := localAddrPort.Addr()
+	return localAddr, nil
 }

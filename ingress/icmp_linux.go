@@ -24,25 +24,27 @@ import (
 type icmpProxy struct {
 	srcFunnelTracker *packet.FunnelTracker
 	listenIP         netip.Addr
+	ipv6Zone         string
 	logger           *zerolog.Logger
 	idleTimeout      time.Duration
 }
 
-func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
-	if err := testPermission(listenIP); err != nil {
+func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
+	if err := testPermission(listenIP, zone); err != nil {
 		return nil, err
 	}
 	return &icmpProxy{
 		srcFunnelTracker: packet.NewFunnelTracker(),
 		listenIP:         listenIP,
+		ipv6Zone:         zone,
 		logger:           logger,
 		idleTimeout:      idleTimeout,
 	}, nil
 }
 
-func testPermission(listenIP netip.Addr) error {
+func testPermission(listenIP netip.Addr, zone string) error {
 	// Opens a non-privileged ICMP socket. On Linux the group ID of the process needs to be in ping_group_range
-	conn, err := newICMPConn(listenIP)
+	conn, err := newICMPConn(listenIP, zone)
 	if err != nil {
 		// TODO: TUN-6715 check if cloudflared is in ping_group_range if the check failed. If not log instruction to
 		// change the group ID
@@ -63,10 +65,11 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 	}
 	newConnChan := make(chan *icmp.PacketConn, 1)
 	newFunnelFunc := func() (packet.Funnel, error) {
-		conn, err := newICMPConn(ip.listenIP)
+		conn, err := newICMPConn(ip.listenIP, ip.ipv6Zone)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to open ICMP socket")
 		}
+		ip.logger.Debug().Msgf("Opened ICMP socket listen on %s", conn.LocalAddr())
 		newConnChan <- conn
 		localUDPAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 		if !ok {

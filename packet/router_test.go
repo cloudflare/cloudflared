@@ -26,7 +26,12 @@ func TestRouterReturnTTLExceed(t *testing.T) {
 	returnPipe := &mockFunnelUniPipe{
 		uniPipe: make(chan RawPacket),
 	}
-	router := NewRouter(upstream, returnPipe, &mockICMPRouter{}, &noopLogger)
+	packetConfig := &GlobalRouterConfig{
+		ICMPRouter: &mockICMPRouter{},
+		IPv4Src:    netip.MustParseAddr("172.16.0.1"),
+		IPv6Src:    netip.MustParseAddr("fd51:2391:523:f4ee::1"),
+	}
+	router := NewRouter(packetConfig, upstream, returnPipe, &noopLogger)
 	ctx, cancel := context.WithCancel(context.Background())
 	routerStopped := make(chan struct{})
 	go func() {

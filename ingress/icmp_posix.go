@@ -16,12 +16,15 @@ import (
 )
 
 // Opens a non-privileged ICMP socket on Linux and Darwin
-func newICMPConn(listenIP netip.Addr) (*icmp.PacketConn, error) {
-	network := "udp6"
+func newICMPConn(listenIP netip.Addr, zone string) (*icmp.PacketConn, error) {
 	if listenIP.Is4() {
-		network = "udp4"
+		return icmp.ListenPacket("udp4", listenIP.String())
 	}
-	return icmp.ListenPacket(network, listenIP.String())
+	listenAddr := listenIP.String()
+	if zone != "" {
+		listenAddr = listenAddr + "%" + zone
+	}
+	return icmp.ListenPacket("udp6", listenAddr)
 }
 
 func netipAddr(addr net.Addr) (netip.Addr, bool) {

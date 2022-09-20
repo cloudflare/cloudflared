@@ -16,7 +16,6 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -117,13 +116,6 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		connAwareLogger:   log,
 	}
 
-	icmpRouter, err := ingress.NewICMPRouter(config.Log)
-	if err != nil {
-		log.Logger().Warn().Err(err).Msg("Failed to create icmp router, ICMP proxy feature is disabled")
-	} else {
-		edgeTunnelServer.icmpRouter = icmpRouter
-	}
-
 	useReconnectToken := false
 	if config.ClassicTunnel != nil {
 		useReconnectToken = config.ClassicTunnel.UseReconnectToken
@@ -151,9 +143,9 @@ func (s *Supervisor) Run(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) error {
-	if s.edgeTunnelServer.icmpRouter != nil {
+	if s.config.PacketConfig != nil {
 		go func() {
-			if err := s.edgeTunnelServer.icmpRouter.Serve(ctx); err != nil {
+			if err := s.config.PacketConfig.ICMPRouter.Serve(ctx); err != nil {
 				if errors.Is(err, net.ErrClosed) {
 					s.log.Logger().Info().Err(err).Msg("icmp router terminated")
 				} else {
