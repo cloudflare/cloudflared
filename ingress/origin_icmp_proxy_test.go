@@ -264,11 +264,14 @@ func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.
 }
 
 type echoFlowResponder struct {
+	lock     sync.Mutex
 	decoder  *packet.ICMPDecoder
 	respChan chan []byte
 }
 
 func (efr *echoFlowResponder) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
+	efr.lock.Lock()
+	defer efr.lock.Unlock()
 	copiedPacket := make([]byte, len(pk.Data))
 	copy(copiedPacket, pk.Data)
 	efr.respChan <- copiedPacket
@@ -276,6 +279,8 @@ func (efr *echoFlowResponder) SendPacket(dst netip.Addr, pk packet.RawPacket) er
 }
 
 func (efr *echoFlowResponder) Close() error {
+	efr.lock.Lock()
+	defer efr.lock.Unlock()
 	close(efr.respChan)
 	return nil
 }
