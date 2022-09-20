@@ -265,6 +265,9 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 	if c.Http2Origin != nil {
 		out.Http2Origin = *c.Http2Origin
 	}
+	if c.Access != nil {
+		out.Access = *c.Access
+	}
 	return out
 }
 
@@ -310,6 +313,9 @@ type OriginRequestConfig struct {
 	IPRules []ipaccess.Rule `yaml:"ipRules" json:"ipRules"`
 	// Attempt to connect to origin with HTTP/2
 	Http2Origin bool `yaml:"http2Origin" json:"http2Origin"`
+
+	// Access holds all access related configs
+	Access config.AccessConfig `yaml:"access" json:"access,omitempty"`
 }
 
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {

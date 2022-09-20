@@ -229,6 +229,19 @@ type OriginRequestConfig struct {
 	IPRules []IngressIPRule `yaml:"ipRules" json:"ipRules,omitempty"`
 	// Attempt to connect to origin with HTTP/2
 	Http2Origin *bool `yaml:"http2Origin" json:"http2Origin,omitempty"`
+	// Access holds all access related configs
+	Access *AccessConfig `yaml:"access" json:"access,omitempty"`
+}
+
+type AccessConfig struct {
+	// Enabled when set to true will fail every request that does not arrive through an access authenticated endpoint.
+	Enabled bool
+
+	// TeamName is the organization team name to get the public key certificates for.
+	TeamName string `yaml:"teamName" json:"teamName,omitempty"`
+
+	// AudTag is the AudTag to verify access JWT against.
+	AudTag []string `yaml:"audTag" json:"audTag,omitempty"`
 }
 
 type IngressIPRule struct {
