@@ -116,14 +116,12 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		gracefulShutdownC: gracefulShutdownC,
 		connAwareLogger:   log,
 	}
-	if useDatagramV2(config) {
-		// TODO: TUN-6701: Decouple upgrade of datagram v2 and using icmp proxy
-		icmpRouter, err := ingress.NewICMPRouter(config.Log)
-		if err != nil {
-			log.Logger().Warn().Err(err).Msg("Failed to create icmp router, will continue to use datagram v1")
-		} else {
-			edgeTunnelServer.icmpRouter = icmpRouter
-		}
+
+	icmpRouter, err := ingress.NewICMPRouter(config.Log)
+	if err != nil {
+		log.Logger().Warn().Err(err).Msg("Failed to create icmp router, ICMP proxy feature is disabled")
+	} else {
+		edgeTunnelServer.icmpRouter = icmpRouter
 	}
 
 	useReconnectToken := false
@@ -434,16 +432,4 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 	registrationOptions := s.config.registrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
 	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
 	return rpcClient.Authenticate(ctx, s.config.ClassicTunnel, registrationOptions)
-}
-
-func useDatagramV2(config *TunnelConfig) bool {
-	if config.NamedTunnel == nil {
-		return false
-	}
-	for _, feature := range config.NamedTunnel.Client.Features {
-		if feature == FeatureDatagramV2 {
-			return true
-		}
-	}
-	return false
 }
