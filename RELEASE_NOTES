@@ -1,3 +1,25 @@
+2022.9.1
+- 2022-09-20 TUN-6777: Fix race condition in TestFunnelIdleTimeout
+- 2022-09-20 TUN-6595: Enable datagramv2 and icmp proxy by default
+- 2022-09-20 TUN-6773: Add access based configuration to ingress.OriginRequestConfig
+- 2022-09-19 TUN-6778: Cleanup logs about ICMP
+- 2022-09-19 TUN-6779: cloudflared should also use the root CAs from system pool to validate edge certificate
+- 2022-09-19 TUN-6780: Add support for certReload to also include support for client certificates
+- 2022-09-16 TUN-6767: Build ICMP proxy for Windows only when CGO is enabled
+- 2022-09-15 TUN-6590: Use Windows Teamcity agent to build binary
+- 2022-09-13 TUN-6592: Decrement TTL and return ICMP time exceed if it's 0
+- 2022-09-09 TUN-6749: Fix icmp_generic build
+- 2022-09-09 TUN-6744: On posix platforms, assign unique echo ID per (src, dst, echo ID)
+- 2022-09-08 TUN-6743: Support ICMPv6 echo on Windows
+- 2022-09-08 TUN-6689: Utilize new RegisterUDPSession to begin tracing
+- 2022-09-07 TUN-6688: Update RegisterUdpSession capnproto to include trace context
+- 2022-09-06 TUN-6740: Detect no UDP packets allowed and fallback from QUIC in that case
+- 2022-09-06 TUN-6654: Support ICMPv6 on Linux and Darwin
+- 2022-09-02 TUN-6696: Refactor flow into funnel and close idle funnels
+- 2022-09-02 TUN-6718: Bump go and go-boring 1.18.6
+- 2022-08-29 TUN-6531: Implement ICMP proxy for Windows using IcmpSendEcho
+- 2022-08-24 RTG-1339 Support post-quantum hybrid key exchange
+
 2022.9.0
 - 2022-09-05 TUN-6737: Fix datagramV2Type should be declared in its own block so it starts at 0
 - 2022-09-01 TUN-6725: Fix testProxySSEAllData
