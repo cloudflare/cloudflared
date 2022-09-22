@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/net/idna"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ingress/middleware"
@@ -275,6 +276,16 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			return Ingress{}, err
 		}
 
+		isCatchAllRule := (r.Hostname == "" || r.Hostname == "*") && r.Path == ""
+		punycodeHostname := ""
+		if !isCatchAllRule {
+			punycode, err := idna.Lookup.ToASCII(r.Hostname)
+			// Don't provide the punycode hostname if it is the same as the original hostname
+			if err == nil && punycode != r.Hostname {
+				punycodeHostname = punycode
+			}
+		}
+
 		var pathRegexp *Regexp
 		if r.Path != "" {
 			var err error
@@ -286,11 +297,12 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 		}
 
 		rules[i] = Rule{
-			Hostname: r.Hostname,
-			Service:  service,
-			Path:     pathRegexp,
-			Handlers: handlers,
-			Config:   cfg,
+			Hostname:         r.Hostname,
+			punycodeHostname: punycodeHostname,
+			Service:          service,
+			Path:             pathRegexp,
+			Handlers:         handlers,
+			Config:           cfg,
 		}
 	}
 	return Ingress{Rules: rules, Defaults: defaults}, nil

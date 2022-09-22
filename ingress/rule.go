@@ -14,6 +14,9 @@ type Rule struct {
 	// Requests for this hostname will be proxied to this rule's service.
 	Hostname string `json:"hostname"`
 
+	// punycodeHostname is an additional optional hostname converted to punycode.
+	punycodeHostname string
+
 	// Path is an optional regex that can specify path-driven ingress rules.
 	Path *Regexp `json:"path"`
 
@@ -50,9 +53,18 @@ func (r Rule) MultiLineString() string {
 
 // Matches checks if the rule matches a given hostname/path combination.
 func (r *Rule) Matches(hostname, path string) bool {
-	hostMatch := r.Hostname == "" || r.Hostname == "*" || matchHost(r.Hostname, hostname)
+	hostMatch := false
+	if r.Hostname == "" || r.Hostname == "*" {
+		hostMatch = true
+	} else {
+		hostMatch = matchHost(r.Hostname, hostname)
+	}
+	punycodeHostMatch := false
+	if r.punycodeHostname != "" {
+		punycodeHostMatch = matchHost(r.punycodeHostname, hostname)
+	}
 	pathMatch := r.Path == nil || r.Path.Regexp == nil || r.Path.Regexp.MatchString(path)
-	return hostMatch && pathMatch
+	return (hostMatch || punycodeHostMatch) && pathMatch
 }
 
 // Regexp adds unmarshalling from json for regexp.Regexp

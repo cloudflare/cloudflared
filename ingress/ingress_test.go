@@ -131,6 +131,36 @@ ingress:
 			},
 		},
 		{
+			name: "Unicode domain",
+			args: args{rawYAML: `
+ingress:
+ - hostname: môô.cloudflare.com
+   service: https://localhost:8000
+ - service: https://localhost:8001
+`},
+			want: []Rule{
+				{
+					Hostname:         "môô.cloudflare.com",
+					punycodeHostname: "xn--m-xgaa.cloudflare.com",
+					Service:          &httpService{url: localhost8000},
+					Config:           defaultConfig,
+				},
+				{
+					Service: &httpService{url: localhost8001},
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "Invalid unicode domain",
+			args: args{rawYAML: fmt.Sprintf(`
+ingress:
+ - hostname: %s
+   service: https://localhost:8000
+`, string(rune(0xd8f3))+".cloudflare.com")},
+			wantErr: true,
+		},
+		{
 			name: "Invalid service",
 			args: args{rawYAML: `
 ingress:
