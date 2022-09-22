@@ -37,16 +37,13 @@ const (
 	sshConfigTemplate  = `
 Add to your {{.Home}}/.ssh/config:
 
-Host {{.Hostname}}
 {{- if .ShortLivedCerts}}
-  ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1'
-
-Host cfpipe-{{.Hostname}}
-  HostName {{.Hostname}}
+Match host {{.Hostname}} exec "{{.Cloudflared}} access ssh-gen --hostname %h"
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
-  IdentityFile ~/.cloudflared/{{.Hostname}}-cf_key
-  CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
+  IdentityFile ~/.cloudflared/%h-cf_key
+  CertificateFile ~/.cloudflared/%h-cf_key-cert.pub
 {{- else}}
+Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
 {{end}}
 `
