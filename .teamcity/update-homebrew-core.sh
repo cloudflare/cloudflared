@@ -23,4 +23,4 @@ git config --global user.name "cloudflare-warp-bot"
 git config --global user.email "warp-bot@cloudflare.com"
 
 # bump formula pr
-brew bump-formula-pr cloudflared --version="$VERSION" --no-browse
+brew bump-formula-pr cloudflared --version="$VERSION" --no-browse --no-audit

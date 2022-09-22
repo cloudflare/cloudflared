@@ -220,6 +220,7 @@ stretch: &stretch
       - s3cmd
       - jq
       - build-essential
+      - procps
     post-cache:
       - .teamcity/update-homebrew.sh
       - .teamcity/update-homebrew-core.sh
