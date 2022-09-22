@@ -60,6 +60,21 @@ func NewOriginProxy(
 	return proxy
 }
 
+func (p *Proxy) applyIngressMiddleware(rule *ingress.Rule, r *http.Request, w connection.ResponseWriter) (error, bool) {
+	for _, handler := range rule.Handlers {
+		result, err := handler.Handle(r.Context(), r)
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("error while processing middleware handler %s", handler.Name())), false
+		}
+
+		if result.ShouldFilterRequest {
+			w.WriteRespHeaders(result.StatusCode, nil)
+			return fmt.Errorf("request filtered by middleware handler (%s) due to: %s", handler.Name(), result.Reason), true
+		}
+	}
+	return nil, true
+}
+
 // ProxyHTTP further depends on ingress rules to establish a connection with the origin service. This may be
 // a simple roundtrip or a tcp/websocket dial depending on ingres rule setup.
 func (p *Proxy) ProxyHTTP(
@@ -86,6 +101,13 @@ func (p *Proxy) ProxyHTTP(
 	p.logRequest(req, logFields)
 	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
 	ruleSpan.End()
+	if err, applied := p.applyIngressMiddleware(rule, req, w); err != nil {
+		if applied {
+			p.log.Error().Msg(err.Error())
+			return nil
+		}
+		return err
+	}
 
 	switch originProxy := rule.Service.(type) {
 	case ingress.HTTPOriginProxy:

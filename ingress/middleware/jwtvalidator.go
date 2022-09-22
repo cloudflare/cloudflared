@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -14,7 +13,6 @@ const (
 )
 
 var (
-	ErrNoAccessToken         = errors.New("no access token provided in request")
 	cloudflareAccessCertsURL = "https://%s.cloudflareaccess.com"
 )
 
@@ -39,28 +37,43 @@ func NewJWTValidator(teamName string, certsURL string, audTags []string) *JWTVal
 	verifier := oidc.NewVerifier(certsURL, keySet, config)
 	return &JWTValidator{
 		IDTokenVerifier: verifier,
+		audTags:         audTags,
 	}
 }
 
-func (v *JWTValidator) Handle(ctx context.Context, r *http.Request) error {
+func (v *JWTValidator) Name() string {
+	return "AccessJWTValidator"
+}
+
+func (v *JWTValidator) Handle(ctx context.Context, r *http.Request) (*HandleResult, error) {
 	accessJWT := r.Header.Get(headerKeyAccessJWTAssertion)
 	if accessJWT == "" {
-		return ErrNoAccessToken
+		// log the exact error message here. the message is specific to the handler implementation logic, we don't gain anything
+		// in passing it upstream. and each handler impl know what logging level to use for each.
+		return &HandleResult{
+			ShouldFilterRequest: true,
+			StatusCode:          http.StatusForbidden,
+			Reason:              "no access token in request",
+		}, nil
 	}
 
 	token, err := v.IDTokenVerifier.Verify(ctx, accessJWT)
 	if err != nil {
-		return fmt.Errorf("Invalid token: %w", err)
+		return nil, err
 	}
 
-	// We want atleast one audTag to match
+	// We want at least one audTag to match
 	for _, jwtAudTag := range token.Audience {
 		for _, acceptedAudTag := range v.audTags {
 			if acceptedAudTag == jwtAudTag {
-				return nil
+				return &HandleResult{ShouldFilterRequest: false}, nil
 			}
 		}
 	}
 
-	return fmt.Errorf("Invalid token: %w", err)
+	return &HandleResult{
+		ShouldFilterRequest: true,
+		StatusCode:          http.StatusForbidden,
+		Reason:              fmt.Sprintf("Invalid token in jwt: %v", token.Audience),
+	}, nil
 }
