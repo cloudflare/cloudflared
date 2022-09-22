@@ -299,12 +299,7 @@ func (efr *echoFlowResponder) validate(t *testing.T, echoReq *packet.ICMP) {
 		require.Equal(t, ipv6.ICMPTypeEchoReply, decoded.Type)
 	}
 	require.Equal(t, 0, decoded.Code)
-	if echoReq.Type == ipv4.ICMPTypeEcho {
-		require.NotZero(t, decoded.Checksum)
-	} else {
-		// For ICMPv6, the kernel will compute the checksum during transmission unless pseudo header is not nil
-		require.Zero(t, decoded.Checksum)
-	}
+	require.NotZero(t, decoded.Checksum)
 
 	require.Equal(t, echoReq.Body, decoded.Body)
 }

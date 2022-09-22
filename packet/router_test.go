@@ -96,6 +96,7 @@ func assertTTLExceed(t *testing.T, originalPacket *ICMP, expectedSrc netip.Addr,
 		require.Equal(t, ipv6.ICMPTypeTimeExceeded, decoded.Type)
 	}
 	require.Equal(t, 0, decoded.Code)
+	assertICMPChecksum(t, decoded)
 	timeExceed, ok := decoded.Body.(*icmp.TimeExceeded)
 	require.True(t, ok)
 	require.True(t, bytes.Equal(rawPacket.Data, timeExceed.Data))

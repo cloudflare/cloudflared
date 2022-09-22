@@ -152,6 +152,7 @@ func TestDecodeICMP(t *testing.T) {
 
 		require.Equal(t, test.packet.Type, icmpPacket.Type)
 		require.Equal(t, test.packet.Code, icmpPacket.Code)
+		assertICMPChecksum(t, icmpPacket)
 		require.Equal(t, test.packet.Body, icmpPacket.Body)
 		expectedBody, err := test.packet.Body.Marshal(test.packet.Type.Protocol())
 		require.NoError(t, err)

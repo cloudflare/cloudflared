@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/icmp"
@@ -101,4 +102,96 @@ func assertTTLExceedPacket(t *testing.T, pk *ICMP) {
 		require.Len(t, rawTTLExceedPacket.Data, headerLen+icmpHeaderLen+len(rawPacket.Data))
 		require.True(t, bytes.Equal(rawPacket.Data, rawTTLExceedPacket.Data[headerLen+icmpHeaderLen:]))
 	}
+
+	decoder := NewICMPDecoder()
+	decodedPacket, err := decoder.Decode(rawTTLExceedPacket)
+	require.NoError(t, err)
+	assertICMPChecksum(t, decodedPacket)
+}
+
+func assertICMPChecksum(t *testing.T, icmpPacket *ICMP) {
+	buf := gopacket.NewSerializeBuffer()
+	if icmpPacket.Protocol == layers.IPProtocolICMPv4 {
+		icmpv4 := layers.ICMPv4{
+			TypeCode: layers.CreateICMPv4TypeCode(uint8(icmpPacket.Type.(ipv4.ICMPType)), uint8(icmpPacket.Code)),
+		}
+		switch body := icmpPacket.Body.(type) {
+		case *icmp.Echo:
+			icmpv4.Id = uint16(body.ID)
+			icmpv4.Seq = uint16(body.Seq)
+			payload := gopacket.Payload(body.Data)
+			require.NoError(t, payload.SerializeTo(buf, serializeOpts))
+		default:
+			require.NoError(t, serializeICMPAsPayload(icmpPacket.Message, buf))
+		}
+		// SerializeTo sets the checksum in icmpv4
+		require.NoError(t, icmpv4.SerializeTo(buf, serializeOpts))
+		require.Equal(t, icmpv4.Checksum, uint16(icmpPacket.Checksum))
+	} else {
+		switch body := icmpPacket.Body.(type) {
+		case *icmp.Echo:
+			payload := gopacket.Payload(body.Data)
+			require.NoError(t, payload.SerializeTo(buf, serializeOpts))
+			echo := layers.ICMPv6Echo{
+				Identifier: uint16(body.ID),
+				SeqNumber:  uint16(body.Seq),
+			}
+			require.NoError(t, echo.SerializeTo(buf, serializeOpts))
+		default:
+			require.NoError(t, serializeICMPAsPayload(icmpPacket.Message, buf))
+		}
+
+		icmpv6 := layers.ICMPv6{
+			TypeCode: layers.CreateICMPv6TypeCode(uint8(icmpPacket.Type.(ipv6.ICMPType)), uint8(icmpPacket.Code)),
+		}
+		ipLayer := layers.IPv6{
+			Version:    6,
+			SrcIP:      icmpPacket.Src.AsSlice(),
+			DstIP:      icmpPacket.Dst.AsSlice(),
+			NextHeader: icmpPacket.Protocol,
+			HopLimit:   icmpPacket.TTL,
+		}
+		require.NoError(t, icmpv6.SetNetworkLayerForChecksum(&ipLayer))
+
+		// SerializeTo sets the checksum in icmpv4
+		require.NoError(t, icmpv6.SerializeTo(buf, serializeOpts))
+		require.Equal(t, icmpv6.Checksum, uint16(icmpPacket.Checksum))
+	}
+}
+
+func serializeICMPAsPayload(message *icmp.Message, buf gopacket.SerializeBuffer) error {
+	serializedBody, err := message.Body.Marshal(message.Type.Protocol())
+	if err != nil {
+		return err
+	}
+	payload := gopacket.Payload(serializedBody)
+	return payload.SerializeTo(buf, serializeOpts)
+}
+
+func TestChecksum(t *testing.T) {
+	data := []byte{0x63, 0x2c, 0x49, 0xd6, 0x00, 0x0d, 0xc1, 0xda}
+	pk := ICMP{
+		IP: &IP{
+			Src:      netip.MustParseAddr("2606:4700:110:89c1:c63a:861:e08c:b049"),
+			Dst:      netip.MustParseAddr("fde8:b693:d420:109b::2"),
+			Protocol: layers.IPProtocolICMPv6,
+			TTL:      3,
+		},
+		Message: &icmp.Message{
+			Type: ipv6.ICMPTypeEchoRequest,
+			Code: 0,
+			Body: &icmp.Echo{
+				ID:   0x20a7,
+				Seq:  8,
+				Data: data,
+			},
+		},
+	}
+	encoder := NewEncoder()
+	encoded, err := encoder.Encode(&pk)
+	require.NoError(t, err)
+
+	decoder := NewICMPDecoder()
+	decoded, err := decoder.Decode(encoded)
+	require.Equal(t, 0xff96, decoded.Checksum)
 }

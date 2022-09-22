@@ -1,6 +1,7 @@
 package packet
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net/netip"
 
@@ -21,6 +22,7 @@ const (
 	// 0 = ttl exceed in transit, 1 = fragment reassembly time exceeded
 	icmpTTLExceedInTransitCode       = 0
 	DefaultTTL                 uint8 = 255
+	pseudoHeaderLen                  = 40
 )
 
 // Packet represents an IP packet or a packet that is encapsulated by IP
@@ -117,12 +119,46 @@ func (i *ICMP) EncodeLayers() ([]gopacket.SerializableLayer, error) {
 		return nil, err
 	}
 
-	msg, err := i.Marshal(nil)
+	var serializedPsh []byte = nil
+	if i.Protocol == layers.IPProtocolICMPv6 {
+		psh := &PseudoHeader{
+			SrcIP: i.Src.As16(),
+			DstIP: i.Dst.As16(),
+			// i.Marshal re-calculates the UpperLayerPacketLength
+			UpperLayerPacketLength: 0,
+			NextHeader:             uint8(i.Protocol),
+		}
+		serializedPsh = psh.Marshal()
+	}
+	msg, err := i.Marshal(serializedPsh)
 	if err != nil {
 		return nil, err
 	}
 	icmpLayer := gopacket.Payload(msg)
 	return append(ipLayers, icmpLayer), nil
+}
+
+// https://www.rfc-editor.org/rfc/rfc2460#section-8.1
+type PseudoHeader struct {
+	SrcIP                  [16]byte
+	DstIP                  [16]byte
+	UpperLayerPacketLength uint32
+	zero                   [3]byte
+	NextHeader             uint8
+}
+
+func (ph *PseudoHeader) Marshal() []byte {
+	buf := make([]byte, pseudoHeaderLen)
+	index := 0
+	copy(buf, ph.SrcIP[:])
+	index += 16
+	copy(buf[index:], ph.DstIP[:])
+	index += 16
+	binary.BigEndian.PutUint32(buf[index:], ph.UpperLayerPacketLength)
+	index += 4
+	copy(buf[index:], ph.zero[:])
+	buf[pseudoHeaderLen-1] = ph.NextHeader
+	return buf
 }
 
 func NewICMPTTLExceedPacket(originalIP *IP, originalPacket RawPacket, routerIP netip.Addr) *ICMP {
@@ -137,6 +173,7 @@ func NewICMPTTLExceedPacket(originalIP *IP, originalPacket RawPacket, routerIP n
 		protocol = layers.IPProtocolICMPv6
 		icmpType = ipv6.ICMPTypeTimeExceeded
 	}
+
 	return &ICMP{
 		IP: &IP{
 			Src:      routerIP,
