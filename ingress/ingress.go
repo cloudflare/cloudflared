@@ -13,6 +13,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ingress/middleware"
 	"github.com/cloudflare/cloudflared/ipaccess"
 )
 
@@ -168,6 +169,28 @@ func (ing Ingress) CatchAll() *Rule {
 	return &ing.Rules[len(ing.Rules)-1]
 }
 
+func validateAccessConfiguration(cfg *config.AccessConfig) error {
+	if !cfg.Required {
+		return nil
+	}
+
+	// It is possible to set `required:true` and not have these two configured yet.
+	// But if one of them is configured, we'd validate for correctness.
+	if len(cfg.AudTag) == 0 && cfg.TeamName == "" {
+		return nil
+	}
+
+	if len(cfg.AudTag) == 0 {
+		return errors.New("access audtag cannot be empty")
+	}
+
+	if cfg.TeamName == "" {
+		return errors.New("access.TeamName cannot be blank")
+	}
+
+	return nil
+}
+
 func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginRequestConfig) (Ingress, error) {
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
@@ -237,6 +260,17 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			}
 		}
 
+		var handlers []middleware.Handler
+		if access := r.OriginRequest.Access; access != nil {
+			if err := validateAccessConfiguration(access); err != nil {
+				return Ingress{}, err
+			}
+			if access.Required {
+				verifier := middleware.NewJWTValidator(access.TeamName, "", access.AudTag)
+				handlers = append(handlers, verifier)
+			}
+		}
+
 		if err := validateHostname(r, i, len(ingress)); err != nil {
 			return Ingress{}, err
 		}
@@ -255,6 +289,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			Hostname: r.Hostname,
 			Service:  service,
 			Path:     pathRegexp,
+			Handlers: handlers,
 			Config:   cfg,
 		}
 	}

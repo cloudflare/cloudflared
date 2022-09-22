@@ -42,8 +42,8 @@ func NewJWTValidator(teamName string, certsURL string, audTags []string) *JWTVal
 	}
 }
 
-func (v *JWTValidator) Handle(ctx context.Context, headers http.Header) error {
-	accessJWT := headers.Get(headerKeyAccessJWTAssertion)
+func (v *JWTValidator) Handle(ctx context.Context, r *http.Request) error {
+	accessJWT := r.Header.Get(headerKeyAccessJWTAssertion)
 	if accessJWT == "" {
 		return ErrNoAccessToken
 	}

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+
+	"github.com/cloudflare/cloudflared/ingress/middleware"
 )
 
 // Rule routes traffic from a hostname/path on the public internet to the
@@ -21,9 +23,7 @@ type Rule struct {
 	Service OriginService `json:"service"`
 
 	// Handlers is a list of functions that acts as a middleware during ProxyHTTP
-	// TODO TUN-6774: Uncomment when we parse ingress to this. This serves as a demonstration on how
-	// we want to plug in Verifiers.
-	// Handlers []middleware.Handler
+	Handlers []middleware.Handler
 
 	// Configure the request cloudflared sends to this specific origin.
 	Config OriginRequestConfig `json:"originRequest"`

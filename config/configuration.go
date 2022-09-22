@@ -234,14 +234,14 @@ type OriginRequestConfig struct {
 }
 
 type AccessConfig struct {
-	// Enabled when set to true will fail every request that does not arrive through an access authenticated endpoint.
-	Enabled bool
+	// Required when set to true will fail every request that does not arrive through an access authenticated endpoint.
+	Required bool `yaml:"required" json:"required,omitempty"`
 
 	// TeamName is the organization team name to get the public key certificates for.
-	TeamName string `yaml:"teamName" json:"teamName,omitempty"`
+	TeamName string `yaml:"teamName" json:"teamName"`
 
 	// AudTag is the AudTag to verify access JWT against.
-	AudTag []string `yaml:"audTag" json:"audTag,omitempty"`
+	AudTag []string `yaml:"audTag" json:"audTag"`
 }
 
 type IngressIPRule struct {
