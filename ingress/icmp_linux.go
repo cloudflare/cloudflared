@@ -12,6 +12,9 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -19,6 +22,15 @@ import (
 	"golang.org/x/net/icmp"
 
 	"github.com/cloudflare/cloudflared/packet"
+)
+
+const (
+	// https://lwn.net/Articles/550551/ IPv4 and IPv6 share the same path
+	pingGroupPath = "/proc/sys/net/ipv4/ping_group_range"
+)
+
+var (
+	findGroupIDRegex = regexp.MustCompile(`\d+`)
 )
 
 type icmpProxy struct {
@@ -30,7 +42,7 @@ type icmpProxy struct {
 }
 
 func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
-	if err := testPermission(listenIP, zone); err != nil {
+	if err := testPermission(listenIP, zone, logger); err != nil {
 		return nil, err
 	}
 	return &icmpProxy{
@@ -42,17 +54,47 @@ func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idle
 	}, nil
 }
 
-func testPermission(listenIP netip.Addr, zone string) error {
+func testPermission(listenIP netip.Addr, zone string, logger *zerolog.Logger) error {
 	// Opens a non-privileged ICMP socket. On Linux the group ID of the process needs to be in ping_group_range
+	// Only check ping_group_range once for IPv4
+	if listenIP.Is4() {
+		if err := checkInPingGroup(); err != nil {
+			logger.Warn().Err(err).Msgf("The user running cloudflared process has a GID (group ID) that is not within ping_group_range. You might need to add that user to a group within that range, or instead update the range to encompass a group the user is already in by modifying %s. Otherwise cloudflared will not be able to ping this network", pingGroupPath)
+			return err
+		}
+	}
 	conn, err := newICMPConn(listenIP, zone)
 	if err != nil {
-		// TODO: TUN-6715 check if cloudflared is in ping_group_range if the check failed. If not log instruction to
-		// change the group ID
 		return err
 	}
 	// This conn is only to test if cloudflared has permission to open this type of socket
 	conn.Close()
 	return nil
+}
+
+func checkInPingGroup() error {
+	file, err := os.ReadFile(pingGroupPath)
+	if err != nil {
+		return err
+	}
+	groupID := os.Getgid()
+	// Example content: 999	   59999
+	found := findGroupIDRegex.FindAll(file, 2)
+	if len(found) == 2 {
+		groupMin, err := strconv.ParseUint(string(found[0]), 10, 16)
+		if err != nil {
+			return errors.Wrapf(err, "failed to determine minimum ping group ID")
+		}
+		groupMax, err := strconv.ParseUint(string(found[1]), 10, 16)
+		if err != nil {
+			return errors.Wrapf(err, "failed to determine minimum ping group ID")
+		}
+		if groupID < int(groupMin) || groupID > int(groupMax) {
+			return fmt.Errorf("Group ID %d is not between ping group %d to %d", groupID, groupMin, groupMax)
+		}
+		return nil
+	}
+	return fmt.Errorf("did not find group range in %s", pingGroupPath)
 }
 
 func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
