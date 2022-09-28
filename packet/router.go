@@ -11,7 +11,7 @@ import (
 type ICMPRouter interface {
 	// Serve starts listening for responses to the requests until context is done
 	Serve(ctx context.Context) error
-	// Request sends an ICMP message
+	// Request sends an ICMP message. Implementations should not modify pk after the function returns.
 	Request(pk *ICMP, responder FunnelUniPipe) error
 }
 

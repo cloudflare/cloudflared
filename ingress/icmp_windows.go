@@ -262,6 +262,9 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	return ctx.Err()
 }
 
+// Request sends an ICMP echo request and wait for a reply or timeout.
+// The async version of Win32 APIs take a callback whose memory is not garbage collected, so we use the synchronous version.
+// It's possible that a slow request will block other requests, so we set the timeout to only 1s.
 func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
 	if pk == nil {
 		return errPacketNil
