@@ -20,6 +20,12 @@ def select_platform(plat):
     return pytest.mark.skipif(
         platform.system() != plat, reason=f"Only runs on {plat}")
 
+def fips_enabled():
+    env_fips = os.getenv("COMPONENT_TESTS_FIPS")
+    return env_fips is not None and env_fips != "0"
+
+nofips = pytest.mark.skipif(
+        fips_enabled(), reason=f"Only runs without FIPS (COMPONENT_TESTS_FIPS=0)")
 
 def write_config(directory, config):
     config_path = directory / "config.yml"

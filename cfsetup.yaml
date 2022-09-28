@@ -197,6 +197,26 @@ stretch: &stretch
   component-test:
     build_dir: *build_dir
     builddeps:
+      - *pinned_go
+      - python3.7
+      - python3-pip
+      - python3-setuptools
+      # procps installs the ps command which is needed in test_sysv_service because the init script
+      # uses ps pid to determine if the agent is running
+      - procps
+    pre-cache-copy-paths:
+      - component-tests/requirements.txt
+    pre-cache: &component_test_pre_cache
+      - sudo pip3 install --upgrade -r component-tests/requirements.txt
+    post-cache: &component_test_post_cache
+      # Creates and routes a Named Tunnel for this build. Also constructs config file from env vars.
+      - python3 component-tests/setup.py --type create
+      - pytest component-tests -o log_cli=true --log-cli-level=INFO
+      # The Named Tunnel is deleted and its route unprovisioned here.
+      - python3 component-tests/setup.py --type cleanup
+  component-test-fips:
+    build_dir: *build_dir
+    builddeps:
       - *pinned_go_fips
       - python3.7
       - python3-pip
@@ -206,14 +226,8 @@ stretch: &stretch
       - procps
     pre-cache-copy-paths:
       - component-tests/requirements.txt
-    pre-cache:
-      - sudo pip3 install --upgrade -r component-tests/requirements.txt
-    post-cache:
-      # Creates and routes a Named Tunnel for this build. Also constructs config file from env vars.
-      - python3 component-tests/setup.py --type create
-      - pytest component-tests -o log_cli=true --log-cli-level=INFO
-      # The Named Tunnel is deleted and its route unprovisioned here.
-      - python3 component-tests/setup.py --type cleanup
+    pre-cache: *component_test_pre_cache
+    post-cache: *component_test_post_cache
   update-homebrew:
     builddeps:
       - openssh-client
