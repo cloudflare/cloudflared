@@ -81,11 +81,11 @@ func checkInPingGroup() error {
 	// Example content: 999	   59999
 	found := findGroupIDRegex.FindAll(file, 2)
 	if len(found) == 2 {
-		groupMin, err := strconv.ParseUint(string(found[0]), 10, 16)
+		groupMin, err := strconv.ParseInt(string(found[0]), 10, 32)
 		if err != nil {
 			return errors.Wrapf(err, "failed to determine minimum ping group ID")
 		}
-		groupMax, err := strconv.ParseUint(string(found[1]), 10, 16)
+		groupMax, err := strconv.ParseInt(string(found[1]), 10, 32)
 		if err != nil {
 			return errors.Wrapf(err, "failed to determine minimum ping group ID")
 		}
