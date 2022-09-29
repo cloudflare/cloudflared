@@ -13,9 +13,10 @@ import (
 func TestConfigFileSettings(t *testing.T) {
 	var (
 		firstIngress = UnvalidatedIngressRule{
-			Hostname: "tunnel1.example.com",
-			Path:     "/id",
-			Service:  "https://localhost:8000",
+			Hostname:        "tunnel1.example.com",
+			Path:            "/id",
+			PathReplacement: "/id",
+			Service:         "https://localhost:8000",
 		}
 		secondIngress = UnvalidatedIngressRule{
 			Hostname: "*",
@@ -45,6 +46,7 @@ originRequest:
 ingress:
  - hostname: tunnel1.example.com
    path: /id
+   pathReplacement: /id
    service: https://localhost:8000
  - hostname: "*"
    service: https://localhost:8001
