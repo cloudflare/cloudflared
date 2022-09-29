@@ -23,12 +23,10 @@ type Upstream interface {
 
 // Router routes packets between Upstream and ICMPRouter. Currently it rejects all other type of ICMP packets
 type Router struct {
-	upstream   Upstream
-	returnPipe FunnelUniPipe
-	icmpRouter ICMPRouter
-	ipv4Src    netip.Addr
-	ipv6Src    netip.Addr
-	logger     *zerolog.Logger
+	upstream     Upstream
+	returnPipe   FunnelUniPipe
+	globalConfig *GlobalRouterConfig
+	logger       *zerolog.Logger
 }
 
 // GlobalRouterConfig is the configuration shared by all instance of Router.
@@ -41,12 +39,10 @@ type GlobalRouterConfig struct {
 
 func NewRouter(globalConfig *GlobalRouterConfig, upstream Upstream, returnPipe FunnelUniPipe, logger *zerolog.Logger) *Router {
 	return &Router{
-		upstream:   upstream,
-		returnPipe: returnPipe,
-		icmpRouter: globalConfig.ICMPRouter,
-		ipv4Src:    globalConfig.IPv4Src,
-		ipv6Src:    globalConfig.IPv6Src,
-		logger:     logger,
+		upstream:     upstream,
+		returnPipe:   returnPipe,
+		globalConfig: globalConfig,
+		logger:       logger,
 	}
 }
 
@@ -57,6 +53,10 @@ func (r *Router) Serve(ctx context.Context) error {
 		rawPacket, err := r.upstream.ReceivePacket(ctx)
 		if err != nil {
 			return err
+		}
+		// Drop packets if ICMPRouter wasn't created
+		if r.globalConfig == nil {
+			continue
 		}
 		icmpPacket, err := icmpDecoder.Decode(rawPacket)
 		if err != nil {
@@ -72,7 +72,7 @@ func (r *Router) Serve(ctx context.Context) error {
 		}
 		icmpPacket.TTL--
 
-		if err := r.icmpRouter.Request(icmpPacket, r.returnPipe); err != nil {
+		if err := r.globalConfig.ICMPRouter.Request(icmpPacket, r.returnPipe); err != nil {
 			r.logger.Err(err).
 				Str("src", icmpPacket.Src.String()).
 				Str("dst", icmpPacket.Dst.String()).
@@ -86,9 +86,9 @@ func (r *Router) Serve(ctx context.Context) error {
 func (r *Router) sendTTLExceedMsg(pk *ICMP, rawPacket RawPacket, encoder *Encoder) error {
 	var srcIP netip.Addr
 	if pk.Dst.Is4() {
-		srcIP = r.ipv4Src
+		srcIP = r.globalConfig.IPv4Src
 	} else {
-		srcIP = r.ipv6Src
+		srcIP = r.globalConfig.IPv6Src
 	}
 	ttlExceedPacket := NewICMPTTLExceedPacket(pk.IP, rawPacket, srcIP)
 

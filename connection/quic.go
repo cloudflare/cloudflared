@@ -50,7 +50,7 @@ type QUICConnection struct {
 	// sessionManager tracks active sessions. It receives datagrams from quic connection via datagramMuxer
 	sessionManager datagramsession.Manager
 	// datagramMuxer mux/demux datagrams from quic connection
-	datagramMuxer        quicpogs.BaseDatagramMuxer
+	datagramMuxer        *quicpogs.DatagramMuxerV2
 	packetRouter         *packet.Router
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
@@ -75,11 +75,7 @@ func NewQUICConnection(
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
-
-	var pr *packet.Router
-	if packetRouterConfig != nil {
-		pr = packet.NewRouter(packetRouterConfig, datagramMuxer, &returnPipe{muxer: datagramMuxer}, logger)
-	}
+	packetRouter := packet.NewRouter(packetRouterConfig, datagramMuxer, &returnPipe{muxer: datagramMuxer}, logger)
 
 	return &QUICConnection{
 		session:              session,
@@ -87,7 +83,7 @@ func NewQUICConnection(
 		logger:               logger,
 		sessionManager:       sessionManager,
 		datagramMuxer:        datagramMuxer,
-		packetRouter:         pr,
+		packetRouter:         packetRouter,
 		controlStreamHandler: controlStreamHandler,
 		connOptions:          connOptions,
 	}, nil
@@ -123,17 +119,14 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 		defer cancel()
 		return q.sessionManager.Serve(ctx)
 	})
-
 	errGroup.Go(func() error {
 		defer cancel()
 		return q.datagramMuxer.ServeReceive(ctx)
 	})
-	if q.packetRouter != nil {
-		errGroup.Go(func() error {
-			defer cancel()
-			return q.packetRouter.Serve(ctx)
-		})
-	}
+	errGroup.Go(func() error {
+		defer cancel()
+		return q.packetRouter.Serve(ctx)
+	})
 
 	return errGroup.Wait()
 }

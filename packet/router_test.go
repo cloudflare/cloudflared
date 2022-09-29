@@ -56,7 +56,7 @@ func TestRouterReturnTTLExceed(t *testing.T) {
 			},
 		},
 	}
-	assertTTLExceed(t, &pk, router.ipv4Src, upstream, returnPipe)
+	assertTTLExceed(t, &pk, router.globalConfig.IPv4Src, upstream, returnPipe)
 	pk = ICMP{
 		IP: &IP{
 			Src:      netip.MustParseAddr("fd51:2391:523:f4ee::1"),
@@ -74,7 +74,7 @@ func TestRouterReturnTTLExceed(t *testing.T) {
 			},
 		},
 	}
-	assertTTLExceed(t, &pk, router.ipv6Src, upstream, returnPipe)
+	assertTTLExceed(t, &pk, router.globalConfig.IPv6Src, upstream, returnPipe)
 
 	cancel()
 	<-routerStopped
