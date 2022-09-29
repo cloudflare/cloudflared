@@ -445,6 +445,41 @@ ingress:
 `},
 			wantErr: true,
 		},
+		{
+			name: "Path replacement",
+			args: args{rawYAML: `
+ingress:
+- hostname: test.example.com
+  service: https://localhost:8000
+  path: ^/api/(.*)$
+  pathReplacement: /$1
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname:        "test.example.com",
+					Service:         &httpService{url: localhost8000},
+					Path:            &Regexp{Regexp: regexp.MustCompile("^/api/(.*)$")},
+					PathReplacement: "/$1",
+					Config:          defaultConfig,
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "Path replacement without a path specified",
+			args: args{rawYAML: `
+ingress:
+- hostname: test.example.com
+  service: https://localhost:8000
+  pathReplacement: /$1
+- service: http_status:404
+`},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

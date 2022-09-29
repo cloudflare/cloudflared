@@ -46,9 +46,9 @@ func TestUnixSocketOrigin(t *testing.T) {
 
 	tests := []MultipleIngressTest{
 		{
-			url:            "http://unix.example.com",
+			url:            "http://unix.example.com/created",
 			expectedStatus: http.StatusCreated,
-			expectedBody:   []byte("Created"),
+			expectedBody:   []byte("/created"),
 		},
 	}
 

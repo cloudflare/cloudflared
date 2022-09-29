@@ -20,6 +20,10 @@ type Rule struct {
 	// Path is an optional regex that can specify path-driven ingress rules.
 	Path *Regexp `json:"path"`
 
+	// PathReplacement is an optional regexp replacement string for Path,
+	// that gets sent to the Service
+	PathReplacement string `json:"pathReplacement"`
+
 	// A (probably local) address. Requests for a hostname which matches this
 	// rule's hostname pattern will be proxied to the service running on this
 	// address.

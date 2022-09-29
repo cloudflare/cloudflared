@@ -117,6 +117,8 @@ func (p *Proxy) ProxyHTTP(
 			originProxy,
 			isWebsocket,
 			rule.Config.DisableChunkedEncoding,
+			rule.Path,
+			rule.PathReplacement,
 			logFields,
 		); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
@@ -189,11 +191,18 @@ func (p *Proxy) proxyHTTPRequest(
 	httpService ingress.HTTPOriginProxy,
 	isWebsocket bool,
 	disableChunkedEncoding bool,
+	pathRegexp *ingress.Regexp,
+	pathReplacement string,
 	fields logFields,
 ) error {
 	roundTripReq := tr.Request
-	if isWebsocket {
+	if isWebsocket || pathReplacement != "" {
 		roundTripReq = tr.Clone(tr.Request.Context())
+	}
+	if pathReplacement != "" {
+		roundTripReq.URL.Path = pathRegexp.ReplaceAllString(roundTripReq.URL.Path, pathReplacement)
+	}
+	if isWebsocket {
 		roundTripReq.Header.Set("Connection", "Upgrade")
 		roundTripReq.Header.Set("Upgrade", "websocket")
 		roundTripReq.Header.Set("Sec-Websocket-Version", "13")

@@ -294,6 +294,8 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 				return Ingress{}, errors.Wrapf(err, "Rule #%d has an invalid regex", i+1)
 			}
 			pathRegexp = &Regexp{Regexp: regex}
+		} else if r.PathReplacement != "" {
+			return Ingress{}, fmt.Errorf("rule #%d has a path replacement without a path specified", i+1)
 		}
 
 		rules[i] = Rule{
@@ -301,6 +303,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			punycodeHostname: punycodeHostname,
 			Service:          service,
 			Path:             pathRegexp,
+			PathReplacement:  r.PathReplacement,
 			Handlers:         handlers,
 			Config:           cfg,
 		}

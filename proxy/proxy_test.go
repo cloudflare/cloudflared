@@ -296,6 +296,18 @@ func TestProxyMultipleOrigins(t *testing.T) {
 
 	unvalidatedIngress := []config.UnvalidatedIngressRule{
 		{
+			Hostname:        "api.example.com",
+			Service:         api.URL,
+			Path:            "^/service1/(.*)$",
+			PathReplacement: "/$1",
+		},
+		{
+			Hostname:        "api.example.com",
+			Service:         api.URL,
+			Path:            "^/service2/(.*)$",
+			PathReplacement: "/route2/$1",
+		},
+		{
 			Hostname: "api.example.com",
 			Service:  api.URL,
 		},
@@ -305,7 +317,7 @@ func TestProxyMultipleOrigins(t *testing.T) {
 		},
 		{
 			Hostname: "health.example.com",
-			Path:     "/health",
+			Path:     "^/health$",
 			Service:  "http_status:200",
 		},
 		{
@@ -316,9 +328,19 @@ func TestProxyMultipleOrigins(t *testing.T) {
 
 	tests := []MultipleIngressTest{
 		{
-			url:            "http://api.example.com",
+			url:            fmt.Sprintf("http://api.example.com/service1%s", hello.HealthRoute),
 			expectedStatus: http.StatusCreated,
-			expectedBody:   []byte("Created"),
+			expectedBody:   []byte(hello.HealthRoute),
+		},
+		{
+			url:            fmt.Sprintf("http://api.example.com/service2%s", hello.HealthRoute),
+			expectedStatus: http.StatusCreated,
+			expectedBody:   []byte(fmt.Sprintf("/route2%s", hello.HealthRoute)),
+		},
+		{
+			url:            "http://api.example.com/created",
+			expectedStatus: http.StatusCreated,
+			expectedBody:   []byte("/created"),
 		},
 		{
 			url:            fmt.Sprintf("http://hello.example.com%s", hello.HealthRoute),
@@ -384,7 +406,7 @@ type mockAPI struct{}
 
 func (ma mockAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write([]byte("Created"))
+	_, _ = w.Write([]byte(r.URL.Path))
 }
 
 type errorOriginTransport struct{}
