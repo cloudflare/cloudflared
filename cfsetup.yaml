@@ -119,18 +119,6 @@ stretch: &stretch
       - export GOOS=linux
       - export GOARCH=arm64
       - make cloudflared-deb
-  publish-deb:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - build-essential
-      - fakeroot
-      - rubygem-fpm
-      - openssh-client
-    post-cache:
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - make publish-deb
   github-release-macos-amd64:
     build_dir: *build_dir
     builddeps: &build_pygithub
@@ -277,18 +265,3 @@ stretch: &stretch
 buster: *stretch
 bullseye: *stretch
 bookworm: *stretch
-centos-7:
-  publish-rpm:
-    build_dir: *build_dir
-    builddeps: &el7_builddeps
-      - https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-    pre-cache:
-      - yum install -y fakeroot
-      - yum upgrade -y binutils-2.27-44.base.el7.x86_64
-      - wget https://go.dev/dl/go1.18.6.linux-amd64.tar.gz -P /tmp/
-      - tar -C /usr/local -xzf /tmp/go1.18.6.linux-amd64.tar.gz
-    post-cache:
-      - export PATH=$PATH:/usr/local/go/bin
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - make publish-rpm
