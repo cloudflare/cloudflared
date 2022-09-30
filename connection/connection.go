@@ -39,6 +39,7 @@ type Orchestrator interface {
 	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
 	GetConfigJSON() ([]byte, error)
 	GetOriginProxy() (OriginProxy, error)
+	WarpRoutingEnabled() (enabled bool)
 }
 
 type NamedTunnelProperties struct {

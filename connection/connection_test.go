@@ -56,6 +56,10 @@ func (mcr *mockOrchestrator) GetOriginProxy() (OriginProxy, error) {
 	return mcr.originProxy, nil
 }
 
+func (mcr *mockOrchestrator) WarpRoutingEnabled() (enabled bool) {
+	return true
+}
+
 type mockOriginProxy struct{}
 
 func (moc *mockOriginProxy) ProxyHTTP(

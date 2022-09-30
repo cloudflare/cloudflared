@@ -23,10 +23,11 @@ type Upstream interface {
 
 // Router routes packets between Upstream and ICMPRouter. Currently it rejects all other type of ICMP packets
 type Router struct {
-	upstream     Upstream
-	returnPipe   FunnelUniPipe
-	globalConfig *GlobalRouterConfig
-	logger       *zerolog.Logger
+	upstream               Upstream
+	returnPipe             FunnelUniPipe
+	globalConfig           *GlobalRouterConfig
+	logger                 *zerolog.Logger
+	checkRouterEnabledFunc func() bool
 }
 
 // GlobalRouterConfig is the configuration shared by all instance of Router.
@@ -37,12 +38,13 @@ type GlobalRouterConfig struct {
 	Zone       string
 }
 
-func NewRouter(globalConfig *GlobalRouterConfig, upstream Upstream, returnPipe FunnelUniPipe, logger *zerolog.Logger) *Router {
+func NewRouter(globalConfig *GlobalRouterConfig, upstream Upstream, returnPipe FunnelUniPipe, logger *zerolog.Logger, checkRouterEnabledFunc func() bool) *Router {
 	return &Router{
-		upstream:     upstream,
-		returnPipe:   returnPipe,
-		globalConfig: globalConfig,
-		logger:       logger,
+		upstream:               upstream,
+		returnPipe:             returnPipe,
+		globalConfig:           globalConfig,
+		logger:                 logger,
+		checkRouterEnabledFunc: checkRouterEnabledFunc,
 	}
 }
 
@@ -54,10 +56,16 @@ func (r *Router) Serve(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
 		// Drop packets if ICMPRouter wasn't created
 		if r.globalConfig == nil {
 			continue
 		}
+
+		if enabled := r.checkRouterEnabledFunc(); !enabled {
+			continue
+		}
+
 		icmpPacket, err := icmpDecoder.Decode(rawPacket)
 		if err != nil {
 			r.logger.Err(err).Msg("Failed to decode ICMP packet from quic datagram")

@@ -75,7 +75,7 @@ func NewQUICConnection(
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
-	packetRouter := packet.NewRouter(packetRouterConfig, datagramMuxer, &returnPipe{muxer: datagramMuxer}, logger)
+	packetRouter := packet.NewRouter(packetRouterConfig, datagramMuxer, &returnPipe{muxer: datagramMuxer}, logger, orchestrator.WarpRoutingEnabled)
 
 	return &QUICConnection{
 		session:              session,

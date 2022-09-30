@@ -27,10 +27,12 @@ type Orchestrator struct {
 	// Used by UpdateConfig to make sure one update at a time
 	lock sync.RWMutex
 	// Underlying value is proxy.Proxy, can be read without the lock, but still needs the lock to update
-	proxy  atomic.Value
-	config *Config
-	tags   []tunnelpogs.Tag
-	log    *zerolog.Logger
+	proxy atomic.Value
+	// TODO: TUN-6815 Use atomic.Bool once we upgrade to go 1.19. 1 Means enabled and 0 means disabled
+	warpRoutingEnabled uint32
+	config             *Config
+	tags               []tunnelpogs.Tag
+	log                *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -122,6 +124,11 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	o.proxy.Store(newProxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting
+	if warpRouting.Enabled {
+		atomic.StoreUint32(&o.warpRoutingEnabled, 1)
+	} else {
+		atomic.StoreUint32(&o.warpRoutingEnabled, 0)
+	}
 
 	// If proxyShutdownC is nil, there is no previous running proxy
 	if o.proxyShutdownC != nil {
@@ -188,6 +195,14 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 		return nil, err
 	}
 	return proxy, nil
+}
+
+// TODO: TUN-6815 consider storing WarpRouting.Enabled as atomic.Bool once we upgrade to go 1.19
+func (o *Orchestrator) WarpRoutingEnabled() (enabled bool) {
+	if atomic.LoadUint32(&o.warpRoutingEnabled) == 0 {
+		return false
+	}
+	return true
 }
 
 func (o *Orchestrator) waitToCloseLastProxy() {
