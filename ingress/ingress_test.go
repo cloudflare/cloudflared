@@ -446,7 +446,7 @@ ingress:
 			wantErr: true,
 		},
 		{
-			name: "Path replacement",
+			name: "Rewrite",
 			args: args{rawYAML: `
 ingress:
 - hostname: test.example.com
@@ -470,7 +470,7 @@ ingress:
 			},
 		},
 		{
-			name: "Path replacement without a path specified",
+			name: "Rewrite without a path specified",
 			args: args{rawYAML: `
 ingress:
 - hostname: test.example.com
