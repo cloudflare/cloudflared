@@ -177,11 +177,11 @@ func ValidateUrl(c *cli.Context, allowURLFromArgs bool) (*url.URL, error) {
 }
 
 type UnvalidatedIngressRule struct {
-	Hostname        string              `json:"hostname,omitempty"`
-	Path            string              `json:"path,omitempty"`
-	PathReplacement string              `yaml:"pathReplacement" json:"pathReplacement,omitempty"`
-	Service         string              `json:"service,omitempty"`
-	OriginRequest   OriginRequestConfig `yaml:"originRequest" json:"originRequest"`
+	Hostname      string              `json:"hostname,omitempty"`
+	Path          string              `json:"path,omitempty"`
+	Rewrite       string              `json:"rewrite,omitempty"`
+	Service       string              `json:"service,omitempty"`
+	OriginRequest OriginRequestConfig `yaml:"originRequest" json:"originRequest"`
 }
 
 // OriginRequestConfig is a set of optional fields that users may set to

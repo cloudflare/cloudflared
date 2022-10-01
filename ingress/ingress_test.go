@@ -452,16 +452,16 @@ ingress:
 - hostname: test.example.com
   service: https://localhost:8000
   path: ^/api/(.*)$
-  pathReplacement: /$1
+  rewrite: /$1
 - service: http_status:404
 `},
 			want: []Rule{
 				{
-					Hostname:        "test.example.com",
-					Service:         &httpService{url: localhost8000},
-					Path:            &Regexp{Regexp: regexp.MustCompile("^/api/(.*)$")},
-					PathReplacement: "/$1",
-					Config:          defaultConfig,
+					Hostname: "test.example.com",
+					Service:  &httpService{url: localhost8000},
+					Path:     &Regexp{Regexp: regexp.MustCompile("^/api/(.*)$")},
+					Rewrite:  "/$1",
+					Config:   defaultConfig,
 				},
 				{
 					Service: &fourOhFour,
@@ -475,7 +475,7 @@ ingress:
 ingress:
 - hostname: test.example.com
   service: https://localhost:8000
-  pathReplacement: /$1
+  rewrite: /$1
 - service: http_status:404
 `},
 			wantErr: true,

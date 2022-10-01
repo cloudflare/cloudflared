@@ -296,16 +296,22 @@ func TestProxyMultipleOrigins(t *testing.T) {
 
 	unvalidatedIngress := []config.UnvalidatedIngressRule{
 		{
-			Hostname:        "api.example.com",
-			Service:         api.URL,
-			Path:            "^/service1/(.*)$",
-			PathReplacement: "/$1",
+			Hostname: "api.example.com",
+			Service:  api.URL,
+			Path:     "^/service1/(.*)$",
+			Rewrite:  "/$1",
 		},
 		{
-			Hostname:        "api.example.com",
-			Service:         api.URL,
-			Path:            "^/service2/(.*)$",
-			PathReplacement: "/route2/$1",
+			Hostname: "api.example.com",
+			Service:  api.URL,
+			Path:     "^/service2/(.*)$",
+			Rewrite:  "/route2/$1",
+		},
+		{
+			Hostname: "api.example.com",
+			Service:  api.URL,
+			Path:     `^/service3/(.*)/(\w+)$`,
+			Rewrite:  "/$2/$1",
 		},
 		{
 			Hostname: "api.example.com",
@@ -336,6 +342,11 @@ func TestProxyMultipleOrigins(t *testing.T) {
 			url:            fmt.Sprintf("http://api.example.com/service2%s", hello.HealthRoute),
 			expectedStatus: http.StatusCreated,
 			expectedBody:   []byte(fmt.Sprintf("/route2%s", hello.HealthRoute)),
+		},
+		{
+			url:            fmt.Sprintf("http://api.example.com/service3/func%s", hello.HealthRoute),
+			expectedStatus: http.StatusCreated,
+			expectedBody:   []byte(fmt.Sprintf("%s/func", hello.HealthRoute)),
 		},
 		{
 			url:            "http://api.example.com/created",
