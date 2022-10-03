@@ -1,3 +1,21 @@
+2022.10.0
+- 2022-09-30 TUN-6755: Remove unused publish functions
+- 2022-09-30 TUN-6813: Only proxy ICMP packets when warp-routing is enabled
+- 2022-09-29 TUN-6811: Ping group range should be parsed as int32
+- 2022-09-29 TUN-6812: Drop IP packets if ICMP proxy is not initialized
+- 2022-09-28 TUN-6716: Document limitation of Windows ICMP proxy
+- 2022-09-28 TUN-6810: Add component test for post-quantum
+- 2022-09-27 TUN-6715: Provide suggestion to add cloudflared to ping_group_range if it failed to open ICMP socket
+- 2022-09-22 TUN-6792: Fix brew core release by not auditing the formula
+- 2022-09-22 TUN-6774: Validate OriginRequest.Access to add Ingress.Middleware
+- 2022-09-22 TUN-6775: Add middleware.Handler verification to ProxyHTTP
+- 2022-09-22 TUN-6791: Calculate ICMPv6 checksum
+- 2022-09-22 TUN-6801: Add punycode alternatives for ingress rules
+- 2022-09-21 TUN-6772: Add a JWT Validator as an ingress verifier
+- 2022-09-21 TUN-6772: Add a JWT Validator as an ingress verifier
+- 2022-09-21 TUN-6774: Validate OriginRequest.Access to add Ingress.Middleware
+- 2022-09-21 TUN-6772: Add a JWT Validator as an ingress verifier
+- 2022-09-20 TUN-6741: ICMP proxy tries to listen on specific IPv4 & IPv6 when possible
 2022.9.1
 - 2022-09-20 TUN-6777: Fix race condition in TestFunnelIdleTimeout
 - 2022-09-20 TUN-6595: Enable datagramv2 and icmp proxy by default
