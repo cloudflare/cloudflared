@@ -103,7 +103,8 @@ func (p *Proxy) ProxyHTTP(
 	ruleSpan.End()
 	if err, applied := p.applyIngressMiddleware(rule, req, w); err != nil {
 		if applied {
-			p.log.Error().Msg(err.Error())
+			rule, srv := ruleField(p.ingressRules, ruleNum)
+			p.logRequestError(err, cfRay, "", rule, srv)
 			return nil
 		}
 		return err
