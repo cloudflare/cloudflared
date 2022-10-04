@@ -189,7 +189,7 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Sessi
 		defer quicSession.CloseWithError(0, "")
 
 		// Wait a few milliseconds for MTU discovery to take place
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 300)
 
 		var muxer BaseDatagramMuxer
 		switch version {
