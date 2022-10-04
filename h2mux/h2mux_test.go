@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -976,9 +977,10 @@ func TestLongSiteWithDictionaries(t *testing.T) {
 
 		tstLen := 500
 		errGroup, _ := errgroup.WithContext(context.Background())
+		errGroup.SetLimit(runtime.NumGoroutine())
 		for i := 0; i < tstLen; i++ {
 			errGroup.Go(func() error {
-				path := paths[rand.Int()%len(paths)]
+				path := paths[rand.Intn(len(paths))]
 				return sampleSiteTest(muxPair, path, files)
 			})
 		}
