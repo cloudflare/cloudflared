@@ -683,9 +683,12 @@ func TestConnections(t *testing.T) {
 			req.Header = test.args.requestHeaders
 			respWriter := test.args.eyeballResponseWriter
 
+			var wg sync.WaitGroup
 			if pipedReqBody, ok := test.args.eyeballRequestBody.(*pipedRequestBody); ok {
 				respWriter = newTCPRespWriter(pipedReqBody.pipedConn)
+				wg.Add(1)
 				go func() {
+					defer wg.Done()
 					resp := pipedReqBody.roundtrip(test.args.ingressServiceScheme + ln.Addr().String())
 					replayer.Write(resp)
 				}()
@@ -697,6 +700,8 @@ func TestConnections(t *testing.T) {
 				log := zerolog.Nop()
 				err = proxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, &log), test.args.connectionType == connection.TypeWebsocket)
 			}
+
+			wg.Wait()
 
 			cancel()
 			assert.Equal(t, test.want.err, err != nil)
