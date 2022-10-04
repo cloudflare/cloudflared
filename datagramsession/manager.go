@@ -88,10 +88,10 @@ func (m *manager) shutdownSessions(err error) {
 	}
 	closeSessionErr := &errClosedSession{
 		message: err.Error(),
+		// Usually connection with remote has been closed, so set this to true to skip unregistering from remote
+		// context.Canceled is an exception because that means session is being closed by our side
+		byRemote: !errors.Is(err, context.Canceled),
 	}
-	// Usually connection with remote has been closed, so set this to true to skip unregistering from remote
-	// context.Canceled is an exception because that means session is being closed by our side
-	closeSessionErr.byRemote = !errors.Is(err, context.Canceled)
 	for _, s := range m.sessions {
 		s.close(closeSessionErr)
 	}
