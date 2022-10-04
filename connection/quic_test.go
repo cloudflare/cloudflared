@@ -145,21 +145,30 @@ func TestQUICServer(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-			var wg sync.WaitGroup
-			wg.Add(1)
+			defer cancel()
+
+			var serverReady sync.WaitGroup
+			serverReady.Add(1)
+
+			serverFinished := make(chan struct{}, 1)
 			go func() {
-				defer wg.Done()
+				defer cancel()
 				quicServer(
 					t, udpListener, testTLSServerConfig, testQUICConfig,
 					test.dest, test.connectionType, test.metadata, test.message, test.expectedResponse,
+					&serverReady, serverFinished,
 				)
 			}()
 
-			qc := testQUICConnection(udpListener.LocalAddr(), t)
-			go qc.Serve(ctx)
+			serverReady.Wait()
 
-			wg.Wait()
-			cancel()
+			qc := testQUICConnection(udpListener.LocalAddr(), t)
+			err = qc.Serve(ctx)
+			select {
+			case <-serverFinished:
+			default:
+				require.Fail(t, "QUICConnection.Serve() finished before server shut down", err)
+			}
 		})
 	}
 }
@@ -186,6 +195,8 @@ func quicServer(
 	metadata []quicpogs.Metadata,
 	message []byte,
 	expectedResponse []byte,
+	serverReady *sync.WaitGroup,
+	serverFinished chan struct{},
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -193,6 +204,7 @@ func quicServer(
 	earlyListener, err := quic.Listen(conn, tlsConf, config)
 	require.NoError(t, err)
 
+	serverReady.Done()
 	session, err := earlyListener.Accept(ctx)
 	require.NoError(t, err)
 
@@ -214,13 +226,14 @@ func quicServer(
 	}
 
 	response := make([]byte, len(expectedResponse))
-	_, err = stream.Read(response)
-	if err != io.EOF {
+	if _, err = stream.Read(response); err != io.EOF {
 		require.NoError(t, err)
 	}
 
 	// For now it is an echo server. Verify if the same data is returned.
 	assert.Equal(t, expectedResponse, response)
+
+	serverFinished <- struct{}{}
 }
 
 type mockOriginProxyWithRequest struct{}
