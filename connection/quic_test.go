@@ -150,7 +150,7 @@ func TestQUICServer(t *testing.T) {
 			var serverReady sync.WaitGroup
 			serverReady.Add(1)
 
-			serverFinished := make(chan struct{}, 1)
+			serverFinished := make(chan struct{})
 			go func() {
 				defer cancel()
 				quicServer(
@@ -233,7 +233,7 @@ func quicServer(
 	// For now it is an echo server. Verify if the same data is returned.
 	assert.Equal(t, expectedResponse, response)
 
-	serverFinished <- struct{}{}
+	close(serverFinished)
 }
 
 type mockOriginProxyWithRequest struct{}
