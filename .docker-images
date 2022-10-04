@@ -2,8 +2,7 @@ images:
   - name: cloudflared
     dockerfile: Dockerfile.$ARCH
     context: .
-    versions: 
-      - latest
+    version_file: versions
     registries:
     - name: docker.io/cloudflare
       user: env:DOCKER_USER

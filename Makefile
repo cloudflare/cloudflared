@@ -131,6 +131,10 @@ endif
 container:
 	docker build --build-arg=TARGET_ARCH=$(TARGET_ARCH) --build-arg=TARGET_OS=$(TARGET_OS) -t cloudflare/cloudflared-$(TARGET_OS)-$(TARGET_ARCH):"$(VERSION)" .
 
+.PHONY: generate-docker-version
+generate-docker-version:
+	echo latest $(VERSION) > versions
+
 .PHONY: test
 test: vet
 ifndef CI

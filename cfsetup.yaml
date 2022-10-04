@@ -78,6 +78,12 @@ stretch: &stretch
       # same logic as above, but for FIPS packages only
       - ./build-packages-fips.sh
       - make github-release-built-pkgs
+  generate-versions-file:
+    build_dir: *build_dir
+    builddeps: 
+      - build-essential
+    post-cache:
+      - make generate-docker-version
   build-deb:
     build_dir: *build_dir
     builddeps: &build_deb_deps
