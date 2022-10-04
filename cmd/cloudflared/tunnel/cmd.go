@@ -665,6 +665,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_MAX_FETCH_SIZE"},
 			Hidden:  true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "post-quantum",
+			Usage:   "When given creates an experimental post-quantum secure tunnel",
+			Aliases: []string{"pq"},
+			EnvVars: []string{"TUNNEL_POST_QUANTUM"},
+			Hidden:  FipsEnabled,
+		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
 	}...)
