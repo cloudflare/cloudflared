@@ -497,7 +497,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	case <-rpcClientFactory.registered:
 		break // ok
 	case <-time.Tick(time.Second):
-		t.Fatal("timeout out waiting for registration")
+		t.Fatal("timed out waiting for registration")
 	}
 
 	// signal graceful shutdown
@@ -507,12 +507,15 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	case <-rpcClientFactory.unregistered:
 		break // ok
 	case <-time.Tick(time.Second):
-		t.Fatal("timeout out waiting for unregistered signal")
+		t.Fatal("timed out waiting for unregistered signal")
 	}
 	assert.True(t, controlStream.IsStopped())
 
 	cancel()
 	wg.Wait()
+
+	// give up CPU for a bit to let Observer.dispatchEvents propagate tunnel events
+	time.Sleep(300 * time.Millisecond)
 
 	events.assertSawEvent(t, Event{
 		Index:     http2Conn.connIndex,
