@@ -514,7 +514,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	cancel()
 	wg.Wait()
 
-	// give up CPU for a bit to let Observer.dispatchEvents propagate tunnel events
+	// give up CPU for a bit to let Observer.dispatchEvents() propagate tunnel events
 	time.Sleep(300 * time.Millisecond)
 
 	events.assertSawEvent(t, Event{
