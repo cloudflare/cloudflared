@@ -796,7 +796,7 @@ func TestMultipleStreamsWithDictionaries(t *testing.T) {
 
 				expectBody := strings.Replace(htmlBody, "paragraph", path, 1) + strconv.Itoa(index)
 				responseBody := make([]byte, len(expectBody)*2)
-				n, err := stream.Read(responseBody)
+				n, err := stream.Read(responseBody) // potentially flaky because of the partial read
 				if err != nil {
 					errorsC <- fmt.Errorf("stream %d error from (*MuxedStream).Read: %s", stream.streamID, err)
 					return

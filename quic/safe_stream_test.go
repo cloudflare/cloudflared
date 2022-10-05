@@ -124,7 +124,7 @@ func quicServer(t *testing.T, serverReady *sync.WaitGroup, conn net.PacketConn) 
 
 func clientRoundTrip(t *testing.T, stream io.ReadWriteCloser, mustWork bool) {
 	response := make([]byte, len(testMsg))
-	_, err := stream.Read(response)
+	_, err := io.ReadFull(stream, response)
 	if !mustWork {
 		return
 	}

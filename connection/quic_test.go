@@ -226,7 +226,7 @@ func quicServer(
 	}
 
 	response := make([]byte, len(expectedResponse))
-	if _, err = stream.Read(response); err != io.EOF {
+	if _, err = io.ReadFull(stream, response); err != io.EOF {
 		require.NoError(t, err)
 	}
 

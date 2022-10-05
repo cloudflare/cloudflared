@@ -205,7 +205,7 @@ func writeVersion(stream io.Writer) error {
 
 func readVersion(stream io.Reader) (string, error) {
 	version := make([]byte, protocolVersionLength)
-	_, err := stream.Read(version)
+	_, err := io.ReadFull(stream, version)
 	return string(version), err
 }
 

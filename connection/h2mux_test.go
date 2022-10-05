@@ -119,7 +119,7 @@ func TestServeStreamHTTP(t *testing.T) {
 		} else {
 			assert.True(t, hasHeader(stream, ResponseMetaHeader, responseMetaHeaderOrigin))
 			body := make([]byte, len(test.expectedBody))
-			_, err = stream.Read(body)
+			_, err = io.ReadFull(stream, body)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedBody, body)
 		}
@@ -264,7 +264,7 @@ func benchmarkServeStreamHTTPSimple(b *testing.B, test testRequest) {
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
 		stream, openstreamErr := edgeMux.OpenStream(ctx, headers, nil)
-		_, readBodyErr := stream.Read(body)
+		_, readBodyErr := io.ReadFull(stream, body)
 		b.StopTimer()
 
 		require.NoError(b, openstreamErr)
