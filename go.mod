@@ -6,6 +6,7 @@ require (
 	github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93
 	github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 	github.com/coredns/coredns v1.8.7
+	github.com/coreos/go-oidc/v3 v3.4.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/facebookgo/grace v0.0.0-20180706040059-75cf19382434
 	github.com/fsnotify/fsnotify v1.4.9
@@ -56,7 +57,6 @@ require (
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/cloudflare/circl v1.2.1-0.20220809205628-0a9554f37a47 // indirect
 	github.com/coredns/caddy v1.1.1 // indirect
-	github.com/coreos/go-oidc/v3 v3.4.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/facebookgo/ensure v0.0.0-20160127193407-b4ab57deab51 // indirect
@@ -113,8 +113,8 @@ replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 // Post-quantum tunnel RTG-1339
 replace (
 	// branch go1.18
-	github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20220824105406-fb955667e0af
+	github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20221010110824-0053225e48b2
 
 	// branch go1.19
-	github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20220824104809-96561a41e0af
+	github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20221010110800-4f3769902fe0
 )
