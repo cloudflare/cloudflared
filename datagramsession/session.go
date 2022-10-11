@@ -24,6 +24,13 @@ func SessionIdleErr(timeout time.Duration) error {
 
 type transportSender func(session *packet.Session) error
 
+// ErrVithVariableSeverity are errors that have variable severity
+type ErrVithVariableSeverity interface {
+	error
+	// LogLevel return the severity of this error
+	LogLevel() zerolog.Level
+}
+
 // Session is a bidirectional pipe of datagrams between transport and dstConn
 // Destination can be a connection with origin or with eyeball
 // When the destination is origin:
@@ -53,7 +60,11 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 				if errors.Is(err, net.ErrClosed) {
 					s.log.Debug().Msg("Destination connection closed")
 				} else {
-					s.log.Error().Err(err).Msg("Failed to send session payload from destination to transport")
+					level := zerolog.ErrorLevel
+					if variableErr, ok := err.(ErrVithVariableSeverity); ok {
+						level = variableErr.LogLevel()
+					}
+					s.log.WithLevel(level).Err(err).Msg("Failed to send session payload from destination to transport")
 				}
 				if closeSession {
 					s.closeChan <- err
