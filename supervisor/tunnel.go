@@ -254,8 +254,9 @@ func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolF
 		if !ok {
 			return err
 		}
+
 		e.config.Observer.SendReconnect(connIndex)
-		connLog.Logger().Info().Msgf("Retrying connection in up to %s seconds", duration)
+		connLog.Logger().Info().Msgf("Retrying connection in up to %s", duration)
 	}
 
 	// Check if the connection error was from an IP issue with the host or
