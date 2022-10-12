@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/raven-go"
+	"github.com/google/uuid"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -24,7 +25,6 @@ import (
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/ui"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -109,6 +109,7 @@ func Commands() []*cli.Command {
 		buildIngressSubcommand(),
 		buildDeleteCommand(),
 		buildCleanupCommand(),
+		buildTokenCommand(),
 		// for compatibility, allow following as tunnel subcommands
 		proxydns.Command(true),
 		cliutil.RemovedCommand("db-connect"),
@@ -127,26 +128,34 @@ func buildTunnelCommand(subcommands []*cli.Command) *cli.Command {
 		Name:      "tunnel",
 		Action:    cliutil.ConfiguredAction(TunnelCommand),
 		Category:  "Tunnel",
-		Usage:     "Make a locally-running web service accessible over the internet using Cloudflare Tunnel.",
+		Usage:     "Use Cloudflare Tunnel to expose private services to the Internet or to Cloudflare connected private users.",
 		ArgsUsage: " ",
-		Description: `Cloudflare Tunnel asks you to specify a hostname on a Cloudflare-powered
-		domain you control and a local address. Traffic from that hostname is routed
-		(optionally via a Cloudflare Load Balancer) to this machine and appears on the
-		specified port where it can be served.
+		Description: `    Cloudflare Tunnel allows to expose private services without opening any ingress port on this machine. It can expose:
+  A) Locally reachable HTTP-based private services to the Internet on DNS with Cloudflare as authority (which you can
+then protect with Cloudflare Access).
+  B) Locally reachable TCP/UDP-based private services to Cloudflare connected private users in the same account, e.g.,
+those enrolled to a Zero Trust WARP Client.
 
-		This feature requires your Cloudflare account be subscribed to the Cloudflare Smart Routing feature.
+You can manage your Tunnels via dash.teams.cloudflare.com. This approach will only require you to run a single command
+later in each machine where you wish to run a Tunnel.
 
-		To use, begin by calling login to download a certificate:
+Alternatively, you can manage your Tunnels via the command line. Begin by obtaining a certificate to be able to do so:
 
-			$ cloudflared tunnel login
+	$ cloudflared tunnel login
 
-		With your certificate installed you can then launch your first tunnel,
-		replacing my.site.com with a subdomain of your site:
+With your certificate installed you can then get started with Tunnels:
 
-			$ cloudflared tunnel --hostname my.site.com --url http://localhost:8080
+	$ cloudflared tunnel create my-first-tunnel
+	$ cloudflared tunnel route dns my-first-tunnel my-first-tunnel.mydomain.com
+	$ cloudflared tunnel run --hello-world my-first-tunnel
 
-		If you have a web server running on port 8080 (in this example), it will be available on
-		the internet!`,
+You can now access my-first-tunnel.mydomain.com and be served an example page by your local cloudflared process.
+
+For exposing local TCP/UDP services by IP to your privately connected users, check out:
+
+	$ cloudflared tunnel route ip --help
+
+See https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/ for more info.`,
 		Subcommands: subcommands,
 		Flags:       tunnelFlags(false),
 	}
@@ -208,7 +217,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 // runClassicTunnel creates a "classic" non-named tunnel
 func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, buildInfo, nil, sc.log, sc.isUIEnabled)
+	return StartServer(sc.c, buildInfo, nil, sc.log)
 }
 
 func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
@@ -226,7 +235,6 @@ func StartServer(
 	info *cliutil.BuildInfo,
 	namedTunnel *connection.NamedTunnelProperties,
 	log *zerolog.Logger,
-	isUIEnabled bool,
 ) error {
 	_ = raven.SetDSN(sentryDSN)
 	var wg sync.WaitGroup
@@ -321,9 +329,9 @@ func StartServer(
 		return fmt.Errorf(errText)
 	}
 
-	logTransport := logger.CreateTransportLoggerFromContext(c, isUIEnabled)
+	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
 
-	observer := connection.NewObserver(log, logTransport, isUIEnabled)
+	observer := connection.NewObserver(log, logTransport)
 
 	// Send Quick Tunnel URL to UI if applicable
 	var quickTunnelURL string
@@ -334,9 +342,22 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, dynamicConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
+	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
+		return err
+	}
+	var clientID uuid.UUID
+	if tunnelConfig.NamedTunnel != nil {
+		clientID, err = uuid.FromBytes(tunnelConfig.NamedTunnel.Client.ClientID)
+		if err != nil {
+			// set to nil for classic tunnels
+			clientID = uuid.Nil
+		}
+	}
+
+	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	if err != nil {
 		return err
 	}
 
@@ -349,17 +370,12 @@ func StartServer(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		readinessServer := metrics.NewReadyServer(log)
+		readinessServer := metrics.NewReadyServer(log, clientID)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, log)
+		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, orchestrator, log)
 	}()
 
-	orchestrator, err := orchestration.NewOrchestrator(ctx, dynamicConfig, tunnelConfig.Tags, tunnelConfig.Log)
-	if err != nil {
-		return err
-	}
-
-	reconnectCh := make(chan supervisor.ReconnectSignal, 1)
+	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int("ha-connections"))
 	if c.IsSet("stdin-control") {
 		log.Info().Msg("Enabling control through stdin")
 		go stdinControl(reconnectCh, log)
@@ -373,18 +389,6 @@ func StartServer(
 		}()
 		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, reconnectCh, graceShutdownC)
 	}()
-
-	if isUIEnabled {
-		tunnelUI := ui.NewUIModel(
-			info.Version(),
-			hostname,
-			metricsListener.Addr().String(),
-			dynamicConfig.Ingress,
-			tunnelConfig.HAConnections,
-		)
-		app := tunnelUI.Launch(ctx, log, logTransport)
-		observer.RegisterSink(app)
-	}
 
 	gracePeriod, err := gracePeriod(c)
 	if err != nil {
@@ -504,6 +508,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "region",
 			Usage:   "Cloudflare Edge region to connect to. Omit or set to empty to connect to the global region.",
 			EnvVars: []string{"TUNNEL_REGION"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "edge-ip-version",
+			Usage:   "Cloudflare Edge ip address version to connect with. {4, 6, auto}",
+			EnvVars: []string{"TUNNEL_EDGE_IP_VERSION"},
+			Value:   "4",
+			Hidden:  false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    tlsconfig.CaCertFlag,
@@ -638,9 +649,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:   uiFlag,
-			Usage:  "Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
+			Usage:  "(depreciated) Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
 			Value:  false,
-			Hidden: shouldHide,
+			Hidden: true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:   "quick-service",
@@ -653,6 +664,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   `The maximum number of results that cloudflared can fetch from Cloudflare API for any listing operations needed`,
 			EnvVars: []string{"TUNNEL_MAX_FETCH_SIZE"},
 			Hidden:  true,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "post-quantum",
+			Usage:   "When given creates an experimental post-quantum secure tunnel",
+			Aliases: []string{"pq"},
+			EnvVars: []string{"TUNNEL_POST_QUANTUM"},
+			Hidden:  FipsEnabled,
 		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
@@ -811,6 +829,13 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Usage:   legacyTunnelFlag("Disables chunked transfer encoding; useful if you are running a WSGI server."),
 			EnvVars: []string{"TUNNEL_NO_CHUNKED_ENCODING"},
 			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    ingress.Http2OriginFlag,
+			Usage:   "Enables HTTP/2 origin servers.",
+			EnvVars: []string{"TUNNEL_ORIGIN_ENABLE_HTTP2"},
+			Hidden:  shouldHide,
+			Value:   false,
 		}),
 	}
 	return append(flags, sshFlags(shouldHide)...)

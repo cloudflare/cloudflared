@@ -20,7 +20,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/net/idna"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
@@ -134,11 +134,18 @@ var (
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    "protocol",
-		Value:   "auto",
+		Value:   connection.AutoSelectFlag,
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", connection.AvailableProtocolFlagMessage),
 		EnvVars: []string{"TUNNEL_TRANSPORT_PROTOCOL"},
 		Hidden:  true,
+	})
+	postQuantumFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
+		Name:    "post-quantum",
+		Usage:   "When given creates an experimental post-quantum secure tunnel",
+		Aliases: []string{"pq"},
+		EnvVars: []string{"TUNNEL_POST_QUANTUM"},
+		Hidden:  FipsEnabled,
 	})
 	sortInfoByFlag = &cli.StringFlag{
 		Name:    "sort-by",
@@ -168,6 +175,16 @@ var (
 		Aliases: []string{"s"},
 		Usage:   "Base64 encoded secret to set for the tunnel. The decoded secret must be at least 32 bytes long. If not specified, a random 32-byte secret will be generated.",
 		EnvVars: []string{"TUNNEL_CREATE_SECRET"},
+	}
+	icmpv4SrcFlag = &cli.StringFlag{
+		Name:    "icmpv4-src",
+		Usage:   "Source address to send/receive ICMPv4 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to 0.0.0.0.",
+		EnvVars: []string{"TUNNEL_ICMPV4_SRC"},
+	}
+	icmpv6SrcFlag = &cli.StringFlag{
+		Name:    "icmpv6-src",
+		Usage:   "Source address and the interface name to send/receive ICMPv6 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to ::.",
+		EnvVars: []string{"TUNNEL_ICMPV6_SRC"},
 	}
 )
 
@@ -602,9 +619,12 @@ func buildRunCommand() *cli.Command {
 		forceFlag,
 		credentialsFileFlag,
 		credentialsContentsFlag,
+		postQuantumFlag,
 		selectProtocolFlag,
 		featuresFlag,
 		tunnelTokenFlag,
+		icmpv4SrcFlag,
+		icmpv6SrcFlag,
 	}
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{
@@ -644,7 +664,7 @@ func runCommand(c *cli.Context) error {
 
 	// Check if token is provided and if not use default tunnelID flag method
 	if tokenStr := c.String(TunnelTokenFlag); tokenStr != "" {
-		if token, err := parseToken(tokenStr); err == nil {
+		if token, err := ParseToken(tokenStr); err == nil {
 			return sc.runWithCredentials(token.Credentials())
 		}
 
@@ -663,7 +683,7 @@ func runCommand(c *cli.Context) error {
 	}
 }
 
-func parseToken(tokenStr string) (*connection.TunnelToken, error) {
+func ParseToken(tokenStr string) (*connection.TunnelToken, error) {
 	content, err := base64.StdEncoding.DecodeString(tokenStr)
 	if err != nil {
 		return nil, err
@@ -714,6 +734,59 @@ func cleanupCommand(c *cli.Context) error {
 	return sc.cleanupConnections(tunnelIDs)
 }
 
+func buildTokenCommand() *cli.Command {
+	return &cli.Command{
+		Name:               "token",
+		Action:             cliutil.ConfiguredAction(tokenCommand),
+		Usage:              "Fetch the credentials token for an existing tunnel (by name or UUID) that allows to run it",
+		UsageText:          "cloudflared tunnel [tunnel command options] token [subcommand options] TUNNEL",
+		Description:        "cloudflared tunnel token will fetch the credentials token for a given tunnel (by its name or UUID), which is then used to run the tunnel. This command fails if the tunnel does not exist or has been deleted. Use the flag `cloudflared tunnel token --cred-file /my/path/file.json TUNNEL` to output the token to the credentials JSON file. Note: this command only works for Tunnels created since cloudflared version 2022.3.0",
+		Flags:              []cli.Flag{credentialsFileFlagCLIOnly},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func tokenCommand(c *cli.Context) error {
+	sc, err := newSubcommandContext(c)
+	if err != nil {
+		return errors.Wrap(err, "error setting up logger")
+	}
+
+	warningChecker := updater.StartWarningCheck(c)
+	defer warningChecker.LogWarningIfAny(sc.log)
+
+	if c.NArg() != 1 {
+		return cliutil.UsageError(`"cloudflared tunnel token" requires exactly 1 argument, the name or UUID of tunnel to fetch the credentials token for.`)
+	}
+	tunnelID, err := sc.findID(c.Args().First())
+	if err != nil {
+		return errors.Wrap(err, "error parsing tunnel ID")
+	}
+
+	token, err := sc.getTunnelTokenCredentials(tunnelID)
+	if err != nil {
+		return err
+	}
+
+	if path := c.String(CredFileFlag); path != "" {
+		credentials := token.Credentials()
+		err := writeTunnelCredentials(path, &credentials)
+		if err != nil {
+			return errors.Wrapf(err, "error writing token credentials to JSON file in path %s", path)
+		}
+
+		return nil
+	}
+
+	encodedToken, err := token.Encode()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s", encodedToken)
+	return nil
+}
+
 func buildRouteCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "route",
@@ -748,7 +821,7 @@ Further information about managing Cloudflare WARP traffic to your tunnel is ava
 				Name:        "lb",
 				Action:      cliutil.ConfiguredAction(routeLbCommand),
 				Usage:       "Use this tunnel as a load balancer origin, creating pool and load balancer if necessary",
-				UsageText:   "cloudflared tunnel route dns [TUNNEL] [HOSTNAME] [LB-POOL]",
+				UsageText:   "cloudflared tunnel route lb [TUNNEL] [HOSTNAME] [LB-POOL]",
 				Description: `Creates Load Balancer with an origin pool that points to the tunnel.`,
 			},
 			buildRouteIPSubcommand(),

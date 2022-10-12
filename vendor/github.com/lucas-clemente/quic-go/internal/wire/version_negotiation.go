@@ -35,7 +35,7 @@ func ParseVersionNegotiationPacket(b *bytes.Reader) (*Header, []protocol.Version
 }
 
 // ComposeVersionNegotiation composes a Version Negotiation
-func ComposeVersionNegotiation(destConnID, srcConnID protocol.ConnectionID, versions []protocol.VersionNumber) ([]byte, error) {
+func ComposeVersionNegotiation(destConnID, srcConnID protocol.ConnectionID, versions []protocol.VersionNumber) []byte {
 	greasedVersions := protocol.GetGreasedVersions(versions)
 	expectedLen := 1 /* type byte */ + 4 /* version field */ + 1 /* dest connection ID length field */ + destConnID.Len() + 1 /* src connection ID length field */ + srcConnID.Len() + len(greasedVersions)*4
 	buf := bytes.NewBuffer(make([]byte, 0, expectedLen))
@@ -50,5 +50,5 @@ func ComposeVersionNegotiation(destConnID, srcConnID protocol.ConnectionID, vers
 	for _, v := range greasedVersions {
 		utils.BigEndian.WriteUint32(buf, uint32(v))
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes()
 }

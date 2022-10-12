@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ipaccess"
@@ -26,8 +26,21 @@ ingress:
 `
 	ing, err := ParseIngress(MustReadIngress(rawYAML))
 	require.NoError(t, err)
-	_, ok := ing.Rules[0].Service.(*unixSocketPath)
+	s, ok := ing.Rules[0].Service.(*unixSocketPath)
 	require.True(t, ok)
+	require.Equal(t, "http", s.scheme)
+}
+
+func TestParseUnixSocketTLS(t *testing.T) {
+	rawYAML := `
+ingress:
+- service: unix+tls:/tmp/echo.sock
+`
+	ing, err := ParseIngress(MustReadIngress(rawYAML))
+	require.NoError(t, err)
+	s, ok := ing.Rules[0].Service.(*unixSocketPath)
+	require.True(t, ok)
+	require.Equal(t, "https", s.scheme)
 }
 
 func Test_parseIngress(t *testing.T) {
@@ -118,6 +131,36 @@ ingress:
 			},
 		},
 		{
+			name: "Unicode domain",
+			args: args{rawYAML: `
+ingress:
+ - hostname: môô.cloudflare.com
+   service: https://localhost:8000
+ - service: https://localhost:8001
+`},
+			want: []Rule{
+				{
+					Hostname:         "môô.cloudflare.com",
+					punycodeHostname: "xn--m-xgaa.cloudflare.com",
+					Service:          &httpService{url: localhost8000},
+					Config:           defaultConfig,
+				},
+				{
+					Service: &httpService{url: localhost8001},
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "Invalid unicode domain",
+			args: args{rawYAML: fmt.Sprintf(`
+ingress:
+ - hostname: %s
+   service: https://localhost:8000
+`, string(rune(0xd8f3))+".cloudflare.com")},
+			wantErr: true,
+		},
+		{
 			name: "Invalid service",
 			args: args{rawYAML: `
 ingress:
@@ -195,6 +238,14 @@ ingress:
 			args: args{rawYAML: `
 ingress:
  - service: http_status:asdf
+`},
+			wantErr: true,
+		},
+		{
+			name: "Invalid HTTP status code",
+			args: args{rawYAML: `
+ingress:
+ - service: http_status:8080
 `},
 			wantErr: true,
 		},
@@ -469,12 +520,12 @@ func TestSingleOriginSetsConfig(t *testing.T) {
 	ingress, err := NewSingleOrigin(cliCtx, allowURLFromArgs)
 	require.NoError(t, err)
 
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.ConnectTimeout)
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.TLSTimeout)
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.TCPKeepAlive)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.ConnectTimeout)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.TLSTimeout)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.TCPKeepAlive)
 	assert.True(t, ingress.Rules[0].Config.NoHappyEyeballs)
 	assert.Equal(t, 10, ingress.Rules[0].Config.KeepAliveConnections)
-	assert.Equal(t, time.Second, ingress.Rules[0].Config.KeepAliveTimeout)
+	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.KeepAliveTimeout)
 	assert.Equal(t, "example.com:8080", ingress.Rules[0].Config.HTTPHostHeader)
 	assert.Equal(t, "example.com", ingress.Rules[0].Config.OriginServerName)
 	assert.Equal(t, "/etc/certs/ca.pem", ingress.Rules[0].Config.CAPool)
@@ -495,7 +546,7 @@ func TestFindMatchingRule(t *testing.T) {
 			},
 			{
 				Hostname: "tunnel-b.example.com",
-				Path:     mustParsePath(t, "/health"),
+				Path:     MustParsePath(t, "/health"),
 			},
 			{
 				Hostname: "*",
@@ -578,10 +629,10 @@ func TestIsHTTPService(t *testing.T) {
 	}
 }
 
-func mustParsePath(t *testing.T, path string) *regexp.Regexp {
+func MustParsePath(t *testing.T, path string) *Regexp {
 	regexp, err := regexp.Compile(path)
 	assert.NoError(t, err)
-	return regexp
+	return &Regexp{Regexp: regexp}
 }
 
 func MustParseURL(t *testing.T, rawURL string) *url.URL {

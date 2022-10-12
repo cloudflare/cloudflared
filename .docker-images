@@ -1,8 +1,12 @@
 images:
   - name: cloudflared
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.$ARCH
     context: .
+    version_file: versions
     registries:
     - name: docker.io/cloudflare
       user: env:DOCKER_USER
       password: env:DOCKER_PASSWORD
+    architectures:
+    - amd64
+    - arm64

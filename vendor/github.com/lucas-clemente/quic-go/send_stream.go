@@ -50,6 +50,7 @@ type sendStream struct {
 	nextFrame      *wire.StreamFrame
 
 	writeChan chan struct{}
+	writeOnce chan struct{}
 	deadline  time.Time
 
 	flowController flowcontrol.StreamFlowController
@@ -73,6 +74,7 @@ func newSendStream(
 		sender:         sender,
 		flowController: flowController,
 		writeChan:      make(chan struct{}, 1),
+		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 		version:        version,
 	}
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
@@ -84,6 +86,12 @@ func (s *sendStream) StreamID() protocol.StreamID {
 }
 
 func (s *sendStream) Write(p []byte) (int, error) {
+	// Concurrent use of Write is not permitted (and doesn't make any sense),
+	// but sometimes people do it anyway.
+	// Make sure that we only execute one call at any given time to avoid hard to debug failures.
+	s.writeOnce <- struct{}{}
+	defer func() { <-s.writeOnce }()
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

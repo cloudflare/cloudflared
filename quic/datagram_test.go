@@ -1,21 +1,28 @@
 package quic
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"math/big"
+	"net/netip"
 	"testing"
 	"time"
 
+	"github.com/google/gopacket/layers"
 	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 var (
@@ -24,7 +31,7 @@ var (
 
 func TestSuffixThenRemoveSessionID(t *testing.T) {
 	msg := []byte(t.Name())
-	msgWithID, err := suffixSessionID(testSessionID, msg)
+	msgWithID, err := SuffixSessionID(testSessionID, msg)
 	require.NoError(t, err)
 	require.Len(t, msgWithID, len(msg)+sessionIDLen)
 
@@ -43,24 +50,76 @@ func TestRemoveSessionIDError(t *testing.T) {
 
 func TestSuffixSessionIDError(t *testing.T) {
 	msg := make([]byte, MaxDatagramFrameSize-sessionIDLen)
-	_, err := suffixSessionID(testSessionID, msg)
+	_, err := SuffixSessionID(testSessionID, msg)
 	require.NoError(t, err)
 
 	msg = make([]byte, MaxDatagramFrameSize-sessionIDLen+1)
-	_, err = suffixSessionID(testSessionID, msg)
+	_, err = SuffixSessionID(testSessionID, msg)
 	require.Error(t, err)
 }
 
-func TestMaxDatagramPayload(t *testing.T) {
-	payload := make([]byte, maxDatagramPayloadSize)
+func TestDatagram(t *testing.T) {
+	maxPayload := make([]byte, maxDatagramPayloadSize)
+	noPayloadSession := uuid.New()
+	maxPayloadSession := uuid.New()
+	sessionToPayload := []*packet.Session{
+		{
+			ID:      noPayloadSession,
+			Payload: make([]byte, 0),
+		},
+		{
+			ID:      maxPayloadSession,
+			Payload: maxPayload,
+		},
+	}
 
+	packets := []packet.ICMP{
+		{
+			IP: &packet.IP{
+				Src:      netip.MustParseAddr("172.16.0.1"),
+				Dst:      netip.MustParseAddr("192.168.0.1"),
+				Protocol: layers.IPProtocolICMPv4,
+			},
+			Message: &icmp.Message{
+				Type: ipv4.ICMPTypeTimeExceeded,
+				Code: 0,
+				Body: &icmp.TimeExceeded{
+					Data: []byte("original packet"),
+				},
+			},
+		},
+		{
+			IP: &packet.IP{
+				Src:      netip.MustParseAddr("172.16.0.2"),
+				Dst:      netip.MustParseAddr("192.168.0.2"),
+				Protocol: layers.IPProtocolICMPv4,
+			},
+			Message: &icmp.Message{
+				Type: ipv4.ICMPTypeEcho,
+				Code: 0,
+				Body: &icmp.Echo{
+					ID:   6182,
+					Seq:  9151,
+					Data: []byte("Test ICMP echo"),
+				},
+			},
+		},
+	}
+
+	testDatagram(t, 1, sessionToPayload, nil)
+	testDatagram(t, 2, sessionToPayload, packets)
+}
+
+func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Session, packets []packet.ICMP) {
 	quicConfig := &quic.Config{
-		KeepAlive:            true,
+		KeepAlivePeriod:      5 * time.Millisecond,
 		EnableDatagrams:      true,
 		MaxDatagramFrameSize: MaxDatagramFrameSize,
 	}
 	quicListener := newQUICListener(t, quicConfig)
 	defer quicListener.Close()
+
+	logger := zerolog.Nop()
 
 	errGroup, ctx := errgroup.WithContext(context.Background())
 	// Run edge side of datagram muxer
@@ -71,21 +130,40 @@ func TestMaxDatagramPayload(t *testing.T) {
 			return err
 		}
 
-		muxer, err := NewDatagramMuxer(quicSession)
-		if err != nil {
-			return err
+		sessionDemuxChan := make(chan *packet.Session, 16)
+
+		switch version {
+		case 1:
+			muxer := NewDatagramMuxer(quicSession, &logger, sessionDemuxChan)
+			muxer.ServeReceive(ctx)
+		case 2:
+			muxer := NewDatagramMuxerV2(quicSession, &logger, sessionDemuxChan)
+			muxer.ServeReceive(ctx)
+
+			icmpDecoder := packet.NewICMPDecoder()
+			for _, pk := range packets {
+				received, err := muxer.ReceivePacket(ctx)
+				require.NoError(t, err)
+
+				receivedICMP, err := icmpDecoder.Decode(received)
+				require.NoError(t, err)
+				require.Equal(t, pk.IP, receivedICMP.IP)
+				require.Equal(t, pk.Type, receivedICMP.Type)
+				require.Equal(t, pk.Code, receivedICMP.Code)
+				require.Equal(t, pk.Body, receivedICMP.Body)
+			}
+		default:
+			return fmt.Errorf("unknown datagram version %d", version)
 		}
 
-		sessionID, receivedPayload, err := muxer.ReceiveFrom()
-		if err != nil {
-			return err
+		for _, expectedPayload := range sessionToPayloads {
+			actualPayload := <-sessionDemuxChan
+			require.Equal(t, expectedPayload, actualPayload)
 		}
-		require.Equal(t, testSessionID, sessionID)
-		require.True(t, bytes.Equal(payload, receivedPayload))
-
 		return nil
 	})
 
+	largePayload := make([]byte, MaxDatagramFrameSize)
 	// Run cloudflared side of datagram muxer
 	errGroup.Go(func() error {
 		tlsClientConfig := &tls.Config{
@@ -95,23 +173,43 @@ func TestMaxDatagramPayload(t *testing.T) {
 		// Establish quic connection
 		quicSession, err := quic.DialAddrEarly(quicListener.Addr().String(), tlsClientConfig, quicConfig)
 		require.NoError(t, err)
-
-		muxer, err := NewDatagramMuxer(quicSession)
-		if err != nil {
-			return err
-		}
+		defer quicSession.CloseWithError(0, "")
 
 		// Wait a few milliseconds for MTU discovery to take place
 		time.Sleep(time.Millisecond * 100)
-		err = muxer.SendTo(testSessionID, payload)
-		if err != nil {
-			return err
+
+		var muxer BaseDatagramMuxer
+		switch version {
+		case 1:
+			muxer = NewDatagramMuxer(quicSession, &logger, nil)
+		case 2:
+			muxerV2 := NewDatagramMuxerV2(quicSession, &logger, nil)
+			encoder := packet.NewEncoder()
+			for _, pk := range packets {
+				encodedPacket, err := encoder.Encode(&pk)
+				require.NoError(t, err)
+				require.NoError(t, muxerV2.SendPacket(encodedPacket))
+			}
+			// Payload larger than transport MTU, should not be sent
+			require.Error(t, muxerV2.SendPacket(packet.RawPacket{
+				Data: largePayload,
+			}))
+			muxer = muxerV2
+		default:
+			return fmt.Errorf("unknown datagram version %d", version)
 		}
 
-		// Payload larger than transport MTU, should return an error
-		largePayload := make([]byte, MaxDatagramFrameSize)
-		err = muxer.SendTo(testSessionID, largePayload)
-		require.Error(t, err)
+		for _, session := range sessionToPayloads {
+			require.NoError(t, muxer.SendToSession(session))
+		}
+		// Payload larger than transport MTU, should not be sent
+		require.Error(t, muxer.SendToSession(&packet.Session{
+			ID:      testSessionID,
+			Payload: largePayload,
+		}))
+
+		// Wait for edge to finish receiving the messages
+		time.Sleep(time.Millisecond * 100)
 
 		return nil
 	})

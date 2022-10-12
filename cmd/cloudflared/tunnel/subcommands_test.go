@@ -183,7 +183,7 @@ func Test_validateHostname(t *testing.T) {
 }
 
 func Test_TunnelToken(t *testing.T) {
-	token, err := parseToken("aabc")
+	token, err := ParseToken("aabc")
 	require.Error(t, err)
 	require.Nil(t, token)
 
@@ -198,7 +198,7 @@ func Test_TunnelToken(t *testing.T) {
 
 	token64 := base64.StdEncoding.EncodeToString(tokenJsonStr)
 
-	token, err = parseToken(token64)
+	token, err = ParseToken(token64)
 	require.NoError(t, err)
 	require.Equal(t, token, expectedToken)
 }

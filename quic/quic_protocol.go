@@ -37,7 +37,8 @@ const (
 	protocolVersionLength = 2
 
 	HandshakeIdleTimeout = 5 * time.Second
-	MaxIdleTimeout       = 15 * time.Second
+	MaxIdleTimeout       = 5 * time.Second
+	MaxIdlePingPeriod    = 1 * time.Second
 )
 
 // RequestServerStream is a stream to serve requests
@@ -246,12 +247,8 @@ func NewRPCClientStream(ctx context.Context, stream io.ReadWriteCloser, logger *
 	}, nil
 }
 
-func (rcs *RPCClientStream) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfterHint time.Duration) error {
-	resp, err := rcs.client.RegisterUdpSession(ctx, sessionID, dstIP, dstPort, closeIdleAfterHint)
-	if err != nil {
-		return err
-	}
-	return resp.Err
+func (rcs *RPCClientStream) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfterHint time.Duration, traceContext string) (*tunnelpogs.RegisterUdpSessionResponse, error) {
+	return rcs.client.RegisterUdpSession(ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
 }
 
 func (rcs *RPCClientStream) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {

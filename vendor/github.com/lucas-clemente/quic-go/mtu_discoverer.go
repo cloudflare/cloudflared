@@ -11,7 +11,6 @@ import (
 
 type mtuDiscoverer interface {
 	ShouldSendProbe(now time.Time) bool
-	NextProbeTime() time.Time
 	GetPing() (ping ackhandler.Frame, datagramSize protocol.ByteCount)
 }
 
@@ -53,16 +52,7 @@ func (f *mtuFinder) ShouldSendProbe(now time.Time) bool {
 	if f.probeInFlight || f.done() {
 		return false
 	}
-	return !now.Before(f.NextProbeTime())
-}
-
-// NextProbeTime returns the time when the next probe packet should be sent.
-// It returns the zero value if no probe packet should be sent.
-func (f *mtuFinder) NextProbeTime() time.Time {
-	if f.probeInFlight || f.done() {
-		return time.Time{}
-	}
-	return f.lastProbeTime.Add(mtuProbeDelay * f.rttStats.SmoothedRTT())
+	return !now.Before(f.lastProbeTime.Add(mtuProbeDelay * f.rttStats.SmoothedRTT()))
 }
 
 func (f *mtuFinder) GetPing() (ackhandler.Frame, protocol.ByteCount) {

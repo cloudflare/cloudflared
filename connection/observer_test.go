@@ -12,7 +12,7 @@ import (
 )
 
 func TestSendUrl(t *testing.T) {
-	observer := NewObserver(&log, &log, false)
+	observer := NewObserver(&log, &log)
 
 	observer.SendURL("my-url.com")
 	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://my-url.com"))
@@ -63,7 +63,7 @@ func TestRegisterServerLocation(t *testing.T) {
 }
 
 func TestObserverEventsDontBlock(t *testing.T) {
-	observer := NewObserver(&log, &log, false)
+	observer := NewObserver(&log, &log)
 	var mu sync.Mutex
 	observer.RegisterSink(EventSinkFunc(func(_ Event) {
 		// callback will block if lock is already held

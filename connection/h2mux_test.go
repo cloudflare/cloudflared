@@ -47,8 +47,8 @@ func newH2MuxConnection(t require.TestingT) (*h2muxConnection, *h2mux.Muxer) {
 		edgeMuxChan <- edgeMux
 	}()
 	var connIndex = uint8(0)
-	testObserver := NewObserver(&log, &log, false)
-	h2muxConn, err, _ := NewH2muxConnection(testOrchestrator, testGracePeriod, testMuxerConfig, originConn, connIndex, testObserver, nil)
+	testObserver := NewObserver(&log, &log)
+	h2muxConn, err, _ := NewH2muxConnection(testOrchestrator, testGracePeriod, testMuxerConfig, originConn, connIndex, testObserver, nil, &log)
 	require.NoError(t, err)
 	return h2muxConn, <-edgeMuxChan
 }

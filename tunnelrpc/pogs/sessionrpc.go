@@ -14,7 +14,11 @@ import (
 )
 
 type SessionManager interface {
-	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) error
+	// RegisterUdpSession is the call provided to cloudflared to handle an incoming
+	// capnproto RegisterUdpSession request from the edge.
+	RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*RegisterUdpSessionResponse, error)
+	// UnregisterUdpSession is the call provided to cloudflared to handle an incoming
+	// capnproto UnregisterUdpSession request from the edge.
 	UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error
 }
 
@@ -50,9 +54,17 @@ func (i SessionManager_PogsImpl) RegisterUdpSession(p tunnelrpc.SessionManager_r
 
 	closeIdleAfterHint := time.Duration(p.Params.CloseAfterIdleHint())
 
-	resp := RegisterUdpSessionResponse{}
-	registrationErr := i.impl.RegisterUdpSession(p.Ctx, sessionID, dstIP, dstPort, closeIdleAfterHint)
+	traceContext, err := p.Params.TraceContext()
+	if err != nil {
+		return err
+	}
+
+	resp, registrationErr := i.impl.RegisterUdpSession(p.Ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
 	if registrationErr != nil {
+		// Make sure to assign a response even if one is not returned from register
+		if resp == nil {
+			resp = &RegisterUdpSessionResponse{}
+		}
 		resp.Err = registrationErr
 	}
 
@@ -85,12 +97,16 @@ func (i SessionManager_PogsImpl) UnregisterUdpSession(p tunnelrpc.SessionManager
 }
 
 type RegisterUdpSessionResponse struct {
-	Err error
+	Err   error
+	Spans []byte // Spans in protobuf format
 }
 
 func (p *RegisterUdpSessionResponse) Marshal(s tunnelrpc.RegisterUdpSessionResponse) error {
 	if p.Err != nil {
 		return s.SetErr(p.Err.Error())
+	}
+	if err := s.SetSpans(p.Spans); err != nil {
+		return err
 	}
 	return nil
 }
@@ -102,6 +118,10 @@ func (p *RegisterUdpSessionResponse) Unmarshal(s tunnelrpc.RegisterUdpSessionRes
 	}
 	if respErr != "" {
 		p.Err = fmt.Errorf(respErr)
+	}
+	p.Spans, err = s.Spans()
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -116,7 +136,7 @@ func (c SessionManager_PogsClient) Close() error {
 	return c.Conn.Close()
 }
 
-func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration) (*RegisterUdpSessionResponse, error) {
+func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*RegisterUdpSessionResponse, error) {
 	client := tunnelrpc.SessionManager{Client: c.Client}
 	promise := client.RegisterUdpSession(ctx, func(p tunnelrpc.SessionManager_registerUdpSession_Params) error {
 		if err := p.SetSessionId(sessionID[:]); err != nil {
@@ -127,6 +147,7 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 		}
 		p.SetDstPort(dstPort)
 		p.SetCloseAfterIdleHint(int64(closeAfterIdleHint))
+		p.SetTraceContext(traceContext)
 		return nil
 	})
 	result, err := promise.Result().Struct()

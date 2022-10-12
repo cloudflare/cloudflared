@@ -127,18 +127,32 @@ func (h *ExtendedHeader) Write(b *bytes.Buffer, ver protocol.VersionNumber) erro
 	return h.writeShortHeader(b, ver)
 }
 
-func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, _ protocol.VersionNumber) error {
+func (h *ExtendedHeader) writeLongHeader(b *bytes.Buffer, version protocol.VersionNumber) error {
 	var packetType uint8
-	//nolint:exhaustive
-	switch h.Type {
-	case protocol.PacketTypeInitial:
-		packetType = 0x0
-	case protocol.PacketType0RTT:
-		packetType = 0x1
-	case protocol.PacketTypeHandshake:
-		packetType = 0x2
-	case protocol.PacketTypeRetry:
-		packetType = 0x3
+	if version == protocol.Version2 {
+		//nolint:exhaustive
+		switch h.Type {
+		case protocol.PacketTypeInitial:
+			packetType = 0b01
+		case protocol.PacketType0RTT:
+			packetType = 0b10
+		case protocol.PacketTypeHandshake:
+			packetType = 0b11
+		case protocol.PacketTypeRetry:
+			packetType = 0b00
+		}
+	} else {
+		//nolint:exhaustive
+		switch h.Type {
+		case protocol.PacketTypeInitial:
+			packetType = 0b00
+		case protocol.PacketType0RTT:
+			packetType = 0b01
+		case protocol.PacketTypeHandshake:
+			packetType = 0b10
+		case protocol.PacketTypeRetry:
+			packetType = 0b11
+		}
 	}
 	firstByte := 0xc0 | packetType<<4
 	if h.Type != protocol.PacketTypeRetry {

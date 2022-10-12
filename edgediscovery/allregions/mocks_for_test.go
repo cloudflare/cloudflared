@@ -9,6 +9,115 @@ import (
 	"testing/quick"
 )
 
+var (
+	v4Addrs = []*EdgeAddr{&addr0, &addr1, &addr2, &addr3}
+	v6Addrs = []*EdgeAddr{&addr4, &addr5, &addr6, &addr7}
+	addr0   = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.0"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.0"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V4,
+	}
+	addr1 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.1"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.1"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V4,
+	}
+	addr2 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.2"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.2"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V4,
+	}
+	addr3 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("123.4.5.3"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("123.4.5.3"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V4,
+	}
+	addr4 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("2606:4700:a0::1"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("2606:4700:a0::1"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V6,
+	}
+	addr5 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("2606:4700:a0::2"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("2606:4700:a0::2"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V6,
+	}
+	addr6 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("2606:4700:a0::3"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("2606:4700:a0::3"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V6,
+	}
+	addr7 = EdgeAddr{
+		TCP: &net.TCPAddr{
+			IP:   net.ParseIP("2606:4700:a0::4"),
+			Port: 8000,
+			Zone: "",
+		},
+		UDP: &net.UDPAddr{
+			IP:   net.ParseIP("2606:4700:a0::4"),
+			Port: 8000,
+			Zone: "",
+		},
+		IPVersion: V6,
+	}
+)
+
 type mockAddrs struct {
 	// a set of synthetic SRV records
 	addrMap map[net.SRV][]*EdgeAddr
@@ -36,7 +145,7 @@ func newMockAddrs(port uint16, numRegions uint8, numAddrsPerRegion uint8) mockAd
 				IP:   net.ParseIP(fmt.Sprintf("10.0.%v.%v", r, a)),
 				Port: int(port),
 			}
-			addrs = append(addrs, &EdgeAddr{tcpAddr, udpAddr})
+			addrs = append(addrs, &EdgeAddr{tcpAddr, udpAddr, V4})
 		}
 		addrMap[srv] = addrs
 		numAddrs += len(addrs)

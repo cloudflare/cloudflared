@@ -2,7 +2,9 @@ package connection
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -19,6 +21,8 @@ type controlStream struct {
 	connectedFuse         ConnectedFuse
 	namedTunnelProperties *NamedTunnelProperties
 	connIndex             uint8
+	edgeAddress           net.IP
+	protocol              Protocol
 
 	newRPCClientFunc RPCClientFunc
 
@@ -30,9 +34,13 @@ type controlStream struct {
 // ControlStreamHandler registers connections with origintunneld and initiates graceful shutdown.
 type ControlStreamHandler interface {
 	// ServeControlStream handles the control plane of the transport in the current goroutine calling this
-	ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions) error
+	ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions, tunnelConfigGetter TunnelConfigJSONGetter) error
 	// IsStopped tells whether the method above has finished
 	IsStopped() bool
+}
+
+type TunnelConfigJSONGetter interface {
+	GetConfigJSON() ([]byte, error)
 }
 
 // NewControlStream returns a new instance of ControlStreamHandler
@@ -41,9 +49,11 @@ func NewControlStream(
 	connectedFuse ConnectedFuse,
 	namedTunnelConfig *NamedTunnelProperties,
 	connIndex uint8,
+	edgeAddress net.IP,
 	newRPCClientFunc RPCClientFunc,
 	gracefulShutdownC <-chan struct{},
 	gracePeriod time.Duration,
+	protocol Protocol,
 ) ControlStreamHandler {
 	if newRPCClientFunc == nil {
 		newRPCClientFunc = newRegistrationRPCClient
@@ -54,8 +64,10 @@ func NewControlStream(
 		namedTunnelProperties: namedTunnelConfig,
 		newRPCClientFunc:      newRPCClientFunc,
 		connIndex:             connIndex,
+		edgeAddress:           edgeAddress,
 		gracefulShutdownC:     gracefulShutdownC,
 		gracePeriod:           gracePeriod,
+		protocol:              protocol,
 	}
 }
 
@@ -63,14 +75,30 @@ func (c *controlStream) ServeControlStream(
 	ctx context.Context,
 	rw io.ReadWriteCloser,
 	connOptions *tunnelpogs.ConnectionOptions,
+	tunnelConfigGetter TunnelConfigJSONGetter,
 ) error {
 	rpcClient := c.newRPCClientFunc(ctx, rw, c.observer.log)
 
-	if err := rpcClient.RegisterConnection(ctx, c.namedTunnelProperties, connOptions, c.connIndex, c.observer); err != nil {
+	registrationDetails, err := rpcClient.RegisterConnection(ctx, c.namedTunnelProperties, connOptions, c.connIndex, c.edgeAddress, c.observer)
+	if err != nil {
 		rpcClient.Close()
 		return err
 	}
+
+	c.observer.logServerInfo(c.connIndex, registrationDetails.Location, c.edgeAddress, fmt.Sprintf("Connection %s registered", registrationDetails.UUID))
+	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location)
 	c.connectedFuse.Connected()
+
+	// if conn index is 0 and tunnel is not remotely managed, then send local ingress rules configuration
+	if c.connIndex == 0 && !registrationDetails.TunnelIsRemotelyManaged {
+		if tunnelConfig, err := tunnelConfigGetter.GetConfigJSON(); err == nil {
+			if err := rpcClient.SendLocalConfiguration(ctx, tunnelConfig, c.observer); err != nil {
+				c.observer.log.Err(err).Msg("unable to send local configuration")
+			}
+		} else {
+			c.observer.log.Err(err).Msg("failed to obtain current configuration")
+		}
+	}
 
 	c.waitForUnregister(ctx, rpcClient)
 	return nil

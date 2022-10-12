@@ -1,8 +1,11 @@
 import logging
 import os
+import platform
 import subprocess
 from contextlib import contextmanager
 from time import sleep
+
+import pytest
 
 import requests
 import yaml
@@ -13,6 +16,17 @@ from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 LOGGER = logging.getLogger(__name__)
 
 
+def select_platform(plat):
+    return pytest.mark.skipif(
+        platform.system() != plat, reason=f"Only runs on {plat}")
+
+def fips_enabled():
+    env_fips = os.getenv("COMPONENT_TESTS_FIPS")
+    return env_fips is not None and env_fips != "0"
+
+nofips = pytest.mark.skipif(
+        fips_enabled(), reason=f"Only runs without FIPS (COMPONENT_TESTS_FIPS=0)")
+
 def write_config(directory, config):
     config_path = directory / "config.yml"
     with open(config_path, 'w') as outfile:
@@ -21,9 +35,14 @@ def write_config(directory, config):
 
 
 def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False,
-                      allow_input=False, capture_output=True, root=False):
-    config_path = write_config(directory, config.full_config)
+                      allow_input=False, capture_output=True, root=False, skip_config_flag=False):
+
+    config_path = None
+    if not skip_config_flag:
+        config_path = write_config(directory, config.full_config)
+
     cmd = cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root)
+
     if new_process:
         return run_cloudflared_background(cmd, allow_input, capture_output)
     # By setting check=True, it will raise an exception if the process exits with non-zero exit code
@@ -36,7 +55,10 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
         cmd += ["sudo"]
     cmd += [config.cloudflared_binary]
     cmd += cfd_pre_args
-    cmd += ["--config", str(config_path)]
+
+    if config_path is not None:
+        cmd += ["--config", str(config_path)]
+
     cmd += cfd_args
     LOGGER.info(f"Run cmd {cmd} with config {config}")
     return cmd
@@ -46,13 +68,15 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
 def run_cloudflared_background(cmd, allow_input, capture_output):
     output = subprocess.PIPE if capture_output else subprocess.DEVNULL
     stdin = subprocess.PIPE if allow_input else None
+    cfd = None
     try:
         cfd = subprocess.Popen(cmd, stdin=stdin, stdout=output, stderr=output)
         yield cfd
     finally:
-        cfd.terminate()
-        if capture_output:
-            LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
+        if cfd:
+            cfd.terminate()
+            if capture_output:
+                LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
 
 
 def wait_tunnel_ready(tunnel_url=None, require_min_connections=1, cfd_logs=None):
@@ -91,14 +115,27 @@ def _log_cloudflared_logs(cfd_logs):
             LOGGER.warning(line)
 
 
-@retry(stop_max_attempt_number=MAX_RETRIES * BACKOFF_SECS, wait_fixed=1000)
+@retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
 def check_tunnel_not_connected():
     url = f'http://localhost:{METRICS_PORT}/ready'
 
     try:
-        resp = requests.get(url, timeout=1)
+        resp = requests.get(url, timeout=BACKOFF_SECS)
         assert resp.status_code == 503, f"Expect {url} returns 503, got {resp.status_code}"
+        assert resp.json()[
+            "readyConnections"] == 0, "Expected all connections to be terminated (pending reconnect)"
     # cloudflared might already terminate
+    except requests.exceptions.ConnectionError as e:
+        LOGGER.warning(f"Failed to connect to {url}, error: {e}")
+
+
+def get_tunnel_connector_id():
+    url = f'http://localhost:{METRICS_PORT}/ready'
+
+    try:
+        resp = requests.get(url, timeout=1)
+        return resp.json()["connectorId"]
+    # cloudflared might already terminated
     except requests.exceptions.ConnectionError as e:
         LOGGER.warning(f"Failed to connect to {url}, error: {e}")
 

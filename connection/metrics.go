@@ -13,6 +13,7 @@ const (
 	MetricsNamespace = "cloudflared"
 	TunnelSubsystem  = "tunnel"
 	muxerSubsystem   = "muxer"
+	configSubsystem  = "config"
 )
 
 type muxerMetrics struct {
@@ -36,6 +37,11 @@ type muxerMetrics struct {
 	compRateAve      *prometheus.GaugeVec
 }
 
+type localConfigMetrics struct {
+	pushes       prometheus.Counter
+	pushesErrors prometheus.Counter
+}
+
 type tunnelMetrics struct {
 	timerRetries    prometheus.Gauge
 	serverLocations *prometheus.GaugeVec
@@ -51,6 +57,39 @@ type tunnelMetrics struct {
 	muxerMetrics        *muxerMetrics
 	tunnelsHA           tunnelsForHA
 	userHostnamesCounts *prometheus.CounterVec
+
+	localConfigMetrics *localConfigMetrics
+}
+
+func newLocalConfigMetrics() *localConfigMetrics {
+
+	pushesMetric := prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: configSubsystem,
+			Name:      "local_config_pushes",
+			Help:      "Number of local configuration pushes to the edge",
+		},
+	)
+
+	pushesErrorsMetric := prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: configSubsystem,
+			Name:      "local_config_pushes_errors",
+			Help:      "Number of errors occurred during local configuration pushes",
+		},
+	)
+
+	prometheus.MustRegister(
+		pushesMetric,
+		pushesErrorsMetric,
+	)
+
+	return &localConfigMetrics{
+		pushes:       pushesMetric,
+		pushesErrors: pushesErrorsMetric,
+	}
 }
 
 func newMuxerMetrics() *muxerMetrics {
@@ -328,7 +367,7 @@ func initTunnelMetrics() *tunnelMetrics {
 			Name:      "server_locations",
 			Help:      "Where each tunnel is connected to. 1 means current location, 0 means previous locations.",
 		},
-		[]string{"connection_id", "location"},
+		[]string{"connection_id", "edge_location"},
 	)
 	prometheus.MustRegister(serverLocations)
 
@@ -386,6 +425,7 @@ func initTunnelMetrics() *tunnelMetrics {
 		regFail:             registerFail,
 		rpcFail:             rpcFail,
 		userHostnamesCounts: userHostnamesCounts,
+		localConfigMetrics:  newLocalConfigMetrics(),
 	}
 }
 

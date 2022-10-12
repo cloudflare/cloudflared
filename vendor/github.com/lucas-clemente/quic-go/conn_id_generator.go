@@ -10,7 +10,7 @@ import (
 )
 
 type connIDGenerator struct {
-	connIDLen  int
+	generator  ConnectionIDGenerator
 	highestSeq uint64
 
 	activeSrcConnIDs        map[uint64]protocol.ConnectionID
@@ -35,10 +35,11 @@ func newConnIDGenerator(
 	retireConnectionID func(protocol.ConnectionID),
 	replaceWithClosed func(protocol.ConnectionID, packetHandler),
 	queueControlFrame func(wire.Frame),
+	generator ConnectionIDGenerator,
 	version protocol.VersionNumber,
 ) *connIDGenerator {
 	m := &connIDGenerator{
-		connIDLen:              initialConnectionID.Len(),
+		generator:              generator,
 		activeSrcConnIDs:       make(map[uint64]protocol.ConnectionID),
 		addConnectionID:        addConnectionID,
 		getStatelessResetToken: getStatelessResetToken,
@@ -54,7 +55,7 @@ func newConnIDGenerator(
 }
 
 func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
-	if m.connIDLen == 0 {
+	if m.generator.ConnectionIDLen() == 0 {
 		return nil
 	}
 	// The active_connection_id_limit transport parameter is the number of
@@ -99,7 +100,7 @@ func (m *connIDGenerator) Retire(seq uint64, sentWithDestConnID protocol.Connect
 }
 
 func (m *connIDGenerator) issueNewConnID() error {
-	connID, err := protocol.GenerateConnectionID(m.connIDLen)
+	connID, err := m.generator.GenerateConnectionID()
 	if err != nil {
 		return err
 	}

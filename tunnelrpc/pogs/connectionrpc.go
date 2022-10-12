@@ -18,6 +18,7 @@ import (
 type RegistrationServer interface {
 	RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error)
 	UnregisterConnection(ctx context.Context)
+	UpdateLocalConfiguration(ctx context.Context, config []byte) error
 }
 
 type RegistrationServer_PogsImpl struct {
@@ -86,6 +87,17 @@ func (i RegistrationServer_PogsImpl) UnregisterConnection(p tunnelrpc.Registrati
 
 	i.impl.UnregisterConnection(p.Ctx)
 	return nil
+}
+
+func (i RegistrationServer_PogsImpl) UpdateLocalConfiguration(c tunnelrpc.RegistrationServer_updateLocalConfiguration) error {
+	server.Ack(c.Options)
+
+	configBytes, err := c.Params.Config()
+	if err != nil {
+		return err
+	}
+
+	return i.impl.UpdateLocalConfiguration(c.Ctx, configBytes)
 }
 
 type RegistrationServer_PogsClient struct {
@@ -163,6 +175,24 @@ func (c RegistrationServer_PogsClient) RegisterConnection(ctx context.Context, a
 	return nil, newRPCError("unknown result which %d", result.Which())
 }
 
+func (c RegistrationServer_PogsClient) SendLocalConfiguration(ctx context.Context, config []byte) error {
+	client := tunnelrpc.TunnelServer{Client: c.Client}
+	promise := client.UpdateLocalConfiguration(ctx, func(p tunnelrpc.RegistrationServer_updateLocalConfiguration_Params) error {
+		if err := p.SetConfig(config); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	_, err := promise.Struct()
+	if err != nil {
+		return wrapRPCError(err)
+	}
+
+	return nil
+}
+
 func (c RegistrationServer_PogsClient) UnregisterConnection(ctx context.Context) error {
 	client := tunnelrpc.TunnelServer{Client: c.Client}
 	promise := client.UnregisterConnection(ctx, func(p tunnelrpc.RegistrationServer_unregisterConnection_Params) error {
@@ -212,8 +242,9 @@ func (a *TunnelAuth) UnmarshalCapnproto(s tunnelrpc.TunnelAuth) error {
 }
 
 type ConnectionDetails struct {
-	UUID     uuid.UUID
-	Location string
+	UUID                    uuid.UUID
+	Location                string
+	TunnelIsRemotelyManaged bool
 }
 
 func (details *ConnectionDetails) MarshalCapnproto(s tunnelrpc.ConnectionDetails) error {
@@ -223,6 +254,7 @@ func (details *ConnectionDetails) MarshalCapnproto(s tunnelrpc.ConnectionDetails
 	if err := s.SetLocationName(details.Location); err != nil {
 		return err
 	}
+	s.SetTunnelIsRemotelyManaged(details.TunnelIsRemotelyManaged)
 
 	return nil
 }
@@ -240,6 +272,7 @@ func (details *ConnectionDetails) UnmarshalCapnproto(s tunnelrpc.ConnectionDetai
 	if err != nil {
 		return err
 	}
+	details.TunnelIsRemotelyManaged = s.TunnelIsRemotelyManaged()
 
 	return err
 }

@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lucas-clemente/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection"
@@ -17,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 const (
@@ -37,12 +41,14 @@ const (
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
 // reconnects them if they disconnect.
 type Supervisor struct {
-	cloudflaredUUID   uuid.UUID
-	config            *TunnelConfig
-	orchestrator      *orchestration.Orchestrator
-	edgeIPs           *edgediscovery.Edge
-	tunnelErrors      chan tunnelError
-	tunnelsConnecting map[int]chan struct{}
+	cloudflaredUUID         uuid.UUID
+	config                  *TunnelConfig
+	orchestrator            *orchestration.Orchestrator
+	edgeIPs                 *edgediscovery.Edge
+	edgeTunnelServer        *EdgeTunnelServer
+	tunnelErrors            chan tunnelError
+	tunnelsConnecting       map[int]chan struct{}
+	tunnelsProtocolFallback map[int]*protocolFallback
 	// nextConnectedIndex and nextConnectedSignal are used to wait for all
 	// currently-connecting tunnels to finish connecting so we can reset backoff timer
 	nextConnectedIndex  int
@@ -62,7 +68,6 @@ var errEarlyShutdown = errors.New("shutdown started")
 
 type tunnelError struct {
 	index int
-	addr  *allregions.EdgeAddr
 	err   error
 }
 
@@ -72,14 +77,43 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
 	}
 
+	isStaticEdge := len(config.EdgeAddrs) > 0
+
 	var edgeIPs *edgediscovery.Edge
-	if len(config.EdgeAddrs) > 0 {
+	if isStaticEdge { // static edge addresses
 		edgeIPs, err = edgediscovery.StaticEdge(config.Log, config.EdgeAddrs)
 	} else {
-		edgeIPs, err = edgediscovery.ResolveEdge(config.Log, config.Region)
+		edgeIPs, err = edgediscovery.ResolveEdge(config.Log, config.Region, config.EdgeIPVersion)
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	reconnectCredentialManager := newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections)
+
+	tracker := tunnelstate.NewConnTracker(config.Log)
+	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
+
+	var edgeAddrHandler EdgeAddrHandler
+	if isStaticEdge { // static edge addresses
+		edgeAddrHandler = &IPAddrFallback{}
+	} else if config.EdgeIPVersion == allregions.IPv6Only || config.EdgeIPVersion == allregions.Auto {
+		edgeAddrHandler = &IPAddrFallback{}
+	} else { // IPv4Only
+		edgeAddrHandler = &DefaultAddrFallback{}
+	}
+
+	edgeTunnelServer := EdgeTunnelServer{
+		config:            config,
+		cloudflaredUUID:   cloudflaredUUID,
+		orchestrator:      orchestrator,
+		credentialManager: reconnectCredentialManager,
+		edgeAddrs:         edgeIPs,
+		edgeAddrHandler:   edgeAddrHandler,
+		tracker:           tracker,
+		reconnectCh:       reconnectCh,
+		gracefulShutdownC: gracefulShutdownC,
+		connAwareLogger:   log,
 	}
 
 	useReconnectToken := false
@@ -92,11 +126,13 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		config:                     config,
 		orchestrator:               orchestrator,
 		edgeIPs:                    edgeIPs,
+		edgeTunnelServer:           &edgeTunnelServer,
 		tunnelErrors:               make(chan tunnelError),
 		tunnelsConnecting:          map[int]chan struct{}{},
-		log:                        NewConnAwareLogger(config.Log, config.Observer),
+		tunnelsProtocolFallback:    map[int]*protocolFallback{},
+		log:                        log,
 		logTransport:               config.LogTransport,
-		reconnectCredentialManager: newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections),
+		reconnectCredentialManager: reconnectCredentialManager,
 		useReconnectToken:          useReconnectToken,
 		reconnectCh:                reconnectCh,
 		gracefulShutdownC:          gracefulShutdownC,
@@ -107,6 +143,18 @@ func (s *Supervisor) Run(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) error {
+	if s.config.PacketConfig != nil {
+		go func() {
+			if err := s.config.PacketConfig.ICMPRouter.Serve(ctx); err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					s.log.Logger().Info().Err(err).Msg("icmp router terminated")
+				} else {
+					s.log.Logger().Err(err).Msg("icmp router terminated")
+				}
+			}
+		}()
+	}
+
 	if err := s.initialize(ctx, connectedSignal); err != nil {
 		if err == errEarlyShutdown {
 			return nil
@@ -143,11 +191,22 @@ func (s *Supervisor) Run(
 				tunnelsActive--
 			}
 			return nil
-		// startTunnel returned with error
+		// startTunnel completed with a response
 		// (note that this may also be caused by context cancellation)
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
 			if tunnelError.err != nil && !shuttingDown {
+				switch tunnelError.err.(type) {
+				case ReconnectSignal:
+					// For tunnels that closed with reconnect signal, we reconnect immediately
+					go s.startTunnel(ctx, tunnelError.index, s.newConnectedTunnelSignal(tunnelError.index))
+					tunnelsActive++
+					continue
+				}
+				// Make sure we don't continue if there is no more fallback allowed
+				if _, retry := s.tunnelsProtocolFallback[tunnelError.index].GetMaxBackoffDuration(ctx); !retry {
+					continue
+				}
 				s.log.ConnAwareLogger().Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
@@ -155,10 +214,9 @@ func (s *Supervisor) Run(
 				if backoffTimer == nil {
 					backoffTimer = backoff.BackoffTimer()
 				}
-
-				// Previously we'd mark the edge address as bad here, but now we'll just silently use another.
 			} else if tunnelsActive == 0 {
-				// all connected tunnels exited gracefully, no more work to do
+				s.log.ConnAwareLogger().Msg("no more connections active and exiting")
+				// All connected tunnels exited gracefully, no more work to do
 				return nil
 			}
 		// Backoff was set and its timer expired
@@ -192,6 +250,8 @@ func (s *Supervisor) Run(
 }
 
 // Returns nil if initialization succeeded, else the initialization error.
+// Attempts here will be made to connect one tunnel, if successful, it will
+// connect the available tunnels up to config.HAConnections.
 func (s *Supervisor) initialize(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
@@ -201,8 +261,15 @@ func (s *Supervisor) initialize(
 		s.log.Logger().Info().Msgf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
 		s.config.HAConnections = availableAddrs
 	}
+	s.tunnelsProtocolFallback[0] = &protocolFallback{
+		retry.BackoffHandler{MaxRetries: s.config.Retries, RetryForever: true},
+		s.config.ProtocolSelector.Current(),
+		false,
+	}
 
 	go s.startFirstTunnel(ctx, connectedSignal)
+
+	// Wait for response from first tunnel before proceeding to attempt other HA edge tunnels
 	select {
 	case <-ctx.Done():
 		<-s.tunnelErrors
@@ -213,10 +280,15 @@ func (s *Supervisor) initialize(
 		return errEarlyShutdown
 	case <-connectedSignal.Wait():
 	}
+
 	// At least one successful connection, so start the rest
 	for i := 1; i < s.config.HAConnections; i++ {
-		ch := signal.New(make(chan struct{}))
-		go s.startTunnel(ctx, i, ch)
+		s.tunnelsProtocolFallback[i] = &protocolFallback{
+			retry.BackoffHandler{MaxRetries: s.config.Retries, RetryForever: true},
+			s.config.ProtocolSelector.Current(),
+			false,
+		}
+		go s.startTunnel(ctx, i, s.newConnectedTunnelSignal(i))
 		time.Sleep(registrationInterval)
 	}
 	return nil
@@ -229,102 +301,65 @@ func (s *Supervisor) startFirstTunnel(
 	connectedSignal *signal.Signal,
 ) {
 	var (
-		addr *allregions.EdgeAddr
-		err  error
+		err error
 	)
 	const firstConnIndex = 0
+	isStaticEdge := len(s.config.EdgeAddrs) > 0
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: firstConnIndex, addr: addr, err: err}
+		s.tunnelErrors <- tunnelError{index: firstConnIndex, err: err}
 	}()
 
-	addr, err = s.edgeIPs.GetAddr(firstConnIndex)
-	if err != nil {
-		return
-	}
-
-	err = ServeTunnelLoop(
-		ctx,
-		s.reconnectCredentialManager,
-		s.config,
-		s.orchestrator,
-		addr,
-		s.log,
-		firstConnIndex,
-		connectedSignal,
-		s.cloudflaredUUID,
-		s.reconnectCh,
-		s.gracefulShutdownC,
-	)
 	// If the first tunnel disconnects, keep restarting it.
-	edgeErrors := 0
-	for s.unusedIPs() {
+	for {
+		err = s.edgeTunnelServer.Serve(ctx, firstConnIndex, s.tunnelsProtocolFallback[firstConnIndex], connectedSignal)
 		if ctx.Err() != nil {
 			return
 		}
-		switch err.(type) {
-		case nil:
-			return
-		// try the next address if it was a dialError(network problem) or
-		// dupConnRegisterTunnelError
-		case edgediscovery.DialError, connection.DupConnRegisterTunnelError:
-			edgeErrors++
-		default:
+		if err == nil {
 			return
 		}
-		if edgeErrors >= 2 {
-			addr, err = s.edgeIPs.GetDifferentAddr(firstConnIndex)
-			if err != nil {
+		// Make sure we don't continue if there is no more fallback allowed
+		if _, retry := s.tunnelsProtocolFallback[firstConnIndex].GetMaxBackoffDuration(ctx); !retry {
+			return
+		}
+		// Try again for Unauthorized errors because we hope them to be
+		// transient due to edge propagation lag on new Tunnels.
+		if strings.Contains(err.Error(), "Unauthorized") {
+			continue
+		}
+		switch err.(type) {
+		case edgediscovery.ErrNoAddressesLeft:
+			// If your provided addresses are not available, we will keep trying regardless.
+			if !isStaticEdge {
 				return
 			}
+		case connection.DupConnRegisterTunnelError,
+			*quic.IdleTimeoutError,
+			edgediscovery.DialError,
+			*connection.EdgeQuicDialError:
+			// Try again for these types of errors
+		default:
+			// Uncaught errors should bail startup
+			return
 		}
-		err = ServeTunnelLoop(
-			ctx,
-			s.reconnectCredentialManager,
-			s.config,
-			s.orchestrator,
-			addr,
-			s.log,
-			firstConnIndex,
-			connectedSignal,
-			s.cloudflaredUUID,
-			s.reconnectCh,
-			s.gracefulShutdownC,
-		)
 	}
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on
-// s.tunnelErrors.
+// s.tunnelError as this is expected to run in a goroutine.
 func (s *Supervisor) startTunnel(
 	ctx context.Context,
 	index int,
 	connectedSignal *signal.Signal,
 ) {
 	var (
-		addr *allregions.EdgeAddr
-		err  error
+		err error
 	)
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: index, addr: addr, err: err}
+		s.tunnelErrors <- tunnelError{index: index, err: err}
 	}()
 
-	addr, err = s.edgeIPs.GetDifferentAddr(index)
-	if err != nil {
-		return
-	}
-	err = ServeTunnelLoop(
-		ctx,
-		s.reconnectCredentialManager,
-		s.config,
-		s.orchestrator,
-		addr,
-		s.log,
-		uint8(index),
-		connectedSignal,
-		s.cloudflaredUUID,
-		s.reconnectCh,
-		s.gracefulShutdownC,
-	)
+	err = s.edgeTunnelServer.Serve(ctx, uint8(index), s.tunnelsProtocolFallback[index], connectedSignal)
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {

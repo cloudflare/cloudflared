@@ -47,17 +47,12 @@ class TestReconnect:
         cloudflared.stdin.flush()
 
     def assert_reconnect(self, config, cloudflared, repeat):
-        wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=self.default_ha_conns)
+        wait_tunnel_ready(tunnel_url=config.get_url(),
+                          require_min_connections=self.default_ha_conns)
         for _ in range(repeat):
-            for i in range(self.default_ha_conns):
+            for _ in range(self.default_ha_conns):
                 self.send_reconnect(cloudflared, self.default_reconnect_secs)
-                expect_connections = self.default_ha_conns-i-1
-                if expect_connections > 0:
-                    # Don't check if tunnel returns 200 here because there is a race condition between wait_tunnel_ready
-                    # retrying to get 200 response and reconnecting
-                    wait_tunnel_ready(require_min_connections=expect_connections)
-                else:
-                    check_tunnel_not_connected()
-
+            check_tunnel_not_connected()
             sleep(self.default_reconnect_secs * 2)
-            wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=self.default_ha_conns)
+            wait_tunnel_ready(tunnel_url=config.get_url(),
+                              require_min_connections=self.default_ha_conns)

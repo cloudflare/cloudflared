@@ -121,6 +121,8 @@ struct ConnectionDetails {
     uuid @0 :Data;
     # airport code of the colo where this connection landed
     locationName @1 :Text;
+    # tells if the tunnel is remotely managed
+    tunnelIsRemotelyManaged @2: Bool;
 }
 
 struct TunnelAuth {
@@ -131,6 +133,7 @@ struct TunnelAuth {
 interface RegistrationServer {
     registerConnection @0 (auth :TunnelAuth, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
     unregisterConnection @1 () -> ();
+    updateLocalConfiguration @2 (config :Data) -> ();
 }
 
 interface TunnelServer extends (RegistrationServer) {
@@ -145,12 +148,13 @@ interface TunnelServer extends (RegistrationServer) {
 
 struct RegisterUdpSessionResponse {
     err @0 :Text;
+    spans @1 :Data;
 }
 
 interface SessionManager {
     # Let the edge decide closeAfterIdle to make sure cloudflared doesn't close session before the edge closes its side
-    registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort: UInt16, closeAfterIdleHint: Int64) -> (result :RegisterUdpSessionResponse);
-    unregisterUdpSession @1 (sessionId :Data, message: Text) -> ();
+    registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort :UInt16, closeAfterIdleHint :Int64, traceContext :Text = "") -> (result :RegisterUdpSessionResponse);
+    unregisterUdpSession @1 (sessionId :Data, message :Text) -> ();
 }
 
 struct UpdateConfigurationResponse {

@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"sync"
@@ -19,7 +20,7 @@ const (
 	edgeH2TLSServerName = "h2.cftunnel.com"
 	// edgeQUICServerName is the server name to establish quic connection with edge.
 	edgeQUICServerName = "quic.cftunnel.com"
-	autoSelectFlag     = "auto"
+	AutoSelectFlag     = "auto"
 )
 
 var (
@@ -130,6 +131,7 @@ type autoProtocolSelector struct {
 	refreshAfter    time.Time
 	ttl             time.Duration
 	log             *zerolog.Logger
+	needPQ          bool
 }
 
 func newAutoProtocolSelector(
@@ -139,6 +141,7 @@ func newAutoProtocolSelector(
 	fetchFunc PercentageFetcher,
 	ttl time.Duration,
 	log *zerolog.Logger,
+	needPQ bool,
 ) *autoProtocolSelector {
 	return &autoProtocolSelector{
 		current:         current,
@@ -148,6 +151,7 @@ func newAutoProtocolSelector(
 		refreshAfter:    time.Now().Add(ttl),
 		ttl:             ttl,
 		log:             log,
+		needPQ:          needPQ,
 	}
 }
 
@@ -187,6 +191,9 @@ func getProtocol(protocolPool []Protocol, fetchFunc PercentageFetcher, switchThr
 func (s *autoProtocolSelector) Fallback() (Protocol, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
+	if s.needPQ {
+		return 0, false
+	}
 	return s.current.fallback()
 }
 
@@ -199,9 +206,14 @@ func NewProtocolSelector(
 	fetchFunc PercentageFetcher,
 	ttl time.Duration,
 	log *zerolog.Logger,
+	needPQ bool,
 ) (ProtocolSelector, error) {
 	// Classic tunnel is only supported with h2mux
 	if namedTunnel == nil {
+		if needPQ {
+			return nil, errors.New("Classic tunnel does not support post-quantum")
+		}
+
 		return &staticProtocolSelector{
 			current: H2mux,
 		}, nil
@@ -209,8 +221,11 @@ func NewProtocolSelector(
 
 	threshold := switchThreshold(namedTunnel.Credentials.AccountTag)
 	fetchedProtocol, err := getProtocol([]Protocol{QUIC, HTTP2}, fetchFunc, threshold)
-	if err != nil {
-		log.Err(err).Msg("Unable to lookup protocol. Defaulting to `http2`. If this fails, you can set `--protocol h2mux` in your cloudflared command.")
+	if err != nil && protocolFlag == "auto" {
+		log.Err(err).Msg("Unable to lookup protocol. Defaulting to `http2`. If this fails, you can attempt `--protocol quic` instead.")
+		if needPQ {
+			return nil, errors.New("http2 does not support post-quantum")
+		}
 		return &staticProtocolSelector{
 			current: HTTP2,
 		}, nil
@@ -221,10 +236,10 @@ func NewProtocolSelector(
 			protocolFlag = HTTP2.String()
 			fetchedProtocol = HTTP2Warp
 		}
-		return selectWarpRoutingProtocols(protocolFlag, fetchFunc, ttl, log, threshold, fetchedProtocol)
+		return selectWarpRoutingProtocols(protocolFlag, fetchFunc, ttl, log, threshold, fetchedProtocol, needPQ)
 	}
 
-	return selectNamedTunnelProtocols(protocolFlag, fetchFunc, ttl, log, threshold, fetchedProtocol)
+	return selectNamedTunnelProtocols(protocolFlag, fetchFunc, ttl, log, threshold, fetchedProtocol, needPQ)
 }
 
 func selectNamedTunnelProtocols(
@@ -234,6 +249,7 @@ func selectNamedTunnelProtocols(
 	log *zerolog.Logger,
 	threshold int32,
 	protocol Protocol,
+	needPQ bool,
 ) (ProtocolSelector, error) {
 	// If the user picks a protocol, then we stick to it no matter what.
 	switch protocolFlag {
@@ -247,8 +263,8 @@ func selectNamedTunnelProtocols(
 
 	// If the user does not pick (hopefully the majority) then we use the one derived from the TXT DNS record and
 	// fallback on failures.
-	if protocolFlag == autoSelectFlag {
-		return newAutoProtocolSelector(protocol, []Protocol{QUIC, HTTP2, H2mux}, threshold, fetchFunc, ttl, log), nil
+	if protocolFlag == AutoSelectFlag {
+		return newAutoProtocolSelector(protocol, []Protocol{QUIC, HTTP2, H2mux}, threshold, fetchFunc, ttl, log, needPQ), nil
 	}
 
 	return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
@@ -261,6 +277,7 @@ func selectWarpRoutingProtocols(
 	log *zerolog.Logger,
 	threshold int32,
 	protocol Protocol,
+	needPQ bool,
 ) (ProtocolSelector, error) {
 	// If the user picks a protocol, then we stick to it no matter what.
 	switch protocolFlag {
@@ -272,8 +289,8 @@ func selectWarpRoutingProtocols(
 
 	// If the user does not pick (hopefully the majority) then we use the one derived from the TXT DNS record and
 	// fallback on failures.
-	if protocolFlag == autoSelectFlag {
-		return newAutoProtocolSelector(protocol, []Protocol{QUICWarp, HTTP2Warp}, threshold, fetchFunc, ttl, log), nil
+	if protocolFlag == AutoSelectFlag {
+		return newAutoProtocolSelector(protocol, []Protocol{QUICWarp, HTTP2Warp}, threshold, fetchFunc, ttl, log, needPQ), nil
 	}
 
 	return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)

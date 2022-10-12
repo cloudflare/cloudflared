@@ -23,6 +23,10 @@ type Packet struct {
 	skippedPacket           bool
 }
 
+func (p *Packet) outstanding() bool {
+	return !p.declaredLost && !p.skippedPacket && !p.IsPathMTUProbePacket
+}
+
 // SentPacketHandler handles ACKs received for outgoing packets
 type SentPacketHandler interface {
 	// SentPacket may modify the packet

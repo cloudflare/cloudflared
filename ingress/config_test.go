@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
-	yaml "gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ipaccess"
@@ -65,7 +65,7 @@ func TestUnmarshalRemoteConfigOverridesGlobal(t *testing.T) {
 	err := json.Unmarshal(rawConfig, &remoteConfig)
 	require.NoError(t, err)
 	require.True(t, remoteConfig.Ingress.Rules[0].Config.NoTLSVerify)
-	require.True(t, remoteConfig.Ingress.defaults.NoHappyEyeballs)
+	require.True(t, remoteConfig.Ingress.Defaults.NoHappyEyeballs)
 }
 
 func TestOriginRequestConfigOverrides(t *testing.T) {
@@ -74,11 +74,11 @@ func TestOriginRequestConfigOverrides(t *testing.T) {
 		// root-level configuration.
 		actual0 := ing.Rules[0].Config
 		expected0 := OriginRequestConfig{
-			ConnectTimeout:         1 * time.Minute,
-			TLSTimeout:             1 * time.Second,
-			TCPKeepAlive:           1 * time.Second,
+			ConnectTimeout:         config.CustomDuration{Duration: 1 * time.Minute},
+			TLSTimeout:             config.CustomDuration{Duration: 1 * time.Second},
+			TCPKeepAlive:           config.CustomDuration{Duration: 1 * time.Second},
 			NoHappyEyeballs:        true,
-			KeepAliveTimeout:       1 * time.Second,
+			KeepAliveTimeout:       config.CustomDuration{Duration: 1 * time.Second},
 			KeepAliveConnections:   1,
 			HTTPHostHeader:         "abc",
 			OriginServerName:       "a1",
@@ -99,11 +99,11 @@ func TestOriginRequestConfigOverrides(t *testing.T) {
 		// Rule 1 overrode all the root-level config.
 		actual1 := ing.Rules[1].Config
 		expected1 := OriginRequestConfig{
-			ConnectTimeout:         2 * time.Minute,
-			TLSTimeout:             2 * time.Second,
-			TCPKeepAlive:           2 * time.Second,
+			ConnectTimeout:         config.CustomDuration{Duration: 2 * time.Minute},
+			TLSTimeout:             config.CustomDuration{Duration: 2 * time.Second},
+			TCPKeepAlive:           config.CustomDuration{Duration: 2 * time.Second},
 			NoHappyEyeballs:        false,
-			KeepAliveTimeout:       2 * time.Second,
+			KeepAliveTimeout:       config.CustomDuration{Duration: 2 * time.Second},
 			KeepAliveConnections:   2,
 			HTTPHostHeader:         "def",
 			OriginServerName:       "b2",
@@ -191,12 +191,12 @@ ingress:
 	rawConfig := []byte(`
 {
     "originRequest": {
-        "connectTimeout": 60000000000,
-		"tlsTimeout": 1000000000,
+        "connectTimeout": 60,
+		"tlsTimeout": 1,
 		"noHappyEyeballs": true,
-		"tcpKeepAlive": 1000000000,
+		"tcpKeepAlive": 1,
 		"keepAliveConnections": 1,
-		"keepAliveTimeout": 1000000000,
+		"keepAliveTimeout": 1,
 		"httpHostHeader": "abc",
 		"originServerName": "a1",
 		"caPool": "/tmp/path0",
@@ -228,12 +228,12 @@ ingress:
 			"hostname": "*",
             "service": "https://localhost:8001",
 			"originRequest": {
-				"connectTimeout": 120000000000,
-				"tlsTimeout": 2000000000,
+				"connectTimeout": 120,
+				"tlsTimeout": 2,
 				"noHappyEyeballs": false,
-				"tcpKeepAlive": 2000000000,
+				"tcpKeepAlive": 2,
 				"keepAliveConnections": 2,
-				"keepAliveTimeout": 2000000000,
+				"keepAliveTimeout": 2,
 				"httpHostHeader": "def",
 				"originServerName": "b2",
 				"caPool": "/tmp/path1",
@@ -274,7 +274,7 @@ func TestOriginRequestConfigDefaults(t *testing.T) {
 		// Rule 0 didn't override anything, so it inherits the cloudflared defaults
 		actual0 := ing.Rules[0].Config
 		expected0 := OriginRequestConfig{
-			ConnectTimeout:       defaultConnectTimeout,
+			ConnectTimeout:       defaultHTTPConnectTimeout,
 			TLSTimeout:           defaultTLSTimeout,
 			TCPKeepAlive:         defaultTCPKeepAlive,
 			KeepAliveConnections: defaultKeepAliveConnections,
@@ -286,11 +286,11 @@ func TestOriginRequestConfigDefaults(t *testing.T) {
 		// Rule 1 overrode all defaults.
 		actual1 := ing.Rules[1].Config
 		expected1 := OriginRequestConfig{
-			ConnectTimeout:         2 * time.Minute,
-			TLSTimeout:             2 * time.Second,
-			TCPKeepAlive:           2 * time.Second,
+			ConnectTimeout:         config.CustomDuration{Duration: 2 * time.Minute},
+			TLSTimeout:             config.CustomDuration{Duration: 2 * time.Second},
+			TCPKeepAlive:           config.CustomDuration{Duration: 2 * time.Second},
 			NoHappyEyeballs:        false,
-			KeepAliveTimeout:       2 * time.Second,
+			KeepAliveTimeout:       config.CustomDuration{Duration: 2 * time.Second},
 			KeepAliveConnections:   2,
 			HTTPHostHeader:         "def",
 			OriginServerName:       "b2",
@@ -360,12 +360,12 @@ ingress:
 			"hostname": "*",
             "service": "https://localhost:8001",
 			"originRequest": {
-				"connectTimeout": 120000000000,
-				"tlsTimeout": 2000000000,
+				"connectTimeout": 120,
+				"tlsTimeout": 2,
 				"noHappyEyeballs": false,
-				"tcpKeepAlive": 2000000000,
+				"tcpKeepAlive": 2,
 				"keepAliveConnections": 2,
-				"keepAliveTimeout": 2000000000,
+				"keepAliveTimeout": 2,
 				"httpHostHeader": "def",
 				"originServerName": "b2",
 				"caPool": "/tmp/path1",
@@ -404,7 +404,7 @@ func TestDefaultConfigFromCLI(t *testing.T) {
 	c := cli.NewContext(nil, set, nil)
 
 	expected := OriginRequestConfig{
-		ConnectTimeout:       defaultConnectTimeout,
+		ConnectTimeout:       defaultHTTPConnectTimeout,
 		TLSTimeout:           defaultTLSTimeout,
 		TCPKeepAlive:         defaultTCPKeepAlive,
 		KeepAliveConnections: defaultKeepAliveConnections,

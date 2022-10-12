@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import copy
+import json
+import base64
 
 from dataclasses import dataclass, InitVar
 
@@ -60,6 +62,28 @@ class NamedTunnelConfig(NamedTunnelBaseConfig):
 
     def get_url(self):
         return "https://" + self.ingress[0]['hostname']
+
+    def base_config(self):
+        config = self.full_config.copy()
+
+        # removes the tunnel reference
+        del(config["tunnel"])
+        del(config["credentials-file"])
+
+        return config
+
+    def get_tunnel_id(self):
+        return self.full_config["tunnel"]
+
+    def get_token(self):
+        creds = self.get_credentials_json()
+        token_dict = {"a": creds["AccountTag"], "t": creds["TunnelID"], "s": creds["TunnelSecret"]}
+        token_json_str = json.dumps(token_dict)
+        return base64.b64encode(token_json_str.encode('utf-8'))
+
+    def get_credentials_json(self):
+        with open(self.credentials_file) as json_file:
+            return json.load(json_file)
 
 
 @dataclass(frozen=True)

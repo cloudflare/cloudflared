@@ -598,7 +598,7 @@ func (h *sentPacketHandler) detectLostPackets(now time.Time, encLevel protocol.E
 			pnSpace.lossTime = lossTime
 		}
 		if packetLost {
-			p.declaredLost = true
+			p = pnSpace.history.DeclareLost(p)
 			// the bytes in flight need to be reduced no matter if the frames in this packet will be retransmitted
 			h.removeFromBytesInFlight(p)
 			h.queueFramesForRetransmission(p)
@@ -767,7 +767,7 @@ func (h *sentPacketHandler) QueueProbePacket(encLevel protocol.EncryptionLevel) 
 	// TODO: don't declare the packet lost here.
 	// Keep track of acknowledged frames instead.
 	h.removeFromBytesInFlight(p)
-	p.declaredLost = true
+	pnSpace.history.DeclareLost(p)
 	return true
 }
 

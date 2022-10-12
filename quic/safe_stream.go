@@ -41,3 +41,14 @@ func (s *SafeStreamCloser) Close() error {
 	s.stream.CancelRead(0)
 	return s.stream.Close()
 }
+
+func (s *SafeStreamCloser) CloseWrite() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// As documented by the quic-go library, this doesn't actually close the entire stream.
+	// It prevents further writes, which in turn will result in an EOF signal being sent the other side of stream when
+	// reading.
+	// We can still read from this stream.
+	return s.stream.Close()
+}

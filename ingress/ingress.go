@@ -11,8 +11,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
+	"golang.org/x/net/idna"
 
 	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ingress/middleware"
 	"github.com/cloudflare/cloudflared/ipaccess"
 )
 
@@ -64,8 +66,8 @@ func matchHost(ruleHost, reqHost string) bool {
 
 // Ingress maps eyeball requests to origins.
 type Ingress struct {
-	Rules    []Rule
-	defaults OriginRequestConfig
+	Rules    []Rule              `json:"ingress"`
+	Defaults OriginRequestConfig `json:"originRequest"`
 }
 
 // NewSingleOrigin constructs an Ingress set with only one rule, constructed from
@@ -86,7 +88,7 @@ func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 				Config:  setConfig(defaults, config.OriginRequestConfig{}),
 			},
 		},
-		defaults: defaults,
+		Defaults: defaults,
 	}
 	return ing, err
 }
@@ -97,8 +99,16 @@ type WarpRoutingService struct {
 	Proxy StreamBasedOriginProxy
 }
 
-func NewWarpRoutingService() *WarpRoutingService {
-	return &WarpRoutingService{Proxy: &rawTCPService{name: ServiceWarpRouting}}
+func NewWarpRoutingService(config WarpRoutingConfig) *WarpRoutingService {
+	svc := &rawTCPService{
+		name: ServiceWarpRouting,
+		dialer: net.Dialer{
+			Timeout:   config.ConnectTimeout.Duration,
+			KeepAlive: config.TCPKeepAlive.Duration,
+		},
+	}
+
+	return &WarpRoutingService{Proxy: svc}
 }
 
 // Get a single origin service from the CLI/config.
@@ -126,7 +136,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 		if err != nil {
 			return nil, errors.Wrap(err, "Error validating --unix-socket")
 		}
-		return &unixSocketPath{path: path}, nil
+		return &unixSocketPath{path: path, scheme: "http"}, nil
 	}
 	u, err := url.Parse("http://localhost:8080")
 	return &httpService{url: u}, err
@@ -160,6 +170,28 @@ func (ing Ingress) CatchAll() *Rule {
 	return &ing.Rules[len(ing.Rules)-1]
 }
 
+func validateAccessConfiguration(cfg *config.AccessConfig) error {
+	if !cfg.Required {
+		return nil
+	}
+
+	// It is possible to set `required:true` and not have these two configured yet.
+	// But if one of them is configured, we'd validate for correctness.
+	if len(cfg.AudTag) == 0 && cfg.TeamName == "" {
+		return nil
+	}
+
+	if len(cfg.AudTag) == 0 {
+		return errors.New("access audtag cannot be empty")
+	}
+
+	if cfg.TeamName == "" {
+		return errors.New("access.TeamName cannot be blank")
+	}
+
+	return nil
+}
+
 func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginRequestConfig) (Ingress, error) {
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
@@ -169,15 +201,21 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 		if prefix := "unix:"; strings.HasPrefix(r.Service, prefix) {
 			// No validation necessary for unix socket filepath services
 			path := strings.TrimPrefix(r.Service, prefix)
-			service = &unixSocketPath{path: path}
+			service = &unixSocketPath{path: path, scheme: "http"}
+		} else if prefix := "unix+tls:"; strings.HasPrefix(r.Service, prefix) {
+			path := strings.TrimPrefix(r.Service, prefix)
+			service = &unixSocketPath{path: path, scheme: "https"}
 		} else if prefix := "http_status:"; strings.HasPrefix(r.Service, prefix) {
-			status, err := strconv.Atoi(strings.TrimPrefix(r.Service, prefix))
+			statusCode, err := strconv.Atoi(strings.TrimPrefix(r.Service, prefix))
 			if err != nil {
-				return Ingress{}, errors.Wrap(err, "invalid HTTP status")
+				return Ingress{}, errors.Wrap(err, "invalid HTTP status code")
 			}
-			srv := newStatusCode(status)
+			if statusCode < 100 || statusCode > 999 {
+				return Ingress{}, fmt.Errorf("invalid HTTP status code: %d", statusCode)
+			}
+			srv := newStatusCode(statusCode)
 			service = &srv
-		} else if r.Service == "hello_world" || r.Service == "hello-world" || r.Service == "helloworld" {
+		} else if r.Service == HelloWorldService || r.Service == "hello-world" || r.Service == "helloworld" {
 			service = new(helloWorld)
 		} else if r.Service == ServiceSocksProxy {
 			rules := make([]ipaccess.Rule, len(r.OriginRequest.IPRules))
@@ -223,27 +261,51 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			}
 		}
 
+		var handlers []middleware.Handler
+		if access := r.OriginRequest.Access; access != nil {
+			if err := validateAccessConfiguration(access); err != nil {
+				return Ingress{}, err
+			}
+			if access.Required {
+				verifier := middleware.NewJWTValidator(access.TeamName, "", access.AudTag)
+				handlers = append(handlers, verifier)
+			}
+		}
+
 		if err := validateHostname(r, i, len(ingress)); err != nil {
 			return Ingress{}, err
 		}
 
-		var pathRegex *regexp.Regexp
-		if r.Path != "" {
-			var err error
-			pathRegex, err = regexp.Compile(r.Path)
-			if err != nil {
-				return Ingress{}, errors.Wrapf(err, "Rule #%d has an invalid regex", i+1)
+		isCatchAllRule := (r.Hostname == "" || r.Hostname == "*") && r.Path == ""
+		punycodeHostname := ""
+		if !isCatchAllRule {
+			punycode, err := idna.Lookup.ToASCII(r.Hostname)
+			// Don't provide the punycode hostname if it is the same as the original hostname
+			if err == nil && punycode != r.Hostname {
+				punycodeHostname = punycode
 			}
 		}
 
+		var pathRegexp *Regexp
+		if r.Path != "" {
+			var err error
+			regex, err := regexp.Compile(r.Path)
+			if err != nil {
+				return Ingress{}, errors.Wrapf(err, "Rule #%d has an invalid regex", i+1)
+			}
+			pathRegexp = &Regexp{Regexp: regex}
+		}
+
 		rules[i] = Rule{
-			Hostname: r.Hostname,
-			Service:  service,
-			Path:     pathRegex,
-			Config:   cfg,
+			Hostname:         r.Hostname,
+			punycodeHostname: punycodeHostname,
+			Service:          service,
+			Path:             pathRegexp,
+			Handlers:         handlers,
+			Config:           cfg,
 		}
 	}
-	return Ingress{Rules: rules, defaults: defaults}, nil
+	return Ingress{Rules: rules, Defaults: defaults}, nil
 }
 
 func validateHostname(r config.UnvalidatedIngressRule, ruleIndex, totalRules int) error {

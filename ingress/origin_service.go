@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -20,7 +21,8 @@ import (
 )
 
 const (
-	HelloWorldService = "Hello World test origin"
+	HelloWorldService = "hello_world"
+	HttpStatusService = "http_status"
 )
 
 // OriginService is something a tunnel can proxy traffic to.
@@ -31,16 +33,22 @@ type OriginService interface {
 	// starting the origin service.
 	// Implementor of services managed by cloudflared should terminate the service if shutdownC is closed
 	start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg OriginRequestConfig) error
+	MarshalJSON() ([]byte, error)
 }
 
-// unixSocketPath is an OriginService representing a unix socket (which accepts HTTP)
+// unixSocketPath is an OriginService representing a unix socket (which accepts HTTP or HTTPS)
 type unixSocketPath struct {
 	path      string
+	scheme    string
 	transport *http.Transport
 }
 
 func (o *unixSocketPath) String() string {
-	return "unix socket: " + o.path
+	scheme := ""
+	if o.scheme == "https" {
+		scheme = "+tls"
+	}
+	return fmt.Sprintf("unix%s:%s", scheme, o.path)
 }
 
 func (o *unixSocketPath) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
@@ -50,6 +58,10 @@ func (o *unixSocketPath) start(log *zerolog.Logger, _ <-chan struct{}, cfg Origi
 	}
 	o.transport = transport
 	return nil
+}
+
+func (o unixSocketPath) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
 }
 
 type httpService struct {
@@ -72,10 +84,15 @@ func (o *httpService) String() string {
 	return o.url.String()
 }
 
+func (o httpService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
+}
+
 // rawTCPService dials TCP to the destination specified by the client
 // It's used by warp routing
 type rawTCPService struct {
-	name string
+	name   string
+	dialer net.Dialer
 }
 
 func (o *rawTCPService) String() string {
@@ -86,12 +103,18 @@ func (o *rawTCPService) start(log *zerolog.Logger, _ <-chan struct{}, cfg Origin
 	return nil
 }
 
+func (o rawTCPService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
+}
+
 // tcpOverWSService models TCP origins serving eyeballs connecting over websocket, such as
 // cloudflared access commands.
 type tcpOverWSService struct {
+	scheme        string
 	dest          string
 	isBastion     bool
 	streamHandler streamHandlerFunc
+	dialer        net.Dialer
 }
 
 type socksProxyOverWSService struct {
@@ -110,7 +133,8 @@ func newTCPOverWSService(url *url.URL) *tcpOverWSService {
 		addPortIfMissing(url, 7864) // just a random port since there isn't a default in this case
 	}
 	return &tcpOverWSService{
-		dest: url.Host,
+		scheme: url.Scheme,
+		dest:   url.Host,
 	}
 }
 
@@ -140,7 +164,12 @@ func (o *tcpOverWSService) String() string {
 	if o.isBastion {
 		return ServiceBastion
 	}
-	return o.dest
+
+	if o.scheme != "" {
+		return fmt.Sprintf("%s://%s", o.scheme, o.dest)
+	} else {
+		return o.dest
+	}
 }
 
 func (o *tcpOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
@@ -149,7 +178,13 @@ func (o *tcpOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg Ori
 	} else {
 		o.streamHandler = DefaultStreamHandler
 	}
+	o.dialer.Timeout = cfg.ConnectTimeout.Duration
+	o.dialer.KeepAlive = cfg.TCPKeepAlive.Duration
 	return nil
+}
+
+func (o tcpOverWSService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
 }
 
 func (o *socksProxyOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
@@ -158,6 +193,10 @@ func (o *socksProxyOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, 
 
 func (o *socksProxyOverWSService) String() string {
 	return ServiceSocksProxy
+}
+
+func (o socksProxyOverWSService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
 }
 
 // HelloWorld is an OriginService for the built-in Hello World server.
@@ -196,23 +235,22 @@ func (o *helloWorld) start(
 	return nil
 }
 
+func (o helloWorld) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
+}
+
 // statusCode is an OriginService that just responds with a given HTTP status.
 // Typical use-case is "user wants the catch-all rule to just respond 404".
 type statusCode struct {
-	resp *http.Response
+	code int
 }
 
 func newStatusCode(status int) statusCode {
-	resp := &http.Response{
-		StatusCode: status,
-		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
-		Body:       new(NopReadCloser),
-	}
-	return statusCode{resp: resp}
+	return statusCode{code: status}
 }
 
 func (o *statusCode) String() string {
-	return fmt.Sprintf("HTTP %d", o.resp.StatusCode)
+	return fmt.Sprintf("http_status:%d", o.code)
 }
 
 func (o *statusCode) start(
@@ -221,6 +259,10 @@ func (o *statusCode) start(
 	cfg OriginRequestConfig,
 ) error {
 	return nil
+}
+
+func (o statusCode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
 }
 
 type NopReadCloser struct{}
@@ -244,18 +286,19 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerol
 		Proxy:                 http.ProxyFromEnvironment,
 		MaxIdleConns:          cfg.KeepAliveConnections,
 		MaxIdleConnsPerHost:   cfg.KeepAliveConnections,
-		IdleConnTimeout:       cfg.KeepAliveTimeout,
-		TLSHandshakeTimeout:   cfg.TLSTimeout,
+		IdleConnTimeout:       cfg.KeepAliveTimeout.Duration,
+		TLSHandshakeTimeout:   cfg.TLSTimeout.Duration,
 		ExpectContinueTimeout: 1 * time.Second,
 		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: cfg.NoTLSVerify},
+		ForceAttemptHTTP2:     cfg.Http2Origin,
 	}
 	if _, isHelloWorld := service.(*helloWorld); !isHelloWorld && cfg.OriginServerName != "" {
 		httpTransport.TLSClientConfig.ServerName = cfg.OriginServerName
 	}
 
 	dialer := &net.Dialer{
-		Timeout:   cfg.ConnectTimeout,
-		KeepAlive: cfg.TCPKeepAlive,
+		Timeout:   cfg.ConnectTimeout.Duration,
+		KeepAlive: cfg.TCPKeepAlive.Duration,
 	}
 	if cfg.NoHappyEyeballs {
 		dialer.FallbackDelay = -1 // As of Golang 1.12, a negative delay disables "happy eyeballs"
@@ -294,4 +337,8 @@ func (mos MockOriginHTTPService) String() string {
 
 func (mos MockOriginHTTPService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
 	return nil
+}
+
+func (mos MockOriginHTTPService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(mos.String())
 }

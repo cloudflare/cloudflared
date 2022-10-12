@@ -18,6 +18,19 @@ func (e DupConnRegisterTunnelError) Error() string {
 	return "already connected to this server, trying another address"
 }
 
+// Dial to edge server with quic failed
+type EdgeQuicDialError struct {
+	Cause error
+}
+
+func (e *EdgeQuicDialError) Error() string {
+	return "failed to dial to edge with quic: " + e.Cause.Error()
+}
+
+func (e *EdgeQuicDialError) Unwrap() error {
+	return e.Cause
+}
+
 // RegisterTunnel error from server
 type ServerRegisterTunnelError struct {
 	Cause     error

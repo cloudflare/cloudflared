@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gobwas/ws/wsutil"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +33,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	edgeConn, cfdConn := net.Pipe()
 	var connIndex = uint8(0)
 	log := zerolog.Nop()
-	obs := NewObserver(&log, &log, false)
+	obs := NewObserver(&log, &log)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
@@ -39,7 +41,9 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		connIndex,
 		nil,
 		nil,
+		nil,
 		1*time.Second,
+		HTTP2,
 	)
 	return NewHTTP2Connection(
 		cfdConn,
@@ -51,6 +55,41 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		controlStream,
 		&log,
 	), edgeConn
+}
+
+func TestHTTP2ConfigurationSet(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		http2Conn.Serve(ctx)
+	}()
+
+	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	require.NoError(t, err)
+
+	endpoint := fmt.Sprintf("http://localhost:8080/ok")
+	reqBody := []byte(`{
+"version": 2, 
+"config": {"warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}}
+`)
+	reader := bytes.NewReader(reqBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, reader)
+	require.NoError(t, err)
+	req.Header.Set(InternalUpgradeHeader, ConfigurationUpdate)
+
+	resp, err := edgeHTTP2Conn.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	bdy, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
+	cancel()
+	wg.Wait()
+
 }
 
 func TestServeHTTP(t *testing.T) {
@@ -130,18 +169,27 @@ type mockNamedTunnelRPCClient struct {
 	unregistered chan struct{}
 }
 
+func (mc mockNamedTunnelRPCClient) SendLocalConfiguration(c context.Context, config []byte, observer *Observer) error {
+	return nil
+}
+
 func (mc mockNamedTunnelRPCClient) RegisterConnection(
 	c context.Context,
 	properties *NamedTunnelProperties,
 	options *tunnelpogs.ConnectionOptions,
 	connIndex uint8,
+	edgeAddress net.IP,
 	observer *Observer,
-) error {
+) (*tunnelpogs.ConnectionDetails, error) {
 	if mc.shouldFail != nil {
-		return mc.shouldFail
+		return nil, mc.shouldFail
 	}
 	close(mc.registered)
-	return nil
+	return &tunnelpogs.ConnectionDetails{
+		Location:                "LIS",
+		UUID:                    uuid.New(),
+		TunnelIsRemotelyManaged: false,
+	}, nil
 }
 
 func (mc mockNamedTunnelRPCClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
@@ -309,15 +357,17 @@ func TestServeControlStream(t *testing.T) {
 		unregistered: make(chan struct{}),
 	}
 
-	obs := NewObserver(&log, &log, false)
+	obs := NewObserver(&log, &log)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
 		&NamedTunnelProperties{},
 		1,
+		nil,
 		rpcClientFactory.newMockRPCClient,
 		nil,
 		1*time.Second,
+		HTTP2,
 	)
 	http2Conn.controlStreamHandler = controlStream
 
@@ -359,15 +409,17 @@ func TestFailRegistration(t *testing.T) {
 		unregistered: make(chan struct{}),
 	}
 
-	obs := NewObserver(&log, &log, false)
+	obs := NewObserver(&log, &log)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
 		&NamedTunnelProperties{},
 		http2Conn.connIndex,
+		nil,
 		rpcClientFactory.newMockRPCClient,
 		nil,
 		1*time.Second,
+		HTTP2,
 	)
 	http2Conn.controlStreamHandler = controlStream
 
@@ -404,16 +456,18 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	events := &eventCollectorSink{}
 
 	shutdownC := make(chan struct{})
-	obs := NewObserver(&log, &log, false)
+	obs := NewObserver(&log, &log)
 	obs.RegisterSink(events)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
 		&NamedTunnelProperties{},
 		http2Conn.connIndex,
+		nil,
 		rpcClientFactory.newMockRPCClient,
 		shutdownC,
 		1*time.Second,
+		HTTP2,
 	)
 
 	http2Conn.controlStreamHandler = controlStream
@@ -441,7 +495,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 
 	select {
 	case <-rpcClientFactory.registered:
-		break //ok
+		break // ok
 	case <-time.Tick(time.Second):
 		t.Fatal("timeout out waiting for registration")
 	}
@@ -451,7 +505,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 
 	select {
 	case <-rpcClientFactory.unregistered:
-		break //ok
+		break // ok
 	case <-time.Tick(time.Second):
 		t.Fatal("timeout out waiting for unregistered signal")
 	}

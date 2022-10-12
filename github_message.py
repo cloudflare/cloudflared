@@ -1,29 +1,56 @@
 #!/usr/bin/python3
 """
-Creates Github Releases Notes with content hashes
+Create Github Releases Notes with binary checksums from Workers KV
 """
 
 import argparse
 import logging
 import os
-import hashlib
-import glob
+import requests
 
-from github import Github, GithubException, UnknownObjectException
+from github import Github, UnknownObjectException
 
 FORMAT = "%(levelname)s - %(asctime)s: %(message)s"
-logging.basicConfig(format=FORMAT)
+logging.basicConfig(format=FORMAT, level=logging.INFO)
 
 CLOUDFLARED_REPO = os.environ.get("GITHUB_REPO", "cloudflare/cloudflared")
 GITHUB_CONFLICT_CODE = "already_exists"
+BASE_KV_URL = 'https://api.cloudflare.com/client/v4/accounts/'
 
-def get_sha256(filename):
-    """ get the sha256 of a file """
-    sha256_hash = hashlib.sha256()
-    with open(filename,"rb") as f:
-        for byte_block in iter(lambda: f.read(4096),b""):
-            sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
+
+def kv_get_keys(prefix, account, namespace, api_token):
+    """ get the KV keys for a given prefix """
+    response = requests.get(
+        BASE_KV_URL + account + "/storage/kv/namespaces/" +
+        namespace + "/keys" + "?prefix=" + prefix,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + api_token,
+        },
+    )
+    if response.status_code != 200:
+        jsonResponse = response.json()
+        errors = jsonResponse["errors"]
+        if len(errors) > 0:
+            raise Exception("failed to get checksums: {0}", errors[0])
+    return response.json()["result"]
+
+
+def kv_get_value(key, account, namespace, api_token):
+    """ get the KV value for a provided key """
+    response = requests.get(
+        BASE_KV_URL + account + "/storage/kv/namespaces/" + namespace + "/values/" + key,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + api_token,
+        },
+    )
+    if response.status_code != 200:
+        jsonResponse = response.json()
+        errors = jsonResponse["errors"]
+        if len(errors) > 0:
+            raise Exception("failed to get checksums: {0}", errors[0])
+    return response.text
 
 
 def update_or_add_message(msg, name, sha):
@@ -42,6 +69,7 @@ def update_or_add_message(msg, name, sha):
         return '{0}{1}```'.format(msg[:back], new_text)
     return '{0} \n### SHA256 Checksums:\n```\n{1}```'.format(msg, new_text)
 
+
 def get_release(repo, version):
     """ Get a Github Release matching the version tag. """
     try:
@@ -55,10 +83,19 @@ def get_release(repo, version):
 def parse_args():
     """ Parse and validate args """
     parser = argparse.ArgumentParser(
-        description="Creates Github Releases and uploads assets."
+        description="Updates a Github Release with checksums from KV"
     )
     parser.add_argument(
         "--api-key", default=os.environ.get("API_KEY"), help="Github API key"
+    )
+    parser.add_argument(
+        "--kv-namespace-id", default=os.environ.get("KV_NAMESPACE"), help="workers KV namespace id"
+    )
+    parser.add_argument(
+        "--kv-account-id", default=os.environ.get("KV_ACCOUNT"), help="workers KV account id"
+    )
+    parser.add_argument(
+        "--kv-api-token", default=os.environ.get("KV_API_TOKEN"), help="workers KV API Token"
     )
     parser.add_argument(
         "--release-version",
@@ -80,6 +117,18 @@ def parse_args():
         logging.error("Missing API key")
         is_valid = False
 
+    if not args.kv_namespace_id:
+        logging.error("Missing KV namespace id")
+        is_valid = False
+
+    if not args.kv_account_id:
+        logging.error("Missing KV account id")
+        is_valid = False
+
+    if not args.kv_api_token:
+        logging.error("Missing KV API token")
+        is_valid = False
+
     if is_valid:
         return args
 
@@ -95,16 +144,20 @@ def main():
         repo = client.get_repo(CLOUDFLARED_REPO)
         release = get_release(repo, args.release_version)
 
-        msg = release.body
+        msg = ""
 
-        for filepath in glob.glob("artifacts/*"):
-            pkg_hash = get_sha256(filepath)
-            # add the sha256 of the new artifact to the release message body
-            name = os.path.basename(filepath)
-            msg = update_or_add_message(msg, name, pkg_hash)
+        prefix = f"update_{args.release_version}_"
+        keys = kv_get_keys(prefix, args.kv_account_id,
+                           args.kv_namespace_id, args.kv_api_token)
+        for key in [k["name"] for k in keys]:
+            checksum = kv_get_value(
+                key, args.kv_account_id, args.kv_namespace_id, args.kv_api_token)
+            binary_name = key[len(prefix):]
+            msg = update_or_add_message(msg, binary_name, checksum)
 
         if args.dry_run:
-            logging.info("Skipping asset upload because of dry-run")
+            logging.info("Skipping release message update because of dry-run")
+            logging.info(f"Github message:\n{msg}")
             return
 
         # update the release body text

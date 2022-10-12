@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"net"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -8,6 +9,7 @@ import (
 
 const (
 	LogFieldLocation          = "location"
+	LogFieldIPAddress         = "ip"
 	observerChannelBufferSize = 16
 )
 
@@ -16,7 +18,6 @@ type Observer struct {
 	logTransport    *zerolog.Logger
 	metrics         *tunnelMetrics
 	tunnelEventChan chan Event
-	uiEnabled       bool
 	addSinkChan     chan EventSink
 }
 
@@ -24,12 +25,11 @@ type EventSink interface {
 	OnTunnelEvent(event Event)
 }
 
-func NewObserver(log, logTransport *zerolog.Logger, uiEnabled bool) *Observer {
+func NewObserver(log, logTransport *zerolog.Logger) *Observer {
 	o := &Observer{
 		log:             log,
 		logTransport:    logTransport,
 		metrics:         newTunnelMetrics(),
-		uiEnabled:       uiEnabled,
 		tunnelEventChan: make(chan Event, observerChannelBufferSize),
 		addSinkChan:     make(chan EventSink, observerChannelBufferSize),
 	}
@@ -41,11 +41,12 @@ func (o *Observer) RegisterSink(sink EventSink) {
 	o.addSinkChan <- sink
 }
 
-func (o *Observer) logServerInfo(connIndex uint8, location, msg string) {
+func (o *Observer) logServerInfo(connIndex uint8, location string, address net.IP, msg string) {
 	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
 	o.log.Info().
 		Uint8(LogFieldConnIndex, connIndex).
 		Str(LogFieldLocation, location).
+		IPAddr(LogFieldIPAddress, address).
 		Msg(msg)
 	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }
@@ -54,8 +55,8 @@ func (o *Observer) sendRegisteringEvent(connIndex uint8) {
 	o.sendEvent(Event{Index: connIndex, EventType: RegisteringTunnel})
 }
 
-func (o *Observer) sendConnectedEvent(connIndex uint8, location string) {
-	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
+func (o *Observer) sendConnectedEvent(connIndex uint8, protocol Protocol, location string) {
+	o.sendEvent(Event{Index: connIndex, EventType: Connected, Protocol: protocol, Location: location})
 }
 
 func (o *Observer) SendURL(url string) {

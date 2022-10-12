@@ -35,7 +35,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 	type fields struct {
 		c                 *cli.Context
 		log               *zerolog.Logger
-		isUIEnabled       bool
 		fs                fileSystem
 		tunnelstoreClient cfapi.Client
 		userCredential    *userCredential
@@ -168,7 +167,6 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 			sc := &subcommandContext{
 				c:                 tt.fields.c,
 				log:               tt.fields.log,
-				isUIEnabled:       tt.fields.isUIEnabled,
 				fs:                tt.fields.fs,
 				tunnelstoreClient: tt.fields.tunnelstoreClient,
 				userCredential:    tt.fields.userCredential,
@@ -214,6 +212,10 @@ func (d *deleteMockTunnelStore) GetTunnel(tunnelID uuid.UUID) (*cfapi.Tunnel, er
 		return nil, fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
 	}
 	return &tunnel.tunnel, nil
+}
+
+func (d *deleteMockTunnelStore) GetTunnelToken(tunnelID uuid.UUID) (string, error) {
+	return "token", nil
 }
 
 func (d *deleteMockTunnelStore) DeleteTunnel(tunnelID uuid.UUID) error {
@@ -303,7 +305,6 @@ func Test_subcommandContext_Delete(t *testing.T) {
 			sc := &subcommandContext{
 				c:                 tt.fields.c,
 				log:               tt.fields.log,
-				isUIEnabled:       tt.fields.isUIEnabled,
 				fs:                tt.fields.fs,
 				tunnelstoreClient: tt.fields.tunnelstoreClient,
 				userCredential:    tt.fields.userCredential,

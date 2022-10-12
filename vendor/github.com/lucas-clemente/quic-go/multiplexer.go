@@ -32,7 +32,7 @@ type connManager struct {
 }
 
 // The connMultiplexer listens on multiple net.PacketConns and dispatches
-// incoming packets to the session handler.
+// incoming packets to the connection handler.
 type connMultiplexer struct {
 	mutex sync.Mutex
 

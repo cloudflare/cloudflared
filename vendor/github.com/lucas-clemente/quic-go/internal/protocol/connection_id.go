@@ -67,3 +67,15 @@ func (c ConnectionID) String() string {
 	}
 	return fmt.Sprintf("%x", c.Bytes())
 }
+
+type DefaultConnectionIDGenerator struct {
+	ConnLen int
+}
+
+func (d *DefaultConnectionIDGenerator) GenerateConnectionID() ([]byte, error) {
+	return GenerateConnectionID(d.ConnLen)
+}
+
+func (d *DefaultConnectionIDGenerator) ConnectionIDLen() int {
+	return d.ConnLen
+}

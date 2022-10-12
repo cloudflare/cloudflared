@@ -23,11 +23,12 @@ const (
 	VersionUnknown  VersionNumber = math.MaxUint32
 	VersionDraft29  VersionNumber = 0xff00001d
 	Version1        VersionNumber = 0x1
+	Version2        VersionNumber = 0x709a50c4
 )
 
 // SupportedVersions lists the versions that the server supports
 // must be in sorted descending order
-var SupportedVersions = []VersionNumber{Version1, VersionDraft29}
+var SupportedVersions = []VersionNumber{Version1, Version2, VersionDraft29}
 
 // IsValidVersion says if the version is known to quic-go
 func IsValidVersion(v VersionNumber) bool {
@@ -50,6 +51,8 @@ func (vn VersionNumber) String() string {
 		return "draft-29"
 	case Version1:
 		return "v1"
+	case Version2:
+		return "v2"
 	default:
 		if vn.isGQUIC() {
 			return fmt.Sprintf("gQUIC %d", vn.toGQUICVersion())

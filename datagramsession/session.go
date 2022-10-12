@@ -2,12 +2,16 @@ package datagramsession
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 const (
@@ -18,39 +22,31 @@ func SessionIdleErr(timeout time.Duration) error {
 	return fmt.Errorf("session idle for %v", timeout)
 }
 
+type transportSender func(session *packet.Session) error
+
+// ErrVithVariableSeverity are errors that have variable severity
+type ErrVithVariableSeverity interface {
+	error
+	// LogLevel return the severity of this error
+	LogLevel() zerolog.Level
+}
+
 // Session is a bidirectional pipe of datagrams between transport and dstConn
-// Currently the only implementation of transport is quic DatagramMuxer
 // Destination can be a connection with origin or with eyeball
 // When the destination is origin:
-// - Datagrams from edge are read by Manager from the transport. Manager finds the corresponding Session and calls the
-//   write method of the Session to send to origin
-// - Datagrams from origin are read from conn and SentTo transport. Transport will return them to eyeball
+// - Manager receives datagrams from receiveChan and calls the transportToDst method of the Session to send to origin
+// - Datagrams from origin are read from conn and Send to transport using the transportSender callback. Transport will return them to eyeball
 // When the destination is eyeball:
-// - Datagrams from eyeball are read from conn and SentTo transport. Transport will send them to cloudflared
-// - Datagrams from cloudflared are read by Manager from the transport. Manager finds the corresponding Session and calls the
-//   write method of the Session to send to eyeball
+// - Datagrams from eyeball are read from conn and Send to transport. Transport will send them to cloudflared using the transportSender callback.
+// - Manager receives datagrams from receiveChan and calls the transportToDst method of the Session to send to the eyeball
 type Session struct {
-	ID        uuid.UUID
-	transport transport
-	dstConn   io.ReadWriteCloser
+	ID       uuid.UUID
+	sendFunc transportSender
+	dstConn  io.ReadWriteCloser
 	// activeAtChan is used to communicate the last read/write time
 	activeAtChan chan time.Time
 	closeChan    chan error
 	log          *zerolog.Logger
-}
-
-func newSession(id uuid.UUID, transport transport, dstConn io.ReadWriteCloser, log *zerolog.Logger) *Session {
-	return &Session{
-		ID:        id,
-		transport: transport,
-		dstConn:   dstConn,
-		// activeAtChan has low capacity. It can be full when there are many concurrent read/write. markActive() will
-		// drop instead of blocking because last active time only needs to be an approximation
-		activeAtChan: make(chan time.Time, 2),
-		// capacity is 2 because close() and dstToTransport routine in Serve() can write to this channel
-		closeChan: make(chan error, 2),
-		log:       log,
-	}
 }
 
 func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (closedByRemote bool, err error) {
@@ -60,9 +56,20 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 		const maxPacketSize = 1500
 		readBuffer := make([]byte, maxPacketSize)
 		for {
-			if err := s.dstToTransport(readBuffer); err != nil {
-				s.closeChan <- err
-				return
+			if closeSession, err := s.dstToTransport(readBuffer); err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					s.log.Debug().Msg("Destination connection closed")
+				} else {
+					level := zerolog.ErrorLevel
+					if variableErr, ok := err.(ErrVithVariableSeverity); ok {
+						level = variableErr.LogLevel()
+					}
+					s.log.WithLevel(level).Err(err).Msg("Failed to send session payload from destination to transport")
+				}
+				if closeSession {
+					s.closeChan <- err
+					return
+				}
 			}
 		}
 	}()
@@ -103,32 +110,29 @@ func (s *Session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 	}
 }
 
-func (s *Session) dstToTransport(buffer []byte) error {
+func (s *Session) dstToTransport(buffer []byte) (closeSession bool, err error) {
 	n, err := s.dstConn.Read(buffer)
 	s.markActive()
 	// https://pkg.go.dev/io#Reader suggests caller should always process n > 0 bytes
-	if n > 0 {
-		if n <= int(s.transport.MTU()) {
-			err = s.transport.SendTo(s.ID, buffer[:n])
-		} else {
-			// drop packet for now, eventually reply with ICMP for PMTUD
-			s.log.Debug().
-				Str("session", s.ID.String()).
-				Int("len", n).
-				Int("mtu", s.transport.MTU()).
-				Msg("dropped packet exceeding MTU")
+	if n > 0 || err == nil {
+		session := packet.Session{
+			ID:      s.ID,
+			Payload: buffer[:n],
+		}
+		if sendErr := s.sendFunc(&session); sendErr != nil {
+			return false, sendErr
 		}
 	}
-	// Some UDP application might send 0-size payload.
-	if err == nil && n == 0 {
-		err = s.transport.SendTo(s.ID, []byte{})
-	}
-	return err
+	return err != nil, err
 }
 
 func (s *Session) transportToDst(payload []byte) (int, error) {
 	s.markActive()
-	return s.dstConn.Write(payload)
+	n, err := s.dstConn.Write(payload)
+	if err != nil {
+		s.log.Err(err).Msg("Failed to write payload to session")
+	}
+	return n, err
 }
 
 // Sends the last active time to the idle checker loop without blocking. activeAtChan will only be full when there

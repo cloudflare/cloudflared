@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/go-oidc/jose"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"gopkg.in/square/go-jose.v2"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/retry"
@@ -27,6 +27,10 @@ const (
 	appDomainHeader       = "CF-Access-Domain"
 	appAUDHeader          = "CF-Access-Aud"
 	AccessLoginWorkerPath = "/cdn-cgi/access/login"
+)
+
+var (
+	userAgent = "DEV"
 )
 
 type AppInfo struct {
@@ -142,6 +146,10 @@ func (l *lock) Release() error {
 func isTokenLocked(lockFilePath string) bool {
 	exists, err := config.FileExists(lockFilePath)
 	return exists && err == nil
+}
+
+func Init(version string) {
+	userAgent = fmt.Sprintf("cloudflared/%s", version)
 }
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
@@ -261,6 +269,7 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create app info request")
 	}
+	appInfoReq.Header.Add("User-Agent", userAgent)
 	resp, err := client.Do(appInfoReq)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get app info")
@@ -311,6 +320,7 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create app token request")
 	}
+	appTokenRequest.Header.Add("User-Agent", userAgent)
 	resp, err := client.Do(appTokenRequest)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get app token")
@@ -342,7 +352,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 		return "", err
 	}
 	var payload jwtPayload
-	err = json.Unmarshal(token.Payload, &payload)
+	err = json.Unmarshal(token.UnsafePayloadWithoutVerification(), &payload)
 	if err != nil {
 		return "", err
 	}
@@ -351,7 +361,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.Encode(), nil
+	return token.CompactSerialize()
 }
 
 func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
@@ -364,7 +374,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 		return "", err
 	}
 	var payload jwtPayload
-	err = json.Unmarshal(token.Payload, &payload)
+	err = json.Unmarshal(token.UnsafePayloadWithoutVerification(), &payload)
 	if err != nil {
 		return "", err
 	}
@@ -373,22 +383,21 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.Encode(), nil
+	return token.CompactSerialize()
 
 }
 
 // GetTokenIfExists will return the token from local storage if it exists and not expired
-func getTokenIfExists(path string) (*jose.JWT, error) {
+func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
 	content, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	token, err := jose.ParseJWT(string(content))
+	token, err := jose.ParseSigned(string(content))
 	if err != nil {
 		return nil, err
 	}
-
-	return &token, nil
+	return token, nil
 }
 
 // RemoveTokenIfExists removes the a token from local storage if it exists

@@ -22,7 +22,16 @@ const (
 	startupTime     = time.Millisecond * 500
 )
 
-func newMetricsHandler(readyServer *ReadyServer, quickTunnelHostname string) *mux.Router {
+type orchestrator interface {
+	GetVersionedConfigJSON() ([]byte, error)
+}
+
+func newMetricsHandler(
+	readyServer *ReadyServer,
+	quickTunnelHostname string,
+	orchestrator orchestrator,
+	log *zerolog.Logger,
+) *mux.Router {
 	router := mux.NewRouter()
 	router.PathPrefix("/debug/").Handler(http.DefaultServeMux)
 
@@ -36,6 +45,18 @@ func newMetricsHandler(readyServer *ReadyServer, quickTunnelHostname string) *mu
 	router.HandleFunc("/quicktunnel", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, `{"hostname":"%s"}`, quickTunnelHostname)
 	})
+	if orchestrator != nil {
+		router.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+			json, err := orchestrator.GetVersionedConfigJSON()
+			if err != nil {
+				w.WriteHeader(500)
+				_, _ = fmt.Fprintf(w, "ERR: %v", err)
+				log.Err(err).Msg("Failed to serve config")
+				return
+			}
+			_, _ = w.Write(json)
+		})
+	}
 
 	return router
 }
@@ -45,6 +66,7 @@ func ServeMetrics(
 	shutdownC <-chan struct{},
 	readyServer *ReadyServer,
 	quickTunnelHostname string,
+	orchestrator orchestrator,
 	log *zerolog.Logger,
 ) (err error) {
 	var wg sync.WaitGroup
@@ -52,7 +74,7 @@ func ServeMetrics(
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
 	// profile CPU usage depends on WriteTimeout
-	h := newMetricsHandler(readyServer, quickTunnelHostname)
+	h := newMetricsHandler(readyServer, quickTunnelHostname, orchestrator, log)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
