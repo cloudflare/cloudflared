@@ -657,6 +657,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	quicConn, err := connection.NewQUICConnection(
 		quicConfig,
 		edgeAddr,
+		connIndex,
 		tlsConfig,
 		e.orchestrator,
 		connOptions,

@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -42,6 +43,11 @@ const (
 	demuxChanCapacity = 16
 )
 
+var (
+	portForConnIndex = make(map[uint8]int, 0)
+	portMapMutex     sync.Mutex
+)
+
 // QUICConnection represents the type that facilitates Proxying via QUIC streams.
 type QUICConnection struct {
 	session      quic.Connection
@@ -60,6 +66,7 @@ type QUICConnection struct {
 func NewQUICConnection(
 	quicConfig *quic.Config,
 	edgeAddr net.Addr,
+	connIndex uint8,
 	tlsConfig *tls.Config,
 	orchestrator Orchestrator,
 	connOptions *tunnelpogs.ConnectionOptions,
@@ -67,9 +74,20 @@ func NewQUICConnection(
 	logger *zerolog.Logger,
 	packetRouterConfig *packet.GlobalRouterConfig,
 ) (*QUICConnection, error) {
-	session, err := quic.DialAddr(edgeAddr.String(), tlsConfig, quicConfig)
+	udpConn, err := createUDPConnForConnIndex(connIndex, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := quic.Dial(udpConn, edgeAddr, edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
 		return nil, &EdgeQuicDialError{Cause: err}
+	}
+
+	// wrap the session, so that the UDPConn is closed after session is closed.
+	session = &wrapCloseableConnQuicConnection{
+		session,
+		udpConn,
 	}
 
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
@@ -491,4 +509,46 @@ func (rp *returnPipe) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
 
 func (rp *returnPipe) Close() error {
 	return nil
+}
+
+func createUDPConnForConnIndex(connIndex uint8, logger *zerolog.Logger) (*net.UDPConn, error) {
+	portMapMutex.Lock()
+	defer portMapMutex.Unlock()
+
+	// if port was not set yet, it will be zero, so bind will randomly allocate one.
+	if port, ok := portForConnIndex[connIndex]; ok {
+		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: port})
+		// if there wasn't an error, or if port was 0 (independently of error or not, just return)
+		if err == nil {
+			return udpConn, nil
+		} else {
+			logger.Debug().Err(err).Msgf("Unable to reuse port %d for connIndex %d. Falling back to random allocation.", port, connIndex)
+		}
+	}
+
+	// if we reached here, then there was an error or port as not been allocated it.
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err == nil {
+		udpAddr, ok := (udpConn.LocalAddr()).(*net.UDPAddr)
+		if !ok {
+			return nil, fmt.Errorf("unable to cast to udpConn")
+		}
+		portForConnIndex[connIndex] = udpAddr.Port
+	} else {
+		delete(portForConnIndex, connIndex)
+	}
+
+	return udpConn, err
+}
+
+type wrapCloseableConnQuicConnection struct {
+	quic.Connection
+	udpConn *net.UDPConn
+}
+
+func (w *wrapCloseableConnQuicConnection) CloseWithError(errorCode quic.ApplicationErrorCode, reason string) error {
+	err := w.Connection.CloseWithError(errorCode, reason)
+	w.udpConn.Close()
+
+	return err
 }

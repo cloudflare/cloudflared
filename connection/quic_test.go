@@ -567,6 +567,37 @@ func TestNopCloserReadWriterCloseAfterEOF(t *testing.T) {
 	require.Equal(t, err, io.EOF)
 }
 
+func TestCreateUDPConnReuseSourcePort(t *testing.T) {
+	logger := zerolog.Nop()
+	conn, err := createUDPConnForConnIndex(0, &logger)
+	require.NoError(t, err)
+
+	getPortFunc := func(conn *net.UDPConn) int {
+		addr := conn.LocalAddr().(*net.UDPAddr)
+		return addr.Port
+	}
+
+	initialPort := getPortFunc(conn)
+
+	// close conn
+	conn.Close()
+
+	// should get the same port as before.
+	conn, err = createUDPConnForConnIndex(0, &logger)
+	require.NoError(t, err)
+	require.Equal(t, initialPort, getPortFunc(conn))
+
+	// new index, should get a different port
+	conn1, err := createUDPConnForConnIndex(1, &logger)
+	require.NoError(t, err)
+	require.NotEqual(t, initialPort, getPortFunc(conn1))
+
+	// not closing the conn and trying to obtain a new conn for same index should give a different random port
+	conn, err = createUDPConnForConnIndex(0, &logger)
+	require.NoError(t, err)
+	require.NotEqual(t, initialPort, getPortFunc(conn))
+}
+
 func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
 	var (
 		payload = []byte(t.Name())
@@ -682,6 +713,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection 
 	qc, err := NewQUICConnection(
 		testQUICConfig,
 		udpListenerAddr,
+		0,
 		tlsClientConfig,
 		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
 		&tunnelpogs.ConnectionOptions{},
