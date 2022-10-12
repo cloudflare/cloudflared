@@ -977,7 +977,7 @@ func TestLongSiteWithDictionaries(t *testing.T) {
 
 		tstLen := 500
 		errGroup, _ := errgroup.WithContext(context.Background())
-		errGroup.SetLimit(runtime.NumGoroutine())
+		errGroup.SetLimit(runtime.GOMAXPROCS(0))
 		for i := 0; i < tstLen; i++ {
 			errGroup.Go(func() error {
 				path := paths[rand.Intn(len(paths))]
