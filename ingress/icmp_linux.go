@@ -19,9 +19,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/icmp"
 
 	"github.com/cloudflare/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 const (
@@ -98,14 +100,24 @@ func checkInPingGroup() error {
 }
 
 func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
+	ctx, span := responder.requestSpan(ctx, pk)
+	defer responder.exportSpan()
+
 	originalEcho, err := getICMPEcho(pk.Message)
 	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
+	span.SetAttributes(
+		attribute.Int("originalEchoID", originalEcho.ID),
+		attribute.Int("seq", originalEcho.Seq),
+	)
+
 	newConnChan := make(chan *icmp.PacketConn, 1)
 	newFunnelFunc := func() (packet.Funnel, error) {
 		conn, err := newICMPConn(ip.listenIP, ip.ipv6Zone)
 		if err != nil {
+			tracing.EndWithErrorStatus(span, err)
 			return nil, errors.Wrap(err, "failed to open ICMP socket")
 		}
 		ip.logger.Debug().Msgf("Opened ICMP socket listen on %s", conn.LocalAddr())
@@ -117,6 +129,8 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		if !ok {
 			return nil, fmt.Errorf("ICMP listener address %s is not net.UDPAddr", conn.LocalAddr())
 		}
+		span.SetAttributes(attribute.Int("port", localUDPAddr.Port))
+
 		echoID := localUDPAddr.Port
 		icmpFlow := newICMPEchoFlow(pk.Src, closeCallback, conn, responder, echoID, originalEcho.ID, packet.NewEncoder())
 		return icmpFlow, nil
@@ -128,13 +142,16 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	}
 	funnel, isNew, err := ip.srcFunnelTracker.GetOrRegister(funnelID, newFunnelFunc)
 	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
 	icmpFlow, err := toICMPEchoFlow(funnel)
 	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
 	if isNew {
+		span.SetAttributes(attribute.Bool("newFlow", true))
 		ip.logger.Debug().
 			Str("src", pk.Src.String()).
 			Str("dst", pk.Dst.String()).
@@ -153,8 +170,10 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		}()
 	}
 	if err := icmpFlow.sendToDst(pk.Dst, pk.Message); err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return errors.Wrap(err, "failed to send ICMP echo request")
 	}
+	tracing.End(span)
 	return nil
 }
 

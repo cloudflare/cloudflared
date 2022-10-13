@@ -16,7 +16,9 @@ var (
 
 // Funnel is an abstraction to pipe from 1 src to 1 or more destinations
 type Funnel interface {
-	// LastActive returns the last time SendToDst or ReturnToSrc is called
+	// Updates the last time traffic went through this funnel
+	UpdateLastActive()
+	// LastActive returns the last time there is traffic through this funnel
 	LastActive() time.Time
 	// Close closes the funnel. Further call to SendToDst or ReturnToSrc should return an error
 	Close() error

@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/icmp"
 
 	"github.com/cloudflare/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 type icmpProxy struct {
@@ -129,10 +131,18 @@ func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idle
 }
 
 func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
+	ctx, span := responder.requestSpan(ctx, pk)
+	defer responder.exportSpan()
+
 	originalEcho, err := getICMPEcho(pk.Message)
 	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
+	span.SetAttributes(
+		attribute.Int("originalEchoID", originalEcho.ID),
+		attribute.Int("seq", originalEcho.Seq),
+	)
 	echoIDTrackerKey := flow3Tuple{
 		srcIP:          pk.Src,
 		dstIP:          pk.Dst,
@@ -141,8 +151,12 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	// TODO: TUN-6744 assign unique flow per (src, echo ID)
 	assignedEchoID, success := ip.echoIDTracker.getOrAssign(echoIDTrackerKey)
 	if !success {
-		return fmt.Errorf("failed to assign unique echo ID")
+		err := fmt.Errorf("failed to assign unique echo ID")
+		tracing.EndWithErrorStatus(span, err)
+		return err
 	}
+	span.SetAttributes(attribute.Int("assignedEchoID", int(assignedEchoID)))
+
 	newFunnelFunc := func() (packet.Funnel, error) {
 		originalEcho, err := getICMPEcho(pk.Message)
 		if err != nil {
@@ -158,9 +172,11 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	funnelID := echoFunnelID(assignedEchoID)
 	funnel, isNew, err := ip.srcFunnelTracker.GetOrRegister(funnelID, newFunnelFunc)
 	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
 	if isNew {
+		span.SetAttributes(attribute.Bool("newFlow", true))
 		ip.logger.Debug().
 			Str("src", pk.Src.String()).
 			Str("dst", pk.Dst.String()).
@@ -170,9 +186,16 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	}
 	icmpFlow, err := toICMPEchoFlow(funnel)
 	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
-	return icmpFlow.sendToDst(pk.Dst, pk.Message)
+	err = icmpFlow.sendToDst(pk.Dst, pk.Message)
+	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
+		return err
+	}
+	tracing.End(span)
+	return nil
 }
 
 // Serve listens for responses to the requests until context is done

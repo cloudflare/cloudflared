@@ -200,6 +200,11 @@ func (mm *mockMuxer) SendPacket(pk quicpogs.Packet) error {
 			},
 			TracingIdentity: copiedMetadata,
 		}
+	case quicpogs.DatagramTypeTracingSpan:
+		copiedPacket = &quicpogs.TracingSpanPacket{
+			Spans:           copiedPayload,
+			TracingIdentity: copiedMetadata,
+		}
 	default:
 		return fmt.Errorf("unexpected metadata type %d", pk.Type())
 	}

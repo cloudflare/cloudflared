@@ -6,9 +6,12 @@ import (
 	"net/netip"
 
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/cloudflare/cloudflared/packet"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 // Upstream of raw packets
@@ -70,7 +73,14 @@ func (r *PacketRouter) nextPacket(ctx context.Context) (packet.RawPacket, *packe
 	case quicpogs.DatagramTypeIP:
 		return packet.RawPacket{Data: pk.Payload()}, responder, nil
 	case quicpogs.DatagramTypeIPWithTrace:
-		return packet.RawPacket{}, responder, fmt.Errorf("TODO: TUN-6604 Handle IP packet with trace")
+		var identity tracing.Identity
+		if err := identity.UnmarshalBinary(pk.Metadata()); err != nil {
+			r.logger.Err(err).Bytes("tracingIdentity", pk.Metadata()).Msg("Failed to unmarshal tracing identity")
+		} else {
+			responder.tracedCtx = tracing.NewTracedContext(ctx, identity.String(), r.logger)
+			responder.serializedIdentity = pk.Metadata()
+		}
+		return packet.RawPacket{Data: pk.Payload()}, responder, nil
 	default:
 		return packet.RawPacket{}, nil, fmt.Errorf("unexpected datagram type %d", pk.Type())
 	}
@@ -126,9 +136,39 @@ func (r *PacketRouter) sendTTLExceedMsg(ctx context.Context, pk *packet.ICMP, ra
 }
 
 type packetResponder struct {
-	datagramMuxer muxer
+	datagramMuxer      muxer
+	tracedCtx          *tracing.TracedContext
+	serializedIdentity []byte
+}
+
+func (pr *packetResponder) tracingEnabled() bool {
+	return pr.tracedCtx != nil
 }
 
 func (pr *packetResponder) returnPacket(rawPacket packet.RawPacket) error {
 	return pr.datagramMuxer.SendPacket(quicpogs.RawPacket(rawPacket))
+}
+
+func (pr *packetResponder) requestSpan(ctx context.Context, pk *packet.ICMP) (context.Context, trace.Span) {
+	if !pr.tracingEnabled() {
+		return ctx, tracing.NewNoopSpan()
+	}
+	return pr.tracedCtx.Tracer().Start(pr.tracedCtx, "icmp-echo-request", trace.WithAttributes(
+		attribute.String("src", pk.Src.String()),
+		attribute.String("dst", pk.Dst.String()),
+	))
+}
+
+func (pr *packetResponder) exportSpan() {
+	if !pr.tracingEnabled() {
+		return
+	}
+	spans := pr.tracedCtx.GetProtoSpans()
+	pr.tracedCtx.ClearSpans()
+	if len(spans) > 0 {
+		pr.datagramMuxer.SendPacket(&quicpogs.TracingSpanPacket{
+			Spans:           spans,
+			TracingIdentity: pr.serializedIdentity,
+		})
+	}
 }

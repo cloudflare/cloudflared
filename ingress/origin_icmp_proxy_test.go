@@ -1,10 +1,13 @@
 package ingress
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +20,8 @@ import (
 	"golang.org/x/net/ipv6"
 
 	"github.com/cloudflare/cloudflared/packet"
+	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 var (
@@ -94,6 +99,75 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 			validateEchoFlow(t, muxer, &pk)
 		}
 	}
+	cancel()
+	<-proxyDone
+}
+
+func TestTraceICMPRouterEcho(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("TODO: TUN-6861 Trace ICMP in Windows")
+	}
+	tracingCtx := "ec31ad8a01fde11fdcabe2efdce36873:52726f6cabc144f5:0:1"
+
+	logger := zerolog.New(os.Stderr)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &logger)
+	require.NoError(t, err)
+
+	proxyDone := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		router.Serve(ctx)
+		close(proxyDone)
+	}()
+
+	// Buffer 2 packets, reply and request span
+	muxer := newMockMuxer(2)
+	tracingIdentity, err := tracing.NewIdentity(tracingCtx)
+	require.NoError(t, err)
+	serializedIdentity, err := tracingIdentity.MarshalBinary()
+	require.NoError(t, err)
+
+	responder := packetResponder{
+		datagramMuxer:      muxer,
+		tracedCtx:          tracing.NewTracedContext(ctx, tracingIdentity.String(), &logger),
+		serializedIdentity: serializedIdentity,
+	}
+
+	echo := &icmp.Echo{
+		ID:   12910,
+		Seq:  182,
+		Data: []byte(t.Name()),
+	}
+	pk := packet.ICMP{
+		IP: &packet.IP{
+			Src:      localhostIP,
+			Dst:      localhostIP,
+			Protocol: layers.IPProtocolICMPv4,
+			TTL:      packet.DefaultTTL,
+		},
+		Message: &icmp.Message{
+			Type: ipv4.ICMPTypeEcho,
+			Code: 0,
+			Body: echo,
+		},
+	}
+	require.NoError(t, router.Request(ctx, &pk, &responder))
+	validateEchoFlow(t, muxer, &pk)
+	receivedPacket := <-muxer.cfdToEdge
+	tracingSpanPacket, ok := receivedPacket.(*quicpogs.TracingSpanPacket)
+	require.True(t, ok)
+	require.NotEmpty(t, tracingSpanPacket.Spans)
+	require.True(t, bytes.Equal(serializedIdentity, tracingSpanPacket.TracingIdentity))
+
+	echo.Seq++
+	pk.Body = echo
+	// Only first request for a flow is traced. The edge will not send tracing context for the second request
+	responder = packetResponder{
+		datagramMuxer: muxer,
+	}
+	require.NoError(t, router.Request(ctx, &pk, &responder))
+	validateEchoFlow(t, muxer, &pk)
+
 	cancel()
 	<-proxyDone
 }

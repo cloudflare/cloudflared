@@ -27,6 +27,8 @@ type InMemoryClient interface {
 	// ProtoSpans returns a copy of the list of in-memory stored spans as otlp
 	// protobuf byte array.
 	ProtoSpans() ([]byte, error)
+	// Clear spans removes all in-memory spans
+	ClearSpans()
 }
 
 // InMemoryOtlpClient is a client implementation for otlptrace.Client
@@ -78,6 +80,12 @@ func (mc *InMemoryOtlpClient) ProtoSpans() ([]byte, error) {
 	return proto.Marshal(pbRequest)
 }
 
+func (mc *InMemoryOtlpClient) ClearSpans() {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.spans = make([]*tracepb.ResourceSpans, 0)
+}
+
 // NoopOtlpClient is a client implementation for otlptrace.Client that does nothing
 type NoopOtlpClient struct{}
 
@@ -102,3 +110,5 @@ func (mc *NoopOtlpClient) Spans() (string, error) {
 func (mc *NoopOtlpClient) ProtoSpans() ([]byte, error) {
 	return nil, errNoopTracer
 }
+
+func (mc *NoopOtlpClient) ClearSpans() {}
