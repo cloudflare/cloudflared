@@ -20,8 +20,8 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
-	"github.com/cloudflare/cloudflared/packet"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
@@ -70,7 +70,7 @@ type TunnelConfig struct {
 	MuxerConfig      *connection.MuxerConfig
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
-	PacketConfig     *packet.GlobalRouterConfig
+	PacketConfig     *ingress.GlobalRouterConfig
 }
 
 func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {

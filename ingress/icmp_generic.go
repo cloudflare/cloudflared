@@ -18,7 +18,7 @@ var errICMPProxyNotImplemented = fmt.Errorf("ICMP proxy is not implemented on %s
 
 type icmpProxy struct{}
 
-func (ip icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
+func (ip icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
 	return errICMPProxyNotImplemented
 }
 

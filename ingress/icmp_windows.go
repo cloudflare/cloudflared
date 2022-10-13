@@ -265,7 +265,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 // Request sends an ICMP echo request and wait for a reply or timeout.
 // The async version of Win32 APIs take a callback whose memory is not garbage collected, so we use the synchronous version.
 // It's possible that a slow request will block other requests, so we set the timeout to only 1s.
-func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
+func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
 	if pk == nil {
 		return errPacketNil
 	}
@@ -292,7 +292,7 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 	return nil
 }
 
-func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, data []byte, responder packet.FunnelUniPipe) error {
+func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, data []byte, responder *packetResponder) error {
 	var replyType icmp.Type
 	if request.Dst.Is4() {
 		replyType = ipv4.ICMPTypeEchoReply
@@ -331,7 +331,7 @@ func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, d
 	if err != nil {
 		return err
 	}
-	return responder.SendPacket(request.Src, serializedPacket)
+	return responder.returnPacket(serializedPacket)
 }
 
 func (ip *icmpProxy) icmpEchoRoundtrip(dst netip.Addr, echo *icmp.Echo) ([]byte, error) {

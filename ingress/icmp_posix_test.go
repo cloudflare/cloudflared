@@ -52,24 +52,26 @@ func TestFunnelIdleTimeout(t *testing.T) {
 			},
 		},
 	}
-	responder := echoFlowResponder{
-		decoder:  packet.NewICMPDecoder(),
-		respChan: make(chan []byte),
+	muxer := newMockMuxer(0)
+	responder := packetResponder{
+		datagramMuxer: muxer,
 	}
-	require.NoError(t, proxy.Request(&pk, &responder))
-	responder.validate(t, &pk)
+	require.NoError(t, proxy.Request(ctx, &pk, &responder))
+	validateEchoFlow(t, muxer, &pk)
 
 	// Send second request, should reuse the funnel
-	require.NoError(t, proxy.Request(&pk, nil))
-	responder.validate(t, &pk)
+	require.NoError(t, proxy.Request(ctx, &pk, &packetResponder{
+		datagramMuxer: nil,
+	}))
+	validateEchoFlow(t, muxer, &pk)
 
 	time.Sleep(idleTimeout * 2)
-	newResponder := echoFlowResponder{
-		decoder:  packet.NewICMPDecoder(),
-		respChan: make(chan []byte),
+	newMuxer := newMockMuxer(0)
+	newResponder := packetResponder{
+		datagramMuxer: newMuxer,
 	}
-	require.NoError(t, proxy.Request(&pk, &newResponder))
-	newResponder.validate(t, &pk)
+	require.NoError(t, proxy.Request(ctx, &pk, &newResponder))
+	validateEchoFlow(t, newMuxer, &pk)
 
 	cancel()
 	<-proxyDone

@@ -16,10 +16,6 @@ var (
 
 // Funnel is an abstraction to pipe from 1 src to 1 or more destinations
 type Funnel interface {
-	// SendToDst sends a raw packet to a destination
-	SendToDst(dst netip.Addr, pk RawPacket) error
-	// ReturnToSrc returns a raw packet to the source
-	ReturnToSrc(pk RawPacket) error
 	// LastActive returns the last time SendToDst or ReturnToSrc is called
 	LastActive() time.Time
 	// Close closes the funnel. Further call to SendToDst or ReturnToSrc should return an error
@@ -36,71 +32,24 @@ type FunnelUniPipe interface {
 	Close() error
 }
 
-// RawPacketFunnel is an implementation of Funnel that sends raw packets. It can be embedded in other structs to
-// satisfy the Funnel interface.
-type RawPacketFunnel struct {
-	Src netip.Addr
+type ActivityTracker struct {
 	// last active unix time. Unit is seconds
 	lastActive int64
-	sendPipe   FunnelUniPipe
-	returnPipe FunnelUniPipe
 }
 
-func NewRawPacketFunnel(src netip.Addr, sendPipe, returnPipe FunnelUniPipe) *RawPacketFunnel {
-	return &RawPacketFunnel{
-		Src:        src,
+func NewActivityTracker() *ActivityTracker {
+	return &ActivityTracker{
 		lastActive: time.Now().Unix(),
-		sendPipe:   sendPipe,
-		returnPipe: returnPipe,
 	}
 }
 
-func (rpf *RawPacketFunnel) SendToDst(dst netip.Addr, pk RawPacket) error {
-	rpf.updateLastActive()
-	return rpf.sendPipe.SendPacket(dst, pk)
+func (at *ActivityTracker) UpdateLastActive() {
+	atomic.StoreInt64(&at.lastActive, time.Now().Unix())
 }
 
-func (rpf *RawPacketFunnel) ReturnToSrc(pk RawPacket) error {
-	rpf.updateLastActive()
-	return rpf.returnPipe.SendPacket(rpf.Src, pk)
-}
-
-func (rpf *RawPacketFunnel) updateLastActive() {
-	atomic.StoreInt64(&rpf.lastActive, time.Now().Unix())
-}
-
-func (rpf *RawPacketFunnel) LastActive() time.Time {
-	lastActive := atomic.LoadInt64(&rpf.lastActive)
+func (at *ActivityTracker) LastActive() time.Time {
+	lastActive := atomic.LoadInt64(&at.lastActive)
 	return time.Unix(lastActive, 0)
-}
-
-func (rpf *RawPacketFunnel) Close() error {
-	sendPipeErr := rpf.sendPipe.Close()
-	returnPipeErr := rpf.returnPipe.Close()
-	if sendPipeErr != nil {
-		return sendPipeErr
-	}
-	if returnPipeErr != nil {
-		return returnPipeErr
-	}
-	return nil
-}
-
-func (rpf *RawPacketFunnel) Equal(other Funnel) bool {
-	otherRawFunnel, ok := other.(*RawPacketFunnel)
-	if !ok {
-		return false
-	}
-	if rpf.Src != otherRawFunnel.Src {
-		return false
-	}
-	if rpf.sendPipe != otherRawFunnel.sendPipe {
-		return false
-	}
-	if rpf.returnPipe != otherRawFunnel.returnPipe {
-		return false
-	}
-	return true
 }
 
 // FunnelID represents a key type that can be used by FunnelTracker

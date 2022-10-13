@@ -52,9 +52,9 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 		close(proxyDone)
 	}()
 
-	responder := echoFlowResponder{
-		decoder:  packet.NewICMPDecoder(),
-		respChan: make(chan []byte, 1),
+	muxer := newMockMuxer(1)
+	responder := packetResponder{
+		datagramMuxer: muxer,
 	}
 
 	protocol := layers.IPProtocolICMPv6
@@ -90,8 +90,8 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 					},
 				},
 			}
-			require.NoError(t, router.Request(&pk, &responder))
-			responder.validate(t, &pk)
+			require.NoError(t, router.Request(ctx, &pk, &responder))
+			validateEchoFlow(t, muxer, &pk)
 		}
 	}
 	cancel()
@@ -123,9 +123,10 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 		echoID := 38451 + i
 		go func() {
 			defer wg.Done()
-			responder := echoFlowResponder{
-				decoder:  packet.NewICMPDecoder(),
-				respChan: make(chan []byte, 1),
+
+			muxer := newMockMuxer(1)
+			responder := packetResponder{
+				datagramMuxer: muxer,
 			}
 			for seq := 0; seq < endSeq; seq++ {
 				pk := &packet.ICMP{
@@ -145,15 +146,15 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 						},
 					},
 				}
-				require.NoError(t, router.Request(pk, &responder))
-				responder.validate(t, pk)
+				require.NoError(t, router.Request(ctx, pk, &responder))
+				validateEchoFlow(t, muxer, pk)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			responder := echoFlowResponder{
-				decoder:  packet.NewICMPDecoder(),
-				respChan: make(chan []byte, 1),
+			muxer := newMockMuxer(1)
+			responder := packetResponder{
+				datagramMuxer: muxer,
 			}
 			for seq := 0; seq < endSeq; seq++ {
 				pk := &packet.ICMP{
@@ -173,8 +174,8 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 						},
 					},
 				}
-				require.NoError(t, router.Request(pk, &responder))
-				responder.validate(t, pk)
+				require.NoError(t, router.Request(ctx, pk, &responder))
+				validateEchoFlow(t, muxer, pk)
 			}
 		}()
 	}
@@ -241,9 +242,9 @@ func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.
 	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
 	require.NoError(t, err)
 
-	responder := echoFlowResponder{
-		decoder:  packet.NewICMPDecoder(),
-		respChan: make(chan []byte),
+	muxer := newMockMuxer(1)
+	responder := packetResponder{
+		datagramMuxer: muxer,
 	}
 	protocol := layers.IPProtocolICMPv4
 	if srcDstIP.Is6() {
@@ -259,7 +260,7 @@ func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.
 			},
 			Message: &m,
 		}
-		require.Error(t, router.Request(&pk, &responder))
+		require.Error(t, router.Request(context.Background(), &pk, &responder))
 	}
 }
 
@@ -285,9 +286,10 @@ func (efr *echoFlowResponder) Close() error {
 	return nil
 }
 
-func (efr *echoFlowResponder) validate(t *testing.T, echoReq *packet.ICMP) {
-	pk := <-efr.respChan
-	decoded, err := efr.decoder.Decode(packet.RawPacket{Data: pk})
+func validateEchoFlow(t *testing.T, muxer *mockMuxer, echoReq *packet.ICMP) {
+	pk := <-muxer.cfdToEdge
+	decoder := packet.NewICMPDecoder()
+	decoded, err := decoder.Decode(packet.RawPacket{Data: pk.Payload()})
 	require.NoError(t, err)
 	require.Equal(t, decoded.Src, echoReq.Dst)
 	require.Equal(t, decoded.Dst, echoReq.Src)

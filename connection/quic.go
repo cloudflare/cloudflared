@@ -57,7 +57,7 @@ type QUICConnection struct {
 	sessionManager datagramsession.Manager
 	// datagramMuxer mux/demux datagrams from quic connection
 	datagramMuxer        *quicpogs.DatagramMuxerV2
-	packetRouter         *packet.Router
+	packetRouter         *ingress.PacketRouter
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
 }
@@ -72,7 +72,7 @@ func NewQUICConnection(
 	connOptions *tunnelpogs.ConnectionOptions,
 	controlStreamHandler ControlStreamHandler,
 	logger *zerolog.Logger,
-	packetRouterConfig *packet.GlobalRouterConfig,
+	packetRouterConfig *ingress.GlobalRouterConfig,
 ) (*QUICConnection, error) {
 	udpConn, err := createUDPConnForConnIndex(connIndex, logger)
 	if err != nil {
@@ -93,8 +93,7 @@ func NewQUICConnection(
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
-	muxer := muxerWrapper{muxer: datagramMuxer}
-	packetRouter := packet.NewRouter(packetRouterConfig, &muxer, &muxer, logger, orchestrator.WarpRoutingEnabled)
+	packetRouter := ingress.NewPacketRouter(packetRouterConfig, datagramMuxer, logger, orchestrator.WarpRoutingEnabled)
 
 	return &QUICConnection{
 		session:              session,

@@ -43,24 +43,54 @@ type flow3Tuple struct {
 
 // icmpEchoFlow implements the packet.Funnel interface.
 type icmpEchoFlow struct {
-	*packet.RawPacketFunnel
+	*packet.ActivityTracker
+	closeCallback  func() error
+	src            netip.Addr
+	originConn     *icmp.PacketConn
+	responder      *packetResponder
 	assignedEchoID int
 	originalEchoID int
 	// it's up to the user to ensure respEncoder is not used concurrently
 	respEncoder *packet.Encoder
 }
 
-func newICMPEchoFlow(src netip.Addr, sendPipe, returnPipe packet.FunnelUniPipe, assignedEchoID, originalEchoID int, respEncoder *packet.Encoder) *icmpEchoFlow {
+func newICMPEchoFlow(src netip.Addr, closeCallback func() error, originConn *icmp.PacketConn, responder *packetResponder, assignedEchoID, originalEchoID int, respEncoder *packet.Encoder) *icmpEchoFlow {
 	return &icmpEchoFlow{
-		RawPacketFunnel: packet.NewRawPacketFunnel(src, sendPipe, returnPipe),
+		ActivityTracker: packet.NewActivityTracker(),
+		closeCallback:   closeCallback,
+		src:             src,
+		originConn:      originConn,
+		responder:       responder,
 		assignedEchoID:  assignedEchoID,
 		originalEchoID:  originalEchoID,
 		respEncoder:     respEncoder,
 	}
 }
 
+func (ief *icmpEchoFlow) Equal(other packet.Funnel) bool {
+	otherICMPFlow, ok := other.(*icmpEchoFlow)
+	if !ok {
+		return false
+	}
+	if otherICMPFlow.src != ief.src {
+		return false
+	}
+	if otherICMPFlow.originalEchoID != ief.originalEchoID {
+		return false
+	}
+	if otherICMPFlow.assignedEchoID != ief.assignedEchoID {
+		return false
+	}
+	return true
+}
+
+func (ief *icmpEchoFlow) Close() error {
+	return ief.closeCallback()
+}
+
 // sendToDst rewrites the echo ID to the one assigned to this flow
 func (ief *icmpEchoFlow) sendToDst(dst netip.Addr, msg *icmp.Message) error {
+	ief.UpdateLastActive()
 	originalEcho, err := getICMPEcho(msg)
 	if err != nil {
 		return err
@@ -80,17 +110,21 @@ func (ief *icmpEchoFlow) sendToDst(dst netip.Addr, msg *icmp.Message) error {
 	if err != nil {
 		return err
 	}
-	return ief.SendToDst(dst, packet.RawPacket{Data: serializedPacket})
+	_, err = ief.originConn.WriteTo(serializedPacket, &net.UDPAddr{
+		IP: dst.AsSlice(),
+	})
+	return err
 }
 
 // returnToSrc rewrites the echo ID to the original echo ID from the eyeball
 func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) error {
+	ief.UpdateLastActive()
 	reply.echo.ID = ief.originalEchoID
 	reply.msg.Body = reply.echo
 	pk := packet.ICMP{
 		IP: &packet.IP{
 			Src:      reply.from,
-			Dst:      ief.Src,
+			Dst:      ief.src,
 			Protocol: layers.IPProtocol(reply.msg.Type.Protocol()),
 			TTL:      packet.DefaultTTL,
 		},
@@ -100,7 +134,7 @@ func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) error {
 	if err != nil {
 		return err
 	}
-	return ief.ReturnToSrc(serializedPacket)
+	return ief.responder.returnPacket(serializedPacket)
 }
 
 type echoReply struct {

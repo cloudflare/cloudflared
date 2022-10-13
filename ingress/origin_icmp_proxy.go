@@ -37,7 +37,9 @@ func NewICMPRouter(ipv4Addr, ipv6Addr netip.Addr, ipv6Zone string, logger *zerol
 	ipv4Proxy, ipv4Err := newICMPProxy(ipv4Addr, "", logger, funnelIdleTimeout)
 	ipv6Proxy, ipv6Err := newICMPProxy(ipv6Addr, ipv6Zone, logger, funnelIdleTimeout)
 	if ipv4Err != nil && ipv6Err != nil {
-		return nil, fmt.Errorf("cannot create ICMPv4 proxy: %v nor ICMPv6 proxy: %v", ipv4Err, ipv6Err)
+		err := fmt.Errorf("cannot create ICMPv4 proxy: %v nor ICMPv6 proxy: %v", ipv4Err, ipv6Err)
+		logger.Debug().Err(err).Msg("ICMP proxy feature is disabled")
+		return nil, err
 	}
 	if ipv4Err != nil {
 		logger.Debug().Err(ipv4Err).Msg("failed to create ICMPv4 proxy, only ICMPv6 proxy is created")
@@ -73,15 +75,18 @@ func (ir *icmpRouter) Serve(ctx context.Context) error {
 	return fmt.Errorf("ICMPv4 proxy and ICMPv6 proxy are both nil")
 }
 
-func (ir *icmpRouter) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
+func (ir *icmpRouter) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
+	if pk == nil {
+		return errPacketNil
+	}
 	if pk.Dst.Is4() {
 		if ir.ipv4Proxy != nil {
-			return ir.ipv4Proxy.Request(pk, responder)
+			return ir.ipv4Proxy.Request(ctx, pk, responder)
 		}
 		return fmt.Errorf("ICMPv4 proxy was not instantiated")
 	}
 	if ir.ipv6Proxy != nil {
-		return ir.ipv6Proxy.Request(pk, responder)
+		return ir.ipv6Proxy.Request(ctx, pk, responder)
 	}
 	return fmt.Errorf("ICMPv6 proxy was not instantiated")
 }

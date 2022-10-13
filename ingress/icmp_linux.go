@@ -97,10 +97,7 @@ func checkInPingGroup() error {
 	return fmt.Errorf("did not find group range in %s", pingGroupPath)
 }
 
-func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
-	if pk == nil {
-		return errPacketNil
-	}
+func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
 	originalEcho, err := getICMPEcho(pk.Message)
 	if err != nil {
 		return err
@@ -113,13 +110,15 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 		}
 		ip.logger.Debug().Msgf("Opened ICMP socket listen on %s", conn.LocalAddr())
 		newConnChan <- conn
+		closeCallback := func() error {
+			return conn.Close()
+		}
 		localUDPAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 		if !ok {
 			return nil, fmt.Errorf("ICMP listener address %s is not net.UDPAddr", conn.LocalAddr())
 		}
-		originSender := originSender{conn: conn}
 		echoID := localUDPAddr.Port
-		icmpFlow := newICMPEchoFlow(pk.Src, &originSender, responder, echoID, originalEcho.ID, packet.NewEncoder())
+		icmpFlow := newICMPEchoFlow(pk.Src, closeCallback, conn, responder, echoID, originalEcho.ID, packet.NewEncoder())
 		return icmpFlow, nil
 	}
 	funnelID := flow3Tuple{
@@ -185,22 +184,6 @@ func (ip *icmpProxy) listenResponse(flow *icmpEchoFlow, conn *icmp.PacketConn) e
 			continue
 		}
 	}
-}
-
-// originSender wraps icmp.PacketConn to implement packet.FunnelUniPipe interface
-type originSender struct {
-	conn *icmp.PacketConn
-}
-
-func (os *originSender) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
-	_, err := os.conn.WriteTo(pk.Data, &net.UDPAddr{
-		IP: dst.AsSlice(),
-	})
-	return err
-}
-
-func (os *originSender) Close() error {
-	return os.conn.Close()
 }
 
 // Only linux uses flow3Tuple as FunnelID

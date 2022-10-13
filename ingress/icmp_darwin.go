@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net"
 	"net/netip"
 	"strconv"
 	"sync"
@@ -129,10 +128,7 @@ func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idle
 	}, nil
 }
 
-func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) error {
-	if pk == nil {
-		return errPacketNil
-	}
+func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
 	originalEcho, err := getICMPEcho(pk.Message)
 	if err != nil {
 		return err
@@ -152,13 +148,11 @@ func (ip *icmpProxy) Request(pk *packet.ICMP, responder packet.FunnelUniPipe) er
 		if err != nil {
 			return nil, err
 		}
-		originSender := originSender{
-			conn:             ip.conn,
-			echoIDTracker:    ip.echoIDTracker,
-			echoIDTrackerKey: echoIDTrackerKey,
-			assignedEchoID:   assignedEchoID,
+		closeCallback := func() error {
+			ip.echoIDTracker.release(echoIDTrackerKey, assignedEchoID)
+			return nil
 		}
-		icmpFlow := newICMPEchoFlow(pk.Src, &originSender, responder, int(assignedEchoID), originalEcho.ID, ip.encoder)
+		icmpFlow := newICMPEchoFlow(pk.Src, closeCallback, ip.conn, responder, int(assignedEchoID), originalEcho.ID, ip.encoder)
 		return icmpFlow, nil
 	}
 	funnelID := echoFunnelID(assignedEchoID)
@@ -249,24 +243,4 @@ func (ip *icmpProxy) sendReply(reply *echoReply) error {
 		return err
 	}
 	return icmpFlow.returnToSrc(reply)
-}
-
-// originSender wraps icmp.PacketConn to implement packet.FunnelUniPipe interface
-type originSender struct {
-	conn             *icmp.PacketConn
-	echoIDTracker    *echoIDTracker
-	echoIDTrackerKey flow3Tuple
-	assignedEchoID   uint16
-}
-
-func (os *originSender) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
-	_, err := os.conn.WriteTo(pk.Data, &net.UDPAddr{
-		IP: dst.AsSlice(),
-	})
-	return err
-}
-
-func (os *originSender) Close() error {
-	os.echoIDTracker.release(os.echoIDTrackerKey, os.assignedEchoID)
-	return nil
 }
