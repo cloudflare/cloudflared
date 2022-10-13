@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -282,7 +281,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 			switch resp.StatusCode {
 			// v1 proxy, warp enabled
 			case 200:
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				require.Equal(t, t.Name(), string(body))
 				warpRoutingDisabled = false
@@ -504,7 +503,7 @@ func TestClosePreviousProxies(t *testing.T) {
 	require.Equal(t, http.StatusTeapot, resp.StatusCode)
 
 	// The hello-world server in config v1 should have been stopped. We wait a bit since it's closed asynchronously.
-	time.Sleep(time.Millisecond * 10)
+	time.Sleep(time.Millisecond * 300)
 	resp, err = proxyHTTP(originProxyV1, hostname)
 	require.Error(t, err)
 	require.Nil(t, resp)
@@ -522,8 +521,8 @@ func TestClosePreviousProxies(t *testing.T) {
 
 	// cancel the context should terminate the last proxy
 	cancel()
-	// Wait for proxies to shutdown
-	time.Sleep(time.Millisecond * 10)
+	// Wait for proxies to shut down
+	time.Sleep(time.Millisecond * 300)
 
 	resp, err = proxyHTTP(originProxyV3, hostname)
 	require.Error(t, err)
