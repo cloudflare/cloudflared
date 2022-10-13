@@ -113,9 +113,12 @@ func extractSessionID(b []byte) (uuid.UUID, []byte, error) {
 // SuffixSessionID appends the session ID at the end of the payload. Suffix is more performant than prefix because
 // the payload slice might already have enough capacity to append the session ID at the end
 func SuffixSessionID(sessionID uuid.UUID, b []byte) ([]byte, error) {
-	if len(b)+len(sessionID) > MaxDatagramFrameSize {
+	return suffixMetadata(b, sessionID[:])
+}
+
+func suffixMetadata(payload, metadata []byte) ([]byte, error) {
+	if len(payload)+len(metadata) > MaxDatagramFrameSize {
 		return nil, fmt.Errorf("datagram size exceed %d", MaxDatagramFrameSize)
 	}
-	b = append(b, sessionID[:]...)
-	return b, nil
+	return append(payload, metadata...), nil
 }

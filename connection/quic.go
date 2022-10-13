@@ -93,7 +93,8 @@ func NewQUICConnection(
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
-	packetRouter := packet.NewRouter(packetRouterConfig, datagramMuxer, &returnPipe{muxer: datagramMuxer}, logger, orchestrator.WarpRoutingEnabled)
+	muxer := muxerWrapper{muxer: datagramMuxer}
+	packetRouter := packet.NewRouter(packetRouterConfig, &muxer, &muxer, logger, orchestrator.WarpRoutingEnabled)
 
 	return &QUICConnection{
 		session:              session,
@@ -498,16 +499,28 @@ func (np *nopCloserReadWriter) Close() error {
 	return nil
 }
 
-// returnPipe wraps DatagramMuxerV2 to satisfy the packet.FunnelUniPipe interface
-type returnPipe struct {
+// muxerWrapper wraps DatagramMuxerV2 to satisfy the packet.FunnelUniPipe interface
+type muxerWrapper struct {
 	muxer *quicpogs.DatagramMuxerV2
 }
 
-func (rp *returnPipe) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
-	return rp.muxer.SendPacket(pk)
+func (rp *muxerWrapper) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
+	return rp.muxer.SendPacket(quicpogs.RawPacket(pk))
 }
 
-func (rp *returnPipe) Close() error {
+func (rp *muxerWrapper) ReceivePacket(ctx context.Context) (packet.RawPacket, error) {
+	pk, err := rp.muxer.ReceivePacket(ctx)
+	if err != nil {
+		return packet.RawPacket{}, err
+	}
+	rawPacket, ok := pk.(quicpogs.RawPacket)
+	if ok {
+		return packet.RawPacket(rawPacket), nil
+	}
+	return packet.RawPacket{}, fmt.Errorf("unexpected packet type %+v", pk)
+}
+
+func (rp *muxerWrapper) Close() error {
 	return nil
 }
 

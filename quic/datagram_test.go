@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -23,6 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 var (
@@ -121,6 +123,15 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Sessi
 
 	logger := zerolog.Nop()
 
+	tracingIdentity, err := tracing.NewIdentity("ec31ad8a01fde11fdcabe2efdce36873:52726f6cabc144f5:0:1")
+	require.NoError(t, err)
+	serializedTracingID, err := tracingIdentity.MarshalBinary()
+	require.NoError(t, err)
+	tracingSpan := &TracingSpanPacket{
+		Spans:           []byte("tracing"),
+		TracingIdentity: serializedTracingID,
+	}
+
 	errGroup, ctx := errgroup.WithContext(context.Background())
 	// Run edge side of datagram muxer
 	errGroup.Go(func() error {
@@ -140,18 +151,17 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Sessi
 			muxer := NewDatagramMuxerV2(quicSession, &logger, sessionDemuxChan)
 			muxer.ServeReceive(ctx)
 
-			icmpDecoder := packet.NewICMPDecoder()
 			for _, pk := range packets {
 				received, err := muxer.ReceivePacket(ctx)
 				require.NoError(t, err)
-
-				receivedICMP, err := icmpDecoder.Decode(received)
+				validateIPPacket(t, received, &pk)
+				received, err = muxer.ReceivePacket(ctx)
 				require.NoError(t, err)
-				require.Equal(t, pk.IP, receivedICMP.IP)
-				require.Equal(t, pk.Type, receivedICMP.Type)
-				require.Equal(t, pk.Code, receivedICMP.Code)
-				require.Equal(t, pk.Body, receivedICMP.Body)
+				validateIPPacketWithTracing(t, received, &pk, serializedTracingID)
 			}
+			received, err := muxer.ReceivePacket(ctx)
+			require.NoError(t, err)
+			validateTracingSpans(t, received, tracingSpan)
 		default:
 			return fmt.Errorf("unknown datagram version %d", version)
 		}
@@ -188,10 +198,15 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Sessi
 			for _, pk := range packets {
 				encodedPacket, err := encoder.Encode(&pk)
 				require.NoError(t, err)
-				require.NoError(t, muxerV2.SendPacket(encodedPacket))
+				require.NoError(t, muxerV2.SendPacket(RawPacket(encodedPacket)))
+				require.NoError(t, muxerV2.SendPacket(&TracedPacket{
+					Packet:          encodedPacket,
+					TracingIdentity: serializedTracingID,
+				}))
 			}
+			require.NoError(t, muxerV2.SendPacket(tracingSpan))
 			// Payload larger than transport MTU, should not be sent
-			require.Error(t, muxerV2.SendPacket(packet.RawPacket{
+			require.Error(t, muxerV2.SendPacket(RawPacket{
 				Data: largePayload,
 			}))
 			muxer = muxerV2
@@ -215,6 +230,38 @@ func testDatagram(t *testing.T, version uint8, sessionToPayloads []*packet.Sessi
 	})
 
 	require.NoError(t, errGroup.Wait())
+}
+
+func validateIPPacket(t *testing.T, receivedPacket Packet, expectedICMP *packet.ICMP) {
+	require.Equal(t, DatagramTypeIP, receivedPacket.Type())
+	rawPacket := receivedPacket.(RawPacket)
+	decoder := packet.NewICMPDecoder()
+	receivedICMP, err := decoder.Decode(packet.RawPacket(rawPacket))
+	require.NoError(t, err)
+	validateICMP(t, expectedICMP, receivedICMP)
+}
+
+func validateIPPacketWithTracing(t *testing.T, receivedPacket Packet, expectedICMP *packet.ICMP, serializedTracingID []byte) {
+	require.Equal(t, DatagramTypeIPWithTrace, receivedPacket.Type())
+	tracedPacket := receivedPacket.(*TracedPacket)
+	decoder := packet.NewICMPDecoder()
+	receivedICMP, err := decoder.Decode(tracedPacket.Packet)
+	require.NoError(t, err)
+	validateICMP(t, expectedICMP, receivedICMP)
+	require.True(t, bytes.Equal(tracedPacket.TracingIdentity, serializedTracingID))
+}
+
+func validateICMP(t *testing.T, expected, actual *packet.ICMP) {
+	require.Equal(t, expected.IP, actual.IP)
+	require.Equal(t, expected.Type, actual.Type)
+	require.Equal(t, expected.Code, actual.Code)
+	require.Equal(t, expected.Body, actual.Body)
+}
+
+func validateTracingSpans(t *testing.T, receivedPacket Packet, expectedSpan *TracingSpanPacket) {
+	require.Equal(t, DatagramTypeTracingSpan, receivedPacket.Type())
+	tracingSpans := receivedPacket.(*TracingSpanPacket)
+	require.Equal(t, tracingSpans, expectedSpan)
 }
 
 func newQUICListener(t *testing.T, config *quic.Config) quic.Listener {
