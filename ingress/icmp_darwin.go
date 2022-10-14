@@ -219,7 +219,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 			ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply, continue to parse as full packet")
 			// In unit test, we found out when the listener listens on 0.0.0.0, the socket reads the full packet after
 			// the second reply
-			if err := ip.handleFullPacket(icmpDecoder, buf[:n]); err != nil {
+			if err := ip.handleFullPacket(ctx, icmpDecoder, buf[:n]); err != nil {
 				ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply as full packet")
 			}
 			continue
@@ -228,14 +228,14 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 			ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
 			continue
 		}
-		if err := ip.sendReply(reply); err != nil {
+		if err := ip.sendReply(ctx, reply); err != nil {
 			ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 			continue
 		}
 	}
 }
 
-func (ip *icmpProxy) handleFullPacket(decoder *packet.ICMPDecoder, rawPacket []byte) error {
+func (ip *icmpProxy) handleFullPacket(ctx context.Context, decoder *packet.ICMPDecoder, rawPacket []byte) error {
 	icmpPacket, err := decoder.Decode(packet.RawPacket{Data: rawPacket})
 	if err != nil {
 		return err
@@ -249,13 +249,13 @@ func (ip *icmpProxy) handleFullPacket(decoder *packet.ICMPDecoder, rawPacket []b
 		msg:  icmpPacket.Message,
 		echo: echo,
 	}
-	if ip.sendReply(&reply); err != nil {
+	if ip.sendReply(ctx, &reply); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (ip *icmpProxy) sendReply(reply *echoReply) error {
+func (ip *icmpProxy) sendReply(ctx context.Context, reply *echoReply) error {
 	funnelID := echoFunnelID(reply.echo.ID)
 	funnel, ok := ip.srcFunnelTracker.Get(funnelID)
 	if !ok {
@@ -265,5 +265,19 @@ func (ip *icmpProxy) sendReply(reply *echoReply) error {
 	if err != nil {
 		return err
 	}
-	return icmpFlow.returnToSrc(reply)
+
+	_, span := icmpFlow.responder.replySpan(ctx, ip.logger)
+	defer icmpFlow.responder.exportSpan()
+
+	span.SetAttributes(
+		attribute.String("dst", reply.from.String()),
+		attribute.Int("echoID", reply.echo.ID),
+		attribute.Int("seq", reply.echo.Seq),
+		attribute.Int("originalEchoID", icmpFlow.originalEchoID),
+	)
+	if err := icmpFlow.returnToSrc(reply); err != nil {
+		tracing.EndWithErrorStatus(span, err)
+	}
+	tracing.End(span)
+	return nil
 }

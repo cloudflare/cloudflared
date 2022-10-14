@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -109,8 +108,7 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 	}
 	tracingCtx := "ec31ad8a01fde11fdcabe2efdce36873:52726f6cabc144f5:0:1"
 
-	logger := zerolog.New(os.Stderr)
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &logger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -120,8 +118,8 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 		close(proxyDone)
 	}()
 
-	// Buffer 2 packets, reply and request span
-	muxer := newMockMuxer(2)
+	// Buffer 3 packets, request span, reply span and reply
+	muxer := newMockMuxer(3)
 	tracingIdentity, err := tracing.NewIdentity(tracingCtx)
 	require.NoError(t, err)
 	serializedIdentity, err := tracingIdentity.MarshalBinary()
@@ -129,7 +127,7 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 
 	responder := packetResponder{
 		datagramMuxer:      muxer,
-		tracedCtx:          tracing.NewTracedContext(ctx, tracingIdentity.String(), &logger),
+		tracedCtx:          tracing.NewTracedContext(ctx, tracingIdentity.String(), &noopLogger),
 		serializedIdentity: serializedIdentity,
 	}
 
@@ -153,20 +151,35 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 	}
 	require.NoError(t, router.Request(ctx, &pk, &responder))
 	validateEchoFlow(t, muxer, &pk)
+
+	// Request span
 	receivedPacket := <-muxer.cfdToEdge
-	tracingSpanPacket, ok := receivedPacket.(*quicpogs.TracingSpanPacket)
+	requestSpan, ok := receivedPacket.(*quicpogs.TracingSpanPacket)
 	require.True(t, ok)
-	require.NotEmpty(t, tracingSpanPacket.Spans)
-	require.True(t, bytes.Equal(serializedIdentity, tracingSpanPacket.TracingIdentity))
+	require.NotEmpty(t, requestSpan.Spans)
+	require.True(t, bytes.Equal(serializedIdentity, requestSpan.TracingIdentity))
+	// Reply span
+	receivedPacket = <-muxer.cfdToEdge
+	replySpan, ok := receivedPacket.(*quicpogs.TracingSpanPacket)
+	require.True(t, ok)
+	require.NotEmpty(t, replySpan.Spans)
+	require.True(t, bytes.Equal(serializedIdentity, replySpan.TracingIdentity))
+	require.False(t, bytes.Equal(requestSpan.Spans, replySpan.Spans))
 
 	echo.Seq++
 	pk.Body = echo
 	// Only first request for a flow is traced. The edge will not send tracing context for the second request
-	responder = packetResponder{
+	newResponder := packetResponder{
 		datagramMuxer: muxer,
 	}
-	require.NoError(t, router.Request(ctx, &pk, &responder))
+	require.NoError(t, router.Request(ctx, &pk, &newResponder))
 	validateEchoFlow(t, muxer, &pk)
+
+	select {
+	case receivedPacket = <-muxer.cfdToEdge:
+		panic(fmt.Sprintf("Receive unexpected packet %+v", receivedPacket))
+	default:
+	}
 
 	cancel()
 	<-proxyDone

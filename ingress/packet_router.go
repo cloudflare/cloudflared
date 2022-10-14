@@ -135,10 +135,13 @@ func (r *PacketRouter) sendTTLExceedMsg(ctx context.Context, pk *packet.ICMP, ra
 	return r.muxer.SendPacket(quicpogs.RawPacket(encodedTTLExceed))
 }
 
+// packetResponder should not be used concurrently. This assumption is upheld because reply packets are ready one-by-one
 type packetResponder struct {
 	datagramMuxer      muxer
 	tracedCtx          *tracing.TracedContext
 	serializedIdentity []byte
+	// hadReply tracks if there has been any reply for this flow
+	hadReply bool
 }
 
 func (pr *packetResponder) tracingEnabled() bool {
@@ -146,6 +149,7 @@ func (pr *packetResponder) tracingEnabled() bool {
 }
 
 func (pr *packetResponder) returnPacket(rawPacket packet.RawPacket) error {
+	pr.hadReply = true
 	return pr.datagramMuxer.SendPacket(quicpogs.RawPacket(rawPacket))
 }
 
@@ -159,13 +163,21 @@ func (pr *packetResponder) requestSpan(ctx context.Context, pk *packet.ICMP) (co
 	))
 }
 
+func (pr *packetResponder) replySpan(ctx context.Context, logger *zerolog.Logger) (context.Context, trace.Span) {
+	if !pr.tracingEnabled() || pr.hadReply {
+		return ctx, tracing.NewNoopSpan()
+	}
+	return pr.tracedCtx.Tracer().Start(pr.tracedCtx, "icmp-echo-reply")
+}
+
 func (pr *packetResponder) exportSpan() {
 	if !pr.tracingEnabled() {
 		return
 	}
 	spans := pr.tracedCtx.GetProtoSpans()
-	pr.tracedCtx.ClearSpans()
 	if len(spans) > 0 {
+		// Make sure spans are cleared after they are sent
+		defer pr.tracedCtx.ClearSpans()
 		pr.datagramMuxer.SendPacket(&quicpogs.TracingSpanPacket{
 			Spans:           spans,
 			TracingIdentity: pr.serializedIdentity,

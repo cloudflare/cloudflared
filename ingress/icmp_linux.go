@@ -20,7 +20,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
-	"golang.org/x/net/icmp"
 
 	"github.com/cloudflare/cloudflared/packet"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -113,7 +112,6 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		attribute.Int("seq", originalEcho.Seq),
 	)
 
-	newConnChan := make(chan *icmp.PacketConn, 1)
 	newFunnelFunc := func() (packet.Funnel, error) {
 		conn, err := newICMPConn(ip.listenIP, ip.ipv6Zone)
 		if err != nil {
@@ -121,7 +119,6 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 			return nil, errors.Wrap(err, "failed to open ICMP socket")
 		}
 		ip.logger.Debug().Msgf("Opened ICMP socket listen on %s", conn.LocalAddr())
-		newConnChan <- conn
 		closeCallback := func() error {
 			return conn.Close()
 		}
@@ -157,10 +154,9 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 			Str("dst", pk.Dst.String()).
 			Int("originalEchoID", originalEcho.ID).
 			Msg("New flow")
-		conn := <-newConnChan
 		go func() {
 			defer ip.srcFunnelTracker.Unregister(funnelID, icmpFlow)
-			if err := ip.listenResponse(icmpFlow, conn); err != nil {
+			if err := ip.listenResponse(ctx, icmpFlow); err != nil {
 				ip.logger.Debug().Err(err).
 					Str("src", pk.Src.String()).
 					Str("dst", pk.Dst.String()).
@@ -182,27 +178,53 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (ip *icmpProxy) listenResponse(flow *icmpEchoFlow, conn *icmp.PacketConn) error {
+func (ip *icmpProxy) listenResponse(ctx context.Context, flow *icmpEchoFlow) error {
 	buf := make([]byte, mtu)
 	for {
-		n, from, err := conn.ReadFrom(buf)
-		if err != nil {
+		retryable, err := ip.handleResponse(ctx, flow, buf)
+		if err != nil && !retryable {
 			return err
 		}
-		reply, err := parseReply(from, buf[:n])
-		if err != nil {
-			ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply")
-			continue
-		}
-		if !isEchoReply(reply.msg) {
-			ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
-			continue
-		}
-		if err := flow.returnToSrc(reply); err != nil {
-			ip.logger.Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
-			continue
-		}
 	}
+}
+
+func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf []byte) (retryableErr bool, err error) {
+	_, span := flow.responder.replySpan(ctx, ip.logger)
+	defer flow.responder.exportSpan()
+
+	span.SetAttributes(
+		attribute.Int("originalEchoID", flow.originalEchoID),
+	)
+
+	n, from, err := flow.originConn.ReadFrom(buf)
+	if err != nil {
+		tracing.EndWithErrorStatus(span, err)
+		return false, err
+	}
+	reply, err := parseReply(from, buf[:n])
+	if err != nil {
+		ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply")
+		tracing.EndWithErrorStatus(span, err)
+		return true, err
+	}
+	if !isEchoReply(reply.msg) {
+		err := fmt.Errorf("Expect ICMP echo reply, got %s", reply.msg.Type)
+		ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
+		tracing.EndWithErrorStatus(span, err)
+		return true, err
+	}
+	span.SetAttributes(
+		attribute.String("dst", reply.from.String()),
+		attribute.Int("echoID", reply.echo.ID),
+		attribute.Int("seq", reply.echo.Seq),
+	)
+	if err := flow.returnToSrc(reply); err != nil {
+		ip.logger.Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
+		tracing.EndWithErrorStatus(span, err)
+		return true, err
+	}
+	tracing.End(span)
+	return true, nil
 }
 
 // Only linux uses flow3Tuple as FunnelID
