@@ -427,6 +427,12 @@ func (defaults *OriginRequestConfig) setHttp2Origin(overrides config.OriginReque
 	}
 }
 
+func (defaults *OriginRequestConfig) setAccess(overrides config.OriginRequestConfig) {
+	if val := overrides.Access; val != nil {
+		defaults.Access = *val
+	}
+}
+
 // SetConfig gets config for the requests that cloudflared sends to origins.
 // Each field has a setter method which sets a value for the field by trying to find:
 //   1. The user config for this rule
@@ -453,6 +459,8 @@ func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfi
 	cfg.setProxyType(overrides)
 	cfg.setIPRules(overrides)
 	cfg.setHttp2Origin(overrides)
+	cfg.setAccess(overrides)
+
 	return cfg
 }
 
@@ -463,6 +471,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 	var keepAliveConnections *int
 	var keepAliveTimeout *config.CustomDuration
 	var proxyAddress *string
+	var access *config.AccessConfig
 
 	if c.ConnectTimeout != defaultHTTPConnectTimeout {
 		connectTimeout = &c.ConnectTimeout
@@ -481,6 +490,9 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 	}
 	if c.ProxyAddress != defaultProxyAddress {
 		proxyAddress = &c.ProxyAddress
+	}
+	if c.Access.Required {
+		access = &c.Access
 	}
 
 	return config.OriginRequestConfig{
@@ -501,6 +513,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 		ProxyType:              emptyStringToNil(c.ProxyType),
 		IPRules:                convertToRawIPRules(c.IPRules),
 		Http2Origin:            defaultBoolToNil(c.Http2Origin),
+		Access:                 access,
 	}
 }
 
