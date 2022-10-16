@@ -59,7 +59,7 @@ func TestParseEchoReply(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		resp, err := newEchoResp(test.replyBuf)
+		resp, err := newEchoV4Resp(test.replyBuf)
 		if test.expectedReply == nil {
 			require.Error(t, err)
 			require.Nil(t, resp)

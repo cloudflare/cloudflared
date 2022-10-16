@@ -103,9 +103,6 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 }
 
 func TestTraceICMPRouterEcho(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("TODO: TUN-6861 Trace ICMP in Windows")
-	}
 	tracingCtx := "ec31ad8a01fde11fdcabe2efdce36873:52726f6cabc144f5:0:1"
 
 	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
@@ -149,8 +146,12 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 			Body: echo,
 		},
 	}
+
 	require.NoError(t, router.Request(ctx, &pk, &responder))
-	validateEchoFlow(t, muxer, &pk)
+	// On Windows, request span is returned before reply
+	if runtime.GOOS != "windows" {
+		validateEchoFlow(t, muxer, &pk)
+	}
 
 	// Request span
 	receivedPacket := <-muxer.cfdToEdge
@@ -158,6 +159,11 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 	require.True(t, ok)
 	require.NotEmpty(t, requestSpan.Spans)
 	require.True(t, bytes.Equal(serializedIdentity, requestSpan.TracingIdentity))
+
+	if runtime.GOOS == "windows" {
+		validateEchoFlow(t, muxer, &pk)
+	}
+
 	// Reply span
 	receivedPacket = <-muxer.cfdToEdge
 	replySpan, ok := receivedPacket.(*quicpogs.TracingSpanPacket)
