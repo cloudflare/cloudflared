@@ -24,7 +24,7 @@ type Identity struct {
 
 // TODO: TUN-6604 Remove this. To reconstruct into Jaeger propagation format, convert tracingContext to tracing.Identity
 func (tc *Identity) String() string {
-	return fmt.Sprintf("%x%x:%x:0:%x", tc.traceIDUpper, tc.traceIDLower, tc.spanID, tc.flags)
+	return fmt.Sprintf("%016x%016x:%x:0:%x", tc.traceIDUpper, tc.traceIDLower, tc.spanID, tc.flags)
 }
 
 func (tc *Identity) MarshalBinary() ([]byte, error) {
@@ -68,14 +68,9 @@ func NewIdentity(trace string) (*Identity, error) {
 		return nil, fmt.Errorf("trace '%s' doesn't have exactly 4 parts separated by %s", trace, separator)
 	}
 	const base = 16
-	tracingID := parts[0]
-	if len(tracingID) == 0 {
-		return nil, fmt.Errorf("missing tracing ID")
-	}
-	if len(tracingID) != 32 {
-		// Correctly left pad the trace to a length of 32
-		left := traceID128bitsWidth - len(tracingID)
-		tracingID = strings.Repeat("0", left) + tracingID
+	tracingID, err := padTracingID(parts[0])
+	if err != nil {
+		return nil, err
 	}
 	traceIDUpper, err := strconv.ParseUint(tracingID[:16], base, 64)
 	if err != nil {
@@ -99,4 +94,17 @@ func NewIdentity(trace string) (*Identity, error) {
 		spanID:       spanID,
 		flags:        uint8(flags),
 	}, nil
+}
+
+func padTracingID(tracingID string) (string, error) {
+	if len(tracingID) == 0 {
+		return "", fmt.Errorf("missing tracing ID")
+	}
+	if len(tracingID) == traceID128bitsWidth {
+		return tracingID, nil
+	}
+	// Correctly left pad the trace to a length of 32
+	left := traceID128bitsWidth - len(tracingID)
+	paddedTracingID := strings.Repeat("0", left) + tracingID
+	return paddedTracingID, nil
 }
