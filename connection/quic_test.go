@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -142,24 +141,33 @@ func TestQUICServer(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
+		test := test // capture range variable
 		t.Run(test.desc, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-			var wg sync.WaitGroup
-			wg.Add(1)
+
+			quicListener, err := quic.Listen(udpListener, testTLSServerConfig, testQUICConfig)
+			require.NoError(t, err)
+
+			serverDone := make(chan struct{})
 			go func() {
-				defer wg.Done()
 				quicServer(
-					t, udpListener, testTLSServerConfig, testQUICConfig,
-					test.dest, test.connectionType, test.metadata, test.message, test.expectedResponse,
+					ctx, t, quicListener, test.dest, test.connectionType, test.metadata, test.message, test.expectedResponse,
 				)
+				close(serverDone)
 			}()
 
-			qc := testQUICConnection(udpListener.LocalAddr(), t)
-			go qc.Serve(ctx)
+			qc := testQUICConnection(udpListener.LocalAddr(), t, uint8(i))
 
-			wg.Wait()
+			connDone := make(chan struct{})
+			go func() {
+				qc.Serve(ctx)
+				close(connDone)
+			}()
+
+			<-serverDone
 			cancel()
+			<-connDone
 		})
 	}
 }
@@ -177,23 +185,16 @@ func (fakeControlStream) IsStopped() bool {
 }
 
 func quicServer(
+	ctx context.Context,
 	t *testing.T,
-	conn net.PacketConn,
-	tlsConf *tls.Config,
-	config *quic.Config,
+	listener quic.Listener,
 	dest string,
 	connectionType quicpogs.ConnectionType,
 	metadata []quicpogs.Metadata,
 	message []byte,
 	expectedResponse []byte,
 ) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	earlyListener, err := quic.Listen(conn, tlsConf, config)
-	require.NoError(t, err)
-
-	session, err := earlyListener.Accept(ctx)
+	session, err := listener.Accept(ctx)
 	require.NoError(t, err)
 
 	quicStream, err := session.OpenStreamSync(context.Background())
@@ -482,6 +483,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 
 	log := zerolog.Nop()
 	for _, test := range tests {
+		test := test // capture range variable
 		t.Run(test.name, func(t *testing.T) {
 			req, err := buildHTTPRequest(context.Background(), test.connectRequest, test.body, &log)
 			assert.NoError(t, err)
@@ -519,7 +521,8 @@ func TestServeUDPSession(t *testing.T) {
 		edgeQUICSessionChan <- edgeQUICSession
 	}()
 
-	qc := testQUICConnection(val, t)
+	// Random index to avoid reusing port
+	qc := testQUICConnection(val, t, 28)
 	go qc.Serve(ctx)
 
 	edgeQUICSession := <-edgeQUICSessionChan
@@ -703,7 +706,7 @@ func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionI
 	return nil
 }
 
-func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection {
+func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QUICConnection {
 	tlsClientConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"argotunnel"},
@@ -713,7 +716,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T) *QUICConnection 
 	qc, err := NewQUICConnection(
 		testQUICConfig,
 		udpListenerAddr,
-		0,
+		index,
 		tlsClientConfig,
 		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
 		&tunnelpogs.ConnectionOptions{},
