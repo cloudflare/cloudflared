@@ -157,7 +157,7 @@ func (cft *cfdTracer) GetSpans() (enc string) {
 
 // GetProtoSpans returns the spans as the otlp traces in protobuf byte array.
 func (cft *cfdTracer) GetProtoSpans() (proto []byte) {
-	proto, err := cft.exporter.ProtoSpans()
+	proto, err := cft.exporter.ExportProtoSpans()
 	switch err {
 	case nil:
 		break
@@ -187,10 +187,6 @@ func (cft *cfdTracer) AddSpans(headers http.Header) {
 	}
 
 	headers[CanonicalCloudflaredTracingHeader] = []string{enc}
-}
-
-func (cft *cfdTracer) ClearSpans() {
-	cft.exporter.ClearSpans()
 }
 
 // End will set the OK status for the span and then end it.

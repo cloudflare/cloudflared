@@ -176,8 +176,6 @@ func (pr *packetResponder) exportSpan() {
 	}
 	spans := pr.tracedCtx.GetProtoSpans()
 	if len(spans) > 0 {
-		// Make sure spans are cleared after they are sent
-		defer pr.tracedCtx.ClearSpans()
 		pr.datagramMuxer.SendPacket(&quicpogs.TracingSpanPacket{
 			Spans:           spans,
 			TracingIdentity: pr.serializedIdentity,
