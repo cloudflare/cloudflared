@@ -1,3 +1,24 @@
+2022.10.1
+- 2022-10-16 TUN-6861: Trace ICMP on Windows
+- 2022-10-15 TUN-6860: Send access configuration keys to the edge
+- 2022-10-14 TUN-6858: Trace ICMP reply
+- 2022-10-13 TUN-6855: Add DatagramV2Type for IP packet with trace and tracing spans
+- 2022-10-13 TUN-6856: Refactor to lay foundation for tracing ICMP
+- 2022-10-13 TUN-6604: Trace icmp echo request on Linux and Darwin
+- 2022-10-12 Fix log message (#591)
+- 2022-10-12 TUN-6853: Reuse source port when connecting to the edge for quic connections
+- 2022-10-11 TUN-6829: Allow user of datagramsession to control logging level of errors
+- 2022-10-10 RTG-2276 Update qtls and go mod tidy
+- 2022-10-05 Add post-quantum flag to quick tunnel
+- 2022-10-05 TUN-6823: Update github release message to pull from KV
+- 2022-10-04 TUN-6825: Fix cloudflared:version images require arch hyphens
+- 2022-10-03 TUN-6806: Add ingress rule number to log when filtering due to middlware handler
+- 2022-08-17 Label correct container
+- 2022-08-16 Fix typo in help text for `cloudflared tunnel route lb`
+- 2022-07-18 drop usage of cat when sed is invoked to generate the manpage
+- 2021-03-15 update-build-readme
+- 2021-03-15 fix link
+
 2022.10.0
 - 2022-09-30 TUN-6755: Remove unused publish functions
 - 2022-09-30 TUN-6813: Only proxy ICMP packets when warp-routing is enabled
