@@ -81,6 +81,7 @@ stretch: &stretch
   generate-versions-file:
     build_dir: *build_dir
     builddeps: 
+      - *pinned_go
       - build-essential
     post-cache:
       - make generate-docker-version
