@@ -170,7 +170,7 @@ func TunnelCommand(c *cli.Context) error {
 		return runAdhocNamedTunnel(sc, name, c.String(CredFileFlag))
 	}
 	if ref := config.GetConfiguration().TunnelID; ref != "" {
-		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
+		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s. If you are trying to start a TryCloudflare quick tunnel, the `config.yaml` file must not be present (consider temporarily renaming it).", ref)
 	}
 
 	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
