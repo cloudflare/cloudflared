@@ -1,3 +1,8 @@
+2022.10.2
+- 2022-10-18 TUN-6869: Fix Makefile complaining about missing GO packages
+- 2022-10-18 TUN-6864: Don't reuse port in quic unit tests
+- 2022-10-18 TUN-6868: Return left padded tracing ID when tracing identity is converted to string
+
 2022.10.1
 - 2022-10-16 TUN-6861: Trace ICMP on Windows
 - 2022-10-15 TUN-6860: Send access configuration keys to the edge
