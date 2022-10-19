@@ -57,13 +57,13 @@ func TestFunnelIdleTimeout(t *testing.T) {
 		datagramMuxer: muxer,
 	}
 	require.NoError(t, proxy.Request(ctx, &pk, &responder))
-	validateEchoFlow(t, muxer, &pk)
+	validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
 
 	// Send second request, should reuse the funnel
 	require.NoError(t, proxy.Request(ctx, &pk, &packetResponder{
 		datagramMuxer: nil,
 	}))
-	validateEchoFlow(t, muxer, &pk)
+	validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
 
 	time.Sleep(idleTimeout * 2)
 	newMuxer := newMockMuxer(0)
@@ -71,7 +71,7 @@ func TestFunnelIdleTimeout(t *testing.T) {
 		datagramMuxer: newMuxer,
 	}
 	require.NoError(t, proxy.Request(ctx, &pk, &newResponder))
-	validateEchoFlow(t, newMuxer, &pk)
+	validateEchoFlow(t, <-newMuxer.cfdToEdge, &pk)
 
 	cancel()
 	<-proxyDone
