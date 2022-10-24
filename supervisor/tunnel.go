@@ -37,6 +37,7 @@ const (
 	FeatureAllowRemoteConfig = "allow_remote_config"
 	FeatureDatagramV2        = "support_datagram_v2"
 	FeaturePostQuantum       = "postquantum"
+	FeatureQUICSupportEOF    = "support_quic_eof"
 )
 
 type TunnelConfig struct {
