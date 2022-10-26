@@ -1,3 +1,7 @@
+2022.10.3
+- 2022-10-24 TUN-6871: Add default feature to cloudflared to support EOF on QUIC connections
+- 2022-10-19 TUN-6876: Fix flaky TestTraceICMPRouterEcho by taking account request span can return before reply
+- 2022-10-18 TUN-6867: Clear spans right after they are serialized to avoid returning duplicate spans
 2022.10.2
 - 2022-10-18 TUN-6869: Fix Makefile complaining about missing GO packages
 - 2022-10-18 TUN-6864: Don't reuse port in quic unit tests
