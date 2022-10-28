@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -158,13 +158,8 @@ func newSocksProxyOverWSService(accessPolicy *ipaccess.Policy) *socksProxyOverWS
 func addPortIfMissing(uri *url.URL, port int) {
 	hostname := uri.Hostname()
 
-	// check if it is an IPv6 address and wrap it with brackets
-	if ip := net.ParseIP(hostname); ip != nil && strings.Count(hostname, ":") > 0 {
-		hostname = fmt.Sprintf("[%s]", hostname)
-	}
-
 	if uri.Port() == "" {
-		uri.Host = fmt.Sprintf("%s:%d", hostname, port)
+		uri.Host = net.JoinHostPort(hostname, strconv.FormatInt(int64(port), 10))
 	}
 }
 
