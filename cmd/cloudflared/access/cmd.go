@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"text/template"
 	"time"
@@ -38,10 +39,22 @@ const (
 Add to your {{.Home}}/.ssh/config:
 
 {{- if .ShortLivedCerts}}
-Match host {{.Hostname}} exec "{{.Cloudflared}} access ssh-gen --hostname %h"
+	{{- if eq .OS "windows"}}
+	ProxyCommand {{.Cloudflared}} access ssh-gen --hostname %h && ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1
+	{{- else}}
+  ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1'
+	{{end}}
+
+Host cfpipe-{{.Hostname}}
+  HostName {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
-  IdentityFile ~/.cloudflared/%h-cf_key
-  CertificateFile ~/.cloudflared/%h-cf_key-cert.pub
+	{{- if eq .OS "windows"}}
+  IdentityFile {{.CurrWorkingDir}}/{{.Hostname}}-cf_key
+  CertificateFile {{.CurrWorkingDir}}/{{.Hostname}}-cf_key-cert.pub
+	{{- else}}
+	IdentityFile ~/.cloudflared/{{.Hostname}}-cf_key
+  CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
+	{{end}}
 {{- else}}
 Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
@@ -342,6 +355,10 @@ func generateToken(c *cli.Context) error {
 
 // sshConfig prints an example SSH config to stdout
 func sshConfig(c *cli.Context) error {
+	currWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		return err
+	}
 	genCertBool := c.Bool(sshGenCertFlag)
 	hostname := c.String(sshHostnameFlag)
 	if hostname == "" {
@@ -353,10 +370,23 @@ func sshConfig(c *cli.Context) error {
 		ShortLivedCerts bool
 		Hostname        string
 		Cloudflared     string
+		CurrWorkingDir  string
+		OS              string
 	}
 
 	t := template.Must(template.New("sshConfig").Parse(sshConfigTemplate))
-	return t.Execute(os.Stdout, config{Home: os.Getenv("HOME"), ShortLivedCerts: genCertBool, Hostname: hostname, Cloudflared: cloudflaredPath()})
+
+	return t.Execute(
+		os.Stdout,
+		config{
+			Home:            os.Getenv("HOME"),
+			ShortLivedCerts: genCertBool,
+			Hostname:        hostname,
+			Cloudflared:     cloudflaredPath(),
+			CurrWorkingDir:  currWorkingDirectory,
+			OS:              runtime.GOOS,
+		},
+	)
 }
 
 // sshGen generates a short lived certificate for provided hostname
@@ -449,6 +479,10 @@ func processURL(s string) (*url.URL, error) {
 
 // cloudflaredPath pulls the full path of cloudflared on disk
 func cloudflaredPath() string {
+	if runtime.GOOS == "windows" {
+		absPath, _ := os.Executable()
+		return absPath
+	}
 	for _, p := range strings.Split(os.Getenv("PATH"), ":") {
 		path := fmt.Sprintf("%s/%s", p, "cloudflared")
 		if isFileThere(path) {
