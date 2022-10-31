@@ -71,7 +71,7 @@ Description=Update cloudflared
 After=network.target
 
 [Service]
-ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 11 ]; then systemctl restart cloudflared; exit 0; fi; exit $code'
+ExecStart=/bin/bash -c '{{ .Path }} update'
 `,
 	},
 	{
