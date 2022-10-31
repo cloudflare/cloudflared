@@ -86,6 +86,22 @@ OnCalendar=daily
 WantedBy=timers.target
 `,
 	},
+	{
+		Path: "/etc/systemd/system/cloudflared-restart.path",
+		Content: `[Path]
+PathChanged=/usr/bin/cloudflared
+
+[Install]
+WantedBy=multi-user.target
+`,
+	},
+	{
+		Path: "/etc/systemd/system/cloudflared-restart.service",
+		Content: `[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart cloudflared
+`,
+	},
 }
 
 var sysvTemplate = ServiceTemplate{
@@ -271,6 +287,10 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 	}
 	if err := runCommand("systemctl", "enable", cloudflaredService); err != nil {
 		log.Err(err).Msgf("systemctl enable %s error", cloudflaredService)
+		return err
+	}
+	if err := runCommand("systemctl", "enable", "cloudflared-restart.path"); err != nil {
+		log.Err(err).Msg("systemctl enable cloudflared-restart.path error")
 		return err
 	}
 	if err := runCommand("systemctl", "start", "cloudflared-update.timer"); err != nil {
