@@ -293,6 +293,10 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 		log.Err(err).Msg("systemctl enable cloudflared-restart.path error")
 		return err
 	}
+	if err := runCommand("systemctl", "start", "cloudflared-restart.path"); err != nil {
+		log.Err(err).Msg("systemctl start cloudflared-restart.path error")
+		return err
+	}
 	if err := runCommand("systemctl", "start", "cloudflared-update.timer"); err != nil {
 		log.Err(err).Msg("systemctl start cloudflared-update.timer error")
 		return err
@@ -353,6 +357,14 @@ func uninstallSystemd(log *zerolog.Logger) error {
 	}
 	if err := runCommand("systemctl", "stop", cloudflaredService); err != nil {
 		log.Err(err).Msgf("systemctl stop %s error", cloudflaredService)
+		return err
+	}
+	if err := runCommand("systemctl", "disable", "cloudflared-restart.path"); err != nil {
+		log.Err(err).Msg("systemctl disable cloudflared-restart.path error")
+		return err
+	}
+	if err := runCommand("systemctl", "stop", "cloudflared-restart.path"); err != nil {
+		log.Err(err).Msg("systemctl stop cloudflared-restart.path error")
 		return err
 	}
 	if err := runCommand("systemctl", "stop", "cloudflared-update.timer"); err != nil {
