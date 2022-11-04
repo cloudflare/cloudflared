@@ -3,26 +3,26 @@
 // tldr is it uses Elliptic Curves (Curve25519) for the keys, XSalsa20 and Poly1305 for encryption.
 // You can read more here https://godoc.org/golang.org/x/crypto/nacl/box.
 //
-//		msg := []byte("super safe message.")
-//		alice, err := NewEncrypter("alice_priv_key.pem", "alice_pub_key.pem")
-//		if err != nil {
-//			log.Fatal(err)
-//		}
+//	msg := []byte("super safe message.")
+//	alice, err := NewEncrypter("alice_priv_key.pem", "alice_pub_key.pem")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
-//		bob, err := NewEncrypter("bob_priv_key.pem", "bob_pub_key.pem")
-//		if err != nil {
-//			log.Fatal(err)
-//		}
-//		encrypted, err := alice.Encrypt(msg, bob.PublicKey())
-//		if err != nil {
-//			log.Fatal(err)
-//		}
+//	bob, err := NewEncrypter("bob_priv_key.pem", "bob_pub_key.pem")
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	encrypted, err := alice.Encrypt(msg, bob.PublicKey())
+//	if err != nil {
+//		log.Fatal(err)
+//	}
 //
-//		data, err := bob.Decrypt(encrypted, alice.PublicKey())
-//		if err != nil {
-//			log.Fatal(err)
-//		}
-//		fmt.Println(string(data))
+//	data, err := bob.Decrypt(encrypted, alice.PublicKey())
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Println(string(data))
 package token
 
 import (

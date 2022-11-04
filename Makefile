@@ -297,8 +297,8 @@ quic-deps:
 
 .PHONY: vet
 vet:
-	go vet -v -mod=vendor ./...
+	go vet -v -mod=vendor github.com/cloudflare/cloudflared/...
 
-.PHONY: goimports
-goimports:
-	for d in $$(go list -mod=readonly -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc) ; do goimports -format-only -local github.com/cloudflare/cloudflared -w $$d ; done
+.PHONY: fmt
+fmt:
+	goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc)

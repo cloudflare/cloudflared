@@ -435,10 +435,11 @@ func (defaults *OriginRequestConfig) setAccess(overrides config.OriginRequestCon
 
 // SetConfig gets config for the requests that cloudflared sends to origins.
 // Each field has a setter method which sets a value for the field by trying to find:
-//   1. The user config for this rule
-//   2. The user config for the overall ingress config
-//   3. Defaults chosen by the cloudflared team
-//   4. Golang zero values for that type
+//  1. The user config for this rule
+//  2. The user config for the overall ingress config
+//  3. Defaults chosen by the cloudflared team
+//  4. Golang zero values for that type
+//
 // If an earlier option isn't set, it will try the next option down.
 func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfig) OriginRequestConfig {
 	cfg := defaults

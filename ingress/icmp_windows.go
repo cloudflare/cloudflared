@@ -376,20 +376,20 @@ func (ip *icmpProxy) icmpEchoRoundtrip(dst netip.Addr, echo *icmp.Echo) (echoRes
 }
 
 /*
-	Wrapper to call https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpsendecho
-	Parameters:
-	- IcmpHandle: Handle created by IcmpCreateFile
-	- DestinationAddress: IPv4 in the form of https://docs.microsoft.com/en-us/windows/win32/api/inaddr/ns-inaddr-in_addr#syntax
-	- RequestData: A pointer to echo data
-	- RequestSize: Number of bytes in buffer pointed by echo data
-	- RequestOptions: IP header options
-	- ReplyBuffer: A pointer to the buffer for echoReply, options and data
-	- ReplySize: Number of bytes allocated for ReplyBuffer
-	- Timeout: Timeout in milliseconds to wait for a reply
-	Returns:
-	- the number of replies in uint32 https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpsendecho#return-value
-	To retain the reference allocated objects, conversion from pointer to uintptr must happen as arguments to the
-	syscall function
+Wrapper to call https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpsendecho
+Parameters:
+- IcmpHandle: Handle created by IcmpCreateFile
+- DestinationAddress: IPv4 in the form of https://docs.microsoft.com/en-us/windows/win32/api/inaddr/ns-inaddr-in_addr#syntax
+- RequestData: A pointer to echo data
+- RequestSize: Number of bytes in buffer pointed by echo data
+- RequestOptions: IP header options
+- ReplyBuffer: A pointer to the buffer for echoReply, options and data
+- ReplySize: Number of bytes allocated for ReplyBuffer
+- Timeout: Timeout in milliseconds to wait for a reply
+Returns:
+- the number of replies in uint32 https://docs.microsoft.com/en-us/windows/win32/api/icmpapi/nf-icmpapi-icmpsendecho#return-value
+To retain the reference allocated objects, conversion from pointer to uintptr must happen as arguments to the
+syscall function
 */
 func (ip *icmpProxy) icmpSendEcho(dst netip.Addr, echo *icmp.Echo) (*echoV4Resp, error) {
 	dataSize := len(echo.Data)

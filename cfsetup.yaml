@@ -1,23 +1,29 @@
-pinned_go: &pinned_go go=1.18.6-1
-pinned_go_fips: &pinned_go_fips go-boring=1.18.6-1
+pinned_go: &pinned_go go=1.19.3-1
+pinned_go_fips: &pinned_go_fips go-boring=1.19.3-1
 
 build_dir: &build_dir /cfsetup_build
 default-flavor: bullseye
 stretch: &stretch
   build:
     build_dir: *build_dir
-    builddeps:
+    builddeps: &build_deps
       - *pinned_go
       - build-essential
+      - gotest-to-teamcity
+    pre-cache: &build_pre_cache
+      - export GOCACHE=/cfsetup_build/.cache/go-build
+      - go install golang.org/x/tools/cmd/goimports@latest
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
       - make cloudflared
   build-fips:
     build_dir: *build_dir
-    builddeps:
+    builddeps: &build_deps_fips
       - *pinned_go_fips
       - build-essential
+      - gotest-to-teamcity
+    pre-cache: *build_pre_cache
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
@@ -163,12 +169,8 @@ stretch: &stretch
       - make github-windows-upload
   test:
     build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - build-essential
-      - gotest-to-teamcity
-    pre-cache: &test_pre_cache
-      - go install golang.org/x/tools/cmd/goimports@latest
+    builddeps: *build_deps
+    pre-cache: *build_pre_cache
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
@@ -177,11 +179,8 @@ stretch: &stretch
       - make test | gotest-to-teamcity
   test-fips:
     build_dir: *build_dir
-    builddeps:
-      - *pinned_go_fips
-      - build-essential
-      - gotest-to-teamcity
-    pre-cache: *test_pre_cache
+    builddeps: *build_deps_fips
+    pre-cache: *build_pre_cache
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64

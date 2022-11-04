@@ -71,11 +71,14 @@ type EdgeAddr struct {
 // If the call to net.LookupSRV fails, try to fall back to DoT from Cloudflare directly.
 //
 // Note: Instead of DoT, we could also have used DoH. Either of these:
-//     - directly via the JSON API (https://1.1.1.1/dns-query?ct=application/dns-json&name=_origintunneld._tcp.argotunnel.com&type=srv)
-//     - indirectly via `tunneldns.NewUpstreamHTTPS()`
+//   - directly via the JSON API (https://1.1.1.1/dns-query?ct=application/dns-json&name=_origintunneld._tcp.argotunnel.com&type=srv)
+//   - indirectly via `tunneldns.NewUpstreamHTTPS()`
+//
 // But both of these cases miss out on a key feature from the stdlib:
-//     "The returned records are sorted by priority and randomized by weight within a priority."
-//     (https://golang.org/pkg/net/#Resolver.LookupSRV)
+//
+//	"The returned records are sorted by priority and randomized by weight within a priority."
+//	(https://golang.org/pkg/net/#Resolver.LookupSRV)
+//
 // Does this matter? I don't know. It may someday. Let's use DoT so we don't need to worry about it.
 // See also: Go feature request for stdlib-supported DoH: https://github.com/golang/go/issues/27552
 var fallbackLookupSRV = lookupSRVWithDOT

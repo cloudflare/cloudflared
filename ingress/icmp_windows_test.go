@@ -125,7 +125,7 @@ func TestParseEchoV6Reply(t *testing.T) {
 	}
 }
 
-//  TestSendEchoErrors makes sure icmpSendEcho handles error cases
+// TestSendEchoErrors makes sure icmpSendEcho handles error cases
 func TestSendEchoErrors(t *testing.T) {
 	testSendEchoErrors(t, netip.IPv4Unspecified())
 	testSendEchoErrors(t, netip.IPv6Unspecified())

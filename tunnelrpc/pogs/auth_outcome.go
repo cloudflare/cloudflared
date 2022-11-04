@@ -40,7 +40,6 @@ func (ar AuthenticateResponse) Outcome() AuthOutcome {
 }
 
 // AuthOutcome is a programmer-friendly sum type denoting the possible outcomes of Authenticate.
-//go-sumtype:decl AuthOutcome
 type AuthOutcome interface {
 	isAuthOutcome()
 	// Serialize into an AuthenticateResponse which can be sent via Capnp

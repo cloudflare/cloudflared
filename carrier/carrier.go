@@ -1,6 +1,6 @@
-//Package carrier provides a WebSocket proxy to carry or proxy a connection
-//from the local client to the edge. See it as a wrapper around any protocol
-//that it packages up in a WebSocket connection to the edge.
+// Package carrier provides a WebSocket proxy to carry or proxy a connection
+// from the local client to the edge. See it as a wrapper around any protocol
+// that it packages up in a WebSocket connection to the edge.
 package carrier
 
 import (
