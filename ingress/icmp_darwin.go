@@ -157,6 +157,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	}
 	span.SetAttributes(attribute.Int("assignedEchoID", int(assignedEchoID)))
 
+	shouldReplaceFunnelFunc := createShouldReplaceFunnelFunc(ip.logger, responder.datagramMuxer, pk, originalEcho.ID)
 	newFunnelFunc := func() (packet.Funnel, error) {
 		originalEcho, err := getICMPEcho(pk.Message)
 		if err != nil {
@@ -170,7 +171,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		return icmpFlow, nil
 	}
 	funnelID := echoFunnelID(assignedEchoID)
-	funnel, isNew, err := ip.srcFunnelTracker.GetOrRegister(funnelID, newFunnelFunc)
+	funnel, isNew, err := ip.srcFunnelTracker.GetOrRegister(funnelID, shouldReplaceFunnelFunc, newFunnelFunc)
 	if err != nil {
 		tracing.EndWithErrorStatus(span, err)
 		return err

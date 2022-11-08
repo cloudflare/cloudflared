@@ -108,13 +108,23 @@ func (ft *FunnelTracker) Get(id FunnelID) (Funnel, bool) {
 	return funnel, ok
 }
 
-// Registers a funnel. It replaces the current funnel.
-func (ft *FunnelTracker) GetOrRegister(id FunnelID, newFunnelFunc func() (Funnel, error)) (funnel Funnel, new bool, err error) {
+// Registers a funnel. If the `id` is already registered and `shouldReplaceFunc` returns true, it closes and replaces
+// the current funnel. If `newFunnelFunc` returns an error, the `id` will remain unregistered, even if it was registered
+// when calling this function.
+func (ft *FunnelTracker) GetOrRegister(
+	id FunnelID,
+	shouldReplaceFunc func(Funnel) bool,
+	newFunnelFunc func() (Funnel, error),
+) (funnel Funnel, new bool, err error) {
 	ft.lock.Lock()
 	defer ft.lock.Unlock()
 	currentFunnel, exists := ft.funnels[id]
 	if exists {
-		return currentFunnel, false, nil
+		if !shouldReplaceFunc(currentFunnel) {
+			return currentFunnel, false, nil
+		}
+		currentFunnel.Close()
+		delete(ft.funnels, id)
 	}
 	newFunnel, err := newFunnelFunc()
 	if err != nil {
@@ -124,7 +134,7 @@ func (ft *FunnelTracker) GetOrRegister(id FunnelID, newFunnelFunc func() (Funnel
 	return newFunnel, true, nil
 }
 
-// Unregisters a funnel if the funnel equals to the current funnel
+// Unregisters and closes a funnel if the funnel equals to the current funnel
 func (ft *FunnelTracker) Unregister(id FunnelID, funnel Funnel) (deleted bool) {
 	ft.lock.Lock()
 	defer ft.lock.Unlock()

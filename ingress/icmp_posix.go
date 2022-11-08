@@ -10,6 +10,7 @@ import (
 	"net/netip"
 
 	"github.com/google/gopacket/layers"
+	"github.com/rs/zerolog"
 	"golang.org/x/net/icmp"
 
 	"github.com/cloudflare/cloudflared/packet"
@@ -173,4 +174,31 @@ func toICMPEchoFlow(funnel packet.Funnel) (*icmpEchoFlow, error) {
 		return nil, fmt.Errorf("%v is not *ICMPEchoFunnel", funnel)
 	}
 	return icmpFlow, nil
+}
+
+func createShouldReplaceFunnelFunc(logger *zerolog.Logger, muxer muxer, pk *packet.ICMP, originalEchoID int) func(packet.Funnel) bool {
+	return func(existing packet.Funnel) bool {
+		existingFlow, err := toICMPEchoFlow(existing)
+		if err != nil {
+			logger.Err(err).
+				Str("src", pk.Src.String()).
+				Str("dst", pk.Dst.String()).
+				Int("originalEchoID", originalEchoID).
+				Msg("Funnel of wrong type found")
+			return true
+		}
+		// Each quic connection should have a unique muxer.
+		// If the existing flow has a different muxer, there's a new quic connection where return packets should be
+		// routed. Otherwise, return packets will be send to the first observed incoming connection, rather than the
+		// most recently observed connection.
+		if existingFlow.responder.datagramMuxer != muxer {
+			logger.Debug().
+				Str("src", pk.Src.String()).
+				Str("dst", pk.Dst.String()).
+				Int("originalEchoID", originalEchoID).
+				Msg("Replacing funnel with new responder")
+			return true
+		}
+		return false
+	}
 }

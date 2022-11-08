@@ -52,18 +52,28 @@ func TestFunnelIdleTimeout(t *testing.T) {
 			},
 		},
 	}
+	funnelID := flow3Tuple{
+		srcIP:          pk.Src,
+		dstIP:          pk.Dst,
+		originalEchoID: echoID,
+	}
 	muxer := newMockMuxer(0)
 	responder := packetResponder{
 		datagramMuxer: muxer,
 	}
 	require.NoError(t, proxy.Request(ctx, &pk, &responder))
 	validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
+	funnel1, found := proxy.srcFunnelTracker.Get(funnelID)
+	require.True(t, found)
 
 	// Send second request, should reuse the funnel
 	require.NoError(t, proxy.Request(ctx, &pk, &packetResponder{
-		datagramMuxer: nil,
+		datagramMuxer: muxer,
 	}))
 	validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
+	funnel2, found := proxy.srcFunnelTracker.Get(funnelID)
+	require.True(t, found)
+	require.Equal(t, funnel1, funnel2)
 
 	time.Sleep(idleTimeout * 2)
 	newMuxer := newMockMuxer(0)
