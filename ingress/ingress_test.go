@@ -674,6 +674,46 @@ ingress:
 	}
 }
 
+func TestParseAccessConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		cfg         config.AccessConfig
+		expectError bool
+	}{
+		{
+			name:        "Config required with teamName only",
+			cfg:         config.AccessConfig{Required: true, TeamName: "team"},
+			expectError: false,
+		},
+		{
+			name:        "required false",
+			cfg:         config.AccessConfig{Required: false},
+			expectError: false,
+		},
+		{
+			name:        "required true but empty config",
+			cfg:         config.AccessConfig{Required: true},
+			expectError: false,
+		},
+		{
+			name:        "complete config",
+			cfg:         config.AccessConfig{Required: true, TeamName: "team", AudTag: []string{"a"}},
+			expectError: false,
+		},
+		{
+			name:        "required true with audTags but no teamName",
+			cfg:         config.AccessConfig{Required: true, AudTag: []string{"a"}},
+			expectError: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateAccessConfiguration(&test.cfg)
+			require.Equal(t, err != nil, test.expectError)
+		})
+	}
+}
+
 func MustReadIngress(s string) *config.Configuration {
 	var conf config.Configuration
 	err := yaml.Unmarshal([]byte(s), &conf)

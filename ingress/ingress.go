@@ -175,18 +175,10 @@ func validateAccessConfiguration(cfg *config.AccessConfig) error {
 		return nil
 	}
 
-	// It is possible to set `required:true` and not have these two configured yet.
-	// But if one of them is configured, we'd validate for correctness.
-	if len(cfg.AudTag) == 0 && cfg.TeamName == "" {
-		return nil
-	}
-
-	if len(cfg.AudTag) == 0 {
-		return errors.New("access audtag cannot be empty")
-	}
-
-	if cfg.TeamName == "" {
-		return errors.New("access.TeamName cannot be blank")
+	// we allow for an initial setup where user can force Access but not configure the rest of the keys.
+	// however, if the user specified audTags but forgot teamName, we should alert it.
+	if cfg.TeamName == "" && len(cfg.AudTag) > 0 {
+		return errors.New("access.TeamName cannot be blank when access.audTags are present")
 	}
 
 	return nil
