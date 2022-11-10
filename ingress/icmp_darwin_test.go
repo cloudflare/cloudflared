@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 func TestSingleEchoIDTracker(t *testing.T) {
@@ -118,4 +120,10 @@ func (eit *echoIDTracker) get(key flow3Tuple) (id uint16, exist bool) {
 	defer eit.lock.Unlock()
 	id, exists := eit.mapping[key]
 	return id, exists
+}
+
+func getFunnel(t *testing.T, proxy *icmpProxy, tuple flow3Tuple) (packet.Funnel, bool) {
+	assignedEchoID, success := proxy.echoIDTracker.getOrAssign(tuple)
+	require.True(t, success)
+	return proxy.srcFunnelTracker.Get(echoFunnelID(assignedEchoID))
 }

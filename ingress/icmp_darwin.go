@@ -148,7 +148,6 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		dstIP:          pk.Dst,
 		originalEchoID: originalEcho.ID,
 	}
-	// TODO: TUN-6744 assign unique flow per (src, echo ID)
 	assignedEchoID, success := ip.echoIDTracker.getOrAssign(echoIDTrackerKey)
 	if !success {
 		err := fmt.Errorf("failed to assign unique echo ID")
