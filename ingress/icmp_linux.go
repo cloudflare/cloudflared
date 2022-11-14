@@ -220,7 +220,7 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 		attribute.Int("seq", reply.echo.Seq),
 	)
 	if err := flow.returnToSrc(reply); err != nil {
-		ip.logger.Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
+		ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 		tracing.EndWithErrorStatus(span, err)
 		return true, err
 	}

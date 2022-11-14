@@ -229,7 +229,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 			continue
 		}
 		if err := ip.sendReply(ctx, reply); err != nil {
-			ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
+			ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 			continue
 		}
 	}
