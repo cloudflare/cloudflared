@@ -74,7 +74,7 @@ func (sc *subcommandContext) client() (cfapi.Client, error) {
 		sc.c.String("api-url"),
 		credential.cert.AccountID,
 		credential.cert.ZoneID,
-		credential.cert.ServiceKey,
+		credential.cert.APIToken,
 		userAgent,
 		sc.log,
 	)
