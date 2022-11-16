@@ -39,22 +39,20 @@ const (
 Add to your {{.Home}}/.ssh/config:
 
 {{- if .ShortLivedCerts}}
-	{{- if eq .OS "windows"}}
-	ProxyCommand {{.Cloudflared}} access ssh-gen --hostname %h && ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1
-	{{- else}}
+{{- if eq .OS "windows"}}
+  ProxyCommand {{.Cloudflared}} access ssh-gen --hostname %h && ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1
+{{- else}}
   ProxyCommand bash -c '{{.Cloudflared}} access ssh-gen --hostname %h; ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1'
-	{{end}}
+{{end}}
 
 Host cfpipe-{{.Hostname}}
   HostName {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
-	{{- if eq .OS "windows"}}
-  IdentityFile {{.CurrWorkingDir}}/{{.Hostname}}-cf_key
+{{- if eq .OS "windows"}} IdentityFile {{.CurrWorkingDir}}/{{.Hostname}}-cf_key
   CertificateFile {{.CurrWorkingDir}}/{{.Hostname}}-cf_key-cert.pub
-	{{- else}}
-	IdentityFile ~/.cloudflared/{{.Hostname}}-cf_key
+{{- else}} IdentityFile ~/.cloudflared/{{.Hostname}}-cf_key
   CertificateFile ~/.cloudflared/{{.Hostname}}-cf_key-cert.pub
-	{{end}}
+{{end}}
 {{- else}}
 Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
