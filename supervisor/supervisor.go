@@ -45,7 +45,7 @@ type Supervisor struct {
 	config                  *TunnelConfig
 	orchestrator            *orchestration.Orchestrator
 	edgeIPs                 *edgediscovery.Edge
-	edgeTunnelServer        *EdgeTunnelServer
+	edgeTunnelServer        TunnelServer
 	tunnelErrors            chan tunnelError
 	tunnelsConnecting       map[int]chan struct{}
 	tunnelsProtocolFallback map[int]*protocolFallback
@@ -285,7 +285,8 @@ func (s *Supervisor) initialize(
 	for i := 1; i < s.config.HAConnections; i++ {
 		s.tunnelsProtocolFallback[i] = &protocolFallback{
 			retry.BackoffHandler{MaxRetries: s.config.Retries, RetryForever: true},
-			s.config.ProtocolSelector.Current(),
+			// Set the protocol we know the first tunnel connected with.
+			s.tunnelsProtocolFallback[0].protocol,
 			false,
 		}
 		go s.startTunnel(ctx, i, s.newConnectedTunnelSignal(i))

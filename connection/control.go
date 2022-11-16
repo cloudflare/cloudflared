@@ -85,7 +85,7 @@ func (c *controlStream) ServeControlStream(
 		return err
 	}
 
-	c.observer.logServerInfo(c.connIndex, registrationDetails.Location, c.edgeAddress, fmt.Sprintf("Connection %s registered", registrationDetails.UUID))
+	c.observer.logServerInfo(c.connIndex, registrationDetails.Location, c.edgeAddress, fmt.Sprintf("Connection %s registered with protocol: %s", registrationDetails.UUID, c.protocol))
 	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location)
 	c.connectedFuse.Connected()
 

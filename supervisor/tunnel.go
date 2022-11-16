@@ -206,6 +206,10 @@ type EdgeTunnelServer struct {
 	connAwareLogger *ConnAwareLogger
 }
 
+type TunnelServer interface {
+	Serve(ctx context.Context, connIndex uint8, protocolFallback *protocolFallback, connectedSignal *signal.Signal) error
+}
+
 func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolFallback *protocolFallback, connectedSignal *signal.Signal) error {
 	haConnections.Inc()
 	defer haConnections.Dec()
