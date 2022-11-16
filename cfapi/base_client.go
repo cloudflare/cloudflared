@@ -104,7 +104,7 @@ func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (
 	if bodyReader != nil {
 		req.Header.Set("Content-Type", jsonContentType)
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", r.authToken))
+	req.Header.Add("X-Auth-User-Service-Key", r.authToken)
 	req.Header.Add("Accept", "application/json;version=1")
 	return r.client.Do(req)
 }
