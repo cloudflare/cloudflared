@@ -1,3 +1,17 @@
+2022.11.0
+- 2022-11-16 Revert "TUN-6935: Cloudflared should use APIToken instead of serviceKey"
+- 2022-11-16 TUN-6929: Use same protocol for other connections as first one
+- 2022-11-14 TUN-6941: Reduce log level to debug when failing to proxy ICMP reply
+- 2022-11-14 TUN-6935: Cloudflared should use APIToken instead of serviceKey
+- 2022-11-14 TUN-6935: Cloudflared should use APIToken instead of serviceKey
+- 2022-11-11 TUN-6937: Bump golang.org/x/* packages to new release tags
+- 2022-11-10 ZTC-234: macOS tests
+- 2022-11-09 TUN-6927: Refactor validate access configuration to allow empty audTags only
+- 2022-11-08 ZTC-234: Replace ICMP funnels when ingress connection changes
+- 2022-11-04 TUN-6917: Bump go to 1.19.3
+- 2022-11-02 Issue #574: Better ssh config for short-lived cert (#763)
+- 2022-10-28 TUN-6898: Fix bug handling IPv6 based ingresses with missing port
+- 2022-10-28 TUN-6898: Refactor addPortIfMissing
 2022.10.3
 - 2022-10-24 TUN-6871: Add default feature to cloudflared to support EOF on QUIC connections
 - 2022-10-19 TUN-6876: Fix flaky TestTraceICMPRouterEcho by taking account request span can return before reply
