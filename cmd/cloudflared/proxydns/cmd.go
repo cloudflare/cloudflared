@@ -1,6 +1,7 @@
 package proxydns
 
 import (
+	"context"
 	"net"
 	"os"
 	"os/signal"
@@ -73,7 +74,7 @@ func Run(c *cli.Context) error {
 		log.Fatal().Err(err).Msg("Failed to open the metrics listener")
 	}
 
-	go metrics.ServeMetrics(metricsListener, nil, nil, "", nil, log)
+	go metrics.ServeMetrics(metricsListener, context.Background(), metrics.Config{}, log)
 
 	listener, err := tunneldns.CreateListener(
 		c.String("address"),

@@ -372,7 +372,12 @@ func StartServer(
 		defer wg.Done()
 		readinessServer := metrics.NewReadyServer(log, clientID)
 		observer.RegisterSink(readinessServer)
-		errC <- metrics.ServeMetrics(metricsListener, ctx.Done(), readinessServer, quickTunnelURL, orchestrator, log)
+		metricsConfig := metrics.Config{
+			ReadyServer:         readinessServer,
+			QuickTunnelHostname: quickTunnelURL,
+			Orchestrator:        orchestrator,
+		}
+		errC <- metrics.ServeMetrics(metricsListener, ctx, metricsConfig, log)
 	}()
 
 	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int("ha-connections"))
