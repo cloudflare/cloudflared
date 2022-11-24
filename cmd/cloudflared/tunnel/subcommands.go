@@ -783,7 +783,7 @@ func tokenCommand(c *cli.Context) error {
 		return err
 	}
 
-	fmt.Printf("%s", encodedToken)
+	fmt.Println(encodedToken)
 	return nil
 }
 
