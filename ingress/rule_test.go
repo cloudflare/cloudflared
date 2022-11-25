@@ -148,6 +148,16 @@ func Test_rule_matches(t *testing.T) {
 			},
 			want: true,
 		},
+		{
+			name: "Hostname with wildcard should not match if no dot present",
+			rule: Rule{
+				Hostname: "*.api.abc.cloud",
+			},
+			args: args{
+				requestURL: MustParseURL(t, "https://testing-api.abc.cloud"),
+			},
+			want: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

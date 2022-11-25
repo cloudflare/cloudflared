@@ -58,7 +58,7 @@ func matchHost(ruleHost, reqHost string) bool {
 
 	// Validate hostnames that use wildcards at the start
 	if strings.HasPrefix(ruleHost, "*.") {
-		toMatch := strings.TrimPrefix(ruleHost, "*.")
+		toMatch := strings.TrimPrefix(ruleHost, "*")
 		return strings.HasSuffix(reqHost, toMatch)
 	}
 	return false
