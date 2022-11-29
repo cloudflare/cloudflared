@@ -81,6 +81,8 @@ func NewQUICConnection(
 
 	session, err := quic.Dial(udpConn, edgeAddr, edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
+		// close the udp server socket in case of error connecting to the edge
+		udpConn.Close()
 		return nil, &EdgeQuicDialError{Cause: err}
 	}
 
