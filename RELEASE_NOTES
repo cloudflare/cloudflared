@@ -1,3 +1,8 @@
+2022.11.1
+- 2022-11-29 TUN-6981: We should close UDP socket if failed to connecto to edge
+- 2022-11-25 CUSTESC-23757: Fix a bug where a wildcard ingress rule would match an host without starting with a dot
+- 2022-11-24 TUN-6970: Print newline when printing tunnel token
+- 2022-11-22 TUN-6963: Refactor Metrics service setup
 2022.11.0
 - 2022-11-16 Revert "TUN-6935: Cloudflared should use APIToken instead of serviceKey"
 - 2022-11-16 TUN-6929: Use same protocol for other connections as first one
