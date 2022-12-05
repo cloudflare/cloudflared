@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -euxo pipefail
 
 if [[ "$(uname)" != "Darwin" ]] ; then
     echo "This should be run on macOS"
