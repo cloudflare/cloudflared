@@ -35,7 +35,9 @@ if [[ ! -z "$CFD_CODE_SIGN_KEY" ]]; then
   if [[ ! -z "$CFD_CODE_SIGN_PASS" ]]; then
     # write private key to disk and then import it keychain
     echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
-    out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1)
+    # we set || true  here and for every `security import invoke` because the  "duplicate SecKeychainItemImport" error 
+    # will cause set -e to exit 1. It is okay we do this because we deliberately handle this error in the lines below.
+    out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1) || true 
     exitcode=$?
     if [ -n "$out" ]; then
       if [ $exitcode -eq 0 ]; then
@@ -55,7 +57,7 @@ fi
 if [[ ! -z "$CFD_CODE_SIGN_CERT" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
-  out1=$(security import ${CODE_SIGN_CERT} -A 2>&1)
+  out1=$(security import ${CODE_SIGN_CERT} -A 2>&1) || true
   exitcode1=$?
   if [ -n "$out1" ]; then
     if [ $exitcode1 -eq 0 ]; then
@@ -77,7 +79,7 @@ if [[ ! -z "$CFD_INSTALLER_KEY" ]]; then
   if [[ ! -z "$CFD_INSTALLER_PASS" ]]; then
     # write private key to disk and then import it into the keychain
     echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
-    out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1)
+    out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1) || true
     exitcode2=$?
     if [ -n "$out2" ]; then
       if [ $exitcode2 -eq 0 ]; then
@@ -97,7 +99,7 @@ fi
 if [[ ! -z "$CFD_INSTALLER_CERT" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
-  out3=$(security import ${INSTALLER_CERT} -A 2>&1)
+  out3=$(security import ${INSTALLER_CERT} -A 2>&1) || true
   exitcode3=$?
   if [ -n "$out3" ]; then
     if [ $exitcode3 -eq 0 ]; then
