@@ -82,6 +82,15 @@ const (
 	LogFieldPIDPathname         = "pidPathname"
 	LogFieldTmpTraceFilename    = "tmpTraceFilename"
 	LogFieldTraceOutputFilepath = "traceOutputFilepath"
+
+	tunnelCmdErrorMessage = `You did not specify any valid additional argument to the cloudflared tunnel command. 
+
+If you are trying to run a Quick Tunnel then you need to explicitly pass the --url flag. 
+Eg. cloudflared tunnel --url localhost:8080/. 
+
+Please note that Quick Tunnels are meant to be ephemeral and should only be used for testing purposes. 
+For production usage, we recommend creating Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)
+`
 )
 
 var (
@@ -166,21 +175,27 @@ func TunnelCommand(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
 	if name := c.String("name"); name != "" { // Start a named tunnel
 		return runAdhocNamedTunnel(sc, name, c.String(CredFileFlag))
 	}
+
+	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
+	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("hello-world")
+	if !dnsProxyStandAlone(c, nil) && c.String("hostname") == "" && c.String("quick-service") != "" && shouldRunQuickTunnel {
+		return RunQuickTunnel(sc)
+	}
+
 	if ref := config.GetConfiguration().TunnelID; ref != "" {
 		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
 	}
 
-	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
-	// For now, default to legacy setup unless quick-service is specified
-	if !dnsProxyStandAlone(c, nil) && c.String("hostname") == "" && c.String("quick-service") != "" {
-		return RunQuickTunnel(sc)
+	// Start a classic tunnel if hostname is specified.
+	if c.String("hostname") != "" {
+		return runClassicTunnel(sc)
 	}
 
-	// Start a classic tunnel
-	return runClassicTunnel(sc)
+	return errors.New(tunnelCmdErrorMessage)
 }
 
 func Init(info *cliutil.BuildInfo, gracefulShutdown chan struct{}) {
