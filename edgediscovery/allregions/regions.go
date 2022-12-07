@@ -2,6 +2,7 @@ package allregions
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/rs/zerolog"
 )
@@ -85,6 +86,15 @@ func (rs *Regions) AddrUsedBy(connID int) *EdgeAddr {
 // GetUnusedAddr gets an unused addr from the edge, excluding the given addr. Prefer to use addresses
 // evenly across both regions.
 func (rs *Regions) GetUnusedAddr(excluding *EdgeAddr, connID int) *EdgeAddr {
+	// If both regions have the same number of available addrs, lets randomise which one
+	// we pick. The rest of this algorithm will continue to make sure we always use addresses
+	// evenly across both regions.
+	if rs.region1.AvailableAddrs() == rs.region2.AvailableAddrs() {
+		regions := []Region{rs.region1, rs.region2}
+		firstChoice := rand.Intn(2)
+		return getAddrs(excluding, connID, &regions[firstChoice], &regions[1-firstChoice])
+	}
+
 	if rs.region1.AvailableAddrs() > rs.region2.AvailableAddrs() {
 		return getAddrs(excluding, connID, &rs.region1, &rs.region2)
 	}
