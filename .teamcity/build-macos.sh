@@ -142,13 +142,8 @@ fi
 if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
   
-  # notarize the binary
-  if [[ ! -z "$CFD_NOTE_PASSWORD" ]]; then
-    zip "${BINARY_NAME}.zip" ${BINARY_NAME} 
-    xcrun altool --notarize-app -f "${BINARY_NAME}.zip" -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
-  fi
-fi
-
+ # notarize the binary
+ # TODO: https://jira.cfdata.org/browse/TUN-5789
 
 # creating build directory
 rm -rf $TARGET_DIRECTORY
@@ -173,10 +168,7 @@ if [[ ! -z "$PKG_SIGN_NAME" ]]; then
       ${PKGNAME}
 
       # notarize the package
-      if [[ ! -z "$CFD_NOTE_PASSWORD" ]]; then
-        xcrun altool --notarize-app -f ${PKGNAME} -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
-        xcrun stapler staple ${PKGNAME}
-      fi
+      # TODO: https://jira.cfdata.org/browse/TUN-5789
 else
     pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
