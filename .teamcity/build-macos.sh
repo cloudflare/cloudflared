@@ -144,6 +144,7 @@ if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   
  # notarize the binary
  # TODO: https://jira.cfdata.org/browse/TUN-5789
+fi
 
 # creating build directory
 rm -rf $TARGET_DIRECTORY
