@@ -241,7 +241,8 @@ func StartServer(
 	listeners := gracenet.Net{}
 	errC := make(chan error)
 
-	if config.GetConfiguration().Source() == "" {
+	// Only log for locally configured tunnels (Token is blank).
+	if config.GetConfiguration().Source() == "" && c.String(TunnelTokenFlag) == "" {
 		log.Info().Msg(config.ErrNoConfigFile.Error())
 	}
 
