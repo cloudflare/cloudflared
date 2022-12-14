@@ -14,7 +14,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/retry"
@@ -94,14 +93,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	tracker := tunnelstate.NewConnTracker(config.Log)
 	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
 
-	var edgeAddrHandler EdgeAddrHandler
-	if isStaticEdge { // static edge addresses
-		edgeAddrHandler = &IPAddrFallback{}
-	} else if config.EdgeIPVersion == allregions.IPv6Only || config.EdgeIPVersion == allregions.Auto {
-		edgeAddrHandler = &IPAddrFallback{}
-	} else { // IPv4Only
-		edgeAddrHandler = &DefaultAddrFallback{}
-	}
+	edgeAddrHandler := NewIPAddrFallback(config.MaxEdgeAddrRetries)
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,

@@ -612,6 +612,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  5,
 			Hidden: true,
 		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:   "max-edge-addr-retries",
+			Usage:  "Maximum number of times to retry on edge addrs before falling back to a lower protocol",
+			Value:  8,
+			Hidden: true,
+		}),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "retries",
