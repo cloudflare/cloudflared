@@ -1,3 +1,9 @@
+## 2022.12.0
+### Improvements
+- cloudflared now attempts to try other edge addresses before falling back to a lower protoocol.
+- cloudflared tunnel no longer spins up a quick tunnel. The call has to be explicit and provide a --url flag.
+- cloudflared will now randomly pick the first or second region to connect to instead of always connecting to region2 first.
+
 ## 2022.9.0
 ### New Features
 - cloudflared now rejects ingress rules with invalid http status codes for http_status.
