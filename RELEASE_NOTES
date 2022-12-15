@@ -1,3 +1,17 @@
+2022.12.0
+- 2022-12-14 TUN-6999: cloudflared should attempt other edge addresses before falling back on protocol
+- 2022-12-13 TUN-7004: Dont show local config dirs for remotely configured tuns
+- 2022-12-12 TUN-7003: Tempoarily disable erroneous notarize-app
+- 2022-12-12 TUN-7003: Add back a missing fi
+- 2022-12-07 TUN-7000: Reduce metric cardinality of closedConnections metric by removing error as tag
+- 2022-12-07 TUN-6994: Improve logging config file not found
+- 2022-12-07 TUN-7002: Randomise first region selection
+- 2022-12-07 TUN-6995: Disable quick-tunnels spin up by default
+- 2022-12-05 TUN-6984: Add bash set x to improve visibility during builds
+- 2022-12-05 TUN-6984: [CI] Ignore security import errors for code_sigining
+- 2022-12-05 TUN-6984: [CI] Don't fail on unset.
+- 2022-11-30 TUN-6984: Set euo pipefile for homebrew builds
+
 2022.11.1
 - 2022-11-29 TUN-6981: We should close UDP socket if failed to connecto to edge
 - 2022-11-25 CUSTESC-23757: Fix a bug where a wildcard ingress rule would match an host without starting with a dot
