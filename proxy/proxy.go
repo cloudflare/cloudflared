@@ -16,9 +16,9 @@ import (
 	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	"github.com/cloudflare/cloudflared/websocket"
 )
 
 const (
@@ -257,7 +257,7 @@ func (p *Proxy) proxyHTTPRequest(
 			reader: tr.Request.Body,
 		}
 
-		websocket.Stream(eyeballStream, rwc, p.log)
+		stream.Pipe(eyeballStream, rwc, p.log)
 		return nil
 	}
 

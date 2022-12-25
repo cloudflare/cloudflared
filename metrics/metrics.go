@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -37,10 +36,8 @@ type orchestrator interface {
 func newMetricsHandler(
 	config Config,
 	log *zerolog.Logger,
-) *mux.Router {
-	router := mux.NewRouter()
-	router.PathPrefix("/debug/").Handler(http.DefaultServeMux)
-
+) *http.ServeMux {
+	router := http.NewServeMux()
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "OK\n")
