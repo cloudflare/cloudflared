@@ -945,7 +945,7 @@ func (t *HTTPTransport) Send(url, authHeader string, packet *Packet) error {
 	io.Copy(ioutil.Discard, res.Body)
 	res.Body.Close()
 	if res.StatusCode != 200 {
-		return fmt.Errorf("raven: got http status %d", res.StatusCode)
+		return fmt.Errorf("raven: got http status %d - x-sentry-error: %s", res.StatusCode, res.Header.Get("X-Sentry-Error"))
 	}
 	return nil
 }

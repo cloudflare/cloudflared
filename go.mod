@@ -10,7 +10,8 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/facebookgo/grace v0.0.0-20180706040059-75cf19382434
 	github.com/fsnotify/fsnotify v1.4.9
-	github.com/getsentry/raven-go v0.0.0-20180517221441-ed7bcb39ff10
+	github.com/getsentry/raven-go v0.2.0
+	github.com/getsentry/sentry-go v0.16.0
 	github.com/gobwas/ws v1.0.4
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/google/gopacket v1.1.19
@@ -18,7 +19,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/json-iterator/go v1.1.12
 	github.com/lucas-clemente/quic-go v0.28.1
-	github.com/mattn/go-colorable v0.1.8
+	github.com/mattn/go-colorable v0.1.13
 	github.com/miekg/dns v1.1.45
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.9.1
@@ -39,7 +40,7 @@ require (
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.3.0
 	golang.org/x/term v0.3.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/coreos/go-oidc.v2 v2.2.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/square/go-jose.v2 v2.6.0
@@ -48,10 +49,10 @@ require (
 )
 
 require (
-	github.com/BurntSushi/toml v0.3.1 // indirect
+	github.com/BurntSushi/toml v1.2.0 // indirect
 	github.com/apparentlymart/go-cidr v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/certifi/gocertifi v0.0.0-20200211180108-c7c1fbc02894 // indirect
+	github.com/certifi/gocertifi v0.0.0-20210507211836-431795d63e8d // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/cloudflare/circl v1.2.1-0.20220809205628-0a9554f37a47 // indirect
@@ -76,7 +77,7 @@ require (
 	github.com/marten-seemann/qtls-go1-17 v0.1.2 // indirect
 	github.com/marten-seemann/qtls-go1-18 v0.1.2 // indirect
 	github.com/marten-seemann/qtls-go1-19 v0.1.0-beta.1 // indirect
-	github.com/mattn/go-isatty v0.0.12 // indirect
+	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect

@@ -14,7 +14,7 @@ import (
 
 	"github.com/coreos/go-systemd/daemon"
 	"github.com/facebookgo/grace/gracenet"
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -258,7 +258,13 @@ func StartServer(
 	namedTunnel *connection.NamedTunnelProperties,
 	log *zerolog.Logger,
 ) error {
-	_ = raven.SetDSN(sentryDSN)
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn:     sentryDSN,
+		Release: c.App.Version,
+	})
+	if err != nil {
+		return err
+	}
 	var wg sync.WaitGroup
 	listeners := gracenet.Net{}
 	errC := make(chan error)
