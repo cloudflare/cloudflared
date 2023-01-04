@@ -306,6 +306,7 @@ func (c *Conn) clientHandshake(ctx context.Context) (err error) {
 		c.config.ClientSessionCache.Put(cacheKey, toClientSessionState(hs.session))
 	}
 
+	c.updateConnectionState()
 	return nil
 }
 

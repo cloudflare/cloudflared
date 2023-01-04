@@ -132,10 +132,10 @@ github.com/cloudflare/circl v1.2.1-0.20220809205628-0a9554f37a47 h1:YzpECHxZ9TzO
 github.com/cloudflare/circl v1.2.1-0.20220809205628-0a9554f37a47/go.mod h1:qhx8gBILsYlbam7h09SvHDSkjpe3TfLA7b/z4rxJvkE=
 github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc h1:Dvk3ySBsOm5EviLx6VCyILnafPcQinXGP5jbTdHUJgE=
 github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc/go.mod h1:HlgKKR8V5a1wroIDDIz3/A+T+9Janfq+7n1P5sEFdi0=
-github.com/cloudflare/qtls-pq v0.0.0-20221010110800-4f3769902fe0 h1:LEsjEHfKnIJEJU9QEIPVRuslxpBu+2kG2DXhxpkGT+o=
-github.com/cloudflare/qtls-pq v0.0.0-20221010110800-4f3769902fe0/go.mod h1:aIsWqC0WXyUiUxBl/RfxAjDyWE9CCLqvSMnCMTd/+bc=
-github.com/cloudflare/qtls-pq v0.0.0-20221010110824-0053225e48b2 h1:ErNoeVNqFXV+emlf4gY7Ms7/0DbQ8PT2UFxNyWBc51Q=
-github.com/cloudflare/qtls-pq v0.0.0-20221010110824-0053225e48b2/go.mod h1:mW0BgKFFDAiSmOdUwoORtjo0V2vqw5QzVYRtKQqw/Jg=
+github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e h1:frfo+L0qloEb6Vj+qjS4pbAYSJQZAlUnKZu0uJoErac=
+github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e/go.mod h1:mW0BgKFFDAiSmOdUwoORtjo0V2vqw5QzVYRtKQqw/Jg=
+github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e h1:RtQDXvDi0PK3EonP0v7zkE5/rApK4MsgRATCdD+ughg=
+github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e/go.mod h1:aIsWqC0WXyUiUxBl/RfxAjDyWE9CCLqvSMnCMTd/+bc=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/cncf/udpa/go v0.0.0-20200629203442-efcf912fb354/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=

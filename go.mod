@@ -111,8 +111,8 @@ replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 // Post-quantum tunnel RTG-1339
 replace (
 	// branch go1.18
-	github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20221010110824-0053225e48b2
+	github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e
 
 	// branch go1.19
-	github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20221010110800-4f3769902fe0
+	github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e
 )

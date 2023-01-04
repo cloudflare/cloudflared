@@ -125,6 +125,9 @@ type Conn struct {
 	used0RTT bool
 
 	tmp [16]byte
+
+	connStateMutex sync.Mutex
+	connState      ConnectionStateWith0RTT
 }
 
 // Access to net.Conn methods.
@@ -1533,19 +1536,16 @@ func (c *Conn) handshakeContext(ctx context.Context) (ret error) {
 
 // ConnectionState returns basic TLS details about the connection.
 func (c *Conn) ConnectionState() ConnectionState {
-	c.handshakeMutex.Lock()
-	defer c.handshakeMutex.Unlock()
-	return c.connectionStateLocked()
+	c.connStateMutex.Lock()
+	defer c.connStateMutex.Unlock()
+	return c.connState.ConnectionState
 }
 
 // ConnectionStateWith0RTT returns basic TLS details (incl. 0-RTT status) about the connection.
 func (c *Conn) ConnectionStateWith0RTT() ConnectionStateWith0RTT {
-	c.handshakeMutex.Lock()
-	defer c.handshakeMutex.Unlock()
-	return ConnectionStateWith0RTT{
-		ConnectionState: c.connectionStateLocked(),
-		Used0RTT:        c.used0RTT,
-	}
+	c.connStateMutex.Lock()
+	defer c.connStateMutex.Unlock()
+	return c.connState
 }
 
 func (c *Conn) connectionStateLocked() ConnectionState {
@@ -1574,6 +1574,15 @@ func (c *Conn) connectionStateLocked() ConnectionState {
 		state.ekm = c.ekm
 	}
 	return toConnectionState(state)
+}
+
+func (c *Conn) updateConnectionState() {
+	c.connStateMutex.Lock()
+	defer c.connStateMutex.Unlock()
+	c.connState = ConnectionStateWith0RTT{
+		Used0RTT:        c.used0RTT,
+		ConnectionState: c.connectionStateLocked(),
+	}
 }
 
 // OCSPResponse returns the stapled OCSP response from the TLS server, if

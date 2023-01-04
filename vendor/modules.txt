@@ -194,10 +194,10 @@ github.com/marten-seemann/qtls-go1-16
 # github.com/marten-seemann/qtls-go1-17 v0.1.2
 ## explicit; go 1.17
 github.com/marten-seemann/qtls-go1-17
-# github.com/marten-seemann/qtls-go1-18 v0.1.2 => github.com/cloudflare/qtls-pq v0.0.0-20221010110824-0053225e48b2
+# github.com/marten-seemann/qtls-go1-18 v0.1.2 => github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e
 ## explicit; go 1.18
 github.com/marten-seemann/qtls-go1-18
-# github.com/marten-seemann/qtls-go1-19 v0.1.0-beta.1 => github.com/cloudflare/qtls-pq v0.0.0-20221010110800-4f3769902fe0
+# github.com/marten-seemann/qtls-go1-19 v0.1.0-beta.1 => github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e
 ## explicit; go 1.19
 github.com/marten-seemann/qtls-go1-19
 # github.com/mattn/go-colorable v0.1.8
@@ -578,5 +578,5 @@ zombiezen.com/go/capnproto2/std/capnp/rpc
 # github.com/lucas-clemente/quic-go => github.com/chungthuang/quic-go v0.27.1-0.20220809135021-ca330f1dec9f
 # github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
 # gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
-# github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20221010110824-0053225e48b2
-# github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20221010110800-4f3769902fe0
+# github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e
+# github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e
