@@ -108,6 +108,9 @@ else
 	PACKAGE_ARCH := $(TARGET_ARCH)
 endif
 
+#for FIPS compliance, FPM defaults to MD5.
+RPM_DIGEST := --rpm-digest sha256
+
 .PHONY: all
 all: cloudflared test
 
@@ -163,13 +166,13 @@ define build_package
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
 	cp cloudflared.1 $(PACKAGE_DIR)/cloudflared.1
-	fakeroot fpm -C $(PACKAGE_DIR) -s dir -t $(1) \
+	fpm -C $(PACKAGE_DIR) -s dir -t $(1) \
 		--description 'Cloudflare Tunnel daemon' \
 		--vendor 'Cloudflare' \
 		--license 'Apache License Version 2.0' \
 		--url 'https://github.com/cloudflare/cloudflared' \
 		-m 'Cloudflare <support@cloudflare.com>' \
-	    -a $(PACKAGE_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
+	    -a $(PACKAGE_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(RPM_DIGEST) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
 		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(INSTALL_MANDIR)
 endef
 
