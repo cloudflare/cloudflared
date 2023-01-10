@@ -716,6 +716,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QU
 	qc, err := NewQUICConnection(
 		testQUICConfig,
 		udpListenerAddr,
+		nil,
 		index,
 		tlsClientConfig,
 		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
