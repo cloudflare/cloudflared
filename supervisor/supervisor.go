@@ -94,6 +94,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
 
 	edgeAddrHandler := NewIPAddrFallback(config.MaxEdgeAddrRetries)
+	edgeBindAddr := config.EdgeBindAddr
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
@@ -102,6 +103,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		credentialManager: reconnectCredentialManager,
 		edgeAddrs:         edgeIPs,
 		edgeAddrHandler:   edgeAddrHandler,
+		edgeBindAddr:      edgeBindAddr,
 		tracker:           tracker,
 		reconnectCh:       reconnectCh,
 		gracefulShutdownC: gracefulShutdownC,
@@ -384,7 +386,7 @@ func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) 
 		return nil, err
 	}
 
-	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.EdgeTLSConfigs[connection.H2mux], arbitraryEdgeIP.TCP)
+	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.EdgeTLSConfigs[connection.H2mux], arbitraryEdgeIP.TCP, nil)
 	if err != nil {
 		return nil, err
 	}

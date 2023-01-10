@@ -83,12 +83,12 @@ const (
 	LogFieldTmpTraceFilename    = "tmpTraceFilename"
 	LogFieldTraceOutputFilepath = "traceOutputFilepath"
 
-	tunnelCmdErrorMessage = `You did not specify any valid additional argument to the cloudflared tunnel command. 
+	tunnelCmdErrorMessage = `You did not specify any valid additional argument to the cloudflared tunnel command.
 
-If you are trying to run a Quick Tunnel then you need to explicitly pass the --url flag. 
-Eg. cloudflared tunnel --url localhost:8080/. 
+If you are trying to run a Quick Tunnel then you need to explicitly pass the --url flag.
+Eg. cloudflared tunnel --url localhost:8080/.
 
-Please note that Quick Tunnels are meant to be ephemeral and should only be used for testing purposes. 
+Please note that Quick Tunnels are meant to be ephemeral and should only be used for testing purposes.
 For production usage, we recommend creating Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)
 `
 )
@@ -539,9 +539,15 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    "edge-ip-version",
-			Usage:   "Cloudflare Edge ip address version to connect with. {4, 6, auto}",
+			Usage:   "Cloudflare Edge IP address version to connect with. {4, 6, auto}",
 			EnvVars: []string{"TUNNEL_EDGE_IP_VERSION"},
 			Value:   "4",
+			Hidden:  false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "edge-bind-address",
+			Usage:   "Bind to IP address for outgoing connections to Cloudflare Edge.",
+			EnvVars: []string{"TUNNEL_EDGE_BIND_ADDRESS"},
 			Hidden:  false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{

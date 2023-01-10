@@ -49,6 +49,7 @@ type TunnelConfig struct {
 	EdgeAddrs          []string
 	Region             string
 	EdgeIPVersion      allregions.ConfigIPVersion
+	EdgeBindAddr       net.IP
 	HAConnections      int
 	IncidentLookup     IncidentLookup
 	IsAutoupdated      bool
@@ -209,6 +210,7 @@ type EdgeTunnelServer struct {
 	credentialManager *reconnectCredentialManager
 	edgeAddrHandler   EdgeAddrHandler
 	edgeAddrs         *edgediscovery.Edge
+	edgeBindAddr      net.IP
 	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
 	tracker           *tunnelstate.ConnTracker
@@ -499,7 +501,7 @@ func (e *EdgeTunnelServer) serveConnection(
 			connIndex)
 
 	case connection.HTTP2, connection.HTTP2Warp:
-		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, e.config.EdgeTLSConfigs[protocol], addr.TCP)
+		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, e.config.EdgeTLSConfigs[protocol], addr.TCP, e.edgeBindAddr)
 		if err != nil {
 			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection with Cloudflare edge")
 			return err, true
@@ -518,7 +520,7 @@ func (e *EdgeTunnelServer) serveConnection(
 		}
 
 	default:
-		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, e.config.EdgeTLSConfigs[protocol], addr.TCP)
+		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, e.config.EdgeTLSConfigs[protocol], addr.TCP, e.edgeBindAddr)
 		if err != nil {
 			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection with Cloudflare edge")
 			return err, true
@@ -678,6 +680,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	quicConn, err := connection.NewQUICConnection(
 		quicConfig,
 		edgeAddr,
+		e.edgeBindAddr,
 		connIndex,
 		tlsConfig,
 		e.orchestrator,

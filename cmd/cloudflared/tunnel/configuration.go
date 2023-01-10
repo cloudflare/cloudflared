@@ -48,7 +48,7 @@ var (
 	secretFlags     = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 	defaultFeatures = []string{supervisor.FeatureAllowRemoteConfig, supervisor.FeatureSerializedHeaders, supervisor.FeatureDatagramV2, supervisor.FeatureQUICSupportEOF}
 
-	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version"}
+	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address"}
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -349,6 +349,11 @@ func prepareTunnelConfig(
 		return nil, nil, err
 	}
 
+	edgeBindAddr, err := parseConfigBindAddress(c.String("edge-bind-address"))
+	if err != nil {
+		return nil, nil, err
+	}
+
 	var pqKexIdx int
 	if needPQ {
 		pqKexIdx = mathRand.Intn(len(supervisor.PQKexes))
@@ -366,6 +371,7 @@ func prepareTunnelConfig(
 		EdgeAddrs:       c.StringSlice("edge"),
 		Region:          c.String("region"),
 		EdgeIPVersion:   edgeIPVersion,
+		EdgeBindAddr:    edgeBindAddr,
 		HAConnections:   c.Int("ha-connections"),
 		IncidentLookup:  supervisor.NewIncidentLookup(),
 		IsAutoupdated:   c.Bool("is-autoupdated"),
@@ -461,6 +467,18 @@ func parseConfigIPVersion(version string) (v allregions.ConfigIPVersion, err err
 		err = fmt.Errorf("invalid value for edge-ip-version: %s", version)
 	}
 	return
+}
+
+func parseConfigBindAddress(ipstr string) (net.IP, error) {
+	// Unspecified - it's fine
+	if ipstr == "" {
+		return nil, nil
+	}
+	ip := net.ParseIP(ipstr)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid value for edge-bind-address: %s", ipstr)
+	}
+	return ip, nil
 }
 
 func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRouterConfig, error) {
