@@ -68,7 +68,6 @@ type TunnelConfig struct {
 	PQKexIdx int
 
 	NamedTunnel      *connection.NamedTunnelProperties
-	ClassicTunnel    *connection.ClassicTunnelProperties
 	MuxerConfig      *connection.MuxerConfig
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
@@ -577,12 +576,8 @@ func (e *EdgeTunnelServer) serveH2mux(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		if e.config.NamedTunnel != nil {
-			connOptions := e.config.connectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
-			return handler.ServeNamedTunnel(serveCtx, e.config.NamedTunnel, connOptions, connectedFuse)
-		}
-		registrationOptions := e.config.registrationOptions(connIndex, edgeConn.LocalAddr().String(), e.cloudflaredUUID)
-		return handler.ServeClassicTunnel(serveCtx, e.config.ClassicTunnel, e.credentialManager, registrationOptions, connectedFuse)
+		connOptions := e.config.connectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
+		return handler.ServeNamedTunnel(serveCtx, e.config.NamedTunnel, connOptions, connectedFuse)
 	})
 
 	errGroup.Go(func() error {
