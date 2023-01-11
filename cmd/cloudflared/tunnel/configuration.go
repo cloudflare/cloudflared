@@ -348,10 +348,23 @@ func prepareTunnelConfig(
 	if err != nil {
 		return nil, nil, err
 	}
-
 	edgeBindAddr, err := parseConfigBindAddress(c.String("edge-bind-address"))
 	if err != nil {
 		return nil, nil, err
+	}
+	if ok, err := isIPHostLocal(edgeBindAddr); !ok {
+		if err != nil {
+			// There could be unforeseen reasons that net.InterfaceAddrs() may fail
+			// Better not to be fatal here, or it could be annoying for users
+			log.Warn().Msgf("Cannot determine if edge-bind-address is available: %v", err)
+		} else {
+			return nil, nil, fmt.Errorf("edge-bind-address is not local to this host: %s", edgeBindAddr)
+		}
+	}
+	edgeIPVersion, err = adjustIPVersionByBindAddress(edgeIPVersion, edgeBindAddr)
+	if err != nil {
+		// This is not a fatal error, we just overrode edgeIPVersion
+		log.Warn().Msgf("Overriding edge-ip-version to %s: %v", edgeIPVersion, err)
 	}
 
 	var pqKexIdx int
@@ -479,6 +492,37 @@ func parseConfigBindAddress(ipstr string) (net.IP, error) {
 		return nil, fmt.Errorf("invalid value for edge-bind-address: %s", ipstr)
 	}
 	return ip, nil
+}
+
+func isIPHostLocal(ip net.IP) (bool, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false, err
+	}
+	for _, addr := range addrs {
+		if ip.Equal(addr.(*net.IPNet).IP) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func adjustIPVersionByBindAddress(ipVersion allregions.ConfigIPVersion, ip net.IP) (allregions.ConfigIPVersion, error) {
+	if ip == nil {
+		return ipVersion, nil
+	}
+	// https://pkg.go.dev/net#IP.To4: "If ip is not an IPv4 address, To4 returns nil."
+	if ip.To4() != nil {
+		if ipVersion == allregions.IPv6Only {
+			return allregions.IPv4Only, fmt.Errorf("IPv4 bind address is specified, but edge-ip-version is IPv6")
+		}
+		return allregions.IPv4Only, nil
+	} else {
+		if ipVersion == allregions.IPv4Only {
+			return allregions.IPv6Only, fmt.Errorf("IPv6 bind address is specified, but edge-ip-version is IPv4")
+		}
+		return allregions.IPv6Only, nil
+	}
 }
 
 func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRouterConfig, error) {

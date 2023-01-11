@@ -41,6 +41,19 @@ const (
 	IPv6Only ConfigIPVersion = 6
 )
 
+func (c ConfigIPVersion) String() string {
+	switch c {
+	case Auto:
+		return "auto"
+	case IPv4Only:
+		return "4"
+	case IPv6Only:
+		return "6"
+	default:
+		return ""
+	}
+}
+
 // IPVersion is the IP version of an EdgeAddr
 type EdgeIPVersion int8
 
