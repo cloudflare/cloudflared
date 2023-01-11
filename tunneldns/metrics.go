@@ -35,7 +35,7 @@ func (p MetricsPlugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dn
 
 	// Update built-in metrics
 	server := metrics.WithServer(ctx)
-	vars.Report(server, state, ".", rcode.ToString(rw.Rcode), pluginName, rw.Len, rw.Start)
+	vars.Report(server, state, ".", "", rcode.ToString(rw.Rcode), pluginName, rw.Len, rw.Start)
 
 	return status, err
 }

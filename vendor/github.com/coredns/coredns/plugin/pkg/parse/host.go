@@ -32,7 +32,6 @@ func stripZone(host string) string {
 func HostPortOrFile(s ...string) ([]string, error) {
 	var servers []string
 	for _, h := range s {
-
 		trans, host := Transport(h)
 
 		addr, _, err := net.SplitHostPort(host)

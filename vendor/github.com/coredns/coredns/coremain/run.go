@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -95,7 +96,7 @@ func confLoader(serverType string) (caddy.Input, error) {
 		return caddy.CaddyfileFromPipe(os.Stdin, serverType)
 	}
 
-	contents, err := os.ReadFile(conf)
+	contents, err := os.ReadFile(filepath.Clean(conf))
 	if err != nil {
 		return nil, err
 	}

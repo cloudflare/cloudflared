@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package coredns.dns;
-option go_package = "pb";
+option go_package = ".;pb";
 
 message DnsPacket {
 	bytes msg = 1;

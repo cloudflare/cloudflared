@@ -39,7 +39,7 @@ func setup(c *caddy.Controller) error {
 		for _, h := range conf.ListenHosts {
 			addrstr := conf.Transport + "://" + net.JoinHostPort(h, conf.Port)
 			for _, p := range conf.Handlers() {
-				vars.PluginEnabled.WithLabelValues(addrstr, conf.Zone, p.Name()).Set(1)
+				vars.PluginEnabled.WithLabelValues(addrstr, conf.Zone, conf.ViewName, p.Name()).Set(1)
 			}
 		}
 		return nil
@@ -49,7 +49,7 @@ func setup(c *caddy.Controller) error {
 		for _, h := range conf.ListenHosts {
 			addrstr := conf.Transport + "://" + net.JoinHostPort(h, conf.Port)
 			for _, p := range conf.Handlers() {
-				vars.PluginEnabled.WithLabelValues(addrstr, conf.Zone, p.Name()).Set(1)
+				vars.PluginEnabled.WithLabelValues(addrstr, conf.Zone, conf.ViewName, p.Name()).Set(1)
 			}
 		}
 		return nil

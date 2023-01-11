@@ -125,7 +125,6 @@ func (h Host) NormalizeExact() []string {
 	}
 	for i := range hosts {
 		hosts[i] = Name(hosts[i]).Normalize()
-
 	}
 	return hosts
 }

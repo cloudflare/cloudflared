@@ -34,6 +34,7 @@ var Directives = []string{
 	"any",
 	"chaos",
 	"loadbalance",
+	"tsig",
 	"cache",
 	"rewrite",
 	"header",
@@ -59,4 +60,5 @@ var Directives = []string{
 	"whoami",
 	"on",
 	"sign",
+	"view",
 }

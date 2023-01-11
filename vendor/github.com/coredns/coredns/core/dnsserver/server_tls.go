@@ -28,9 +28,11 @@ func NewServerTLS(addr string, group []*Config) (*ServerTLS, error) {
 	// The *tls* plugin must make sure that multiple conflicting
 	// TLS configuration returns an error: it can only be specified once.
 	var tlsConfig *tls.Config
-	for _, conf := range s.zones {
-		// Should we error if some configs *don't* have TLS?
-		tlsConfig = conf.TLSConfig
+	for _, z := range s.zones {
+		for _, conf := range z {
+			// Should we error if some configs *don't* have TLS?
+			tlsConfig = conf.TLSConfig
+		}
 	}
 
 	return &ServerTLS{Server: s, tlsConfig: tlsConfig}, nil

@@ -66,7 +66,7 @@ func (c *Cache) Remove(key uint64) {
 // Len returns the number of elements in the cache.
 func (c *Cache) Len() int {
 	l := 0
-	for _, s := range c.shards {
+	for _, s := range &c.shards {
 		l += s.Len()
 	}
 	return l
@@ -74,7 +74,7 @@ func (c *Cache) Len() int {
 
 // Walk walks each shard in the cache.
 func (c *Cache) Walk(f func(map[uint64]interface{}, uint64) bool) {
-	for _, s := range c.shards {
+	for _, s := range &c.shards {
 		s.Walk(f)
 	}
 }

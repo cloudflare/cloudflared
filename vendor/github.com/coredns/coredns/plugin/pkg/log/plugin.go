@@ -27,6 +27,7 @@ func (p P) Debug(v ...interface{}) {
 	if !D.Value() {
 		return
 	}
+	ls.debug(p.plugin, v...)
 	p.log(debug, v...)
 }
 
@@ -35,29 +36,56 @@ func (p P) Debugf(format string, v ...interface{}) {
 	if !D.Value() {
 		return
 	}
+	ls.debugf(p.plugin, format, v...)
 	p.logf(debug, format, v...)
 }
 
 // Info logs as log.Info.
-func (p P) Info(v ...interface{}) { p.log(info, v...) }
+func (p P) Info(v ...interface{}) {
+	ls.info(p.plugin, v...)
+	p.log(info, v...)
+}
 
 // Infof logs as log.Infof.
-func (p P) Infof(format string, v ...interface{}) { p.logf(info, format, v...) }
+func (p P) Infof(format string, v ...interface{}) {
+	ls.infof(p.plugin, format, v...)
+	p.logf(info, format, v...)
+}
 
 // Warning logs as log.Warning.
-func (p P) Warning(v ...interface{}) { p.log(warning, v...) }
+func (p P) Warning(v ...interface{}) {
+	ls.warning(p.plugin, v...)
+	p.log(warning, v...)
+}
 
 // Warningf logs as log.Warningf.
-func (p P) Warningf(format string, v ...interface{}) { p.logf(warning, format, v...) }
+func (p P) Warningf(format string, v ...interface{}) {
+	ls.warningf(p.plugin, format, v...)
+	p.logf(warning, format, v...)
+}
 
 // Error logs as log.Error.
-func (p P) Error(v ...interface{}) { p.log(err, v...) }
+func (p P) Error(v ...interface{}) {
+	ls.error(p.plugin, v...)
+	p.log(err, v...)
+}
 
 // Errorf logs as log.Errorf.
-func (p P) Errorf(format string, v ...interface{}) { p.logf(err, format, v...) }
+func (p P) Errorf(format string, v ...interface{}) {
+	ls.errorf(p.plugin, format, v...)
+	p.logf(err, format, v...)
+}
 
 // Fatal logs as log.Fatal and calls os.Exit(1).
-func (p P) Fatal(v ...interface{}) { p.log(fatal, v...); os.Exit(1) }
+func (p P) Fatal(v ...interface{}) {
+	ls.fatal(p.plugin, v...)
+	p.log(fatal, v...)
+	os.Exit(1)
+}
 
 // Fatalf logs as log.Fatalf and calls os.Exit(1).
-func (p P) Fatalf(format string, v ...interface{}) { p.logf(fatal, format, v...); os.Exit(1) }
+func (p P) Fatalf(format string, v ...interface{}) {
+	ls.fatalf(p.plugin, format, v...)
+	p.logf(fatal, format, v...)
+	os.Exit(1)
+}

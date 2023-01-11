@@ -24,7 +24,5 @@ func (r *Recorder) WriteMsg(res *dns.Msg) error {
 	_, r.Caller[0], _, _ = runtime.Caller(1)
 	_, r.Caller[1], _, _ = runtime.Caller(2)
 	_, r.Caller[2], _, _ = runtime.Caller(3)
-	r.Len += res.Len()
-	r.Msg = res
-	return r.ResponseWriter.WriteMsg(res)
+	return r.Recorder.WriteMsg(res)
 }

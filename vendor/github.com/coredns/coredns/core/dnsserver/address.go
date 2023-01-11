@@ -49,12 +49,23 @@ func newOverlapZone() *zoneOverlap {
 // registerAndCheck adds a new zoneAddr for validation, it returns information about existing or overlapping with already registered
 // we consider that an unbound address is overlapping all bound addresses for same zone, same port
 func (zo *zoneOverlap) registerAndCheck(z zoneAddr) (existingZone *zoneAddr, overlappingZone *zoneAddr) {
+	existingZone, overlappingZone = zo.check(z)
+	if existingZone != nil || overlappingZone != nil {
+		return existingZone, overlappingZone
+	}
+	// there is no overlap, keep the current zoneAddr for future checks
+	zo.registeredAddr[z] = z
+	zo.unboundOverlap[z.unbound()] = z
+	return nil, nil
+}
 
+// check validates a zoneAddr for overlap without registering it
+func (zo *zoneOverlap) check(z zoneAddr) (existingZone *zoneAddr, overlappingZone *zoneAddr) {
 	if exist, ok := zo.registeredAddr[z]; ok {
 		// exact same zone already registered
 		return &exist, nil
 	}
-	uz := zoneAddr{Zone: z.Zone, Address: "", Port: z.Port, Transport: z.Transport}
+	uz := z.unbound()
 	if already, ok := zo.unboundOverlap[uz]; ok {
 		if z.Address == "" {
 			// current is not bound to an address, but there is already another zone with a bind address registered
@@ -65,8 +76,11 @@ func (zo *zoneOverlap) registerAndCheck(z zoneAddr) (existingZone *zoneAddr, ove
 			return nil, &uz
 		}
 	}
-	// there is no overlap, keep the current zoneAddr for future checks
-	zo.registeredAddr[z] = z
-	zo.unboundOverlap[uz] = z
+	// there is no overlap
 	return nil, nil
+}
+
+// unbound returns an unbound version of the zoneAddr
+func (z zoneAddr) unbound() zoneAddr {
+	return zoneAddr{Zone: z.Zone, Address: "", Port: z.Port, Transport: z.Transport}
 }
