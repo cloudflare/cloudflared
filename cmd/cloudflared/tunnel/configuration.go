@@ -352,14 +352,8 @@ func prepareTunnelConfig(
 	if err != nil {
 		return nil, nil, err
 	}
-	if ok, err := isIPHostLocal(edgeBindAddr); !ok {
-		if err != nil {
-			// There could be unforeseen reasons that net.InterfaceAddrs() may fail
-			// Better not to be fatal here, or it could be annoying for users
-			log.Warn().Msgf("Cannot determine if edge-bind-address is available: %v", err)
-		} else {
-			return nil, nil, fmt.Errorf("edge-bind-address is not local to this host: %s", edgeBindAddr)
-		}
+	if err := testIPBindable(edgeBindAddr); err != nil {
+		return nil, nil, fmt.Errorf("invalid edge-bind-address %s: %v", edgeBindAddr, err)
 	}
 	edgeIPVersion, err = adjustIPVersionByBindAddress(edgeIPVersion, edgeBindAddr)
 	if err != nil {
@@ -494,17 +488,21 @@ func parseConfigBindAddress(ipstr string) (net.IP, error) {
 	return ip, nil
 }
 
-func isIPHostLocal(ip net.IP) (bool, error) {
-	addrs, err := net.InterfaceAddrs()
+func testIPBindable(ip net.IP) error {
+	var network, address string
+	if ip.To4() != nil {
+		network, address = "udp4", "127.0.0.1:4"
+	} else {
+		network, address = "udp6", "[::1]:4"
+	}
+
+	dialer := net.Dialer{LocalAddr: &net.UDPAddr{IP: ip}}
+	conn, err := dialer.Dial(network, address)
 	if err != nil {
-		return false, err
+		return err
 	}
-	for _, addr := range addrs {
-		if ip.Equal(addr.(*net.IPNet).IP) {
-			return true, nil
-		}
-	}
-	return false, nil
+	conn.Close()
+	return nil
 }
 
 func adjustIPVersionByBindAddress(ipVersion allregions.ConfigIPVersion, ip net.IP) (allregions.ConfigIPVersion, error) {
