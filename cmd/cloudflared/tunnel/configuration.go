@@ -358,7 +358,7 @@ func prepareTunnelConfig(
 	edgeIPVersion, err = adjustIPVersionByBindAddress(edgeIPVersion, edgeBindAddr)
 	if err != nil {
 		// This is not a fatal error, we just overrode edgeIPVersion
-		log.Warn().Msgf("Overriding edge-ip-version to %s: %v", edgeIPVersion, err)
+		log.Warn().Str("edge-ip-version", edgeIPVersion.String()).Err(err).Msg("Overriding edge-ip-version")
 	}
 
 	var pqKexIdx int
