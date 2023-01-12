@@ -489,19 +489,17 @@ func parseConfigBindAddress(ipstr string) (net.IP, error) {
 }
 
 func testIPBindable(ip net.IP) error {
-	var network, address string
-	if ip.To4() != nil {
-		network, address = "udp4", "127.0.0.1:4"
-	} else {
-		network, address = "udp6", "[::1]:4"
+	// "Unspecified" = let OS choose, so always bindable
+	if ip == nil {
+		return nil
 	}
 
-	dialer := net.Dialer{LocalAddr: &net.UDPAddr{IP: ip}}
-	conn, err := dialer.Dial(network, address)
+	addr := &net.UDPAddr{IP: ip, Port: 0}
+	listener, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return err
 	}
-	conn.Close()
+	listener.Close()
 	return nil
 }
 
