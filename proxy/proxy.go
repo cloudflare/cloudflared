@@ -261,7 +261,9 @@ func (p *Proxy) proxyHTTPRequest(
 		return nil
 	}
 
-	_, _ = cfio.Copy(w, resp.Body)
+	if _, err = cfio.Copy(w, resp.Body); err != nil {
+		return err
+	}
 
 	// copy trailers
 	copyTrailers(w, resp)

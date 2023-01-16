@@ -193,7 +193,11 @@ func (q *QUICConnection) runStream(quicStream quic.Stream) {
 	// A call to close will simulate a close to the read-side, which will fail subsequent reads.
 	noCloseStream := &nopCloserReadWriter{ReadWriteCloser: stream}
 	if err := q.handleStream(ctx, noCloseStream); err != nil {
-		q.logger.Err(err).Msg("Failed to handle QUIC stream")
+		q.logger.Debug().Err(err).Msg("Failed to handle QUIC stream")
+
+		// if we received an error at this level, then close write side of stream with an error, which will result in
+		// RST_STREAM frame.
+		quicStream.CancelWrite(0)
 	}
 }
 
@@ -226,43 +230,60 @@ func (q *QUICConnection) handleDataStream(ctx context.Context, stream *quicpogs.
 		return err
 	}
 
-	if err := q.dispatchRequest(ctx, stream, err, request); err != nil {
-		_ = stream.WriteConnectResponseData(err)
+	if err, connectResponseSent := q.dispatchRequest(ctx, stream, err, request); err != nil {
 		q.logger.Err(err).Str("type", request.Type.String()).Str("dest", request.Dest).Msg("Request failed")
+
+		// if the connectResponse was already sent and we had an error, we need to propagate it up, so that the stream is
+		// closed with an RST_STREAM frame
+		if connectResponseSent {
+			return err
+		}
+
+		if writeRespErr := stream.WriteConnectResponseData(err); writeRespErr != nil {
+			return writeRespErr
+		}
 	}
 
 	return nil
 }
 
-func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.RequestServerStream, err error, request *quicpogs.ConnectRequest) error {
+// dispatchRequest will dispatch the request depending on the type and returns an error if it occurs.
+// More importantly, it also tells if the during processing of the request the ConnectResponse metadata was sent downstream.
+// This is important since it informs
+func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.RequestServerStream, err error, request *quicpogs.ConnectRequest) (error, bool) {
 	originProxy, err := q.orchestrator.GetOriginProxy()
 	if err != nil {
-		return err
+		return err, false
 	}
 
 	switch request.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
 		tracedReq, err := buildHTTPRequest(ctx, request, stream, q.logger)
 		if err != nil {
-			return err
+			return err, false
 		}
 		w := newHTTPResponseAdapter(stream)
-		return originProxy.ProxyHTTP(w, tracedReq, request.Type == quicpogs.ConnectionTypeWebsocket)
+		return originProxy.ProxyHTTP(&w, tracedReq, request.Type == quicpogs.ConnectionTypeWebsocket), w.connectResponseSent
 
 	case quicpogs.ConnectionTypeTCP:
-		rwa := &streamReadWriteAcker{stream}
+		rwa := &streamReadWriteAcker{RequestServerStream: stream}
 		metadata := request.MetadataMap()
 		return originProxy.ProxyTCP(ctx, rwa, &TCPRequest{
 			Dest:      request.Dest,
 			FlowID:    metadata[QUICMetadataFlowID],
 			CfTraceID: metadata[tracing.TracerContextName],
-		})
+		}), rwa.connectResponseSent
+	default:
+		return errors.Errorf("unsupported error type: %s", request.Type), false
 	}
-	return nil
 }
 
 func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) error {
-	return rpcStream.Serve(q, q, q.logger)
+	if err := rpcStream.Serve(q, q, q.logger); err != nil {
+		q.logger.Err(err).Msg("failed handling RPC stream")
+	}
+
+	return nil
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
@@ -357,6 +378,7 @@ func (q *QUICConnection) UpdateConfiguration(ctx context.Context, version int32,
 // the client.
 type streamReadWriteAcker struct {
 	*quicpogs.RequestServerStream
+	connectResponseSent bool
 }
 
 // AckConnection acks response back to the proxy.
@@ -365,23 +387,25 @@ func (s *streamReadWriteAcker) AckConnection(tracePropagation string) error {
 		Key: tracing.CanonicalCloudflaredTracingHeader,
 		Val: tracePropagation,
 	}
+	s.connectResponseSent = true
 	return s.WriteConnectResponseData(nil, metadata)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.
 type httpResponseAdapter struct {
 	*quicpogs.RequestServerStream
+	connectResponseSent bool
 }
 
 func newHTTPResponseAdapter(s *quicpogs.RequestServerStream) httpResponseAdapter {
-	return httpResponseAdapter{s}
+	return httpResponseAdapter{RequestServerStream: s}
 }
 
-func (hrw httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
+func (hrw *httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
 	// we do not support trailers over QUIC
 }
 
-func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
+func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
 	metadata := make([]quicpogs.Metadata, 0)
 	metadata = append(metadata, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(status)})
 	for k, vv := range header {
@@ -390,11 +414,17 @@ func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) 
 			metadata = append(metadata, quicpogs.Metadata{Key: httpHeaderKey, Val: v})
 		}
 	}
+
 	return hrw.WriteConnectResponseData(nil, metadata...)
 }
 
-func (hrw httpResponseAdapter) WriteErrorResponse(err error) {
+func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {
 	hrw.WriteConnectResponseData(err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
+}
+
+func (hrw *httpResponseAdapter) WriteConnectResponseData(respErr error, metadata ...quicpogs.Metadata) error {
+	hrw.connectResponseSent = true
+	return hrw.RequestServerStream.WriteConnectResponseData(respErr, metadata...)
 }
 
 func buildHTTPRequest(

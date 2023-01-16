@@ -261,7 +261,7 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 			defer wg.Done()
 			log := zerolog.Nop()
 			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
-			require.NoError(t, err)
+			require.Equal(t, err.Error(), "context canceled")
 
 			require.Equal(t, http.StatusOK, responseWriter.Code)
 		}()

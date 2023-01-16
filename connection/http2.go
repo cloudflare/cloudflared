@@ -115,52 +115,52 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var requestErr error
 	switch connType {
 	case TypeControlStream:
-		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, c.orchestrator); err != nil {
-			c.controlStreamErr = err
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
+		requestErr = c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, c.orchestrator)
+		if requestErr != nil {
+			c.controlStreamErr = requestErr
 		}
 
 	case TypeConfiguration:
-		if err := c.handleConfigurationUpdate(respWriter, r); err != nil {
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
-		}
+		requestErr = c.handleConfigurationUpdate(respWriter, r)
 
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
 		// Check for tracing on request
 		tr := tracing.NewTracedHTTPRequest(r, c.log)
 		if err := originProxy.ProxyHTTP(respWriter, tr, connType == TypeWebsocket); err != nil {
-			err := fmt.Errorf("Failed to proxy HTTP: %w", err)
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
+			requestErr = fmt.Errorf("Failed to proxy HTTP: %w", err)
 		}
 
 	case TypeTCP:
 		host, err := getRequestHost(r)
 		if err != nil {
-			err := fmt.Errorf(`cloudflared received a warp-routing request with an empty host value: %w`, err)
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
+			requestErr = fmt.Errorf(`cloudflared received a warp-routing request with an empty host value: %w`, err)
+			break
 		}
 
 		rws := NewHTTPResponseReadWriterAcker(respWriter, r)
-		if err := originProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
+		requestErr = originProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
 			Dest:      host,
 			CFRay:     FindCfRayHeader(r),
 			LBProbe:   IsLBProbeRequest(r),
 			CfTraceID: r.Header.Get(tracing.TracerContextName),
-		}); err != nil {
-			respWriter.WriteErrorResponse()
-		}
+		})
 
 	default:
-		err := fmt.Errorf("Received unknown connection type: %s", connType)
-		c.log.Error().Err(err)
-		respWriter.WriteErrorResponse()
+		requestErr = fmt.Errorf("Received unknown connection type: %s", connType)
+	}
+
+	if requestErr != nil {
+		c.log.Error().Err(requestErr).Msg("failed to serve incoming request")
+
+		// WriteErrorResponse will return false if status was already written. we need to abort handler.
+		if !respWriter.WriteErrorResponse() {
+			c.log.Debug().Msg("Handler aborted due to failure to write error response after status already sent")
+			panic(http.ErrAbortHandler)
+		}
 	}
 }
 
@@ -275,9 +275,16 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 	return nil
 }
 
-func (rp *http2RespWriter) WriteErrorResponse() {
+func (rp *http2RespWriter) WriteErrorResponse() bool {
+	if rp.statusWritten {
+		return false
+	}
+
 	rp.setResponseMetaHeader(responseMetaHeaderCfd)
 	rp.w.WriteHeader(http.StatusBadGateway)
+	rp.statusWritten = true
+
+	return true
 }
 
 func (rp *http2RespWriter) setResponseMetaHeader(value string) {
