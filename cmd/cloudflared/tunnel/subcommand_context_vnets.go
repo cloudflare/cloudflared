@@ -23,12 +23,12 @@ func (sc *subcommandContext) listVirtualNetworks(filter *cfapi.VnetFilter) ([]*c
 	return client.ListVirtualNetworks(filter)
 }
 
-func (sc *subcommandContext) deleteVirtualNetwork(vnetId uuid.UUID) error {
+func (sc *subcommandContext) deleteVirtualNetwork(vnetId uuid.UUID, force bool) error {
 	client, err := sc.client()
 	if err != nil {
 		return errors.Wrap(err, noClientMsg)
 	}
-	return client.DeleteVirtualNetwork(vnetId)
+	return client.DeleteVirtualNetwork(vnetId, force)
 }
 
 func (sc *subcommandContext) updateVirtualNetwork(vnetId uuid.UUID, updates cfapi.UpdateVirtualNetwork) error {

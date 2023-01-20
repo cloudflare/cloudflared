@@ -28,7 +28,7 @@ type IPRouteClient interface {
 type VnetClient interface {
 	CreateVirtualNetwork(newVnet NewVirtualNetwork) (VirtualNetwork, error)
 	ListVirtualNetworks(filter *VnetFilter) ([]*VirtualNetwork, error)
-	DeleteVirtualNetwork(id uuid.UUID) error
+	DeleteVirtualNetwork(id uuid.UUID, force bool) error
 	UpdateVirtualNetwork(id uuid.UUID, updates UpdateVirtualNetwork) error
 }
 
