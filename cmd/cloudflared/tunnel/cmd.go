@@ -195,7 +195,7 @@ func TunnelCommand(c *cli.Context) error {
 		return runClassicTunnel(sc)
 	}
 
-	if c.String("proxy-dns") != "" {
+	if c.IsSet("proxy-dns") {
 		// NamedTunnelProperties are nil since proxy dns server does not need it.
 		// This is supported for legacy reasons: dns proxy server is not a tunnel and ideally should
 		// not run as part of cloudflared tunnel.
