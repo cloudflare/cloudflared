@@ -38,6 +38,7 @@ func newMetricsHandler(
 	log *zerolog.Logger,
 ) *http.ServeMux {
 	router := http.NewServeMux()
+	router.Handle("/debug/", http.DefaultServeMux)
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "OK\n")
