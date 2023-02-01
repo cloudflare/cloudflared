@@ -258,9 +258,6 @@ func prepareTunnelConfig(
 			return nil, nil, err
 		}
 	}
-	if ingressRules.IsEmpty() {
-		return nil, nil, ingress.ErrNoIngressRules
-	}
 
 	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, cfg.WarpRouting.Enabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log, c.Bool("post-quantum"))
 	if err != nil {
