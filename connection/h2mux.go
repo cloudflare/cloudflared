@@ -123,6 +123,46 @@ func (h *h2muxConnection) ServeNamedTunnel(ctx context.Context, namedTunnel *Nam
 	return err
 }
 
+func (h *h2muxConnection) ServeClassicTunnel(ctx context.Context, classicTunnel *ClassicTunnelProperties, credentialManager CredentialManager, registrationOptions *tunnelpogs.RegistrationOptions, connectedFuse ConnectedFuse) error {
+	errGroup, serveCtx := errgroup.WithContext(ctx)
+	errGroup.Go(func() error {
+		return h.serveMuxer(serveCtx)
+	})
+
+	errGroup.Go(func() (err error) {
+		defer func() {
+			if err == nil {
+				connectedFuse.Connected()
+			}
+		}()
+		if classicTunnel.UseReconnectToken && connectedFuse.IsConnected() {
+			err := h.reconnectTunnel(ctx, credentialManager, classicTunnel, registrationOptions)
+			if err == nil {
+				return nil
+			}
+			// log errors and proceed to RegisterTunnel
+			h.observer.log.Err(err).
+				Uint8(LogFieldConnIndex, h.connIndex).
+				Msg("Couldn't reconnect connection. Re-registering it instead.")
+		}
+		return h.registerTunnel(ctx, credentialManager, classicTunnel, registrationOptions)
+	})
+
+	errGroup.Go(func() error {
+		h.controlLoop(serveCtx, connectedFuse, false)
+		return nil
+	})
+
+	err := errGroup.Wait()
+	if err == errMuxerStopped {
+		if h.stoppedGracefully {
+			return nil
+		}
+		h.observer.log.Info().Uint8(LogFieldConnIndex, h.connIndex).Msg("Unexpected muxer shutdown")
+	}
+	return err
+}
+
 func (h *h2muxConnection) serveMuxer(ctx context.Context) error {
 	// All routines should stop when muxer finish serving. When muxer is shutdown
 	// gracefully, it doesn't return an error, so we need to return errMuxerShutdown

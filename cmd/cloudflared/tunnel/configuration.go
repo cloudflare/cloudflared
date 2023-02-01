@@ -32,6 +32,7 @@ import (
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/validation"
 )
 
 const LogFieldOriginCertPath = "originCertPath"
@@ -41,6 +42,8 @@ var (
 	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
 	serviceUrl      = developerPortal + "/reference/service/"
 	argumentsUrl    = developerPortal + "/reference/arguments/"
+
+	LogFieldHostname = "hostname"
 
 	secretFlags     = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 	defaultFeatures = []string{supervisor.FeatureAllowRemoteConfig, supervisor.FeatureSerializedHeaders, supervisor.FeatureDatagramV2, supervisor.FeatureQUICSupportEOF}
@@ -124,7 +127,7 @@ func isSecretEnvVar(key string) bool {
 }
 
 func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelProperties) bool {
-	return c.IsSet("proxy-dns") && (!c.IsSet("tag") && !c.IsSet("hello-world") && namedTunnel == nil)
+	return c.IsSet("proxy-dns") && (!c.IsSet("hostname") && !c.IsSet("tag") && !c.IsSet("hello-world") && namedTunnel == nil)
 }
 
 func findOriginCert(originCertPath string, log *zerolog.Logger) (string, error) {
@@ -190,19 +193,37 @@ func prepareTunnelConfig(
 	observer *connection.Observer,
 	namedTunnel *connection.NamedTunnelProperties,
 ) (*supervisor.TunnelConfig, *orchestration.Config, error) {
-	clientID, err := uuid.NewRandom()
+	isNamedTunnel := namedTunnel != nil
+
+	configHostname := c.String("hostname")
+	hostname, err := validation.ValidateHostname(configHostname)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "can't generate connector UUID")
+		log.Err(err).Str(LogFieldHostname, configHostname).Msg("Invalid hostname")
+		return nil, nil, errors.Wrap(err, "Invalid hostname")
 	}
-	log.Info().Msgf("Generated Connector ID: %s", clientID)
+	clientID := c.String("id")
+	if !c.IsSet("id") {
+		clientID, err = generateRandomClientID(log)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	tags, err := NewTagSliceFromCLI(c.StringSlice("tag"))
 	if err != nil {
 		log.Err(err).Msg("Tag parse failure")
 		return nil, nil, errors.Wrap(err, "Tag parse failure")
 	}
-	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID.String()})
+
+	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID})
+
+	var (
+		ingressRules  ingress.Ingress
+		classicTunnel *connection.ClassicTunnelProperties
+	)
 
 	transportProtocol := c.String("protocol")
+
 	needPQ := c.Bool("post-quantum")
 	if needPQ {
 		if FipsEnabled {
@@ -217,52 +238,79 @@ func prepareTunnelConfig(
 
 	protocolFetcher := edgediscovery.ProtocolPercentage
 
-	features := append(c.StringSlice("features"), defaultFeatures...)
-	if needPQ {
-		features = append(features, supervisor.FeaturePostQuantum)
-	}
-	if c.IsSet(TunnelTokenFlag) {
-		if transportProtocol == connection.AutoSelectFlag {
-			protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
-				// If the Tunnel is remotely managed and no protocol is set, we prefer QUIC, but still allow fall-back.
-				preferQuic := []edgediscovery.ProtocolPercent{
-					{
-						Protocol:   connection.QUIC.String(),
-						Percentage: 100,
-					},
-					{
-						Protocol:   connection.HTTP2.String(),
-						Percentage: 100,
-					},
-				}
-				return preferQuic, nil
-			}
-		}
-		log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
-	}
-	namedTunnel.Client = tunnelpogs.ClientInfo{
-		ClientID: clientID[:],
-		Features: dedup(features),
-		Version:  info.Version(),
-		Arch:     info.OSArch(),
-	}
 	cfg := config.GetConfiguration()
-	ingressRules, err := ingress.ParseIngress(cfg)
-	if err != nil && err != ingress.ErrNoIngressRules {
-		return nil, nil, err
+	if isNamedTunnel {
+		clientUUID, err := uuid.NewRandom()
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "can't generate connector UUID")
+		}
+		log.Info().Msgf("Generated Connector ID: %s", clientUUID)
+		features := append(c.StringSlice("features"), defaultFeatures...)
+		if needPQ {
+			features = append(features, supervisor.FeaturePostQuantum)
+		}
+		if c.IsSet(TunnelTokenFlag) {
+			if transportProtocol == connection.AutoSelectFlag {
+				protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
+					// If the Tunnel is remotely managed and no protocol is set, we prefer QUIC, but still allow fall-back.
+					preferQuic := []edgediscovery.ProtocolPercent{
+						{
+							Protocol:   connection.QUIC.String(),
+							Percentage: 100,
+						},
+						{
+							Protocol:   connection.HTTP2.String(),
+							Percentage: 100,
+						},
+					}
+					return preferQuic, nil
+				}
+			}
+			log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
+		}
+		namedTunnel.Client = tunnelpogs.ClientInfo{
+			ClientID: clientUUID[:],
+			Features: dedup(features),
+			Version:  info.Version(),
+			Arch:     info.OSArch(),
+		}
+		ingressRules, err = ingress.ParseIngress(cfg)
+		if err != nil && err != ingress.ErrNoIngressRules {
+			return nil, nil, err
+		}
+		if !ingressRules.IsEmpty() && c.IsSet("url") {
+			return nil, nil, ingress.ErrURLIncompatibleWithIngress
+		}
+	} else {
+
+		originCertPath := c.String("origincert")
+		originCertLog := log.With().
+			Str(LogFieldOriginCertPath, originCertPath).
+			Logger()
+
+		originCert, err := getOriginCert(originCertPath, &originCertLog)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "Error getting origin cert")
+		}
+
+		classicTunnel = &connection.ClassicTunnelProperties{
+			Hostname:   hostname,
+			OriginCert: originCert,
+			// turn off use of reconnect token and auth refresh when using named tunnels
+			UseReconnectToken: !isNamedTunnel && c.Bool("use-reconnect-token"),
+		}
 	}
-	// Only for quick tunnels will we attempt to parse the --url flag for a tunnel ingress rule
-	if ingressRules.IsEmpty() && c.IsSet("url") && namedTunnel.QuickTunnelUrl != "" {
-		ingressRules, err = ingress.NewSingleOrigin(c, true)
+
+	// Convert single-origin configuration into multi-origin configuration.
+	if ingressRules.IsEmpty() {
+		ingressRules, err = ingress.NewSingleOrigin(c, !isNamedTunnel)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
-	if ingressRules.IsEmpty() {
-		return nil, nil, ingress.ErrNoIngressRules
-	}
 
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, cfg.WarpRouting.Enabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log, c.Bool("post-quantum"))
+	warpRoutingEnabled := isWarpRoutingEnabled(cfg.WarpRouting, isNamedTunnel)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, warpRoutingEnabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log, c.Bool("post-quantum"))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -314,7 +362,7 @@ func prepareTunnelConfig(
 		GracePeriod:     gracePeriod,
 		ReplaceExisting: c.Bool("force"),
 		OSArch:          info.OSArch(),
-		ClientID:        clientID.String(),
+		ClientID:        clientID,
 		EdgeAddrs:       c.StringSlice("edge"),
 		Region:          c.String("region"),
 		EdgeIPVersion:   edgeIPVersion,
@@ -331,6 +379,7 @@ func prepareTunnelConfig(
 		Retries:            uint(c.Int("retries")),
 		RunFromTerminal:    isRunningFromTerminal(),
 		NamedTunnel:        namedTunnel,
+		ClassicTunnel:      classicTunnel,
 		MuxerConfig:        muxerConfig,
 		ProtocolSelector:   protocolSelector,
 		EdgeTLSConfigs:     edgeTLSConfigs,
@@ -370,6 +419,10 @@ func gracePeriod(c *cli.Context) (time.Duration, error) {
 		return time.Duration(0), fmt.Errorf("grace-period must be equal or less than %v", connection.MaxGracePeriod)
 	}
 	return period, nil
+}
+
+func isWarpRoutingEnabled(warpConfig config.WarpRoutingConfig, isNamedTunnel bool) bool {
+	return warpConfig.Enabled && isNamedTunnel
 }
 
 func isRunningFromTerminal() bool {

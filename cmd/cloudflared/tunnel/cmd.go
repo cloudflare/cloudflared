@@ -100,7 +100,6 @@ var (
 	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
 		"any existing DNS records for this hostname.", overwriteDNSFlag)
-	deprecatedClassicTunnelErr = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
 )
 
 func Flags() []cli.Flag {
@@ -183,7 +182,7 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
 	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("hello-world")
-	if !dnsProxyStandAlone(c, nil) && c.String("quick-service") != "" && shouldRunQuickTunnel {
+	if !dnsProxyStandAlone(c, nil) && c.String("hostname") == "" && c.String("quick-service") != "" && shouldRunQuickTunnel {
 		return RunQuickTunnel(sc)
 	}
 
@@ -191,9 +190,9 @@ func TunnelCommand(c *cli.Context) error {
 		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
 	}
 
-	// classic tunnel usage is no longer supported
+	// Start a classic tunnel if hostname is specified.
 	if c.String("hostname") != "" {
-		return deprecatedClassicTunnelErr
+		return runClassicTunnel(sc)
 	}
 
 	if c.IsSet("proxy-dns") {
@@ -236,6 +235,11 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 	}
 
 	return nil
+}
+
+// runClassicTunnel creates a "classic" non-named tunnel
+func runClassicTunnel(sc *subcommandContext) error {
+	return StartServer(sc.c, buildInfo, nil, sc.log)
 }
 
 func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
@@ -344,6 +348,14 @@ func StartServer(
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
 		return waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, log)
+	}
+
+	url := c.String("url")
+	hostname := c.String("hostname")
+	if url == hostname && url != "" && hostname != "" {
+		errText := "hostname and url shouldn't match. See --help for more information"
+		log.Error().Msg(errText)
+		return fmt.Errorf(errText)
 	}
 
 	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)

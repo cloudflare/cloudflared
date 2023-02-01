@@ -155,6 +155,8 @@ func action(graceShutdownC chan struct{}) cli.ActionFunc {
 		if isEmptyInvocation(c) {
 			return handleServiceMode(c, graceShutdownC)
 		}
+		tags := make(map[string]string)
+		tags["hostname"] = c.String("hostname")
 		func() {
 			defer sentry.Recover()
 			err = tunnel.TunnelCommand(c)

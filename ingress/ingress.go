@@ -71,8 +71,9 @@ type Ingress struct {
 }
 
 // NewSingleOrigin constructs an Ingress set with only one rule, constructed from
-// CLI parameters for quick tunnels like --url or --no-chunked-encoding.
+// legacy CLI parameters like --url or --no-chunked-encoding.
 func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
+
 	service, err := parseSingleOriginService(c, allowURLFromArgs)
 	if err != nil {
 		return Ingress{}, err
