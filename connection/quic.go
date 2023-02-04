@@ -383,12 +383,16 @@ type streamReadWriteAcker struct {
 
 // AckConnection acks response back to the proxy.
 func (s *streamReadWriteAcker) AckConnection(tracePropagation string) error {
-	metadata := quicpogs.Metadata{
-		Key: tracing.CanonicalCloudflaredTracingHeader,
-		Val: tracePropagation,
+	metadata := []quicpogs.Metadata{}
+	// Only add tracing if provided by origintunneld
+	if tracePropagation != "" {
+		metadata = append(metadata, quicpogs.Metadata{
+			Key: tracing.CanonicalCloudflaredTracingHeader,
+			Val: tracePropagation,
+		})
 	}
 	s.connectResponseSent = true
-	return s.WriteConnectResponseData(nil, metadata)
+	return s.WriteConnectResponseData(nil, metadata...)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.
