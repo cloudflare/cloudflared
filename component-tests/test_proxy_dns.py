@@ -12,17 +12,11 @@ class TestProxyDns:
     def test_proxy_dns_with_named_tunnel(self, tmp_path, component_tests_config):
         run_test_scenario(tmp_path, component_tests_config, CfdModes.NAMED, run_proxy_dns=True)
 
-    def test_proxy_dns_with_classic_tunnel(self, tmp_path, component_tests_config):
-        run_test_scenario(tmp_path, component_tests_config, CfdModes.CLASSIC, run_proxy_dns=True)
-
     def test_proxy_dns_alone(self, tmp_path, component_tests_config):
         run_test_scenario(tmp_path, component_tests_config, CfdModes.PROXY_DNS, run_proxy_dns=True)
 
     def test_named_tunnel_alone(self, tmp_path, component_tests_config):
         run_test_scenario(tmp_path, component_tests_config, CfdModes.NAMED, run_proxy_dns=False)
-
-    def test_classic_tunnel_alone(self, tmp_path, component_tests_config):
-        run_test_scenario(tmp_path, component_tests_config, CfdModes.CLASSIC, run_proxy_dns=False)
 
 
 def run_test_scenario(tmp_path, component_tests_config, cfd_mode, run_proxy_dns):
@@ -33,10 +27,6 @@ def run_test_scenario(tmp_path, component_tests_config, cfd_mode, run_proxy_dns)
         expect_tunnel = True
         pre_args = ["tunnel"]
         args = ["run"]
-    elif cfd_mode == CfdModes.CLASSIC:
-        expect_tunnel = True
-        pre_args = []
-        args = []
     elif cfd_mode == CfdModes.PROXY_DNS:
         expect_proxy_dns = True
         pre_args = []

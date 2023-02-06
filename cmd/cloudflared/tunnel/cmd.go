@@ -36,6 +36,7 @@ import (
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/cloudflare/cloudflared/validation"
 )
 
 const (
@@ -100,6 +101,7 @@ var (
 	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
 		"any existing DNS records for this hostname.", overwriteDNSFlag)
+	deprecatedClassicTunnelErr = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
 )
 
 func Flags() []cli.Flag {
@@ -176,23 +178,40 @@ func TunnelCommand(c *cli.Context) error {
 		return err
 	}
 
-	if name := c.String("name"); name != "" { // Start a named tunnel
+	// Run a adhoc named tunnel
+	// Allows for the creation, routing (optional), and startup of a tunnel in one command
+	// --name required
+	// --url or --hello-world required
+	// --hostname optional
+	if name := c.String("name"); name != "" {
+		hostname, err := validation.ValidateHostname(c.String("hostname"))
+		if err != nil {
+			return errors.Wrap(err, "Invalid hostname provided")
+		}
+		url := c.String("url")
+		if url == hostname && url != "" && hostname != "" {
+			return fmt.Errorf("hostname and url shouldn't match. See --help for more information")
+		}
+
 		return runAdhocNamedTunnel(sc, name, c.String(CredFileFlag))
 	}
 
-	// Unauthenticated named tunnel on <random>.<quick-tunnels-service>.com
+	// Run a quick tunnel
+	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
+	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
 	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("hello-world")
-	if !dnsProxyStandAlone(c, nil) && c.String("hostname") == "" && c.String("quick-service") != "" && shouldRunQuickTunnel {
+	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
 		return RunQuickTunnel(sc)
 	}
 
+	// If user provides a config, check to see if they meant to use `tunnel run` instead
 	if ref := config.GetConfiguration().TunnelID; ref != "" {
 		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
 	}
 
-	// Start a classic tunnel if hostname is specified.
+	// Classic tunnel usage is no longer supported
 	if c.String("hostname") != "" {
-		return runClassicTunnel(sc)
+		return deprecatedClassicTunnelErr
 	}
 
 	if c.IsSet("proxy-dns") {
@@ -235,11 +254,6 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 	}
 
 	return nil
-}
-
-// runClassicTunnel creates a "classic" non-named tunnel
-func runClassicTunnel(sc *subcommandContext) error {
-	return StartServer(sc.c, buildInfo, nil, sc.log)
 }
 
 func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
@@ -343,19 +357,11 @@ func StartServer(
 		errC <- autoupdater.Run(ctx)
 	}()
 
-	// Serve DNS proxy stand-alone if no hostname or tag or app is going to run
+	// Serve DNS proxy stand-alone if no tunnel type (quick, adhoc, named) is going to run
 	if dnsProxyStandAlone(c, namedTunnel) {
 		connectedSignal.Notify()
 		// no grace period, handle SIGINT/SIGTERM immediately
 		return waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, log)
-	}
-
-	url := c.String("url")
-	hostname := c.String("hostname")
-	if url == hostname && url != "" && hostname != "" {
-		errText := "hostname and url shouldn't match. See --help for more information"
-		log.Error().Msg(errText)
-		return fmt.Errorf(errText)
 	}
 
 	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
