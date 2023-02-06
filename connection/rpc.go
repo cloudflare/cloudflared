@@ -295,7 +295,7 @@ func (h *h2muxConnection) registerNamedTunnel(
 		return err
 	}
 	h.observer.logServerInfo(h.connIndex, registrationDetails.Location, nil, fmt.Sprintf("Connection %s registered", registrationDetails.UUID))
-	h.observer.sendConnectedEvent(h.connIndex, H2mux, registrationDetails.Location)
+	h.observer.sendConnectedEvent(h.connIndex, 0, registrationDetails.Location)
 
 	return nil
 }

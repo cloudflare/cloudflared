@@ -19,8 +19,6 @@ import (
 )
 
 const (
-	// SRV and TXT record resolution TTL
-	ResolveTTL = time.Hour
 	// Waiting time before retrying a failed tunnel connection
 	tunnelRetryDuration = time.Second * 10
 	// Interval between registering new tunnels

@@ -487,7 +487,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	)
 
 	switch protocol {
-	case connection.QUIC, connection.QUICWarp:
+	case connection.QUIC:
 		connOptions := e.config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return e.serveQUIC(ctx,
 			addr.UDP,
@@ -496,7 +496,7 @@ func (e *EdgeTunnelServer) serveConnection(
 			controlStream,
 			connIndex)
 
-	case connection.HTTP2, connection.HTTP2Warp:
+	case connection.HTTP2:
 		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, e.config.EdgeTLSConfigs[protocol], addr.TCP)
 		if err != nil {
 			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection with Cloudflare edge")

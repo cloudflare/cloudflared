@@ -21,11 +21,10 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -218,34 +217,13 @@ func prepareTunnelConfig(
 		transportProtocol = connection.QUIC.String()
 	}
 
-	protocolFetcher := edgediscovery.ProtocolPercentage
-
-	features := append(c.StringSlice("features"), defaultFeatures...)
+	features := dedup(append(c.StringSlice("features"), defaultFeatures...))
 	if needPQ {
 		features = append(features, supervisor.FeaturePostQuantum)
 	}
-	if c.IsSet(TunnelTokenFlag) {
-		if transportProtocol == connection.AutoSelectFlag {
-			protocolFetcher = func() (edgediscovery.ProtocolPercents, error) {
-				// If the Tunnel is remotely managed and no protocol is set, we prefer QUIC, but still allow fall-back.
-				preferQuic := []edgediscovery.ProtocolPercent{
-					{
-						Protocol:   connection.QUIC.String(),
-						Percentage: 100,
-					},
-					{
-						Protocol:   connection.HTTP2.String(),
-						Percentage: 100,
-					},
-				}
-				return preferQuic, nil
-			}
-		}
-		log.Info().Msg("Will be fetching remotely managed configuration from Cloudflare API. Defaulting to protocol: quic")
-	}
 	namedTunnel.Client = tunnelpogs.ClientInfo{
 		ClientID: clientID[:],
-		Features: dedup(features),
+		Features: features,
 		Version:  info.Version(),
 		Arch:     info.OSArch(),
 	}
@@ -268,7 +246,7 @@ func prepareTunnelConfig(
 		}
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, cfg.WarpRouting.Enabled, namedTunnel, protocolFetcher, supervisor.ResolveTTL, log, c.Bool("post-quantum"))
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), c.Bool("post-quantum"), edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)
 	if err != nil {
 		return nil, nil, err
 	}
