@@ -25,8 +25,9 @@ const (
 )
 
 var (
-	// ProtocolList represents a list of supported protocols for communication with the edge.
-	ProtocolList = []Protocol{HTTP2, QUIC}
+	// ProtocolList represents a list of supported protocols for communication with the edge
+	// in order of precedence for remote percentage fetcher.
+	ProtocolList = []Protocol{QUIC, HTTP2}
 )
 
 type Protocol int64
@@ -171,7 +172,8 @@ func getProtocol(protocolPool []Protocol, fetchFunc edgediscovery.PercentageFetc
 		}
 	}
 
-	return protocolPool[len(protocolPool)-1], nil
+	// Default to first index in protocolPool list
+	return protocolPool[0], nil
 }
 
 // defaultProtocolSelector will allow for a protocol to have a fallback
@@ -223,6 +225,7 @@ func NewProtocolSelector(
 
 	threshold := switchThreshold(accountTag)
 	fetchedProtocol, err := getProtocol(ProtocolList, protocolFetcher, threshold)
+	log.Debug().Msgf("Fetched protocol: %s", fetchedProtocol)
 	if err != nil {
 		log.Warn().Msg("Unable to lookup protocol percentage.")
 		// Falling through here since 'auto' is handled in the switch and failing
