@@ -218,11 +218,6 @@ func NewProtocolSelector(
 		}, nil
 	}
 
-	// When a --token is provided, we want to start with QUIC but have fallback to HTTP2
-	if tunnelTokenProvided {
-		return newDefaultProtocolSelector(QUIC), nil
-	}
-
 	threshold := switchThreshold(accountTag)
 	fetchedProtocol, err := getProtocol(ProtocolList, protocolFetcher, threshold)
 	log.Debug().Msgf("Fetched protocol: %s", fetchedProtocol)
@@ -244,6 +239,10 @@ func NewProtocolSelector(
 	case HTTP2.String():
 		return &staticProtocolSelector{current: HTTP2}, nil
 	case AutoSelectFlag:
+		// When a --token is provided, we want to start with QUIC but have fallback to HTTP2
+		if tunnelTokenProvided {
+			return newDefaultProtocolSelector(QUIC), nil
+		}
 		return newRemoteProtocolSelector(fetchedProtocol, ProtocolList, threshold, protocolFetcher, resolveTTL, log), nil
 	}
 
