@@ -601,3 +601,7 @@ zombiezen.com/go/capnproto2/std/capnp/rpc
 # gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 # github.com/marten-seemann/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e
 # github.com/marten-seemann/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e
+# github.com/marten-seemann/qtls-go1-20 => github.com/cloudflare/qtls-pq v0.0.0-20230215110727-8b4e1699c2a8
+# github.com/quic-go/qtls-go1-18 => github.com/cloudflare/qtls-pq v0.0.0-20230103171413-e7a2fb559a0e
+# github.com/quic-go/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20230103171656-05e84f90909e
+# github.com/quic-go/qtls-go1-20 => github.com/cloudflare/qtls-pq v0.0.0-20230215110727-8b4e1699c2a8
