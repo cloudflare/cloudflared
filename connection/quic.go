@@ -60,6 +60,7 @@ type QUICConnection struct {
 	packetRouter         *ingress.PacketRouter
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
+	connIndex            uint8
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -106,6 +107,7 @@ func NewQUICConnection(
 		packetRouter:         packetRouter,
 		controlStreamHandler: controlStreamHandler,
 		connOptions:          connOptions,
+		connIndex:            connIndex,
 	}, nil
 }
 
@@ -258,7 +260,7 @@ func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.R
 
 	switch request.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
-		tracedReq, err := buildHTTPRequest(ctx, request, stream, q.logger)
+		tracedReq, err := buildHTTPRequest(ctx, request, stream, q.connIndex, q.logger)
 		if err != nil {
 			return err, false
 		}
@@ -272,6 +274,7 @@ func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.R
 			Dest:      request.Dest,
 			FlowID:    metadata[QUICMetadataFlowID],
 			CfTraceID: metadata[tracing.TracerContextName],
+			ConnIndex: q.connIndex,
 		}), rwa.connectResponseSent
 	default:
 		return errors.Errorf("unsupported error type: %s", request.Type), false
@@ -435,6 +438,7 @@ func buildHTTPRequest(
 	ctx context.Context,
 	connectRequest *quicpogs.ConnectRequest,
 	body io.ReadCloser,
+	connIndex uint8,
 	log *zerolog.Logger,
 ) (*tracing.TracedHTTPRequest, error) {
 	metadata := connectRequest.MetadataMap()
@@ -478,7 +482,7 @@ func buildHTTPRequest(
 	stripWebsocketUpgradeHeader(req)
 
 	// Check for tracing on request
-	tracedReq := tracing.NewTracedHTTPRequest(req, log)
+	tracedReq := tracing.NewTracedHTTPRequest(req, connIndex, log)
 	return tracedReq, err
 }
 

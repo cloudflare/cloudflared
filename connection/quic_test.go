@@ -485,7 +485,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 	for _, test := range tests {
 		test := test // capture range variable
 		t.Run(test.name, func(t *testing.T) {
-			req, err := buildHTTPRequest(context.Background(), test.connectRequest, test.body, &log)
+			req, err := buildHTTPRequest(context.Background(), test.connectRequest, test.body, 0, &log)
 			assert.NoError(t, err)
 			test.req = test.req.WithContext(req.Context())
 			assert.Equal(t, test.req, req.Request)

@@ -196,7 +196,7 @@ func (h *h2muxConnection) ServeStream(stream *h2mux.MuxedStream) error {
 		return err
 	}
 
-	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, h.log), sourceConnectionType == TypeWebsocket)
+	err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, h.connIndex, h.log), sourceConnectionType == TypeWebsocket)
 	if err != nil {
 		respWriter.WriteErrorResponse()
 	}

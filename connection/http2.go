@@ -129,7 +129,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
 		// Check for tracing on request
-		tr := tracing.NewTracedHTTPRequest(r, c.log)
+		tr := tracing.NewTracedHTTPRequest(r, c.connIndex, c.log)
 		if err := originProxy.ProxyHTTP(respWriter, tr, connType == TypeWebsocket); err != nil {
 			requestErr = fmt.Errorf("Failed to proxy HTTP: %w", err)
 		}
@@ -147,6 +147,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			CFRay:     FindCfRayHeader(r),
 			LBProbe:   IsLBProbeRequest(r),
 			CfTraceID: r.Header.Get(tracing.TracerContextName),
+			ConnIndex: c.connIndex,
 		})
 
 	default:

@@ -142,6 +142,7 @@ type TCPRequest struct {
 	LBProbe   bool
 	FlowID    string
 	CfTraceID string
+	ConnIndex uint8
 }
 
 // ReadWriteAcker is a readwriter with the ability to Acknowledge to the downstream (edge) that the origin has
