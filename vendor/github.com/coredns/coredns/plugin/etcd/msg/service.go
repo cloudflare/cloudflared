@@ -154,7 +154,6 @@ func split255(s string) []string {
 		} else {
 			sx = append(sx, s[p:])
 			break
-
 		}
 		p, i = p+255, i+255
 	}

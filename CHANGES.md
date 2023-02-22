@@ -1,3 +1,14 @@
+## 2023.2.2
+### Notices
+- Legacy tunnels were officially deprecated on December 1, 2022. Starting with this version, cloudflared no longer supports connecting legacy tunnels.
+- h2mux tunnel connection protocol is no longer supported. Any tunnels still configured to use this protocol will alert and use http2 tunnel protocol instead. We recommend using quic protocol for all tunnels going forward.
+
+## 2023.2.1
+### Bug fixes
+- Fixed a bug in TCP connection proxy that could result in the connection being closed before all data was written.
+- cloudflared now correctly aborts body write if connection to origin service fails after response headers were sent already.
+- Fixed a bug introduced in the previous release where debug endpoints were removed.
+
 ## 2022.12.0
 ### Improvements
 - cloudflared now attempts to try other edge addresses before falling back to a lower protoocol.

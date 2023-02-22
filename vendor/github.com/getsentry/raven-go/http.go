@@ -69,17 +69,31 @@ func (h *Http) Class() string { return "request" }
 //		...
 //	}))
 func RecoveryHandler(handler func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return Recoverer(http.HandlerFunc(handler)).ServeHTTP
+}
+
+// Recovery handler to wrap the stdlib net/http Mux.
+// Example:
+//  mux := http.NewServeMux
+//  ...
+//	http.Handle("/", raven.Recoverer(mux))
+func Recoverer(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rval := recover(); rval != nil {
 				debug.PrintStack()
 				rvalStr := fmt.Sprint(rval)
-				packet := NewPacket(rvalStr, NewException(errors.New(rvalStr), GetOrNewStacktrace(rval.(error), 2, 3, nil)), NewHttp(r))
+				var packet *Packet
+				if err, ok := rval.(error); ok {
+					packet = NewPacket(rvalStr, NewException(errors.New(rvalStr), GetOrNewStacktrace(err, 2, 3, nil)), NewHttp(r))
+				} else {
+					packet = NewPacket(rvalStr, NewException(errors.New(rvalStr), NewStacktrace(2, 3, nil)), NewHttp(r))
+				}
 				Capture(packet, nil)
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}()
 
-		handler(w, r)
-	}
+		handler.ServeHTTP(w, r)
+	})
 }

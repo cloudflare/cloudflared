@@ -23,23 +23,23 @@ You can use the returned `*x509.CertPool` as part of an HTTP transport, for exam
 
 ```go
 import (
-  "net/http"
-  "crypto/tls"
+	"net/http"
+	"crypto/tls"
 )
 
 // Setup an HTTP client with a custom transport
 transport := &http.Transport{
-  Proxy: ProxyFromEnvironment,
-  DialContext: (&net.Dialer{
-    Timeout:   30 * time.Second,
-    KeepAlive: 30 * time.Second,
-    DualStack: true,
-  }).DialContext,
-  ForceAttemptHTTP2:     true,
-  MaxIdleConns:          100,
-  IdleConnTimeout:       90 * time.Second,
-  TLSHandshakeTimeout:   10 * time.Second,
-  ExpectContinueTimeout: 1 * time.Second,
+	Proxy: ProxyFromEnvironment,
+	DialContext: (&net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	ForceAttemptHTTP2:     true,
+	MaxIdleConns:          100,
+	IdleConnTimeout:       90 * time.Second,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
 }
 // or, starting with go1.13 simply use:
 // transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -59,16 +59,11 @@ Import as follows:
 import "github.com/certifi/gocertifi"
 ```
 
-### Errors
-
-```go
-var ErrParseFailed = errors.New("gocertifi: error when parsing certificates")
-```
-
 ### Functions
 
 ```go
 func CACerts() (*x509.CertPool, error)
 ```
 CACerts builds an X.509 certificate pool containing the Mozilla CA Certificate
-bundle. Returns nil on error along with an appropriate error code.
+bundle. This can't actually error and always returns successfully with `nil`
+as the error. This will be replaced in `v2` to only return the `CertPool`.

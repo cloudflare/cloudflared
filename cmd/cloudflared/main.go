@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -50,7 +50,6 @@ var (
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	metrics.RegisterBuildInfo(BuildType, BuildTime, Version)
-	raven.SetRelease(Version)
 	maxprocs.Set()
 	bInfo := cliutil.GetBuildInfo(BuildType, Version)
 
@@ -156,10 +155,10 @@ func action(graceShutdownC chan struct{}) cli.ActionFunc {
 		if isEmptyInvocation(c) {
 			return handleServiceMode(c, graceShutdownC)
 		}
-		tags := make(map[string]string)
-		tags["hostname"] = c.String("hostname")
-		raven.SetTagsContext(tags)
-		raven.CapturePanic(func() { err = tunnel.TunnelCommand(c) }, nil)
+		func() {
+			defer sentry.Recover()
+			err = tunnel.TunnelCommand(c)
+		}()
 		if err != nil {
 			captureError(err)
 		}
@@ -187,7 +186,7 @@ func captureError(err error) {
 			return
 		}
 	}
-	raven.CaptureError(err, nil)
+	sentry.CaptureException(err)
 }
 
 // cloudflared was started without any flags

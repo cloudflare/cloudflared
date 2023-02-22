@@ -1,12 +1,14 @@
 package dnsserver
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
 
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin"
+	"github.com/coredns/coredns/request"
 )
 
 // Config configuration for a single server.
@@ -28,6 +30,9 @@ type Config struct {
 	// Debug controls the panic/recover mechanism that is enabled by default.
 	Debug bool
 
+	// Stacktrace controls including stacktrace as part of log from recover mechanism, it is disabled by default.
+	Stacktrace bool
+
 	// The transport we implement, normally just "dns" over TCP/UDP, but could be
 	// DNS-over-TLS or DNS-over-gRPC.
 	Transport string
@@ -37,8 +42,19 @@ type Config struct {
 	// may depend on it.
 	HTTPRequestValidateFunc func(*http.Request) bool
 
+	// FilterFuncs is used to further filter access
+	// to this handler. E.g. to limit access to a reverse zone
+	// on a non-octet boundary, i.e. /17
+	FilterFuncs []FilterFunc
+
+	// ViewName is the name of the Viewer PLugin defined in the Config
+	ViewName string
+
 	// TLSConfig when listening for encrypted connections (gRPC, DNS-over-TLS).
 	TLSConfig *tls.Config
+
+	// TSIG secrets, [name]key.
+	TsigSecret map[string]string
 
 	// Plugin stack.
 	Plugin []plugin.Plugin
@@ -54,7 +70,13 @@ type Config struct {
 	// firstConfigInBlock is used to reference the first config in a server block, for the
 	// purpose of sharing single instance of each plugin among all zones in a server block.
 	firstConfigInBlock *Config
+
+	// metaCollector references the first MetadataCollector plugin, if one exists
+	metaCollector MetadataCollector
 }
+
+// FilterFunc is a function that filters requests from the Config
+type FilterFunc func(context.Context, *request.Request) bool
 
 // keyForConfig builds a key for identifying the configs during setup time
 func keyForConfig(blocIndex int, blocKeyIndex int) string {

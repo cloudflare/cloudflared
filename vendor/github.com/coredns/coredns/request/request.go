@@ -313,7 +313,6 @@ func (r *Request) Class() string {
 	}
 
 	return dns.Class(r.Req.Question[0].Qclass).String()
-
 }
 
 // QClass returns the class of the question in the request.
@@ -327,7 +326,6 @@ func (r *Request) QClass() uint16 {
 	}
 
 	return r.Req.Question[0].Qclass
-
 }
 
 // Clear clears all caching from Request s.

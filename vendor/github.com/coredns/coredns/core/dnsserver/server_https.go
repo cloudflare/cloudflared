@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	stdlog "log"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/coredns/caddy"
+	"github.com/coredns/coredns/plugin/metrics/vars"
 	"github.com/coredns/coredns/plugin/pkg/dnsutil"
 	"github.com/coredns/coredns/plugin/pkg/doh"
+	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/coredns/coredns/plugin/pkg/response"
 	"github.com/coredns/coredns/plugin/pkg/reuseport"
 	"github.com/coredns/coredns/plugin/pkg/transport"
@@ -26,6 +29,18 @@ type ServerHTTPS struct {
 	validRequest func(*http.Request) bool
 }
 
+// loggerAdapter is a simple adapter around CoreDNS logger made to implement io.Writer in order to log errors from HTTP server
+type loggerAdapter struct {
+}
+
+func (l *loggerAdapter) Write(p []byte) (n int, err error) {
+	clog.Debug(string(p))
+	return len(p), nil
+}
+
+// HTTPRequestKey is the context key for the current processed HTTP request (if current processed request was done over DOH)
+type HTTPRequestKey struct{}
+
 // NewServerHTTPS returns a new CoreDNS HTTPS server and compiles all plugins in to it.
 func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 	s, err := NewServer(addr, group)
@@ -35,9 +50,11 @@ func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 	// The *tls* plugin must make sure that multiple conflicting
 	// TLS configuration returns an error: it can only be specified once.
 	var tlsConfig *tls.Config
-	for _, conf := range s.zones {
-		// Should we error if some configs *don't* have TLS?
-		tlsConfig = conf.TLSConfig
+	for _, z := range s.zones {
+		for _, conf := range z {
+			// Should we error if some configs *don't* have TLS?
+			tlsConfig = conf.TLSConfig
+		}
 	}
 
 	// http/2 is recommended when using DoH. We need to specify it in next protos
@@ -48,8 +65,10 @@ func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 
 	// Use a custom request validation func or use the standard DoH path check.
 	var validator func(*http.Request) bool
-	for _, conf := range s.zones {
-		validator = conf.HTTPRequestValidateFunc
+	for _, z := range s.zones {
+		for _, conf := range z {
+			validator = conf.HTTPRequestValidateFunc
+		}
 	}
 	if validator == nil {
 		validator = func(r *http.Request) bool { return r.URL.Path == doh.Path }
@@ -59,6 +78,7 @@ func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
+		ErrorLog:     stdlog.New(&loggerAdapter{}, "", 0),
 	}
 	sh := &ServerHTTPS{
 		Server: s, tlsConfig: tlsConfig, httpsServer: srv, validRequest: validator,
@@ -88,7 +108,6 @@ func (s *ServerHTTPS) ServePacket(p net.PacketConn) error { return nil }
 
 // Listen implements caddy.TCPServer interface.
 func (s *ServerHTTPS) Listen() (net.Listener, error) {
-
 	l, err := reuseport.Listen("tcp", s.Addr[len(transport.HTTPS+"://"):])
 	if err != nil {
 		return nil, err
@@ -125,15 +144,16 @@ func (s *ServerHTTPS) Stop() error {
 // ServeHTTP is the handler that gets the HTTP request and converts to the dns format, calls the plugin
 // chain, converts it back and write it to the client.
 func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
 	if !s.validRequest(r) {
 		http.Error(w, "", http.StatusNotFound)
+		s.countResponse(http.StatusNotFound)
 		return
 	}
 
 	msg, err := doh.RequestToMsg(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		s.countResponse(http.StatusBadRequest)
 		return
 	}
 
@@ -150,6 +170,7 @@ func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// We should expect a packet to be returned that we can send to the client.
 	ctx := context.WithValue(context.Background(), Key{}, s.Server)
 	ctx = context.WithValue(ctx, LoopKey{}, 0)
+	ctx = context.WithValue(ctx, HTTPRequestKey{}, r)
 	s.ServeDNS(ctx, dw, msg)
 
 	// See section 4.2.1 of RFC 8484.
@@ -157,6 +178,7 @@ func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// handler has not provided any response message.
 	if dw.Msg == nil {
 		http.Error(w, "No response", http.StatusInternalServerError)
+		s.countResponse(http.StatusInternalServerError)
 		return
 	}
 
@@ -169,8 +191,13 @@ func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%f", age.Seconds()))
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	w.WriteHeader(http.StatusOK)
+	s.countResponse(http.StatusOK)
 
 	w.Write(buf)
+}
+
+func (s *ServerHTTPS) countResponse(status int) {
+	vars.HTTPSResponsesCount.WithLabelValues(s.Addr, strconv.Itoa(status)).Inc()
 }
 
 // Shutdown stops the server (non gracefully).

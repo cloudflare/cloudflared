@@ -8,19 +8,22 @@
 
 With *prometheus* you export metrics from CoreDNS and any plugin that has them.
 The default location for the metrics is `localhost:9153`. The metrics path is fixed to `/metrics`.
-The following metrics are exported:
+
+In addition to the default Go metrics exported by the [Prometheus Go client](https://prometheus.io/docs/guides/go-application/),
+the following metrics are exported:
 
 * `coredns_build_info{version, revision, goversion}` - info about CoreDNS itself.
 * `coredns_panics_total{}` - total number of panics.
-* `coredns_dns_requests_total{server, zone, proto, family, type}` - total query count.
-* `coredns_dns_request_duration_seconds{server, zone, type}` - duration to process each query.
-* `coredns_dns_request_size_bytes{server, zone, proto}` - size of the request in bytes.
-* `coredns_dns_do_requests_total{server, zone}` -  queries that have the DO bit set
-* `coredns_dns_response_size_bytes{server, zone, proto}` - response size in bytes.
-* `coredns_dns_responses_total{server, zone, rcode, plugin}` - response per zone, rcode and plugin.
-* `coredns_plugin_enabled{server, zone, name}` - indicates whether a plugin is enabled on per server and zone basis.
+* `coredns_dns_requests_total{server, zone, view, proto, family, type}` - total query count.
+* `coredns_dns_request_duration_seconds{server, zone, view, type}` - duration to process each query.
+* `coredns_dns_request_size_bytes{server, zone, view, proto}` - size of the request in bytes.
+* `coredns_dns_do_requests_total{server, view, zone}` -  queries that have the DO bit set
+* `coredns_dns_response_size_bytes{server, zone, view, proto}` - response size in bytes.
+* `coredns_dns_responses_total{server, zone, view, rcode, plugin}` - response per zone, rcode and plugin.
+* `coredns_dns_https_responses_total{server, status}` - responses per server and http status code.
+* `coredns_plugin_enabled{server, zone, view, name}` - indicates whether a plugin is enabled on per server, zone and view basis.
 
-Each counter has a label `zone` which is the zonename used for the request/response.
+Almost each counter has a label `zone` which is the zonename used for the request/response.
 
 Extra labels used are:
 
@@ -32,11 +35,19 @@ Extra labels used are:
 * `type` which holds the query type. It holds most common types (A, AAAA, MX, SOA, CNAME, PTR, TXT,
   NS, SRV, DS, DNSKEY, RRSIG, NSEC, NSEC3, HTTPS, IXFR, AXFR and ANY) and "other" which lumps together all
   other types.
+* `status` which holds the https status code. Possible values are:
+  * 200 - request is processed,
+  * 404 - request has been rejected on validation,
+  * 400 - request to dns message conversion failed,
+  * 500 - processing ended up with no response.
 * the `plugin` label holds the name of the plugin that made the write to the client. If the server
   did the write (on error for instance), the value is empty.
 
 If monitoring is enabled, queries that do not enter the plugin chain are exported under the fake
 name "dropped" (without a closing dot - this is never a valid domain name).
+
+Other plugins may export additional stats when the _prometheus_ plugin is enabled.  Those stats are documented in each
+plugin's README.
 
 This plugin can only be used once per Server Block.
 

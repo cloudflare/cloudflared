@@ -1,5 +1,5 @@
 *.test
+*.out
 example/example
-
-docs/_build
-docs/doctrees
+/xunit.xml
+/coverage.xml

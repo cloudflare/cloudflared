@@ -1,3 +1,13 @@
+2023.2.1
+- 2023-02-01 TUN-7065: Revert Ingress Rule check for named tunnel configurations
+- 2023-02-01 Revert "TUN-7065: Revert Ingress Rule check for named tunnel configurations"
+- 2023-02-01 Revert "TUN-7065: Remove classic tunnel creation"
+2023.1.0
+- 2023-01-10 TUN-7064: RPM digests are now sha256 instead of md5sum
+- 2023-01-04 RTG-2418 Update qtls
+- 2022-12-24 TUN-7057: Remove dependency github.com/gorilla/mux
+- 2022-12-24 TUN-6724: Migrate to sentry-go from raven-go
+
 2022.12.1
 - 2022-12-20 TUN-7021: Fix proxy-dns not starting when cloudflared tunnel is run
 - 2022-12-15 TUN-7010: Changelog for release 2022.12.0

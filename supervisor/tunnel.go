@@ -69,7 +69,6 @@ type TunnelConfig struct {
 	PQKexIdx int
 
 	NamedTunnel      *connection.NamedTunnelProperties
-	ClassicTunnel    *connection.ClassicTunnelProperties
 	MuxerConfig      *connection.MuxerConfig
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
@@ -205,7 +204,6 @@ func (f *ipAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsN
 
 type EdgeTunnelServer struct {
 	config            *TunnelConfig
-	cloudflaredUUID   uuid.UUID
 	orchestrator      *orchestration.Orchestrator
 	credentialManager *reconnectCredentialManager
 	edgeAddrHandler   EdgeAddrHandler
@@ -491,7 +489,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	)
 
 	switch protocol {
-	case connection.QUIC, connection.QUICWarp:
+	case connection.QUIC:
 		connOptions := e.config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return e.serveQUIC(ctx,
 			addr.UDP,
@@ -500,7 +498,7 @@ func (e *EdgeTunnelServer) serveConnection(
 			controlStream,
 			connIndex)
 
-	case connection.HTTP2, connection.HTTP2Warp:
+	case connection.HTTP2:
 		edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, e.config.EdgeTLSConfigs[protocol], addr.TCP, e.edgeBindAddr)
 		if err != nil {
 			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection with Cloudflare edge")
@@ -579,12 +577,8 @@ func (e *EdgeTunnelServer) serveH2mux(
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		if e.config.NamedTunnel != nil {
-			connOptions := e.config.connectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
-			return handler.ServeNamedTunnel(serveCtx, e.config.NamedTunnel, connOptions, connectedFuse)
-		}
-		registrationOptions := e.config.registrationOptions(connIndex, edgeConn.LocalAddr().String(), e.cloudflaredUUID)
-		return handler.ServeClassicTunnel(serveCtx, e.config.ClassicTunnel, e.credentialManager, registrationOptions, connectedFuse)
+		connOptions := e.config.connectionOptions(edgeConn.LocalAddr().String(), uint8(connectedFuse.backoff.Retries()))
+		return handler.ServeNamedTunnel(serveCtx, e.config.NamedTunnel, connOptions, connectedFuse)
 	})
 
 	errGroup.Go(func() error {

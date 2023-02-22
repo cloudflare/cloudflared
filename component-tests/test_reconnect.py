@@ -33,13 +33,6 @@ class TestReconnect:
             # Repeat the test multiple times because some issues only occur after multiple reconnects
             self.assert_reconnect(config, cloudflared, 5)
 
-    def test_classic_reconnect(self, tmp_path, component_tests_config):
-        extra_config = copy.copy(self.extra_config)
-        extra_config["hello-world"] = True
-        config = component_tests_config(additional_config=extra_config, cfd_mode=CfdModes.CLASSIC)
-        with start_cloudflared(tmp_path, config, cfd_args=[], new_process=True, allow_input=True, capture_output=False) as cloudflared:
-            self.assert_reconnect(config, cloudflared, 1)
-
     def send_reconnect(self, cloudflared, secs):
         # Although it is recommended to use the Popen.communicate method, we cannot
         # use it because it blocks on reading stdout and stderr until EOF is reached
