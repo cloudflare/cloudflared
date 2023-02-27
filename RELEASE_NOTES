@@ -1,3 +1,12 @@
+2023.2.2
+- 2023-02-22 TUN-7197: Add connIndex tag to debug messages of incoming requests
+- 2023-02-08 TUN-7167: Respect protocol overrides with --token
+- 2023-02-06 TUN-7065: Remove classic tunnel creation
+- 2023-02-06 TUN-6938: Force h2mux protocol to http2 for named tunnels
+- 2023-02-06 TUN-6938: Provide QUIC as first in protocol list
+- 2023-02-03 TUN-7158: Correct TCP tracing propagation
+- 2023-02-01 TUN-7151: Update changes file with latest release notices
+
 2023.2.1
 - 2023-02-01 TUN-7065: Revert Ingress Rule check for named tunnel configurations
 - 2023-02-01 Revert "TUN-7065: Revert Ingress Rule check for named tunnel configurations"
