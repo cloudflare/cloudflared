@@ -4,6 +4,8 @@ set -euo pipefail
 
 FILENAME="${PWD}/artifacts/cloudflared-darwin-amd64.tgz"
 
+echo "$GITHUB_PRIVATE_KEY"
+
 if ! VERSION="$(git describe --tags --exact-match 2>/dev/null)" ; then
     echo "Skipping public release for an untagged commit."
     echo "##teamcity[buildStatus status='SUCCESS' text='Skipped due to lack of tag']"
