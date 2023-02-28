@@ -44,7 +44,7 @@ var (
 	secretFlags     = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 	defaultFeatures = []string{supervisor.FeatureAllowRemoteConfig, supervisor.FeatureSerializedHeaders, supervisor.FeatureDatagramV2, supervisor.FeatureQUICSupportEOF}
 
-	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version"}
+	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address"}
 )
 
 // returns the first path that contains a cert.pem file. If none of the DefaultConfigSearchDirectories
@@ -284,6 +284,18 @@ func prepareTunnelConfig(
 	if err != nil {
 		return nil, nil, err
 	}
+	edgeBindAddr, err := parseConfigBindAddress(c.String("edge-bind-address"))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := testIPBindable(edgeBindAddr); err != nil {
+		return nil, nil, fmt.Errorf("invalid edge-bind-address %s: %v", edgeBindAddr, err)
+	}
+	edgeIPVersion, err = adjustIPVersionByBindAddress(edgeIPVersion, edgeBindAddr)
+	if err != nil {
+		// This is not a fatal error, we just overrode edgeIPVersion
+		log.Warn().Str("edgeIPVersion", edgeIPVersion.String()).Err(err).Msg("Overriding edge-ip-version")
+	}
 
 	var pqKexIdx int
 	if needPQ {
@@ -302,6 +314,7 @@ func prepareTunnelConfig(
 		EdgeAddrs:       c.StringSlice("edge"),
 		Region:          c.String("region"),
 		EdgeIPVersion:   edgeIPVersion,
+		EdgeBindAddr:    edgeBindAddr,
 		HAConnections:   c.Int("ha-connections"),
 		IncidentLookup:  supervisor.NewIncidentLookup(),
 		IsAutoupdated:   c.Bool("is-autoupdated"),
@@ -392,6 +405,51 @@ func parseConfigIPVersion(version string) (v allregions.ConfigIPVersion, err err
 		err = fmt.Errorf("invalid value for edge-ip-version: %s", version)
 	}
 	return
+}
+
+func parseConfigBindAddress(ipstr string) (net.IP, error) {
+	// Unspecified - it's fine
+	if ipstr == "" {
+		return nil, nil
+	}
+	ip := net.ParseIP(ipstr)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid value for edge-bind-address: %s", ipstr)
+	}
+	return ip, nil
+}
+
+func testIPBindable(ip net.IP) error {
+	// "Unspecified" = let OS choose, so always bindable
+	if ip == nil {
+		return nil
+	}
+
+	addr := &net.UDPAddr{IP: ip, Port: 0}
+	listener, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return err
+	}
+	listener.Close()
+	return nil
+}
+
+func adjustIPVersionByBindAddress(ipVersion allregions.ConfigIPVersion, ip net.IP) (allregions.ConfigIPVersion, error) {
+	if ip == nil {
+		return ipVersion, nil
+	}
+	// https://pkg.go.dev/net#IP.To4: "If ip is not an IPv4 address, To4 returns nil."
+	if ip.To4() != nil {
+		if ipVersion == allregions.IPv6Only {
+			return allregions.IPv4Only, fmt.Errorf("IPv4 bind address is specified, but edge-ip-version is IPv6")
+		}
+		return allregions.IPv4Only, nil
+	} else {
+		if ipVersion == allregions.IPv4Only {
+			return allregions.IPv6Only, fmt.Errorf("IPv6 bind address is specified, but edge-ip-version is IPv4")
+		}
+		return allregions.IPv6Only, nil
+	}
 }
 
 func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRouterConfig, error) {

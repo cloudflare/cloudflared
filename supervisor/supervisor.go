@@ -82,6 +82,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
 
 	edgeAddrHandler := NewIPAddrFallback(config.MaxEdgeAddrRetries)
+	edgeBindAddr := config.EdgeBindAddr
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
@@ -89,6 +90,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		credentialManager: reconnectCredentialManager,
 		edgeAddrs:         edgeIPs,
 		edgeAddrHandler:   edgeAddrHandler,
+		edgeBindAddr:      edgeBindAddr,
 		tracker:           tracker,
 		reconnectCh:       reconnectCh,
 		gracefulShutdownC: gracefulShutdownC,

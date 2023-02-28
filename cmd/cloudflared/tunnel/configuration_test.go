@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"net"
 	"os"
 	"testing"
 
@@ -213,4 +214,24 @@ func getCertPoolSubjects(certPool *x509.CertPool) ([]*pkix.Name, error) {
 
 func isUnrecoverableError(err error) bool {
 	return err != nil && err.Error() != "crypto/x509: system root pool is not available on Windows"
+}
+
+func TestTestIPBindable(t *testing.T) {
+	assert.Nil(t, testIPBindable(nil))
+
+	// Public services - if one of these IPs is on the machine, the test environment is too weird
+	assert.NotNil(t, testIPBindable(net.ParseIP("8.8.8.8")))
+	assert.NotNil(t, testIPBindable(net.ParseIP("1.1.1.1")))
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, addr := range addrs {
+		if i >= 3 {
+			break
+		}
+		ip := addr.(*net.IPNet).IP
+		assert.Nil(t, testIPBindable(ip))
+	}
 }
