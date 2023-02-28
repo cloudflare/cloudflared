@@ -2,61 +2,63 @@
 
 <?if $(var.Platform)="x86"?>
     <?define Program_Files="ProgramFilesFolder"?>
-<?else?>
+<?else ?>
     <?define Program_Files="ProgramFiles64Folder"?>
-<?endif?>
+<?endif ?>
 <?ifndef var.Version?>
     <?error Undefined Version variable?>
-<?endif?>
+<?endif ?>
 <?ifndef var.Path?>
     <?error Undefined Path variable?>
-<?endif?>
+<?endif ?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-    <Product Id="35e5e858-9372-4449-bf73-1cd6f7267128" 
+    <Product Id="*"
         UpgradeCode="23f90fdd-9328-47ea-ab52-5380855a4b12"
         Name="cloudflared"
         Version="$(var.Version)"
         Manufacturer="cloudflare"
         Language="1033">
 
-      <Package InstallerVersion="200" Compressed="yes" Comments="Windows Installer Package" InstallScope="perMachine"/>
+        <Package InstallerVersion="200" Compressed="yes" Comments="Windows Installer Package" InstallScope="perMachine" />
 
-      <Media Id="1" Cabinet="product.cab" EmbedCab="yes"/>
+        <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
 
-      <Upgrade Id="23f90fdd-9328-47ea-ab52-5380855a4b12">
-         <UpgradeVersion Minimum="$(var.Version)" OnlyDetect="yes" Property="NEWERVERSIONDETECTED"/>
-         <UpgradeVersion Minimum="2020.8.0" Maximum="$(var.Version)" IncludeMinimum="yes" IncludeMaximum="no"
-                         Property="OLDERVERSIONBEINGUPGRADED"/>
-      </Upgrade>
-      <Condition Message="A newer version of this software is already installed.">NOT NEWERVERSIONDETECTED</Condition>
+        <MajorUpgrade DowngradeErrorMessage="A later version of [ProductName] is already installed. Setup will now exit." />
 
-    <Directory Id="TARGETDIR" Name="SourceDir">
-        <!--This specifies where the cloudflared.exe is moved to in the windows Operation System-->
-        <Directory Id="$(var.Program_Files)">
-            <Directory Id="INSTALLDIR" Name="cloudflared">
-                <Component Id="ApplicationFiles" Guid="35e5e858-9372-4449-bf73-1cd6f7267128">
-                    <File Id="ApplicationFile0" Source="$(var.Path)"/>
-                </Component>
+        <Upgrade Id="23f90fdd-9328-47ea-ab52-5380855a4b12">
+            <UpgradeVersion Minimum="$(var.Version)" OnlyDetect="yes" Property="NEWERVERSIONDETECTED" />
+            <UpgradeVersion Minimum="2020.8.0" Maximum="$(var.Version)" IncludeMinimum="yes" IncludeMaximum="no"
+                Property="OLDERVERSIONBEINGUPGRADED" />
+        </Upgrade>
+        <Condition Message="A newer version of this software is already installed.">NOT NEWERVERSIONDETECTED</Condition>
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <!--This specifies where the cloudflared.exe is moved to in the windows Operation System-->
+            <Directory Id="$(var.Program_Files)">
+                <Directory Id="INSTALLDIR" Name="cloudflared">
+                    <Component Id="ApplicationFiles" Guid="35e5e858-9372-4449-bf73-1cd6f7267128">
+                        <File Id="ApplicationFile0" Source="$(var.Path)" />
+                    </Component>
+                </Directory>
             </Directory>
+            <Component Id="ENVS" Guid="6bb74449-d10d-4f4a-933e-6fc9fa006eae">
+                <!--Set the cloudflared bin location to the Path Environment Variable-->
+                <Environment Id="ENV0"
+                    Name="PATH"
+                    Value="[INSTALLDIR]."
+                    Permanent="no"
+                    Part="last"
+                    Action="create"
+                    System="yes" />
+            </Component>
         </Directory>
-        <Component Id="ENVS" Guid="6bb74449-d10d-4f4a-933e-6fc9fa006eae">
-        <!--Set the cloudflared bin location to the Path Environment Variable-->
-         <Environment Id="ENV0"
-           Name="PATH"
-           Value="[INSTALLDIR]."
-           Permanent="no"
-           Part="last"
-           Action="create"
-           System="yes" />
-        </Component>
-    </Directory>
 
 
-    <Feature Id='Complete' Level='1'>
-      <ComponentRef Id="ENVS"/>
-      <ComponentRef Id='ApplicationFiles' />
-    </Feature>
+        <Feature Id='Complete' Level='1'>
+            <ComponentRef Id="ENVS" />
+            <ComponentRef Id='ApplicationFiles' />
+        </Feature>
 
     </Product>
 </Wix>
