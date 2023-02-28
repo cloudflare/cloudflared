@@ -3,9 +3,6 @@
 set -euo pipefail
 
 FILENAME="${PWD}/artifacts/cloudflared-darwin-amd64.tgz"
-
-echo "$GITHUB_PRIVATE_KEY"
-
 if ! VERSION="$(git describe --tags --exact-match 2>/dev/null)" ; then
     echo "Skipping public release for an untagged commit."
     echo "##teamcity[buildStatus status='SUCCESS' text='Skipped due to lack of tag']"
@@ -34,7 +31,7 @@ SHA256=$(sha256sum "$FILENAME" | cut -b1-64)
 # set up git (note that UserKnownHostsFile is an absolute path so we can cd wherever)
 mkdir -p tmp
 ssh-keyscan -t rsa github.com > tmp/github.txt
-echo "$GITHUB_PRIVATE_KEY" > tmp/private.key
+echo "$GITHUB_PRIVATE_KEY_B64" | base64 --decode > tmp/private.key
 chmod 0400 tmp/private.key
 export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$PWD/tmp/github.txt -i $PWD/tmp/private.key -o IdentitiesOnly=yes"
 
