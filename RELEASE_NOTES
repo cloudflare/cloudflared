@@ -1,3 +1,11 @@
+2023.3.0
+- 2023-03-01 GH-352: Add Tunnel CLI option "edge-bind-address" (#870)
+- 2023-03-01 Fixed WIX template to allow MSI upgrades (#838)
+- 2023-02-28 TUN-7213: Decode Base64 encoded key before writing it
+- 2023-02-28 check.yaml: update actions to v3 (#876)
+- 2023-02-27 TUN-7213: Debug homebrew-cloudflare  build
+- 2023-02-15 RTG-2476 Add qtls override for Go 1.20
+
 2023.2.2
 - 2023-02-22 TUN-7197: Add connIndex tag to debug messages of incoming requests
 - 2023-02-08 TUN-7167: Respect protocol overrides with --token
