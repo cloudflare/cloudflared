@@ -14,8 +14,8 @@ if [[ ! -f "$FILENAME" ]] ; then
     exit 1
 fi
 
-if [[ "${GITHUB_PRIVATE_KEY:-}" == "" ]] ; then
-    echo "Missing GITHUB_PRIVATE_KEY"
+if [[ "${GITHUB_PRIVATE_KEY_B64:-}" == "" ]] ; then
+    echo "Missing GITHUB_PRIVATE_KEY_B64"
     exit 1
 fi
 
