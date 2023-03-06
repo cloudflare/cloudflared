@@ -21,10 +21,10 @@ fi
 
 # upload to s3 bucket for use by Homebrew formula
 s3cmd \
-    --acl-public --signature-v2 --access_key="$AWS_ACCESS_KEY_ID" --secret_key="$AWS_SECRET_ACCESS_KEY" --host-bucket="%(bucket)s.s3.cfdata.org" \
+    --acl-public --access_key="$AWS_ACCESS_KEY_ID" --secret_key="$AWS_SECRET_ACCESS_KEY" --host-bucket="%(bucket)s.s3.cfdata.org" \
     put "$FILENAME" "s3://cftunnel-docs/dl/cloudflared-$VERSION-darwin-amd64.tgz"
 s3cmd \
-    --acl-public --signature-v2 --access_key="$AWS_ACCESS_KEY_ID" --secret_key="$AWS_SECRET_ACCESS_KEY" --host-bucket="%(bucket)s.s3.cfdata.org" \
+    --acl-public --access_key="$AWS_ACCESS_KEY_ID" --secret_key="$AWS_SECRET_ACCESS_KEY" --host-bucket="%(bucket)s.s3.cfdata.org" \
     cp "s3://cftunnel-docs/dl/cloudflared-$VERSION-darwin-amd64.tgz" "s3://cftunnel-docs/dl/cloudflared-stable-darwin-amd64.tgz"
 SHA256=$(sha256sum "$FILENAME" | cut -b1-64)
 
