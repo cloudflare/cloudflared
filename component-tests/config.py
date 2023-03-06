@@ -41,8 +41,10 @@ class NamedTunnelBaseConfig(BaseConfig):
 
     def merge_config(self, additional):
         config = super(NamedTunnelBaseConfig, self).merge_config(additional)
-        config['tunnel'] = self.tunnel
-        config['credentials-file'] = self.credentials_file
+        if 'tunnel' not in config:
+            config['tunnel'] = self.tunnel
+        if 'credentials-file' not in config:
+            config['credentials-file'] = self.credentials_file
         # In some cases we want to override default ingress, such as in config tests
         if 'ingress' not in config:
             config['ingress'] = self.ingress
@@ -84,28 +86,9 @@ class NamedTunnelConfig(NamedTunnelBaseConfig):
     def get_credentials_json(self):
         with open(self.credentials_file) as json_file:
             return json.load(json_file)
-
-
+        
 @dataclass(frozen=True)
-class ClassicTunnelBaseConfig(BaseConfig):
-    hostname: str = None
-    origincert: str = None
-
-    def __post_init__(self):
-        if self.hostname is None:
-            raise TypeError("Field tunnel is not set")
-        if self.origincert is None:
-            raise TypeError("Field credentials_file is not set")
-
-    def merge_config(self, additional):
-        config = super(ClassicTunnelBaseConfig, self).merge_config(additional)
-        config['hostname'] = self.hostname
-        config['origincert'] = self.origincert
-        return config
-
-
-@dataclass(frozen=True)
-class ClassicTunnelConfig(ClassicTunnelBaseConfig):
+class QuickTunnelConfig(BaseConfig):
     full_config: dict = None
     additional_config: InitVar[dict] = {}
 
@@ -114,10 +97,6 @@ class ClassicTunnelConfig(ClassicTunnelBaseConfig):
         # https://docs.python.org/3/library/dataclasses.html#frozen-instances
         object.__setattr__(self, 'full_config',
                            self.merge_config(additional_config))
-
-    def get_url(self):
-        return "https://" + self.hostname
-
 
 @dataclass(frozen=True)
 class ProxyDnsConfig(BaseConfig):

@@ -23,6 +23,7 @@ import (
 
 const (
 	HelloWorldService = "hello_world"
+	HelloWorldFlag    = "hello-world"
 	HttpStatusService = "http_status"
 )
 

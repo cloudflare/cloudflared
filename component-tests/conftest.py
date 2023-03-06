@@ -5,14 +5,14 @@ from time import sleep
 import pytest
 import yaml
 
-from config import NamedTunnelConfig, ClassicTunnelConfig, ProxyDnsConfig
+from config import NamedTunnelConfig, ProxyDnsConfig, QuickTunnelConfig
 from constants import BACKOFF_SECS, PROXY_DNS_PORT
 from util import LOGGER
 
 
 class CfdModes(Enum):
     NAMED = auto()
-    CLASSIC = auto()
+    QUICK = auto()
     PROXY_DNS = auto()
 
 
@@ -42,12 +42,10 @@ def component_tests_config():
                                          tunnel=config['tunnel'],
                                          credentials_file=config['credentials_file'],
                                          ingress=config['ingress'])
-            elif cfd_mode is CfdModes.CLASSIC:
-                return ClassicTunnelConfig(
-                    additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'],
-                    hostname=config['classic_hostname'], origincert=config['origincert'])
             elif cfd_mode is CfdModes.PROXY_DNS:
                 return ProxyDnsConfig(cloudflared_binary=config['cloudflared_binary'])
+            elif cfd_mode is CfdModes.QUICK:
+                return QuickTunnelConfig(additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'])
             else:
                 raise Exception(f"Unknown cloudflared mode {cfd_mode}")
 

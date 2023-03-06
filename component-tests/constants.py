@@ -7,4 +7,4 @@ PROXY_DNS_PORT = 9053
 
 
 def protocols():
-    return ["h2mux", "http2", "quic"]
+    return ["http2", "quic"]

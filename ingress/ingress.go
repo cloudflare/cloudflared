@@ -112,7 +112,7 @@ func NewWarpRoutingService(config WarpRoutingConfig) *WarpRoutingService {
 
 // Get a single origin service from the CLI/config.
 func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginService, error) {
-	if c.IsSet("hello-world") {
+	if c.IsSet(HelloWorldFlag) {
 		return new(helloWorld), nil
 	}
 	if c.IsSet(config.BastionFlag) {
@@ -206,7 +206,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			}
 			srv := newStatusCode(statusCode)
 			service = &srv
-		} else if r.Service == HelloWorldService || r.Service == "hello-world" || r.Service == "helloworld" {
+		} else if r.Service == HelloWorldFlag || r.Service == HelloWorldService {
 			service = new(helloWorld)
 		} else if r.Service == ServiceSocksProxy {
 			rules := make([]ipaccess.Rule, len(r.OriginRequest.IPRules))

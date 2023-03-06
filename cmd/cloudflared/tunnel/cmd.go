@@ -199,7 +199,7 @@ func TunnelCommand(c *cli.Context) error {
 	// Run a quick tunnel
 	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
 	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
-	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("hello-world")
+	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
 	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
 		return RunQuickTunnel(sc)
 	}
@@ -215,6 +215,9 @@ func TunnelCommand(c *cli.Context) error {
 	}
 
 	if c.IsSet("proxy-dns") {
+		if shouldRunQuickTunnel {
+			return fmt.Errorf("running a quick tunnel with `proxy-dns` is not supported")
+		}
 		// NamedTunnelProperties are nil since proxy dns server does not need it.
 		// This is supported for legacy reasons: dns proxy server is not a tunnel and ideally should
 		// not run as part of cloudflared tunnel.
@@ -786,7 +789,7 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "hello-world",
+			Name:    ingress.HelloWorldFlag,
 			Value:   false,
 			Usage:   "Run Hello World Server",
 			EnvVars: []string{"TUNNEL_HELLO_WORLD"},

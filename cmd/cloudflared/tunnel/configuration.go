@@ -124,7 +124,7 @@ func isSecretEnvVar(key string) bool {
 func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelProperties) bool {
 	return c.IsSet("proxy-dns") &&
 		!(c.IsSet("name") || // adhoc-named tunnel
-			c.IsSet("hello-world") || // quick or named tunnel
+			c.IsSet(ingress.HelloWorldFlag) || // quick or named tunnel
 			namedTunnel != nil) // named tunnel
 }
 
@@ -231,17 +231,16 @@ func prepareTunnelConfig(
 	if err != nil && err != ingress.ErrNoIngressRules {
 		return nil, nil, err
 	}
-	if c.IsSet("url") {
-		// Ingress rules cannot be provided with --url flag
+	if c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag) || c.IsSet(config.BastionFlag) {
+		// Ingress rules cannot be provided with --url, --hello-world or --bastion flag
 		if !ingressRules.IsEmpty() {
 			return nil, nil, ingress.ErrURLIncompatibleWithIngress
-		} else {
-			// Only for quick or adhoc tunnels will we attempt to parse:
-			// --url, --hello-world, or --unix-socket flag for a tunnel ingress rule
-			ingressRules, err = ingress.NewSingleOrigin(c, false)
-			if err != nil {
-				return nil, nil, err
-			}
+		}
+		// Only for quick or adhoc tunnels will we attempt to parse:
+		// --url, --hello-world, --bastion, or --unix-socket flag for a tunnel ingress rule
+		ingressRules, err = ingress.NewSingleOrigin(c, false)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
 
