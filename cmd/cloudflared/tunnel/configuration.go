@@ -25,7 +25,6 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
@@ -272,14 +271,6 @@ func prepareTunnelConfig(
 	if err != nil {
 		return nil, nil, err
 	}
-	muxerConfig := &connection.MuxerConfig{
-		HeartbeatInterval: c.Duration("heartbeat-interval"),
-		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
-		MaxHeartbeats: uint64(c.Int("heartbeat-count")),
-		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
-		CompressionSetting: h2mux.CompressionSetting(uint64(c.Int("compression-quality"))),
-		MetricsUpdateFreq:  c.Duration("metrics-update-freq"),
-	}
 	edgeIPVersion, err := parseConfigIPVersion(c.String("edge-ip-version"))
 	if err != nil {
 		return nil, nil, err
@@ -328,7 +319,6 @@ func prepareTunnelConfig(
 		Retries:            uint(c.Int("retries")),
 		RunFromTerminal:    isRunningFromTerminal(),
 		NamedTunnel:        namedTunnel,
-		MuxerConfig:        muxerConfig,
 		ProtocolSelector:   protocolSelector,
 		EdgeTLSConfigs:     edgeTLSConfigs,
 		NeedPQ:             needPQ,

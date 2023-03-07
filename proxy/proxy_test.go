@@ -23,7 +23,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/cfio"
-
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
@@ -34,7 +33,7 @@ import (
 )
 
 var (
-	testTags        = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
+	testTags        = []tunnelpogs.Tag{{Name: "Name", Value: "value"}}
 	noWarpRouting   = ingress.WarpRoutingConfig{}
 	testWarpRouting = ingress.WarpRoutingConfig{
 		Enabled:        true,
