@@ -402,6 +402,7 @@ func (s *streamReadWriteAcker) AckConnection(tracePropagation string) error {
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.
 type httpResponseAdapter struct {
 	*quicpogs.RequestServerStream
+	headers             http.Header
 	connectResponseSent bool
 }
 
@@ -424,6 +425,14 @@ func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header)
 	}
 
 	return hrw.WriteConnectResponseData(nil, metadata...)
+}
+
+func (hrw *httpResponseAdapter) Header() http.Header {
+	return hrw.headers
+}
+
+func (hrw *httpResponseAdapter) WriteHeader(status int) {
+	hrw.WriteRespHeaders(status, hrw.headers)
 }
 
 func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {

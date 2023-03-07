@@ -200,6 +200,7 @@ func (h *HTTPResponseReadWriteAcker) AckConnection(tracePropagation string) erro
 type ResponseWriter interface {
 	WriteRespHeaders(status int, header http.Header) error
 	AddTrailer(trailerName, trailerValue string)
+	http.ResponseWriter
 	io.Writer
 }
 

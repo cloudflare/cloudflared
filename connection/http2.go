@@ -197,6 +197,7 @@ type http2RespWriter struct {
 	flusher       http.Flusher
 	shouldFlush   bool
 	statusWritten bool
+	respHeaders   http.Header
 	log           *zerolog.Logger
 }
 
@@ -274,6 +275,14 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 
 	rp.statusWritten = true
 	return nil
+}
+
+func (rp *http2RespWriter) Header() http.Header {
+	return rp.respHeaders
+}
+
+func (rp *http2RespWriter) WriteHeader(status int) {
+	rp.WriteRespHeaders(status, rp.respHeaders)
 }
 
 func (rp *http2RespWriter) WriteErrorResponse() bool {
