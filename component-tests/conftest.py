@@ -26,7 +26,7 @@ def component_tests_config():
         config = yaml.safe_load(stream)
         LOGGER.info(f"component tests base config {config}")
 
-        def _component_tests_config(additional_config={}, cfd_mode=CfdModes.NAMED, run_proxy_dns=True):
+        def _component_tests_config(additional_config={}, cfd_mode=CfdModes.NAMED, run_proxy_dns=True, provide_ingress=True):
             if run_proxy_dns:
                 # Regression test for TUN-4177, running with proxy-dns should not prevent tunnels from running.
                 # So we run all tests with it.
@@ -36,12 +36,21 @@ def component_tests_config():
                 additional_config.pop("proxy-dns", None)
                 additional_config.pop("proxy-dns-port", None)
 
+            # Allows the ingress rules to be omitted from the provided config
+            ingress = []
+            if provide_ingress:
+                ingress = config['ingress']
+
+            # Provide the hostname to allow routing to the tunnel even if the ingress rule isn't defined in the config
+            hostname = config['ingress'][0]['hostname']
+
             if cfd_mode is CfdModes.NAMED:
                 return NamedTunnelConfig(additional_config=additional_config,
                                          cloudflared_binary=config['cloudflared_binary'],
                                          tunnel=config['tunnel'],
                                          credentials_file=config['credentials_file'],
-                                         ingress=config['ingress'])
+                                         ingress=ingress,
+                                         hostname=hostname)
             elif cfd_mode is CfdModes.PROXY_DNS:
                 return ProxyDnsConfig(cloudflared_binary=config['cloudflared_binary'])
             elif cfd_mode is CfdModes.QUICK:

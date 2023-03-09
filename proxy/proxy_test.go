@@ -149,8 +149,7 @@ func TestProxySingleOrigin(t *testing.T) {
 	err := cliCtx.Set("hello-world", "true")
 	require.NoError(t, err)
 
-	allowURLFromArgs := false
-	ingressRule, err := ingress.NewSingleOrigin(cliCtx, allowURLFromArgs)
+	ingressRule, err := ingress.ParseIngressFromConfigAndCLI(&config.Configuration{}, cliCtx, &log)
 	require.NoError(t, err)
 
 	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))

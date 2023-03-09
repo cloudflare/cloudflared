@@ -20,6 +20,7 @@ import (
 
 var (
 	ErrNoIngressRules             = errors.New("The config file doesn't contain any ingress rules")
+	ErrNoIngressRulesCLI          = errors.New("No ingress rules were defined in provided config (if any) nor from the cli, cloudflared will return 502 for all incoming HTTP requests")
 	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all URLs (i.e. it should not have a hostname or path filter)")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
 	errHostnameContainsPort       = errors.New("Hostname cannot contain a port")
@@ -70,16 +71,52 @@ type Ingress struct {
 	Defaults OriginRequestConfig `json:"originRequest"`
 }
 
-// NewSingleOrigin constructs an Ingress set with only one rule, constructed from
-// CLI parameters for quick tunnels like --url or --no-chunked-encoding.
-func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
+// ParseIngress parses ingress rules, but does not send HTTP requests to the origins.
+func ParseIngress(conf *config.Configuration) (Ingress, error) {
+	if len(conf.Ingress) == 0 {
+		return Ingress{}, ErrNoIngressRules
+	}
+	return validateIngress(conf.Ingress, originRequestFromConfig(conf.OriginRequest))
+}
+
+// ParseIngressFromConfigAndCLI will parse the configuration rules from config files for ingress
+// rules and then attempt to parse CLI for ingress rules.
+// Will always return at least one valid ingress rule. If none are provided by the user, the default
+// will be to return 502 status code for all incoming requests.
+func ParseIngressFromConfigAndCLI(conf *config.Configuration, c *cli.Context, log *zerolog.Logger) (Ingress, error) {
+	// Attempt to parse ingress rules from configuration
+	ingressRules, err := ParseIngress(conf)
+	if err == nil && !ingressRules.IsEmpty() {
+		return ingressRules, nil
+	}
+	if err != ErrNoIngressRules {
+		return Ingress{}, err
+	}
+	// Attempt to parse ingress rules from CLI:
+	//   --url or --unix-socket flag for a tunnel HTTP ingress
+	//   --hello-world for a basic HTTP ingress self-served
+	//   --bastion for ssh bastion service
+	ingressRules, err = parseCLIIngress(c, false)
+	if errors.Is(err, ErrNoIngressRulesCLI) {
+		log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+		return newDefaultOrigin(c, log), nil
+	}
+	if err != nil {
+		return Ingress{}, err
+	}
+	return ingressRules, nil
+}
+
+// parseCLIIngress constructs an Ingress set with only one rule constructed from
+// CLI parameters: --url, --hello-world, --bastion, or --unix-socket
+func parseCLIIngress(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 	service, err := parseSingleOriginService(c, allowURLFromArgs)
 	if err != nil {
 		return Ingress{}, err
 	}
 
 	// Construct an Ingress with the single rule.
-	defaults := originRequestFromSingeRule(c)
+	defaults := originRequestFromSingleRule(c)
 	ing := Ingress{
 		Rules: []Rule{
 			{
@@ -90,6 +127,22 @@ func NewSingleOrigin(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 		Defaults: defaults,
 	}
 	return ing, err
+}
+
+// newDefaultOrigin always returns a 502 response code to help indicate that there are no ingress
+// rules setup, but the tunnel is reachable.
+func newDefaultOrigin(c *cli.Context, log *zerolog.Logger) Ingress {
+	noRulesService := newDefaultStatusCode(log)
+	defaults := originRequestFromSingleRule(c)
+	ingress := Ingress{
+		Rules: []Rule{
+			{
+				Service: &noRulesService,
+			},
+		},
+		Defaults: defaults,
+	}
+	return ingress
 }
 
 // WarpRoutingService starts a tcp stream between the origin and requests from
@@ -137,8 +190,7 @@ func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginServ
 		}
 		return &unixSocketPath{path: path, scheme: "http"}, nil
 	}
-	u, err := url.Parse("http://localhost:8080")
-	return &httpService{url: u}, err
+	return nil, ErrNoIngressRulesCLI
 }
 
 // IsEmpty checks if there are any ingress rules.
@@ -333,14 +385,6 @@ func (e errRuleShouldNotBeCatchAll) Error() string {
 	return fmt.Sprintf("Rule #%d is matching the hostname '%s', but "+
 		"this will match every hostname, meaning the rules which follow it "+
 		"will never be triggered.", e.index+1, e.hostname)
-}
-
-// ParseIngress parses ingress rules, but does not send HTTP requests to the origins.
-func ParseIngress(conf *config.Configuration) (Ingress, error) {
-	if len(conf.Ingress) == 0 {
-		return Ingress{}, ErrNoIngressRules
-	}
-	return validateIngress(conf.Ingress, originRequestFromConfig(conf.OriginRequest))
 }
 
 func isHTTPService(url *url.URL) bool {

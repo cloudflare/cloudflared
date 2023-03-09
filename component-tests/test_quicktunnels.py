@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-import requests
 from conftest import CfdModes
 from constants import METRICS_PORT
 from util import LOGGER, start_cloudflared, wait_tunnel_ready, get_quicktunnel_url, send_requests
 
-class TestCLI:
+class TestQuickTunnels:
     def test_quick_tunnel(self, tmp_path, component_tests_config):
         config = component_tests_config(cfd_mode=CfdModes.QUICK, run_proxy_dns=False)
         LOGGER.debug(config)

@@ -44,6 +44,9 @@ func (o *httpService) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
+	if o.defaultResp {
+		o.log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+	}
 	resp := &http.Response{
 		StatusCode: o.code,
 		Status:     fmt.Sprintf("%d %s", o.code, http.StatusText(o.code)),

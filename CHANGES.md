@@ -1,3 +1,7 @@
+## 2023.3.1
+### Breaking Change
+- Running a tunnel without ingress rules defined in configuration file nor from the CLI flags will no longer provide a default ingress rule to localhost:8080 and instead will return HTTP response code 502 for all incoming HTTP requests.
+
 ## 2023.2.2
 ### Notices
 - Legacy tunnels were officially deprecated on December 1, 2022. Starting with this version, cloudflared no longer supports connecting legacy tunnels.

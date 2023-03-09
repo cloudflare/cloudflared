@@ -30,6 +30,7 @@ class NamedTunnelBaseConfig(BaseConfig):
     tunnel: str = None
     credentials_file: str = None
     ingress: list = None
+    hostname: str = None
 
     def __post_init__(self):
         if self.tunnel is None:
@@ -63,7 +64,7 @@ class NamedTunnelConfig(NamedTunnelBaseConfig):
                            self.merge_config(additional_config))
 
     def get_url(self):
-        return "https://" + self.ingress[0]['hostname']
+        return "https://" + self.hostname
 
     def base_config(self):
         config = self.full_config.copy()

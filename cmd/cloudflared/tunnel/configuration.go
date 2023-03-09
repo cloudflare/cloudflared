@@ -227,21 +227,9 @@ func prepareTunnelConfig(
 		Arch:     info.OSArch(),
 	}
 	cfg := config.GetConfiguration()
-	ingressRules, err := ingress.ParseIngress(cfg)
-	if err != nil && err != ingress.ErrNoIngressRules {
+	ingressRules, err := ingress.ParseIngressFromConfigAndCLI(cfg, c, log)
+	if err != nil {
 		return nil, nil, err
-	}
-	if c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag) || c.IsSet(config.BastionFlag) {
-		// Ingress rules cannot be provided with --url, --hello-world or --bastion flag
-		if !ingressRules.IsEmpty() {
-			return nil, nil, ingress.ErrURLIncompatibleWithIngress
-		}
-		// Only for quick or adhoc tunnels will we attempt to parse:
-		// --url, --hello-world, --bastion, or --unix-socket flag for a tunnel ingress rule
-		ingressRules, err = ingress.NewSingleOrigin(c, false)
-		if err != nil {
-			return nil, nil, err
-		}
 	}
 
 	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), c.Bool("post-quantum"), edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)

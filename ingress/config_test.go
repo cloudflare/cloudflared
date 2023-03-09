@@ -411,7 +411,7 @@ func TestDefaultConfigFromCLI(t *testing.T) {
 		KeepAliveTimeout:     defaultKeepAliveTimeout,
 		ProxyAddress:         defaultProxyAddress,
 	}
-	actual := originRequestFromSingeRule(c)
+	actual := originRequestFromSingleRule(c)
 	require.Equal(t, expected, actual)
 }
 
