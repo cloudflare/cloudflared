@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 
-<?if $(var.Platform)="x86"?>
-    <?define Program_Files="ProgramFilesFolder"?>
-<?else ?>
+<?if $(var.Platform)="x64" ?>
     <?define Program_Files="ProgramFiles64Folder"?>
+<?else ?>
+    <?define Program_Files="ProgramFilesFolder"?>
 <?endif ?>
 <?ifndef var.Version?>
     <?error Undefined Version variable?>
