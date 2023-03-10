@@ -263,10 +263,6 @@ func newDefaultStatusCode(log *zerolog.Logger) statusCode {
 }
 
 func (o *statusCode) String() string {
-	// returning a different service name can help with identifying users via config that don't setup ingress rules
-	if o.defaultResp {
-		return "default_http_status:502"
-	}
 	return fmt.Sprintf("http_status:%d", o.code)
 }
 
