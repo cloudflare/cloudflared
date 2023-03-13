@@ -2,6 +2,12 @@
 ### Breaking Change
 - Running a tunnel without ingress rules defined in configuration file nor from the CLI flags will no longer provide a default ingress rule to localhost:8080 and instead will return HTTP response code 503 for all incoming HTTP requests.
 
+### Security Fixes
+- Windows 32 bit machines MSI now defaults to Program Files to install cloudflared. (See CVE-2023-1314). The cloudflared client itself is unaffected. This just changes how the installer works on 32 bit windows machines.
+
+### Bug Fixes
+- Fixed a bug that would cause running tunnel on Bastion mode and without ingress rules to crash.
+
 ## 2023.2.2
 ### Notices
 - Legacy tunnels were officially deprecated on December 1, 2022. Starting with this version, cloudflared no longer supports connecting legacy tunnels.
