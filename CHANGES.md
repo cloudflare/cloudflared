@@ -1,3 +1,7 @@
+## 2023.3.2
+### Notices
+- Due to the nature of QuickTunnels (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/do-more-with-tunnels/trycloudflare/) and its intended usage for testing and experiment of Cloudflare Tunnels, starting from 2023.3.2, QuickTunnels only make a single connection to the edge. If users want to use Tunnels in a production enverionment, they should move to Named Tunnels instead. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/remote/#set-up-a-tunnel-remotely-dashboard-setup)
+
 ## 2023.3.1
 ### Breaking Change
 - Running a tunnel without ingress rules defined in configuration file nor from the CLI flags will no longer provide a default ingress rule to localhost:8080 and instead will return HTTP response code 503 for all incoming HTTP requests.

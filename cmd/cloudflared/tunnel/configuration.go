@@ -293,7 +293,7 @@ func prepareTunnelConfig(
 		Region:          c.String("region"),
 		EdgeIPVersion:   edgeIPVersion,
 		EdgeBindAddr:    edgeBindAddr,
-		HAConnections:   c.Int("ha-connections"),
+		HAConnections:   c.Int(haConnectionsFlag),
 		IncidentLookup:  supervisor.NewIncidentLookup(),
 		IsAutoupdated:   c.Bool("is-autoupdated"),
 		LBPool:          c.String("lb-pool"),

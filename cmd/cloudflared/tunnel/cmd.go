@@ -42,6 +42,9 @@ import (
 const (
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
 
+	// ha-Connections specifies how many connections to make to the edge
+	haConnectionsFlag = "ha-connections"
+
 	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
 	sshPortFlag = "local-ssh-port"
 
@@ -418,7 +421,7 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx, metricsConfig, log)
 	}()
 
-	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int("ha-connections"))
+	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int(haConnectionsFlag))
 	if c.IsSet("stdin-control") {
 		log.Info().Msg("Enabling control through stdin")
 		go stdinControl(reconnectCh, log)
@@ -655,7 +658,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:   "ha-connections",
+			Name:   haConnectionsFlag,
 			Value:  4,
 			Hidden: true,
 		}),

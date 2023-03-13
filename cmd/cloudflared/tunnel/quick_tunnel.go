@@ -73,6 +73,9 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		sc.c.Set("protocol", "quic")
 	}
 
+	// Override the number of connections used. Quick tunnels shouldn't be used for production usage,
+	// so, use a single connection instead.
+	sc.c.Set(haConnectionsFlag, "1")
 	return StartServer(
 		sc.c,
 		buildInfo,

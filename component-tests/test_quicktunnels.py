@@ -8,7 +8,7 @@ class TestQuickTunnels:
         config = component_tests_config(cfd_mode=CfdModes.QUICK, run_proxy_dns=False)
         LOGGER.debug(config)
         with start_cloudflared(tmp_path, config, cfd_args=["--hello-world"], new_process=True):
-            wait_tunnel_ready(require_min_connections=4)
+            wait_tunnel_ready(require_min_connections=1)
             url = get_quicktunnel_url()
             send_requests(url, 3, True)
     
