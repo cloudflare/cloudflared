@@ -1,3 +1,14 @@
+2023.3.1
+- 2023-03-13 TUN-7271: Return 503 status code when no ingress rules configured
+- 2023-03-10 TUN-7272: Fix cloudflared returning non supported status service which breaks configuration migration
+- 2023-03-09 TUN-7259: Add warning for missing ingress rules
+- 2023-03-09 TUN-7268: Default to Program Files as location for win32
+- 2023-03-07 TUN-7252: Remove h2mux connection
+- 2023-03-07 TUN-7253: Adopt http.ResponseWriter for connection.ResponseWriter
+- 2023-03-06 TUN-7245: Add bastion flag to origin service check
+- 2023-03-06 EDGESTORE-108: Remove deprecated s3v2 signature
+- 2023-03-02 TUN-7226: Fixed a missed rename
+
 2023.3.0
 - 2023-03-01 GH-352: Add Tunnel CLI option "edge-bind-address" (#870)
 - 2023-03-01 Fixed WIX template to allow MSI upgrades (#838)
