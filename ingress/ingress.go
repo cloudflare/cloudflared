@@ -20,7 +20,7 @@ import (
 
 var (
 	ErrNoIngressRules             = errors.New("The config file doesn't contain any ingress rules")
-	ErrNoIngressRulesCLI          = errors.New("No ingress rules were defined in provided config (if any) nor from the cli, cloudflared will return 502 for all incoming HTTP requests")
+	ErrNoIngressRulesCLI          = errors.New("No ingress rules were defined in provided config (if any) nor from the cli, cloudflared will return 503 for all incoming HTTP requests")
 	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all URLs (i.e. it should not have a hostname or path filter)")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
 	errHostnameContainsPort       = errors.New("Hostname cannot contain a port")
@@ -129,7 +129,7 @@ func parseCLIIngress(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 	return ing, err
 }
 
-// newDefaultOrigin always returns a 502 response code to help indicate that there are no ingress
+// newDefaultOrigin always returns a 503 response code to help indicate that there are no ingress
 // rules setup, but the tunnel is reachable.
 func newDefaultOrigin(c *cli.Context, log *zerolog.Logger) Ingress {
 	noRulesService := newDefaultStatusCode(log)

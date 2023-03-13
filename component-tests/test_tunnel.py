@@ -24,7 +24,7 @@ class TestTunnel:
 
     def test_tunnel_no_ingress(self, tmp_path, component_tests_config):
         '''
-        Running a tunnel with no ingress rules provided from either config.yaml or CLI will still work but return 502
+        Running a tunnel with no ingress rules provided from either config.yaml or CLI will still work but return 503
         for all incoming requests.
         '''
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
@@ -32,9 +32,9 @@ class TestTunnel:
         with start_cloudflared(tmp_path, config, cfd_args=["run"], new_process=True):
             wait_tunnel_ready(require_min_connections=4)
             resp = send_request(config.get_url()+"/")
-            assert resp.status_code == 502, "Expected cloudflared to return 502 for all requests with no ingress defined"
+            assert resp.status_code == 503, "Expected cloudflared to return 503 for all requests with no ingress defined"
             resp = send_request(config.get_url()+"/test")
-            assert resp.status_code == 502, "Expected cloudflared to return 502 for all requests with no ingress defined"
+            assert resp.status_code == 503, "Expected cloudflared to return 503 for all requests with no ingress defined"
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)

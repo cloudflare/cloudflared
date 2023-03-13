@@ -257,9 +257,9 @@ func newStatusCode(status int) statusCode {
 	return statusCode{code: status}
 }
 
-// default status code (502) that is returned for requests to cloudflared that don't have any ingress rules setup
+// default status code (503) that is returned for requests to cloudflared that don't have any ingress rules setup
 func newDefaultStatusCode(log *zerolog.Logger) statusCode {
-	return statusCode{code: 502, defaultResp: true, log: log}
+	return statusCode{code: 503, defaultResp: true, log: log}
 }
 
 func (o *statusCode) String() string {
