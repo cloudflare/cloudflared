@@ -82,6 +82,8 @@ else ifeq ($(LOCAL_OS),windows)
     TARGET_OS ?= windows
 else ifeq ($(LOCAL_OS),freebsd)
     TARGET_OS ?= freebsd
+else ifeq ($(LOCAL_OS),openbsd)
+    TARGET_OS ?= openbsd
 else
     $(error This system's OS $(LOCAL_OS) isn't supported)
 endif
