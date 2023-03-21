@@ -12,6 +12,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/getsentry/raven-go v0.2.0
 	github.com/getsentry/sentry-go v0.16.0
+	github.com/go-chi/chi/v5 v5.0.8
 	github.com/gobwas/ws v1.0.4
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/google/gopacket v1.1.19

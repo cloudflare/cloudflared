@@ -17,6 +17,12 @@ type StreamBasedOriginProxy interface {
 	EstablishConnection(ctx context.Context, dest string) (OriginConnection, error)
 }
 
+// HTTPLocalProxy can be implemented by cloudflared services that want to handle incoming http requests.
+type HTTPLocalProxy interface {
+	// Handler is how cloudflared proxies eyeball requests to the local cloudflared services
+	http.Handler
+}
+
 func (o *unixSocketPath) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.URL.Scheme = o.scheme
 	return o.transport.RoundTrip(req)

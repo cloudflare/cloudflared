@@ -30,6 +30,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/signal"
@@ -397,7 +398,9 @@ func StartServer(
 		}
 	}
 
-	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, tunnelConfig.Log)
+	mgmt := management.New(c.String("management-hostname"))
+	localRules := []ingress.Rule{ingress.NewManagementRule(mgmt)}
+	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, localRules, tunnelConfig.Log)
 	if err != nil {
 		return err
 	}
@@ -894,6 +897,13 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_ORIGIN_ENABLE_HTTP2"},
 			Hidden:  shouldHide,
 			Value:   false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "management-hostname",
+			Usage:   "Management hostname to signify incoming management requests",
+			EnvVars: []string{"TUNNEL_MANAGEMENT_HOSTNAME"},
+			Hidden:  true,
+			Value:   "management.argotunnel.com",
 		}),
 	}
 	return append(flags, sshFlags(shouldHide)...)

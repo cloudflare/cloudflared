@@ -17,6 +17,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ipaccess"
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
@@ -276,6 +277,54 @@ func (o *statusCode) start(
 
 func (o statusCode) MarshalJSON() ([]byte, error) {
 	return json.Marshal(o.String())
+}
+
+// WarpRoutingService starts a tcp stream between the origin and requests from
+// warp clients.
+type WarpRoutingService struct {
+	Proxy StreamBasedOriginProxy
+}
+
+func NewWarpRoutingService(config WarpRoutingConfig) *WarpRoutingService {
+	svc := &rawTCPService{
+		name: ServiceWarpRouting,
+		dialer: net.Dialer{
+			Timeout:   config.ConnectTimeout.Duration,
+			KeepAlive: config.TCPKeepAlive.Duration,
+		},
+	}
+
+	return &WarpRoutingService{Proxy: svc}
+}
+
+// ManagementService starts a local HTTP server to handle incoming management requests.
+type ManagementService struct {
+	HTTPLocalProxy
+}
+
+func newManagementService(managementProxy HTTPLocalProxy) *ManagementService {
+	return &ManagementService{
+		HTTPLocalProxy: managementProxy,
+	}
+}
+
+func (o *ManagementService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
+	return nil
+}
+
+func (o *ManagementService) String() string {
+	return "management"
+}
+
+func (o ManagementService) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
+}
+
+func NewManagementRule(management *management.ManagementService) Rule {
+	return Rule{
+		Hostname: management.Hostname,
+		Service:  newManagementService(management),
+	}
 }
 
 type NopReadCloser struct{}

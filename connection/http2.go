@@ -218,6 +218,7 @@ func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, l
 		w:           w,
 		flusher:     flusher,
 		shouldFlush: connType.shouldFlush(),
+		respHeaders: make(http.Header),
 		log:         log,
 	}, nil
 }

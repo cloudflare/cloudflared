@@ -407,7 +407,7 @@ type httpResponseAdapter struct {
 }
 
 func newHTTPResponseAdapter(s *quicpogs.RequestServerStream) httpResponseAdapter {
-	return httpResponseAdapter{RequestServerStream: s}
+	return httpResponseAdapter{RequestServerStream: s, headers: make(http.Header)}
 }
 
 func (hrw *httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {

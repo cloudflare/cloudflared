@@ -38,6 +38,7 @@ const (
 	FeatureDatagramV2        = "support_datagram_v2"
 	FeaturePostQuantum       = "postquantum"
 	FeatureQUICSupportEOF    = "support_quic_eof"
+	FeatureManagementLogs    = "management_logs"
 )
 
 type TunnelConfig struct {

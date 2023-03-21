@@ -37,6 +37,7 @@ const (
 type Proxy struct {
 	ingressRules ingress.Ingress
 	warpRouting  *ingress.WarpRoutingService
+	management   *ingress.ManagementService
 	tags         []tunnelpogs.Tag
 	log          *zerolog.Logger
 }
@@ -139,6 +140,9 @@ func (p *Proxy) ProxyHTTP(
 			p.logRequestError(err, cfRay, "", rule, srv)
 			return err
 		}
+		return nil
+	case ingress.HTTPLocalProxy:
+		originProxy.ServeHTTP(w, req)
 		return nil
 	default:
 		return fmt.Errorf("Unrecognized service: %s, %t", rule.Service, originProxy)

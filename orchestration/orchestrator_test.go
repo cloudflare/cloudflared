@@ -21,7 +21,7 @@ import (
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/proxy"
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -50,11 +50,11 @@ func TestUpdateConfiguration(t *testing.T) {
 	initConfig := &Config{
 		Ingress: &ingress.Ingress{},
 	}
-	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, &testLogger)
+	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, []ingress.Rule{ingress.NewManagementRule(management.New("management.argotunnel.com"))}, &testLogger)
 	require.NoError(t, err)
 	initOriginProxy, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
-	require.IsType(t, &proxy.Proxy{}, initOriginProxy)
+	require.Implements(t, (*connection.OriginProxy)(nil), initOriginProxy)
 	require.False(t, orchestrator.WarpRoutingEnabled())
 
 	configJSONV2 := []byte(`
@@ -95,6 +95,10 @@ func TestUpdateConfiguration(t *testing.T) {
 
 	updateWithValidation(t, orchestrator, 2, configJSONV2)
 	configV2 := orchestrator.config
+	// Validate local ingress rules
+	require.Equal(t, "management.argotunnel.com", configV2.Ingress.LocalRules[0].Hostname)
+	require.True(t, configV2.Ingress.LocalRules[0].Matches("management.argotunnel.com", "/ping"))
+	require.Equal(t, "management", configV2.Ingress.LocalRules[0].Service.String())
 	// Validate ingress rule 0
 	require.Equal(t, "jira.tunnel.org", configV2.Ingress.Rules[0].Hostname)
 	require.True(t, configV2.Ingress.Rules[0].Matches("jira.tunnel.org", "/login"))
@@ -128,7 +132,7 @@ func TestUpdateConfiguration(t *testing.T) {
 
 	originProxyV2, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
-	require.IsType(t, &proxy.Proxy{}, originProxyV2)
+	require.Implements(t, (*connection.OriginProxy)(nil), originProxyV2)
 	require.NotEqual(t, originProxyV2, initOriginProxy)
 
 	// Should not downgrade to an older version
@@ -172,7 +176,7 @@ func TestUpdateConfiguration(t *testing.T) {
 
 	originProxyV10, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
-	require.IsType(t, &proxy.Proxy{}, originProxyV10)
+	require.Implements(t, (*connection.OriginProxy)(nil), originProxyV10)
 	require.NotEqual(t, originProxyV10, originProxyV2)
 }
 
@@ -257,7 +261,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	orchestrator, err := NewOrchestrator(ctx, initConfig, testTags, &testLogger)
+	orchestrator, err := NewOrchestrator(ctx, initConfig, testTags, []ingress.Rule{}, &testLogger)
 	require.NoError(t, err)
 
 	updateWithValidation(t, orchestrator, 1, configJSONV1)
@@ -484,7 +488,7 @@ func TestClosePreviousProxies(t *testing.T) {
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	orchestrator, err := NewOrchestrator(ctx, initConfig, testTags, &testLogger)
+	orchestrator, err := NewOrchestrator(ctx, initConfig, testTags, []ingress.Rule{}, &testLogger)
 	require.NoError(t, err)
 
 	updateWithValidation(t, orchestrator, 1, configWithHelloWorld)
@@ -539,7 +543,7 @@ func TestPersistentConnection(t *testing.T) {
 	initConfig := &Config{
 		Ingress: &ingress.Ingress{},
 	}
-	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, &testLogger)
+	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, []ingress.Rule{}, &testLogger)
 	require.NoError(t, err)
 
 	wsOrigin := httptest.NewServer(http.HandlerFunc(wsEcho))
