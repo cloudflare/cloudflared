@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -197,10 +198,55 @@ func (h *HTTPResponseReadWriteAcker) AckConnection(tracePropagation string) erro
 	return h.w.WriteRespHeaders(resp.StatusCode, resp.Header)
 }
 
+// localProxyConnection emulates an incoming connection to cloudflared as a net.Conn.
+// Used when handling a "hijacked" connection from connection.ResponseWriter
+type localProxyConnection struct {
+	io.ReadWriteCloser
+}
+
+func (c *localProxyConnection) Read(b []byte) (int, error) {
+	return c.ReadWriteCloser.Read(b)
+}
+
+func (c *localProxyConnection) Write(b []byte) (int, error) {
+	return c.ReadWriteCloser.Write(b)
+}
+
+func (c *localProxyConnection) Close() error {
+	return c.ReadWriteCloser.Close()
+}
+
+func (c *localProxyConnection) LocalAddr() net.Addr {
+	// Unused LocalAddr
+	return &net.TCPAddr{IP: net.IPv6loopback, Port: 0, Zone: ""}
+}
+
+func (c *localProxyConnection) RemoteAddr() net.Addr {
+	// Unused RemoteAddr
+	return &net.TCPAddr{IP: net.IPv6loopback, Port: 0, Zone: ""}
+}
+
+func (c *localProxyConnection) SetDeadline(t time.Time) error {
+	// ignored since we can't set the read/write Deadlines for the tunnel back to origintunneld
+	return nil
+}
+
+func (c *localProxyConnection) SetReadDeadline(t time.Time) error {
+	// ignored since we can't set the read/write Deadlines for the tunnel back to origintunneld
+	return nil
+}
+
+func (c *localProxyConnection) SetWriteDeadline(t time.Time) error {
+	// ignored since we can't set the read/write Deadlines for the tunnel back to origintunneld
+	return nil
+}
+
+// ResponseWriter is the response path for a request back through cloudflared's tunnel.
 type ResponseWriter interface {
 	WriteRespHeaders(status int, header http.Header) error
 	AddTrailer(trailerName, trailerValue string)
 	http.ResponseWriter
+	http.Hijacker
 	io.Writer
 }
 

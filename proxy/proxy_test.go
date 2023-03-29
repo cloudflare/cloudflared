@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"flag"
@@ -76,6 +77,10 @@ func (w *mockHTTPRespWriter) headers() http.Header {
 	return w.Header()
 }
 
+func (m *mockHTTPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
+}
+
 type mockWSRespWriter struct {
 	*mockHTTPRespWriter
 	writeNotification chan []byte
@@ -107,6 +112,10 @@ func (w *mockWSRespWriter) Close() error {
 
 func (w *mockWSRespWriter) Read(data []byte) (int, error) {
 	return w.reader.Read(data)
+}
+
+func (m *mockWSRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
 }
 
 type mockSSERespWriter struct {
@@ -840,6 +849,10 @@ func (w *wsRespWriter) WriteHeader(status int) {
 	// unused
 }
 
+func (m *wsRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
+}
+
 type mockTCPRespWriter struct {
 	w               io.Writer
 	responseHeaders http.Header
@@ -877,6 +890,10 @@ func (m *mockTCPRespWriter) Header() http.Header {
 
 func (m *mockTCPRespWriter) WriteHeader(status int) {
 	// do nothing
+}
+
+func (m *mockTCPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
 }
 
 func createSingleIngressConfig(t *testing.T, service string) ingress.Ingress {

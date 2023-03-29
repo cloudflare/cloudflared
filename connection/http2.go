@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"context"
 	gojson "encoding/json"
 	"fmt"
@@ -198,6 +199,8 @@ type http2RespWriter struct {
 	shouldFlush   bool
 	statusWritten bool
 	respHeaders   http.Header
+	hijackedMutex sync.Mutex
+	hijackedv     bool
 	log           *zerolog.Logger
 }
 
@@ -233,6 +236,10 @@ func (rp *http2RespWriter) AddTrailer(trailerName, trailerValue string) {
 }
 
 func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) error {
+	if rp.hijacked() {
+		rp.log.Warn().Msg("WriteRespHeaders after hijack")
+		return nil
+	}
 	dest := rp.w.Header()
 	userHeaders := make(http.Header, len(header))
 	for name, values := range header {
@@ -283,7 +290,41 @@ func (rp *http2RespWriter) Header() http.Header {
 }
 
 func (rp *http2RespWriter) WriteHeader(status int) {
+	if rp.hijacked() {
+		rp.log.Warn().Msg("WriteHeader after hijack")
+		return
+	}
 	rp.WriteRespHeaders(status, rp.respHeaders)
+}
+
+func (rp *http2RespWriter) hijacked() bool {
+	rp.hijackedMutex.Lock()
+	defer rp.hijackedMutex.Unlock()
+	return rp.hijackedv
+}
+
+func (rp *http2RespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if !rp.statusWritten {
+		return nil, nil, fmt.Errorf("status not yet written before attempting to hijack connection")
+	}
+	// Make sure to flush anything left in the buffer before hijacking
+	if rp.shouldFlush {
+		rp.flusher.Flush()
+	}
+	rp.hijackedMutex.Lock()
+	defer rp.hijackedMutex.Unlock()
+	if rp.hijackedv {
+		return nil, nil, http.ErrHijacked
+	}
+	rp.hijackedv = true
+	conn := &localProxyConnection{rp}
+	// We return the http2RespWriter here because we want to make sure that we flush after every write
+	// otherwise the HTTP2 write buffer waits a few seconds before sending.
+	readWriter := bufio.NewReadWriter(
+		bufio.NewReader(rp),
+		bufio.NewWriter(rp),
+	)
+	return conn, readWriter, nil
 }
 
 func (rp *http2RespWriter) WriteErrorResponse() bool {

@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -433,6 +434,15 @@ func (hrw *httpResponseAdapter) Header() http.Header {
 
 func (hrw *httpResponseAdapter) WriteHeader(status int) {
 	hrw.WriteRespHeaders(status, hrw.headers)
+}
+
+func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn := &localProxyConnection{hrw.ReadWriteCloser}
+	readWriter := bufio.NewReadWriter(
+		bufio.NewReader(hrw.ReadWriteCloser),
+		bufio.NewWriter(hrw.ReadWriteCloser),
+	)
+	return conn, readWriter, nil
 }
 
 func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {
