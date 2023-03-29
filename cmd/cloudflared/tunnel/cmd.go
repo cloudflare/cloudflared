@@ -28,6 +28,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
@@ -398,8 +399,11 @@ func StartServer(
 		}
 	}
 
-	mgmt := management.New(c.String("management-hostname"))
-	localRules := []ingress.Rule{ingress.NewManagementRule(mgmt)}
+	localRules := []ingress.Rule{}
+	if features.Contains(features.FeatureManagementLogs) {
+		mgmt := management.New(c.String("management-hostname"))
+		localRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
+	}
 	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, localRules, tunnelConfig.Log)
 	if err != nil {
 		return err

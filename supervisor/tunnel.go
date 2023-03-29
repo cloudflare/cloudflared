@@ -19,6 +19,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -31,14 +32,7 @@ import (
 )
 
 const (
-	dialTimeout              = 15 * time.Second
-	FeatureSerializedHeaders = "serialized_headers"
-	FeatureQuickReconnects   = "quick_reconnects"
-	FeatureAllowRemoteConfig = "allow_remote_config"
-	FeatureDatagramV2        = "support_datagram_v2"
-	FeaturePostQuantum       = "postquantum"
-	FeatureQUICSupportEOF    = "support_quic_eof"
-	FeatureManagementLogs    = "management_logs"
+	dialTimeout = 15 * time.Second
 )
 
 type TunnelConfig struct {
@@ -112,11 +106,11 @@ func (c *TunnelConfig) connectionOptions(originLocalAddr string, numPreviousAtte
 }
 
 func (c *TunnelConfig) SupportedFeatures() []string {
-	features := []string{FeatureSerializedHeaders}
+	supported := []string{features.FeatureSerializedHeaders}
 	if c.NamedTunnel == nil {
-		features = append(features, FeatureQuickReconnects)
+		supported = append(supported, features.FeatureQuickReconnects)
 	}
-	return features
+	return supported
 }
 
 func StartTunnelDaemon(

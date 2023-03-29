@@ -25,6 +25,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
@@ -40,8 +41,7 @@ var (
 	serviceUrl      = developerPortal + "/reference/service/"
 	argumentsUrl    = developerPortal + "/reference/arguments/"
 
-	secretFlags     = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
-	defaultFeatures = []string{supervisor.FeatureAllowRemoteConfig, supervisor.FeatureSerializedHeaders, supervisor.FeatureDatagramV2, supervisor.FeatureQUICSupportEOF}
+	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 
 	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address"}
 )
@@ -216,13 +216,13 @@ func prepareTunnelConfig(
 		transportProtocol = connection.QUIC.String()
 	}
 
-	features := dedup(append(c.StringSlice("features"), defaultFeatures...))
+	clientFeatures := dedup(append(c.StringSlice("features"), features.DefaultFeatures...))
 	if needPQ {
-		features = append(features, supervisor.FeaturePostQuantum)
+		clientFeatures = append(clientFeatures, features.FeaturePostQuantum)
 	}
 	namedTunnel.Client = tunnelpogs.ClientInfo{
 		ClientID: clientID[:],
-		Features: features,
+		Features: clientFeatures,
 		Version:  info.Version(),
 		Arch:     info.OSArch(),
 	}
