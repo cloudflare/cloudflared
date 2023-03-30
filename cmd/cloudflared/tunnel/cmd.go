@@ -401,7 +401,7 @@ func StartServer(
 
 	localRules := []ingress.Rule{}
 	if features.Contains(features.FeatureManagementLogs) {
-		mgmt := management.New(c.String("management-hostname"))
+		mgmt := management.New(c.String("management-hostname"), logger.ManagementLogger.Log, logger.ManagementLogger)
 		localRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
 	}
 	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, localRules, tunnelConfig.Log)

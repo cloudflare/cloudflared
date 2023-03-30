@@ -15,6 +15,9 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/cloudflare/cloudflared/features"
+	"github.com/cloudflare/cloudflared/management"
 )
 
 const (
@@ -35,8 +38,19 @@ const (
 	consoleTimeFormat = time.RFC3339
 )
 
+var (
+	ManagementLogger *management.Logger
+)
+
 func init() {
+	zerolog.TimeFieldFormat = time.RFC3339
 	zerolog.TimestampFunc = utcNow
+
+	if features.Contains(features.FeatureManagementLogs) {
+		// Management logger needs to be initialized before any of the other loggers as to not capture
+		// it's own logging events.
+		ManagementLogger = management.NewLogger()
+	}
 }
 
 func utcNow() time.Time {
@@ -89,6 +103,10 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 		}
 
 		writers = append(writers, rollingLogger)
+	}
+
+	if features.Contains(features.FeatureManagementLogs) {
+		writers = append(writers, ManagementLogger)
 	}
 
 	multi := resilientMultiWriter{writers}
