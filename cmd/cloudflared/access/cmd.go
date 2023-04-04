@@ -40,8 +40,8 @@ Add to your {{.Home}}/.ssh/config:
 {{- if .ShortLivedCerts}}
 Match host {{.Hostname}} exec "{{.Cloudflared}} access ssh-gen --hostname %h"
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
-  IdentityFile ~/.cloudflared/%h-cf_key
-  CertificateFile ~/.cloudflared/%h-cf_key-cert.pub
+  IdentityFile ~/.cloudflared/{{.SSHCertFilePath}}-cf_key
+  CertificateFile ~/.cloudflared/{{.SSHCertFilePath}}-cf_key-cert.pub
 {{- else}}
 Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
@@ -365,10 +365,11 @@ func sshConfig(c *cli.Context) error {
 		ShortLivedCerts bool
 		Hostname        string
 		Cloudflared     string
+		SSHCertFilePath string
 	}
 
 	t := template.Must(template.New("sshConfig").Parse(sshConfigTemplate))
-	return t.Execute(os.Stdout, config{Home: os.Getenv("HOME"), ShortLivedCerts: genCertBool, Hostname: hostname, Cloudflared: cloudflaredPath()})
+	return t.Execute(os.Stdout, config{Home: os.Getenv("HOME"), ShortLivedCerts: genCertBool, Hostname: hostname, Cloudflared: cloudflaredPath(), SSHCertFilePath: token.GenerateSSHCertFilePathFromURL(url.Parse(ensureURLScheme(hostname)), sshgen.keyName)})
 }
 
 // sshGen generates a short lived certificate for provided hostname
