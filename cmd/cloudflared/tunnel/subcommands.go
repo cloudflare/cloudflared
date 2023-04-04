@@ -632,7 +632,7 @@ func buildRunCommand() *cli.Command {
 		Action:    cliutil.ConfiguredAction(runCommand),
 		Usage:     "Proxy a local web server by running the given tunnel",
 		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] [TUNNEL]",
-		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections
+		Description: `Runs the tunnel identified by name or UUID, creating highly available connections
   between your server and the Cloudflare edge. You can provide name or UUID of tunnel to run either as the
   last command line argument or in the configuration file using "tunnel: TUNNEL".
 
