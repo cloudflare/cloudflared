@@ -142,7 +142,7 @@ func (p *Proxy) ProxyHTTP(
 		}
 		return nil
 	case ingress.HTTPLocalProxy:
-		originProxy.ServeHTTP(w, req)
+		p.proxyLocalRequest(originProxy, w, req, isWebsocket)
 		return nil
 	default:
 		return fmt.Errorf("Unrecognized service: %s, %t", rule.Service, originProxy)
@@ -304,6 +304,17 @@ func (p *Proxy) proxyStream(
 
 	originConn.Stream(ctx, rwa, p.log)
 	return nil
+}
+
+func (p *Proxy) proxyLocalRequest(proxy ingress.HTTPLocalProxy, w connection.ResponseWriter, req *http.Request, isWebsocket bool) {
+	if isWebsocket {
+		// These headers are added since they are stripped off during an eyeball request to origintunneld, but they
+		// are required during the Handshake process of a WebSocket request.
+		req.Header.Set("Connection", "Upgrade")
+		req.Header.Set("Upgrade", "websocket")
+		req.Header.Set("Sec-Websocket-Version", "13")
+	}
+	proxy.ServeHTTP(w, req)
 }
 
 type bidirectionalStream struct {
