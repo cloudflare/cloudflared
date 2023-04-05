@@ -1,0 +1,96 @@
+
+name: "Fetch upstream changes and create tags"
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: maggie0002/cloudflared
+
+jobs:
+  fetch-and-tag:
+    name: "Fetch upstream changes and create tags"
+    runs-on: "ubuntu-latest"
+    outputs:
+      output1: ${{ steps.fetch_and_tag_step.outputs.current_tag }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{secrets.TAP}}
+
+      - name: Fetch upstream and rebase
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com" && \
+          git config user.name "GitHub Workflow" && \
+          git remote add upstream https://github.com/cloudflare/cloudflared.git && \
+          git fetch --tags upstream && \
+          git rebase upstream/master
+
+      - name: Get and store latest tag as output variable
+        id: fetch_and_tag_step
+        run: |
+          echo $(git log --tags --simplify-by-decoration --pretty="format:%D" --reverse -n1  | cut -d" " -f2 | sed '$s/,$//') && \
+          latest_tag=$(git log --tags --simplify-by-decoration --pretty="format:%D" --reverse -n1  | cut -d" " -f2 | sed '$s/,$//') && \
+          echo "latest_tag=$(git log --tags --simplify-by-decoration --pretty="format:%D" --reverse -n1  | cut -d" " -f2 | sed '$s/,$//')" >> "$GITHUB_ENV" && \
+          echo "::set-output name=current_tag::$latest_tag"
+
+      - name: If a new tag from CloudFlare
+        if: ${{ !endsWith(env.latest_tag, '-ma') }}
+        run: |
+          git tag "${{env.latest_tag}}-ma"
+      - name: Push changes
+        run: |
+          git push origin master --tags -f
+
+  build-and-push:
+    name: "Build and publish images"
+    runs-on: ubuntu-latest
+    needs: [fetch-and-tag]
+    if: ${{ !endsWith(needs.fetch-and-tag.outputs.output1, '-ma') }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository based on tag
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.fetch-and-tag.outputs.output1 }}
+
+      - name: Rebase the custom build on to this tag
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com" && \
+          git config user.name "GitHub Workflow" && \
+          git merge origin/base -m "Merge Docker build files"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Available platforms
+        run: echo ${{ steps.buildx.outputs.platforms }}
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.fetch-and-tag.outputs.output1 }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
