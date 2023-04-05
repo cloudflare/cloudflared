@@ -95,14 +95,6 @@ var (
 		Usage:   "Inverts the sort order of the tunnel list.",
 		EnvVars: []string{"TUNNEL_LIST_INVERT_SORT"},
 	}
-	forceFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
-		Name:    "force",
-		Aliases: []string{"f"},
-		Usage: "By default, if a tunnel is currently being run from a cloudflared, you can't " +
-			"simultaneously rerun it again from a second cloudflared. The --force flag lets you " +
-			"overwrite the previous tunnel. If you want to use a single hostname with multiple " +
-			"tunnels, you can do so with Cloudflare's Load Balancer product.",
-	})
 	featuresFlag = altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 		Name:    "features",
 		Aliases: []string{"F"},
@@ -616,7 +608,6 @@ func renderOutput(format string, v interface{}) error {
 
 func buildRunCommand() *cli.Command {
 	flags := []cli.Flag{
-		forceFlag,
 		credentialsFileFlag,
 		credentialsContentsFlag,
 		postQuantumFlag,
