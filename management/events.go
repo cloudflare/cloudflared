@@ -210,3 +210,11 @@ func IsClosed(err error, log *zerolog.Logger) bool {
 	}
 	return false
 }
+
+func AsClosed(err error) *websocket.CloseError {
+	var closeErr websocket.CloseError
+	if errors.As(err, &closeErr) {
+		return &closeErr
+	}
+	return nil
+}

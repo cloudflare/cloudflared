@@ -15,6 +15,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/tail"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
@@ -89,6 +90,7 @@ func main() {
 	updater.Init(Version)
 	tracing.Init(Version)
 	token.Init(Version)
+	tail.Init(Version)
 	runApp(app, graceShutdownC)
 }
 
@@ -138,6 +140,7 @@ To determine if an update happened in a script, check for error code 11.`,
 	cmds = append(cmds, tunnel.Commands()...)
 	cmds = append(cmds, proxydns.Command(false))
 	cmds = append(cmds, access.Commands()...)
+	cmds = append(cmds, tail.Command())
 	return cmds
 }
 

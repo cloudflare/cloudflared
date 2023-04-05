@@ -932,7 +932,7 @@ func commandHelpTemplate() string {
 	for _, f := range configureCloudflaredFlags(false) {
 		parentFlagsHelp += fmt.Sprintf(" %s\n\t", f)
 	}
-	for _, f := range configureLoggingFlags(false) {
+	for _, f := range cliutil.ConfigureLoggingFlags(false) {
 		parentFlagsHelp += fmt.Sprintf(" %s\n\t", f)
 	}
 	const template = `NAME:

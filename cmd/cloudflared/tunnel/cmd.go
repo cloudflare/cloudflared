@@ -80,9 +80,6 @@ const (
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
 
-	debugLevelWarning = "At debug level cloudflared will log request URL, method, protocol, content length, as well as, all request and response headers. " +
-		"This can expose sensitive information in your logs."
-
 	LogFieldCommand             = "command"
 	LogFieldExpandedPath        = "expandedPath"
 	LogFieldPIDPathname         = "pidPathname"
@@ -541,7 +538,7 @@ func addPortIfMissing(uri *url.URL, port int) string {
 func tunnelFlags(shouldHide bool) []cli.Flag {
 	flags := configureCloudflaredFlags(shouldHide)
 	flags = append(flags, configureProxyFlags(shouldHide)...)
-	flags = append(flags, configureLoggingFlags(shouldHide)...)
+	flags = append(flags, cliutil.ConfigureLoggingFlags(shouldHide)...)
 	flags = append(flags, configureProxyDNSFlags(shouldHide)...)
 	flags = append(flags, []cli.Flag{
 		credentialsFileFlag,
@@ -1012,44 +1009,6 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Listen port for the proxy.",
 			Value:   0,
 			EnvVars: []string{"TUNNEL_PROXY_PORT"},
-			Hidden:  shouldHide,
-		}),
-	}
-}
-
-func configureLoggingFlags(shouldHide bool) []cli.Flag {
-	return []cli.Flag{
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogLevelFlag,
-			Value:   "info",
-			Usage:   "Application logging level {debug, info, warn, error, fatal}. " + debugLevelWarning,
-			EnvVars: []string{"TUNNEL_LOGLEVEL"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogTransportLevelFlag,
-			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
-			Value:   "info",
-			Usage:   "Transport logging level(previously called protocol logging level) {debug, info, warn, error, fatal}",
-			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogFileFlag,
-			Usage:   "Save application log to this file for reporting issues.",
-			EnvVars: []string{"TUNNEL_LOGFILE"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogDirectoryFlag,
-			Usage:   "Save application log to this directory for reporting issues.",
-			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "trace-output",
-			Usage:   "Name of trace output file, generated when cloudflared stops.",
-			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
 			Hidden:  shouldHide,
 		}),
 	}
