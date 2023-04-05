@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: maggie0002/cloudflared
+  IMAGE_NAME: markis/cloudflared
 
 jobs:
   fetch-and-tag:
