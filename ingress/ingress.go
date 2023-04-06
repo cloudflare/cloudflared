@@ -94,7 +94,7 @@ func ParseIngress(conf *config.Configuration) (Ingress, error) {
 // ParseIngressFromConfigAndCLI will parse the configuration rules from config files for ingress
 // rules and then attempt to parse CLI for ingress rules.
 // Will always return at least one valid ingress rule. If none are provided by the user, the default
-// will be to return 502 status code for all incoming requests.
+// will be to return 503 status code for all incoming requests.
 func ParseIngressFromConfigAndCLI(conf *config.Configuration, c *cli.Context, log *zerolog.Logger) (Ingress, error) {
 	// Attempt to parse ingress rules from configuration
 	ingressRules, err := ParseIngress(conf)
@@ -110,7 +110,11 @@ func ParseIngressFromConfigAndCLI(conf *config.Configuration, c *cli.Context, lo
 	//   --bastion for ssh bastion service
 	ingressRules, err = parseCLIIngress(c, false)
 	if errors.Is(err, ErrNoIngressRulesCLI) {
-		log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+		// Only log a warning if the tunnel is not a remotely managed tunnel and the config
+		// will be loaded after connecting.
+		if !c.IsSet("token") {
+			log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+		}
 		return newDefaultOrigin(c, log), nil
 	}
 	if err != nil {
