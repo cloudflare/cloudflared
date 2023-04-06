@@ -41,7 +41,7 @@ func NewLogger() *Logger {
 	log := zerolog.New(zerolog.ConsoleWriter{
 		Out:        os.Stdout,
 		TimeFormat: time.RFC3339,
-	}).With().Timestamp().Logger().Level(zerolog.DebugLevel)
+	}).With().Timestamp().Logger().Level(zerolog.InfoLevel)
 	return &Logger{
 		Log: &log,
 	}
