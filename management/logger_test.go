@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // No listening sessions will not write to the channel
@@ -22,12 +23,13 @@ func TestLoggerWrite_OneSession(t *testing.T) {
 
 	session := logger.Listen()
 	defer logger.Close(session)
-	zlog.Info().Int("type", int(HTTP)).Msg("hello")
+	zlog.Info().Int(EventTypeKey, int(HTTP)).Msg("hello")
 	select {
 	case event := <-session.listener:
+		assert.NotEmpty(t, event.Time)
 		assert.Equal(t, "hello", event.Message)
-		assert.Equal(t, LogLevel("info"), event.Level)
-		assert.Equal(t, HTTP, event.Type)
+		assert.Equal(t, Info, event.Level)
+		assert.Equal(t, HTTP, event.Event)
 	default:
 		assert.Fail(t, "expected an event to be in the listener")
 	}
@@ -41,13 +43,14 @@ func TestLoggerWrite_MultipleSessions(t *testing.T) {
 	session1 := logger.Listen()
 	defer logger.Close(session1)
 	session2 := logger.Listen()
-	zlog.Info().Int("type", int(HTTP)).Msg("hello")
+	zlog.Info().Int(EventTypeKey, int(HTTP)).Msg("hello")
 	for _, session := range []*Session{session1, session2} {
 		select {
 		case event := <-session.listener:
+			assert.NotEmpty(t, event.Time)
 			assert.Equal(t, "hello", event.Message)
-			assert.Equal(t, LogLevel("info"), event.Level)
-			assert.Equal(t, HTTP, event.Type)
+			assert.Equal(t, Info, event.Level)
+			assert.Equal(t, HTTP, event.Event)
 		default:
 			assert.Fail(t, "expected an event to be in the listener")
 		}
@@ -55,12 +58,13 @@ func TestLoggerWrite_MultipleSessions(t *testing.T) {
 
 	// Close session2 and make sure session1 still receives events
 	logger.Close(session2)
-	zlog.Info().Int("type", int(HTTP)).Msg("hello2")
+	zlog.Info().Int(EventTypeKey, int(HTTP)).Msg("hello2")
 	select {
 	case event := <-session1.listener:
+		assert.NotEmpty(t, event.Time)
 		assert.Equal(t, "hello2", event.Message)
-		assert.Equal(t, LogLevel("info"), event.Level)
-		assert.Equal(t, HTTP, event.Type)
+		assert.Equal(t, Info, event.Level)
+		assert.Equal(t, HTTP, event.Event)
 	default:
 		assert.Fail(t, "expected an event to be in the listener")
 	}
@@ -72,4 +76,63 @@ func TestLoggerWrite_MultipleSessions(t *testing.T) {
 	default:
 		// pass
 	}
+}
+
+type mockWriter struct {
+	event *Log
+	err   error
+}
+
+func (m *mockWriter) Write(p []byte) (int, error) {
+	m.event, m.err = parseZerologEvent(p)
+	return len(p), nil
+}
+
+// Validate all event types are set properly
+func TestParseZerologEvent_EventTypes(t *testing.T) {
+	writer := mockWriter{}
+	zlog := zerolog.New(&writer).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+
+	for _, test := range []LogEventType{
+		Cloudflared,
+		HTTP,
+		TCP,
+		UDP,
+	} {
+		t.Run(test.String(), func(t *testing.T) {
+			defer func() { writer.err = nil }()
+			zlog.Info().Int(EventTypeKey, int(test)).Msg("test")
+			require.NoError(t, writer.err)
+			require.Equal(t, test, writer.event.Event)
+		})
+	}
+
+	// Invalid defaults to Cloudflared LogEventType
+	t.Run("Invalid", func(t *testing.T) {
+		defer func() { writer.err = nil }()
+		zlog.Info().Str(EventTypeKey, "unknown").Msg("test")
+		require.NoError(t, writer.err)
+		require.Equal(t, Cloudflared, writer.event.Event)
+	})
+}
+
+// Validate top-level keys are removed from Fields
+func TestParseZerologEvent_Fields(t *testing.T) {
+	writer := mockWriter{}
+	zlog := zerolog.New(&writer).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+	zlog.Info().Int(EventTypeKey, int(Cloudflared)).Str("test", "test").Msg("test message")
+	require.NoError(t, writer.err)
+	event := writer.event
+	require.NotEmpty(t, event.Time)
+	require.Equal(t, Cloudflared, event.Event)
+	require.Equal(t, Info, event.Level)
+	require.Equal(t, "test message", event.Message)
+
+	// Make sure Fields doesn't have other set keys used in the Log struct
+	require.NotEmpty(t, event.Fields)
+	require.Equal(t, "test", event.Fields["test"])
+	require.NotContains(t, event.Fields, EventTypeKey)
+	require.NotContains(t, event.Fields, LevelKey)
+	require.NotContains(t, event.Fields, MessageKey)
+	require.NotContains(t, event.Fields, TimeKey)
 }

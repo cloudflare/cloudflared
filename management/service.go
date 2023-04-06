@@ -96,12 +96,7 @@ func (m *ManagementService) streamLogs(c *websocket.Conn, ctx context.Context, s
 		case event := <-session.listener:
 			err := WriteEvent(c, ctx, &EventLog{
 				ServerEvent: ServerEvent{Type: Logs},
-				Logs: []Log{{
-					Event:     Cloudflared,
-					Timestamp: event.Time,
-					Level:     event.Level,
-					Message:   event.Message,
-				}},
+				Logs:        []*Log{event},
 			})
 			if err != nil {
 				// If the client (or the server) already closed the connection, don't attempt to close it again

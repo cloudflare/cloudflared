@@ -59,7 +59,7 @@ type EventStopStreaming struct {
 // EventLog is the event that the server sends to the client with the log events.
 type EventLog struct {
 	ServerEvent
-	Logs []Log `json:"logs"`
+	Logs []*Log `json:"logs"`
 }
 
 // LogEventType is the way that logging messages are able to be filtered.
@@ -68,10 +68,12 @@ type EventLog struct {
 type LogEventType int
 
 const (
-	Cloudflared LogEventType = 0
-	HTTP        LogEventType = 1
-	TCP         LogEventType = 2
-	UDP         LogEventType = 3
+	// Cloudflared events are signficant to cloudflared operations like connection state changes.
+	// Cloudflared is also the default event type for any events that haven't been separated into a proper event type.
+	Cloudflared LogEventType = iota
+	HTTP
+	TCP
+	UDP
 )
 
 func (l LogEventType) String() string {
@@ -101,12 +103,26 @@ const (
 	Error LogLevel = "error"
 )
 
+const (
+	// TimeKey aligns with the zerolog.TimeFieldName
+	TimeKey = "time"
+	// LevelKey aligns with the zerolog.LevelFieldName
+	LevelKey = "level"
+	// LevelKey aligns with the zerolog.MessageFieldName
+	MessageKey = "message"
+	// EventTypeKey is the custom JSON key of the LogEventType in ZeroLogEvent
+	EventTypeKey = "event"
+	// FieldsKey is a custom JSON key to match and store every other key for a zerolog event
+	FieldsKey = "fields"
+)
+
 // Log is the basic structure of the events that are sent to the client.
 type Log struct {
-	Event     LogEventType `json:"event"`
-	Timestamp string       `json:"timestamp"`
-	Level     LogLevel     `json:"level"`
-	Message   string       `json:"message"`
+	Time    string                 `json:"time,omitempty"`
+	Level   LogLevel               `json:"level,omitempty"`
+	Message string                 `json:"message,omitempty"`
+	Event   LogEventType           `json:"event,omitempty"`
+	Fields  map[string]interface{} `json:"fields,omitempty"`
 }
 
 // IntoClientEvent unmarshals the provided ClientEvent into the proper type.

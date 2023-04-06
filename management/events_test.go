@@ -62,12 +62,12 @@ func TestIntoServerEvent_Invalid(t *testing.T) {
 func TestReadServerEvent(t *testing.T) {
 	sentEvent := EventLog{
 		ServerEvent: ServerEvent{Type: Logs},
-		Logs: []Log{
+		Logs: []*Log{
 			{
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Event:     HTTP,
-				Level:     Info,
-				Message:   "test",
+				Time:    time.Now().UTC().Format(time.RFC3339),
+				Event:   HTTP,
+				Level:   Info,
+				Message: "test",
 			},
 		},
 	}

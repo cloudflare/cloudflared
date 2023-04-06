@@ -187,7 +187,12 @@ func Run(c *cli.Context) error {
 					}
 					// Output all the logs received to stdout
 					for _, l := range logs.Logs {
-						fmt.Printf("%s %s %s %s\n", l.Timestamp, l.Level, l.Event, l.Message)
+						fields, err := json.Marshal(l.Fields)
+						if err != nil {
+							fields = []byte("unable to parse fields")
+							log.Debug().Msgf("unable to parse fields from event %+v", l)
+						}
+						fmt.Printf("%s %s %s %s %s\n", l.Time, l.Level, l.Event, l.Message, fields)
 					}
 				case management.UnknownServerEventType:
 					fallthrough

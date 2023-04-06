@@ -18,14 +18,6 @@ const (
 	logWindow = 30
 )
 
-// ZeroLogEvent is the json structure that zerolog stores it's events as
-type ZeroLogEvent struct {
-	Time    string       `json:"time,omitempty"`
-	Level   LogLevel     `json:"level,omitempty"`
-	Type    LogEventType `json:"type,omitempty"`
-	Message string       `json:"message,omitempty"`
-}
-
 // Logger manages the number of management streaming log sessions
 type Logger struct {
 	sessions []*Session
@@ -54,14 +46,14 @@ type LoggerListener interface {
 
 type Session struct {
 	// Buffered channel that holds the recent log events
-	listener chan *ZeroLogEvent
+	listener chan *Log
 	// Types of log events that this session will provide through the listener
 	filters []LogEventType
 }
 
 func newListener(size int) *Session {
 	return &Session{
-		listener: make(chan *ZeroLogEvent, size),
+		listener: make(chan *Log, size),
 		filters:  []LogEventType{},
 	}
 }
@@ -104,12 +96,10 @@ func (l *Logger) Write(p []byte) (int, error) {
 	if len(l.sessions) == 0 {
 		return len(p), nil
 	}
-	var event ZeroLogEvent
-	iter := json.BorrowIterator(p)
-	defer json.ReturnIterator(iter)
-	iter.ReadVal(&event)
-	if iter.Error != nil {
-		l.Log.Debug().Msg("unable to unmarshal log event")
+	event, err := parseZerologEvent(p)
+	// drop event if unable to parse properly
+	if err != nil {
+		l.Log.Debug().Msg("unable to parse log event")
 		return len(p), nil
 	}
 	for _, listener := range l.sessions {
@@ -118,7 +108,7 @@ func (l *Logger) Write(p []byte) (int, error) {
 			valid := false
 			// make sure listener is subscribed to this event type
 			for _, t := range listener.filters {
-				if t == event.Type {
+				if t == event.Event {
 					valid = true
 					break
 				}
@@ -129,7 +119,7 @@ func (l *Logger) Write(p []byte) (int, error) {
 		}
 
 		select {
-		case listener.listener <- &event:
+		case listener.listener <- event:
 		default:
 			// buffer is full, discard
 		}
@@ -139,4 +129,55 @@ func (l *Logger) Write(p []byte) (int, error) {
 
 func (l *Logger) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 	return l.Write(p)
+}
+
+func parseZerologEvent(p []byte) (*Log, error) {
+	var fields map[string]interface{}
+	iter := json.BorrowIterator(p)
+	defer json.ReturnIterator(iter)
+	iter.ReadVal(&fields)
+	if iter.Error != nil {
+		return nil, iter.Error
+	}
+	logTime := time.Now().UTC().Format(zerolog.TimeFieldFormat)
+	if t, ok := fields[TimeKey]; ok {
+		if t, ok := t.(string); ok {
+			logTime = t
+		}
+	}
+	logLevel := Debug
+	if level, ok := fields[LevelKey]; ok {
+		if level, ok := level.(string); ok {
+			logLevel = LogLevel(level)
+		}
+	}
+	// Assume the event type is Cloudflared if unable to parse/find. This could be from log events that haven't
+	// yet been tagged with the appropriate EventType yet.
+	logEvent := Cloudflared
+	e := fields[EventTypeKey]
+	if e != nil {
+		if eventNumber, ok := e.(float64); ok {
+			logEvent = LogEventType(eventNumber)
+		}
+	}
+	logMessage := ""
+	if m, ok := fields[MessageKey]; ok {
+		if m, ok := m.(string); ok {
+			logMessage = m
+		}
+	}
+	event := Log{
+		Time:    logTime,
+		Level:   logLevel,
+		Event:   logEvent,
+		Message: logMessage,
+	}
+	// Remove the keys that have top level keys on Log
+	delete(fields, TimeKey)
+	delete(fields, LevelKey)
+	delete(fields, EventTypeKey)
+	delete(fields, MessageKey)
+	// The rest of the keys go into the Fields
+	event.Fields = fields
+	return &event, nil
 }
