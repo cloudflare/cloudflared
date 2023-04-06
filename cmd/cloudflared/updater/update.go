@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/facebookgo/grace/gracenet"
@@ -95,10 +96,23 @@ func CheckForUpdate(options updateOptions) (CheckResult, error) {
 		url = StagingUpdateURL
 	}
 
+	if runtime.GOOS == "windows" {
+		cfdPath = encodeWindowsPath(cfdPath)
+	}
+
 	s := NewWorkersService(version, url, cfdPath, Options{IsBeta: options.isBeta,
 		IsForced: options.isForced, RequestedVersion: options.intendedVersion})
 
 	return s.Check()
+}
+func encodeWindowsPath(path string) string {
+	// We do this because Windows allows spaces in directories such as
+	// Program Files but does not allow these directories to be spaced in batch files.
+	targetPath := strings.Replace(path, "Program Files (x86)", "PROGRA~2", -1)
+	// This is to do the same in 32 bit systems. We do this second so that the first
+	// replace is for x86 dirs.
+	targetPath = strings.Replace(targetPath, "Program Files", "PROGRA~1", -1)
+	return targetPath
 }
 
 func applyUpdate(options updateOptions, update CheckResult) UpdateOutcome {
