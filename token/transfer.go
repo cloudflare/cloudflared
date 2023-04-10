@@ -25,12 +25,12 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func RunTransfer(transferURL *url.URL, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
+func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
 	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
 	}
-	requestURL, err := buildRequestURL(transferURL, key, value+encrypterClient.PublicKey(), shouldEncrypt, useHostOnly)
+	requestURL, err := buildRequestURL(transferURL, appAUD, key, value+encrypterClient.PublicKey(), shouldEncrypt, useHostOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +76,10 @@ func RunTransfer(transferURL *url.URL, resourceName, key, value string, shouldEn
 // BuildRequestURL creates a request suitable for a resource transfer.
 // it will return a constructed url based off the base url and query key/value provided.
 // cli will build a url for cli transfer request.
-func buildRequestURL(baseURL *url.URL, key, value string, cli, useHostOnly bool) (string, error) {
+func buildRequestURL(baseURL *url.URL, appAUD string, key, value string, cli, useHostOnly bool) (string, error) {
 	q := baseURL.Query()
 	q.Set(key, value)
+	q.Set("aud", appAUD)
 	baseURL.RawQuery = q.Encode()
 	if useHostOnly {
 		baseURL.Path = ""
