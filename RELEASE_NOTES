@@ -1,3 +1,18 @@
+2023.4.0
+- 2023-04-07 TUN-7356: Bump golang.org/x/net package to 0.7.0
+- 2023-04-07 TUN-7357: Bump to go 1.19.6
+- 2023-04-06 TUN-7127: Disconnect logger level requirement for management
+- 2023-04-05 TUN-7332: Remove legacy tunnel force flag
+- 2023-04-05 TUN-7135: Add cloudflared tail
+- 2023-04-04 Add suport for OpenBSD (#916)
+- 2023-04-04 Fix typo (#918)
+- 2023-04-04 TUN-7125: Add management streaming logs WebSocket protocol
+- 2023-03-30 TUN-9999: Remove classic tunnel component tests
+- 2023-03-30 TUN-7126: Add Management logger io.Writer
+- 2023-03-29 TUN-7324: Add http.Hijacker to connection.ResponseWriter
+- 2023-03-29 TUN-7333: Default features checkable at runtime across all packages
+- 2023-03-21 TUN-7124: Add intercept ingress rule for management requests
+
 2023.3.1
 - 2023-03-13 TUN-7271: Return 503 status code when no ingress rules configured
 - 2023-03-10 TUN-7272: Fix cloudflared returning non supported status service which breaks configuration migration
