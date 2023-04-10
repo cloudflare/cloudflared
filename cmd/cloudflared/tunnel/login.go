@@ -53,6 +53,7 @@ func login(c *cli.Context) error {
 
 	resourceData, err := token.RunTransfer(
 		loginURL,
+		"",
 		"cert",
 		"callback",
 		callbackStoreURL,
