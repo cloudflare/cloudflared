@@ -131,13 +131,13 @@ func (m *ManagementService) startStreaming(c *websocket.Conn, ctx context.Contex
 		return
 	}
 	// Expect the first incoming request
-	_, ok := IntoClientEvent[EventStartStreaming](event, StartStreaming)
+	startEvent, ok := IntoClientEvent[EventStartStreaming](event, StartStreaming)
 	if !ok {
-		m.log.Err(c.Close(StatusInvalidCommand, reasonInvalidCommand)).Msgf("expected start_streaming as first recieved event")
+		m.log.Warn().Err(c.Close(StatusInvalidCommand, reasonInvalidCommand)).Msgf("expected start_streaming as first recieved event")
 		return
 	}
 	m.streaming.Store(true)
-	listener := m.logger.Listen()
+	listener := m.logger.Listen(startEvent.Filters)
 	m.log.Debug().Msgf("Streaming logs")
 	go m.streamLogs(c, ctx, listener)
 }

@@ -40,7 +40,7 @@ func NewLogger() *Logger {
 }
 
 type LoggerListener interface {
-	Listen() *Session
+	Listen(*StreamingFilters) *Session
 	Close(*Session)
 }
 
@@ -48,21 +48,55 @@ type Session struct {
 	// Buffered channel that holds the recent log events
 	listener chan *Log
 	// Types of log events that this session will provide through the listener
-	filters []LogEventType
+	filters *StreamingFilters
 }
 
-func newListener(size int) *Session {
-	return &Session{
+func newSession(size int, filters *StreamingFilters) *Session {
+	s := &Session{
 		listener: make(chan *Log, size),
-		filters:  []LogEventType{},
+	}
+	if filters != nil {
+		s.filters = filters
+	} else {
+		s.filters = &StreamingFilters{}
+	}
+	return s
+}
+
+// Insert attempts to insert the log to the session. If the log event matches the provided session filters, it
+// will be applied to the listener.
+func (s *Session) Insert(log *Log) {
+	// Level filters are optional
+	if s.filters.Level != nil {
+		if *s.filters.Level > log.Level {
+			return
+		}
+	}
+	// Event filters are optional
+	if len(s.filters.Events) != 0 && !contains(s.filters.Events, log.Event) {
+		return
+	}
+	select {
+	case s.listener <- log:
+	default:
+		// buffer is full, discard
 	}
 }
 
+func contains(array []LogEventType, t LogEventType) bool {
+	for _, v := range array {
+		if v == t {
+			return true
+		}
+	}
+	return false
+}
+
 // Listen creates a new Session that will append filtered log events as they are created.
-func (l *Logger) Listen() *Session {
+func (l *Logger) Listen(filters *StreamingFilters) *Session {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	listener := newListener(logWindow)
+	listener := newSession(logWindow, filters)
 	l.sessions = append(l.sessions, listener)
 	return listener
 }
@@ -102,27 +136,8 @@ func (l *Logger) Write(p []byte) (int, error) {
 		l.Log.Debug().Msg("unable to parse log event")
 		return len(p), nil
 	}
-	for _, listener := range l.sessions {
-		// no filters means all types are allowed
-		if len(listener.filters) != 0 {
-			valid := false
-			// make sure listener is subscribed to this event type
-			for _, t := range listener.filters {
-				if t == event.Event {
-					valid = true
-					break
-				}
-			}
-			if !valid {
-				continue
-			}
-		}
-
-		select {
-		case listener.listener <- event:
-		default:
-			// buffer is full, discard
-		}
+	for _, session := range l.sessions {
+		session.Insert(event)
 	}
 	return len(p), nil
 }
@@ -146,9 +161,17 @@ func parseZerologEvent(p []byte) (*Log, error) {
 		}
 	}
 	logLevel := Debug
-	if level, ok := fields[LevelKey]; ok {
-		if level, ok := level.(string); ok {
-			logLevel = LogLevel(level)
+	// A zerolog Debug event can be created and then an error can be added
+	// via .Err(error), if so, we upgrade the level to error.
+	if _, hasError := fields["error"]; hasError {
+		logLevel = Error
+	} else {
+		if level, ok := fields[LevelKey]; ok {
+			if level, ok := level.(string); ok {
+				if logLevel, ok = ParseLogLevel(level); !ok {
+					logLevel = Debug
+				}
+			}
 		}
 	}
 	// Assume the event type is Cloudflared if unable to parse/find. This could be from log events that haven't

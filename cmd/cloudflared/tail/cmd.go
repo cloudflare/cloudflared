@@ -39,6 +39,17 @@ func Command() *cli.Command {
 				Value:   "",
 				EnvVars: []string{"TUNNEL_MANAGEMENT_CONNECTOR"},
 			},
+			&cli.StringSliceFlag{
+				Name:    "event",
+				Usage:   "Filter by specific Events (cloudflared, http, tcp, udp) otherwise, defaults to send all events",
+				EnvVars: []string{"TUNNEL_MANAGEMENT_FILTER_EVENTS"},
+			},
+			&cli.StringFlag{
+				Name:    "level",
+				Usage:   "Filter by specific log levels (debug, info, warn, error)",
+				EnvVars: []string{"TUNNEL_MANAGEMENT_FILTER_LEVEL"},
+				Value:   "debug",
+			},
 			&cli.StringFlag{
 				Name:    "token",
 				Usage:   "Access token for a specific tunnel",
@@ -61,7 +72,7 @@ func Command() *cli.Command {
 			&cli.StringFlag{
 				Name:    logger.LogLevelFlag,
 				Value:   "info",
-				Usage:   "Application logging level {debug, info, warn, error, fatal}. ",
+				Usage:   "Application logging level {debug, info, warn, error, fatal}",
 				EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			},
 		},
@@ -113,6 +124,41 @@ func createLogger(c *cli.Context) *zerolog.Logger {
 	return &log
 }
 
+// parseFilters will attempt to parse provided filters to send to with the EventStartStreaming
+func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
+	var level *management.LogLevel
+	var events []management.LogEventType
+
+	argLevel := c.String("level")
+	argEvents := c.StringSlice("event")
+
+	if argLevel != "" {
+		l, ok := management.ParseLogLevel(argLevel)
+		if !ok {
+			return nil, fmt.Errorf("invalid --level filter provided, please use one of the following Log Levels: debug, info, warn, error")
+		}
+		level = &l
+	}
+
+	for _, v := range argEvents {
+		t, ok := management.ParseLogEventType(v)
+		if !ok {
+			return nil, fmt.Errorf("invalid --event filter provided, please use one of the following EventTypes: cloudflared, http, tcp, udp")
+		}
+		events = append(events, t)
+	}
+
+	if level == nil && len(events) == 0 {
+		// When no filters are provided, do not return a StreamingFilters struct
+		return nil, nil
+	}
+
+	return &management.StreamingFilters{
+		Level:  level,
+		Events: events,
+	}, nil
+}
+
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
 	log := createLogger(c)
@@ -120,6 +166,12 @@ func Run(c *cli.Context) error {
 	signals := make(chan os.Signal, 10)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
+
+	filters, err := parseFilters(c)
+	if err != nil {
+		log.Error().Err(err).Msgf("invalid filters provided")
+		return nil
+	}
 
 	managementHostname := c.String("management-hostname")
 	token := c.String("token")
@@ -148,6 +200,7 @@ func Run(c *cli.Context) error {
 	// Once connection is established, send start_streaming event to begin receiving logs
 	err = management.WriteEvent(conn, ctx, &management.EventStartStreaming{
 		ClientEvent: management.ClientEvent{Type: management.StartStreaming},
+		Filters:     filters,
 	})
 	if err != nil {
 		log.Error().Err(err).Msg("unable to request logs from management tunnel")

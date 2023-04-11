@@ -11,14 +11,83 @@ import (
 	"github.com/cloudflare/cloudflared/internal/test"
 )
 
+var (
+	debugLevel *LogLevel
+	infoLevel  *LogLevel
+	warnLevel  *LogLevel
+	errorLevel *LogLevel
+)
+
+func init() {
+	// created here because we can't do a reference to a const enum, i.e. &Info
+	debugLevel := new(LogLevel)
+	*debugLevel = Debug
+	infoLevel := new(LogLevel)
+	*infoLevel = Info
+	warnLevel := new(LogLevel)
+	*warnLevel = Warn
+	errorLevel := new(LogLevel)
+	*errorLevel = Error
+}
+
 func TestIntoClientEvent_StartStreaming(t *testing.T) {
-	event := ClientEvent{
-		Type:  StartStreaming,
-		event: []byte(`{"type": "start_streaming"}`),
+	for _, test := range []struct {
+		name     string
+		expected EventStartStreaming
+	}{
+		{
+			name:     "no filters",
+			expected: EventStartStreaming{ClientEvent: ClientEvent{Type: StartStreaming}},
+		},
+		{
+			name: "level filter",
+			expected: EventStartStreaming{
+				ClientEvent: ClientEvent{Type: StartStreaming},
+				Filters: &StreamingFilters{
+					Level: infoLevel,
+				},
+			},
+		},
+		{
+			name: "events filter",
+			expected: EventStartStreaming{
+				ClientEvent: ClientEvent{Type: StartStreaming},
+				Filters: &StreamingFilters{
+					Events: []LogEventType{Cloudflared, HTTP},
+				},
+			},
+		},
+		{
+			name: "level and events filters",
+			expected: EventStartStreaming{
+				ClientEvent: ClientEvent{Type: StartStreaming},
+				Filters: &StreamingFilters{
+					Level:  infoLevel,
+					Events: []LogEventType{Cloudflared},
+				},
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data, err := json.Marshal(test.expected)
+			require.NoError(t, err)
+			event := ClientEvent{}
+			err = json.Unmarshal(data, &event)
+			require.NoError(t, err)
+			event.event = data
+			ce, ok := IntoClientEvent[EventStartStreaming](&event, StartStreaming)
+			require.True(t, ok)
+			require.Equal(t, test.expected.ClientEvent, ce.ClientEvent)
+			if test.expected.Filters != nil {
+				f := ce.Filters
+				ef := test.expected.Filters
+				if ef.Level != nil {
+					require.Equal(t, *ef.Level, *f.Level)
+				}
+				require.ElementsMatch(t, ef.Events, f.Events)
+			}
+		})
 	}
-	ce, ok := IntoClientEvent[EventStartStreaming](&event, StartStreaming)
-	require.True(t, ok)
-	require.Equal(t, EventStartStreaming{ClientEvent: ClientEvent{Type: StartStreaming}}, *ce)
 }
 
 func TestIntoClientEvent_StopStreaming(t *testing.T) {
