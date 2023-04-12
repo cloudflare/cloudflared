@@ -28,6 +28,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
@@ -751,10 +752,10 @@ func configureCloudflaredFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		},
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "origincert",
+			Name:    credentials.OriginCertFlag,
 			Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
-			Value:   findDefaultOriginCertPath(),
+			Value:   credentials.FindDefaultOriginCertPath(),
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{

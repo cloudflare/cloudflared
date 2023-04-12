@@ -50,6 +50,10 @@ type newTunnel struct {
 	TunnelSecret []byte `json:"tunnel_secret"`
 }
 
+type managementRequest struct {
+	Resources []string `json:"resources"`
+}
+
 type CleanupParams struct {
 	queryParams url.Values
 }
@@ -120,6 +124,28 @@ func (r *RESTClient) GetTunnelToken(tunnelID uuid.UUID) (token string, err error
 	endpoint := r.baseEndpoints.accountLevel
 	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/token", tunnelID))
 	resp, err := r.sendRequest("GET", endpoint, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "REST request failed")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		err = parseResponse(resp.Body, &token)
+		return token, err
+	}
+
+	return "", r.statusCodeToError("get tunnel token", resp)
+}
+
+func (r *RESTClient) GetManagementToken(tunnelID uuid.UUID) (token string, err error) {
+	endpoint := r.baseEndpoints.accountLevel
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/management", tunnelID))
+
+	body := &managementRequest{
+		Resources: []string{"logs"},
+	}
+
+	resp, err := r.sendRequest("POST", endpoint, body)
 	if err != nil {
 		return "", errors.Wrap(err, "REST request failed")
 	}

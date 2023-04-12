@@ -90,7 +90,7 @@ func main() {
 	updater.Init(Version)
 	tracing.Init(Version)
 	token.Init(Version)
-	tail.Init(Version)
+	tail.Init(bInfo)
 	runApp(app, graceShutdownC)
 }
 

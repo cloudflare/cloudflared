@@ -39,8 +39,6 @@ var (
 )
 
 const (
-	DefaultCredentialFile = "cert.pem"
-
 	// BastionFlag is to enable bastion, or jump host, operation
 	BastionFlag = "bastion"
 )

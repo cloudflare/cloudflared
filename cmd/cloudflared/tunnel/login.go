@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/token"
 )
@@ -85,7 +86,7 @@ func checkForExistingCert() (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	path := filepath.Join(configPath, config.DefaultCredentialFile)
+	path := filepath.Join(configPath, credentials.DefaultCredentialFile)
 	fileInfo, err := os.Stat(path)
 	if err == nil && fileInfo.Size() > 0 {
 		return path, true, nil

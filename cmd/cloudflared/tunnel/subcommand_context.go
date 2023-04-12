@@ -13,9 +13,9 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/certutil"
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/logger"
 )
 
@@ -37,7 +37,7 @@ type subcommandContext struct {
 
 	// These fields should be accessed using their respective Getter
 	tunnelstoreClient cfapi.Client
-	userCredential    *userCredential
+	userCredential    *credentials.User
 }
 
 func newSubcommandContext(c *cli.Context) (*subcommandContext, error) {
@@ -56,65 +56,28 @@ func (sc *subcommandContext) credentialFinder(tunnelID uuid.UUID) CredFinder {
 	return newSearchByID(tunnelID, sc.c, sc.log, sc.fs)
 }
 
-type userCredential struct {
-	cert     *certutil.OriginCert
-	certPath string
-}
-
 func (sc *subcommandContext) client() (cfapi.Client, error) {
 	if sc.tunnelstoreClient != nil {
 		return sc.tunnelstoreClient, nil
 	}
-	credential, err := sc.credential()
+	cred, err := sc.credential()
 	if err != nil {
 		return nil, err
 	}
-	userAgent := fmt.Sprintf("cloudflared/%s", buildInfo.Version())
-	client, err := cfapi.NewRESTClient(
-		sc.c.String("api-url"),
-		credential.cert.AccountID,
-		credential.cert.ZoneID,
-		credential.cert.APIToken,
-		userAgent,
-		sc.log,
-	)
-
+	sc.tunnelstoreClient, err = cred.Client(sc.c.String("api-url"), buildInfo.UserAgent(), sc.log)
 	if err != nil {
 		return nil, err
 	}
-	sc.tunnelstoreClient = client
-	return client, nil
+	return sc.tunnelstoreClient, nil
 }
 
-func (sc *subcommandContext) credential() (*userCredential, error) {
+func (sc *subcommandContext) credential() (*credentials.User, error) {
 	if sc.userCredential == nil {
-		originCertPath := sc.c.String("origincert")
-		originCertLog := sc.log.With().
-			Str(LogFieldOriginCertPath, originCertPath).
-			Logger()
-
-		originCertPath, err := findOriginCert(originCertPath, &originCertLog)
+		uc, err := credentials.Read(sc.c.String(credentials.OriginCertFlag), sc.log)
 		if err != nil {
-			return nil, errors.Wrap(err, "Error locating origin cert")
+			return nil, err
 		}
-		blocks, err := readOriginCert(originCertPath)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Can't read origin cert from %s", originCertPath)
-		}
-
-		cert, err := certutil.DecodeOriginCert(blocks)
-		if err != nil {
-			return nil, errors.Wrap(err, "Error decoding origin cert")
-		}
-
-		if cert.AccountID == "" {
-			return nil, errors.Errorf(`Origin certificate needs to be refreshed before creating new tunnels.\nDelete %s and run "cloudflared login" to obtain a new cert.`, originCertPath)
-		}
-
-		sc.userCredential = &userCredential{
-			cert:     cert,
-			certPath: originCertPath,
-		}
+		sc.userCredential = uc
 	}
 	return sc.userCredential, nil
 }
@@ -175,13 +138,13 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 		return nil, err
 	}
 	tunnelCredentials := connection.Credentials{
-		AccountTag:   credential.cert.AccountID,
+		AccountTag:   credential.AccountID(),
 		TunnelSecret: tunnelSecret,
 		TunnelID:     tunnel.ID,
 	}
 	usedCertPath := false
 	if credentialsFilePath == "" {
-		originCertDir := filepath.Dir(credential.certPath)
+		originCertDir := filepath.Dir(credential.CertPath())
 		credentialsFilePath, err = tunnelFilePath(tunnelCredentials.TunnelID, originCertDir)
 		if err != nil {
 			return nil, err

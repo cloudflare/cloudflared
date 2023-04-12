@@ -2,6 +2,7 @@ package tail
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,28 +11,32 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"nhooyr.io/websocket"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
 )
 
 var (
-	version string
+	buildInfo *cliutil.BuildInfo
 )
 
-func Init(v string) {
-	version = v
+func Init(bi *cliutil.BuildInfo) {
+	buildInfo = bi
 }
 
 func Command() *cli.Command {
 	return &cli.Command{
-		Name:   "tail",
-		Action: Run,
-		Usage:  "Stream logs from a remote cloudflared",
+		Name:      "tail",
+		Action:    Run,
+		Usage:     "Stream logs from a remote cloudflared",
+		UsageText: "cloudflared tail [tail command options] [TUNNEL-ID]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "connector-id",
@@ -74,6 +79,12 @@ func Command() *cli.Command {
 				Value:   "info",
 				Usage:   "Application logging level {debug, info, warn, error, fatal}",
 				EnvVars: []string{"TUNNEL_LOGLEVEL"},
+			},
+			&cli.StringFlag{
+				Name:    credentials.OriginCertFlag,
+				Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
+				EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
+				Value:   credentials.FindDefaultOriginCertPath(),
 			},
 		},
 	}
@@ -159,6 +170,59 @@ func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
 	}, nil
 }
 
+// getManagementToken will make a call to the Cloudflare API to acquire a management token for the requested tunnel.
+func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
+	userCreds, err := credentials.Read(c.String(credentials.OriginCertFlag), log)
+	if err != nil {
+		return "", err
+	}
+
+	client, err := userCreds.Client(c.String("api-url"), buildInfo.UserAgent(), log)
+	if err != nil {
+		return "", err
+	}
+
+	tunnelIDString := c.Args().First()
+	if tunnelIDString == "" {
+		return "", errors.New("no tunnel ID provided")
+	}
+	tunnelID, err := uuid.Parse(tunnelIDString)
+	if err != nil {
+		return "", errors.New("unable to parse provided tunnel id as a valid UUID")
+	}
+
+	token, err := client.GetManagementToken(tunnelID)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// buildURL will build the management url to contain the required query parameters to authenticate the request.
+func buildURL(c *cli.Context, log *zerolog.Logger) (url.URL, error) {
+	var err error
+	managementHostname := c.String("management-hostname")
+	token := c.String("token")
+	if token == "" {
+		token, err = getManagementToken(c, log)
+		if err != nil {
+			return url.URL{}, fmt.Errorf("unable to acquire management token for requested tunnel id: %w", err)
+		}
+	}
+	query := url.Values{}
+	query.Add("access_token", token)
+	connector := c.String("connector-id")
+	if connector != "" {
+		connectorID, err := uuid.Parse(connector)
+		if err != nil {
+			return url.URL{}, fmt.Errorf("unabled to parse 'connector-id' flag into a valid UUID: %w", err)
+		}
+		query.Add("connector_id", connectorID.String())
+	}
+	return url.URL{Scheme: "wss", Host: managementHostname, Path: "/logs", RawQuery: query.Encode()}, nil
+}
+
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
 	log := createLogger(c)
@@ -173,12 +237,14 @@ func Run(c *cli.Context) error {
 		return nil
 	}
 
-	managementHostname := c.String("management-hostname")
-	token := c.String("token")
-	u := url.URL{Scheme: "wss", Host: managementHostname, Path: "/logs", RawQuery: "access_token=" + token}
+	u, err := buildURL(c, log)
+	if err != nil {
+		log.Err(err).Msg("unable to construct management request URL")
+		return nil
+	}
 
 	header := make(http.Header)
-	header.Add("User-Agent", "cloudflared/"+version)
+	header.Add("User-Agent", buildInfo.UserAgent())
 	trace := c.String("trace")
 	if trace != "" {
 		header["cf-trace-id"] = []string{trace}
@@ -206,6 +272,11 @@ func Run(c *cli.Context) error {
 		log.Error().Err(err).Msg("unable to request logs from management tunnel")
 		return nil
 	}
+	log.Debug().
+		Str("tunnel-id", c.Args().First()).
+		Str("connector-id", c.String("connector-id")).
+		Interface("filters", filters).
+		Msg("connected")
 
 	readerDone := make(chan struct{})
 

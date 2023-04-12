@@ -47,3 +47,7 @@ func (bi *BuildInfo) GetBuildTypeMsg() string {
 	}
 	return fmt.Sprintf(" with %s", bi.BuildType)
 }
+
+func (bi *BuildInfo) UserAgent() string {
+	return fmt.Sprintf("cloudflared/%s", bi.CloudflaredVersion)
+}
