@@ -16,6 +16,7 @@ var (
 		FeatureSerializedHeaders,
 		FeatureDatagramV2,
 		FeatureQUICSupportEOF,
+		FeatureManagementLogs,
 	}
 )
 

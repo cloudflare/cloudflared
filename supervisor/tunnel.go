@@ -22,6 +22,7 @@ import (
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/retry"
@@ -238,6 +239,7 @@ func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolF
 	}
 
 	logger := e.config.Log.With().
+		Int(management.EventTypeKey, int(management.Cloudflared)).
 		IPAddr(connection.LogFieldIPAddress, addr.UDP.IP).
 		Uint8(connection.LogFieldConnIndex, connIndex).
 		Logger()

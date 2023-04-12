@@ -2,13 +2,13 @@ package connection
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"time"
 
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/management"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -85,7 +85,7 @@ func (c *controlStream) ServeControlStream(
 		return err
 	}
 
-	c.observer.logServerInfo(c.connIndex, registrationDetails.Location, c.edgeAddress, fmt.Sprintf("Connection %s registered with protocol: %s", registrationDetails.UUID, c.protocol))
+	c.observer.logConnected(registrationDetails.UUID, c.connIndex, registrationDetails.Location, c.edgeAddress, c.protocol)
 	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location)
 	c.connectedFuse.Connected()
 
@@ -116,7 +116,11 @@ func (c *controlStream) waitForUnregister(ctx context.Context, rpcClient NamedTu
 
 	c.observer.sendUnregisteringEvent(c.connIndex)
 	rpcClient.GracefulShutdown(ctx, c.gracePeriod)
-	c.observer.log.Info().Uint8(LogFieldConnIndex, c.connIndex).Msg("Unregistered tunnel connection")
+	c.observer.log.Info().
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		Uint8(LogFieldConnIndex, c.connIndex).
+		IPAddr(LogFieldIPAddress, c.edgeAddress).
+		Msg("Unregistered tunnel connection")
 }
 
 func (c *controlStream) IsStopped() bool {
