@@ -31,6 +31,7 @@ const (
 	LogFieldOriginService = "originService"
 	LogFieldFlowID        = "flowID"
 	LogFieldConnIndex     = "connIndex"
+	LogFieldDestAddr      = "destAddr"
 
 	trailerHeaderName = "Trailer"
 )
@@ -171,14 +172,22 @@ func (p *Proxy) ProxyTCP(
 
 	tracedCtx := tracing.NewTracedContext(serveCtx, req.CfTraceID, p.log)
 
-	p.log.Debug().Str(LogFieldFlowID, req.FlowID).Uint8(LogFieldConnIndex, req.ConnIndex).Msg("tcp proxy stream started")
+	p.log.Debug().
+		Str(LogFieldFlowID, req.FlowID).
+		Str(LogFieldDestAddr, req.Dest).
+		Uint8(LogFieldConnIndex, req.ConnIndex).
+		Msg("tcp proxy stream started")
 
 	if err := p.proxyStream(tracedCtx, rwa, req.Dest, p.warpRouting.Proxy); err != nil {
 		p.logRequestError(err, req.CFRay, req.FlowID, "", ingress.ServiceWarpRouting)
 		return err
 	}
 
-	p.log.Debug().Str(LogFieldFlowID, req.FlowID).Uint8(LogFieldConnIndex, req.ConnIndex).Msg("tcp proxy stream finished successfully")
+	p.log.Debug().
+		Str(LogFieldFlowID, req.FlowID).
+		Str(LogFieldDestAddr, req.Dest).
+		Uint8(LogFieldConnIndex, req.ConnIndex).
+		Msg("tcp proxy stream finished successfully")
 
 	return nil
 }
