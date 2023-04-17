@@ -173,6 +173,7 @@ func (p *Proxy) ProxyTCP(
 	tracedCtx := tracing.NewTracedContext(serveCtx, req.CfTraceID, p.log)
 
 	p.log.Debug().
+		Int(management.EventTypeKey, int(management.TCP)).
 		Str(LogFieldFlowID, req.FlowID).
 		Str(LogFieldDestAddr, req.Dest).
 		Uint8(LogFieldConnIndex, req.ConnIndex).
@@ -184,6 +185,7 @@ func (p *Proxy) ProxyTCP(
 	}
 
 	p.log.Debug().
+		Int(management.EventTypeKey, int(management.TCP)).
 		Str(LogFieldFlowID, req.FlowID).
 		Str(LogFieldDestAddr, req.Dest).
 		Uint8(LogFieldConnIndex, req.ConnIndex).
