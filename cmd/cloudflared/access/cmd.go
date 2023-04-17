@@ -280,6 +280,13 @@ func curl(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// Verify that the existing token is still good; if not fetch a new one
+	if err := verifyTokenAtEdge(appURL, appInfo, c, log); err != nil {
+		log.Err(err).Msg("Could not verify token")
+		return err
+	}
+
 	tok, err := token.GetAppTokenIfExists(appInfo)
 	if err != nil || tok == "" {
 		if allowRequest {
