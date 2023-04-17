@@ -1,3 +1,13 @@
+2023.4.1
+- 2023-04-13 TUN-7368: Report destination address for TCP requests in logs
+- 2023-04-12 TUN-7134: Acquire token for cloudflared tail
+- 2023-04-12 TUN-7131: Add cloudflared log event to connection messages and enable streaming logs
+- 2023-04-11 TUN-7132 TUN-7136: Add filter support for streaming logs
+- 2023-04-06 TUN-7354: Don't warn for empty ingress rules when using --token
+- 2023-04-06 TUN-7128: Categorize logs from public hostname locations
+- 2023-04-06 TUN-7351: Add streaming logs session ping and timeout
+- 2023-04-06 TUN-7335: Fix cloudflared update not working in windows
+
 2023.4.0
 - 2023-04-07 TUN-7356: Bump golang.org/x/net package to 0.7.0
 - 2023-04-07 TUN-7357: Bump to go 1.19.6

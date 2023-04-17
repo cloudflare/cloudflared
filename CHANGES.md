@@ -1,6 +1,10 @@
+## 2023.4.1
+### New Features
+- You can now stream your logs from your remote cloudflared to your local terminal with `cloudflared tail <TUNNEL-ID>`. This new feature requires the remote cloudflared to be version 2023.4.1 or higher.
+
 ## 2023.3.2
 ### Notices
-- Due to the nature of QuickTunnels (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/do-more-with-tunnels/trycloudflare/) and its intended usage for testing and experiment of Cloudflare Tunnels, starting from 2023.3.2, QuickTunnels only make a single connection to the edge. If users want to use Tunnels in a production enverionment, they should move to Named Tunnels instead. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/remote/#set-up-a-tunnel-remotely-dashboard-setup)
+- Due to the nature of QuickTunnels (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/do-more-with-tunnels/trycloudflare/) and its intended usage for testing and experiment of Cloudflare Tunnels, starting from 2023.3.2, QuickTunnels only make a single connection to the edge. If users want to use Tunnels in a production environment, they should move to Named Tunnels instead. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/remote/#set-up-a-tunnel-remotely-dashboard-setup)
 
 ## 2023.3.1
 ### Breaking Change
@@ -25,7 +29,7 @@
 
 ## 2022.12.0
 ### Improvements
-- cloudflared now attempts to try other edge addresses before falling back to a lower protoocol.
+- cloudflared now attempts to try other edge addresses before falling back to a lower protocol.
 - cloudflared tunnel no longer spins up a quick tunnel. The call has to be explicit and provide a --url flag.
 - cloudflared will now randomly pick the first or second region to connect to instead of always connecting to region2 first.
 
