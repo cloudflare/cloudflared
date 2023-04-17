@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/packet"
 )
 
@@ -120,7 +121,9 @@ func (m *manager) registerSession(ctx context.Context, registration *registerSes
 }
 
 func (m *manager) newSession(id uuid.UUID, dstConn io.ReadWriteCloser) *Session {
-	logger := m.log.With().Str("sessionID", id.String()).Logger()
+	logger := m.log.With().
+		Int(management.EventTypeKey, int(management.UDP)).
+		Str("sessionID", id.String()).Logger()
 	return &Session{
 		ID:       id,
 		sendFunc: m.sendFunc,

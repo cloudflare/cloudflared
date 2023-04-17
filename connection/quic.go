@@ -25,6 +25,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/packet"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -298,11 +299,12 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 		attribute.String("session-id", sessionID.String()),
 		attribute.String("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)),
 	))
+	log := q.logger.With().Int(management.EventTypeKey, int(management.UDP)).Logger()
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
 	originProxy, err := ingress.DialUDP(dstIP, dstPort)
 	if err != nil {
-		q.logger.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
+		log.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
@@ -313,14 +315,18 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
-		q.logger.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
+		log.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
 
 	go q.serveUDPSession(session, closeAfterIdleHint)
 
-	q.logger.Debug().Str("sessionID", sessionID.String()).Str("src", originProxy.LocalAddr().String()).Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).Msgf("Registered session")
+	log.Debug().
+		Str("sessionID", sessionID.String()).
+		Str("src", originProxy.LocalAddr().String()).
+		Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).
+		Msgf("Registered session")
 	tracing.End(registerSpan)
 
 	resp := tunnelpogs.RegisterUdpSessionResponse{
@@ -341,7 +347,10 @@ func (q *QUICConnection) serveUDPSession(session *datagramsession.Session, close
 			q.closeUDPSession(ctx, session.ID, "terminated without error")
 		}
 	}
-	q.logger.Debug().Err(err).Str("sessionID", session.ID.String()).Msg("Session terminated")
+	q.logger.Debug().Err(err).
+		Int(management.EventTypeKey, int(management.UDP)).
+		Str("sessionID", session.ID.String()).
+		Msg("Session terminated")
 }
 
 // closeUDPSession first unregisters the session from session manager, then it tries to unregister from edge
@@ -351,7 +360,9 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection
 		// with edge
-		q.logger.Debug().Err(err).Str("sessionID", sessionID.String()).
+		q.logger.Debug().Err(err).
+			Int(management.EventTypeKey, int(management.UDP)).
+			Str("sessionID", sessionID.String()).
 			Msgf("Failed to open quic stream to unregister udp session with edge")
 		return
 	}
