@@ -2,12 +2,15 @@ package management
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"nhooyr.io/websocket"
 )
@@ -29,6 +32,9 @@ type ManagementService struct {
 	// The management tunnel hostname
 	Hostname string
 
+	serviceIP string
+	clientID  uuid.UUID
+
 	log    *zerolog.Logger
 	router chi.Router
 
@@ -42,16 +48,24 @@ type ManagementService struct {
 	logger       LoggerListener
 }
 
-func New(managementHostname string, log *zerolog.Logger, logger LoggerListener) *ManagementService {
+func New(managementHostname string,
+	serviceIP string,
+	clientID uuid.UUID,
+	log *zerolog.Logger,
+	logger LoggerListener,
+) *ManagementService {
 	s := &ManagementService{
-		Hostname: managementHostname,
-		log:      log,
-		logger:   logger,
+		Hostname:  managementHostname,
+		log:       log,
+		logger:    logger,
+		serviceIP: serviceIP,
+		clientID:  clientID,
 	}
 	r := chi.NewRouter()
 	r.Get("/ping", ping)
 	r.Head("/ping", ping)
 	r.Get("/logs", s.logs)
+	r.Get("/host_details", s.getHostDetails)
 	s.router = r
 	return s
 }
@@ -63,6 +77,42 @@ func (m *ManagementService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Management Ping handler
 func ping(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
+}
+
+// The response provided by the /host_details endpoint
+type getHostDetailsResponse struct {
+	ClientID string `json:"connector_id"`
+	IP       string `json:"ip,omitempty"`
+	HostName string `json:"hostname,omitempty"`
+}
+
+func (m *ManagementService) getHostDetails(w http.ResponseWriter, r *http.Request) {
+
+	var getHostDetailsResponse = getHostDetailsResponse{
+		ClientID: m.clientID.String(),
+	}
+	if ip, err := getPrivateIP(m.serviceIP); err == nil {
+		getHostDetailsResponse.IP = ip
+	}
+	if hostname, err := os.Hostname(); err == nil {
+		getHostDetailsResponse.HostName = hostname
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	json.NewEncoder(w).Encode(getHostDetailsResponse)
+}
+
+// Get preferred private ip of this machine
+func getPrivateIP(addr string) (string, error) {
+	conn, err := net.DialTimeout("tcp", addr, 1*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	localAddr := conn.LocalAddr().String()
+	host, _, err := net.SplitHostPort(localAddr)
+	return host, err
 }
 
 // readEvents will loop through all incoming websocket messages from a client and marshal them into the

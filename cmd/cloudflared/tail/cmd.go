@@ -32,6 +32,38 @@ func Init(bi *cliutil.BuildInfo) {
 }
 
 func Command() *cli.Command {
+	subcommands := []*cli.Command{
+		buildTailManagementTokenSubcommand(),
+	}
+
+	return buildTailCommand(subcommands)
+}
+
+func buildTailManagementTokenSubcommand() *cli.Command {
+	return &cli.Command{
+		Name:        "token",
+		Action:      cliutil.ConfiguredAction(managementTokenCommand),
+		Usage:       "Get management access jwt",
+		UsageText:   "cloudflared tail token TUNNEL_ID",
+		Description: `Get management access jwt for a tunnel`,
+		Hidden:      true,
+	}
+}
+
+func managementTokenCommand(c *cli.Context) error {
+	log := createLogger(c)
+	token, err := getManagementToken(c, log)
+	if err != nil {
+		return err
+	}
+	var tokenResponse = struct {
+		Token string `json:"token"`
+	}{Token: token}
+
+	return json.NewEncoder(os.Stdout).Encode(tokenResponse)
+}
+
+func buildTailCommand(subcommands []*cli.Command) *cli.Command {
 	return &cli.Command{
 		Name:      "tail",
 		Action:    Run,
@@ -87,6 +119,7 @@ func Command() *cli.Command {
 				Value:   credentials.FindDefaultOriginCertPath(),
 			},
 		},
+		Subcommands: subcommands,
 	}
 }
 

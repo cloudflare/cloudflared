@@ -1,0 +1,8 @@
+cloudflared_binary: "cloudflared"
+tunnel: "ae21a96c-24d1-4ce8-a6ba-962cba5976d3"
+credentials_file: "/Users/sudarsan/.cloudflared/ae21a96c-24d1-4ce8-a6ba-962cba5976d3.json"
+origincert: "/Users/sudarsan/.cloudflared/cert.pem"
+ingress:
+- hostname: named-tunnel-component-tests.example.com
+  service: hello_world
+- service: http_status:404

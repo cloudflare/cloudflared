@@ -29,6 +29,7 @@ import (
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/credentials"
+	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
@@ -399,7 +400,14 @@ func StartServer(
 
 	localRules := []ingress.Rule{}
 	if features.Contains(features.FeatureManagementLogs) {
-		mgmt := management.New(c.String("management-hostname"), logger.ManagementLogger.Log, logger.ManagementLogger)
+		serviceIP := c.String("service-op-ip")
+		if edgeAddrs, err := edgediscovery.ResolveEdge(log, tunnelConfig.Region, tunnelConfig.EdgeIPVersion); err == nil {
+			if serviceAddr, err := edgeAddrs.GetAddrForRPC(); err == nil {
+				serviceIP = serviceAddr.TCP.String()
+			}
+		}
+
+		mgmt := management.New(c.String("management-hostname"), serviceIP, clientID, logger.ManagementLogger.Log, logger.ManagementLogger)
 		localRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
 	}
 	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, localRules, tunnelConfig.Log)
@@ -906,6 +914,13 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_MANAGEMENT_HOSTNAME"},
 			Hidden:  true,
 			Value:   "management.argotunnel.com",
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "service-op-ip",
+			Usage:   "Fallback IP for service operations run by the management service.",
+			EnvVars: []string{"TUNNEL_SERVICE_OP_IP"},
+			Hidden:  true,
+			Value:   "198.41.200.113:80",
 		}),
 	}
 	return append(flags, sshFlags(shouldHide)...)

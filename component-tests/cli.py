@@ -28,6 +28,26 @@ class CloudflaredCli:
         listed = self._run_command(cmd_args, "list")
         return json.loads(listed.stdout)
 
+    def get_management_token(self, config, config_path):
+        basecmd = [config.cloudflared_binary]
+        if config_path is not None:
+            basecmd += ["--config", str(config_path)]
+        origincert = get_config_from_file()["origincert"]
+        if origincert:
+            basecmd += ["--origincert", origincert]
+
+        cmd_args = ["tail", "token", config.get_tunnel_id()]
+        cmd = basecmd + cmd_args
+        result = run_subprocess(cmd, "token", self.logger, check=True, capture_output=True, timeout=15)
+        return json.loads(result.stdout.decode("utf-8").strip())["token"]
+
+    def get_connector_id(self, config): 
+        op = self.get_tunnel_info(config.get_tunnel_id())
+        connectors = []
+        for conn in op["conns"]:
+            connectors.append(conn["id"])
+        return connectors
+
     def get_tunnel_info(self, tunnel_id):
         info = self._run_command(["info", "--output", "json", tunnel_id], "info")
         return json.loads(info.stdout)
