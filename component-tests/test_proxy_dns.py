@@ -25,7 +25,7 @@ def run_test_scenario(tmp_path, component_tests_config, cfd_mode, run_proxy_dns)
 
     if cfd_mode == CfdModes.NAMED:
         expect_tunnel = True
-        pre_args = ["tunnel"]
+        pre_args = ["tunnel", "--ha-connections", "1"]
         args = ["run"]
     elif cfd_mode == CfdModes.PROXY_DNS:
         expect_proxy_dns = True

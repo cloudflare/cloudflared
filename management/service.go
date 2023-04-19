@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -32,8 +33,10 @@ type ManagementService struct {
 	// The management tunnel hostname
 	Hostname string
 
+	// Host details related configurations
 	serviceIP string
 	clientID  uuid.UUID
+	label     string
 
 	log    *zerolog.Logger
 	router chi.Router
@@ -51,6 +54,7 @@ type ManagementService struct {
 func New(managementHostname string,
 	serviceIP string,
 	clientID uuid.UUID,
+	label string,
 	log *zerolog.Logger,
 	logger LoggerListener,
 ) *ManagementService {
@@ -60,6 +64,7 @@ func New(managementHostname string,
 		logger:    logger,
 		serviceIP: serviceIP,
 		clientID:  clientID,
+		label:     label,
 	}
 	r := chi.NewRouter()
 	r.Get("/ping", ping)
@@ -94,13 +99,25 @@ func (m *ManagementService) getHostDetails(w http.ResponseWriter, r *http.Reques
 	if ip, err := getPrivateIP(m.serviceIP); err == nil {
 		getHostDetailsResponse.IP = ip
 	}
-	if hostname, err := os.Hostname(); err == nil {
-		getHostDetailsResponse.HostName = hostname
-	}
+	getHostDetailsResponse.HostName = m.getLabel()
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 	json.NewEncoder(w).Encode(getHostDetailsResponse)
+}
+
+func (m *ManagementService) getLabel() string {
+	if m.label != "" {
+		return fmt.Sprintf("custom:%s", m.label)
+	}
+
+	// If no label is provided we return the system hostname. This is not
+	// a fqdn hostname.
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
 }
 
 // Get preferred private ip of this machine

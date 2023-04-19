@@ -13,9 +13,9 @@ class TestTunnel:
     def test_tunnel_hello_world(self, tmp_path, component_tests_config):
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"],  cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(),
-                              require_min_connections=4)
+                              require_min_connections=1)
 
     """
         test_get_host_details does the following:
@@ -34,9 +34,9 @@ class TestTunnel:
         headers = {}
         headers["Content-Type"] = "application/json"
         config_path = write_config(tmp_path, config.full_config)
-        with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--label" , "test"], cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(),
-                              require_min_connections=4)
+                              require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             access_jwt = cfd_cli.get_management_token(config, config_path)
             connector_id = cfd_cli.get_connector_id(config)[0]
@@ -45,7 +45,7 @@ class TestTunnel:
             
             # Assert response json.
             assert resp.status_code == 200, "Expected cloudflared to return 200 for host details"
-            assert resp.json()["hostname"] != "", "Expected cloudflared to return hostname"
+            assert resp.json()["hostname"] == "custom:test", "Expected cloudflared to return hostname"
             assert resp.json()["ip"] != "", "Expected cloudflared to return ip"
             assert resp.json()["connector_id"] == connector_id, "Expected cloudflared to return connector_id"
 
@@ -53,8 +53,8 @@ class TestTunnel:
     def test_tunnel_url(self, tmp_path, component_tests_config):
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        with start_cloudflared(tmp_path, config, cfd_args=["run", "--url", f"http://localhost:{METRICS_PORT}/"], new_process=True):
-            wait_tunnel_ready(require_min_connections=4)
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"],  cfd_args=["run", "--url", f"http://localhost:{METRICS_PORT}/"], new_process=True):
+            wait_tunnel_ready(require_min_connections=1)
             send_requests(config.get_url()+"/ready", 3, True)
 
     def test_tunnel_no_ingress(self, tmp_path, component_tests_config):
@@ -64,8 +64,8 @@ class TestTunnel:
         '''
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        with start_cloudflared(tmp_path, config, cfd_args=["run"], new_process=True):
-            wait_tunnel_ready(require_min_connections=4)
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"],  cfd_args=["run"], new_process=True):
+            wait_tunnel_ready(require_min_connections=1)
             resp = send_request(config.get_url()+"/")
             assert resp.status_code == 503, "Expected cloudflared to return 503 for all requests with no ingress defined"
             resp = send_request(config.get_url()+"/test")

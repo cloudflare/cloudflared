@@ -34,7 +34,7 @@ class TestTermination:
     def test_graceful_shutdown(self, tmp_path, component_tests_config, signal, protocol):
         config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(
-                tmp_path, config, new_process=True, capture_output=False) as cloudflared:
+                tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"],  new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
 
             connected = threading.Condition()
@@ -56,7 +56,7 @@ class TestTermination:
     def test_shutdown_once_no_connection(self, tmp_path, component_tests_config, signal, protocol):
         config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(
-                tmp_path, config, new_process=True, capture_output=False) as cloudflared:
+                tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
 
             connected = threading.Condition()
@@ -76,7 +76,7 @@ class TestTermination:
     def test_no_connection_shutdown(self, tmp_path, component_tests_config, signal, protocol):
         config = component_tests_config(self._extra_config(protocol))
         with start_cloudflared(
-                tmp_path, config, new_process=True, capture_output=False) as cloudflared:
+                tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
             with self.within_grace_period():
                 self.terminate_by_signal(cloudflared, signal)

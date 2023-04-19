@@ -96,6 +96,7 @@ Eg. cloudflared tunnel --url localhost:8080/.
 Please note that Quick Tunnels are meant to be ephemeral and should only be used for testing purposes.
 For production usage, we recommend creating Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)
 `
+	connectorLabelFlag = "label"
 )
 
 var (
@@ -407,7 +408,14 @@ func StartServer(
 			}
 		}
 
-		mgmt := management.New(c.String("management-hostname"), serviceIP, clientID, logger.ManagementLogger.Log, logger.ManagementLogger)
+		mgmt := management.New(
+			c.String("management-hostname"),
+			serviceIP,
+			clientID,
+			c.String(connectorLabelFlag),
+			logger.ManagementLogger.Log,
+			logger.ManagementLogger,
+		)
 		localRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
 	}
 	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, localRules, tunnelConfig.Log)
@@ -674,6 +682,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:   haConnectionsFlag,
 			Value:  4,
 			Hidden: true,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:  connectorLabelFlag,
+			Usage: "Use this option to give a meaningful label to a specific connector. When a tunnel starts up, a connector id unique to the tunnel is generated. This is a uuid. To make it easier to identify a connector, we will use the hostname of the machine the tunnel is running on along with the connector ID. This option exists if one wants to have more control over what their individual connectors are called.",
+			Value: "",
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:    "grace-period",
