@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 
@@ -58,4 +59,68 @@ func TestReadEventsLoop_ContextCancelled(t *testing.T) {
 	// Want to make sure this function returns when context is cancelled
 	m.readEvents(server, ctx, events)
 	server.Close(websocket.StatusInternalError, "")
+}
+
+func TestCanStartStream_NoSessions(t *testing.T) {
+	m := ManagementService{
+		log: &noopLogger,
+		logger: &Logger{
+			Log: &noopLogger,
+		},
+	}
+	_, cancel := context.WithCancel(context.Background())
+	session := newSession(0, actor{}, cancel)
+	assert.True(t, m.canStartStream(session))
+}
+
+func TestCanStartStream_ExistingSessionDifferentActor(t *testing.T) {
+	m := ManagementService{
+		log: &noopLogger,
+		logger: &Logger{
+			Log: &noopLogger,
+		},
+	}
+	_, cancel := context.WithCancel(context.Background())
+	session1 := newSession(0, actor{ID: "test"}, cancel)
+	assert.True(t, m.canStartStream(session1))
+	m.logger.Listen(session1)
+	assert.True(t, session1.Active())
+
+	// Try another session
+	session2 := newSession(0, actor{ID: "test2"}, cancel)
+	assert.Equal(t, 1, m.logger.ActiveSessions())
+	assert.False(t, m.canStartStream(session2))
+
+	// Close session1
+	m.logger.Remove(session1)
+	assert.True(t, session1.Active()) // Remove doesn't stop a session
+	session1.Stop()
+	assert.False(t, session1.Active())
+	assert.Equal(t, 0, m.logger.ActiveSessions())
+
+	// Try session2 again
+	assert.True(t, m.canStartStream(session2))
+}
+
+func TestCanStartStream_ExistingSessionSameActor(t *testing.T) {
+	m := ManagementService{
+		log: &noopLogger,
+		logger: &Logger{
+			Log: &noopLogger,
+		},
+	}
+	actor := actor{ID: "test"}
+	_, cancel := context.WithCancel(context.Background())
+	session1 := newSession(0, actor, cancel)
+	assert.True(t, m.canStartStream(session1))
+	m.logger.Listen(session1)
+	assert.True(t, session1.Active())
+
+	// Try another session
+	session2 := newSession(0, actor, cancel)
+	assert.Equal(t, 1, m.logger.ActiveSessions())
+	assert.True(t, m.canStartStream(session2))
+	// session1 is removed and stopped
+	assert.Equal(t, 0, m.logger.ActiveSessions())
+	assert.False(t, session1.Active())
 }

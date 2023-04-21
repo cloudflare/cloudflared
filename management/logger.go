@@ -11,16 +11,9 @@ import (
 
 var json = jsoniter.ConfigFastest
 
-const (
-	// Indicates how many log messages the listener will hold before dropping.
-	// Provides a throttling mechanism to drop latest messages if the sender
-	// can't keep up with the influx of log messages.
-	logWindow = 30
-)
-
 // Logger manages the number of management streaming log sessions
 type Logger struct {
-	sessions []*Session
+	sessions []*session
 	mu       sync.RWMutex
 
 	// Unique logger that isn't a io.Writer of the list of zerolog writers. This helps prevent management log
@@ -40,69 +33,47 @@ func NewLogger() *Logger {
 }
 
 type LoggerListener interface {
-	Listen(*StreamingFilters) *Session
-	Close(*Session)
+	// ActiveSession returns the first active session for the requested actor.
+	ActiveSession(actor) *session
+	// ActiveSession returns the count of active sessions.
+	ActiveSessions() int
+	// Listen appends the session to the list of sessions that receive log events.
+	Listen(*session)
+	// Remove a session from the available sessions that were receiving log events.
+	Remove(*session)
 }
 
-type Session struct {
-	// Buffered channel that holds the recent log events
-	listener chan *Log
-	// Types of log events that this session will provide through the listener
-	filters *StreamingFilters
-}
-
-func newSession(size int, filters *StreamingFilters) *Session {
-	s := &Session{
-		listener: make(chan *Log, size),
-	}
-	if filters != nil {
-		s.filters = filters
-	} else {
-		s.filters = &StreamingFilters{}
-	}
-	return s
-}
-
-// Insert attempts to insert the log to the session. If the log event matches the provided session filters, it
-// will be applied to the listener.
-func (s *Session) Insert(log *Log) {
-	// Level filters are optional
-	if s.filters.Level != nil {
-		if *s.filters.Level > log.Level {
-			return
+func (l *Logger) ActiveSession(actor actor) *session {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, session := range l.sessions {
+		if session.actor.ID == actor.ID && session.active.Load() {
+			return session
 		}
 	}
-	// Event filters are optional
-	if len(s.filters.Events) != 0 && !contains(s.filters.Events, log.Event) {
-		return
-	}
-	select {
-	case s.listener <- log:
-	default:
-		// buffer is full, discard
-	}
+	return nil
 }
 
-func contains(array []LogEventType, t LogEventType) bool {
-	for _, v := range array {
-		if v == t {
-			return true
+func (l *Logger) ActiveSessions() int {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	count := 0
+	for _, session := range l.sessions {
+		if session.active.Load() {
+			count += 1
 		}
 	}
-	return false
+	return count
 }
 
-// Listen creates a new Session that will append filtered log events as they are created.
-func (l *Logger) Listen(filters *StreamingFilters) *Session {
+func (l *Logger) Listen(session *session) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	listener := newSession(logWindow, filters)
-	l.sessions = append(l.sessions, listener)
-	return listener
+	session.active.Store(true)
+	l.sessions = append(l.sessions, session)
 }
 
-// Close will remove a Session from the available sessions that were receiving log events.
-func (l *Logger) Close(session *Session) {
+func (l *Logger) Remove(session *session) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	index := -1

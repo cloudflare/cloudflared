@@ -3,6 +3,7 @@ import asyncio
 import json
 import pytest
 import requests
+import websockets
 from websockets.client import connect, WebSocketClientProtocol
 from conftest import CfdModes
 from constants import MAX_RETRIES, BACKOFF_SECS
@@ -88,6 +89,46 @@ class TestTail:
                 # send stop_streaming
                 await websocket.send('{"type": "stop_streaming"}')
 
+    @pytest.mark.asyncio
+    async def test_streaming_logs_actor_override(self, tmp_path, component_tests_config):
+        """
+        Validates that a streaming logs session can be overriden by the same actor 
+        """
+        print("test_streaming_logs_actor_override")
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        LOGGER.debug(config)
+        headers = {}
+        headers["Content-Type"] = "application/json"
+        config_path = write_config(tmp_path, config.full_config)
+        with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
+            wait_tunnel_ready(tunnel_url=config.get_url(),
+                              require_min_connections=1)
+            cfd_cli = CloudflaredCli(config, config_path, LOGGER)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            task = asyncio.ensure_future(start_streaming_to_be_remotely_closed(url))
+            override_task = asyncio.ensure_future(start_streaming_override(url))
+            await asyncio.wait([task, override_task])
+            assert task.exception() == None, task.exception()
+            assert override_task.exception() == None, override_task.exception()
+
+async def start_streaming_to_be_remotely_closed(url):
+    async with connect(url, open_timeout=5, close_timeout=5) as websocket:
+        try:
+            await websocket.send(json.dumps({"type": "start_streaming"}))
+            await asyncio.sleep(10)
+            assert websocket.closed, "expected this request to be forcibly closed by the override"
+        except websockets.ConnectionClosed:
+            # we expect the request to be closed
+            pass
+
+async def start_streaming_override(url):
+    # wait for the first connection to be established
+    await asyncio.sleep(1)
+    async with connect(url, open_timeout=5, close_timeout=5) as websocket:
+        await websocket.send(json.dumps({"type": "start_streaming"}))
+        await asyncio.sleep(1)
+        await websocket.send(json.dumps({"type": "stop_streaming"}))
+        await asyncio.sleep(1)
 
 # Every http request has two log lines sent
 async def generate_and_validate_log_event(websocket: WebSocketClientProtocol, url: str):

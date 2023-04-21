@@ -1,8 +1,8 @@
 package management
 
 import (
+	"context"
 	"testing"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -21,9 +21,14 @@ func TestLoggerWrite_NoSessions(t *testing.T) {
 func TestLoggerWrite_OneSession(t *testing.T) {
 	logger := NewLogger()
 	zlog := zerolog.New(logger).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	session := logger.Listen(nil)
-	defer logger.Close(session)
+	session := newSession(logWindow, actor{ID: actorID}, cancel)
+	logger.Listen(session)
+	defer logger.Remove(session)
+	assert.Equal(t, 1, logger.ActiveSessions())
+	assert.Equal(t, session, logger.ActiveSession(actor{ID: actorID}))
 	zlog.Info().Int(EventTypeKey, int(HTTP)).Msg("hello")
 	select {
 	case event := <-session.listener:
@@ -40,12 +45,20 @@ func TestLoggerWrite_OneSession(t *testing.T) {
 func TestLoggerWrite_MultipleSessions(t *testing.T) {
 	logger := NewLogger()
 	zlog := zerolog.New(logger).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	session1 := logger.Listen(nil)
-	defer logger.Close(session1)
-	session2 := logger.Listen(nil)
+	session1 := newSession(logWindow, actor{}, cancel)
+	logger.Listen(session1)
+	defer logger.Remove(session1)
+	assert.Equal(t, 1, logger.ActiveSessions())
+
+	session2 := newSession(logWindow, actor{}, cancel)
+	logger.Listen(session2)
+	assert.Equal(t, 2, logger.ActiveSessions())
+
 	zlog.Info().Int(EventTypeKey, int(HTTP)).Msg("hello")
-	for _, session := range []*Session{session1, session2} {
+	for _, session := range []*session{session1, session2} {
 		select {
 		case event := <-session.listener:
 			assert.NotEmpty(t, event.Time)
@@ -58,7 +71,7 @@ func TestLoggerWrite_MultipleSessions(t *testing.T) {
 	}
 
 	// Close session2 and make sure session1 still receives events
-	logger.Close(session2)
+	logger.Remove(session2)
 	zlog.Info().Int(EventTypeKey, int(HTTP)).Msg("hello2")
 	select {
 	case event := <-session1.listener:
@@ -74,104 +87,6 @@ func TestLoggerWrite_MultipleSessions(t *testing.T) {
 	select {
 	case <-session2.listener:
 		assert.Fail(t, "An event was not expected to be in the session listener")
-	default:
-		// pass
-	}
-}
-
-// Validate that the session filters events
-func TestSession_Insert(t *testing.T) {
-	infoLevel := new(LogLevel)
-	*infoLevel = Info
-	warnLevel := new(LogLevel)
-	*warnLevel = Warn
-	for _, test := range []struct {
-		name      string
-		filters   StreamingFilters
-		expectLog bool
-	}{
-		{
-			name:      "none",
-			expectLog: true,
-		},
-		{
-			name: "level",
-			filters: StreamingFilters{
-				Level: infoLevel,
-			},
-			expectLog: true,
-		},
-		{
-			name: "filtered out level",
-			filters: StreamingFilters{
-				Level: warnLevel,
-			},
-			expectLog: false,
-		},
-		{
-			name: "events",
-			filters: StreamingFilters{
-				Events: []LogEventType{HTTP},
-			},
-			expectLog: true,
-		},
-		{
-			name: "filtered out event",
-			filters: StreamingFilters{
-				Events: []LogEventType{Cloudflared},
-			},
-			expectLog: false,
-		},
-		{
-			name: "filter and event",
-			filters: StreamingFilters{
-				Level:  infoLevel,
-				Events: []LogEventType{HTTP},
-			},
-			expectLog: true,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			session := newSession(4, &test.filters)
-			log := Log{
-				Time:    time.Now().UTC().Format(time.RFC3339),
-				Event:   HTTP,
-				Level:   Info,
-				Message: "test",
-			}
-			session.Insert(&log)
-			select {
-			case <-session.listener:
-				require.True(t, test.expectLog)
-			default:
-				require.False(t, test.expectLog)
-			}
-		})
-	}
-}
-
-// Validate that the session has a max amount of events to hold
-func TestSession_InsertOverflow(t *testing.T) {
-	session := newSession(1, nil)
-	log := Log{
-		Time:    time.Now().UTC().Format(time.RFC3339),
-		Event:   HTTP,
-		Level:   Info,
-		Message: "test",
-	}
-	// Insert 2 but only max channel size for 1
-	session.Insert(&log)
-	session.Insert(&log)
-	select {
-	case <-session.listener:
-		// pass
-	default:
-		require.Fail(t, "expected one log event")
-	}
-	// Second dequeue should fail
-	select {
-	case <-session.listener:
-		require.Fail(t, "expected no more remaining log events")
 	default:
 		// pass
 	}

@@ -13,6 +13,7 @@ require (
 	github.com/getsentry/raven-go v0.2.0
 	github.com/getsentry/sentry-go v0.16.0
 	github.com/go-chi/chi/v5 v5.0.8
+	github.com/go-jose/go-jose/v3 v3.0.0
 	github.com/gobwas/ws v1.0.4
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/google/gopacket v1.1.19
@@ -36,8 +37,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.6.3
 	go.opentelemetry.io/proto/otlp v0.15.0
 	go.uber.org/automaxprocs v1.4.0
-	golang.org/x/crypto v0.5.0
-	golang.org/x/net v0.7.0
+	golang.org/x/crypto v0.8.0
+	golang.org/x/net v0.9.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.7.0
 	golang.org/x/term v0.7.0
@@ -96,8 +97,8 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/oauth2 v0.4.0 // indirect
-	golang.org/x/text v0.7.0 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20221202195650-67e5cbc046fd // indirect
 	google.golang.org/grpc v1.51.0 // indirect
