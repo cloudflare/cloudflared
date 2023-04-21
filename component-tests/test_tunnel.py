@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import requests
 from conftest import CfdModes
-from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS, MANAGEMENT_HOST_NAME 
+from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 from retrying import retry
 from cli import CloudflaredCli
 from util import LOGGER, write_config, start_cloudflared, wait_tunnel_ready, send_requests
@@ -38,9 +38,8 @@ class TestTunnel:
             wait_tunnel_ready(tunnel_url=config.get_url(),
                               require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            access_jwt = cfd_cli.get_management_token(config, config_path)
             connector_id = cfd_cli.get_connector_id(config)[0]
-            url = f"{MANAGEMENT_HOST_NAME}/host_details?connector_id={connector_id}&access_token={access_jwt}"
+            url = cfd_cli.get_management_url("host_details", config, config_path)
             resp = send_request(url, headers=headers)
             
             # Assert response json.

@@ -4,7 +4,7 @@ BACKOFF_SECS = 7
 MAX_LOG_LINES = 50
 
 PROXY_DNS_PORT = 9053
-MANAGEMENT_HOST_NAME = "https://management.argotunnel.com"
+MANAGEMENT_HOST_NAME = "management.argotunnel.com"
 
 
 def protocols():
