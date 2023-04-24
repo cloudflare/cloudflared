@@ -68,6 +68,27 @@ func TestSession_Insert(t *testing.T) {
 			expectLog: false,
 		},
 		{
+			name: "sampling",
+			filters: StreamingFilters{
+				Sampling: 0.9999999,
+			},
+			expectLog: true,
+		},
+		{
+			name: "sampling (invalid negative)",
+			filters: StreamingFilters{
+				Sampling: -1.0,
+			},
+			expectLog: true,
+		},
+		{
+			name: "sampling (invalid too large)",
+			filters: StreamingFilters{
+				Sampling: 2.0,
+			},
+			expectLog: true,
+		},
+		{
 			name: "filter and event",
 			filters: StreamingFilters{
 				Level:  infoLevel,

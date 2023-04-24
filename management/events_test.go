@@ -58,12 +58,22 @@ func TestIntoClientEvent_StartStreaming(t *testing.T) {
 			},
 		},
 		{
+			name: "sampling filter",
+			expected: EventStartStreaming{
+				ClientEvent: ClientEvent{Type: StartStreaming},
+				Filters: &StreamingFilters{
+					Sampling: 0.5,
+				},
+			},
+		},
+		{
 			name: "level and events filters",
 			expected: EventStartStreaming{
 				ClientEvent: ClientEvent{Type: StartStreaming},
 				Filters: &StreamingFilters{
-					Level:  infoLevel,
-					Events: []LogEventType{Cloudflared},
+					Level:    infoLevel,
+					Events:   []LogEventType{Cloudflared},
+					Sampling: 0.5,
 				},
 			},
 		},

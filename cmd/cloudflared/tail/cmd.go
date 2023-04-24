@@ -83,9 +83,15 @@ func buildTailCommand(subcommands []*cli.Command) *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "level",
-				Usage:   "Filter by specific log levels (debug, info, warn, error)",
+				Usage:   "Filter by specific log levels (debug, info, warn, error). Filters by debug log level by default.",
 				EnvVars: []string{"TUNNEL_MANAGEMENT_FILTER_LEVEL"},
 				Value:   "debug",
+			},
+			&cli.Float64Flag{
+				Name:    "sample",
+				Usage:   "Sample log events by percentage (0.0 .. 1.0). No sampling by default.",
+				EnvVars: []string{"TUNNEL_MANAGEMENT_FILTER_SAMPLE"},
+				Value:   1.0,
 			},
 			&cli.StringFlag{
 				Name:    "token",
@@ -172,9 +178,11 @@ func createLogger(c *cli.Context) *zerolog.Logger {
 func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
 	var level *management.LogLevel
 	var events []management.LogEventType
+	var sample float64
 
 	argLevel := c.String("level")
 	argEvents := c.StringSlice("event")
+	argSample := c.Float64("sample")
 
 	if argLevel != "" {
 		l, ok := management.ParseLogLevel(argLevel)
@@ -192,14 +200,20 @@ func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
 		events = append(events, t)
 	}
 
-	if level == nil && len(events) == 0 {
+	if argSample <= 0.0 || argSample > 1.0 {
+		return nil, fmt.Errorf("invalid --sample value provided, please make sure it is in the range (0.0 .. 1.0)")
+	}
+	sample = argSample
+
+	if level == nil && len(events) == 0 && argSample != 1.0 {
 		// When no filters are provided, do not return a StreamingFilters struct
 		return nil, nil
 	}
 
 	return &management.StreamingFilters{
-		Level:  level,
-		Events: events,
+		Level:    level,
+		Events:   events,
+		Sampling: sample,
 	}, nil
 }
 

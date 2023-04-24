@@ -2,6 +2,7 @@ package management
 
 import (
 	"context"
+	"math/rand"
 	"sync/atomic"
 )
 
@@ -25,6 +26,8 @@ type session struct {
 	listener chan *Log
 	// Types of log events that this session will provide through the listener
 	filters *StreamingFilters
+	// Sampling of the log events this session will send (runs after all other filters if available)
+	sampler *sampler
 }
 
 // NewSession creates a new session.
@@ -43,6 +46,20 @@ func newSession(size int, actor actor, cancel context.CancelFunc) *session {
 func (s *session) Filters(filters *StreamingFilters) {
 	if filters != nil {
 		s.filters = filters
+		sampling := filters.Sampling
+		// clamp the sampling values between 0 and 1
+		if sampling < 0 {
+			sampling = 0
+		}
+		if sampling > 1 {
+			sampling = 1
+		}
+		s.filters.Sampling = sampling
+		if sampling > 0 && sampling < 1 {
+			s.sampler = &sampler{
+				p: int(sampling * 100),
+			}
+		}
 	} else {
 		s.filters = &StreamingFilters{}
 	}
@@ -59,6 +76,10 @@ func (s *session) Insert(log *Log) {
 	}
 	// Event filters are optional
 	if len(s.filters.Events) != 0 && !contains(s.filters.Events, log.Event) {
+		return
+	}
+	// Sampling is also optional
+	if s.sampler != nil && !s.sampler.Sample() {
 		return
 	}
 	select {
@@ -85,4 +106,15 @@ func contains(array []LogEventType, t LogEventType) bool {
 		}
 	}
 	return false
+}
+
+// sampler will send approximately every p percentage log events out of 100.
+type sampler struct {
+	p int
+}
+
+// Sample returns true if the event should be part of the sample, false if the event should be dropped.
+func (s *sampler) Sample() bool {
+	return rand.Intn(100) <= s.p
+
 }

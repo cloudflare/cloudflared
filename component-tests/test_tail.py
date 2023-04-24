@@ -21,12 +21,9 @@ class TestTail:
         print("test_start_stop_streaming")
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        headers = {}
-        headers["Content-Type"] = "application/json"
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
-            wait_tunnel_ready(tunnel_url=config.get_url(),
-                              require_min_connections=1)
+            wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_wsurl("logs", config, config_path)
             async with connect(url, open_timeout=5, close_timeout=3) as websocket:
@@ -43,19 +40,16 @@ class TestTail:
         print("test_streaming_logs")
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        headers = {}
-        headers["Content-Type"] = "application/json"
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
-            wait_tunnel_ready(tunnel_url=config.get_url(),
-                              require_min_connections=1)
+            wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_wsurl("logs", config, config_path)
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming
                 await websocket.send('{"type": "start_streaming"}')
                 # send some http requests to the tunnel to trigger some logs
-                await asyncio.wait_for(generate_and_validate_log_event(websocket, config.get_url()), 10)
+                await generate_and_validate_http_events(websocket, config.get_url(), 10)
                 # send stop_streaming
                 await websocket.send('{"type": "stop_streaming"}')
 
@@ -68,12 +62,36 @@ class TestTail:
         print("test_streaming_logs_filters")
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        headers = {}
-        headers["Content-Type"] = "application/json"
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
-            wait_tunnel_ready(tunnel_url=config.get_url(),
-                              require_min_connections=1)
+            wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
+            cfd_cli = CloudflaredCli(config, config_path, LOGGER)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            async with connect(url, open_timeout=5, close_timeout=5) as websocket:
+                # send start_streaming with tcp logs only
+                await websocket.send(json.dumps({
+                    "type": "start_streaming",
+                    "filters": {
+                        "events": ["tcp"],
+                        "level": "debug"
+                    }
+                }))
+                # don't expect any http logs
+                await generate_and_validate_no_log_event(websocket, config.get_url())
+                # send stop_streaming
+                await websocket.send('{"type": "stop_streaming"}')
+    
+    @pytest.mark.asyncio
+    async def test_streaming_logs_sampling(self, tmp_path, component_tests_config):
+        """
+        Validates that a streaming logs connection will stream logs with sampling.
+        """
+        print("test_streaming_logs_sampling")
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        LOGGER.debug(config)
+        config_path = write_config(tmp_path, config.full_config)
+        with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
+            wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_wsurl("logs", config, config_path)
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
@@ -81,11 +99,12 @@ class TestTail:
                 await websocket.send(json.dumps({
                     "type": "start_streaming",
                     "filters": {
-                        "events": ["tcp"]
+                        "sampling": 0.5
                     }
                 }))
                 # don't expect any http logs
-                await generate_and_validate_no_log_event(websocket, config.get_url())
+                count = await generate_and_validate_http_events(websocket, config.get_url(), 10)
+                assert count < (10 * 2) # There are typically always two log lines for http requests (request and response)
                 # send stop_streaming
                 await websocket.send('{"type": "stop_streaming"}')
 
@@ -97,12 +116,9 @@ class TestTail:
         print("test_streaming_logs_actor_override")
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
-        headers = {}
-        headers["Content-Type"] = "application/json"
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
-            wait_tunnel_ready(tunnel_url=config.get_url(),
-                              require_min_connections=1)
+            wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_wsurl("logs", config, config_path)
             task = asyncio.ensure_future(start_streaming_to_be_remotely_closed(url))
@@ -131,16 +147,22 @@ async def start_streaming_override(url):
         await asyncio.sleep(1)
 
 # Every http request has two log lines sent
-async def generate_and_validate_log_event(websocket: WebSocketClientProtocol, url: str):
-    send_request(url)
-    req_line = await websocket.recv()
-    log_line = json.loads(req_line)
-    assert log_line["type"] == "logs"
-    assert log_line["logs"][0]["event"] == "http"
-    req_line = await websocket.recv()
-    log_line = json.loads(req_line)
-    assert log_line["type"] == "logs"
-    assert log_line["logs"][0]["event"] == "http"
+async def generate_and_validate_http_events(websocket: WebSocketClientProtocol, url: str, count_send: int):
+    for i in range(count_send):
+        send_request(url)
+    # There are typically always two log lines for http requests (request and response)
+    count = 0
+    while True:
+        try:
+            req_line = await asyncio.wait_for(websocket.recv(), 2)
+            log_line = json.loads(req_line)
+            assert log_line["type"] == "logs"
+            assert log_line["logs"][0]["event"] == "http"
+            count += 1
+        except asyncio.TimeoutError:
+            # ignore timeout from waiting for recv
+            break
+    return count
 
 # Every http request has two log lines sent
 async def generate_and_validate_no_log_event(websocket: WebSocketClientProtocol, url: str):

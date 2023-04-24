@@ -52,8 +52,9 @@ type EventStartStreaming struct {
 }
 
 type StreamingFilters struct {
-	Events []LogEventType `json:"events,omitempty"`
-	Level  *LogLevel      `json:"level,omitempty"`
+	Events   []LogEventType `json:"events,omitempty"`
+	Level    *LogLevel      `json:"level,omitempty"`
+	Sampling float64        `json:"sampling,omitempty"`
 }
 
 // EventStopStreaming signifies that the client wishes to halt receiving log events.
