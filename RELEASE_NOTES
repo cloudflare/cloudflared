@@ -1,3 +1,16 @@
+2023.4.2
+- 2023-04-24 TUN-7133: Add sampling support for streaming logs
+- 2023-04-21 TUN-7141: Add component tests for streaming logs
+- 2023-04-21 TUN-7373: Streaming logs override for same actor
+- 2023-04-20 TUN-7383: Bump requirements.txt
+- 2023-04-19 TUN-7361: Add a label to override hostname
+- 2023-04-19 TUN-7378: Remove RPC debug logs
+- 2023-04-18 TUN-7360: Add Get Host Details handler in management service
+- 2023-04-17 AUTH-3122 Verify that Access tokens are still valid in curl command
+- 2023-04-17 TUN-7129: Categorize TCP logs for streaming logs
+- 2023-04-17 TUN-7130: Categorize UDP logs for streaming logs
+- 2023-04-10 AUTH-4887 Add aud parameter to token transfer url
+
 2023.4.1
 - 2023-04-13 TUN-7368: Report destination address for TCP requests in logs
 - 2023-04-12 TUN-7134: Acquire token for cloudflared tail
