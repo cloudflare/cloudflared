@@ -3,7 +3,7 @@ pinned_go_fips: &pinned_go_fips go-boring=1.19.6-1
 
 build_dir: &build_dir /cfsetup_build
 default-flavor: bullseye
-stretch: &stretch
+buster: &buster
   build:
     build_dir: *build_dir
     builddeps: &build_deps
@@ -268,6 +268,5 @@ stretch: &stretch
       - export GOARCH=amd64
       - make publish-cloudflared-junos
 
-buster: *stretch
-bullseye: *stretch
-bookworm: *stretch
+bullseye: *buster
+bookworm: *buster
