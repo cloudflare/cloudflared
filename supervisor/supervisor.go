@@ -286,6 +286,7 @@ func (s *Supervisor) startFirstTunnel(
 			}
 		case connection.DupConnRegisterTunnelError,
 			*quic.IdleTimeoutError,
+			*quic.ApplicationError,
 			edgediscovery.DialError,
 			*connection.EdgeQuicDialError:
 			// Try again for these types of errors
