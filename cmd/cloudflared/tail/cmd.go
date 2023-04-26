@@ -100,6 +100,12 @@ func buildTailCommand(subcommands []*cli.Command) *cli.Command {
 				EnvVars: []string{"TUNNEL_MANAGEMENT_TOKEN"},
 			},
 			&cli.StringFlag{
+				Name:    "output",
+				Usage:   "Output format for the logs (default, json)",
+				Value:   "default",
+				EnvVars: []string{"TUNNEL_MANAGEMENT_OUTPUT"},
+			},
+			&cli.StringFlag{
 				Name:    "management-hostname",
 				Usage:   "Management hostname to signify incoming management requests",
 				EnvVars: []string{"TUNNEL_MANAGEMENT_HOSTNAME"},
@@ -270,6 +276,24 @@ func buildURL(c *cli.Context, log *zerolog.Logger) (url.URL, error) {
 	return url.URL{Scheme: "wss", Host: managementHostname, Path: "/logs", RawQuery: query.Encode()}, nil
 }
 
+func printLine(log *management.Log, logger *zerolog.Logger) {
+	fields, err := json.Marshal(log.Fields)
+	if err != nil {
+		fields = []byte("unable to parse fields")
+		logger.Debug().Msgf("unable to parse fields from event %+v", log)
+	}
+	fmt.Printf("%s %s %s %s %s\n", log.Time, log.Level, log.Event, log.Message, fields)
+}
+
+func printJSON(log *management.Log, logger *zerolog.Logger) {
+	output, err := json.Marshal(log)
+	if err != nil {
+		logger.Debug().Msgf("unable to parse event to json %+v", log)
+	} else {
+		fmt.Println(string(output))
+	}
+}
+
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
 	log := createLogger(c)
@@ -277,6 +301,16 @@ func Run(c *cli.Context) error {
 	signals := make(chan os.Signal, 10)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
+
+	output := "default"
+	switch c.String("output") {
+	case "default", "":
+		output = "default"
+	case "json":
+		output = "json"
+	default:
+		log.Err(errors.New("invalid --output value provided, please make sure it is one of: default, json")).Send()
+	}
 
 	filters, err := parseFilters(c)
 	if err != nil {
@@ -358,12 +392,11 @@ func Run(c *cli.Context) error {
 					}
 					// Output all the logs received to stdout
 					for _, l := range logs.Logs {
-						fields, err := json.Marshal(l.Fields)
-						if err != nil {
-							fields = []byte("unable to parse fields")
-							log.Debug().Msgf("unable to parse fields from event %+v", l)
+						if output == "json" {
+							printJSON(l, log)
+						} else {
+							printLine(l, log)
 						}
-						fmt.Printf("%s %s %s %s %s\n", l.Time, l.Level, l.Event, l.Message, fields)
 					}
 				case management.UnknownServerEventType:
 					fallthrough
