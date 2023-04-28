@@ -15,7 +15,7 @@ var (
 	clientConnLabels = []string{"conn_index"}
 	clientMetrics    = struct {
 		totalConnections  prometheus.Counter
-		closedConnections *prometheus.CounterVec
+		closedConnections prometheus.Counter
 		sentPackets       *prometheus.CounterVec
 		sentBytes         *prometheus.CounterVec
 		receivePackets    *prometheus.CounterVec
@@ -30,9 +30,8 @@ var (
 		totalConnections: prometheus.NewCounter(
 			totalConnectionsOpts(logging.PerspectiveClient),
 		),
-		closedConnections: prometheus.NewCounterVec(
+		closedConnections: prometheus.NewCounter(
 			closedConnectionsOpts(logging.PerspectiveClient),
-			[]string{"error"},
 		),
 		sentPackets: prometheus.NewCounterVec(
 			sentPacketsOpts(logging.PerspectiveClient),
@@ -284,7 +283,7 @@ func (cc *clientCollector) startedConnection() {
 }
 
 func (cc *clientCollector) closedConnection(err error) {
-	clientMetrics.closedConnections.WithLabelValues(err.Error()).Inc()
+	clientMetrics.closedConnections.Inc()
 }
 
 func (cc *clientCollector) sentPackets(size logging.ByteCount) {

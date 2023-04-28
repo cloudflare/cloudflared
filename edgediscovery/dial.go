@@ -15,12 +15,16 @@ func DialEdge(
 	timeout time.Duration,
 	tlsConfig *tls.Config,
 	edgeTCPAddr *net.TCPAddr,
+	localIP net.IP,
 ) (net.Conn, error) {
 	// Inherit from parent context so we can cancel (Ctrl-C) while dialing
 	dialCtx, dialCancel := context.WithTimeout(ctx, timeout)
 	defer dialCancel()
 
 	dialer := net.Dialer{}
+	if localIP != nil {
+		dialer.LocalAddr = &net.TCPAddr{IP: localIP, Port: 0}
+	}
 	edgeConn, err := dialer.DialContext(dialCtx, "tcp", edgeTCPAddr.String())
 	if err != nil {
 		return nil, newDialError(err, "DialContext error")

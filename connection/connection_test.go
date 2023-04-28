@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -140,7 +141,7 @@ func wsEchoEndpoint(w ResponseWriter, r *http.Request) error {
 	}()
 
 	originConn := &echoPipe{reader: readPipe, writer: writePipe}
-	websocket.Stream(wsConn, originConn, &log)
+	stream.Pipe(wsConn, originConn, &log)
 	cancel()
 	wsConn.Close()
 	return nil
@@ -178,7 +179,7 @@ func wsFlakyEndpoint(w ResponseWriter, r *http.Request) error {
 
 	closedAfter := time.Millisecond * time.Duration(rand.Intn(50))
 	originConn := &flakyConn{closeAt: time.Now().Add(closedAfter)}
-	websocket.Stream(wsConn, originConn, &log)
+	stream.Pipe(wsConn, originConn, &log)
 	cancel()
 	wsConn.Close()
 	return nil

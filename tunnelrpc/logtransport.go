@@ -24,17 +24,17 @@ func NewTransportLogger(log *zerolog.Logger, t rpc.Transport) rpc.Transport {
 }
 
 func (t *transport) SendMessage(ctx context.Context, msg rpccapnp.Message) error {
-	t.log.Debug().Msgf("rpcconnect: tx %s", formatMsg(msg))
+	t.log.Trace().Msgf("rpc tx: %s", formatMsg(msg))
 	return t.Transport.SendMessage(ctx, msg)
 }
 
 func (t *transport) RecvMessage(ctx context.Context) (rpccapnp.Message, error) {
 	msg, err := t.Transport.RecvMessage(ctx)
 	if err != nil {
-		t.log.Debug().Msgf("rpcconnect: rx error: %s", err)
+		t.log.Debug().Msgf("rpc rx error: %s", err)
 		return msg, err
 	}
-	t.log.Debug().Msgf("rpcconnect: rx %s", formatMsg(msg))
+	t.log.Trace().Msgf("rpc rx: %s", formatMsg(msg))
 	return msg, nil
 }
 

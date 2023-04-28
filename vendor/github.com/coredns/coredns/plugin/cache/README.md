@@ -37,7 +37,9 @@ cache [TTL] [ZONES...] {
     success CAPACITY [TTL] [MINTTL]
     denial CAPACITY [TTL] [MINTTL]
     prefetch AMOUNT [[DURATION] [PERCENTAGE%]]
-    serve_stale [DURATION]
+    serve_stale [DURATION] [REFRESH_MODE]
+    servfail DURATION
+    disable success|denial [ZONES...]
 }
 ~~~
 
@@ -54,10 +56,20 @@ cache [TTL] [ZONES...] {
   **DURATION** defaults to 1m. Prefetching will happen when the TTL drops below **PERCENTAGE**,
   which defaults to `10%`, or latest 1 second before TTL expiration. Values should be in the range `[10%, 90%]`.
   Note the percent sign is mandatory. **PERCENTAGE** is treated as an `int`.
-* `serve_stale`, when serve\_stale is set, cache always will serve an expired entry to a client if there is one
-  available.  When this happens, cache will attempt to refresh the cache entry after sending the expired cache
-  entry to the client. The responses have a TTL of 0. **DURATION** is how far back to consider
-  stale responses as fresh. The default duration is 1h.
+* `serve_stale`, when serve\_stale is set, cache will always serve an expired entry to a client if there is one
+  available as long as it has not been expired for longer than **DURATION** (default 1 hour). By default, the _cache_ plugin will
+  attempt to refresh the cache entry after sending the expired cache entry to the client. The
+  responses have a TTL of 0. **REFRESH_MODE** controls the timing of the expired cache entry refresh.
+  `verify` will first verify that an entry is still unavailable from the source before sending the expired entry to the client.
+  `immediate` will immediately send the expired entry to the client before
+  checking to see if the entry is available from the source. **REFRESH_MODE** defaults to `immediate`. Setting this
+  value to `verify` can lead to increased latency when serving stale responses, but will prevent stale entries
+  from ever being served if an updated response can be retrieved from the source.
+* `servfail` cache SERVFAIL responses for **DURATION**.  Setting **DURATION** to 0 will disable caching of SERVFAIL
+  responses.  If this option is not set, SERVFAIL responses will be cached for 5 seconds.  **DURATION** may not be
+  greater than 5 minutes.
+* `disable`  disable the success or denial cache for the listed **ZONES**.  If no **ZONES** are given, the specified
+  cache will be disabled for all zones.
 
 ## Capacity and Eviction
 
@@ -73,14 +85,14 @@ Entries with 0 TTL will remain in the cache until randomly evicted when the shar
 
 If monitoring is enabled (via the *prometheus* plugin) then the following metrics are exported:
 
-* `coredns_cache_entries{server, type}` - Total elements in the cache by cache type.
-* `coredns_cache_hits_total{server, type}` - Counter of cache hits by cache type.
-* `coredns_cache_misses_total{server}` - Counter of cache misses. - Deprecated, derive misses from cache hits/requests counters.
-* `coredns_cache_requests_total{server}` - Counter of cache requests.
-* `coredns_cache_prefetch_total{server}` - Counter of times the cache has prefetched a cached item.
-* `coredns_cache_drops_total{server}` - Counter of responses excluded from the cache due to request/response question name mismatch.
-* `coredns_cache_served_stale_total{server}` - Counter of requests served from stale cache entries.
-* `coredns_cache_evictions_total{server, type}` - Counter of cache evictions.
+* `coredns_cache_entries{server, type, zones, view}` - Total elements in the cache by cache type.
+* `coredns_cache_hits_total{server, type, zones, view}` - Counter of cache hits by cache type.
+* `coredns_cache_misses_total{server, zones, view}` - Counter of cache misses. - Deprecated, derive misses from cache hits/requests counters.
+* `coredns_cache_requests_total{server, zones, view}` - Counter of cache requests.
+* `coredns_cache_prefetch_total{server, zones, view}` - Counter of times the cache has prefetched a cached item.
+* `coredns_cache_drops_total{server, zones, view}` - Counter of responses excluded from the cache due to request/response question name mismatch.
+* `coredns_cache_served_stale_total{server, zones, view}` - Counter of requests served from stale cache entries.
+* `coredns_cache_evictions_total{server, type, zones, view}` - Counter of cache evictions.
 
 Cache types are either "denial" or "success". `Server` is the server handling the request, see the
 prometheus plugin for documentation.
@@ -112,6 +124,16 @@ example.org {
     cache {
         success 5000
         denial 2500
+    }
+}
+~~~
+
+Enable caching for `example.org`, but do not cache denials in `sub.example.org`:
+
+~~~ corefile
+example.org {
+    cache {
+        disable denial sub.example.org
     }
 }
 ~~~

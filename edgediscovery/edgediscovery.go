@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/management"
 )
 
 const (
@@ -74,33 +75,35 @@ func (ed *Edge) GetAddrForRPC() (*allregions.EdgeAddr, error) {
 
 // GetAddr gives this proxy connection an edge Addr. Prefer Addrs this connection has already used.
 func (ed *Edge) GetAddr(connIndex int) (*allregions.EdgeAddr, error) {
-	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
+	log := ed.log.With().
+		Int(LogFieldConnIndex, connIndex).
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		Logger()
 	ed.Lock()
 	defer ed.Unlock()
 
 	// If this connection has already used an edge addr, return it.
 	if addr := ed.regions.AddrUsedBy(connIndex); addr != nil {
-		log.Debug().Msg("edgediscovery - GetAddr: Returning same address back to proxy connection")
+		log.Debug().IPAddr(LogFieldIPAddress, addr.UDP.IP).Msg("edge discovery: returning same edge address back to pool")
 		return addr, nil
 	}
 
 	// Otherwise, give it an unused one
 	addr := ed.regions.GetUnusedAddr(nil, connIndex)
 	if addr == nil {
-		log.Debug().Msg("edgediscovery - GetAddr: No addresses left to give proxy connection")
+		log.Debug().Msg("edge discovery: no addresses left in pool to give proxy connection")
 		return nil, errNoAddressesLeft
 	}
-	log = ed.log.With().
-		Int(LogFieldConnIndex, connIndex).
-		IPAddr(LogFieldIPAddress, addr.UDP.IP).Logger()
-	log.Debug().Msgf("edgediscovery - GetAddr: Giving connection its new address")
+	log.Debug().IPAddr(LogFieldIPAddress, addr.UDP.IP).Msg("edge discovery: giving new address to connection")
 	return addr, nil
 }
 
 // GetDifferentAddr gives back the proxy connection's edge Addr and uses a new one.
 func (ed *Edge) GetDifferentAddr(connIndex int, hasConnectivityError bool) (*allregions.EdgeAddr, error) {
-	log := ed.log.With().Int(LogFieldConnIndex, connIndex).Logger()
-
+	log := ed.log.With().
+		Int(LogFieldConnIndex, connIndex).
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		Logger()
 	ed.Lock()
 	defer ed.Unlock()
 
@@ -110,14 +113,14 @@ func (ed *Edge) GetDifferentAddr(connIndex int, hasConnectivityError bool) (*all
 	}
 	addr := ed.regions.GetUnusedAddr(oldAddr, connIndex)
 	if addr == nil {
-		log.Debug().Msg("edgediscovery - GetDifferentAddr: No addresses left to give proxy connection")
+		log.Debug().Msg("edge discovery: no addresses left in pool to give proxy connection")
 		// note: if oldAddr were not nil, it will become available on the next iteration
 		return nil, errNoAddressesLeft
 	}
-	log = ed.log.With().
-		Int(LogFieldConnIndex, connIndex).
-		IPAddr(LogFieldIPAddress, addr.UDP.IP).Logger()
-	log.Debug().Msgf("edgediscovery - GetDifferentAddr: Giving connection its new address from the address list: %v", ed.regions.AvailableAddrs())
+	log.Debug().
+		IPAddr(LogFieldIPAddress, addr.UDP.IP).
+		Int("available", ed.regions.AvailableAddrs()).
+		Msg("edge discovery: giving new address to connection")
 	return addr, nil
 }
 
@@ -133,8 +136,9 @@ func (ed *Edge) AvailableAddrs() int {
 func (ed *Edge) GiveBack(addr *allregions.EdgeAddr, hasConnectivityError bool) bool {
 	ed.Lock()
 	defer ed.Unlock()
-	log := ed.log.With().
-		IPAddr(LogFieldIPAddress, addr.UDP.IP).Logger()
-	log.Debug().Msgf("edgediscovery - GiveBack: Address now unused")
+	ed.log.Debug().
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		IPAddr(LogFieldIPAddress, addr.UDP.IP).
+		Msg("edge discovery: gave back address to the pool")
 	return ed.regions.GiveBack(addr, hasConnectivityError)
 }

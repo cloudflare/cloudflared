@@ -28,8 +28,9 @@ type Orchestrator struct {
 	lock sync.RWMutex
 	// Underlying value is proxy.Proxy, can be read without the lock, but still needs the lock to update
 	proxy atomic.Value
-	// TODO: TUN-6815 Use atomic.Bool once we upgrade to go 1.19. 1 Means enabled and 0 means disabled
-	warpRoutingEnabled uint32
+	// Set of local ingress rules defined at cloudflared startup (separate from user-defined ingress rules)
+	localRules         []ingress.Rule
+	warpRoutingEnabled atomic.Bool
 	config             *Config
 	tags               []tunnelpogs.Tag
 	log                *zerolog.Logger
@@ -40,10 +41,11 @@ type Orchestrator struct {
 	proxyShutdownC chan<- struct{}
 }
 
-func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag, log *zerolog.Logger) (*Orchestrator, error) {
+func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag, localRules []ingress.Rule, log *zerolog.Logger) (*Orchestrator, error) {
 	o := &Orchestrator{
 		// Lowest possible version, any remote configuration will have version higher than this
 		currentVersion: 0,
+		localRules:     localRules,
 		config:         config,
 		tags:           tags,
 		log:            log,
@@ -112,6 +114,9 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	default:
 	}
 
+	// Assign the local ingress rules to the parsed ingress
+	ingressRules.LocalRules = o.localRules
+
 	// Start new proxy before closing the ones from last version.
 	// The upside is we don't need to restart proxy from last version, which can fail
 	// The downside is new version might have ingress rule that require previous version to be shutdown first
@@ -120,14 +125,14 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	if err := ingressRules.StartOrigins(o.log, proxyShutdownC); err != nil {
 		return errors.Wrap(err, "failed to start origin")
 	}
-	newProxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.log)
-	o.proxy.Store(newProxy)
+	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.log)
+	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting
 	if warpRouting.Enabled {
-		atomic.StoreUint32(&o.warpRoutingEnabled, 1)
+		o.warpRoutingEnabled.Store(true)
 	} else {
-		atomic.StoreUint32(&o.warpRoutingEnabled, 0)
+		o.warpRoutingEnabled.Store(false)
 	}
 
 	// If proxyShutdownC is nil, there is no previous running proxy
@@ -188,7 +193,7 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 		o.log.Error().Msg(err.Error())
 		return nil, err
 	}
-	proxy, ok := val.(*proxy.Proxy)
+	proxy, ok := val.(connection.OriginProxy)
 	if !ok {
 		err := fmt.Errorf("origin proxy has unexpected value %+v", val)
 		o.log.Error().Msg(err.Error())
@@ -197,12 +202,8 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 	return proxy, nil
 }
 
-// TODO: TUN-6815 consider storing WarpRouting.Enabled as atomic.Bool once we upgrade to go 1.19
-func (o *Orchestrator) WarpRoutingEnabled() (enabled bool) {
-	if atomic.LoadUint32(&o.warpRoutingEnabled) == 0 {
-		return false
-	}
-	return true
+func (o *Orchestrator) WarpRoutingEnabled() bool {
+	return o.warpRoutingEnabled.Load()
 }
 
 func (o *Orchestrator) waitToCloseLastProxy() {

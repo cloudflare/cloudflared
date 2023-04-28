@@ -52,3 +52,7 @@ func (s *SafeStreamCloser) CloseWrite() error {
 	// We can still read from this stream.
 	return s.stream.Close()
 }
+
+func (s *SafeStreamCloser) SetDeadline(deadline time.Time) error {
+	return s.stream.SetDeadline(deadline)
+}

@@ -5,14 +5,14 @@ from time import sleep
 import pytest
 import yaml
 
-from config import NamedTunnelConfig, ClassicTunnelConfig, ProxyDnsConfig
+from config import NamedTunnelConfig, ProxyDnsConfig, QuickTunnelConfig
 from constants import BACKOFF_SECS, PROXY_DNS_PORT
 from util import LOGGER
 
 
 class CfdModes(Enum):
     NAMED = auto()
-    CLASSIC = auto()
+    QUICK = auto()
     PROXY_DNS = auto()
 
 
@@ -26,7 +26,7 @@ def component_tests_config():
         config = yaml.safe_load(stream)
         LOGGER.info(f"component tests base config {config}")
 
-        def _component_tests_config(additional_config={}, cfd_mode=CfdModes.NAMED, run_proxy_dns=True):
+        def _component_tests_config(additional_config={}, cfd_mode=CfdModes.NAMED, run_proxy_dns=True, provide_ingress=True):
             if run_proxy_dns:
                 # Regression test for TUN-4177, running with proxy-dns should not prevent tunnels from running.
                 # So we run all tests with it.
@@ -36,18 +36,25 @@ def component_tests_config():
                 additional_config.pop("proxy-dns", None)
                 additional_config.pop("proxy-dns-port", None)
 
+            # Allows the ingress rules to be omitted from the provided config
+            ingress = []
+            if provide_ingress:
+                ingress = config['ingress']
+
+            # Provide the hostname to allow routing to the tunnel even if the ingress rule isn't defined in the config
+            hostname = config['ingress'][0]['hostname']
+
             if cfd_mode is CfdModes.NAMED:
                 return NamedTunnelConfig(additional_config=additional_config,
                                          cloudflared_binary=config['cloudflared_binary'],
                                          tunnel=config['tunnel'],
                                          credentials_file=config['credentials_file'],
-                                         ingress=config['ingress'])
-            elif cfd_mode is CfdModes.CLASSIC:
-                return ClassicTunnelConfig(
-                    additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'],
-                    hostname=config['classic_hostname'], origincert=config['origincert'])
+                                         ingress=ingress,
+                                         hostname=hostname)
             elif cfd_mode is CfdModes.PROXY_DNS:
                 return ProxyDnsConfig(cloudflared_binary=config['cloudflared_binary'])
+            elif cfd_mode is CfdModes.QUICK:
+                return QuickTunnelConfig(additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'])
             else:
                 raise Exception(f"Unknown cloudflared mode {cfd_mode}")
 

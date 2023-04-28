@@ -13,7 +13,7 @@ from util import start_cloudflared, wait_tunnel_ready, check_tunnel_not_connecte
 
 @flaky(max_runs=3, min_passes=1)
 class TestReconnect:
-    default_ha_conns = 4
+    default_ha_conns = 1
     default_reconnect_secs = 15
     extra_config = {
         "stdin-control": True,
@@ -29,16 +29,9 @@ class TestReconnect:
     @pytest.mark.parametrize("protocol", protocols())
     def test_named_reconnect(self, tmp_path, component_tests_config, protocol):
         config = component_tests_config(self._extra_config(protocol))
-        with start_cloudflared(tmp_path, config, new_process=True, allow_input=True, capture_output=False) as cloudflared:
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True, allow_input=True, capture_output=False) as cloudflared:
             # Repeat the test multiple times because some issues only occur after multiple reconnects
             self.assert_reconnect(config, cloudflared, 5)
-
-    def test_classic_reconnect(self, tmp_path, component_tests_config):
-        extra_config = copy.copy(self.extra_config)
-        extra_config["hello-world"] = True
-        config = component_tests_config(additional_config=extra_config, cfd_mode=CfdModes.CLASSIC)
-        with start_cloudflared(tmp_path, config, cfd_args=[], new_process=True, allow_input=True, capture_output=False) as cloudflared:
-            self.assert_reconnect(config, cloudflared, 1)
 
     def send_reconnect(self, cloudflared, secs):
         # Although it is recommended to use the Popen.communicate method, we cannot

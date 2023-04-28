@@ -113,7 +113,7 @@ func (rc *RemoteConfig) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func originRequestFromSingeRule(c *cli.Context) OriginRequestConfig {
+func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 	var connectTimeout = defaultHTTPConnectTimeout
 	var tlsTimeout = defaultTLSTimeout
 	var tcpKeepAlive = defaultTCPKeepAlive

@@ -166,6 +166,17 @@ def parse_args():
 
 def upload_asset(release, filepath, filename, release_version, kv_account_id, namespace_id, kv_api_token):
     logging.info("Uploading asset: %s", filename)
+    assets = release.get_assets()
+    uploaded = False
+    for asset in assets:
+        if asset.name == filename:
+            uploaded = True
+            break
+    
+    if uploaded:
+        logging.info("asset already uploaded, skipping upload")
+        return
+    
     release.upload_asset(filepath, name=filename)
 
     # check and extract if the file is a tar and gzipped file (as is the case with the macos builds)
@@ -182,9 +193,11 @@ def upload_asset(release, filepath, filename, release_version, kv_account_id, na
         binary_path = os.path.join(os.getcwd(), 'cfd', 'cloudflared')
 
     # send the sha256 (the checksum) to workers kv
+    logging.info("Uploading sha256 checksum for: %s", filename)
     pkg_hash = get_sha256(binary_path)
     send_hash(pkg_hash, filename, release_version, kv_account_id, namespace_id, kv_api_token)
 
+def move_asset(filepath, filename):
     # create the artifacts directory if it doesn't exist
     artifact_path = os.path.join(os.getcwd(), 'artifacts')
     if not os.path.isdir(artifact_path):
@@ -215,6 +228,7 @@ def main():
                 binary_path = os.path.join(args.path, filename)
                 upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
                 args.kv_api_token)
+                move_asset(binary_path, filename)
         else:
             upload_asset(release, args.path, args.name, args.release_version, args.kv_account_id, args.namespace_id,
                 args.kv_api_token)

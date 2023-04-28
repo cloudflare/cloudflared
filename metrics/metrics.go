@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
@@ -18,36 +17,41 @@ import (
 )
 
 const (
-	shutdownTimeout = time.Second * 15
-	startupTime     = time.Millisecond * 500
+	startupTime            = time.Millisecond * 500
+	defaultShutdownTimeout = time.Second * 15
 )
+
+type Config struct {
+	ReadyServer         *ReadyServer
+	QuickTunnelHostname string
+	Orchestrator        orchestrator
+
+	ShutdownTimeout time.Duration
+}
 
 type orchestrator interface {
 	GetVersionedConfigJSON() ([]byte, error)
 }
 
 func newMetricsHandler(
-	readyServer *ReadyServer,
-	quickTunnelHostname string,
-	orchestrator orchestrator,
+	config Config,
 	log *zerolog.Logger,
-) *mux.Router {
-	router := mux.NewRouter()
-	router.PathPrefix("/debug/").Handler(http.DefaultServeMux)
-
+) *http.ServeMux {
+	router := http.NewServeMux()
+	router.Handle("/debug/", http.DefaultServeMux)
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "OK\n")
 	})
-	if readyServer != nil {
-		router.Handle("/ready", readyServer)
+	if config.ReadyServer != nil {
+		router.Handle("/ready", config.ReadyServer)
 	}
 	router.HandleFunc("/quicktunnel", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprintf(w, `{"hostname":"%s"}`, quickTunnelHostname)
+		_, _ = fmt.Fprintf(w, `{"hostname":"%s"}`, config.QuickTunnelHostname)
 	})
-	if orchestrator != nil {
+	if config.Orchestrator != nil {
 		router.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
-			json, err := orchestrator.GetVersionedConfigJSON()
+			json, err := config.Orchestrator.GetVersionedConfigJSON()
 			if err != nil {
 				w.WriteHeader(500)
 				_, _ = fmt.Fprintf(w, "ERR: %v", err)
@@ -63,10 +67,8 @@ func newMetricsHandler(
 
 func ServeMetrics(
 	l net.Listener,
-	shutdownC <-chan struct{},
-	readyServer *ReadyServer,
-	quickTunnelHostname string,
-	orchestrator orchestrator,
+	ctx context.Context,
+	config Config,
 	log *zerolog.Logger,
 ) (err error) {
 	var wg sync.WaitGroup
@@ -74,7 +76,7 @@ func ServeMetrics(
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
 	// profile CPU usage depends on WriteTimeout
-	h := newMetricsHandler(readyServer, quickTunnelHostname, orchestrator, log)
+	h := newMetricsHandler(config, log)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -91,7 +93,12 @@ func ServeMetrics(
 	// fully started up. So add artificial delay.
 	time.Sleep(startupTime)
 
-	<-shutdownC
+	<-ctx.Done()
+	shutdownTimeout := config.ShutdownTimeout
+	if shutdownTimeout == 0 {
+		shutdownTimeout = defaultShutdownTimeout
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	_ = server.Shutdown(ctx)
 	cancel()

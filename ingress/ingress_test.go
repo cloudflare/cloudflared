@@ -43,7 +43,7 @@ ingress:
 	require.Equal(t, "https", s.scheme)
 }
 
-func Test_parseIngress(t *testing.T) {
+func TestParseIngress(t *testing.T) {
 	localhost8000 := MustParseURL(t, "https://localhost:8000")
 	localhost8001 := MustParseURL(t, "https://localhost:8001")
 	fourOhFour := newStatusCode(404)
@@ -517,7 +517,7 @@ func TestSingleOriginSetsConfig(t *testing.T) {
 
 	allowURLFromArgs := false
 	require.NoError(t, err)
-	ingress, err := NewSingleOrigin(cliCtx, allowURLFromArgs)
+	ingress, err := parseCLIIngress(cliCtx, allowURLFromArgs)
 	require.NoError(t, err)
 
 	assert.Equal(t, config.CustomDuration{Duration: time.Second}, ingress.Rules[0].Config.ConnectTimeout)
@@ -535,6 +535,119 @@ func TestSingleOriginSetsConfig(t *testing.T) {
 	assert.Equal(t, "localhost:8080", ingress.Rules[0].Config.ProxyAddress)
 	assert.Equal(t, uint(8080), ingress.Rules[0].Config.ProxyPort)
 	assert.Equal(t, socksProxy, ingress.Rules[0].Config.ProxyType)
+}
+
+func TestSingleOriginServices(t *testing.T) {
+	host := "://localhost:8080"
+	httpURL := urlMustParse("http" + host)
+	tcpURL := urlMustParse("tcp" + host)
+	unix := "unix://service"
+	newCli := func(params ...string) *cli.Context {
+		flagSet := flag.NewFlagSet(t.Name(), flag.PanicOnError)
+		flagSet.Bool("hello-world", false, "")
+		flagSet.Bool("bastion", false, "")
+		flagSet.String("url", "", "")
+		flagSet.String("unix-socket", "", "")
+		cliCtx := cli.NewContext(cli.NewApp(), flagSet, nil)
+		for i := 0; i < len(params); i += 2 {
+			cliCtx.Set(params[i], params[i+1])
+		}
+
+		return cliCtx
+	}
+
+	tests := []struct {
+		name            string
+		cli             *cli.Context
+		expectedService OriginService
+		err             error
+	}{
+		{
+			name:            "Valid hello-world",
+			cli:             newCli("hello-world", "true"),
+			expectedService: &helloWorld{},
+		},
+		{
+			name:            "Valid bastion",
+			cli:             newCli("bastion", "true"),
+			expectedService: newBastionService(),
+		},
+		{
+			name:            "Valid http url",
+			cli:             newCli("url", httpURL.String()),
+			expectedService: &httpService{url: httpURL},
+		},
+		{
+			name:            "Valid tcp url",
+			cli:             newCli("url", tcpURL.String()),
+			expectedService: newTCPOverWSService(tcpURL),
+		},
+		{
+			name:            "Valid unix-socket",
+			cli:             newCli("unix-socket", unix),
+			expectedService: &unixSocketPath{path: unix, scheme: "http"},
+		},
+		{
+			name: "No origins defined",
+			cli:  newCli(),
+			err:  ErrNoIngressRulesCLI,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ingress, err := parseCLIIngress(test.cli, false)
+			require.Equal(t, err, test.err)
+			if test.err != nil {
+				return
+			}
+			require.Equal(t, 1, len(ingress.Rules))
+			rule := ingress.Rules[0]
+			require.Equal(t, test.expectedService, rule.Service)
+		})
+	}
+}
+
+func urlMustParse(s string) *url.URL {
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
+func TestSingleOriginServices_URL(t *testing.T) {
+	host := "://localhost:8080"
+	newCli := func(param string, value string) *cli.Context {
+		flagSet := flag.NewFlagSet(t.Name(), flag.PanicOnError)
+		flagSet.String("url", "", "")
+		cliCtx := cli.NewContext(cli.NewApp(), flagSet, nil)
+		cliCtx.Set(param, value)
+		return cliCtx
+	}
+
+	httpTests := []string{"http", "https"}
+	for _, test := range httpTests {
+		t.Run(test, func(t *testing.T) {
+			url := urlMustParse(test + host)
+			ingress, err := parseCLIIngress(newCli("url", url.String()), false)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(ingress.Rules))
+			rule := ingress.Rules[0]
+			require.Equal(t, &httpService{url: url}, rule.Service)
+		})
+	}
+
+	tcpTests := []string{"ssh", "rdp", "smb", "tcp"}
+	for _, test := range tcpTests {
+		t.Run(test, func(t *testing.T) {
+			url := urlMustParse(test + host)
+			ingress, err := parseCLIIngress(newCli("url", url.String()), false)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(ingress.Rules))
+			rule := ingress.Rules[0]
+			require.Equal(t, newTCPOverWSService(url), rule.Service)
+		})
+	}
 }
 
 func TestFindMatchingRule(t *testing.T) {

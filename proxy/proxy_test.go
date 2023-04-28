@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"flag"
@@ -23,7 +24,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/cfio"
-
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	testTags        = []tunnelpogs.Tag{tunnelpogs.Tag{Name: "Name", Value: "value"}}
+	testTags        = []tunnelpogs.Tag{{Name: "Name", Value: "value"}}
 	noWarpRouting   = ingress.WarpRoutingConfig{}
 	testWarpRouting = ingress.WarpRoutingConfig{
 		Enabled:        true,
@@ -77,6 +77,10 @@ func (w *mockHTTPRespWriter) headers() http.Header {
 	return w.Header()
 }
 
+func (m *mockHTTPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
+}
+
 type mockWSRespWriter struct {
 	*mockHTTPRespWriter
 	writeNotification chan []byte
@@ -108,6 +112,10 @@ func (w *mockWSRespWriter) Close() error {
 
 func (w *mockWSRespWriter) Read(data []byte) (int, error) {
 	return w.reader.Read(data)
+}
+
+func (m *mockWSRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
 }
 
 type mockSSERespWriter struct {
@@ -150,8 +158,7 @@ func TestProxySingleOrigin(t *testing.T) {
 	err := cliCtx.Set("hello-world", "true")
 	require.NoError(t, err)
 
-	allowURLFromArgs := false
-	ingressRule, err := ingress.NewSingleOrigin(cliCtx, allowURLFromArgs)
+	ingressRule, err := ingress.ParseIngressFromConfigAndCLI(&config.Configuration{}, cliCtx, &log)
 	require.NoError(t, err)
 
 	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
@@ -170,7 +177,7 @@ func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
 		require.NoError(t, err)
 
 		log := zerolog.Nop()
-		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
+		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, 0, &log), false)
 		require.NoError(t, err)
 		for _, tag := range testTags {
 			assert.Equal(t, tag.Value, req.Header.Get(TagHeaderNamePrefix+tag.Name))
@@ -198,7 +205,7 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 		errGroup, ctx := errgroup.WithContext(ctx)
 		errGroup.Go(func() error {
 			log := zerolog.Nop()
-			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), true)
+			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, 0, &log), true)
 			require.NoError(t, err)
 
 			require.Equal(t, http.StatusSwitchingProtocols, responseWriter.Code)
@@ -260,8 +267,8 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			log := zerolog.Nop()
-			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
-			require.NoError(t, err)
+			err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, 0, &log), false)
+			require.Equal(t, err.Error(), "context canceled")
 
 			require.Equal(t, http.StatusOK, responseWriter.Code)
 		}()
@@ -367,7 +374,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 		req, err := http.NewRequest(http.MethodGet, test.url, nil)
 		require.NoError(t, err)
 
-		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false)
+		err = proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, 0, &log), false)
 		require.NoError(t, err)
 
 		assert.Equal(t, test.expectedStatus, responseWriter.Code)
@@ -414,7 +421,7 @@ func TestProxyError(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
 	assert.NoError(t, err)
 
-	assert.Error(t, proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, &log), false))
+	assert.Error(t, proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, 0, &log), false))
 }
 
 type replayer struct {
@@ -695,14 +702,13 @@ func TestConnections(t *testing.T) {
 				err = proxy.ProxyTCP(ctx, rwa, &connection.TCPRequest{Dest: dest})
 			} else {
 				log := zerolog.Nop()
-				err = proxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, &log), test.args.connectionType == connection.TypeWebsocket)
+				err = proxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, 0, &log), test.args.connectionType == connection.TypeWebsocket)
 			}
 
 			cancel()
 			assert.Equal(t, test.want.err, err != nil)
 			assert.Equal(t, test.want.message, replayer.Bytes())
-			respPrinter := respWriter.(responsePrinter)
-			assert.Equal(t, test.want.headers, respPrinter.headers())
+			assert.Equal(t, test.want.headers, respWriter.Header())
 			replayer.rw.Reset()
 		})
 	}
@@ -795,10 +801,6 @@ func (p *pipedRequestBody) Close() error {
 	return nil
 }
 
-type responsePrinter interface {
-	headers() http.Header
-}
-
 type wsRespWriter struct {
 	w               io.Writer
 	responseHeaders http.Header
@@ -837,10 +839,18 @@ func (w *wsRespWriter) AddTrailer(trailerName, trailerValue string) {
 }
 
 // respHeaders is a test function to read respHeaders
-func (w *wsRespWriter) headers() http.Header {
+func (w *wsRespWriter) Header() http.Header {
 	// Removing indeterminstic header because it cannot be asserted.
 	w.responseHeaders.Del("Date")
 	return w.responseHeaders
+}
+
+func (w *wsRespWriter) WriteHeader(status int) {
+	// unused
+}
+
+func (m *wsRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
 }
 
 type mockTCPRespWriter struct {
@@ -863,7 +873,7 @@ func (m *mockTCPRespWriter) Write(p []byte) (n int, err error) {
 	return m.w.Write(p)
 }
 
-func (w *mockTCPRespWriter) AddTrailer(trailerName, trailerValue string) {
+func (m *mockTCPRespWriter) AddTrailer(trailerName, trailerValue string) {
 	// do nothing
 }
 
@@ -874,8 +884,16 @@ func (m *mockTCPRespWriter) WriteRespHeaders(status int, header http.Header) err
 }
 
 // respHeaders is a test function to read respHeaders
-func (m *mockTCPRespWriter) headers() http.Header {
+func (m *mockTCPRespWriter) Header() http.Header {
 	return m.responseHeaders
+}
+
+func (m *mockTCPRespWriter) WriteHeader(status int) {
+	// do nothing
+}
+
+func (m *mockTCPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	panic("Hijack not implemented")
 }
 
 func createSingleIngressConfig(t *testing.T, service string) ingress.Ingress {

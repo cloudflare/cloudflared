@@ -1,3 +1,38 @@
+## 2023.4.1
+### New Features
+- You can now stream your logs from your remote cloudflared to your local terminal with `cloudflared tail <TUNNEL-ID>`. This new feature requires the remote cloudflared to be version 2023.4.1 or higher.
+
+## 2023.3.2
+### Notices
+- Due to the nature of QuickTunnels (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/do-more-with-tunnels/trycloudflare/) and its intended usage for testing and experiment of Cloudflare Tunnels, starting from 2023.3.2, QuickTunnels only make a single connection to the edge. If users want to use Tunnels in a production environment, they should move to Named Tunnels instead. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/remote/#set-up-a-tunnel-remotely-dashboard-setup)
+
+## 2023.3.1
+### Breaking Change
+- Running a tunnel without ingress rules defined in configuration file nor from the CLI flags will no longer provide a default ingress rule to localhost:8080 and instead will return HTTP response code 503 for all incoming HTTP requests.
+
+### Security Fixes
+- Windows 32 bit machines MSI now defaults to Program Files to install cloudflared. (See CVE-2023-1314). The cloudflared client itself is unaffected. This just changes how the installer works on 32 bit windows machines.
+
+### Bug Fixes
+- Fixed a bug that would cause running tunnel on Bastion mode and without ingress rules to crash.
+
+## 2023.2.2
+### Notices
+- Legacy tunnels were officially deprecated on December 1, 2022. Starting with this version, cloudflared no longer supports connecting legacy tunnels.
+- h2mux tunnel connection protocol is no longer supported. Any tunnels still configured to use this protocol will alert and use http2 tunnel protocol instead. We recommend using quic protocol for all tunnels going forward.
+
+## 2023.2.1
+### Bug fixes
+- Fixed a bug in TCP connection proxy that could result in the connection being closed before all data was written.
+- cloudflared now correctly aborts body write if connection to origin service fails after response headers were sent already.
+- Fixed a bug introduced in the previous release where debug endpoints were removed.
+
+## 2022.12.0
+### Improvements
+- cloudflared now attempts to try other edge addresses before falling back to a lower protocol.
+- cloudflared tunnel no longer spins up a quick tunnel. The call has to be explicit and provide a --url flag.
+- cloudflared will now randomly pick the first or second region to connect to instead of always connecting to region2 first.
+
 ## 2022.9.0
 ### New Features
 - cloudflared now rejects ingress rules with invalid http status codes for http_status.

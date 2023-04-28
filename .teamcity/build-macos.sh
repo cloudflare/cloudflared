@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -exo pipefail
+
 if [[ "$(uname)" != "Darwin" ]] ; then
     echo "This should be run on macOS"
     exit 1
@@ -33,7 +35,9 @@ if [[ ! -z "$CFD_CODE_SIGN_KEY" ]]; then
   if [[ ! -z "$CFD_CODE_SIGN_PASS" ]]; then
     # write private key to disk and then import it keychain
     echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
-    out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1)
+    # we set || true  here and for every `security import invoke` because the  "duplicate SecKeychainItemImport" error 
+    # will cause set -e to exit 1. It is okay we do this because we deliberately handle this error in the lines below.
+    out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1) || true 
     exitcode=$?
     if [ -n "$out" ]; then
       if [ $exitcode -eq 0 ]; then
@@ -53,7 +57,7 @@ fi
 if [[ ! -z "$CFD_CODE_SIGN_CERT" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
-  out1=$(security import ${CODE_SIGN_CERT} -A 2>&1)
+  out1=$(security import ${CODE_SIGN_CERT} -A 2>&1) || true
   exitcode1=$?
   if [ -n "$out1" ]; then
     if [ $exitcode1 -eq 0 ]; then
@@ -75,7 +79,7 @@ if [[ ! -z "$CFD_INSTALLER_KEY" ]]; then
   if [[ ! -z "$CFD_INSTALLER_PASS" ]]; then
     # write private key to disk and then import it into the keychain
     echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
-    out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1)
+    out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1) || true
     exitcode2=$?
     if [ -n "$out2" ]; then
       if [ $exitcode2 -eq 0 ]; then
@@ -95,7 +99,7 @@ fi
 if [[ ! -z "$CFD_INSTALLER_CERT" ]]; then
   # write certificate to disk and then import it keychain
   echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
-  out3=$(security import ${INSTALLER_CERT} -A 2>&1)
+  out3=$(security import ${INSTALLER_CERT} -A 2>&1) || true
   exitcode3=$?
   if [ -n "$out3" ]; then
     if [ $exitcode3 -eq 0 ]; then
@@ -138,13 +142,9 @@ fi
 if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
   
-  # notarize the binary
-  if [[ ! -z "$CFD_NOTE_PASSWORD" ]]; then
-    zip "${BINARY_NAME}.zip" ${BINARY_NAME} 
-    xcrun altool --notarize-app -f "${BINARY_NAME}.zip" -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
-  fi
+ # notarize the binary
+ # TODO: https://jira.cfdata.org/browse/TUN-5789
 fi
-
 
 # creating build directory
 rm -rf $TARGET_DIRECTORY
@@ -169,10 +169,7 @@ if [[ ! -z "$PKG_SIGN_NAME" ]]; then
       ${PKGNAME}
 
       # notarize the package
-      if [[ ! -z "$CFD_NOTE_PASSWORD" ]]; then
-        xcrun altool --notarize-app -f ${PKGNAME} -t osx -u ${CFD_NOTE_USERNAME} -p ${CFD_NOTE_PASSWORD} --primary-bundle-id ${BUNDLE_ID}
-        xcrun stapler staple ${PKGNAME}
-      fi
+      # TODO: https://jira.cfdata.org/browse/TUN-5789
 else
     pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \

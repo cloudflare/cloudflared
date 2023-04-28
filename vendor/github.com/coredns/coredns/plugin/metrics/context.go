@@ -22,3 +22,16 @@ func WithServer(ctx context.Context) string {
 	}
 	return srv.(*dnsserver.Server).Addr
 }
+
+// WithView returns the name of the view currently handling the request, if a view is defined.
+//
+// Basic usage with a metric:
+//
+// <metric>.WithLabelValues(metrics.WithView(ctx), labels..).Add(1)
+func WithView(ctx context.Context) string {
+	v := ctx.Value(dnsserver.ViewKey{})
+	if v == nil {
+		return ""
+	}
+	return v.(string)
+}

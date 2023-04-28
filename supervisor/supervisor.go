@@ -3,29 +3,22 @@ package supervisor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lucas-clemente/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 const (
-	// SRV and TXT record resolution TTL
-	ResolveTTL = time.Hour
 	// Waiting time before retrying a failed tunnel connection
 	tunnelRetryDuration = time.Second * 10
 	// Interval between registering new tunnels
@@ -41,11 +34,10 @@ const (
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
 // reconnects them if they disconnect.
 type Supervisor struct {
-	cloudflaredUUID         uuid.UUID
 	config                  *TunnelConfig
 	orchestrator            *orchestration.Orchestrator
 	edgeIPs                 *edgediscovery.Edge
-	edgeTunnelServer        *EdgeTunnelServer
+	edgeTunnelServer        TunnelServer
 	tunnelErrors            chan tunnelError
 	tunnelsConnecting       map[int]chan struct{}
 	tunnelsProtocolFallback map[int]*protocolFallback
@@ -58,7 +50,6 @@ type Supervisor struct {
 	logTransport *zerolog.Logger
 
 	reconnectCredentialManager *reconnectCredentialManager
-	useReconnectToken          bool
 
 	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
@@ -72,13 +63,9 @@ type tunnelError struct {
 }
 
 func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrator, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
-	cloudflaredUUID, err := uuid.NewRandom()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate cloudflared instance ID: %w", err)
-	}
-
 	isStaticEdge := len(config.EdgeAddrs) > 0
 
+	var err error
 	var edgeIPs *edgediscovery.Edge
 	if isStaticEdge { // static edge addresses
 		edgeIPs, err = edgediscovery.StaticEdge(config.Log, config.EdgeAddrs)
@@ -94,35 +81,23 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	tracker := tunnelstate.NewConnTracker(config.Log)
 	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
 
-	var edgeAddrHandler EdgeAddrHandler
-	if isStaticEdge { // static edge addresses
-		edgeAddrHandler = &IPAddrFallback{}
-	} else if config.EdgeIPVersion == allregions.IPv6Only || config.EdgeIPVersion == allregions.Auto {
-		edgeAddrHandler = &IPAddrFallback{}
-	} else { // IPv4Only
-		edgeAddrHandler = &DefaultAddrFallback{}
-	}
+	edgeAddrHandler := NewIPAddrFallback(config.MaxEdgeAddrRetries)
+	edgeBindAddr := config.EdgeBindAddr
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
-		cloudflaredUUID:   cloudflaredUUID,
 		orchestrator:      orchestrator,
 		credentialManager: reconnectCredentialManager,
 		edgeAddrs:         edgeIPs,
 		edgeAddrHandler:   edgeAddrHandler,
+		edgeBindAddr:      edgeBindAddr,
 		tracker:           tracker,
 		reconnectCh:       reconnectCh,
 		gracefulShutdownC: gracefulShutdownC,
 		connAwareLogger:   log,
 	}
 
-	useReconnectToken := false
-	if config.ClassicTunnel != nil {
-		useReconnectToken = config.ClassicTunnel.UseReconnectToken
-	}
-
 	return &Supervisor{
-		cloudflaredUUID:            cloudflaredUUID,
 		config:                     config,
 		orchestrator:               orchestrator,
 		edgeIPs:                    edgeIPs,
@@ -133,7 +108,6 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		log:                        log,
 		logTransport:               config.LogTransport,
 		reconnectCredentialManager: reconnectCredentialManager,
-		useReconnectToken:          useReconnectToken,
 		reconnectCh:                reconnectCh,
 		gracefulShutdownC:          gracefulShutdownC,
 	}, nil
@@ -166,20 +140,6 @@ func (s *Supervisor) Run(
 
 	backoff := retry.BackoffHandler{MaxRetries: s.config.Retries, BaseTime: tunnelRetryDuration, RetryForever: true}
 	var backoffTimer <-chan time.Time
-
-	refreshAuthBackoff := &retry.BackoffHandler{MaxRetries: refreshAuthMaxBackoff, BaseTime: refreshAuthRetryDuration, RetryForever: true}
-	var refreshAuthBackoffTimer <-chan time.Time
-
-	if s.useReconnectToken {
-		if timer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate); err == nil {
-			refreshAuthBackoffTimer = timer
-		} else {
-			s.log.Logger().Err(err).
-				Dur("refreshAuthRetryDuration", refreshAuthRetryDuration).
-				Msgf("supervisor: initial refreshAuth failed, retrying in %v", refreshAuthRetryDuration)
-			refreshAuthBackoffTimer = time.After(refreshAuthRetryDuration)
-		}
-	}
 
 	shuttingDown := false
 	for {
@@ -227,16 +187,6 @@ func (s *Supervisor) Run(
 			}
 			tunnelsActive += len(tunnelsWaiting)
 			tunnelsWaiting = nil
-		// Time to call Authenticate
-		case <-refreshAuthBackoffTimer:
-			newTimer, err := s.reconnectCredentialManager.RefreshAuth(ctx, refreshAuthBackoff, s.authenticate)
-			if err != nil {
-				s.log.Logger().Err(err).Msg("supervisor: Authentication failed")
-				// Permanent failure. Leave the `select` without setting the
-				// channel to be non-null, so we'll never hit this case of the `select` again.
-				continue
-			}
-			refreshAuthBackoffTimer = newTimer
 		// Tunnel successfully connected
 		case <-s.nextConnectedSignal:
 			if !s.waitForNextTunnel(s.nextConnectedIndex) && len(tunnelsWaiting) == 0 {
@@ -285,7 +235,8 @@ func (s *Supervisor) initialize(
 	for i := 1; i < s.config.HAConnections; i++ {
 		s.tunnelsProtocolFallback[i] = &protocolFallback{
 			retry.BackoffHandler{MaxRetries: s.config.Retries, RetryForever: true},
-			s.config.ProtocolSelector.Current(),
+			// Set the protocol we know the first tunnel connected with.
+			s.tunnelsProtocolFallback[0].protocol,
 			false,
 		}
 		go s.startTunnel(ctx, i, s.newConnectedTunnelSignal(i))
@@ -335,6 +286,7 @@ func (s *Supervisor) startFirstTunnel(
 			}
 		case connection.DupConnRegisterTunnelError,
 			*quic.IdleTimeoutError,
+			*quic.ApplicationError,
 			edgediscovery.DialError,
 			*connection.EdgeQuicDialError:
 			// Try again for these types of errors
@@ -383,45 +335,4 @@ func (s *Supervisor) waitForNextTunnel(index int) bool {
 
 func (s *Supervisor) unusedIPs() bool {
 	return s.edgeIPs.AvailableAddrs() > s.config.HAConnections
-}
-
-func (s *Supervisor) authenticate(ctx context.Context, numPreviousAttempts int) (tunnelpogs.AuthOutcome, error) {
-	arbitraryEdgeIP, err := s.edgeIPs.GetAddrForRPC()
-	if err != nil {
-		return nil, err
-	}
-
-	edgeConn, err := edgediscovery.DialEdge(ctx, dialTimeout, s.config.EdgeTLSConfigs[connection.H2mux], arbitraryEdgeIP.TCP)
-	if err != nil {
-		return nil, err
-	}
-	defer edgeConn.Close()
-
-	handler := h2mux.MuxedStreamFunc(func(*h2mux.MuxedStream) error {
-		// This callback is invoked by h2mux when the edge initiates a stream.
-		return nil // noop
-	})
-	muxerConfig := s.config.MuxerConfig.H2MuxerConfig(handler, s.logTransport)
-	muxer, err := h2mux.Handshake(edgeConn, edgeConn, *muxerConfig, h2mux.ActiveStreams)
-	if err != nil {
-		return nil, err
-	}
-	go muxer.Serve(ctx)
-	defer func() {
-		// If we don't wait for the muxer shutdown here, edgeConn.Close() runs before the muxer connections are done,
-		// and the user sees log noise: "error writing data", "connection closed unexpectedly"
-		<-muxer.Shutdown()
-	}()
-
-	stream, err := muxer.OpenRPCStream(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rpcClient := connection.NewTunnelServerClient(ctx, stream, s.log.Logger())
-	defer rpcClient.Close()
-
-	const arbitraryConnectionID = uint8(0)
-	registrationOptions := s.config.registrationOptions(arbitraryConnectionID, edgeConn.LocalAddr().String(), s.cloudflaredUUID)
-	registrationOptions.NumPreviousAttempts = uint8(numPreviousAttempts)
-	return rpcClient.Authenticate(ctx, s.config.ClassicTunnel, registrationOptions)
 }

@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"context"
 	gojson "encoding/json"
 	"fmt"
@@ -115,52 +116,53 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var requestErr error
 	switch connType {
 	case TypeControlStream:
-		if err := c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, c.orchestrator); err != nil {
-			c.controlStreamErr = err
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
+		requestErr = c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, c.orchestrator)
+		if requestErr != nil {
+			c.controlStreamErr = requestErr
 		}
 
 	case TypeConfiguration:
-		if err := c.handleConfigurationUpdate(respWriter, r); err != nil {
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
-		}
+		requestErr = c.handleConfigurationUpdate(respWriter, r)
 
 	case TypeWebsocket, TypeHTTP:
 		stripWebsocketUpgradeHeader(r)
 		// Check for tracing on request
-		tr := tracing.NewTracedHTTPRequest(r, c.log)
+		tr := tracing.NewTracedHTTPRequest(r, c.connIndex, c.log)
 		if err := originProxy.ProxyHTTP(respWriter, tr, connType == TypeWebsocket); err != nil {
-			err := fmt.Errorf("Failed to proxy HTTP: %w", err)
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
+			requestErr = fmt.Errorf("Failed to proxy HTTP: %w", err)
 		}
 
 	case TypeTCP:
 		host, err := getRequestHost(r)
 		if err != nil {
-			err := fmt.Errorf(`cloudflared received a warp-routing request with an empty host value: %w`, err)
-			c.log.Error().Err(err)
-			respWriter.WriteErrorResponse()
+			requestErr = fmt.Errorf(`cloudflared received a warp-routing request with an empty host value: %w`, err)
+			break
 		}
 
 		rws := NewHTTPResponseReadWriterAcker(respWriter, r)
-		if err := originProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
+		requestErr = originProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
 			Dest:      host,
 			CFRay:     FindCfRayHeader(r),
 			LBProbe:   IsLBProbeRequest(r),
 			CfTraceID: r.Header.Get(tracing.TracerContextName),
-		}); err != nil {
-			respWriter.WriteErrorResponse()
-		}
+			ConnIndex: c.connIndex,
+		})
 
 	default:
-		err := fmt.Errorf("Received unknown connection type: %s", connType)
-		c.log.Error().Err(err)
-		respWriter.WriteErrorResponse()
+		requestErr = fmt.Errorf("Received unknown connection type: %s", connType)
+	}
+
+	if requestErr != nil {
+		c.log.Error().Err(requestErr).Msg("failed to serve incoming request")
+
+		// WriteErrorResponse will return false if status was already written. we need to abort handler.
+		if !respWriter.WriteErrorResponse() {
+			c.log.Debug().Msg("Handler aborted due to failure to write error response after status already sent")
+			panic(http.ErrAbortHandler)
+		}
 	}
 }
 
@@ -196,6 +198,9 @@ type http2RespWriter struct {
 	flusher       http.Flusher
 	shouldFlush   bool
 	statusWritten bool
+	respHeaders   http.Header
+	hijackedMutex sync.Mutex
+	hijackedv     bool
 	log           *zerolog.Logger
 }
 
@@ -216,6 +221,7 @@ func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, l
 		w:           w,
 		flusher:     flusher,
 		shouldFlush: connType.shouldFlush(),
+		respHeaders: make(http.Header),
 		log:         log,
 	}, nil
 }
@@ -230,6 +236,10 @@ func (rp *http2RespWriter) AddTrailer(trailerName, trailerValue string) {
 }
 
 func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) error {
+	if rp.hijacked() {
+		rp.log.Warn().Msg("WriteRespHeaders after hijack")
+		return nil
+	}
 	dest := rp.w.Header()
 	userHeaders := make(http.Header, len(header))
 	for name, values := range header {
@@ -275,9 +285,58 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 	return nil
 }
 
-func (rp *http2RespWriter) WriteErrorResponse() {
+func (rp *http2RespWriter) Header() http.Header {
+	return rp.respHeaders
+}
+
+func (rp *http2RespWriter) WriteHeader(status int) {
+	if rp.hijacked() {
+		rp.log.Warn().Msg("WriteHeader after hijack")
+		return
+	}
+	rp.WriteRespHeaders(status, rp.respHeaders)
+}
+
+func (rp *http2RespWriter) hijacked() bool {
+	rp.hijackedMutex.Lock()
+	defer rp.hijackedMutex.Unlock()
+	return rp.hijackedv
+}
+
+func (rp *http2RespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if !rp.statusWritten {
+		return nil, nil, fmt.Errorf("status not yet written before attempting to hijack connection")
+	}
+	// Make sure to flush anything left in the buffer before hijacking
+	if rp.shouldFlush {
+		rp.flusher.Flush()
+	}
+	rp.hijackedMutex.Lock()
+	defer rp.hijackedMutex.Unlock()
+	if rp.hijackedv {
+		return nil, nil, http.ErrHijacked
+	}
+	rp.hijackedv = true
+	conn := &localProxyConnection{rp}
+	// We return the http2RespWriter here because we want to make sure that we flush after every write
+	// otherwise the HTTP2 write buffer waits a few seconds before sending.
+	readWriter := bufio.NewReadWriter(
+		bufio.NewReader(rp),
+		bufio.NewWriter(rp),
+	)
+	return conn, readWriter, nil
+}
+
+func (rp *http2RespWriter) WriteErrorResponse() bool {
+	if rp.statusWritten {
+		return false
+	}
+
 	rp.setResponseMetaHeader(responseMetaHeaderCfd)
 	rp.w.WriteHeader(http.StatusBadGateway)
+	rp.statusWritten = true
+
+	return true
 }
 
 func (rp *http2RespWriter) setResponseMetaHeader(value string) {

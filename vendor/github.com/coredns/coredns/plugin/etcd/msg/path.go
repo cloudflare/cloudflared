@@ -22,6 +22,9 @@ func Path(s, prefix string) string {
 // Domain is the opposite of Path.
 func Domain(s string) string {
 	l := strings.Split(s, "/")
+	if l[len(l)-1] == "" {
+		l = l[:len(l)-1]
+	}
 	// start with 1, to strip /skydns
 	for i, j := 1, len(l)-1; i < j; i, j = i+1, j-1 {
 		l[i], l[j] = l[j], l[i]

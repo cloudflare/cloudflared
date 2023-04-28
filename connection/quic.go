@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/packet"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -60,12 +62,14 @@ type QUICConnection struct {
 	packetRouter         *ingress.PacketRouter
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
+	connIndex            uint8
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
 func NewQUICConnection(
 	quicConfig *quic.Config,
 	edgeAddr net.Addr,
+	localAddr net.IP,
 	connIndex uint8,
 	tlsConfig *tls.Config,
 	orchestrator Orchestrator,
@@ -74,13 +78,15 @@ func NewQUICConnection(
 	logger *zerolog.Logger,
 	packetRouterConfig *ingress.GlobalRouterConfig,
 ) (*QUICConnection, error) {
-	udpConn, err := createUDPConnForConnIndex(connIndex, logger)
+	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	session, err := quic.Dial(udpConn, edgeAddr, edgeAddr.String(), tlsConfig, quicConfig)
 	if err != nil {
+		// close the udp server socket in case of error connecting to the edge
+		udpConn.Close()
 		return nil, &EdgeQuicDialError{Cause: err}
 	}
 
@@ -104,6 +110,7 @@ func NewQUICConnection(
 		packetRouter:         packetRouter,
 		controlStreamHandler: controlStreamHandler,
 		connOptions:          connOptions,
+		connIndex:            connIndex,
 	}, nil
 }
 
@@ -191,7 +198,11 @@ func (q *QUICConnection) runStream(quicStream quic.Stream) {
 	// A call to close will simulate a close to the read-side, which will fail subsequent reads.
 	noCloseStream := &nopCloserReadWriter{ReadWriteCloser: stream}
 	if err := q.handleStream(ctx, noCloseStream); err != nil {
-		q.logger.Err(err).Msg("Failed to handle QUIC stream")
+		q.logger.Debug().Err(err).Msg("Failed to handle QUIC stream")
+
+		// if we received an error at this level, then close write side of stream with an error, which will result in
+		// RST_STREAM frame.
+		quicStream.CancelWrite(0)
 	}
 }
 
@@ -224,43 +235,61 @@ func (q *QUICConnection) handleDataStream(ctx context.Context, stream *quicpogs.
 		return err
 	}
 
-	if err := q.dispatchRequest(ctx, stream, err, request); err != nil {
-		_ = stream.WriteConnectResponseData(err)
+	if err, connectResponseSent := q.dispatchRequest(ctx, stream, err, request); err != nil {
 		q.logger.Err(err).Str("type", request.Type.String()).Str("dest", request.Dest).Msg("Request failed")
+
+		// if the connectResponse was already sent and we had an error, we need to propagate it up, so that the stream is
+		// closed with an RST_STREAM frame
+		if connectResponseSent {
+			return err
+		}
+
+		if writeRespErr := stream.WriteConnectResponseData(err); writeRespErr != nil {
+			return writeRespErr
+		}
 	}
 
 	return nil
 }
 
-func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.RequestServerStream, err error, request *quicpogs.ConnectRequest) error {
+// dispatchRequest will dispatch the request depending on the type and returns an error if it occurs.
+// More importantly, it also tells if the during processing of the request the ConnectResponse metadata was sent downstream.
+// This is important since it informs
+func (q *QUICConnection) dispatchRequest(ctx context.Context, stream *quicpogs.RequestServerStream, err error, request *quicpogs.ConnectRequest) (error, bool) {
 	originProxy, err := q.orchestrator.GetOriginProxy()
 	if err != nil {
-		return err
+		return err, false
 	}
 
 	switch request.Type {
 	case quicpogs.ConnectionTypeHTTP, quicpogs.ConnectionTypeWebsocket:
-		tracedReq, err := buildHTTPRequest(ctx, request, stream, q.logger)
+		tracedReq, err := buildHTTPRequest(ctx, request, stream, q.connIndex, q.logger)
 		if err != nil {
-			return err
+			return err, false
 		}
 		w := newHTTPResponseAdapter(stream)
-		return originProxy.ProxyHTTP(w, tracedReq, request.Type == quicpogs.ConnectionTypeWebsocket)
+		return originProxy.ProxyHTTP(&w, tracedReq, request.Type == quicpogs.ConnectionTypeWebsocket), w.connectResponseSent
 
 	case quicpogs.ConnectionTypeTCP:
-		rwa := &streamReadWriteAcker{stream}
+		rwa := &streamReadWriteAcker{RequestServerStream: stream}
 		metadata := request.MetadataMap()
 		return originProxy.ProxyTCP(ctx, rwa, &TCPRequest{
 			Dest:      request.Dest,
 			FlowID:    metadata[QUICMetadataFlowID],
 			CfTraceID: metadata[tracing.TracerContextName],
-		})
+			ConnIndex: q.connIndex,
+		}), rwa.connectResponseSent
+	default:
+		return errors.Errorf("unsupported error type: %s", request.Type), false
 	}
-	return nil
 }
 
 func (q *QUICConnection) handleRPCStream(rpcStream *quicpogs.RPCServerStream) error {
-	return rpcStream.Serve(q, q, q.logger)
+	if err := rpcStream.Serve(q, q, q.logger); err != nil {
+		q.logger.Err(err).Msg("failed handling RPC stream")
+	}
+
+	return nil
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
@@ -270,11 +299,12 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 		attribute.String("session-id", sessionID.String()),
 		attribute.String("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)),
 	))
+	log := q.logger.With().Int(management.EventTypeKey, int(management.UDP)).Logger()
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
 	originProxy, err := ingress.DialUDP(dstIP, dstPort)
 	if err != nil {
-		q.logger.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
+		log.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
@@ -285,14 +315,18 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
-		q.logger.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
+		log.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
 
 	go q.serveUDPSession(session, closeAfterIdleHint)
 
-	q.logger.Debug().Str("sessionID", sessionID.String()).Str("src", originProxy.LocalAddr().String()).Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).Msgf("Registered session")
+	log.Debug().
+		Str("sessionID", sessionID.String()).
+		Str("src", originProxy.LocalAddr().String()).
+		Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).
+		Msgf("Registered session")
 	tracing.End(registerSpan)
 
 	resp := tunnelpogs.RegisterUdpSessionResponse{
@@ -313,7 +347,10 @@ func (q *QUICConnection) serveUDPSession(session *datagramsession.Session, close
 			q.closeUDPSession(ctx, session.ID, "terminated without error")
 		}
 	}
-	q.logger.Debug().Err(err).Str("sessionID", session.ID.String()).Msg("Session terminated")
+	q.logger.Debug().Err(err).
+		Int(management.EventTypeKey, int(management.UDP)).
+		Str("sessionID", session.ID.String()).
+		Msg("Session terminated")
 }
 
 // closeUDPSession first unregisters the session from session manager, then it tries to unregister from edge
@@ -323,7 +360,9 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection
 		// with edge
-		q.logger.Debug().Err(err).Str("sessionID", sessionID.String()).
+		q.logger.Debug().Err(err).
+			Int(management.EventTypeKey, int(management.UDP)).
+			Str("sessionID", sessionID.String()).
 			Msgf("Failed to open quic stream to unregister udp session with edge")
 		return
 	}
@@ -355,31 +394,39 @@ func (q *QUICConnection) UpdateConfiguration(ctx context.Context, version int32,
 // the client.
 type streamReadWriteAcker struct {
 	*quicpogs.RequestServerStream
+	connectResponseSent bool
 }
 
 // AckConnection acks response back to the proxy.
 func (s *streamReadWriteAcker) AckConnection(tracePropagation string) error {
-	metadata := quicpogs.Metadata{
-		Key: tracing.CanonicalCloudflaredTracingHeader,
-		Val: tracePropagation,
+	metadata := []quicpogs.Metadata{}
+	// Only add tracing if provided by origintunneld
+	if tracePropagation != "" {
+		metadata = append(metadata, quicpogs.Metadata{
+			Key: tracing.CanonicalCloudflaredTracingHeader,
+			Val: tracePropagation,
+		})
 	}
-	return s.WriteConnectResponseData(nil, metadata)
+	s.connectResponseSent = true
+	return s.WriteConnectResponseData(nil, metadata...)
 }
 
 // httpResponseAdapter translates responses written by the HTTP Proxy into ones that can be used in QUIC.
 type httpResponseAdapter struct {
 	*quicpogs.RequestServerStream
+	headers             http.Header
+	connectResponseSent bool
 }
 
 func newHTTPResponseAdapter(s *quicpogs.RequestServerStream) httpResponseAdapter {
-	return httpResponseAdapter{s}
+	return httpResponseAdapter{RequestServerStream: s, headers: make(http.Header)}
 }
 
-func (hrw httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
+func (hrw *httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
 	// we do not support trailers over QUIC
 }
 
-func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
+func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
 	metadata := make([]quicpogs.Metadata, 0)
 	metadata = append(metadata, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(status)})
 	for k, vv := range header {
@@ -388,17 +435,41 @@ func (hrw httpResponseAdapter) WriteRespHeaders(status int, header http.Header) 
 			metadata = append(metadata, quicpogs.Metadata{Key: httpHeaderKey, Val: v})
 		}
 	}
+
 	return hrw.WriteConnectResponseData(nil, metadata...)
 }
 
-func (hrw httpResponseAdapter) WriteErrorResponse(err error) {
+func (hrw *httpResponseAdapter) Header() http.Header {
+	return hrw.headers
+}
+
+func (hrw *httpResponseAdapter) WriteHeader(status int) {
+	hrw.WriteRespHeaders(status, hrw.headers)
+}
+
+func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn := &localProxyConnection{hrw.ReadWriteCloser}
+	readWriter := bufio.NewReadWriter(
+		bufio.NewReader(hrw.ReadWriteCloser),
+		bufio.NewWriter(hrw.ReadWriteCloser),
+	)
+	return conn, readWriter, nil
+}
+
+func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {
 	hrw.WriteConnectResponseData(err, quicpogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
+}
+
+func (hrw *httpResponseAdapter) WriteConnectResponseData(respErr error, metadata ...quicpogs.Metadata) error {
+	hrw.connectResponseSent = true
+	return hrw.RequestServerStream.WriteConnectResponseData(respErr, metadata...)
 }
 
 func buildHTTPRequest(
 	ctx context.Context,
 	connectRequest *quicpogs.ConnectRequest,
 	body io.ReadCloser,
+	connIndex uint8,
 	log *zerolog.Logger,
 ) (*tracing.TracedHTTPRequest, error) {
 	metadata := connectRequest.MetadataMap()
@@ -442,7 +513,7 @@ func buildHTTPRequest(
 	stripWebsocketUpgradeHeader(req)
 
 	// Check for tracing on request
-	tracedReq := tracing.NewTracedHTTPRequest(req, log)
+	tracedReq := tracing.NewTracedHTTPRequest(req, connIndex, log)
 	return tracedReq, err
 }
 
@@ -523,13 +594,17 @@ func (rp *muxerWrapper) Close() error {
 	return nil
 }
 
-func createUDPConnForConnIndex(connIndex uint8, logger *zerolog.Logger) (*net.UDPConn, error) {
+func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, logger *zerolog.Logger) (*net.UDPConn, error) {
 	portMapMutex.Lock()
 	defer portMapMutex.Unlock()
 
+	if localIP == nil {
+		localIP = net.IPv4zero
+	}
+
 	// if port was not set yet, it will be zero, so bind will randomly allocate one.
 	if port, ok := portForConnIndex[connIndex]; ok {
-		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: port})
+		udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: localIP, Port: port})
 		// if there wasn't an error, or if port was 0 (independently of error or not, just return)
 		if err == nil {
 			return udpConn, nil
@@ -539,7 +614,7 @@ func createUDPConnForConnIndex(connIndex uint8, logger *zerolog.Logger) (*net.UD
 	}
 
 	// if we reached here, then there was an error or port as not been allocated it.
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: localIP, Port: 0})
 	if err == nil {
 		udpAddr, ok := (udpConn.LocalAddr()).(*net.UDPAddr)
 		if !ok {

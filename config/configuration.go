@@ -39,8 +39,6 @@ var (
 )
 
 const (
-	DefaultCredentialFile = "cert.pem"
-
 	// BastionFlag is to enable bastion, or jump host, operation
 	BastionFlag = "bastion"
 )
@@ -391,7 +389,8 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	log.Debug().Msgf("Loading configuration from %s", configFile)
 	file, err := os.Open(configFile)
 	if err != nil {
-		if os.IsNotExist(err) {
+		// If does not exist and config file was not specificly specified then return ErrNoConfigFile found.
+		if os.IsNotExist(err) && !c.IsSet("config") {
 			err = ErrNoConfigFile
 		}
 		return nil, "", err

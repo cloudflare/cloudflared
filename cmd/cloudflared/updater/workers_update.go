@@ -25,14 +25,13 @@ const (
 	// rename cloudflared.exe.new to cloudflared.exe
 	// delete cloudflared.exe.old
 	// start the service
-	// delete the batch file
-	windowsUpdateCommandTemplate = `@echo off
-sc stop cloudflared >nul 2>&1
+	// exit with code 0 if we've reached this point indicating success.
+	windowsUpdateCommandTemplate = `sc stop cloudflared >nul 2>&1
 rename "{{.TargetPath}}" {{.OldName}}
 rename "{{.NewPath}}" {{.BinaryName}}
 del "{{.OldPath}}"
 sc start cloudflared >nul 2>&1
-del {{.BatchName}}`
+exit /b 0`
 	batchFileName = "cfd_update.bat"
 )
 
@@ -214,8 +213,9 @@ func isValidChecksum(checksum, filePath string) error {
 // writeBatchFile writes a batch file out to disk
 // see the dicussion on why it has to be done this way
 func writeBatchFile(targetPath string, newPath string, oldPath string) error {
-	os.Remove(batchFileName) //remove any failed updates before download
-	f, err := os.Create(batchFileName)
+	batchFilePath := filepath.Join(filepath.Dir(targetPath), batchFileName)
+	os.Remove(batchFilePath) //remove any failed updates before download
+	f, err := os.Create(batchFilePath)
 	if err != nil {
 		return err
 	}
@@ -241,6 +241,16 @@ func writeBatchFile(targetPath string, newPath string, oldPath string) error {
 
 // run each OS command for windows
 func runWindowsBatch(batchFile string) error {
-	cmd := exec.Command("cmd", "/c", batchFile)
-	return cmd.Start()
+	defer os.Remove(batchFile)
+	cmd := exec.Command("cmd", "/C", batchFile)
+	_, err := cmd.Output()
+	// Remove the batch file we created. Don't let this interfere with the error
+	// we report.
+	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("Error during update : %s;", string(exitError.Stderr))
+		}
+
+	}
+	return err
 }

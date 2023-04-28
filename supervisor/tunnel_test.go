@@ -18,7 +18,7 @@ type dynamicMockFetcher struct {
 	err              error
 }
 
-func (dmf *dynamicMockFetcher) fetch() connection.PercentageFetcher {
+func (dmf *dynamicMockFetcher) fetch() edgediscovery.PercentageFetcher {
 	return func() (edgediscovery.ProtocolPercents, error) {
 		return dmf.protocolPercents, dmf.err
 	}
@@ -32,24 +32,22 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	}
 	log := zerolog.Nop()
 	resolveTTL := time.Duration(0)
-	namedTunnel := &connection.NamedTunnelProperties{}
 	mockFetcher := dynamicMockFetcher{
-		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}},
+		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}},
 	}
-	warpRoutingEnabled := false
 	protocolSelector, err := connection.NewProtocolSelector(
 		"auto",
-		warpRoutingEnabled,
-		namedTunnel,
+		"",
+		false,
+		false,
 		mockFetcher.fetch(),
 		resolveTTL,
 		&log,
-		false,
 	)
 	assert.NoError(t, err)
 
 	initProtocol := protocolSelector.Current()
-	assert.Equal(t, connection.HTTP2, initProtocol)
+	assert.Equal(t, connection.QUIC, initProtocol)
 
 	protoFallback := &protocolFallback{
 		backoff,
@@ -100,12 +98,12 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	// The reason why there's no fallback available is because we pick a specific protocol instead of letting it be auto.
 	protocolSelector, err = connection.NewProtocolSelector(
 		"quic",
-		warpRoutingEnabled,
-		namedTunnel,
+		"",
+		false,
+		false,
 		mockFetcher.fetch(),
 		resolveTTL,
 		&log,
-		false,
 	)
 	assert.NoError(t, err)
 	protoFallback = &protocolFallback{backoff, protocolSelector.Current(), false}

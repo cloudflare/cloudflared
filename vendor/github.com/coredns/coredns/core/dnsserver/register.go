@@ -138,14 +138,6 @@ func (h *dnsContext) InspectServerBlocks(sourceFile string, serverBlocks []caddy
 
 // MakeServers uses the newly-created siteConfigs to create and return a list of server instances.
 func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
-
-	// Now that all Keys and Directives are parsed and initialized
-	// lets verify that there is no overlap on the zones and addresses to listen for
-	errValid := h.validateZonesAndListeningAddresses()
-	if errValid != nil {
-		return nil, errValid
-	}
-
 	// Copy the Plugin, ListenHosts and Debug from first config in the block
 	// to all other config in the same block . Doing this results in zones
 	// sharing the same plugin instances and settings as other zones in
@@ -154,7 +146,9 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 		c.Plugin = c.firstConfigInBlock.Plugin
 		c.ListenHosts = c.firstConfigInBlock.ListenHosts
 		c.Debug = c.firstConfigInBlock.Debug
+		c.Stacktrace = c.firstConfigInBlock.Stacktrace
 		c.TLSConfig = c.firstConfigInBlock.TLSConfig
+		c.TsigSecret = c.firstConfigInBlock.TsigSecret
 	}
 
 	// we must map (group) each config to a bind address
@@ -195,7 +189,27 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 			}
 			servers = append(servers, s)
 		}
+	}
 
+	// For each server config, check for View Filter plugins
+	for _, c := range h.configs {
+		// Add filters in the plugin.cfg order for consistent filter func evaluation order.
+		for _, d := range Directives {
+			if vf, ok := c.registry[d].(Viewer); ok {
+				if c.ViewName != "" {
+					return nil, fmt.Errorf("multiple views defined in server block")
+				}
+				c.ViewName = vf.ViewName()
+				c.FilterFuncs = append(c.FilterFuncs, vf.Filter)
+			}
+		}
+	}
+
+	// Verify that there is no overlap on the zones and listen addresses
+	// for unfiltered server configs
+	errValid := h.validateZonesAndListeningAddresses()
+	if errValid != nil {
+		return nil, errValid
 	}
 
 	return servers, nil
@@ -253,18 +267,24 @@ func (h *dnsContext) validateZonesAndListeningAddresses() error {
 		for _, h := range conf.ListenHosts {
 			// Validate the overlapping of ZoneAddr
 			akey := zoneAddr{Transport: conf.Transport, Zone: conf.Zone, Address: h, Port: conf.Port}
-			existZone, overlapZone := checker.registerAndCheck(akey)
+			var existZone, overlapZone *zoneAddr
+			if len(conf.FilterFuncs) > 0 {
+				// This config has filters. Check for overlap with other (unfiltered) configs.
+				existZone, overlapZone = checker.check(akey)
+			} else {
+				// This config has no filters. Check for overlap with other (unfiltered) configs,
+				// and register the zone to prevent subsequent zones from overlapping with it.
+				existZone, overlapZone = checker.registerAndCheck(akey)
+			}
 			if existZone != nil {
 				return fmt.Errorf("cannot serve %s - it is already defined", akey.String())
 			}
 			if overlapZone != nil {
 				return fmt.Errorf("cannot serve %s - zone overlap listener capacity with %v", akey.String(), overlapZone.String())
 			}
-
 		}
 	}
 	return nil
-
 }
 
 // groupSiteConfigsByListenAddr groups site configs by their listen

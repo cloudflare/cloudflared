@@ -22,6 +22,7 @@ import (
 // ServergRPC represents an instance of a DNS-over-gRPC server.
 type ServergRPC struct {
 	*Server
+	*pb.UnimplementedDnsServiceServer
 	grpcServer *grpc.Server
 	listenAddr net.Addr
 	tlsConfig  *tls.Config
@@ -36,9 +37,11 @@ func NewServergRPC(addr string, group []*Config) (*ServergRPC, error) {
 	// The *tls* plugin must make sure that multiple conflicting
 	// TLS configuration returns an error: it can only be specified once.
 	var tlsConfig *tls.Config
-	for _, conf := range s.zones {
-		// Should we error if some configs *don't* have TLS?
-		tlsConfig = conf.TLSConfig
+	for _, z := range s.zones {
+		for _, conf := range z {
+			// Should we error if some configs *don't* have TLS?
+			tlsConfig = conf.TLSConfig
+		}
 	}
 	// http/2 is required when using gRPC. We need to specify it in next protos
 	// or the upgrade won't happen.
@@ -81,7 +84,6 @@ func (s *ServergRPC) ServePacket(p net.PacketConn) error { return nil }
 
 // Listen implements caddy.TCPServer interface.
 func (s *ServergRPC) Listen() (net.Listener, error) {
-
 	l, err := reuseport.Listen("tcp", s.Addr[len(transport.GRPC+"://"):])
 	if err != nil {
 		return nil, err

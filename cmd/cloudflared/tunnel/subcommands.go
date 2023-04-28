@@ -95,14 +95,6 @@ var (
 		Usage:   "Inverts the sort order of the tunnel list.",
 		EnvVars: []string{"TUNNEL_LIST_INVERT_SORT"},
 	}
-	forceFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
-		Name:    "force",
-		Aliases: []string{"f"},
-		Usage: "By default, if a tunnel is currently being run from a cloudflared, you can't " +
-			"simultaneously rerun it again from a second cloudflared. The --force flag lets you " +
-			"overwrite the previous tunnel. If you want to use a single hostname with multiple " +
-			"tunnels, you can do so with Cloudflare's Load Balancer product.",
-	})
 	featuresFlag = altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 		Name:    "features",
 		Aliases: []string{"F"},
@@ -616,7 +608,6 @@ func renderOutput(format string, v interface{}) error {
 
 func buildRunCommand() *cli.Command {
 	flags := []cli.Flag{
-		forceFlag,
 		credentialsFileFlag,
 		credentialsContentsFlag,
 		postQuantumFlag,
@@ -632,7 +623,7 @@ func buildRunCommand() *cli.Command {
 		Action:    cliutil.ConfiguredAction(runCommand),
 		Usage:     "Proxy a local web server by running the given tunnel",
 		UsageText: "cloudflared tunnel [tunnel command options] run [subcommand options] [TUNNEL]",
-		Description: `Runs the tunnel identified by name or UUUD, creating highly available connections
+		Description: `Runs the tunnel identified by name or UUID, creating highly available connections
   between your server and the Cloudflare edge. You can provide name or UUID of tunnel to run either as the
   last command line argument or in the configuration file using "tunnel: TUNNEL".
 
@@ -783,7 +774,7 @@ func tokenCommand(c *cli.Context) error {
 		return err
 	}
 
-	fmt.Printf("%s", encodedToken)
+	fmt.Println(encodedToken)
 	return nil
 }
 
@@ -821,7 +812,7 @@ Further information about managing Cloudflare WARP traffic to your tunnel is ava
 				Name:        "lb",
 				Action:      cliutil.ConfiguredAction(routeLbCommand),
 				Usage:       "Use this tunnel as a load balancer origin, creating pool and load balancer if necessary",
-				UsageText:   "cloudflared tunnel route lb [TUNNEL] [HOSTNAME] [LB-POOL]",
+				UsageText:   "cloudflared tunnel route lb [TUNNEL] [HOSTNAME] [LB-POOL-NAME]",
 				Description: `Creates Load Balancer with an origin pool that points to the tunnel.`,
 			},
 			buildRouteIPSubcommand(),
@@ -941,7 +932,7 @@ func commandHelpTemplate() string {
 	for _, f := range configureCloudflaredFlags(false) {
 		parentFlagsHelp += fmt.Sprintf(" %s\n\t", f)
 	}
-	for _, f := range configureLoggingFlags(false) {
+	for _, f := range cliutil.ConfigureLoggingFlags(false) {
 		parentFlagsHelp += fmt.Sprintf(" %s\n\t", f)
 	}
 	const template = `NAME:

@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -65,7 +65,7 @@ func (cr *CertReloader) LoadCert() error {
 
 	// Keep the old certificate if there's a problem reading the new one.
 	if err != nil {
-		raven.CaptureError(fmt.Errorf("Error parsing X509 key pair: %v", err), nil)
+		sentry.CaptureException(fmt.Errorf("Error parsing X509 key pair: %v", err))
 		return err
 	}
 	cr.certificate = &cert

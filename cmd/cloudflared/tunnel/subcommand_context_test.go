@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/credentials"
 )
 
 type mockFileSystem struct {
@@ -37,7 +38,7 @@ func Test_subcommandContext_findCredentials(t *testing.T) {
 		log               *zerolog.Logger
 		fs                fileSystem
 		tunnelstoreClient cfapi.Client
-		userCredential    *userCredential
+		userCredential    *credentials.User
 	}
 	type args struct {
 		tunnelID uuid.UUID
@@ -249,7 +250,7 @@ func Test_subcommandContext_Delete(t *testing.T) {
 		isUIEnabled       bool
 		fs                fileSystem
 		tunnelstoreClient *deleteMockTunnelStore
-		userCredential    *userCredential
+		userCredential    *credentials.User
 	}
 	type args struct {
 		tunnelIDs []uuid.UUID

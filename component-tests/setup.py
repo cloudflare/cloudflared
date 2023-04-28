@@ -81,12 +81,6 @@ def create_dns(config, hostname, type, content):
     )
 
 
-def create_classic_dns(config, random_uuid):
-    classic_hostname = "classic-" + random_uuid + "." + config["zone_domain"]
-    create_dns(config, classic_hostname, "AAAA", "fd10:aec2:5dae::")
-    return classic_hostname
-
-
 def create_named_dns(config, random_uuid):
     hostname = "named-" + random_uuid + "." + config["zone_domain"]
     create_dns(config, hostname, "CNAME", config["tunnel"] + ".cfargotunnel.com")
@@ -119,7 +113,6 @@ def create():
     Creates the necessary resources for the components test to run.
      - Creates a named tunnel with a random name.
      - Creates a random CNAME DNS entry for that tunnel.
-     - Creates a random AAAA DNS entry for a classic tunnel.
 
     Those created resources are added to the config (obtained from an environment variable).
     The resulting configuration is persisted for the tests to use.
@@ -129,7 +122,6 @@ def create():
 
     random_uuid = str(uuid.uuid4())
     config["tunnel"] = create_tunnel(config, origincert_path, random_uuid)
-    config["classic_hostname"] = create_classic_dns(config, random_uuid)
     config["ingress"] = [
         {
             "hostname": create_named_dns(config, random_uuid),
@@ -150,7 +142,6 @@ def cleanup():
     """
     config = get_config_from_file()
     delete_tunnel(config)
-    delete_dns(config, config["classic_hostname"])
     delete_dns(config, config["ingress"][0]["hostname"])
 
 

@@ -73,15 +73,16 @@ func Init(version string) {
 type TracedHTTPRequest struct {
 	*http.Request
 	*cfdTracer
+	ConnIndex uint8 // The connection index used to proxy the request
 }
 
 // NewTracedHTTPRequest creates a new tracer for the current HTTP request context.
-func NewTracedHTTPRequest(req *http.Request, log *zerolog.Logger) *TracedHTTPRequest {
+func NewTracedHTTPRequest(req *http.Request, connIndex uint8, log *zerolog.Logger) *TracedHTTPRequest {
 	ctx, exists := extractTrace(req)
 	if !exists {
-		return &TracedHTTPRequest{req, &cfdTracer{trace.NewNoopTracerProvider(), &NoopOtlpClient{}, log}}
+		return &TracedHTTPRequest{req, &cfdTracer{trace.NewNoopTracerProvider(), &NoopOtlpClient{}, log}, connIndex}
 	}
-	return &TracedHTTPRequest{req.WithContext(ctx), newCfdTracer(ctx, log)}
+	return &TracedHTTPRequest{req.WithContext(ctx), newCfdTracer(ctx, log), connIndex}
 }
 
 func (tr *TracedHTTPRequest) ToTracedContext() *TracedContext {

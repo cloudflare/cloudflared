@@ -1,3 +1,116 @@
+2023.4.2
+- 2023-04-24 TUN-7133: Add sampling support for streaming logs
+- 2023-04-21 TUN-7141: Add component tests for streaming logs
+- 2023-04-21 TUN-7373: Streaming logs override for same actor
+- 2023-04-20 TUN-7383: Bump requirements.txt
+- 2023-04-19 TUN-7361: Add a label to override hostname
+- 2023-04-19 TUN-7378: Remove RPC debug logs
+- 2023-04-18 TUN-7360: Add Get Host Details handler in management service
+- 2023-04-17 AUTH-3122 Verify that Access tokens are still valid in curl command
+- 2023-04-17 TUN-7129: Categorize TCP logs for streaming logs
+- 2023-04-17 TUN-7130: Categorize UDP logs for streaming logs
+- 2023-04-10 AUTH-4887 Add aud parameter to token transfer url
+
+2023.4.1
+- 2023-04-13 TUN-7368: Report destination address for TCP requests in logs
+- 2023-04-12 TUN-7134: Acquire token for cloudflared tail
+- 2023-04-12 TUN-7131: Add cloudflared log event to connection messages and enable streaming logs
+- 2023-04-11 TUN-7132 TUN-7136: Add filter support for streaming logs
+- 2023-04-06 TUN-7354: Don't warn for empty ingress rules when using --token
+- 2023-04-06 TUN-7128: Categorize logs from public hostname locations
+- 2023-04-06 TUN-7351: Add streaming logs session ping and timeout
+- 2023-04-06 TUN-7335: Fix cloudflared update not working in windows
+
+2023.4.0
+- 2023-04-07 TUN-7356: Bump golang.org/x/net package to 0.7.0
+- 2023-04-07 TUN-7357: Bump to go 1.19.6
+- 2023-04-06 TUN-7127: Disconnect logger level requirement for management
+- 2023-04-05 TUN-7332: Remove legacy tunnel force flag
+- 2023-04-05 TUN-7135: Add cloudflared tail
+- 2023-04-04 Add suport for OpenBSD (#916)
+- 2023-04-04 Fix typo (#918)
+- 2023-04-04 TUN-7125: Add management streaming logs WebSocket protocol
+- 2023-03-30 TUN-9999: Remove classic tunnel component tests
+- 2023-03-30 TUN-7126: Add Management logger io.Writer
+- 2023-03-29 TUN-7324: Add http.Hijacker to connection.ResponseWriter
+- 2023-03-29 TUN-7333: Default features checkable at runtime across all packages
+- 2023-03-21 TUN-7124: Add intercept ingress rule for management requests
+
+2023.3.1
+- 2023-03-13 TUN-7271: Return 503 status code when no ingress rules configured
+- 2023-03-10 TUN-7272: Fix cloudflared returning non supported status service which breaks configuration migration
+- 2023-03-09 TUN-7259: Add warning for missing ingress rules
+- 2023-03-09 TUN-7268: Default to Program Files as location for win32
+- 2023-03-07 TUN-7252: Remove h2mux connection
+- 2023-03-07 TUN-7253: Adopt http.ResponseWriter for connection.ResponseWriter
+- 2023-03-06 TUN-7245: Add bastion flag to origin service check
+- 2023-03-06 EDGESTORE-108: Remove deprecated s3v2 signature
+- 2023-03-02 TUN-7226: Fixed a missed rename
+
+2023.3.0
+- 2023-03-01 GH-352: Add Tunnel CLI option "edge-bind-address" (#870)
+- 2023-03-01 Fixed WIX template to allow MSI upgrades (#838)
+- 2023-02-28 TUN-7213: Decode Base64 encoded key before writing it
+- 2023-02-28 check.yaml: update actions to v3 (#876)
+- 2023-02-27 TUN-7213: Debug homebrew-cloudflare  build
+- 2023-02-15 RTG-2476 Add qtls override for Go 1.20
+
+2023.2.2
+- 2023-02-22 TUN-7197: Add connIndex tag to debug messages of incoming requests
+- 2023-02-08 TUN-7167: Respect protocol overrides with --token
+- 2023-02-06 TUN-7065: Remove classic tunnel creation
+- 2023-02-06 TUN-6938: Force h2mux protocol to http2 for named tunnels
+- 2023-02-06 TUN-6938: Provide QUIC as first in protocol list
+- 2023-02-03 TUN-7158: Correct TCP tracing propagation
+- 2023-02-01 TUN-7151: Update changes file with latest release notices
+
+2023.2.1
+- 2023-02-01 TUN-7065: Revert Ingress Rule check for named tunnel configurations
+- 2023-02-01 Revert "TUN-7065: Revert Ingress Rule check for named tunnel configurations"
+- 2023-02-01 Revert "TUN-7065: Remove classic tunnel creation"
+2023.1.0
+- 2023-01-10 TUN-7064: RPM digests are now sha256 instead of md5sum
+- 2023-01-04 RTG-2418 Update qtls
+- 2022-12-24 TUN-7057: Remove dependency github.com/gorilla/mux
+- 2022-12-24 TUN-6724: Migrate to sentry-go from raven-go
+
+2022.12.1
+- 2022-12-20 TUN-7021: Fix proxy-dns not starting when cloudflared tunnel is run
+- 2022-12-15 TUN-7010: Changelog for release 2022.12.0
+
+2022.12.0
+- 2022-12-14 TUN-6999: cloudflared should attempt other edge addresses before falling back on protocol
+- 2022-12-13 TUN-7004: Dont show local config dirs for remotely configured tuns
+- 2022-12-12 TUN-7003: Tempoarily disable erroneous notarize-app
+- 2022-12-12 TUN-7003: Add back a missing fi
+- 2022-12-07 TUN-7000: Reduce metric cardinality of closedConnections metric by removing error as tag
+- 2022-12-07 TUN-6994: Improve logging config file not found
+- 2022-12-07 TUN-7002: Randomise first region selection
+- 2022-12-07 TUN-6995: Disable quick-tunnels spin up by default
+- 2022-12-05 TUN-6984: Add bash set x to improve visibility during builds
+- 2022-12-05 TUN-6984: [CI] Ignore security import errors for code_sigining
+- 2022-12-05 TUN-6984: [CI] Don't fail on unset.
+- 2022-11-30 TUN-6984: Set euo pipefile for homebrew builds
+
+2022.11.1
+- 2022-11-29 TUN-6981: We should close UDP socket if failed to connecto to edge
+- 2022-11-25 CUSTESC-23757: Fix a bug where a wildcard ingress rule would match an host without starting with a dot
+- 2022-11-24 TUN-6970: Print newline when printing tunnel token
+- 2022-11-22 TUN-6963: Refactor Metrics service setup
+2022.11.0
+- 2022-11-16 Revert "TUN-6935: Cloudflared should use APIToken instead of serviceKey"
+- 2022-11-16 TUN-6929: Use same protocol for other connections as first one
+- 2022-11-14 TUN-6941: Reduce log level to debug when failing to proxy ICMP reply
+- 2022-11-14 TUN-6935: Cloudflared should use APIToken instead of serviceKey
+- 2022-11-14 TUN-6935: Cloudflared should use APIToken instead of serviceKey
+- 2022-11-11 TUN-6937: Bump golang.org/x/* packages to new release tags
+- 2022-11-10 ZTC-234: macOS tests
+- 2022-11-09 TUN-6927: Refactor validate access configuration to allow empty audTags only
+- 2022-11-08 ZTC-234: Replace ICMP funnels when ingress connection changes
+- 2022-11-04 TUN-6917: Bump go to 1.19.3
+- 2022-11-02 Issue #574: Better ssh config for short-lived cert (#763)
+- 2022-10-28 TUN-6898: Fix bug handling IPv6 based ingresses with missing port
+- 2022-10-28 TUN-6898: Refactor addPortIfMissing
 2022.10.3
 - 2022-10-24 TUN-6871: Add default feature to cloudflared to support EOF on QUIC connections
 - 2022-10-19 TUN-6876: Fix flaky TestTraceICMPRouterEcho by taking account request span can return before reply

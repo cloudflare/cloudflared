@@ -15,6 +15,8 @@ var (
 	errNoProtocolRecord = fmt.Errorf("No TXT record found for %s to determine connection protocol", protocolRecord)
 )
 
+type PercentageFetcher func() (ProtocolPercents, error)
+
 // ProtocolPercent represents a single Protocol Percentage combination.
 type ProtocolPercent struct {
 	Protocol   string `json:"protocol"`

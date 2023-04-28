@@ -10,7 +10,6 @@
 cloudflared_binary: "cloudflared"
 tunnel: "3d539f97-cd3a-4d8e-c33b-65e9099c7a8d"
 credentials_file: "/Users/tunnel/.cloudflared/3d539f97-cd3a-4d8e-c33b-65e9099c7a8d.json"
-classic_hostname: "classic-tunnel-component-tests.example.com"
 origincert: "/Users/tunnel/.cloudflared/cert.pem"
 ingress:
 - hostname: named-tunnel-component-tests.example.com

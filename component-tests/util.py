@@ -9,6 +9,7 @@ import pytest
 
 import requests
 import yaml
+import json
 from retrying import retry
 
 from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
@@ -35,7 +36,7 @@ def write_config(directory, config):
 
 
 def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel"], new_process=False,
-                      allow_input=False, capture_output=True, root=False, skip_config_flag=False):
+                      allow_input=False, capture_output=True, root=False, skip_config_flag=False, expect_success=True):
 
     config_path = None
     if not skip_config_flag:
@@ -46,8 +47,7 @@ def start_cloudflared(directory, config, cfd_args=["run"], cfd_pre_args=["tunnel
     if new_process:
         return run_cloudflared_background(cmd, allow_input, capture_output)
     # By setting check=True, it will raise an exception if the process exits with non-zero exit code
-    return subprocess.run(cmd, check=True, capture_output=capture_output)
-
+    return subprocess.run(cmd, check=expect_success, capture_output=capture_output)
 
 def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
     cmd = []
@@ -77,7 +77,18 @@ def run_cloudflared_background(cmd, allow_input, capture_output):
             cfd.terminate()
             if capture_output:
                 LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
+    
 
+def get_quicktunnel_url():
+    quicktunnel_url = f'http://localhost:{METRICS_PORT}/quicktunnel'
+    with requests.Session() as s:
+        resp = send_request(s, quicktunnel_url, True)
+
+        hostname = resp.json()["hostname"]
+        assert hostname, \
+            f"Quicktunnel endpoint returned {hostname} but we expected a url"
+
+        return f"https://{hostname}"
 
 def wait_tunnel_ready(tunnel_url=None, require_min_connections=1, cfd_logs=None):
     try:
@@ -95,12 +106,13 @@ def inner_wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
     with requests.Session() as s:
         resp = send_request(s, metrics_url, True)
 
-        assert resp.json()["readyConnections"] >= require_min_connections, \
+        ready_connections = resp.json()["readyConnections"]
+
+        assert ready_connections >= require_min_connections, \
             f"Ready endpoint returned {resp.json()} but we expect at least {require_min_connections} connections"
 
         if tunnel_url is not None:
             send_request(s, tunnel_url, True)
-
 
 def _log_cloudflared_logs(cfd_logs):
     log_file = cfd_logs

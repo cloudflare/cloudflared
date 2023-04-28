@@ -74,7 +74,7 @@ def assert_log_to_dir(config, log_dir):
 class TestLogging:
     def test_logging_to_terminal(self, tmp_path, component_tests_config):
         config = component_tests_config()
-        with start_cloudflared(tmp_path, config, new_process=True) as cloudflared:
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
             assert_log_to_terminal(cloudflared)
 
@@ -85,7 +85,7 @@ class TestLogging:
             "logfile": str(log_file),
         }
         config = component_tests_config(extra_config)
-        with start_cloudflared(tmp_path, config, new_process=True, capture_output=False):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True, capture_output=False):
             wait_tunnel_ready(tunnel_url=config.get_url(), cfd_logs=str(log_file))
             assert_log_in_file(log_file)
             assert_json_log(log_file)
@@ -98,6 +98,6 @@ class TestLogging:
             "log-directory": str(log_dir),
         }
         config = component_tests_config(extra_config)
-        with start_cloudflared(tmp_path, config, new_process=True, capture_output=False):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True, capture_output=False):
             wait_tunnel_ready(tunnel_url=config.get_url(), cfd_logs=str(log_dir))
             assert_log_to_dir(config, log_dir)

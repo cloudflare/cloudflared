@@ -80,9 +80,16 @@ func (r *RESTClient) ListVirtualNetworks(filter *VnetFilter) ([]*VirtualNetwork,
 	return nil, r.statusCodeToError("list virtual networks", resp)
 }
 
-func (r *RESTClient) DeleteVirtualNetwork(id uuid.UUID) error {
+func (r *RESTClient) DeleteVirtualNetwork(id uuid.UUID, force bool) error {
 	endpoint := r.baseEndpoints.accountVnets
 	endpoint.Path = path.Join(endpoint.Path, url.PathEscape(id.String()))
+
+	queryParams := url.Values{}
+	if force {
+		queryParams.Set("force", strconv.FormatBool(force))
+	}
+	endpoint.RawQuery = queryParams.Encode()
+
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")

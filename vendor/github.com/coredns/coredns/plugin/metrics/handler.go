@@ -34,7 +34,7 @@ func (m *Metrics) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		rc = status
 	}
 	plugin := m.authoritativePlugin(rw.Caller)
-	vars.Report(WithServer(ctx), state, zone, rcode.ToString(rc), plugin, rw.Len, rw.Start)
+	vars.Report(WithServer(ctx), state, zone, WithView(ctx), rcode.ToString(rc), plugin, rw.Len, rw.Start)
 
 	return status, err
 }

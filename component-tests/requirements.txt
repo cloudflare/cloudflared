@@ -1,6 +1,8 @@
 cloudflare==2.8.15
 flaky==3.7.0
-pytest==6.2.2
+pytest==7.3.1
+pytest-asyncio==0.21.0
 pyyaml==5.4.1
-requests==2.25.1
-retrying==1.3.3
+requests==2.28.2
+retrying==1.3.4
+websockets==11.0.1

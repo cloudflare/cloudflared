@@ -22,6 +22,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/socks"
+	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
@@ -50,6 +51,7 @@ func TestStreamTCPConnection(t *testing.T) {
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		_, err := eyeballConn.Write(testMessage)
+		require.NoError(t, err)
 
 		readBuffer := make([]byte, len(testResponse))
 		_, err = eyeballConn.Read(readBuffer)
@@ -158,7 +160,7 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 			require.NoError(t, err)
 			defer wsForwarderInConn.Close()
 
-			websocket.Stream(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, testLogger)
+			stream.Pipe(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, testLogger)
 			return nil
 		})
 

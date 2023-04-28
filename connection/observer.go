@@ -4,12 +4,17 @@ import (
 	"net"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/management"
 )
 
 const (
+	LogFieldConnectionID      = "connection"
 	LogFieldLocation          = "location"
 	LogFieldIPAddress         = "ip"
+	LogFieldProtocol          = "protocol"
 	observerChannelBufferSize = 16
 )
 
@@ -41,13 +46,16 @@ func (o *Observer) RegisterSink(sink EventSink) {
 	o.addSinkChan <- sink
 }
 
-func (o *Observer) logServerInfo(connIndex uint8, location string, address net.IP, msg string) {
+func (o *Observer) logConnected(connectionID uuid.UUID, connIndex uint8, location string, address net.IP, protocol Protocol) {
 	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
 	o.log.Info().
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		Str(LogFieldConnectionID, connectionID.String()).
 		Uint8(LogFieldConnIndex, connIndex).
 		Str(LogFieldLocation, location).
 		IPAddr(LogFieldIPAddress, address).
-		Msg(msg)
+		Str(LogFieldProtocol, protocol.String()).
+		Msg("Registered tunnel connection")
 	o.metrics.registerServerLocation(uint8ToString(connIndex), location)
 }
 

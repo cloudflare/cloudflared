@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/token"
 	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
 )
@@ -37,7 +38,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 	}
 	defer wsConn.Close()
 
-	cfwebsocket.Stream(wsConn, conn, ws.log)
+	stream.Pipe(wsConn, conn, ws.log)
 	return nil
 }
 

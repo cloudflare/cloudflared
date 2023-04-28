@@ -1,20 +1,25 @@
 package cache
 
 import (
+	"strings"
 	"time"
 
 	"github.com/coredns/coredns/plugin/cache/freq"
+	"github.com/coredns/coredns/request"
 
 	"github.com/miekg/dns"
 )
 
 type item struct {
+	Name               string
+	QType              uint16
 	Rcode              int
 	AuthenticatedData  bool
 	RecursionAvailable bool
 	Answer             []dns.RR
 	Ns                 []dns.RR
 	Extra              []dns.RR
+	wildcard           string
 
 	origTTL uint32
 	stored  time.Time
@@ -24,6 +29,10 @@ type item struct {
 
 func newItem(m *dns.Msg, now time.Time, d time.Duration) *item {
 	i := new(item)
+	if len(m.Question) != 0 {
+		i.Name = m.Question[0].Name
+		i.QType = m.Question[0].Qtype
+	}
 	i.Rcode = m.Rcode
 	i.AuthenticatedData = m.AuthenticatedData
 	i.RecursionAvailable = m.RecursionAvailable
@@ -56,7 +65,7 @@ func newItem(m *dns.Msg, now time.Time, d time.Duration) *item {
 // So we're forced to always set this to 1; regardless if the answer came from the cache or not.
 // On newer systems(e.g. ubuntu 16.04 with glib version 2.23), this issue is resolved.
 // So we may set this bit back to 0 in the future ?
-func (i *item) toMsg(m *dns.Msg, now time.Time, do bool) *dns.Msg {
+func (i *item) toMsg(m *dns.Msg, now time.Time, do bool, ad bool) *dns.Msg {
 	m1 := new(dns.Msg)
 	m1.SetReply(m)
 
@@ -65,8 +74,10 @@ func (i *item) toMsg(m *dns.Msg, now time.Time, do bool) *dns.Msg {
 	// just set it to true.
 	m1.Authoritative = true
 	m1.AuthenticatedData = i.AuthenticatedData
-	if !do {
-		m1.AuthenticatedData = false // when DNSSEC was not wanted, it can't be authenticated data.
+	if !do && !ad {
+		// When DNSSEC was not wanted, it can't be authenticated data.
+		// However, retain the AD bit if the requester set the AD bit, per RFC6840 5.7-5.8
+		m1.AuthenticatedData = false
 	}
 	m1.RecursionAvailable = i.RecursionAvailable
 	m1.Rcode = i.Rcode
@@ -86,4 +97,11 @@ func (i *item) toMsg(m *dns.Msg, now time.Time, do bool) *dns.Msg {
 func (i *item) ttl(now time.Time) int {
 	ttl := int(i.origTTL) - int(now.UTC().Sub(i.stored).Seconds())
 	return ttl
+}
+
+func (i *item) matches(state request.Request) bool {
+	if state.QType() == i.QType && strings.EqualFold(state.QName(), i.Name) {
+		return true
+	}
+	return false
 }
