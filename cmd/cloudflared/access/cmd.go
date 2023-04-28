@@ -39,6 +39,7 @@ const (
 Add to your {{.Home}}/.ssh/config:
 
 {{- if .ShortLivedCerts}}
+Host cfpipe-{{.Hostname}}
 {{- if eq .OS "windows"}}
   ProxyCommand {{.Cloudflared}} access ssh-gen --hostname %h && ssh -tt %r@cfpipe-{{.Hostname}} >&2 <&1
 {{- else}}
