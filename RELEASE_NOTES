@@ -1,3 +1,11 @@
+2023.5.0
+- 2023-04-27 TUN-7398: Add support for quic safe stream to set deadline
+- 2023-04-26 TUN-7394: Retry StartFirstTunnel on quic.ApplicationErrors
+- 2023-04-26 TUN-7392: Ignore release checksum upload if asset already uploaded
+- 2023-04-25 TUN-7392: Ignore duplicate artifact uploads for github release
+- 2023-04-25 TUN-7393: Add json output for cloudflared tail
+- 2023-04-24 TUN-7390: Remove Debian stretch builds
+
 2023.4.2
 - 2023-04-24 TUN-7133: Add sampling support for streaming logs
 - 2023-04-21 TUN-7141: Add component tests for streaming logs
