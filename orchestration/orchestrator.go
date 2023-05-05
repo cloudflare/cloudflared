@@ -44,7 +44,9 @@ type Orchestrator struct {
 func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag, localRules []ingress.Rule, log *zerolog.Logger) (*Orchestrator, error) {
 	o := &Orchestrator{
 		// Lowest possible version, any remote configuration will have version higher than this
-		currentVersion: 0,
+		// Starting at -1 allows a configuration migration (local to remote) to override the current configuration as it
+		// will start at version 0.
+		currentVersion: -1,
 		localRules:     localRules,
 		config:         config,
 		tags:           tags,

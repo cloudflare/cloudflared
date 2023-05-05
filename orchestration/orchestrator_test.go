@@ -181,6 +181,35 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.NotEqual(t, originProxyV10, originProxyV2)
 }
 
+// Validates that a new version 0 will be applied if the configuration is loaded locally.
+// This will happen when a locally managed tunnel is migrated to remote configuration and receives its first configuration.
+func TestUpdateConfiguration_FromMigration(t *testing.T) {
+	initConfig := &Config{
+		Ingress: &ingress.Ingress{},
+	}
+	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, []ingress.Rule{}, &testLogger)
+	require.NoError(t, err)
+	initOriginProxy, err := orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+	require.Implements(t, (*connection.OriginProxy)(nil), initOriginProxy)
+	require.False(t, orchestrator.WarpRoutingEnabled())
+
+	configJSONV2 := []byte(`
+{
+    "ingress": [
+        {
+            "service": "http_status:404"
+        }
+    ],
+    "warp-routing": {
+        "enabled": true
+    }
+}	
+`)
+	updateWithValidation(t, orchestrator, 0, configJSONV2)
+	require.Len(t, orchestrator.config.Ingress.Rules, 1)
+}
+
 // TestConcurrentUpdateAndRead makes sure orchestrator can receive updates and return origin proxy concurrently
 func TestConcurrentUpdateAndRead(t *testing.T) {
 	const (
