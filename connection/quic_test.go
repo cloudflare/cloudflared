@@ -16,8 +16,8 @@ import (
 
 	"github.com/gobwas/ws/wsutil"
 	"github.com/google/uuid"
-	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,9 +32,8 @@ import (
 var (
 	testTLSServerConfig = quicpogs.GenerateTLSConfig()
 	testQUICConfig      = &quic.Config{
-		ConnectionIDLength: 16,
-		KeepAlivePeriod:    5 * time.Second,
-		EnableDatagrams:    true,
+		KeepAlivePeriod: 5 * time.Second,
+		EnableDatagrams: true,
 	}
 )
 
@@ -43,13 +42,6 @@ var _ ReadWriteAcker = (*streamReadWriteAcker)(nil)
 // TestQUICServer tests if a quic server accepts and responds to a quic client with the acceptance protocol.
 // It also serves as a demonstration for communication with the QUIC connection started by a cloudflared.
 func TestQUICServer(t *testing.T) {
-	// Start a UDP Listener for QUIC.
-	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-	require.NoError(t, err)
-	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
-	require.NoError(t, err)
-	defer udpListener.Close()
-
 	// This is simply a sample websocket frame message.
 	wsBuf := &bytes.Buffer{}
 	wsutil.WriteClientBinary(wsBuf, []byte("Hello"))
@@ -145,8 +137,14 @@ func TestQUICServer(t *testing.T) {
 		test := test // capture range variable
 		t.Run(test.desc, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-
-			quicListener, err := quic.Listen(udpListener, testTLSServerConfig, testQUICConfig)
+			// Start a UDP Listener for QUIC.
+			udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+			require.NoError(t, err)
+			udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
+			require.NoError(t, err)
+			defer udpListener.Close()
+			quicTransport := &quic.Transport{Conn: udpListener, ConnectionIDLength: 16}
+			quicListener, err := quicTransport.Listen(testTLSServerConfig, testQUICConfig)
 			require.NoError(t, err)
 
 			serverDone := make(chan struct{})
@@ -187,7 +185,7 @@ func (fakeControlStream) IsStopped() bool {
 func quicServer(
 	ctx context.Context,
 	t *testing.T,
-	listener quic.Listener,
+	listener *quic.Listener,
 	dest string,
 	connectionType quicpogs.ConnectionType,
 	metadata []quicpogs.Metadata,
@@ -713,7 +711,10 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QU
 	}
 	// Start a mock httpProxy
 	log := zerolog.New(os.Stdout)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	qc, err := NewQUICConnection(
+		ctx,
 		testQUICConfig,
 		udpListenerAddr,
 		nil,

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +56,9 @@ func quicClient(t *testing.T, addr net.Addr) {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"argotunnel"},
 	}
-	session, err := quic.DialAddr(addr.String(), tlsConf, testQUICConfig)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	session, err := quic.DialAddr(ctx, addr.String(), tlsConf, testQUICConfig)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup

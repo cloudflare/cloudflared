@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
@@ -605,6 +605,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	}
 
 	quicConn, err := connection.NewQUICConnection(
+		ctx,
 		quicConfig,
 		edgeAddr,
 		e.edgeBindAddr,

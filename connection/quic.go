@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lucas-clemente/quic-go"
 	"github.com/pkg/errors"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -67,6 +67,7 @@ type QUICConnection struct {
 
 // NewQUICConnection returns a new instance of QUICConnection.
 func NewQUICConnection(
+	ctx context.Context,
 	quicConfig *quic.Config,
 	edgeAddr net.Addr,
 	localAddr net.IP,
@@ -83,7 +84,7 @@ func NewQUICConnection(
 		return nil, err
 	}
 
-	session, err := quic.Dial(udpConn, edgeAddr, edgeAddr.String(), tlsConfig, quicConfig)
+	session, err := quic.Dial(ctx, udpConn, edgeAddr, tlsConfig, quicConfig)
 	if err != nil {
 		// close the udp server socket in case of error connecting to the edge
 		udpConn.Close()

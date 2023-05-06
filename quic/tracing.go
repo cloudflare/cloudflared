@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/lucas-clemente/quic-go/logging"
+	"github.com/quic-go/quic-go/logging"
 	"github.com/rs/zerolog"
 )
 
@@ -21,14 +21,15 @@ type tracerConfig struct {
 	index uint8
 }
 
-func NewClientTracer(logger *zerolog.Logger, index uint8) logging.Tracer {
-	return &tracer{
+func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
+	t := &tracer{
 		logger: logger,
 		config: &tracerConfig{
 			isClient: true,
 			index:    index,
 		},
 	}
+	return t.TracerForConnection
 }
 
 func NewServerTracer(logger *zerolog.Logger) logging.Tracer {
@@ -47,7 +48,10 @@ func (t *tracer) TracerForConnection(_ctx context.Context, _p logging.Perspectiv
 	return newConnTracer(newServiceCollector())
 }
 
-func (*tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {}
+func (*tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {
+}
+func (*tracer) SentVersionNegotiationPacket(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
+}
 func (*tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
 }
 
@@ -82,7 +86,7 @@ func (ct *connTracer) ReceivedPacket(hdr *logging.ExtendedHeader, size logging.B
 	ct.metricsCollector.receivedPackets(size)
 }
 
-func (ct *connTracer) BufferedPacket(pt logging.PacketType) {
+func (ct *connTracer) BufferedPacket(pt logging.PacketType, size logging.ByteCount) {
 	ct.metricsCollector.bufferedPackets(pt)
 }
 
@@ -110,10 +114,22 @@ func (ct *connTracer) ReceivedTransportParameters(parameters *logging.TransportP
 func (ct *connTracer) RestoredTransportParameters(parameters *logging.TransportParameters) {
 }
 
-func (ct *connTracer) ReceivedVersionNegotiationPacket(header *logging.Header, numbers []logging.VersionNumber) {
+func (ct *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+}
+
+func (ct *connTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+}
+
+func (ct *connTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
 }
 
 func (ct *connTracer) ReceivedRetry(header *logging.Header) {
+}
+
+func (ct *connTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
+}
+
+func (ct *connTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, frames []logging.Frame) {
 }
 
 func (ct *connTracer) AcknowledgedPacket(level logging.EncryptionLevel, number logging.PacketNumber) {

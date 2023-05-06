@@ -1,0 +1,42 @@
+run:
+linters-settings:
+  depguard:
+    type: blacklist
+    packages:
+      - github.com/marten-seemann/qtls
+      - github.com/quic-go/qtls-go1-19
+      - github.com/quic-go/qtls-go1-20
+    packages-with-error-message:
+      - github.com/marten-seemann/qtls: "importing qtls only allowed in internal/qtls"
+      - github.com/quic-go/qtls-go1-19: "importing qtls only allowed in internal/qtls"
+      - github.com/quic-go/qtls-go1-20: "importing qtls only allowed in internal/qtls"
+  misspell:
+    ignore-words:
+      - ect
+
+linters:
+  disable-all: true
+  enable:
+    - asciicheck
+    - depguard
+    - exhaustive
+    - exportloopref
+    - goimports
+    - gofmt # redundant, since gofmt *should* be a no-op after gofumpt
+    - gofumpt
+    - gosimple
+    - ineffassign
+    - misspell
+    - prealloc
+    - staticcheck
+    - stylecheck
+    - unconvert
+    - unparam
+    - unused
+    - vet
+
+issues:
+  exclude-rules:
+    - path: internal/qtls
+      linters:
+        - depguard
