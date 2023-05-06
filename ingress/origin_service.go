@@ -376,6 +376,13 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerol
 			return dialContext(ctx, "unix", service.path)
 		}
 
+	// If this origin is a http service, configure the sni from the host header, if possible.
+	case *httpService:
+		if httpTransport.TLSClientConfig.ServerName == "" && service.hostHeader != "" {
+			httpTransport.TLSClientConfig.ServerName = service.hostHeader
+		}
+		httpTransport.DialContext = dialContext
+
 	// Otherwise, use the regular network config.
 	default:
 		httpTransport.DialContext = dialContext
