@@ -216,7 +216,11 @@ func (m *ManagementService) parseFilters(c *websocket.Conn, event *ClientEvent, 
 
 // Management Streaming Logs accept handler
 func (m *ManagementService) logs(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, nil)
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{
+			"*.cloudflare.com",
+		},
+	})
 	if err != nil {
 		m.log.Debug().Msgf("management handshake: %s", err.Error())
 		return
