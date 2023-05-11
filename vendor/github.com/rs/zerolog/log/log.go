@@ -3,6 +3,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 
@@ -114,13 +115,13 @@ func Log() *zerolog.Event {
 // Print sends a log event using debug level and no extra field.
 // Arguments are handled in the manner of fmt.Print.
 func Print(v ...interface{}) {
-	Logger.Print(v...)
+	Logger.Debug().CallerSkipFrame(1).Msg(fmt.Sprint(v...))
 }
 
 // Printf sends a log event using debug level and no extra field.
 // Arguments are handled in the manner of fmt.Printf.
 func Printf(format string, v ...interface{}) {
-	Logger.Printf(format, v...)
+	Logger.Debug().CallerSkipFrame(1).Msgf(format, v...)
 }
 
 // Ctx returns the Logger associated with the ctx. If no logger

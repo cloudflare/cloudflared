@@ -7,10 +7,13 @@ Thumbs.db
 *.iml
 *.so
 coverage.*
+go.work
+go.work.sum
 
 gen/
 
 /example/fib/fib
+/example/fib/traces.txt
 /example/jaeger/jaeger
 /example/namedtracer/namedtracer
 /example/opencensus/opencensus

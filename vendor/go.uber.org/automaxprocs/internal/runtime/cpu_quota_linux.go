@@ -18,11 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build linux
 // +build linux
 
 package runtime
 
 import (
+	"errors"
 	"math"
 
 	cg "go.uber.org/automaxprocs/internal/cgroups"
@@ -31,7 +33,7 @@ import (
 // CPUQuotaToGOMAXPROCS converts the CPU quota applied to the calling process
 // to a valid GOMAXPROCS value.
 func CPUQuotaToGOMAXPROCS(minValue int) (int, CPUQuotaStatus, error) {
-	cgroups, err := cg.NewCGroupsForCurrentProcess()
+	cgroups, err := newQueryer()
 	if err != nil {
 		return -1, CPUQuotaUndefined, err
 	}
@@ -46,4 +48,24 @@ func CPUQuotaToGOMAXPROCS(minValue int) (int, CPUQuotaStatus, error) {
 		return minValue, CPUQuotaMinUsed, nil
 	}
 	return maxProcs, CPUQuotaUsed, nil
+}
+
+type queryer interface {
+	CPUQuota() (float64, bool, error)
+}
+
+var (
+	_newCgroups2 = cg.NewCGroups2ForCurrentProcess
+	_newCgroups  = cg.NewCGroupsForCurrentProcess
+)
+
+func newQueryer() (queryer, error) {
+	cgroups, err := _newCgroups2()
+	if err == nil {
+		return cgroups, nil
+	}
+	if errors.Is(err, cg.ErrNotV2) {
+		return _newCgroups()
+	}
+	return nil, err
 }

@@ -18,16 +18,17 @@ Find out [who uses zerolog](https://github.com/rs/zerolog/wiki/Who-uses-zerolog)
 
 ## Features
 
-* Blazing fast
-* Low to zero allocation
-* Level logging
-* Sampling
-* Hooks
-* Contextual fields
+* [Blazing fast](#benchmarks)
+* [Low to zero allocation](#benchmarks)
+* [Leveled logging](#leveled-logging)
+* [Sampling](#log-sampling)
+* [Hooks](#hooks)
+* [Contextual fields](#contextual-logging)
 * `context.Context` integration
-* `net/http` helpers
-* JSON and CBOR encoding formats
-* Pretty logging for development
+* [Integration with `net/http`](#integration-with-nethttp)
+* [JSON and CBOR encoding formats](#binary-encoding)
+* [Pretty logging for development](#pretty-logging)
+* [Error Logging (with optional Stacktrace)](#error-logging)
 
 ## Installation
 
@@ -51,8 +52,6 @@ import (
 
 func main() {
     // UNIX Time is faster and smaller than most timestamps
-    // If you set zerolog.TimeFieldFormat to an empty string,
-    // logs will write with UNIX time
     zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
     log.Print("hello world")
@@ -205,6 +204,80 @@ func main() {
 // Output: {"time":1494567715,"foo":"bar"}
 ```
 
+### Error Logging
+
+You can log errors using the `Err` method
+
+```go
+package main
+
+import (
+	"errors"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+)
+
+func main() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+
+	err := errors.New("seems we have an error here")
+	log.Error().Err(err).Msg("")
+}
+
+// Output: {"level":"error","error":"seems we have an error here","time":1609085256}
+```
+
+> The default field name for errors is `error`, you can change this by setting `zerolog.ErrorFieldName` to meet your needs.
+
+#### Error Logging with Stacktrace
+
+Using `github.com/pkg/errors`, you can add a formatted stacktrace to your errors. 
+
+```go
+package main
+
+import (
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog/pkgerrors"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+)
+
+func main() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
+
+	err := outer()
+	log.Error().Stack().Err(err).Msg("")
+}
+
+func inner() error {
+	return errors.New("seems we have an error here")
+}
+
+func middle() error {
+	err := inner()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func outer() error {
+	err := middle()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Output: {"level":"error","stack":[{"func":"inner","line":"20","source":"errors.go"},{"func":"middle","line":"24","source":"errors.go"},{"func":"outer","line":"32","source":"errors.go"},{"func":"main","line":"15","source":"errors.go"},{"func":"main","line":"204","source":"proc.go"},{"func":"goexit","line":"1374","source":"asm_amd64.s"}],"error":"seems we have an error here","time":1609086683}
+```
+
+> zerolog.ErrorStackMarshaler must be set in order for the stack to output anything.
+
 #### Logging Fatal Messages
 
 ```go
@@ -234,6 +307,7 @@ func main() {
 ```
 
 > NOTE: Using `Msgf` generates one allocation even when the logger is disabled.
+
 
 ### Create logger instance to manage different outputs
 
@@ -325,6 +399,8 @@ log.Logger = log.With().Str("foo", "bar").Logger()
 
 ### Add file and line number to log
 
+Equivalent of `Llongfile`:
+
 ```go
 log.Logger = log.With().Caller().Logger()
 log.Info().Msg("hello world")
@@ -332,10 +408,29 @@ log.Info().Msg("hello world")
 // Output: {"level": "info", "message": "hello world", "caller": "/go/src/your_project/some_file:21"}
 ```
 
+Equivalent of `Lshortfile`:
+
+```go
+zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
+    short := file
+    for i := len(file) - 1; i > 0; i-- {
+        if file[i] == '/' {
+            short = file[i+1:]
+            break
+        }
+    }
+    file = short
+    return file + ":" + strconv.Itoa(line)
+}
+log.Logger = log.With().Caller().Logger()
+log.Info().Msg("hello world")
+
+// Output: {"level": "info", "message": "hello world", "caller": "some_file:21"}
+```
 
 ### Thread-safe, lock-free, non-blocking writer
 
-If your writer might be slow or not thread-safe and you need your log producers to never get slowed down by a slow writer, you can use a `diode.Writer` as follow:
+If your writer might be slow or not thread-safe and you need your log producers to never get slowed down by a slow writer, you can use a `diode.Writer` as follows:
 
 ```go
 wr := diode.NewWriter(os.Stdout, 1000, 10*time.Millisecond, func(missed int) {
@@ -486,11 +581,11 @@ func main() {
 // Output (Line 1: Console; Line 2: Stdout)
 // 12:36PM INF Hello World!
 // {"level":"info","time":"2019-11-07T12:36:38+03:00","message":"Hello World!"}
-``` 
+```
 
 ## Global Settings
 
-Some settings can be changed and will by applied to all loggers:
+Some settings can be changed and will be applied to all loggers:
 
 * `log.Logger`: You can set this value to customize the global logger (the one used by package level methods).
 * `zerolog.SetGlobalLevel`: Can raise the minimum level of all loggers. Call this with `zerolog.Disabled` to disable logging altogether (quiet mode).
@@ -517,6 +612,7 @@ Some settings can be changed and will by applied to all loggers:
 ### Advanced Fields
 
 * `Err`: Takes an `error` and renders it as a string using the `zerolog.ErrorFieldName` field name.
+* `Func`: Run a `func` only if the level is enabled.
 * `Timestamp`: Inserts a timestamp field with `zerolog.TimestampFieldName` field name, formatted using `zerolog.TimeFieldFormat`.
 * `Time`: Adds a field with time formatted with `zerolog.TimeFieldFormat`.
 * `Dur`: Adds a field with `time.Duration`.
@@ -529,7 +625,7 @@ Most fields are also available in the slice format (`Strs` for `[]string`, `Errs
 
 ## Binary Encoding
 
-In addition to the default JSON encoding, `zerolog` can produce binary logs using [CBOR](http://cbor.io) encoding. The choice of encoding can be decided at compile time using the build tag `binary_log` as follows:
+In addition to the default JSON encoding, `zerolog` can produce binary logs using [CBOR](https://cbor.io) encoding. The choice of encoding can be decided at compile time using the build tag `binary_log` as follows:
 
 ```bash
 go build -tags binary_log .
@@ -541,6 +637,8 @@ with zerolog library is [CSD](https://github.com/toravir/csd/).
 ## Related Projects
 
 * [grpc-zerolog](https://github.com/cheapRoc/grpc-zerolog): Implementation of `grpclog.LoggerV2` interface using `zerolog`
+* [overlog](https://github.com/Trendyol/overlog): Implementation of `Mapped Diagnostic Context` interface using `zerolog`
+* [zerologr](https://github.com/go-logr/zerologr): Implementation of `logr.LogSink` interface using `zerolog`
 
 ## Benchmarks
 

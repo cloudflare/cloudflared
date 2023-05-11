@@ -1,7 +1,6 @@
 package dnsserver
 
 import (
-	"flag"
 	"fmt"
 	"net"
 	"time"
@@ -17,12 +16,7 @@ import (
 
 const serverType = "dns"
 
-// Any flags defined here, need to be namespaced to the serverType other
-// wise they potentially clash with other server types.
 func init() {
-	flag.StringVar(&Port, serverType+".port", DefaultPort, "Default port")
-	flag.StringVar(&Port, "p", DefaultPort, "Default port")
-
 	caddy.RegisterServerType(serverType, caddy.ServerType{
 		Directives: func() []string { return Directives },
 		DefaultInput: func() caddy.Input {
@@ -147,7 +141,12 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 		c.ListenHosts = c.firstConfigInBlock.ListenHosts
 		c.Debug = c.firstConfigInBlock.Debug
 		c.Stacktrace = c.firstConfigInBlock.Stacktrace
-		c.TLSConfig = c.firstConfigInBlock.TLSConfig
+
+		// Fork TLSConfig for each encrypted connection
+		c.TLSConfig = c.firstConfigInBlock.TLSConfig.Clone()
+		c.ReadTimeout = c.firstConfigInBlock.ReadTimeout
+		c.WriteTimeout = c.firstConfigInBlock.WriteTimeout
+		c.IdleTimeout = c.firstConfigInBlock.IdleTimeout
 		c.TsigSecret = c.firstConfigInBlock.TsigSecret
 	}
 
@@ -221,7 +220,8 @@ func (c *Config) AddPlugin(m plugin.Plugin) {
 }
 
 // registerHandler adds a handler to a site's handler registration. Handlers
-//  use this to announce that they exist to other plugin.
+//
+//	use this to announce that they exist to other plugin.
 func (c *Config) registerHandler(h plugin.Handler) {
 	if c.registry == nil {
 		c.registry = make(map[string]plugin.Handler)

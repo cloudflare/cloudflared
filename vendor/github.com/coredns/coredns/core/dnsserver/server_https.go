@@ -75,9 +75,9 @@ func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 	}
 
 	srv := &http.Server{
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  s.readTimeout,
+		WriteTimeout: s.writeTimeout,
+		IdleTimeout:  s.idleTimeout,
 		ErrorLog:     stdlog.New(&loggerAdapter{}, "", 0),
 	}
 	sh := &ServerHTTPS{

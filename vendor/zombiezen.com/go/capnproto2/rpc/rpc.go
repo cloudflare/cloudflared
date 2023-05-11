@@ -133,7 +133,7 @@ func (c *Conn) Done() <-chan struct{} {
 func (c *Conn) Err() error {
 	c.stateMu.RLock()
 	var err error
-	if c.state != connDead {
+	if c.state == connDead {
 		err = c.closeErr
 	}
 	c.stateMu.RUnlock()

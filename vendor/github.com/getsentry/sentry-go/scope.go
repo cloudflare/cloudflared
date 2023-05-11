@@ -31,7 +31,6 @@ type Scope struct {
 	extra       map[string]interface{}
 	fingerprint []string
 	level       Level
-	transaction string
 	request     *http.Request
 	// requestBody holds a reference to the original request.Body.
 	requestBody interface {
@@ -275,22 +274,6 @@ func (scope *Scope) SetLevel(level Level) {
 	scope.level = level
 }
 
-// SetTransaction sets the transaction name for the current transaction.
-func (scope *Scope) SetTransaction(name string) {
-	scope.mu.Lock()
-	defer scope.mu.Unlock()
-
-	scope.transaction = name
-}
-
-// Transaction returns the transaction name for the current transaction.
-func (scope *Scope) Transaction() (name string) {
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	return scope.transaction
-}
-
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
@@ -312,7 +295,6 @@ func (scope *Scope) Clone() *Scope {
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
 	clone.level = scope.level
-	clone.transaction = scope.transaction
 	clone.request = scope.request
 	clone.requestBody = scope.requestBody
 	clone.eventProcessors = scope.eventProcessors
@@ -393,10 +375,6 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if scope.level != "" {
 		event.Level = scope.level
-	}
-
-	if scope.transaction != "" {
-		event.Transaction = scope.transaction
 	}
 
 	if event.Request == nil && scope.request != nil {

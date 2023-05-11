@@ -128,7 +128,7 @@ func (b *LRUCache) touchEntry(e *entry) {
 	b.lruList.MoveToFront(&e.element)
 }
 
-// Add an item to the cache overwriting existing one if it
+// SetNow adds an item to the cache overwriting existing one if it
 // exists. Allows specifing current time required to expire an item
 // when no more slots are used. O(log(n)) if expiry is set, O(1) when
 // clear.
@@ -157,7 +157,7 @@ func (b *LRUCache) SetNow(key string, value interface{}, expire time.Time, now t
 	b.insertEntry(e)
 }
 
-// Add an item to the cache overwriting existing one if it
+// Set adds an item to the cache overwriting existing one if it
 // exists. O(log(n)) if expiry is set, O(1) when clear.
 func (b *LRUCache) Set(key string, value interface{}, expire time.Time) {
 	b.SetNow(key, value, expire, time.Time{})
@@ -177,7 +177,7 @@ func (b *LRUCache) Get(key string) (v interface{}, ok bool) {
 	return e.value, true
 }
 
-// Get a key from the cache, possibly stale. Don't modify its LRU score. O(1)
+// GetQuiet gets a key from the cache, possibly stale. Don't modify its LRU score. O(1)
 func (b *LRUCache) GetQuiet(key string) (v interface{}, ok bool) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -190,13 +190,13 @@ func (b *LRUCache) GetQuiet(key string) (v interface{}, ok bool) {
 	return e.value, true
 }
 
-// Get a key from the cache, make sure it's not stale. Update its
+// GetNotStale gets a key from the cache, make sure it's not stale. Update its
 // LRU score. O(log(n)) if the item is expired.
 func (b *LRUCache) GetNotStale(key string) (value interface{}, ok bool) {
 	return b.GetNotStaleNow(key, time.Now())
 }
 
-// Get a key from the cache, make sure it's not stale. Update its
+// GetNotStaleNow gets a key from the cache, make sure it's not stale. Update its
 // LRU score. O(log(n)) if the item is expired.
 func (b *LRUCache) GetNotStaleNow(key string, now time.Time) (value interface{}, ok bool) {
 	b.lock.Lock()
@@ -219,13 +219,13 @@ func (b *LRUCache) GetNotStaleNow(key string, now time.Time) (value interface{},
 	return e.value, true
 }
 
-// Get a key from the cache, possibly stale. Update its LRU
+// GetStale gets a key from the cache, possibly stale. Update its LRU
 // score. O(1) always.
 func (b *LRUCache) GetStale(key string) (value interface{}, ok, expired bool) {
 	return b.GetStaleNow(key, time.Now())
 }
 
-// Get a key from the cache, possibly stale. Update its LRU
+// GetStaleNow gets a key from the cache, possibly stale. Update its LRU
 // score. O(1) always.
 func (b *LRUCache) GetStaleNow(key string, now time.Time) (value interface{}, ok, expired bool) {
 	b.lock.Lock()
@@ -240,7 +240,7 @@ func (b *LRUCache) GetStaleNow(key string, now time.Time) (value interface{}, ok
 	return e.value, true, e.expire.Before(now)
 }
 
-// Get and remove a key from the cache. O(log(n)) if the item is using expiry, O(1) otherwise.
+// Del gets and remove a key from the cache. O(log(n)) if the item is using expiry, O(1) otherwise.
 func (b *LRUCache) Del(key string) (v interface{}, ok bool) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -306,7 +306,7 @@ func (b *LRUCache) Len() int {
 	return b.lruList.Len()
 }
 
-// Get the total capacity of the LRU
+// Capacity gets the total capacity of the LRU
 func (b *LRUCache) Capacity() int {
 	// yes. this stupid thing requires locking
 	b.lock.Lock()

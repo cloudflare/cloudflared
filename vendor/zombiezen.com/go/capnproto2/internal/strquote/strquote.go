@@ -43,7 +43,7 @@ func Append(buf []byte, s []byte) []byte {
 }
 
 func needsEscape(b byte) bool {
-	return b < 0x20 || b >= 0x7f
+	return b < 0x20 || b >= 0x7f || b == '\'' || b == '"' || b == '\\'
 }
 
 func hexDigit(b byte) byte {

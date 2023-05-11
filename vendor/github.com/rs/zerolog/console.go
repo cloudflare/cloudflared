@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mattn/go-colorable"
 )
 
 const (
@@ -57,6 +60,12 @@ type ConsoleWriter struct {
 	// PartsOrder defines the order of parts in output.
 	PartsOrder []string
 
+	// PartsExclude defines parts to not display in output.
+	PartsExclude []string
+
+	// FieldsExclude defines contextual fields to not display in output.
+	FieldsExclude []string
+
 	FormatTimestamp     Formatter
 	FormatLevel         Formatter
 	FormatCaller        Formatter
@@ -65,6 +74,8 @@ type ConsoleWriter struct {
 	FormatFieldValue    Formatter
 	FormatErrFieldName  Formatter
 	FormatErrFieldValue Formatter
+
+	FormatExtra func(map[string]interface{}, *bytes.Buffer) error
 }
 
 // NewConsoleWriter creates and initializes a new ConsoleWriter.
@@ -79,11 +90,21 @@ func NewConsoleWriter(options ...func(w *ConsoleWriter)) ConsoleWriter {
 		opt(&w)
 	}
 
+	// Fix color on Windows
+	if w.Out == os.Stdout || w.Out == os.Stderr {
+		w.Out = colorable.NewColorable(w.Out.(*os.File))
+	}
+
 	return w
 }
 
 // Write transforms the JSON input with formatters and appends to w.Out.
 func (w ConsoleWriter) Write(p []byte) (n int, err error) {
+	// Fix color on Windows
+	if w.Out == os.Stdout || w.Out == os.Stderr {
+		w.Out = colorable.NewColorable(w.Out.(*os.File))
+	}
+
 	if w.PartsOrder == nil {
 		w.PartsOrder = consoleDefaultPartsOrder()
 	}
@@ -109,10 +130,18 @@ func (w ConsoleWriter) Write(p []byte) (n int, err error) {
 
 	w.writeFields(evt, buf)
 
+	if w.FormatExtra != nil {
+		err = w.FormatExtra(evt, buf)
+		if err != nil {
+			return n, err
+		}
+	}
+
 	err = buf.WriteByte('\n')
 	if err != nil {
 		return n, err
 	}
+
 	_, err = buf.WriteTo(w.Out)
 	return len(p), err
 }
@@ -121,6 +150,17 @@ func (w ConsoleWriter) Write(p []byte) (n int, err error) {
 func (w ConsoleWriter) writeFields(evt map[string]interface{}, buf *bytes.Buffer) {
 	var fields = make([]string, 0, len(evt))
 	for field := range evt {
+		var isExcluded bool
+		for _, excluded := range w.FieldsExclude {
+			if field == excluded {
+				isExcluded = true
+				break
+			}
+		}
+		if isExcluded {
+			continue
+		}
+
 		switch field {
 		case LevelFieldName, TimestampFieldName, MessageFieldName, CallerFieldName:
 			continue
@@ -129,7 +169,8 @@ func (w ConsoleWriter) writeFields(evt map[string]interface{}, buf *bytes.Buffer
 	}
 	sort.Strings(fields)
 
-	if len(fields) > 0 {
+	// Write space only if something has already been written to the buffer, and if there are fields.
+	if buf.Len() > 0 && len(fields) > 0 {
 		buf.WriteByte(' ')
 	}
 
@@ -190,7 +231,7 @@ func (w ConsoleWriter) writeFields(evt map[string]interface{}, buf *bytes.Buffer
 		case json.Number:
 			buf.WriteString(fv(fValue))
 		default:
-			b, err := json.Marshal(fValue)
+			b, err := InterfaceMarshalFunc(fValue)
 			if err != nil {
 				fmt.Fprintf(buf, colorize("[error: %v]", colorRed, w.NoColor), err)
 			} else {
@@ -207,6 +248,14 @@ func (w ConsoleWriter) writeFields(evt map[string]interface{}, buf *bytes.Buffer
 // writePart appends a formatted part to buf.
 func (w ConsoleWriter) writePart(buf *bytes.Buffer, evt map[string]interface{}, p string) {
 	var f Formatter
+
+	if w.PartsExclude != nil && len(w.PartsExclude) > 0 {
+		for _, exclude := range w.PartsExclude {
+			if exclude == p {
+				return
+			}
+		}
+	}
 
 	switch p {
 	case LevelFieldName:
@@ -244,10 +293,10 @@ func (w ConsoleWriter) writePart(buf *bytes.Buffer, evt map[string]interface{}, 
 	var s = f(evt[p])
 
 	if len(s) > 0 {
-		buf.WriteString(s)
-		if p != w.PartsOrder[len(w.PartsOrder)-1] { // Skip space for last part
-			buf.WriteByte(' ')
+		if buf.Len() > 0 {
+			buf.WriteByte(' ') // Write space only if not the first part
 		}
+		buf.WriteString(s)
 	}
 }
 
@@ -288,27 +337,31 @@ func consoleDefaultFormatTimestamp(timeFormat string, noColor bool) Formatter {
 		t := "<nil>"
 		switch tt := i.(type) {
 		case string:
-			ts, err := time.Parse(TimeFieldFormat, tt)
+			ts, err := time.ParseInLocation(TimeFieldFormat, tt, time.Local)
 			if err != nil {
 				t = tt
 			} else {
-				t = ts.Format(timeFormat)
+				t = ts.Local().Format(timeFormat)
 			}
 		case json.Number:
 			i, err := tt.Int64()
 			if err != nil {
 				t = tt.String()
 			} else {
-				var sec, nsec int64 = i, 0
+				var sec, nsec int64
+
 				switch TimeFieldFormat {
-				case TimeFormatUnixMs:
-					nsec = int64(time.Duration(i) * time.Millisecond)
-					sec = 0
+				case TimeFormatUnixNano:
+					sec, nsec = 0, i
 				case TimeFormatUnixMicro:
-					nsec = int64(time.Duration(i) * time.Microsecond)
-					sec = 0
+					sec, nsec = 0, int64(time.Duration(i)*time.Microsecond)
+				case TimeFormatUnixMs:
+					sec, nsec = 0, int64(time.Duration(i)*time.Millisecond)
+				default:
+					sec, nsec = i, 0
 				}
-				ts := time.Unix(sec, nsec).UTC()
+
+				ts := time.Unix(sec, nsec)
 				t = ts.Format(timeFormat)
 			}
 		}
@@ -321,22 +374,22 @@ func consoleDefaultFormatLevel(noColor bool) Formatter {
 		var l string
 		if ll, ok := i.(string); ok {
 			switch ll {
-			case "trace":
+			case LevelTraceValue:
 				l = colorize("TRC", colorMagenta, noColor)
-			case "debug":
+			case LevelDebugValue:
 				l = colorize("DBG", colorYellow, noColor)
-			case "info":
+			case LevelInfoValue:
 				l = colorize("INF", colorGreen, noColor)
-			case "warn":
+			case LevelWarnValue:
 				l = colorize("WRN", colorRed, noColor)
-			case "error":
+			case LevelErrorValue:
 				l = colorize(colorize("ERR", colorRed, noColor), colorBold, noColor)
-			case "fatal":
+			case LevelFatalValue:
 				l = colorize(colorize("FTL", colorRed, noColor), colorBold, noColor)
-			case "panic":
+			case LevelPanicValue:
 				l = colorize(colorize("PNC", colorRed, noColor), colorBold, noColor)
 			default:
-				l = colorize("???", colorBold, noColor)
+				l = colorize(ll, colorBold, noColor)
 			}
 		} else {
 			if i == nil {
@@ -356,10 +409,10 @@ func consoleDefaultFormatCaller(noColor bool) Formatter {
 			c = cc
 		}
 		if len(c) > 0 {
-			cwd, err := os.Getwd()
-			if err == nil {
-				c = strings.TrimPrefix(c, cwd)
-				c = strings.TrimPrefix(c, "/")
+			if cwd, err := os.Getwd(); err == nil {
+				if rel, err := filepath.Rel(cwd, c); err == nil {
+					c = rel
+				}
 			}
 			c = colorize(c, colorBold, noColor) + colorize(" >", colorCyan, noColor)
 		}
@@ -386,7 +439,7 @@ func consoleDefaultFormatFieldValue(i interface{}) string {
 
 func consoleDefaultFormatErrFieldName(noColor bool) Formatter {
 	return func(i interface{}) string {
-		return colorize(fmt.Sprintf("%s=", i), colorRed, noColor)
+		return colorize(fmt.Sprintf("%s=", i), colorCyan, noColor)
 	}
 }
 

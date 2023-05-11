@@ -42,7 +42,7 @@ though support for this configuration is best-effort.
 $ go get github.com/getsentry/sentry-go@latest
 ```
 
-Check out the [list of released versions](https://pkg.go.dev/github.com/getsentry/sentry-go?tab=versions).
+Check out the [list of released versions](https://github.com/getsentry/sentry-go/releases).
 
 ## Configuration
 
@@ -62,9 +62,9 @@ More on this in the [Configuration section of the official Sentry Go SDK documen
 
 The SDK supports reporting errors and tracking application performance.
 
-To get started, have a look at one of our [examples](example/):
-- [Basic error instrumentation](example/basic/main.go)
-- [Error and tracing for HTTP servers](example/http/main.go)
+To get started, have a look at one of our [examples](_examples/):
+- [Basic error instrumentation](_examples/basic/main.go)
+- [Error and tracing for HTTP servers](_examples/http/main.go)
 
 We also provide a [complete API reference](https://pkg.go.dev/github.com/getsentry/sentry-go).
 
@@ -96,7 +96,7 @@ checkout the official documentation:
 ## License
 
 Licensed under
-[The 2-Clause BSD License](https://opensource.org/licenses/BSD-2-Clause), see
+[The MIT License](https://opensource.org/licenses/mit/), see
 [`LICENSE`](LICENSE).
 
 ## Community

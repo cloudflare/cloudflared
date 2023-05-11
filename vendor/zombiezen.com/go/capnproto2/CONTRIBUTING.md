@@ -1,6 +1,12 @@
 # How to contribute
 
-We'd love to accept your patches and contributions to this project. There are a
+As of 2020-09-13, Ross Light, the primary maintainer, does not have enough time
+to fix issues for this project or continue feature development. He can review
+PRs to fix issues, answer questions, or opine on discussions, but he will not
+address new issues. If you're interested in maintaining this project, please
+reach out to Ross at ross@zombiezen.com. Thanks!
+
+That said, we'd be happy to accept your patches to this project. There are a
 just a few small guidelines you need to follow.
 
 ## Code contributions

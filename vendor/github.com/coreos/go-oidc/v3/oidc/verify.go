@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	jose "github.com/go-jose/go-jose/v3"
 	"golang.org/x/oauth2"
-	jose "gopkg.in/square/go-jose.v2"
 )
 
 const (

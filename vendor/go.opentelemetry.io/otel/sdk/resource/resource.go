@@ -17,7 +17,6 @@ package resource // import "go.opentelemetry.io/otel/sdk/resource"
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"go.opentelemetry.io/otel"
@@ -51,17 +50,8 @@ func New(ctx context.Context, opts ...Option) (*Resource, error) {
 		cfg = opt.apply(cfg)
 	}
 
-	resource, err := Detect(ctx, cfg.detectors...)
-
-	var err2 error
-	resource, err2 = Merge(resource, &Resource{schemaURL: cfg.schemaURL})
-	if err == nil {
-		err = err2
-	} else if err2 != nil {
-		err = fmt.Errorf("detecting resources: %s", []string{err.Error(), err2.Error()})
-	}
-
-	return resource, err
+	r := &Resource{schemaURL: cfg.schemaURL}
+	return r, detect(ctx, r, cfg.detectors)
 }
 
 // NewWithAttributes creates a resource from attrs and associates the resource with a
@@ -129,6 +119,7 @@ func (r *Resource) Attributes() []attribute.KeyValue {
 	return r.attrs.ToSlice()
 }
 
+// SchemaURL returns the schema URL associated with Resource r.
 func (r *Resource) SchemaURL() string {
 	if r == nil {
 		return ""
@@ -179,13 +170,14 @@ func Merge(a, b *Resource) (*Resource, error) {
 
 	// Merge the schema URL.
 	var schemaURL string
-	if a.schemaURL == "" {
+	switch true {
+	case a.schemaURL == "":
 		schemaURL = b.schemaURL
-	} else if b.schemaURL == "" {
+	case b.schemaURL == "":
 		schemaURL = a.schemaURL
-	} else if a.schemaURL == b.schemaURL {
+	case a.schemaURL == b.schemaURL:
 		schemaURL = a.schemaURL
-	} else {
+	default:
 		return Empty(), errMergeConflictSchemaURL
 	}
 
@@ -194,7 +186,7 @@ func Merge(a, b *Resource) (*Resource, error) {
 	mi := attribute.NewMergeIterator(b.Set(), a.Set())
 	combine := make([]attribute.KeyValue, 0, a.Len()+b.Len())
 	for mi.Next() {
-		combine = append(combine, mi.Label())
+		combine = append(combine, mi.Attribute())
 	}
 	merged := NewWithAttributes(schemaURL, combine...)
 	return merged, nil

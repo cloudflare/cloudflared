@@ -199,7 +199,7 @@ func (c ControlHandler) HandleClose(h ws.Header) error {
 	if err != nil {
 		return err
 	}
-	if err = w.Flush(); err != nil {
+	if err := w.Flush(); err != nil {
 		return err
 	}
 	return ClosedError{

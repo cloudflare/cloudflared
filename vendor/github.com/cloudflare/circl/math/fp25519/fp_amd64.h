@@ -99,6 +99,7 @@
 // Uses: AX, DX, R8-R15, FLAGS
 // Instr: x86_64, bmi2, adx
 #define integerMulAdx(z,x,y) \
+    MOVL    $0,R15; \
     MOVQ   0+y, DX;       XORL  AX,  AX; \
     MULXQ  0+x, AX,  R8;  MOVQ  AX, 0+z; \
     MULXQ  8+x, AX,  R9;  ADCXQ AX,  R8; \

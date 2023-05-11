@@ -22,11 +22,11 @@ func (k *Key) clamp(in *Key) *Key {
 // isValidPubKey verifies if the public key is not a low-order point.
 func (k *Key) isValidPubKey() bool {
 	fp.Modp((*fp.Elt)(k))
-	isLowOrder := false
+	var isLowOrder int
 	for _, P := range lowOrderPoints {
-		isLowOrder = isLowOrder || subtle.ConstantTimeCompare(P[:], k[:]) != 0
+		isLowOrder |= subtle.ConstantTimeCompare(P[:], k[:])
 	}
-	return !isLowOrder
+	return isLowOrder == 0
 }
 
 // KeyGen obtains a public key given a secret key.

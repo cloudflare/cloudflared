@@ -35,6 +35,7 @@ issues:
   exclude-rules:
     - path: _test\.go
       linters:
+        - goconst
         - prealloc
     - path: _test\.go
       text: "G306:"

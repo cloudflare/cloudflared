@@ -33,7 +33,8 @@ func DynamicSamplingContextFromHeader(header []byte) (DynamicSamplingContext, er
 
 	return DynamicSamplingContext{
 		Entries: entries,
-		Frozen:  true,
+		// If there's at least one Sentry value, we consider the DSC frozen
+		Frozen: len(entries) > 0,
 	}, nil
 }
 
@@ -43,6 +44,14 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	hub := hubFromContext(span.Context())
 	scope := hub.Scope()
 	client := hub.Client()
+
+	if client == nil || scope == nil {
+		return DynamicSamplingContext{
+			Entries: map[string]string{},
+			Frozen:  false,
+		}
+	}
+
 	options := client.Options()
 
 	if traceID := span.TraceID.String(); traceID != "" {
@@ -66,8 +75,8 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 
 	// Only include the transaction name if it's of good quality (not empty and not SourceURL)
 	if span.Source != "" && span.Source != SourceURL {
-		if transactionName := scope.Transaction(); transactionName != "" {
-			entries["transaction"] = transactionName
+		if span.IsTransaction() {
+			entries["transaction"] = span.Name
 		}
 	}
 

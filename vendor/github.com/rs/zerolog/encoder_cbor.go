@@ -14,6 +14,13 @@ var (
 	enc = cbor.Encoder{}
 )
 
+func init() {
+	// using closure to reflect the changes at runtime.
+	cbor.JSONMarshalFunc = func(v interface{}) ([]byte, error) {
+		return InterfaceMarshalFunc(v)
+	}
+}
+
 func appendJSON(dst []byte, j []byte) []byte {
 	return cbor.AppendEmbeddedJSON(dst, j)
 }

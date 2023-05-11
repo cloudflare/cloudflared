@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -140,8 +139,10 @@ type ClientOptions struct {
 	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
 	// Use it to mutate the event or return nil to discard the event.
-	// See EventProcessor if you need to mutate transactions.
 	BeforeSend func(event *Event, hint *EventHint) *Event
+	// BeforeSendTransaction is called before transaction events are sent to Sentry.
+	// Use it to mutate the transaction or return nil to discard the transaction.
+	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
 	// Integrations to be installed on the current Client, receives default
@@ -376,13 +377,13 @@ func (client Client) Options() ClientOptions {
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromMessage(message, LevelInfo)
+	event := client.EventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromException(exception, LevelError)
+	event := client.EventFromException(exception, LevelError)
 	return client.CaptureEvent(event, hint, scope)
 }
 
@@ -437,11 +438,11 @@ func (client *Client) RecoverWithContext(
 	var event *Event
 	switch err := err.(type) {
 	case error:
-		event = client.eventFromException(err, LevelFatal)
+		event = client.EventFromException(err, LevelFatal)
 	case string:
-		event = client.eventFromMessage(err, LevelFatal)
+		event = client.EventFromMessage(err, LevelFatal)
 	default:
-		event = client.eventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
+		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
 	}
 	return client.CaptureEvent(event, hint, scope)
 }
@@ -461,10 +462,11 @@ func (client *Client) Flush(timeout time.Duration) bool {
 	return client.Transport.Flush(timeout)
 }
 
-func (client *Client) eventFromMessage(message string, level Level) *Event {
+// EventFromMessage creates an event from the given message string.
+func (client *Client) EventFromMessage(message string, level Level) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
-		return client.eventFromException(err, level)
+		return client.EventFromException(err, level)
 	}
 	event := NewEvent()
 	event.Level = level
@@ -481,41 +483,17 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 	return event
 }
 
-func (client *Client) eventFromException(exception error, level Level) *Event {
+// EventFromException creates a new Sentry event from the given `error` instance.
+func (client *Client) EventFromException(exception error, level Level) *Event {
+	event := NewEvent()
+	event.Level = level
+
 	err := exception
 	if err == nil {
 		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
 	}
 
-	event := NewEvent()
-	event.Level = level
-
-	for i := 0; i < client.options.MaxErrorDepth && err != nil; i++ {
-		event.Exception = append(event.Exception, Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
-		})
-		switch previous := err.(type) {
-		case interface{ Unwrap() error }:
-			err = previous.Unwrap()
-		case interface{ Cause() error }:
-			err = previous.Cause()
-		default:
-			err = nil
-		}
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	// We only add to the most recent error to avoid duplication and because the
-	// current stack is most likely unrelated to errors deeper in the chain.
-	if event.Exception[0].Stacktrace == nil {
-		event.Exception[0].Stacktrace = NewStacktrace()
-	}
-
-	// event.Exception should be sorted such that the most recent error is last.
-	reverse(event.Exception)
+	event.SetException(err, client.options.MaxErrorDepth)
 
 	return event
 }
@@ -570,11 +548,18 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return nil
 	}
 
-	// As per spec, transactions do not go through BeforeSend.
-	if event.Type != transactionType && options.BeforeSend != nil {
-		if hint == nil {
-			hint = &EventHint{}
+	// Apply beforeSend* processors
+	if hint == nil {
+		hint = &EventHint{}
+	}
+	if event.Type == transactionType && options.BeforeSendTransaction != nil {
+		// Transaction events
+		if event = options.BeforeSendTransaction(event, hint); event == nil {
+			Logger.Println("Transaction dropped due to BeforeSendTransaction callback.")
+			return nil
 		}
+	} else if event.Type != transactionType && options.BeforeSend != nil {
+		// All other events
 		if event = options.BeforeSend(event, hint); event == nil {
 			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil

@@ -15,7 +15,7 @@ var errInvalidXSRLRetryAfter = errors.New("invalid retry-after value")
 //
 // Example
 //
-//      X-Sentry-Rate-Limits: 60:transaction, 2700:default;error;security
+//	X-Sentry-Rate-Limits: 60:transaction, 2700:default;error;security
 //
 // This will rate limit transactions for the next 60 seconds and errors for the
 // next 2700 seconds.

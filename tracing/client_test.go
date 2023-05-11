@@ -132,8 +132,7 @@ func createResourceSpan(spans []*tracepb.Span) *tracepb.ResourceSpans {
 				SchemaUrl: instrumentSchemaUrl,
 			},
 		},
-		InstrumentationLibrarySpans: nil,
-		SchemaUrl:                   resourceSchemaUrl,
+		SchemaUrl: resourceSchemaUrl,
 	}
 }
 

@@ -14,6 +14,7 @@ var Directives = []string{
 	"geoip",
 	"cancel",
 	"tls",
+	"timeouts",
 	"reload",
 	"nsid",
 	"bufsize",

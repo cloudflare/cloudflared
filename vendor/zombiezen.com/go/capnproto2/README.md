@@ -8,6 +8,8 @@ go-capnproto consists of:
 - a Go package that provides runtime support
 - a Go package that implements Level 1 of the RPC protocol
 
+This project is looking for a new maintainer. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 [godoc]: https://godoc.org/zombiezen.com/go/capnproto2
 [travis]: https://travis-ci.org/capnproto/go-capnproto2
 

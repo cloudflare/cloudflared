@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -15,6 +16,9 @@ import (
 
 // transactionType is the type of a transaction event.
 const transactionType = "transaction"
+
+// eventType is the type of an error event.
+const eventType = "event"
 
 // Level marks the severity of the event.
 type Level string
@@ -169,21 +173,19 @@ func NewRequest(r *http.Request) *Request {
 	var env map[string]string
 	headers := map[string]string{}
 
-	if client := CurrentHub().Client(); client != nil {
-		if client.Options().SendDefaultPII {
-			// We read only the first Cookie header because of the specification:
-			// https://tools.ietf.org/html/rfc6265#section-5.4
-			// When the user agent generates an HTTP request, the user agent MUST NOT
-			// attach more than one Cookie header field.
-			cookies = r.Header.Get("Cookie")
+	if client := CurrentHub().Client(); client != nil && client.Options().SendDefaultPII {
+		// We read only the first Cookie header because of the specification:
+		// https://tools.ietf.org/html/rfc6265#section-5.4
+		// When the user agent generates an HTTP request, the user agent MUST NOT
+		// attach more than one Cookie header field.
+		cookies = r.Header.Get("Cookie")
 
-			for k, v := range r.Header {
-				headers[k] = strings.Join(v, ",")
-			}
+		for k, v := range r.Header {
+			headers[k] = strings.Join(v, ",")
+		}
 
-			if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-				env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
-			}
+		if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
 		}
 	} else {
 		sensitiveHeaders := getSensitiveHeaders()
@@ -206,6 +208,22 @@ func NewRequest(r *http.Request) *Request {
 	}
 }
 
+// Mechanism is the mechanism by which an exception was generated and handled.
+type Mechanism struct {
+	Type        string                 `json:"type,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	HelpLink    string                 `json:"help_link,omitempty"`
+	Handled     *bool                  `json:"handled,omitempty"`
+	Data        map[string]interface{} `json:"data,omitempty"`
+}
+
+// SetUnhandled indicates that the exception is an unhandled exception, i.e.
+// from a panic.
+func (m *Mechanism) SetUnhandled() {
+	h := false
+	m.Handled = &h
+}
+
 // Exception specifies an error that occurred.
 type Exception struct {
 	Type       string      `json:"type,omitempty"`  // used as the main issue title
@@ -213,6 +231,7 @@ type Exception struct {
 	Module     string      `json:"module,omitempty"`
 	ThreadID   string      `json:"thread_id,omitempty"`
 	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
+	Mechanism  *Mechanism  `json:"mechanism,omitempty"`
 }
 
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
@@ -224,6 +243,34 @@ type SDKMetaData struct {
 // Contains information about how the name of the transaction was determined.
 type TransactionInfo struct {
 	Source TransactionSource `json:"source,omitempty"`
+}
+
+// The DebugMeta interface is not used in Golang apps, but may be populated
+// when proxying Events from other platforms, like iOS, Android, and the
+// Web.  (See: https://develop.sentry.dev/sdk/event-payloads/debugmeta/ ).
+type DebugMeta struct {
+	SdkInfo *DebugMetaSdkInfo `json:"sdk_info,omitempty"`
+	Images  []DebugMetaImage  `json:"images,omitempty"`
+}
+
+type DebugMetaSdkInfo struct {
+	SdkName           string `json:"sdk_name,omitempty"`
+	VersionMajor      int    `json:"version_major,omitempty"`
+	VersionMinor      int    `json:"version_minor,omitempty"`
+	VersionPatchlevel int    `json:"version_patchlevel,omitempty"`
+}
+
+type DebugMetaImage struct {
+	Type        string `json:"type,omitempty"`         // all
+	ImageAddr   string `json:"image_addr,omitempty"`   // macho,elf,pe
+	ImageSize   int    `json:"image_size,omitempty"`   // macho,elf,pe
+	DebugID     string `json:"debug_id,omitempty"`     // macho,elf,pe,wasm,sourcemap
+	DebugFile   string `json:"debug_file,omitempty"`   // macho,elf,pe,wasm
+	CodeID      string `json:"code_id,omitempty"`      // macho,elf,pe,wasm
+	CodeFile    string `json:"code_file,omitempty"`    // macho,elf,pe,wasm,sourcemap
+	ImageVmaddr string `json:"image_vmaddr,omitempty"` // macho,elf,pe
+	Arch        string `json:"arch,omitempty"`         // macho,elf,pe
+	UUID        string `json:"uuid,omitempty"`         // proguard
 }
 
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.
@@ -256,6 +303,7 @@ type Event struct {
 	Modules     map[string]string      `json:"modules,omitempty"`
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
+	DebugMeta   *DebugMeta             `json:"debug_meta,omitempty"`
 
 	// The fields below are only relevant for transactions.
 
@@ -267,6 +315,44 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+}
+
+// SetException appends the unwrapped errors to the event's exception list.
+//
+// maxErrorDepth is the maximum depth of the error chain we will look
+// into while unwrapping the errors.
+func (e *Event) SetException(exception error, maxErrorDepth int) {
+	err := exception
+	if err == nil {
+		return
+	}
+
+	for i := 0; i < maxErrorDepth && err != nil; i++ {
+		e.Exception = append(e.Exception, Exception{
+			Value:      err.Error(),
+			Type:       reflect.TypeOf(err).String(),
+			Stacktrace: ExtractStacktrace(err),
+		})
+		switch previous := err.(type) {
+		case interface{ Unwrap() error }:
+			err = previous.Unwrap()
+		case interface{ Cause() error }:
+			err = previous.Cause()
+		default:
+			err = nil
+		}
+	}
+
+	// Add a trace of the current stack to the most recent error in a chain if
+	// it doesn't have a stack trace yet.
+	// We only add to the most recent error to avoid duplication and because the
+	// current stack is most likely unrelated to errors deeper in the chain.
+	if e.Exception[0].Stacktrace == nil {
+		e.Exception[0].Stacktrace = NewStacktrace()
+	}
+
+	// event.Exception should be sorted such that the most recent error is last.
+	reverse(e.Exception)
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,

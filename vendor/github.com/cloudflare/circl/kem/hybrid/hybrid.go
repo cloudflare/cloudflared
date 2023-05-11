@@ -42,17 +42,26 @@ import (
 
 var ErrUninitialized = errors.New("public or private key not initialized")
 
-// Returns the hybrid KEM of Kyber512 and X25519.
+// Returns the hybrid KEM of Kyber512Draft00 and X25519.
 func Kyber512X25519() kem.Scheme { return kyber512X }
 
-// Returns the hybrid KEM of Kyber768 and X25519.
+// Returns the hybrid KEM of Kyber768Draft00 and X25519.
 func Kyber768X25519() kem.Scheme { return kyber768X }
 
-// Returns the hybrid KEM of Kyber768 and X448.
+// Returns the hybrid KEM of Kyber768Draft00 and X448.
 func Kyber768X448() kem.Scheme { return kyber768X4 }
 
-// Returns the hybrid KEM of Kyber1024 and X448.
+// Returns the hybrid KEM of Kyber1024Draft00 and X448.
 func Kyber1024X448() kem.Scheme { return kyber1024X }
+
+// Returns the hybrid KEM of Kyber768Draft00 and P-256.
+func P256Kyber768Draft00() kem.Scheme { return p256Kyber768Draft00 }
+
+var p256Kyber768Draft00 kem.Scheme = &scheme{
+	"P256Kyber768Draft00",
+	p256Kem,
+	kyber768.Scheme(),
+}
 
 var kyber512X kem.Scheme = &scheme{
 	"Kyber512-X25519",

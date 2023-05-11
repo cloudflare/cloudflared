@@ -28,6 +28,6 @@ const (
 	CPUQuotaUndefined CPUQuotaStatus = iota
 	// CPUQuotaUsed is returned when a valid CPU quota can be used
 	CPUQuotaUsed
-	// CPUQuotaMinUsed is return when CPU quota is smaller than the min value
+	// CPUQuotaMinUsed is returned when CPU quota is smaller than the min value
 	CPUQuotaMinUsed
 )

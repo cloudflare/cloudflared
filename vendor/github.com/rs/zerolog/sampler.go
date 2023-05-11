@@ -38,7 +38,7 @@ func (s RandomSampler) Sample(lvl Level) bool {
 }
 
 // BasicSampler is a sampler that will send every Nth events, regardless of
-// there level.
+// their level.
 type BasicSampler struct {
 	N       uint32
 	counter uint32

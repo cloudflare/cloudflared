@@ -15,6 +15,13 @@ var (
 	enc = json.Encoder{}
 )
 
+func init() {
+	// using closure to reflect the changes at runtime.
+	json.JSONMarshalFunc = func(v interface{}) ([]byte, error) {
+		return InterfaceMarshalFunc(v)
+	}
+}
+
 func appendJSON(dst []byte, j []byte) []byte {
 	return append(dst, j...)
 }

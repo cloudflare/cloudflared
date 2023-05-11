@@ -18,8 +18,10 @@ func (c Context) Logger() Logger {
 	return c.l
 }
 
-// Fields is a helper function to use a map to set fields using type assertion.
-func (c Context) Fields(fields map[string]interface{}) Context {
+// Fields is a helper function to use a map or slice to set fields using type assertion.
+// Only map[string]interface{} and []interface{} are accepted. []interface{} must
+// alternate string keys and arbitrary values, and extraneous ones are ignored.
+func (c Context) Fields(fields interface{}) Context {
 	c.l.context = appendFields(c.l.context, fields)
 	return c
 }
@@ -406,17 +408,9 @@ func (c Context) CallerWithSkipFrameCount(skipFrameCount int) Context {
 	return c
 }
 
-type stackTraceHook struct{}
-
-func (sh stackTraceHook) Run(e *Event, level Level, msg string) {
-	e.Stack()
-}
-
-var sh = stackTraceHook{}
-
 // Stack enables stack trace printing for the error passed to Err().
 func (c Context) Stack() Context {
-	c.l = c.l.Hook(sh)
+	c.l.stack = true
 	return c
 }
 

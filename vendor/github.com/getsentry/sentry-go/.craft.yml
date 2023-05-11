@@ -1,11 +1,13 @@
-minVersion: 0.23.1
+minVersion: 0.35.0
 changelogPolicy: simple
 artifactProvider:
   name: none
 targets:
   - name: github
-    includeNames: /none/
     tagPrefix: v
+  - name: github
+    tagPrefix: otel/v
+    tagOnly: true
   - name: registry
     sdks:
       github:getsentry/sentry-go:

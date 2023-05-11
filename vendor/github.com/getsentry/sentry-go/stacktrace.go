@@ -166,13 +166,7 @@ type Frame struct {
 	Symbol   string `json:"symbol,omitempty"`
 	// Module is, despite the name, the Sentry protocol equivalent of a Go
 	// package's import path.
-	Module string `json:"module,omitempty"`
-	// Package is not used for Go stack trace frames. In other platforms it
-	// refers to a container where the Module can be found. For example, a
-	// Java JAR, a .NET Assembly, or a native dynamic library.
-	// It exists for completeness, allowing the construction and reporting
-	// of custom event payloads.
-	Package     string                 `json:"package,omitempty"`
+	Module      string                 `json:"module,omitempty"`
 	Filename    string                 `json:"filename,omitempty"`
 	AbsPath     string                 `json:"abs_path,omitempty"`
 	Lineno      int                    `json:"lineno,omitempty"`
@@ -182,6 +176,18 @@ type Frame struct {
 	PostContext []string               `json:"post_context,omitempty"`
 	InApp       bool                   `json:"in_app,omitempty"`
 	Vars        map[string]interface{} `json:"vars,omitempty"`
+	// Package and the below are not used for Go stack trace frames.  In
+	// other platforms it refers to a container where the Module can be
+	// found.  For example, a Java JAR, a .NET Assembly, or a native
+	// dynamic library.  They exists for completeness, allowing the
+	// construction and reporting of custom event payloads.
+	Package         string `json:"package,omitempty"`
+	InstructionAddr string `json:"instruction_addr,omitempty"`
+	AddrMode        string `json:"addr_mode,omitempty"`
+	SymbolAddr      string `json:"symbol_addr,omitempty"`
+	ImageAddr       string `json:"image_addr,omitempty"`
+	Platform        string `json:"platform,omitempty"`
+	StackStart      bool   `json:"stack_start,omitempty"`
 }
 
 // NewFrame assembles a stacktrace frame out of runtime.Frame.

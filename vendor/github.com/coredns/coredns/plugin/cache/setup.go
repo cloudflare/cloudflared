@@ -240,6 +240,11 @@ func cacheParse(c *caddy.Controller) (*Cache, error) {
 				default:
 					return nil, fmt.Errorf("cache type for disable must be %q or %q", Success, Denial)
 				}
+			case "keepttl":
+				if len(args) != 0 {
+					return nil, c.ArgErr()
+				}
+				ca.keepttl = true
 			default:
 				return nil, c.ArgErr()
 			}

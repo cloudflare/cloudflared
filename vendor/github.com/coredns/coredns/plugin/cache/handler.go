@@ -28,12 +28,10 @@ func (c *Cache) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 	now := c.now().UTC()
 	server := metrics.WithServer(ctx)
 
-	// On cache miss, if the request has the OPT record and the DO bit set we leave the message as-is. If there isn't a DO bit
-	// set we will modify the request to _add_ one. This means we will always do DNSSEC lookups on cache misses.
-	// When writing to cache, any DNSSEC RRs in the response are written to cache with the response.
-	// When sending a response to a non-DNSSEC client, we remove DNSSEC RRs from the response. We use a 2048 buffer size, which is
-	// less than 4096 (and older default) and more than 1024 which may be too small. We might need to tweaks this
-	// value to be smaller still to prevent UDP fragmentation?
+	// On cache refresh, we will just use the DO bit from the incoming query for the refresh since we key our cache
+	// with the query DO bit. That means two separate cache items for the query DO bit true or false. In the situation
+	// in which upstream doesn't support DNSSEC, the two cache items will effectively be the same. Regardless, any
+	// DNSSEC RRs in the response are written to cache with the response.
 
 	ttl := 0
 	i := c.getIgnoreTTL(now, state, server)
@@ -73,6 +71,11 @@ func (c *Cache) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 		})
 	}
 
+	if c.keepttl {
+		// If keepttl is enabled we fake the current time to the stored
+		// one so that we always get the original TTL
+		now = i.stored
+	}
 	resp := i.toMsg(r, now, do, ad)
 	w.WriteMsg(resp)
 	return dns.RcodeSuccess, nil
@@ -101,9 +104,6 @@ func (c *Cache) doPrefetch(ctx context.Context, state request.Request, cw *Respo
 }
 
 func (c *Cache) doRefresh(ctx context.Context, state request.Request, cw dns.ResponseWriter) (int, error) {
-	if !state.Do() {
-		setDo(state.Req)
-	}
 	return plugin.NextOrFailure(c.Name(), c.Next, ctx, cw, state.Req)
 }
 
@@ -121,7 +121,7 @@ func (c *Cache) Name() string { return "cache" }
 
 // getIgnoreTTL unconditionally returns an item if it exists in the cache.
 func (c *Cache) getIgnoreTTL(now time.Time, state request.Request, server string) *item {
-	k := hash(state.Name(), state.QType())
+	k := hash(state.Name(), state.QType(), state.Do())
 	cacheRequests.WithLabelValues(server, c.zonesMetricLabel, c.viewMetricLabel).Inc()
 
 	if i, ok := c.ncache.Get(k); ok {
@@ -145,7 +145,7 @@ func (c *Cache) getIgnoreTTL(now time.Time, state request.Request, server string
 }
 
 func (c *Cache) exists(state request.Request) *item {
-	k := hash(state.Name(), state.QType())
+	k := hash(state.Name(), state.QType(), state.Do())
 	if i, ok := c.ncache.Get(k); ok {
 		return i.(*item)
 	}
@@ -154,22 +154,3 @@ func (c *Cache) exists(state request.Request) *item {
 	}
 	return nil
 }
-
-// setDo sets the DO bit and UDP buffer size in the message m.
-func setDo(m *dns.Msg) {
-	o := m.IsEdns0()
-	if o != nil {
-		o.SetDo()
-		o.SetUDPSize(defaultUDPBufSize)
-		return
-	}
-
-	o = &dns.OPT{Hdr: dns.RR_Header{Name: ".", Rrtype: dns.TypeOPT}}
-	o.SetDo()
-	o.SetUDPSize(defaultUDPBufSize)
-	m.Extra = append(m.Extra, o)
-}
-
-// defaultUDPBufsize is the bufsize the cache plugin uses on outgoing requests that don't
-// have an OPT RR.
-const defaultUDPBufSize = 2048

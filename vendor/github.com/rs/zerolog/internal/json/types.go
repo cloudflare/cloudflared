@@ -1,10 +1,10 @@
 package json
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"net"
+	"reflect"
 	"strconv"
 )
 
@@ -279,7 +279,7 @@ func (Encoder) AppendUints32(dst []byte, vals []uint32) []byte {
 // AppendUint64 converts the input uint64 to a string and
 // appends the encoded string to the input byte slice.
 func (Encoder) AppendUint64(dst []byte, val uint64) []byte {
-	return strconv.AppendUint(dst, uint64(val), 10)
+	return strconv.AppendUint(dst, val, 10)
 }
 
 // AppendUints64 encodes the input uint64s to json and
@@ -301,7 +301,7 @@ func (Encoder) AppendUints64(dst []byte, vals []uint64) []byte {
 
 func appendFloat(dst []byte, val float64, bitSize int) []byte {
 	// JSON does not permit NaN or Infinity. A typical JSON encoder would fail
-	// with an error, but a logging library wants the data to get thru so we
+	// with an error, but a logging library wants the data to get through so we
 	// make a tradeoff and store those types as string.
 	switch {
 	case math.IsNaN(val):
@@ -350,7 +350,7 @@ func (Encoder) AppendFloats64(dst []byte, vals []float64) []byte {
 		return append(dst, '[', ']')
 	}
 	dst = append(dst, '[')
-	dst = appendFloat(dst, vals[0], 32)
+	dst = appendFloat(dst, vals[0], 64)
 	if len(vals) > 1 {
 		for _, val := range vals[1:] {
 			dst = appendFloat(append(dst, ','), val, 64)
@@ -363,11 +363,19 @@ func (Encoder) AppendFloats64(dst []byte, vals []float64) []byte {
 // AppendInterface marshals the input interface to a string and
 // appends the encoded string to the input byte slice.
 func (e Encoder) AppendInterface(dst []byte, i interface{}) []byte {
-	marshaled, err := json.Marshal(i)
+	marshaled, err := JSONMarshalFunc(i)
 	if err != nil {
 		return e.AppendString(dst, fmt.Sprintf("marshaling error: %v", err))
 	}
 	return append(dst, marshaled...)
+}
+
+// AppendType appends the parameter type (as a string) to the input byte slice.
+func (e Encoder) AppendType(dst []byte, i interface{}) []byte {
+	if i == nil {
+		return e.AppendString(dst, "<nil>")
+	}
+	return e.AppendString(dst, reflect.TypeOf(i).String())
 }
 
 // AppendObjectData takes in an object that is already in a byte array

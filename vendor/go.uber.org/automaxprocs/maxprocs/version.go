@@ -21,4 +21,4 @@
 package maxprocs
 
 // Version is the current package version.
-const Version = "1.4.0"
+const Version = "1.5.2"
