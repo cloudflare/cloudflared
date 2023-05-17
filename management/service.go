@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"nhooyr.io/websocket"
@@ -67,7 +68,17 @@ func New(managementHostname string,
 	r.Get("/ping", ping)
 	r.Head("/ping", ping)
 	r.Get("/logs", s.logs)
-	r.Get("/host_details", s.getHostDetails)
+	r.Route("/host_details", func(r chi.Router) {
+		// CORS middleware required to allow dash to access management.argotunnel.com requests
+		r.Use(cors.Handler(cors.Options{
+			// Allows for any subdomain of cloudflare.com
+			AllowedOrigins: []string{"https://*.cloudflare.com"},
+			// Required to present cookies or other authentication across origin boundries
+			AllowCredentials: true,
+			MaxAge:           300, // Maximum value not ignored by any of major browsers
+		}))
+		r.Get("/", s.getHostDetails)
+	})
 	s.router = r
 	return s
 }

@@ -122,6 +122,9 @@ github.com/getsentry/sentry-go/internal/ratelimit
 # github.com/go-chi/chi/v5 v5.0.8
 ## explicit; go 1.14
 github.com/go-chi/chi/v5
+# github.com/go-chi/cors v1.2.1
+## explicit; go 1.14
+github.com/go-chi/cors
 # github.com/go-jose/go-jose/v3 v3.0.0
 ## explicit; go 1.12
 github.com/go-jose/go-jose/v3
