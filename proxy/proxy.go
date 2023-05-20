@@ -36,6 +36,10 @@ const (
 	trailerHeaderName = "Trailer"
 )
 
+var (
+	ErrRequestEndedAbruptly = errors.New("Incoming request ended abruptly")
+)
+
 // Proxy represents a means to Proxy between cloudflared and the origin services.
 type Proxy struct {
 	ingressRules ingress.Ingress
@@ -127,7 +131,11 @@ func (p *Proxy) ProxyHTTP(
 			logFields,
 		); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
-			p.logRequestError(err, cfRay, "", rule, srv)
+			if errors.Is(err, ErrRequestEndedAbruptly) {
+				p.log.Debug().Msg(err.Error())
+			} else {
+				p.logRequestError(err, cfRay, "", rule, srv)
+			}
 			return err
 		}
 		return nil
@@ -242,7 +250,7 @@ func (p *Proxy) proxyHTTPRequest(
 	if err != nil {
 		tracing.EndWithErrorStatus(ttfbSpan, err)
 		if err := roundTripReq.Context().Err(); err != nil {
-			return errors.Wrap(err, "Incoming request ended abruptly")
+			return ErrRequestEndedAbruptly
 		}
 		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
 	}
