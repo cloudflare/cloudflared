@@ -1,3 +1,9 @@
+2023.5.1
+- 2023-05-16 TUN-7424: Add CORS headers to host_details responses
+- 2023-05-11 TUN-7421: Add *.cloudflare.com to permitted Origins for management WebSocket requests
+- 2023-05-05 TUN-7404: Default configuration version set to -1
+- 2023-05-05 TUN-7227: Migrate to devincarr/quic-go
+
 2023.5.0
 - 2023-04-27 TUN-7398: Add support for quic safe stream to set deadline
 - 2023-04-26 TUN-7394: Retry StartFirstTunnel on quic.ApplicationErrors
