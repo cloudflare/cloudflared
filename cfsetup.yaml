@@ -29,6 +29,12 @@ buster: &buster
       - export GOARCH=amd64
       - export FIPS=true
       - make cloudflared
+  cover: 
+    build_dir: *build_dir
+    builddeps: *build_deps
+    pre-cache: *build_pre_cache
+    post-cache: 
+     - make cover
   # except FIPS (handled in github-fips-release-pkgs) and macos (handled in github-release-macos-amd64)
   github-release-pkgs:
     build_dir: *build_dir

@@ -140,6 +140,7 @@ container:
 generate-docker-version:
 	echo latest $(VERSION) > versions
 
+
 .PHONY: test
 test: vet
 ifndef CI
@@ -147,8 +148,17 @@ ifndef CI
 else
 	@mkdir -p .cover
 	go test -v -mod=vendor -race $(LDFLAGS) -coverprofile=".cover/c.out" ./...
-	go tool cover -html ".cover/c.out" -o .cover/all.html
 endif
+
+.PHONY: cover
+cover:
+	@echo ""
+	@echo "=====> Total test coverage: <====="
+	@echo ""
+	# Print the overall coverage here for quick access.
+	$Q go tool cover -func ".cover/c.out" | grep "total:" | awk '{print $$3}'
+	# Generate the HTML report that can be viewed from the browser in CI.
+	$Q go tool cover -html ".cover/c.out" -o .cover/all.html
 
 .PHONY: test-ssh-server
 test-ssh-server:
