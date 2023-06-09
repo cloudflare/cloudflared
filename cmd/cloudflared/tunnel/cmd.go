@@ -399,7 +399,7 @@ func StartServer(
 		}
 	}
 
-	localRules := []ingress.Rule{}
+	internalRules := []ingress.Rule{}
 	if features.Contains(features.FeatureManagementLogs) {
 		serviceIP := c.String("service-op-ip")
 		if edgeAddrs, err := edgediscovery.ResolveEdge(log, tunnelConfig.Region, tunnelConfig.EdgeIPVersion); err == nil {
@@ -416,9 +416,9 @@ func StartServer(
 			logger.ManagementLogger.Log,
 			logger.ManagementLogger,
 		)
-		localRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
+		internalRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
 	}
-	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, localRules, tunnelConfig.Log)
+	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, internalRules, tunnelConfig.Log)
 	if err != nil {
 		return err
 	}
