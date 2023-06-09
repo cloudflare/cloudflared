@@ -28,8 +28,8 @@ type Orchestrator struct {
 	lock sync.RWMutex
 	// Underlying value is proxy.Proxy, can be read without the lock, but still needs the lock to update
 	proxy atomic.Value
-	// Set of local ingress rules defined at cloudflared startup (separate from user-defined ingress rules)
-	localRules         []ingress.Rule
+	// Set of internal ingress rules defined at cloudflared startup (separate from user-defined ingress rules)
+	internalRules      []ingress.Rule
 	warpRoutingEnabled atomic.Bool
 	config             *Config
 	tags               []tunnelpogs.Tag
@@ -41,13 +41,13 @@ type Orchestrator struct {
 	proxyShutdownC chan<- struct{}
 }
 
-func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag, localRules []ingress.Rule, log *zerolog.Logger) (*Orchestrator, error) {
+func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag, internalRules []ingress.Rule, log *zerolog.Logger) (*Orchestrator, error) {
 	o := &Orchestrator{
 		// Lowest possible version, any remote configuration will have version higher than this
 		// Starting at -1 allows a configuration migration (local to remote) to override the current configuration as it
 		// will start at version 0.
 		currentVersion: -1,
-		localRules:     localRules,
+		internalRules:  internalRules,
 		config:         config,
 		tags:           tags,
 		log:            log,
@@ -116,8 +116,13 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	default:
 	}
 
-	// Assign the local ingress rules to the parsed ingress
-	ingressRules.LocalRules = o.localRules
+	// Assign the internal ingress rules to the parsed ingress
+	ingressRules.InternalRules = o.internalRules
+
+	// Check if ingress rules are empty, and add the default route if so.
+	if ingressRules.IsEmpty() {
+		ingressRules.Rules = ingress.GetDefaultIngressRules(o.log)
+	}
 
 	// Start new proxy before closing the ones from last version.
 	// The upside is we don't need to restart proxy from last version, which can fail

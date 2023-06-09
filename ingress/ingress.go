@@ -44,7 +44,7 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 	if err == nil {
 		hostname = host
 	}
-	for i, rule := range ing.LocalRules {
+	for i, rule := range ing.InternalRules {
 		if rule.Matches(hostname, path) {
 			// Local rule matches return a negative rule index to distiguish local rules from user-defined rules in logs
 			// Full range would be [-1 .. )
@@ -77,7 +77,7 @@ func matchHost(ruleHost, reqHost string) bool {
 // Ingress maps eyeball requests to origins.
 type Ingress struct {
 	// Set of ingress rules that are not added to remote config, e.g. management
-	LocalRules []Rule
+	InternalRules []Rule
 	// Rules that are provided by the user from remote or local configuration
 	Rules    []Rule              `json:"ingress"`
 	Defaults OriginRequestConfig `json:"originRequest"`
@@ -110,16 +110,18 @@ func ParseIngressFromConfigAndCLI(conf *config.Configuration, c *cli.Context, lo
 	//   --bastion for ssh bastion service
 	ingressRules, err = parseCLIIngress(c, false)
 	if errors.Is(err, ErrNoIngressRulesCLI) {
-		// Only log a warning if the tunnel is not a remotely managed tunnel and the config
-		// will be loaded after connecting.
+		// If no token is provided, the probability of NOT being a remotely managed tunnel is higher.
+		// So, we should warn the user that no ingress rules were found, because remote configuration will most likely not exist.
 		if !c.IsSet("token") {
 			log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
 		}
 		return newDefaultOrigin(c, log), nil
 	}
+
 	if err != nil {
 		return Ingress{}, err
 	}
+
 	return ingressRules, nil
 }
 
@@ -148,14 +150,10 @@ func parseCLIIngress(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 // newDefaultOrigin always returns a 503 response code to help indicate that there are no ingress
 // rules setup, but the tunnel is reachable.
 func newDefaultOrigin(c *cli.Context, log *zerolog.Logger) Ingress {
-	noRulesService := newDefaultStatusCode(log)
+	defaultRule := GetDefaultIngressRules(log)
 	defaults := originRequestFromSingleRule(c)
 	ingress := Ingress{
-		Rules: []Rule{
-			{
-				Service: &noRulesService,
-			},
-		},
+		Rules:    defaultRule,
 		Defaults: defaults,
 	}
 	return ingress
@@ -217,6 +215,17 @@ func (ing Ingress) StartOrigins(
 // CatchAll returns the catch-all rule (i.e. the last rule)
 func (ing Ingress) CatchAll() *Rule {
 	return &ing.Rules[len(ing.Rules)-1]
+}
+
+// Gets the default ingress rule that will be return 503 status
+// code for all incoming requests.
+func GetDefaultIngressRules(log *zerolog.Logger) []Rule {
+	noRulesService := newDefaultStatusCode(log)
+	return []Rule{
+		{
+			Service: &noRulesService,
+		},
+	}
 }
 
 func validateAccessConfiguration(cfg *config.AccessConfig) error {

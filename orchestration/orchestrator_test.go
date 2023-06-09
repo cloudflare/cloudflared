@@ -91,15 +91,15 @@ func TestUpdateConfiguration(t *testing.T) {
         "enabled": true,
         "connectTimeout": 10
     }
-}	
+}
 `)
 
 	updateWithValidation(t, orchestrator, 2, configJSONV2)
 	configV2 := orchestrator.config
-	// Validate local ingress rules
-	require.Equal(t, "management.argotunnel.com", configV2.Ingress.LocalRules[0].Hostname)
-	require.True(t, configV2.Ingress.LocalRules[0].Matches("management.argotunnel.com", "/ping"))
-	require.Equal(t, "management", configV2.Ingress.LocalRules[0].Service.String())
+	// Validate internal ingress rules
+	require.Equal(t, "management.argotunnel.com", configV2.Ingress.InternalRules[0].Hostname)
+	require.True(t, configV2.Ingress.InternalRules[0].Matches("management.argotunnel.com", "/ping"))
+	require.Equal(t, "management", configV2.Ingress.InternalRules[0].Service.String())
 	// Validate ingress rule 0
 	require.Equal(t, "jira.tunnel.org", configV2.Ingress.Rules[0].Hostname)
 	require.True(t, configV2.Ingress.Rules[0].Matches("jira.tunnel.org", "/login"))
@@ -145,7 +145,7 @@ func TestUpdateConfiguration(t *testing.T) {
 {
 	"originRequest":
 }
-	
+
 `)
 
 	resp = orchestrator.UpdateConfig(3, invalidJSON)
@@ -165,7 +165,7 @@ func TestUpdateConfiguration(t *testing.T) {
     "warp-routing": {
         "enabled": false
     }
-}	
+}
 `)
 	updateWithValidation(t, orchestrator, 10, configJSONV10)
 	configV10 := orchestrator.config
@@ -204,9 +204,31 @@ func TestUpdateConfiguration_FromMigration(t *testing.T) {
     "warp-routing": {
         "enabled": true
     }
-}	
+}
 `)
 	updateWithValidation(t, orchestrator, 0, configJSONV2)
+	require.Len(t, orchestrator.config.Ingress.Rules, 1)
+}
+
+// Validates that the default ingress rule will be set if there is no rule provided from the remote.
+func TestUpdateConfiguration_WithoutIngressRule(t *testing.T) {
+	initConfig := &Config{
+		Ingress: &ingress.Ingress{},
+	}
+	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, []ingress.Rule{}, &testLogger)
+	require.NoError(t, err)
+	initOriginProxy, err := orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+	require.Implements(t, (*connection.OriginProxy)(nil), initOriginProxy)
+
+	// We need to create an empty RemoteConfigJSON because that will get unmarshalled to a RemoteConfig
+	emptyConfig := &ingress.RemoteConfigJSON{}
+	configBytes, err := json.Marshal(emptyConfig)
+	if err != nil {
+		require.FailNow(t, "The RemoteConfigJSON shouldn't fail while being marshalled")
+	}
+
+	updateWithValidation(t, orchestrator, 0, configBytes)
 	require.Len(t, orchestrator.config.Ingress.Rules, 1)
 }
 
