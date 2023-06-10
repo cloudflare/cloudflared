@@ -10,3 +10,4 @@ images:
     architectures:
     - amd64
     - arm64
+    - arm
