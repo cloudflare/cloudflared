@@ -1,3 +1,8 @@
+2023.6.0
+- 2023-06-15 TUN-7471: Fixes cloudflared not closing the quic stream on unregister UDP session
+- 2023-06-09 TUN-7463: Add default ingress rule if no ingress rules are provided when updating the configuration
+- 2023-05-31 TUN-7447: Add a cover build to report code coverage
+
 2023.5.1
 - 2023-05-16 TUN-7424: Add CORS headers to host_details responses
 - 2023-05-11 TUN-7421: Add *.cloudflare.com to permitted Origins for management WebSocket requests
