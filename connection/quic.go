@@ -357,7 +357,7 @@ func (q *QUICConnection) serveUDPSession(session *datagramsession.Session, close
 // closeUDPSession first unregisters the session from session manager, then it tries to unregister from edge
 func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUID, message string) {
 	q.sessionManager.UnregisterSession(ctx, sessionID, message, false)
-	stream, err := q.session.OpenStream()
+	quicStream, err := q.session.OpenStream()
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection
 		// with edge
@@ -367,6 +367,9 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 			Msgf("Failed to open quic stream to unregister udp session with edge")
 		return
 	}
+
+	stream := quicpogs.NewSafeStreamCloser(quicStream)
+	defer stream.Close()
 	rpcClientStream, err := quicpogs.NewRPCClientStream(ctx, stream, q.logger)
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection
@@ -375,6 +378,8 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 			Msgf("Failed to open rpc stream to unregister udp session with edge")
 		return
 	}
+	defer rpcClientStream.Close()
+
 	if err := rpcClientStream.UnregisterUdpSession(ctx, sessionID, message); err != nil {
 		q.logger.Err(err).Str("sessionID", sessionID.String()).
 			Msgf("Failed to unregister udp session with edge")
