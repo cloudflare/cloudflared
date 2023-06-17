@@ -43,6 +43,22 @@ var (
 			Help:      "Count of error proxying to origin",
 		},
 	)
+	activeTCPSessions = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: connection.MetricsNamespace,
+			Subsystem: "tcp",
+			Name:      "active_sessions",
+			Help:      "Concurrent count of TCP sessions that are being proxied to any origin",
+		},
+	)
+	totalTCPSessions = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: connection.MetricsNamespace,
+			Subsystem: "tcp",
+			Name:      "total_sessions",
+			Help:      "Total count of TCP sessions that have been proxied to any origin",
+		},
+	)
 )
 
 func init() {
@@ -51,6 +67,8 @@ func init() {
 		concurrentRequests,
 		responseByCode,
 		requestErrors,
+		activeTCPSessions,
+		totalTCPSessions,
 	)
 }
 
@@ -61,4 +79,15 @@ func incrementRequests() {
 
 func decrementConcurrentRequests() {
 	concurrentRequests.Dec()
+}
+
+func incrementTCPRequests() {
+	incrementRequests()
+	totalTCPSessions.Inc()
+	activeTCPSessions.Inc()
+}
+
+func decrementTCPConcurrentRequests() {
+	decrementConcurrentRequests()
+	activeTCPSessions.Dec()
 }

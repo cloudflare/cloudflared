@@ -118,6 +118,7 @@ func (m *manager) registerSession(ctx context.Context, registration *registerSes
 	session := m.newSession(registration.sessionID, registration.originProxy)
 	m.sessions[registration.sessionID] = session
 	registration.resultChan <- session
+	incrementUDPSessions()
 }
 
 func (m *manager) newSession(id uuid.UUID, dstConn io.ReadWriteCloser) *Session {
@@ -163,6 +164,7 @@ func (m *manager) unregisterSession(unregistration *unregisterSessionEvent) {
 	if ok {
 		delete(m.sessions, unregistration.sessionID)
 		session.close(unregistration.err)
+		decrementUDPActiveSessions()
 	}
 }
 
