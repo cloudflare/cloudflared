@@ -158,8 +158,8 @@ func (p *Proxy) ProxyTCP(
 	rwa connection.ReadWriteAcker,
 	req *connection.TCPRequest,
 ) error {
-	incrementRequests()
-	defer decrementConcurrentRequests()
+	incrementTCPRequests()
+	defer decrementTCPConcurrentRequests()
 
 	if p.warpRouting == nil {
 		err := errors.New(`cloudflared received a request from WARP client, but your configuration has disabled ingress from WARP clients. To enable this, set "warp-routing:\n\t enabled: true" in your config.yaml`)
