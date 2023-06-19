@@ -63,6 +63,8 @@ type QUICConnection struct {
 	controlStreamHandler ControlStreamHandler
 	connOptions          *tunnelpogs.ConnectionOptions
 	connIndex            uint8
+
+	udpUnregisterTimeout time.Duration
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -78,6 +80,7 @@ func NewQUICConnection(
 	controlStreamHandler ControlStreamHandler,
 	logger *zerolog.Logger,
 	packetRouterConfig *ingress.GlobalRouterConfig,
+	udpUnregisterTimeout time.Duration,
 ) (*QUICConnection, error) {
 	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, logger)
 	if err != nil {
@@ -112,6 +115,7 @@ func NewQUICConnection(
 		controlStreamHandler: controlStreamHandler,
 		connOptions:          connOptions,
 		connIndex:            connIndex,
+		udpUnregisterTimeout: udpUnregisterTimeout,
 	}, nil
 }
 
@@ -370,7 +374,7 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 
 	stream := quicpogs.NewSafeStreamCloser(quicStream)
 	defer stream.Close()
-	rpcClientStream, err := quicpogs.NewRPCClientStream(ctx, stream, q.logger)
+	rpcClientStream, err := quicpogs.NewRPCClientStream(ctx, stream, q.udpUnregisterTimeout, q.logger)
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection
 		// with edge

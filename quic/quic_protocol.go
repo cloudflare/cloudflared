@@ -229,9 +229,12 @@ func writeSignature(stream io.Writer, signature ProtocolSignature) error {
 type RPCClientStream struct {
 	client    tunnelpogs.CloudflaredServer_PogsClient
 	transport rpc.Transport
+
+	// Time we wait for the server to respond to a request before we close the connection.
+	rpcUnregisterUDPSessionDeadline time.Duration
 }
 
-func NewRPCClientStream(ctx context.Context, stream io.ReadWriteCloser, logger *zerolog.Logger) (*RPCClientStream, error) {
+func NewRPCClientStream(ctx context.Context, stream io.ReadWriteCloser, rpcUnregisterUDPSessionDeadline time.Duration, logger *zerolog.Logger) (*RPCClientStream, error) {
 	n, err := stream.Write(RPCStreamProtocolSignature[:])
 	if err != nil {
 		return nil, err
@@ -245,8 +248,9 @@ func NewRPCClientStream(ctx context.Context, stream io.ReadWriteCloser, logger *
 		tunnelrpc.ConnLog(logger),
 	)
 	return &RPCClientStream{
-		client:    tunnelpogs.NewCloudflaredServer_PogsClient(conn.Bootstrap(ctx), conn),
-		transport: transport,
+		client:                          tunnelpogs.NewCloudflaredServer_PogsClient(conn.Bootstrap(ctx), conn),
+		transport:                       transport,
+		rpcUnregisterUDPSessionDeadline: rpcUnregisterUDPSessionDeadline,
 	}, nil
 }
 
@@ -255,6 +259,8 @@ func (rcs *RPCClientStream) RegisterUdpSession(ctx context.Context, sessionID uu
 }
 
 func (rcs *RPCClientStream) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
+	ctx, cancel := context.WithTimeout(ctx, rcs.rpcUnregisterUDPSessionDeadline)
+	defer cancel()
 	return rcs.client.UnregisterUdpSession(ctx, sessionID, message)
 }
 

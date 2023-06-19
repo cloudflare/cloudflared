@@ -68,6 +68,8 @@ type TunnelConfig struct {
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 	PacketConfig     *ingress.GlobalRouterConfig
+
+	UDPUnregisterSessionTimeout time.Duration
 }
 
 func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
@@ -615,7 +617,9 @@ func (e *EdgeTunnelServer) serveQUIC(
 		connOptions,
 		controlStreamHandler,
 		connLogger.Logger(),
-		e.config.PacketConfig)
+		e.config.PacketConfig,
+		e.config.UDPUnregisterSessionTimeout,
+	)
 	if err != nil {
 		if e.config.NeedPQ {
 			handlePQTunnelError(err, e.config)
