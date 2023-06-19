@@ -725,6 +725,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QU
 		fakeControlStream{},
 		&log,
 		nil,
+		5*time.Second,
 	)
 	require.NoError(t, err)
 	return qc

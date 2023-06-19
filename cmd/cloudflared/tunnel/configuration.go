@@ -231,14 +231,15 @@ func prepareTunnelConfig(
 		Observer:        observer,
 		ReportedVersion: info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
-		Retries:            uint(c.Int("retries")),
-		RunFromTerminal:    isRunningFromTerminal(),
-		NamedTunnel:        namedTunnel,
-		ProtocolSelector:   protocolSelector,
-		EdgeTLSConfigs:     edgeTLSConfigs,
-		NeedPQ:             needPQ,
-		PQKexIdx:           pqKexIdx,
-		MaxEdgeAddrRetries: uint8(c.Int("max-edge-addr-retries")),
+		Retries:                     uint(c.Int("retries")),
+		RunFromTerminal:             isRunningFromTerminal(),
+		NamedTunnel:                 namedTunnel,
+		ProtocolSelector:            protocolSelector,
+		EdgeTLSConfigs:              edgeTLSConfigs,
+		NeedPQ:                      needPQ,
+		PQKexIdx:                    pqKexIdx,
+		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
+		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
 	}
 	packetConfig, err := newPacketConfig(c, log)
 	if err != nil {
