@@ -1,3 +1,8 @@
+2023.6.1
+- 2023-06-19 TUN-7480: Added a timeout for unregisterUDP.
+- 2023-06-16 TUN-7477: Add UDP/TCP session metrics
+- 2023-06-14 TUN-7468: Increase the limit of incoming streams
+
 2023.6.0
 - 2023-06-15 TUN-7471: Fixes cloudflared not closing the quic stream on unregister UDP session
 - 2023-06-09 TUN-7463: Add default ingress rule if no ingress rules are provided when updating the configuration
