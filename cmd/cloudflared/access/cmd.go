@@ -525,6 +525,11 @@ func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, err
 		return false, errors.Wrap(err, "Could not create access request")
 	}
 	req.Header.Set("User-Agent", userAgent)
+
+	query := req.URL.Query()
+	query.Set("cloudflared_token_check", "true")
+	req.URL.RawQuery = query.Encode()
+
 	// Do not follow redirects
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
