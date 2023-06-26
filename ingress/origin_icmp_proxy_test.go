@@ -390,15 +390,16 @@ func getLocalIPs(t *testing.T, ipv4 bool) []netip.Addr {
 	require.NoError(t, err)
 	localIPs := []netip.Addr{}
 	for _, i := range interfaces {
-		// Skip TUN devices
-		if strings.Contains(i.Name, "tun") {
+		// Skip TUN devices, and Docker Networks
+		if strings.Contains(i.Name, "tun") || strings.Contains(i.Name, "docker") || strings.HasPrefix(i.Name, "br-") {
 			continue
 		}
 		addrs, err := i.Addrs()
 		require.NoError(t, err)
 		for _, addr := range addrs {
 			if ipnet, ok := addr.(*net.IPNet); ok && (ipnet.IP.IsPrivate() || ipnet.IP.IsLoopback()) {
-				if (ipv4 && ipnet.IP.To4() != nil) || (!ipv4 && ipnet.IP.To4() == nil) {
+				// TODO DEVTOOLS-12514: We only run the IPv6 against the loopback interface due to issues on the CI runners.
+				if (ipv4 && ipnet.IP.To4() != nil) || (!ipv4 && ipnet.IP.To4() == nil && ipnet.IP.IsLoopback()) {
 					localIPs = append(localIPs, netip.MustParseAddr(ipnet.IP.String()))
 				}
 			}
