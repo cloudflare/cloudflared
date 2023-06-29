@@ -34,6 +34,7 @@ const (
 	sshTokenSecretFlag = "service-token-secret"
 	sshGenCertFlag     = "short-lived-cert"
 	sshConnectTo       = "connect-to"
+	sshDebugStream     = "debug-stream"
 	sshConfigTemplate  = `
 Add to your {{.Home}}/.ssh/config:
 
@@ -151,9 +152,12 @@ func Commands() []*cli.Command {
 							EnvVars: []string{"TUNNEL_SERVICE_TOKEN_SECRET"},
 						},
 						&cli.StringFlag{
-							Name:    logger.LogSSHDirectoryFlag,
-							Aliases: []string{"logfile"}, //added to match the tunnel side
-							Usage:   "Save application log to this directory for reporting issues.",
+							Name:  logger.LogFileFlag,
+							Usage: "Save application log to this file for reporting issues.",
+						},
+						&cli.StringFlag{
+							Name:  logger.LogSSHDirectoryFlag,
+							Usage: "Save application log to this directory for reporting issues.",
 						},
 						&cli.StringFlag{
 							Name:    logger.LogSSHLevelFlag,
@@ -164,6 +168,11 @@ func Commands() []*cli.Command {
 							Name:   sshConnectTo,
 							Hidden: true,
 							Usage:  "Connect to alternate location for testing, value is host, host:port, or sni:port:host",
+						},
+						&cli.Uint64Flag{
+							Name:   sshDebugStream,
+							Hidden: true,
+							Usage:  "Writes up-to the max provided stream payloads to the logger as debug statements.",
 						},
 					},
 				},
