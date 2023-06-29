@@ -3,6 +3,7 @@ package access
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/validation"
 )
 
@@ -38,6 +40,7 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *z
 	if forwarder.TokenSecret != "" {
 		headers.Set(cfAccessClientSecretHeader, forwarder.TokenSecret)
 	}
+	headers.Set("User-Agent", userAgent)
 
 	carrier.SetBastionDest(headers, forwarder.Destination)
 
@@ -58,7 +61,12 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *z
 // useful for proxying other protocols (like ssh) over websockets
 // (which you can put Access in front of)
 func ssh(c *cli.Context) error {
-	log := logger.CreateSSHLoggerFromContext(c, logger.EnableTerminalLog)
+	// If not running as a forwarder, disable terminal logs as it collides with the stdin/stdout of the parent process
+	outputTerminal := logger.DisableTerminalLog
+	if c.IsSet(sshURLFlag) {
+		outputTerminal = logger.EnableTerminalLog
+	}
+	log := logger.CreateSSHLoggerFromContext(c, outputTerminal)
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
@@ -76,6 +84,7 @@ func ssh(c *cli.Context) error {
 	if c.IsSet(sshTokenSecretFlag) {
 		headers.Set(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
+	headers.Set("User-Agent", userAgent)
 
 	carrier.SetBastionDest(headers, c.String(sshDestinationFlag))
 
@@ -121,7 +130,19 @@ func ssh(c *cli.Context) error {
 		return err
 	}
 
-	return carrier.StartClient(wsConn, &carrier.StdinoutStream{}, options)
+	var s io.ReadWriter
+	s = &carrier.StdinoutStream{}
+	if c.IsSet(sshDebugStream) {
+		maxMessages := c.Uint64(sshDebugStream)
+		if maxMessages == 0 {
+			// default to 10 if provided but unset
+			maxMessages = 10
+		}
+		logger := log.With().Str("host", hostname).Logger()
+		s = stream.NewDebugStream(s, &logger, maxMessages)
+	}
+	carrier.StartClient(wsConn, s, options)
+	return nil
 }
 
 func buildRequestHeaders(values []string) http.Header {

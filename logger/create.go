@@ -175,7 +175,7 @@ func createFromContext(
 
 	log := newZerolog(loggerConfig)
 	if incompatibleFlagsSet := logFile != "" && logDirectory != ""; incompatibleFlagsSet {
-		log.Error().Msgf("Your config includes values for both %s and %s, but they are incompatible. %s takes precedence.", LogFileFlag, logDirectoryFlagName, LogFileFlag)
+		log.Error().Msgf("Your config includes values for both %s (%s) and %s (%s), but they are incompatible. %s takes precedence.", LogFileFlag, logFile, logDirectoryFlagName, logDirectory, LogFileFlag)
 	}
 	return log
 }
