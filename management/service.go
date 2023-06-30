@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"nhooyr.io/websocket"
 )
@@ -38,6 +39,9 @@ type ManagementService struct {
 	clientID  uuid.UUID
 	label     string
 
+	// Additional Handlers
+	metricsHandler http.Handler
+
 	log    *zerolog.Logger
 	router chi.Router
 
@@ -56,18 +60,20 @@ func New(managementHostname string,
 	logger LoggerListener,
 ) *ManagementService {
 	s := &ManagementService{
-		Hostname:  managementHostname,
-		log:       log,
-		logger:    logger,
-		serviceIP: serviceIP,
-		clientID:  clientID,
-		label:     label,
+		Hostname:       managementHostname,
+		log:            log,
+		logger:         logger,
+		serviceIP:      serviceIP,
+		clientID:       clientID,
+		label:          label,
+		metricsHandler: promhttp.Handler(),
 	}
 	r := chi.NewRouter()
 	r.Use(ValidateAccessTokenQueryMiddleware)
 	r.Get("/ping", ping)
 	r.Head("/ping", ping)
 	r.Get("/logs", s.logs)
+	r.Get("/metrics", s.metricsHandler.ServeHTTP)
 	r.Route("/host_details", func(r chi.Router) {
 		// CORS middleware required to allow dash to access management.argotunnel.com requests
 		r.Use(cors.Handler(cors.Options{
