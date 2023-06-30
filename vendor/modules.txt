@@ -8,9 +8,6 @@ github.com/apparentlymart/go-cidr/cidr
 # github.com/beorn7/perks v1.0.1
 ## explicit; go 1.11
 github.com/beorn7/perks/quantile
-# github.com/certifi/gocertifi v0.0.0-20210507211836-431795d63e8d
-## explicit; go 1.12
-github.com/certifi/gocertifi
 # github.com/cespare/xxhash/v2 v2.1.2
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
@@ -109,9 +106,6 @@ github.com/flynn/go-shlex
 # github.com/fsnotify/fsnotify v1.4.9
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify
-# github.com/getsentry/raven-go v0.2.0
-## explicit
-github.com/getsentry/raven-go
 # github.com/getsentry/sentry-go v0.16.0
 ## explicit; go 1.19
 github.com/getsentry/sentry-go

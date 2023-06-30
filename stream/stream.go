@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/raven-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
@@ -58,24 +58,15 @@ func unidirectionalStream(dst io.Writer, src io.Reader, dir string, status *bidi
 		// server/origin listens forever until closure), it may read/write from the underlying ReadWriter (backed by
 		// the Edge<->cloudflared transport) in an unexpected state.
 		// Because of this, we set this recover() logic.
-		if r := recover(); r != nil {
+		if err := recover(); err != nil {
 			if status.isAnyDone() {
 				// We handle such unexpected errors only when we detect that one side of the streaming is done.
-				log.Debug().Msgf("Gracefully handled error %v in Streaming for %s, error %s", r, dir, debug.Stack())
+				log.Debug().Msgf("recovered from panic in stream.Pipe for %s, error %s, %s", dir, err, debug.Stack())
 			} else {
 				// Otherwise, this is unexpected, but we prevent the program from crashing anyway.
-				log.Warn().Msgf("Gracefully handled unexpected error %v in Streaming for %s, error %s", r, dir, debug.Stack())
-
-				tags := make(map[string]string)
-				tags["root"] = "websocket.stream"
-				tags["dir"] = dir
-				switch rval := r.(type) {
-				case error:
-					raven.CaptureError(rval, tags)
-				default:
-					rvalStr := fmt.Sprint(rval)
-					raven.CaptureMessage(rvalStr, tags)
-				}
+				log.Warn().Msgf("recovered from panic in stream.Pipe for %s, error %s, %s", dir, err, debug.Stack())
+				sentry.CurrentHub().Recover(err)
+				sentry.Flush(time.Second * 5)
 			}
 		}
 	}()
