@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"sync"
 	"time"
@@ -74,6 +75,10 @@ func New(managementHostname string,
 	r.Head("/ping", ping)
 	r.Get("/logs", s.logs)
 	r.Get("/metrics", s.metricsHandler.ServeHTTP)
+
+	// Supports only heap and goroutine
+	r.Get("/debug/pprof/{profile:heap|goroutine}", pprof.Index)
+
 	r.Route("/host_details", func(r chi.Router) {
 		// CORS middleware required to allow dash to access management.argotunnel.com requests
 		r.Use(cors.Handler(cors.Options{
