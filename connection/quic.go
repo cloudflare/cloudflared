@@ -449,6 +449,14 @@ func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header)
 	return hrw.WriteConnectResponseData(nil, metadata...)
 }
 
+func (hrw *httpResponseAdapter) Write(p []byte) (int, error) {
+	// Make sure to send WriteHeader response if not called yet
+	if !hrw.connectResponseSent {
+		hrw.WriteRespHeaders(http.StatusOK, hrw.headers)
+	}
+	return hrw.RequestServerStream.Write(p)
+}
+
 func (hrw *httpResponseAdapter) Header() http.Header {
 	return hrw.headers
 }
