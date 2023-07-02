@@ -764,6 +764,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_POST_QUANTUM"},
 			Hidden:  FipsEnabled,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "warp-routing",
+			Usage:   "Enable WARP routing",
+			EnvVars: []string{"TUNNEL_WARP_ROUTING"},
+			Hidden:  shouldHide,
+		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
 	}...)

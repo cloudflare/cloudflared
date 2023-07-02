@@ -252,6 +252,9 @@ func prepareTunnelConfig(
 		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
 		ConfigurationFlags: parseConfigFlags(c),
 	}
+	if c.Bool("warp-routing") {
+		orchestratorConfig.WarpRouting.Enabled = true
+	}
 	return tunnelConfig, orchestratorConfig, nil
 }
 
