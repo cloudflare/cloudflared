@@ -55,7 +55,7 @@ class TestManagement:
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
-        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_url("metrics", config, config_path)
@@ -76,7 +76,7 @@ class TestManagement:
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
-        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_url("debug/pprof/heap", config, config_path)
@@ -85,6 +85,26 @@ class TestManagement:
             # Assert response.
             assert resp.status_code == 200, "Expected cloudflared to return 200 for /debug/pprof/heap"
             assert resp.headers["Content-Type"] == "application/octet-stream", "Expected /debug/pprof/heap to have return a binary response"
+    
+    """
+        test_get_metrics_when_disabled will verify that diagnostic endpoints (such as /metrics) return 404 and are unmounted. 
+    """
+    def test_get_metrics_when_disabled(self, tmp_path, component_tests_config):
+        # TUN-7377 : wait_tunnel_ready does not work properly in windows.
+        # Skipping this test for windows for now and will address it as part of tun-7377
+        if platform.system() == "Windows":
+            return
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        LOGGER.debug(config)
+        config_path = write_config(tmp_path, config.full_config)
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
+            wait_tunnel_ready(require_min_connections=1)
+            cfd_cli = CloudflaredCli(config, config_path, LOGGER)
+            url = cfd_cli.get_management_url("metrics", config, config_path)
+            resp = send_request(url)
+            
+            # Assert response.
+            assert resp.status_code == 404, "Expected cloudflared to return 404 for /metrics"
 
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
