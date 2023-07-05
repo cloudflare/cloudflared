@@ -92,7 +92,10 @@ func (m *manager) shutdownSessions(err error) {
 		byRemote: true,
 	}
 	for _, s := range m.sessions {
-		s.close(closeSessionErr)
+		m.unregisterSession(&unregisterSessionEvent{
+			sessionID: s.ID,
+			err:       closeSessionErr,
+		})
 	}
 }
 
