@@ -413,6 +413,7 @@ func StartServer(
 
 		mgmt := management.New(
 			c.String("management-hostname"),
+			c.Bool("management-diagnostics"),
 			serviceIP,
 			clientID,
 			c.String(connectorLabelFlag),
@@ -763,6 +764,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Aliases: []string{"pq"},
 			EnvVars: []string{"TUNNEL_POST_QUANTUM"},
 			Hidden:  FipsEnabled,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "management-diagnostics",
+			Usage:   "Enables the in-depth diagnostic routes to be made available over the management service (/debug/pprof, /metrics, etc.)",
+			EnvVars: []string{"TUNNEL_MANAGEMENT_DIAGNOSTICS"},
+			Value:   false,
 		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,

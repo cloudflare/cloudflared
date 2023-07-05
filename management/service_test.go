@@ -3,9 +3,13 @@ package management
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +19,22 @@ import (
 )
 
 var (
-	noopLogger = zerolog.New(io.Discard)
+	noopLogger         = zerolog.New(io.Discard)
+	managementHostname = "https://management.argotunnel.com"
 )
+
+func TestDisableDiagnosticRoutes(t *testing.T) {
+	mgmt := New("management.argotunnel.com", false, "1.1.1.1:80", uuid.Nil, "", &noopLogger, nil)
+	for _, path := range []string{"/metrics", "/debug/pprof/goroutine", "/debug/pprof/heap"} {
+		t.Run(strings.Replace(path, "/", "_", -1), func(t *testing.T) {
+			req := httptest.NewRequest("GET", managementHostname+path+"?access_token="+validToken, nil)
+			recorder := httptest.NewRecorder()
+			mgmt.ServeHTTP(recorder, req)
+			resp := recorder.Result()
+			require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		})
+	}
+}
 
 func TestReadEventsLoop(t *testing.T) {
 	sentEvent := EventStartStreaming{
