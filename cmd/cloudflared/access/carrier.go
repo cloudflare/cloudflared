@@ -148,9 +148,9 @@ func ssh(c *cli.Context) error {
 func buildRequestHeaders(values []string) http.Header {
 	headers := make(http.Header)
 	for _, valuePair := range values {
-		split := strings.Split(valuePair, ":")
-		if len(split) > 1 {
-			headers.Add(strings.TrimSpace(split[0]), strings.TrimSpace(split[1]))
+		header, value, found := strings.Cut(valuePair, ":")
+		if found {
+			headers.Add(strings.TrimSpace(header), strings.TrimSpace(value))
 		}
 	}
 	return headers
