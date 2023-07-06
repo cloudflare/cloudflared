@@ -461,6 +461,9 @@ func (hrw *httpResponseAdapter) Header() http.Header {
 	return hrw.headers
 }
 
+// This is a no-op Flush because this adapter is over a quic.Stream and we don't need Flush here.
+func (hrw *httpResponseAdapter) Flush() {}
+
 func (hrw *httpResponseAdapter) WriteHeader(status int) {
 	hrw.WriteRespHeaders(status, hrw.headers)
 }

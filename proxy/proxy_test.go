@@ -698,7 +698,7 @@ func TestConnections(t *testing.T) {
 				}()
 			}
 			if test.args.connectionType == connection.TypeTCP {
-				rwa := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
+				rwa := connection.NewHTTPResponseReadWriterAcker(respWriter, respWriter.(http.Flusher), req)
 				err = proxy.ProxyTCP(ctx, rwa, &connection.TCPRequest{Dest: dest})
 			} else {
 				log := zerolog.Nop()
@@ -834,6 +834,8 @@ func (w *wsRespWriter) WriteRespHeaders(status int, header http.Header) error {
 	return nil
 }
 
+func (w *wsRespWriter) Flush() {}
+
 func (w *wsRespWriter) AddTrailer(trailerName, trailerValue string) {
 	// do nothing
 }
@@ -872,6 +874,8 @@ func (m *mockTCPRespWriter) Read(p []byte) (n int, err error) {
 func (m *mockTCPRespWriter) Write(p []byte) (n int, err error) {
 	return m.w.Write(p)
 }
+
+func (m *mockTCPRespWriter) Flush() {}
 
 func (m *mockTCPRespWriter) AddTrailer(trailerName, trailerValue string) {
 	// do nothing
