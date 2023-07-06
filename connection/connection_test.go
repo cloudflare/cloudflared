@@ -130,7 +130,8 @@ func wsEchoEndpoint(w ResponseWriter, r *http.Request) error {
 	}
 	wsCtx, cancel := context.WithCancel(r.Context())
 	readPipe, writePipe := io.Pipe()
-	wsConn := websocket.NewConn(wsCtx, NewHTTPResponseReadWriterAcker(w, r), &log)
+
+	wsConn := websocket.NewConn(wsCtx, NewHTTPResponseReadWriterAcker(w, w.(http.Flusher), r), &log)
 	go func() {
 		select {
 		case <-wsCtx.Done():
@@ -175,7 +176,7 @@ func wsFlakyEndpoint(w ResponseWriter, r *http.Request) error {
 	}
 	wsCtx, cancel := context.WithCancel(r.Context())
 
-	wsConn := websocket.NewConn(wsCtx, NewHTTPResponseReadWriterAcker(w, r), &log)
+	wsConn := websocket.NewConn(wsCtx, NewHTTPResponseReadWriterAcker(w, w.(http.Flusher), r), &log)
 
 	closedAfter := time.Millisecond * time.Duration(rand.Intn(50))
 	originConn := &flakyConn{closeAt: time.Now().Add(closedAfter)}

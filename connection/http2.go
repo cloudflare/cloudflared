@@ -142,7 +142,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		rws := NewHTTPResponseReadWriterAcker(respWriter, r)
+		rws := NewHTTPResponseReadWriterAcker(respWriter, respWriter, r)
 		requestErr = originProxy.ProxyTCP(r.Context(), rws, &TCPRequest{
 			Dest:      host,
 			CFRay:     FindCfRayHeader(r),
@@ -287,6 +287,10 @@ func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) erro
 
 func (rp *http2RespWriter) Header() http.Header {
 	return rp.respHeaders
+}
+
+func (rp *http2RespWriter) Flush() {
+	rp.flusher.Flush()
 }
 
 func (rp *http2RespWriter) WriteHeader(status int) {

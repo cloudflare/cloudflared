@@ -450,7 +450,7 @@ func proxyTCP(ctx context.Context, originProxy connection.OriginProxy, originAdd
 		CFRay:   "123",
 		LBProbe: false,
 	}
-	rws := connection.NewHTTPResponseReadWriterAcker(respWriter, req)
+	rws := connection.NewHTTPResponseReadWriterAcker(respWriter, w.(http.Flusher), req)
 
 	return originProxy.ProxyTCP(ctx, rws, tcpReq)
 }
