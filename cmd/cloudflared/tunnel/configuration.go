@@ -240,6 +240,7 @@ func prepareTunnelConfig(
 		PQKexIdx:                    pqKexIdx,
 		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
 		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
+		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),
 	}
 	packetConfig, err := newPacketConfig(c, log)
 	if err != nil {
