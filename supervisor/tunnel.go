@@ -70,6 +70,8 @@ type TunnelConfig struct {
 	PacketConfig     *ingress.GlobalRouterConfig
 
 	UDPUnregisterSessionTimeout time.Duration
+
+	DisableQUICPathMTUDiscovery bool
 }
 
 func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
@@ -596,14 +598,15 @@ func (e *EdgeTunnelServer) serveQUIC(
 	}
 
 	quicConfig := &quic.Config{
-		HandshakeIdleTimeout:  quicpogs.HandshakeIdleTimeout,
-		MaxIdleTimeout:        quicpogs.MaxIdleTimeout,
-		KeepAlivePeriod:       quicpogs.MaxIdlePingPeriod,
-		MaxIncomingStreams:    quicpogs.MaxIncomingStreams,
-		MaxIncomingUniStreams: quicpogs.MaxIncomingStreams,
-		EnableDatagrams:       true,
-		MaxDatagramFrameSize:  quicpogs.MaxDatagramFrameSize,
-		Tracer:                quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
+		HandshakeIdleTimeout:    quicpogs.HandshakeIdleTimeout,
+		MaxIdleTimeout:          quicpogs.MaxIdleTimeout,
+		KeepAlivePeriod:         quicpogs.MaxIdlePingPeriod,
+		MaxIncomingStreams:      quicpogs.MaxIncomingStreams,
+		MaxIncomingUniStreams:   quicpogs.MaxIncomingStreams,
+		EnableDatagrams:         true,
+		MaxDatagramFrameSize:    quicpogs.MaxDatagramFrameSize,
+		Tracer:                  quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
+		DisablePathMTUDiscovery: e.config.DisableQUICPathMTUDiscovery,
 	}
 
 	quicConn, err := connection.NewQUICConnection(
