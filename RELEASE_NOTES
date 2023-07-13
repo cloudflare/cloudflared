@@ -1,3 +1,7 @@
+2023.7.1
+- 2023-07-13 TUN-7582: Correct changelog wording for --management-diagnostics
+- 2023-07-12 TUN-7575: Add option to disable PTMU discovery over QUIC
+
 2023.7.0
 - 2023-07-06 TUN-7558: Flush on Writes for StreamBasedOriginProxy
 - 2023-07-05 TUN-7553: Add flag to enable management diagnostic services
