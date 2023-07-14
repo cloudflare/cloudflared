@@ -73,9 +73,9 @@ github.com/coredns/coredns/request
 # github.com/coreos/go-oidc/v3 v3.6.0
 ## explicit; go 1.19
 github.com/coreos/go-oidc/v3/oidc
-# github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
-## explicit
-github.com/coreos/go-systemd/daemon
+# github.com/coreos/go-systemd/v22 v22.5.0
+## explicit; go 1.12
+github.com/coreos/go-systemd/v22/daemon
 # github.com/cpuguy83/go-md2man/v2 v2.0.0
 ## explicit; go 1.12
 github.com/cpuguy83/go-md2man/v2/md2man
