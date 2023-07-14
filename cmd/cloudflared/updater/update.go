@@ -12,7 +12,7 @@ import (
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
@@ -304,7 +304,7 @@ func wasInstalledFromPackageManager() bool {
 }
 
 func isRunningFromTerminal() bool {
-	return terminal.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
 func IsSysV() bool {
