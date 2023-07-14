@@ -1,5 +1,0 @@
-package brotli
-
-import (
-	"C"
-)

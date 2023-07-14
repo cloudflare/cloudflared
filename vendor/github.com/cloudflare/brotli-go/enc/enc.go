@@ -1,5 +1,0 @@
-package enc
-
-import (
-	"C"
-)

@@ -59,8 +59,6 @@ github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWR
 github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5PlCu98SY8svDHJxuZscDgtXS6KTTbou5AhLI=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93 h1:QrGfkZDnMxcWHaYDdB7CmqS9i26OAnUj/xcus/abYkY=
-github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93/go.mod h1:QiTe66jFdP7cUKMCCf/WrvDyYdtdmdZfVcdoLbzaKVY=
 github.com/cloudflare/circl v1.2.1-0.20220809205628-0a9554f37a47 h1:YzpECHxZ9TzO7LpnKmPxItSd79lLgrR5heIlnqU4dTU=
 github.com/cloudflare/circl v1.2.1-0.20220809205628-0a9554f37a47/go.mod h1:qhx8gBILsYlbam7h09SvHDSkjpe3TfLA7b/z4rxJvkE=
 github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc h1:Dvk3ySBsOm5EviLx6VCyILnafPcQinXGP5jbTdHUJgE=

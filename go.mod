@@ -3,7 +3,6 @@ module github.com/cloudflare/cloudflared
 go 1.19
 
 require (
-	github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93
 	github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 	github.com/coredns/coredns v1.10.0
 	github.com/coreos/go-oidc/v3 v3.6.0
