@@ -6,7 +6,7 @@ require (
 	github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
 	github.com/coredns/coredns v1.10.0
 	github.com/coreos/go-oidc/v3 v3.6.0
-	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
+	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/facebookgo/grace v0.0.0-20180706040059-75cf19382434
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/getsentry/sentry-go v0.16.0
