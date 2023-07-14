@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-jose/go-jose/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"gopkg.in/square/go-jose.v2"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/retry"

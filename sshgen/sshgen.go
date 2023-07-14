@@ -15,10 +15,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/go-jose/go-jose/v3/jwt"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
-	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"

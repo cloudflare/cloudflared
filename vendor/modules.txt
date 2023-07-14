@@ -77,8 +77,8 @@ github.com/coredns/coredns/plugin/pkg/transport
 github.com/coredns/coredns/plugin/pkg/uniq
 github.com/coredns/coredns/plugin/test
 github.com/coredns/coredns/request
-# github.com/coreos/go-oidc/v3 v3.4.0
-## explicit; go 1.14
+# github.com/coreos/go-oidc/v3 v3.6.0
+## explicit; go 1.19
 github.com/coreos/go-oidc/v3/oidc
 # github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 ## explicit
@@ -246,10 +246,6 @@ github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/pquerna/cachecontrol v0.0.0-20180517163645-1555304b9b35
-## explicit
-github.com/pquerna/cachecontrol
-github.com/pquerna/cachecontrol/cacheobject
 # github.com/prometheus/client_golang v1.13.0
 ## explicit; go 1.17
 github.com/prometheus/client_golang/prometheus
@@ -381,7 +377,6 @@ golang.org/x/mod/semver
 ## explicit; go 1.17
 golang.org/x/net/bpf
 golang.org/x/net/context
-golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
@@ -396,7 +391,7 @@ golang.org/x/net/ipv6
 golang.org/x/net/proxy
 golang.org/x/net/trace
 golang.org/x/net/websocket
-# golang.org/x/oauth2 v0.4.0
+# golang.org/x/oauth2 v0.6.0
 ## explicit; go 1.17
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
@@ -554,18 +549,9 @@ google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 ## explicit; go 1.11
-# gopkg.in/coreos/go-oidc.v2 v2.2.1
-## explicit
-gopkg.in/coreos/go-oidc.v2
 # gopkg.in/natefinch/lumberjack.v2 v2.0.0
 ## explicit
 gopkg.in/natefinch/lumberjack.v2
-# gopkg.in/square/go-jose.v2 v2.6.0
-## explicit
-gopkg.in/square/go-jose.v2
-gopkg.in/square/go-jose.v2/cipher
-gopkg.in/square/go-jose.v2/json
-gopkg.in/square/go-jose.v2/jwt
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
