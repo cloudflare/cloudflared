@@ -1,5 +1,0 @@
-package dec
-
-import (
-	"C"
-)
