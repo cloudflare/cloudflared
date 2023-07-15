@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"runtime"
 	"sync"
 
@@ -77,7 +77,7 @@ func LoadOriginCA(originCAPoolFilename string, log *zerolog.Logger) (*x509.CertP
 
 	if originCAPoolFilename != "" {
 		var err error
-		originCustomCAPool, err = ioutil.ReadFile(originCAPoolFilename)
+		originCustomCAPool, err = os.ReadFile(originCAPoolFilename)
 		if err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("unable to read the file %s for --%s", originCAPoolFilename, OriginCAPoolFlag))
 		}
@@ -116,7 +116,7 @@ func LoadCustomOriginCA(originCAFilename string) (*x509.CertPool, error) {
 		return certPool, nil
 	}
 
-	customOriginCA, err := ioutil.ReadFile(originCAFilename)
+	customOriginCA, err := os.ReadFile(originCAFilename)
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("unable to read the file %s", originCAFilename))
 	}

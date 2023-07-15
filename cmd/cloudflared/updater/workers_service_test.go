@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -224,7 +223,7 @@ func TestUpdateService(t *testing.T) {
 	require.Equal(t, v.Version(), mostRecentVersion)
 
 	require.NoError(t, v.Apply())
-	dat, err := ioutil.ReadFile(testFilePath)
+	dat, err := os.ReadFile(testFilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, string(dat), mostRecentVersion)
@@ -243,7 +242,7 @@ func TestBetaUpdateService(t *testing.T) {
 	require.Equal(t, v.Version(), mostRecentBetaVersion)
 
 	require.NoError(t, v.Apply())
-	dat, err := ioutil.ReadFile(testFilePath)
+	dat, err := os.ReadFile(testFilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, string(dat), mostRecentBetaVersion)
@@ -289,7 +288,7 @@ func TestForcedUpdateService(t *testing.T) {
 	require.Equal(t, v.Version(), mostRecentVersion)
 
 	require.NoError(t, v.Apply())
-	dat, err := ioutil.ReadFile(testFilePath)
+	dat, err := os.ReadFile(testFilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, string(dat), mostRecentVersion)
@@ -309,7 +308,7 @@ func TestUpdateSpecificVersionService(t *testing.T) {
 	require.Equal(t, reqVersion, v.Version())
 
 	require.NoError(t, v.Apply())
-	dat, err := ioutil.ReadFile(testFilePath)
+	dat, err := os.ReadFile(testFilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, reqVersion, string(dat))
@@ -328,7 +327,7 @@ func TestCompressedUpdateService(t *testing.T) {
 	require.Equal(t, "2020.09.02", v.Version())
 
 	require.NoError(t, v.Apply())
-	dat, err := ioutil.ReadFile(testFilePath)
+	dat, err := os.ReadFile(testFilePath)
 	require.NoError(t, err)
 
 	require.Equal(t, "2020.09.02", string(dat))

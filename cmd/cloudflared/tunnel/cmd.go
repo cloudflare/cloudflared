@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"runtime/trace"
@@ -305,7 +304,7 @@ func StartServer(
 	}
 
 	if c.IsSet("trace-output") {
-		tmpTraceFile, err := ioutil.TempFile("", "trace")
+		tmpTraceFile, err := os.CreateTemp("", "trace")
 		if err != nil {
 			log.Err(err).Msg("Failed to create new temporary file to save trace output")
 		}

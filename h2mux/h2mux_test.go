@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -652,7 +651,7 @@ func TestHPACK(t *testing.T) {
 		if stream.Headers[0].Value != "200" {
 			t.Fatalf("expected status 200, got %s", stream.Headers[0].Value)
 		}
-		_, _ = ioutil.ReadAll(stream)
+		_, _ = io.ReadAll(stream)
 		_ = stream.Close()
 	}
 }
@@ -905,7 +904,7 @@ func loadSampleFiles(paths []string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	for _, path := range paths {
 		if _, ok := files[path]; !ok {
-			expectBody, err := ioutil.ReadFile(path)
+			expectBody, err := os.ReadFile(path)
 			if err != nil {
 				return nil, err
 			}

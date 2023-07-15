@@ -3,7 +3,7 @@ package ingress
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -141,7 +141,7 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, respBody, []byte(originURL.Host))
 }
@@ -180,7 +180,7 @@ func TestHTTPServiceUsesIngressRuleScheme(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
-		respBody, err := ioutil.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Equal(t, respBody, []byte(p))
 	}

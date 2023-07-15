@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -241,7 +240,7 @@ func writeTunnelCredentials(filePath string, credentials *connection.Credentials
 	if err != nil {
 		return errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
 	}
-	return ioutil.WriteFile(filePath, body, 400)
+	return os.WriteFile(filePath, body, 0400)
 }
 
 func buildListCommand() *cli.Command {
