@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -338,7 +337,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 			switch resp.StatusCode {
 			// v1 proxy, warp enabled
 			case 200:
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				require.Equal(t, t.Name(), string(body))
 				warpRoutingDisabled = false

@@ -3,7 +3,7 @@ package validation
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"testing"
 	"time"
 
@@ -329,7 +329,7 @@ func (f testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 func emptyResponse(statusCode int) *http.Response {
 	return &http.Response{
 		StatusCode: statusCode,
-		Body:       ioutil.NopCloser(bytes.NewReader(nil)),
+		Body:       io.NopCloser(bytes.NewReader(nil)),
 		Header:     make(http.Header),
 	}
 }

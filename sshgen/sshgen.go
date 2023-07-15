@@ -10,9 +10,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -148,7 +148,7 @@ func generateKeyPair(fullName string) ([]byte, error) {
 		return nil, err
 	}
 	if exist {
-		return ioutil.ReadFile(pubKeyName)
+		return os.ReadFile(pubKeyName)
 	}
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -187,5 +187,5 @@ func writeKey(filename string, data []byte) error {
 		return err
 	}
 
-	return ioutil.WriteFile(filepath, data, 0600)
+	return os.WriteFile(filepath, data, 0600)
 }

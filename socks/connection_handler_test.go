@@ -2,7 +2,7 @@ package socks
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -32,7 +32,7 @@ func sendSocksRequest(t *testing.T) []byte {
 	assert.NoError(t, err)
 	defer resp.Body.Close()
 
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 
 	return b

@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -66,7 +65,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	if err := ioutil.WriteFile(path, resourceData, 0600); err != nil {
+	if err := os.WriteFile(path, resourceData, 0600); err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error writing cert to %s", path))
 	}
 

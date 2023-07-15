@@ -5,7 +5,7 @@ package tlsconfig
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
+	"os"
 
 	"github.com/pkg/errors"
 )
@@ -90,7 +90,7 @@ func GetConfig(p *TLSParameters) (*tls.Config, error) {
 func LoadCert(certPaths []string) (*x509.CertPool, error) {
 	ca := x509.NewCertPool()
 	for _, certPath := range certPaths {
-		caCert, err := ioutil.ReadFile(certPath)
+		caCert, err := os.ReadFile(certPath)
 		if err != nil {
 			return nil, errors.Wrapf(err, "Error reading certificate %s", certPath)
 		}

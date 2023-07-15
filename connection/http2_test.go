@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -84,7 +83,7 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	resp, err := edgeHTTP2Conn.RoundTrip(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	bdy, err := ioutil.ReadAll(resp.Body)
+	bdy, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
 	cancel()
@@ -149,7 +148,7 @@ func TestServeHTTP(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, test.expectedStatus, resp.StatusCode)
 		if test.expectedBody != nil {
-			respBody, err := ioutil.ReadAll(resp.Body)
+			respBody, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.Equal(t, test.expectedBody, respBody)
 		}
@@ -546,7 +545,7 @@ func benchmarkServeHTTP(b *testing.B, test testRequest) {
 		require.NoError(b, err)
 		require.Equal(b, test.expectedStatus, resp.StatusCode)
 		if test.expectedBody != nil {
-			respBody, err := ioutil.ReadAll(resp.Body)
+			respBody, err := io.ReadAll(resp.Body)
 			require.NoError(b, err)
 			require.Equal(b, test.expectedBody, respBody)
 		}
