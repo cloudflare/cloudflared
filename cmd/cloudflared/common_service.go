@@ -8,23 +8,25 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 )
 
-func buildArgsForToken(c *cli.Context, log *zerolog.Logger) ([]string, error) {
+type buildArgsFunc = func(c *cli.Context, log *zerolog.Logger) ([]string, map[string]string, error)
+
+func buildArgsForToken(c *cli.Context, log *zerolog.Logger) ([]string, map[string]string, error) {
 	token := c.Args().First()
 	if _, err := tunnel.ParseToken(token); err != nil {
-		return nil, cliutil.UsageError("Provided tunnel token is not valid (%s).", err)
+		return nil, nil, cliutil.UsageError("Provided tunnel token is not valid (%s).", err)
 	}
 
-	return []string{
-		"tunnel", "run", "--token", token,
-	}, nil
+	return []string{"tunnel", "run"},
+		map[string]string{"TUNNEL_TOKEN": token},
+		nil
 }
 
-func getServiceExtraArgsFromCliArgs(c *cli.Context, log *zerolog.Logger) ([]string, error) {
+func getServiceExtraArgsFromCliArgs(c *cli.Context, log *zerolog.Logger) ([]string, map[string]string, error) {
 	if c.NArg() > 0 {
 		// currently, we only support extra args for token
 		return buildArgsForToken(c, log)
 	} else {
 		// empty extra args
-		return make([]string, 0), nil
+		return make([]string, 0), nil, nil
 	}
 }

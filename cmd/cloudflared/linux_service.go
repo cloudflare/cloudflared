@@ -43,6 +43,7 @@ const (
 	serviceConfigFile     = "config.yml"
 	serviceCredentialFile = "cert.pem"
 	serviceConfigPath     = serviceConfigDir + "/" + serviceConfigFile
+	serviceEnvFile        = "/etc/default/cloudflared"
 	cloudflaredService    = "cloudflared.service"
 )
 
@@ -56,6 +57,8 @@ After=network.target
 [Service]
 TimeoutStartSec=0
 Type=notify
+{{- if ne .EnvFile "" }}
+EnvironmentFile=-{{ .EnvFile }}{{ end }}
 ExecStart={{ .Path }} --no-autoupdate{{ range .ExtraArgs }} {{ . }}{{ end }}
 Restart=on-failure
 RestartSec=5s
@@ -196,19 +199,23 @@ func installLinuxService(c *cli.Context) error {
 		Path: etPath,
 	}
 
-	var extraArgsFunc func(c *cli.Context, log *zerolog.Logger) ([]string, error)
+	var extraArgsFunc buildArgsFunc
 	if c.NArg() == 0 {
 		extraArgsFunc = buildArgsForConfig
 	} else {
 		extraArgsFunc = buildArgsForToken
 	}
 
-	extraArgs, err := extraArgsFunc(c, log)
+	extraArgs, extraEnv, err := extraArgsFunc(c, log)
 	if err != nil {
 		return err
 	}
 
 	templateArgs.ExtraArgs = extraArgs
+	templateArgs.Env = extraEnv
+	if len(extraEnv) > 0 {
+		templateArgs.EnvFile = serviceEnvFile
+	}
 
 	switch {
 	case isSystemd():
@@ -225,14 +232,14 @@ func installLinuxService(c *cli.Context) error {
 	return err
 }
 
-func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
+func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, map[string]string, error) {
 	if err := ensureConfigDirExists(serviceConfigDir); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	src, _, err := config.ReadConfigFile(c, log)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// can't use context because this command doesn't define "credentials-file" flag
@@ -241,24 +248,24 @@ func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
 		return err == nil && val != ""
 	}
 	if src.TunnelID == "" || !configPresent(tunnel.CredFileFlag) {
-		return nil, fmt.Errorf(`Configuration file %s must contain entries for the tunnel to run and its associated credentials:
+		return nil, nil, fmt.Errorf(`Configuration file %s must contain entries for the tunnel to run and its associated credentials:
 tunnel: TUNNEL-UUID
 credentials-file: CREDENTIALS-FILE
 `, src.Source())
 	}
 	if src.Source() != serviceConfigPath {
 		if exists, err := config.FileExists(serviceConfigPath); err != nil || exists {
-			return nil, fmt.Errorf("Possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
+			return nil, nil, fmt.Errorf("Possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
 		}
 
 		if err := copyFile(src.Source(), serviceConfigPath); err != nil {
-			return nil, fmt.Errorf("failed to copy %s to %s: %w", src.Source(), serviceConfigPath, err)
+			return nil, nil, fmt.Errorf("failed to copy %s to %s: %w", src.Source(), serviceConfigPath, err)
 		}
 	}
 
 	return []string{
 		"--config", "/etc/cloudflared/config.yml", "tunnel", "run",
-	}, nil
+	}, nil, nil
 }
 
 func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {

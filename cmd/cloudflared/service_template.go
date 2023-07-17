@@ -25,14 +25,48 @@ type ServiceTemplate struct {
 type ServiceTemplateArgs struct {
 	Path      string
 	ExtraArgs []string
+	EnvFile   string
+	Env       map[string]string
+}
+
+func resolvePath(s string) (string, error) {
+	resolvedPath, err := homedir.Expand(s)
+	if err != nil {
+		return "", fmt.Errorf("error resolving path %s: %v", s, err)
+	}
+	return resolvedPath, nil
 }
 
 func (st *ServiceTemplate) ResolvePath() (string, error) {
-	resolvedPath, err := homedir.Expand(st.Path)
-	if err != nil {
-		return "", fmt.Errorf("error resolving path %s: %v", st.Path, err)
+	return resolvePath(st.Path)
+}
+
+func (st *ServiceTemplate) GenerateEnvFile(args *ServiceTemplateArgs) error {
+	if args.EnvFile == "" {
+		return nil
 	}
-	return resolvedPath, nil
+	filePath, err := resolvePath(args.EnvFile)
+	if err != nil {
+		return err
+	}
+	if _, err = os.Stat(filePath); err == nil {
+		return fmt.Errorf("%s", serviceAlreadyExistsWarn(filePath))
+	}
+	fileMode := os.FileMode(0o640)
+	if st.FileMode != 0 {
+		fileMode &= st.FileMode
+	}
+	buf := new(bytes.Buffer)
+	for k, v := range args.Env {
+		if _, err = fmt.Fprintf(buf, "%s=%s\n", k, v); err != nil {
+			return fmt.Errorf("error writing internal buffer: %v", err)
+		}
+	}
+	if err = os.WriteFile(filePath, buf.Bytes(), fileMode); err != nil {
+		_ = os.Remove(filePath)
+		return fmt.Errorf("error writing %s: %v", filePath, err)
+	}
+	return nil
 }
 
 func (st *ServiceTemplate) Generate(args *ServiceTemplateArgs) error {
@@ -45,7 +79,11 @@ func (st *ServiceTemplate) Generate(args *ServiceTemplateArgs) error {
 		return err
 	}
 	if _, err = os.Stat(resolvedPath); err == nil {
-		return fmt.Errorf(serviceAlreadyExistsWarn(resolvedPath))
+		return fmt.Errorf("%s", serviceAlreadyExistsWarn(resolvedPath))
+	}
+
+	if err = st.GenerateEnvFile(args); err != nil {
+		return err
 	}
 
 	var buffer bytes.Buffer
