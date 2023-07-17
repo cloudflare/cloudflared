@@ -132,7 +132,7 @@ func installLaunchd(c *cli.Context) error {
 		log.Err(err).Msg("Error determining install path")
 		return errors.Wrap(err, "Error determining install path")
 	}
-	extraArgs, err := getServiceExtraArgsFromCliArgs(c, log)
+	extraArgs, extraEnv, err := getServiceExtraArgsFromCliArgs(c, log)
 	if err != nil {
 		errMsg := "Unable to determine extra arguments for launch daemon"
 		log.Err(err).Msg(errMsg)
@@ -150,7 +150,7 @@ func installLaunchd(c *cli.Context) error {
 		return errors.Wrap(err, "error determining stderr path")
 	}
 	launchdTemplate := newLaunchdTemplate(installPath, stdoutPath, stderrPath)
-	templateArgs := ServiceTemplateArgs{Path: etPath, ExtraArgs: extraArgs}
+	templateArgs := ServiceTemplateArgs{Path: etPath, ExtraArgs: extraArgs, Env: extraEnv}
 	err = launchdTemplate.Generate(&templateArgs)
 	if err != nil {
 		log.Err(err).Msg("error generating launchd template")

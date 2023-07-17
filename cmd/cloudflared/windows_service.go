@@ -193,12 +193,13 @@ func installWindowsService(c *cli.Context) error {
 		s.Close()
 		return fmt.Errorf(serviceAlreadyExistsWarn(windowsServiceName))
 	}
-	extraArgs, err := getServiceExtraArgsFromCliArgs(c, &log)
+	extraArgs, extraEnv, err := getServiceExtraArgsFromCliArgs(c, &log)
 	if err != nil {
 		errMsg := "Unable to determine extra arguments for windows service"
 		log.Err(err).Msg(errMsg)
 		return errors.Wrap(err, errMsg)
 	}
+	_ = extraEnv // No use for this on Windows
 
 	config := mgr.Config{StartType: mgr.StartAutomatic, DisplayName: windowsServiceDescription}
 	s, err = m.CreateService(windowsServiceName, exepath, config, extraArgs...)
