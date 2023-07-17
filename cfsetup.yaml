@@ -121,7 +121,7 @@ buster: &buster
       - export FIPS=true
       - export ORIGINAL_NAME=true
       - make cloudflared-deb
-  build-fips-internal-deb-nightly:
+  build-internal-deb-nightly-amd64:
     build_dir: *build_dir
     builddeps: *build_fips_deb_deps
     post-cache:
@@ -129,6 +129,16 @@ buster: &buster
       - export GOARCH=amd64
       - export NIGHTLY=true
       - export FIPS=true
+      - export ORIGINAL_NAME=true
+      - make cloudflared-deb
+  build-internal-deb-nightly-arm64:
+    build_dir: *build_dir
+    builddeps: *build_fips_deb_deps
+    post-cache:
+      - export GOOS=linux
+      - export GOARCH=arm64
+      - export NIGHTLY=true
+      #- export FIPS=true # TUN-7595
       - export ORIGINAL_NAME=true
       - make cloudflared-deb
   build-deb-arm64:
