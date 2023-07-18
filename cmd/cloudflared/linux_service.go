@@ -25,6 +25,9 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 				Name:   "install",
 				Usage:  "Install cloudflared as a system service",
 				Action: cliutil.ConfiguredAction(installLinuxService),
+				Flags: []cli.Flag{
+					noUpdateServiceFlag,
+				},
 			},
 			{
 				Name:   "uninstall",
@@ -39,15 +42,17 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 // The directory and files that are used by the service.
 // These are hard-coded in the templates below.
 const (
-	serviceConfigDir      = "/etc/cloudflared"
-	serviceConfigFile     = "config.yml"
-	serviceCredentialFile = "cert.pem"
-	serviceConfigPath     = serviceConfigDir + "/" + serviceConfigFile
-	cloudflaredService    = "cloudflared.service"
+	serviceConfigDir         = "/etc/cloudflared"
+	serviceConfigFile        = "config.yml"
+	serviceCredentialFile    = "cert.pem"
+	serviceConfigPath        = serviceConfigDir + "/" + serviceConfigFile
+	cloudflaredService       = "cloudflared.service"
+	cloudflaredUpdateService = "cloudflared-update.service"
+	cloudflaredUpdateTimer   = "cloudflared-update.timer"
 )
 
-var systemdTemplates = []ServiceTemplate{
-	{
+var systemdAllTemplates = map[string]ServiceTemplate{
+	cloudflaredService: {
 		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredService),
 		Content: `[Unit]
 Description=cloudflared
@@ -64,8 +69,8 @@ RestartSec=5s
 WantedBy=multi-user.target
 `,
 	},
-	{
-		Path: "/etc/systemd/system/cloudflared-update.service",
+	cloudflaredUpdateService: {
+		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredUpdateService),
 		Content: `[Unit]
 Description=Update cloudflared
 After=network.target
@@ -74,8 +79,8 @@ After=network.target
 ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 11 ]; then systemctl restart cloudflared; exit 0; fi; exit $code'
 `,
 	},
-	{
-		Path: "/etc/systemd/system/cloudflared-update.timer",
+	cloudflaredUpdateTimer: {
+		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredUpdateTimer),
 		Content: `[Unit]
 Description=Update cloudflared
 
@@ -106,7 +111,7 @@ var sysvTemplate = ServiceTemplate{
 # Description:       cloudflared agent
 ### END INIT INFO
 name=$(basename $(readlink -f $0))
-cmd="{{.Path}} --pidfile /var/run/$name.pid --autoupdate-freq 24h0m0s{{ range .ExtraArgs }} {{ . }}{{ end }}"
+cmd="{{.Path}} --pidfile /var/run/$name.pid {{ range .ExtraArgs }} {{ . }}{{ end }}"
 pid_file="/var/run/$name.pid"
 stdout_log="/var/log/$name.log"
 stderr_log="/var/log/$name.err"
@@ -178,6 +183,14 @@ exit 0
 `,
 }
 
+var (
+	noUpdateServiceFlag = &cli.BoolFlag{
+		Name:  "no-update-service",
+		Usage: "Disable auto-update of the cloudflared linux service, which restarts the server to upgrade for new versions.",
+		Value: false,
+	}
+)
+
 func isSystemd() bool {
 	if _, err := os.Stat("/run/systemd/system"); err == nil {
 		return true
@@ -196,6 +209,9 @@ func installLinuxService(c *cli.Context) error {
 		Path: etPath,
 	}
 
+	// Check if the "no update flag" is set
+	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
+
 	var extraArgsFunc func(c *cli.Context, log *zerolog.Logger) ([]string, error)
 	if c.NArg() == 0 {
 		extraArgsFunc = buildArgsForConfig
@@ -213,10 +229,10 @@ func installLinuxService(c *cli.Context) error {
 	switch {
 	case isSystemd():
 		log.Info().Msgf("Using Systemd")
-		err = installSystemd(&templateArgs, log)
+		err = installSystemd(&templateArgs, autoUpdate, log)
 	default:
 		log.Info().Msgf("Using SysV")
-		err = installSysv(&templateArgs, log)
+		err = installSysv(&templateArgs, autoUpdate, log)
 	}
 
 	if err == nil {
@@ -261,7 +277,20 @@ credentials-file: CREDENTIALS-FILE
 	}, nil
 }
 
-func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
+func installSystemd(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolog.Logger) error {
+	var systemdTemplates []ServiceTemplate
+	if autoUpdate {
+		systemdTemplates = []ServiceTemplate{
+			systemdAllTemplates[cloudflaredService],
+			systemdAllTemplates[cloudflaredUpdateService],
+			systemdAllTemplates[cloudflaredUpdateTimer],
+		}
+	} else {
+		systemdTemplates = []ServiceTemplate{
+			systemdAllTemplates[cloudflaredService],
+		}
+	}
+
 	for _, serviceTemplate := range systemdTemplates {
 		err := serviceTemplate.Generate(templateArgs)
 		if err != nil {
@@ -273,10 +302,14 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 		log.Err(err).Msgf("systemctl enable %s error", cloudflaredService)
 		return err
 	}
-	if err := runCommand("systemctl", "start", "cloudflared-update.timer"); err != nil {
-		log.Err(err).Msg("systemctl start cloudflared-update.timer error")
-		return err
+
+	if autoUpdate {
+		if err := runCommand("systemctl", "start", cloudflaredUpdateTimer); err != nil {
+			log.Err(err).Msgf("systemctl start %s error", cloudflaredUpdateTimer)
+			return err
+		}
 	}
+
 	if err := runCommand("systemctl", "daemon-reload"); err != nil {
 		log.Err(err).Msg("systemctl daemon-reload error")
 		return err
@@ -284,12 +317,19 @@ func installSystemd(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) erro
 	return runCommand("systemctl", "start", cloudflaredService)
 }
 
-func installSysv(templateArgs *ServiceTemplateArgs, log *zerolog.Logger) error {
+func installSysv(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolog.Logger) error {
 	confPath, err := sysvTemplate.ResolvePath()
 	if err != nil {
 		log.Err(err).Msg("error resolving system path")
 		return err
 	}
+
+	if autoUpdate {
+		templateArgs.ExtraArgs = append([]string{"--autoupdate-freq 24h0m0s"}, templateArgs.ExtraArgs...)
+	} else {
+		templateArgs.ExtraArgs = append([]string{"--no-autoupdate"}, templateArgs.ExtraArgs...)
+	}
+
 	if err := sysvTemplate.Generate(templateArgs); err != nil {
 		log.Err(err).Msg("error generating system template")
 		return err
@@ -327,19 +367,35 @@ func uninstallLinuxService(c *cli.Context) error {
 }
 
 func uninstallSystemd(log *zerolog.Logger) error {
-	if err := runCommand("systemctl", "disable", cloudflaredService); err != nil {
-		log.Err(err).Msgf("systemctl disable %s error", cloudflaredService)
-		return err
+	// Get only the installed services
+	installedServices := make(map[string]ServiceTemplate)
+	for serviceName, serviceTemplate := range systemdAllTemplates {
+		if err := runCommand("systemctl", "status", serviceName); err == nil {
+			installedServices[serviceName] = serviceTemplate
+		} else {
+			log.Info().Msgf("Service '%s' not installed, skipping its uninstall", serviceName)
+		}
 	}
-	if err := runCommand("systemctl", "stop", cloudflaredService); err != nil {
-		log.Err(err).Msgf("systemctl stop %s error", cloudflaredService)
-		return err
+
+	if _, exists := installedServices[cloudflaredService]; exists {
+		if err := runCommand("systemctl", "disable", cloudflaredService); err != nil {
+			log.Err(err).Msgf("systemctl disable %s error", cloudflaredService)
+			return err
+		}
+		if err := runCommand("systemctl", "stop", cloudflaredService); err != nil {
+			log.Err(err).Msgf("systemctl stop %s error", cloudflaredService)
+			return err
+		}
 	}
-	if err := runCommand("systemctl", "stop", "cloudflared-update.timer"); err != nil {
-		log.Err(err).Msg("systemctl stop cloudflared-update.timer error")
-		return err
+
+	if _, exists := installedServices[cloudflaredUpdateTimer]; exists {
+		if err := runCommand("systemctl", "stop", cloudflaredUpdateTimer); err != nil {
+			log.Err(err).Msgf("systemctl stop %s error", cloudflaredUpdateTimer)
+			return err
+		}
 	}
-	for _, serviceTemplate := range systemdTemplates {
+
+	for _, serviceTemplate := range installedServices {
 		if err := serviceTemplate.Remove(); err != nil {
 			log.Err(err).Msg("error removing service template")
 			return err
