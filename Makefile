@@ -209,58 +209,6 @@ cloudflared-darwin-amd64.tgz: cloudflared
 	tar czf cloudflared-darwin-amd64.tgz cloudflared
 	rm cloudflared
 
-.PHONY: cloudflared-junos
-cloudflared-junos: cloudflared jetez-certificate.pem jetez-key.pem
-	jetez --source . \
-		  -j jet.yaml \
-		  --key jetez-key.pem \
-		  --cert jetez-certificate.pem \
-		  --version $(VERSION)
-	rm jetez-*.pem
-
-jetez-certificate.pem:
-ifndef JETEZ_CERT
-	$(error JETEZ_CERT not defined)
-endif
-	@echo "Writing JetEZ certificate"
-	@echo "$$JETEZ_CERT" > jetez-certificate.pem
-
-jetez-key.pem:
-ifndef JETEZ_KEY
-	$(error JETEZ_KEY not defined)
-endif
-	@echo "Writing JetEZ key"
-	@echo "$$JETEZ_KEY" > jetez-key.pem
-
-.PHONY: publish-cloudflared-junos
-publish-cloudflared-junos: cloudflared-junos cloudflared-x86-64.latest.s3
-ifndef S3_ENDPOINT
-	$(error S3_HOST not defined)
-endif
-ifndef S3_URI
-	$(error S3_URI not defined)
-endif
-ifndef S3_ACCESS_KEY
-	$(error S3_ACCESS_KEY not defined)
-endif
-ifndef S3_SECRET_KEY
-	$(error S3_SECRET_KEY not defined)
-endif
-	sha256sum cloudflared-x86-64-$(VERSION).tgz | awk '{printf $$1}' > cloudflared-x86-64-$(VERSION).tgz.shasum
-	s4cmd --endpoint-url $(S3_ENDPOINT) --force --API-GrantRead=uri=http://acs.amazonaws.com/groups/global/AllUsers \
-		put cloudflared-x86-64-$(VERSION).tgz $(S3_URI)/cloudflared-x86-64-$(VERSION).tgz
-	s4cmd --endpoint-url $(S3_ENDPOINT) --force --API-GrantRead=uri=http://acs.amazonaws.com/groups/global/AllUsers \
-		put cloudflared-x86-64-$(VERSION).tgz.shasum $(S3_URI)/cloudflared-x86-64-$(VERSION).tgz.shasum
-	dpkg --compare-versions "$(VERSION)" gt "$(shell cat cloudflared-x86-64.latest.s3)" && \
-		echo -n "$(VERSION)" > cloudflared-x86-64.latest && \
-		s4cmd --endpoint-url $(S3_ENDPOINT) --force --API-GrantRead=uri=http://acs.amazonaws.com/groups/global/AllUsers \
-			put cloudflared-x86-64.latest $(S3_URI)/cloudflared-x86-64.latest || \
-		echo "Latest version not updated"
-
-cloudflared-x86-64.latest.s3:
-	s4cmd --endpoint-url $(S3_ENDPOINT) --force \
-		get $(S3_URI)/cloudflared-x86-64.latest cloudflared-x86-64.latest.s3
-
 .PHONY: homebrew-upload
 homebrew-upload: cloudflared-darwin-amd64.tgz
 	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $$^ $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz
