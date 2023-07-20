@@ -74,6 +74,15 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 			LastAppliedVersion: o.currentVersion,
 		}
 	}
+
+	if string(config) == "null" {
+		o.log.Info().Msg("Ignore null config from server")
+		o.currentVersion = version
+		return &tunnelpogs.UpdateConfigurationResponse{
+			LastAppliedVersion: o.currentVersion,
+		}
+	}
+
 	var newConf newRemoteConfig
 	if err := json.Unmarshal(config, &newConf); err != nil {
 		o.log.Err(err).
