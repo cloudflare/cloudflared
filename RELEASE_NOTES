@@ -1,3 +1,14 @@
+2023.7.2
+- 2023-07-19 TUN-7599: Onboard cloudflared to Software Dashboard
+- 2023-07-19 TUN-7587: Remove junos builds
+- 2023-07-18 TUN-7597: Add flag to disable auto-update services to be installed
+- 2023-07-17 TUN-7594: Add nightly arm64 cloudflared internal deb publishes
+- 2023-07-14 TUN-7586: Upgrade go-jose/go-jose/v3 and core-os/go-oidc/v3
+- 2023-07-14 TUN-7589: Remove legacy golang.org/x/crypto/ssh/terminal package usage
+- 2023-07-14 TUN-7590: Remove usages of ioutil
+- 2023-07-14 TUN-7585: Remove h2mux compression
+- 2023-07-14 TUN-7588: Update package coreos/go-systemd
+
 2023.7.1
 - 2023-07-13 TUN-7582: Correct changelog wording for --management-diagnostics
 - 2023-07-12 TUN-7575: Add option to disable PTMU discovery over QUIC
