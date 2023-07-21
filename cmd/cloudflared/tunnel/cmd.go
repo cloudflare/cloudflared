@@ -782,7 +782,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_WARP_ROUTING"},
 			Hidden:  shouldHide,
 		}),
-    altsrc.NewBoolFlag(&cli.BoolFlag{
+		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "management-diagnostics",
 			Usage:   "Enables the in-depth diagnostic routes to be made available over the management service (/debug/pprof, /metrics, etc.)",
 			EnvVars: []string{"TUNNEL_MANAGEMENT_DIAGNOSTICS"},
