@@ -135,14 +135,7 @@ func Handshake(
 	m.f.ReadMetaHeaders = hpack.NewDecoder(4096, func(hpack.HeaderField) {})
 	// Initialise the settings to identify this connection and confirm the other end is sane.
 	handshakeSetting := http2.Setting{ID: SettingMuxerMagic, Val: MuxerMagicEdge}
-	compressionSetting := http2.Setting{ID: SettingCompression, Val: config.CompressionQuality.toH2Setting()}
-	if CompressionIsSupported() {
-		config.Log.Debug().Msg("muxer: Compression is supported")
-		m.compressionQuality = config.CompressionQuality.getPreset()
-	} else {
-		config.Log.Debug().Msg("muxer: Compression is not supported")
-		compressionSetting = http2.Setting{ID: SettingCompression, Val: 0}
-	}
+	compressionSetting := http2.Setting{ID: SettingCompression, Val: 0}
 
 	expectedMagic := MuxerMagicOrigin
 	if config.IsClient {

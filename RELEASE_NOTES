@@ -1,3 +1,20 @@
+2023.7.1
+- 2023-07-13 TUN-7582: Correct changelog wording for --management-diagnostics
+- 2023-07-12 TUN-7575: Add option to disable PTMU discovery over QUIC
+
+2023.7.0
+- 2023-07-06 TUN-7558: Flush on Writes for StreamBasedOriginProxy
+- 2023-07-05 TUN-7553: Add flag to enable management diagnostic services
+- 2023-07-05 TUN-7564: Support cf-trace-id for cloudflared access
+- 2023-07-05 TUN-7477: Decrement UDP sessions on shutdown
+- 2023-07-03 TUN-7545: Add support for full bidirectionally streaming with close signal propagation
+- 2023-06-30 TUN-7549: Add metrics route to management service
+- 2023-06-30 TUN-7551: Complete removal of raven-go to sentry-go
+- 2023-06-30 TUN-7550: Add pprof endpoint to management service
+- 2023-06-29 TUN-7543: Add --debug-stream flag to cloudflared access ssh
+- 2023-06-26 TUN-6011: Remove docker networks from ICMP Proxy test
+- 2023-06-20 AUTH-5328 Pass cloudflared_token_check param when running cloudflared access login
+
 2023.6.1
 - 2023-06-19 TUN-7480: Added a timeout for unregisterUDP.
 - 2023-06-16 TUN-7477: Add UDP/TCP session metrics

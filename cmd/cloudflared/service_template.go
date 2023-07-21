@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
@@ -64,7 +63,7 @@ func (st *ServiceTemplate) Generate(args *ServiceTemplateArgs) error {
 		return fmt.Errorf("error creating %s: %v", plistFolder, err)
 	}
 
-	err = ioutil.WriteFile(resolvedPath, buffer.Bytes(), fileMode)
+	err = os.WriteFile(resolvedPath, buffer.Bytes(), fileMode)
 	if err != nil {
 		return fmt.Errorf("error writing %s: %v", resolvedPath, err)
 	}
@@ -103,7 +102,7 @@ func runCommand(command string, args ...string) error {
 		return fmt.Errorf("error starting %s: %v", command, err)
 	}
 
-	output, _ := ioutil.ReadAll(stderr)
+	output, _ := io.ReadAll(stderr)
 	err = cmd.Wait()
 	if err != nil {
 		return fmt.Errorf("%s %v returned with error code %v due to: %v", command, args, err, string(output))

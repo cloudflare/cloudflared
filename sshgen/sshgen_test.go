@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v3"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 
 	"github.com/cloudflare/cloudflared/config"
 	cfpath "github.com/cloudflare/cloudflared/token"
@@ -64,7 +63,7 @@ func TestCertGenSuccess(t *testing.T) {
 	mockRequest = func(url, contentType string, body io.Reader) (*http.Response, error) {
 		assert.Contains(t, "/cdn-cgi/access/cert_sign", url)
 		assert.Equal(t, "application/json", contentType)
-		buf, err := ioutil.ReadAll(body)
+		buf, err := io.ReadAll(body)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, buf)
 		return w.Result(), nil

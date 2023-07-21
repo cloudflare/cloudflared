@@ -136,8 +136,11 @@ func (p *Proxy) ProxyHTTP(
 		if err != nil {
 			return err
 		}
-
-		rws := connection.NewHTTPResponseReadWriterAcker(w, req)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return fmt.Errorf("response writer is not a flusher")
+		}
+		rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
 		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, originProxy); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
 			p.logRequestError(err, cfRay, "", rule, srv)

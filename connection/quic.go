@@ -449,9 +449,20 @@ func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header)
 	return hrw.WriteConnectResponseData(nil, metadata...)
 }
 
+func (hrw *httpResponseAdapter) Write(p []byte) (int, error) {
+	// Make sure to send WriteHeader response if not called yet
+	if !hrw.connectResponseSent {
+		hrw.WriteRespHeaders(http.StatusOK, hrw.headers)
+	}
+	return hrw.RequestServerStream.Write(p)
+}
+
 func (hrw *httpResponseAdapter) Header() http.Header {
 	return hrw.headers
 }
+
+// This is a no-op Flush because this adapter is over a quic.Stream and we don't need Flush here.
+func (hrw *httpResponseAdapter) Flush() {}
 
 func (hrw *httpResponseAdapter) WriteHeader(status int) {
 	hrw.WriteRespHeaders(status, hrw.headers)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"sync"
 	"time"
@@ -30,6 +31,17 @@ const (
 	reasonIdleLimitExceeded                      = "session was idle for too long"
 )
 
+var (
+	// CORS middleware required to allow dash to access management.argotunnel.com requests
+	corsHandler = cors.Handler(cors.Options{
+		// Allows for any subdomain of cloudflare.com
+		AllowedOrigins: []string{"https://*.cloudflare.com"},
+		// Required to present cookies or other authentication across origin boundries
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	})
+)
+
 type ManagementService struct {
 	// The management tunnel hostname
 	Hostname string
@@ -53,6 +65,7 @@ type ManagementService struct {
 }
 
 func New(managementHostname string,
+	enableDiagServices bool,
 	serviceIP string,
 	clientID uuid.UUID,
 	label string,
@@ -70,21 +83,21 @@ func New(managementHostname string,
 	}
 	r := chi.NewRouter()
 	r.Use(ValidateAccessTokenQueryMiddleware)
-	r.Get("/ping", ping)
-	r.Head("/ping", ping)
+
+	// Default management services
+	r.With(corsHandler).Get("/ping", ping)
+	r.With(corsHandler).Head("/ping", ping)
 	r.Get("/logs", s.logs)
-	r.Get("/metrics", s.metricsHandler.ServeHTTP)
-	r.Route("/host_details", func(r chi.Router) {
-		// CORS middleware required to allow dash to access management.argotunnel.com requests
-		r.Use(cors.Handler(cors.Options{
-			// Allows for any subdomain of cloudflare.com
-			AllowedOrigins: []string{"https://*.cloudflare.com"},
-			// Required to present cookies or other authentication across origin boundries
-			AllowCredentials: true,
-			MaxAge:           300, // Maximum value not ignored by any of major browsers
-		}))
-		r.Get("/", s.getHostDetails)
-	})
+	r.With(corsHandler).Get("/host_details", s.getHostDetails)
+
+	// Diagnostic management services
+	if enableDiagServices {
+		// Prometheus endpoint
+		r.With(corsHandler).Get("/metrics", s.metricsHandler.ServeHTTP)
+		// Supports only heap and goroutine
+		r.With(corsHandler).Get("/debug/pprof/{profile:heap|goroutine}", pprof.Index)
+	}
+
 	s.router = r
 	return s
 }

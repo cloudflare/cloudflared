@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"runtime/trace"
@@ -12,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/go-systemd/daemon"
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
@@ -81,6 +80,11 @@ const (
 
 	// udpUnregisterSessionTimeout is how long we wait before we stop trying to unregister a UDP session from the edge
 	udpUnregisterSessionTimeoutFlag = "udp-unregister-session-timeout"
+
+	// quicDisablePathMTUDiscovery sets if QUIC should not perform PTMU discovery and use a smaller (safe) packet size.
+	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
+	// Note that this may result in packet drops for UDP proxying, since we expect being able to send at least 1280 bytes of inner packets.
+	quicDisablePathMTUDiscovery = "quic-disable-pmtu-discovery"
 
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
@@ -300,7 +304,7 @@ func StartServer(
 	}
 
 	if c.IsSet("trace-output") {
-		tmpTraceFile, err := ioutil.TempFile("", "trace")
+		tmpTraceFile, err := os.CreateTemp("", "trace")
 		if err != nil {
 			log.Err(err).Msg("Failed to create new temporary file to save trace output")
 		}
@@ -413,6 +417,7 @@ func StartServer(
 
 		mgmt := management.New(
 			c.String("management-hostname"),
+			c.Bool("management-diagnostics"),
 			serviceIP,
 			clientID,
 			c.String(connectorLabelFlag),
@@ -691,6 +696,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  5 * time.Second,
 			Hidden: true,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    quicDisablePathMTUDiscovery,
+			EnvVars: []string{"TUNNEL_DISABLE_QUIC_PMTU"},
+			Usage:   "Use this option to disable PTMU discovery for QUIC connections. This will result in lower packet sizes. Not however, that this may cause instability for UDP proxying.",
+			Value:   false,
+			Hidden:  true,
+		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:  connectorLabelFlag,
 			Usage: "Use this option to give a meaningful label to a specific connector. When a tunnel starts up, a connector id unique to the tunnel is generated. This is a uuid. To make it easier to identify a connector, we will use the hostname of the machine the tunnel is running on along with the connector ID. This option exists if one wants to have more control over what their individual connectors are called.",
@@ -769,6 +781,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Enable WARP routing",
 			EnvVars: []string{"TUNNEL_WARP_ROUTING"},
 			Hidden:  shouldHide,
+		}),
+    altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    "management-diagnostics",
+			Usage:   "Enables the in-depth diagnostic routes to be made available over the management service (/debug/pprof, /metrics, etc.)",
+			EnvVars: []string{"TUNNEL_MANAGEMENT_DIAGNOSTICS"},
+			Value:   false,
 		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,

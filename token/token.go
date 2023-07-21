@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-jose/go-jose/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"gopkg.in/square/go-jose.v2"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/retry"
@@ -124,7 +123,7 @@ func (l *lock) Acquire() error {
 
 	// Create a lock file so other processes won't also try to get the token at
 	// the same time
-	if err := ioutil.WriteFile(l.lockFilePath, []byte{}, 0600); err != nil {
+	if err := os.WriteFile(l.lockFilePath, []byte{}, 0600); err != nil {
 		return err
 	}
 	return nil
@@ -208,7 +207,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.
 			log.Debug().Msgf("failed to exchange org token for app token: %s", err)
 		} else {
 			// generate app path
-			if err := ioutil.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
+			if err := os.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
 				return "", errors.Wrap(err, "failed to write app token to disk")
 			}
 			return appToken, nil
@@ -237,12 +236,12 @@ func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath strin
 
 	// If we were able to get the auth domain and generate an org token path, lets write it to disk.
 	if orgTokenPath != "" {
-		if err := ioutil.WriteFile(orgTokenPath, []byte(resp.OrgToken), 0600); err != nil {
+		if err := os.WriteFile(orgTokenPath, []byte(resp.OrgToken), 0600); err != nil {
 			return "", errors.Wrap(err, "failed to write org token to disk")
 		}
 	}
 
-	if err := ioutil.WriteFile(appTokenPath, []byte(resp.AppToken), 0600); err != nil {
+	if err := os.WriteFile(appTokenPath, []byte(resp.AppToken), 0600); err != nil {
 		return "", errors.Wrap(err, "failed to write app token to disk")
 	}
 
@@ -389,7 +388,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 
 // GetTokenIfExists will return the token from local storage if it exists and not expired
 func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

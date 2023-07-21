@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -652,7 +651,7 @@ func TestHPACK(t *testing.T) {
 		if stream.Headers[0].Value != "200" {
 			t.Fatalf("expected status 200, got %s", stream.Headers[0].Value)
 		}
-		_, _ = ioutil.ReadAll(stream)
+		_, _ = io.ReadAll(stream)
 		_ = stream.Close()
 	}
 }
@@ -675,157 +674,6 @@ func AssertIfPipeReadable(t *testing.T, pipe io.ReadCloser) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		// nothing to read
-	}
-}
-
-func TestMultipleStreamsWithDictionaries(t *testing.T) {
-	l := zerolog.Nop()
-
-	for q := CompressionNone; q <= CompressionMax; q++ {
-		htmlBody := `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"` +
-			`"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">` +
-			`<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">` +
-			`<head>` +
-			`  <title>Your page title here</title>` +
-			`</head>` +
-			`<body>` +
-			`<h1>Your major heading here</h1>` +
-			`<p>` +
-			`This is a regular text paragraph.` +
-			`</p>` +
-			`<ul>` +
-			`  <li>` +
-			`  First bullet of a bullet list.` +
-			`  </li>` +
-			`  <li>` +
-			`  This is the <em>second</em> bullet.` +
-			`  </li>` +
-			`</ul>` +
-			`</body>` +
-			`</html>`
-
-		f := MuxedStreamFunc(func(stream *MuxedStream) error {
-			var contentType string
-			var pathHeader Header
-
-			for _, h := range stream.Headers {
-				if h.Name == ":path" {
-					pathHeader = h
-					break
-				}
-			}
-
-			if pathHeader.Name != ":path" {
-				panic("Couldn't find :path header in test")
-			}
-
-			if strings.Contains(pathHeader.Value, "html") {
-				contentType = "text/html; charset=utf-8"
-			} else if strings.Contains(pathHeader.Value, "js") {
-				contentType = "application/javascript"
-			} else if strings.Contains(pathHeader.Value, "css") {
-				contentType = "text/css"
-			} else {
-				contentType = "img/gif"
-			}
-
-			_ = stream.WriteHeaders([]Header{
-				{Name: "content-type", Value: contentType},
-			})
-			_, _ = stream.Write([]byte(strings.Replace(htmlBody, "paragraph", pathHeader.Value, 1) + stream.Headers[5].Value))
-
-			return nil
-		})
-		muxPair := NewCompressedMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), q), q, f)
-		muxPair.Serve(t)
-
-		var wg sync.WaitGroup
-
-		paths := []string{
-			"/html1",
-			"/html2?sa:ds",
-			"/html3",
-			"/css1",
-			"/html1",
-			"/html2?sa:ds",
-			"/html3",
-			"/css1",
-			"/css2",
-			"/css3",
-			"/js",
-			"/js",
-			"/js",
-			"/js2",
-			"/img2",
-			"/html1",
-			"/html2?sa:ds",
-			"/html3",
-			"/css1",
-			"/css2",
-			"/css3",
-			"/js",
-			"/js",
-			"/js",
-			"/js2",
-			"/img1",
-		}
-
-		wg.Add(len(paths))
-		errorsC := make(chan error, len(paths))
-
-		for i, s := range paths {
-			go func(index int, path string) {
-				defer wg.Done()
-				stream, err := muxPair.OpenEdgeMuxStream(
-					[]Header{
-						{Name: ":method", Value: "GET"},
-						{Name: ":scheme", Value: "https"},
-						{Name: ":authority", Value: "tunnel.otterlyadorable.co.uk"},
-						{Name: ":path", Value: path},
-						{Name: "cf-ray", Value: "378948953f044408-SFO-DOG"},
-						{Name: "idx", Value: strconv.Itoa(index)},
-						{Name: "accept-encoding", Value: "gzip, br"},
-					},
-					nil,
-				)
-				if err != nil {
-					errorsC <- fmt.Errorf("error in OpenStream: %v", err)
-					return
-				}
-
-				expectBody := strings.Replace(htmlBody, "paragraph", path, 1) + strconv.Itoa(index)
-				responseBody := make([]byte, len(expectBody)*2)
-				n, err := stream.Read(responseBody)
-				if err != nil {
-					errorsC <- fmt.Errorf("stream %d error from (*MuxedStream).Read: %s", stream.streamID, err)
-					return
-				}
-				if n != len(expectBody) {
-					errorsC <- fmt.Errorf("stream %d expected response body to have %d bytes, got %d", stream.streamID, len(expectBody), n)
-					return
-				}
-				if string(responseBody[:n]) != expectBody {
-					errorsC <- fmt.Errorf("stream %d expected response body %s, got %s", stream.streamID, expectBody, responseBody[:n])
-					return
-				}
-			}(i, s)
-		}
-
-		wg.Wait()
-		close(errorsC)
-		testFail := false
-		for err := range errorsC {
-			testFail = true
-			l.Error().Msgf("%s", err)
-		}
-		if testFail {
-			t.Fatalf("TestMultipleStreams failed")
-		}
-
-		originMuxMetrics := muxPair.OriginMux.Metrics()
-		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
-			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
-		}
 	}
 }
 
@@ -905,7 +753,7 @@ func loadSampleFiles(paths []string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	for _, path := range paths {
 		if _, ok := files[path]; !ok {
-			expectBody, err := ioutil.ReadFile(path)
+			expectBody, err := os.ReadFile(path)
 			if err != nil {
 				return nil, err
 			}
@@ -913,82 +761,6 @@ func loadSampleFiles(paths []string) (map[string][]byte, error) {
 		}
 	}
 	return files, nil
-}
-
-func TestSampleSiteWithDictionaries(t *testing.T) {
-	paths := []string{
-		"./sample/index.html",
-		"./sample/index2.html",
-		"./sample/index1.html",
-		"./sample/ghost-url.min.js",
-		"./sample/jquery.fitvids.js",
-		"./sample/index1.html",
-		"./sample/index2.html",
-		"./sample/index.html",
-	}
-	files, err := loadSampleFiles(paths)
-	assert.NoError(t, err)
-
-	for q := CompressionNone; q <= CompressionMax; q++ {
-		muxPair := NewCompressedMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), q), q, sampleSiteHandler(files))
-		muxPair.Serve(t)
-
-		var wg sync.WaitGroup
-		errC := make(chan error, len(paths))
-
-		wg.Add(len(paths))
-		for _, s := range paths {
-			go func(path string) {
-				defer wg.Done()
-				errC <- sampleSiteTest(muxPair, path, files)
-			}(s)
-		}
-
-		wg.Wait()
-		close(errC)
-
-		for err := range errC {
-			assert.NoError(t, err)
-		}
-
-		originMuxMetrics := muxPair.OriginMux.Metrics()
-		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
-			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
-		}
-	}
-}
-
-func TestLongSiteWithDictionaries(t *testing.T) {
-	paths := []string{
-		"./sample/index.html",
-		"./sample/index1.html",
-		"./sample/index2.html",
-		"./sample/ghost-url.min.js",
-		"./sample/jquery.fitvids.js",
-	}
-	files, err := loadSampleFiles(paths)
-	assert.NoError(t, err)
-	for q := CompressionNone; q <= CompressionMedium; q++ {
-		muxPair := NewCompressedMuxerPair(t, fmt.Sprintf("%s_%d", t.Name(), q), q, sampleSiteHandler(files))
-		muxPair.Serve(t)
-
-		rand.Seed(time.Now().Unix())
-
-		tstLen := 500
-		errGroup, _ := errgroup.WithContext(context.Background())
-		for i := 0; i < tstLen; i++ {
-			errGroup.Go(func() error {
-				path := paths[rand.Int()%len(paths)]
-				return sampleSiteTest(muxPair, path, files)
-			})
-		}
-		assert.NoError(t, errGroup.Wait())
-
-		originMuxMetrics := muxPair.OriginMux.Metrics()
-		if q > CompressionNone && originMuxMetrics.CompBytesBefore.Value() <= 10*originMuxMetrics.CompBytesAfter.Value() {
-			t.Fatalf("Cross-stream compression is expected to give a better compression ratio")
-		}
-	}
 }
 
 func BenchmarkOpenStream(b *testing.B) {
