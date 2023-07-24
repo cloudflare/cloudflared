@@ -91,10 +91,12 @@ func (b *BackoffHandler) Backoff(ctx context.Context) bool {
 
 // Sets a grace period within which the the backoff timer is maintained. After the grace
 // period expires, the number of retries & backoff duration is reset.
-func (b *BackoffHandler) SetGracePeriod() {
+func (b *BackoffHandler) SetGracePeriod() time.Duration {
 	maxTimeToWait := b.GetBaseTime() * 2 << (b.retries + 1)
 	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
 	b.resetDeadline = Clock.Now().Add(timeToWait)
+
+	return timeToWait
 }
 
 func (b BackoffHandler) GetBaseTime() time.Duration {
