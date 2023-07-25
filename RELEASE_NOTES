@@ -1,3 +1,7 @@
+2023.7.3
+- 2023-07-25 TUN-7628: Correct Host parsing for Access
+- 2023-07-24 TUN-7624: Fix flaky TestBackoffGracePeriod test in cloudflared
+
 2023.7.2
 - 2023-07-19 TUN-7599: Onboard cloudflared to Software Dashboard
 - 2023-07-19 TUN-7587: Remove junos builds
