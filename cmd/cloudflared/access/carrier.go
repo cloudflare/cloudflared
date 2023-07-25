@@ -70,14 +70,14 @@ func ssh(c *cli.Context) error {
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
-	hostname, err := validation.ValidateHostname(rawHostName)
-	if err != nil || rawHostName == "" {
+	url, err := parseURL(rawHostName)
+	if err != nil {
+		log.Err(err).Send()
 		return cli.ShowCommandHelp(c, "ssh")
 	}
-	originURL := ensureURLScheme(hostname)
 
 	// get the headers from the cmdline and add them
-	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
+	headers := parseRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
 		headers.Set(cfAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}
@@ -89,9 +89,9 @@ func ssh(c *cli.Context) error {
 	carrier.SetBastionDest(headers, c.String(sshDestinationFlag))
 
 	options := &carrier.StartOptions{
-		OriginURL: originURL,
+		OriginURL: url.String(),
 		Headers:   headers,
-		Host:      hostname,
+		Host:      url.Host,
 	}
 
 	if connectTo := c.String(sshConnectTo); connectTo != "" {
@@ -138,20 +138,9 @@ func ssh(c *cli.Context) error {
 			// default to 10 if provided but unset
 			maxMessages = 10
 		}
-		logger := log.With().Str("host", hostname).Logger()
+		logger := log.With().Str("host", url.Host).Logger()
 		s = stream.NewDebugStream(s, &logger, maxMessages)
 	}
 	carrier.StartClient(wsConn, s, options)
 	return nil
-}
-
-func buildRequestHeaders(values []string) http.Header {
-	headers := make(http.Header)
-	for _, valuePair := range values {
-		header, value, found := strings.Cut(valuePair, ":")
-		if found {
-			headers.Add(strings.TrimSpace(header), strings.TrimSpace(value))
-		}
-	}
-	return headers
 }

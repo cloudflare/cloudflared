@@ -168,68 +168,6 @@ func validateIP(scheme, host, port string) (string, error) {
 	return fmt.Sprintf("%s://%s", scheme, host), nil
 }
 
-// originURL shouldn't be a pointer, because this function might change the scheme
-func ValidateHTTPService(originURL string, hostname string, transport http.RoundTripper) error {
-	parsedURL, err := url.Parse(originURL)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-		Timeout: validationTimeout,
-	}
-
-	initialRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
-	if err != nil {
-		return err
-	}
-	initialRequest.Host = hostname
-	resp, initialErr := client.Do(initialRequest)
-	if initialErr == nil {
-		resp.Body.Close()
-		return nil
-	}
-
-	// Attempt the same endpoint via the other protocol (http/https); maybe we have better luck?
-	oldScheme := parsedURL.Scheme
-	parsedURL.Scheme = toggleProtocol(oldScheme)
-
-	secondRequest, err := http.NewRequest("GET", parsedURL.String(), nil)
-	if err != nil {
-		return err
-	}
-	secondRequest.Host = hostname
-	resp, secondErr := client.Do(secondRequest)
-	if secondErr == nil { // Worked this time--advise the user to switch protocols
-		_ = resp.Body.Close()
-		return errors.Errorf(
-			"%s doesn't seem to work over %s, but does seem to work over %s. Reason: %v. Consider changing the origin URL to %v",
-			parsedURL.Host,
-			oldScheme,
-			parsedURL.Scheme,
-			initialErr,
-			originURL,
-		)
-	}
-
-	return initialErr
-}
-
-func toggleProtocol(httpProtocol string) string {
-	switch httpProtocol {
-	case "http":
-		return "https"
-	case "https":
-		return "http"
-	default:
-		return httpProtocol
-	}
-}
-
 // Access checks if a JWT from Cloudflare Access is valid.
 type Access struct {
 	verifier *oidc.IDTokenVerifier
