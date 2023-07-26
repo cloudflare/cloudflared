@@ -11,7 +11,6 @@ import (
 	"crypto/hmac"
 	"crypto/rsa"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
 	"sync/atomic"
@@ -46,8 +45,6 @@ type serverHandshakeStateTLS13 struct {
 
 func (hs *serverHandshakeStateTLS13) handshake() error {
 	c := hs.c
-
-	startTime := time.Now()
 
 	if needFIPS() {
 		return errors.New("tls: internal error: TLS 1.3 reached in FIPS mode")
@@ -87,12 +84,6 @@ func (hs *serverHandshakeStateTLS13) handshake() error {
 	if err := hs.readClientFinished(); err != nil {
 		return err
 	}
-
-	raiseCFEvent(&cfEventHandshake{
-		serverSide: true,
-		duration:   time.Since(startTime),
-		kex:        hs.hello.serverShare.group,
-	})
 
 	atomic.StoreUint32(&c.handshakeStatus, 1)
 	c.updateConnectionState()
@@ -208,27 +199,17 @@ GroupSelection:
 		clientKeyShare = &hs.clientHello.keyShares[0]
 	}
 
-	if _, ok := curveForCurveID(selectedGroup); selectedGroup != X25519 && curveIdToCirclScheme(selectedGroup) == nil && !ok {
+	if _, ok := curveForCurveID(selectedGroup); selectedGroup != X25519 && !ok {
 		c.sendAlert(alertInternalError)
 		return errors.New("tls: CurvePreferences includes unsupported curve")
 	}
-	if kem := curveIdToCirclScheme(selectedGroup); kem != nil {
-		ct, ss, alert, err := encapsulateForKem(kem, c.config.rand(), clientKeyShare.data)
-		if err != nil {
-			c.sendAlert(alert)
-			return fmt.Errorf("%s encap: %w", kem.Name(), err)
-		}
-		hs.hello.serverShare = keyShare{group: selectedGroup, data: ct}
-		hs.sharedKey = ss
-	} else {
-		params, err := generateECDHEParameters(c.config.rand(), selectedGroup)
-		if err != nil {
-			c.sendAlert(alertInternalError)
-			return err
-		}
-		hs.hello.serverShare = keyShare{group: selectedGroup, data: params.PublicKey()}
-		hs.sharedKey = params.SharedKey(clientKeyShare.data)
+	params, err := generateECDHEParameters(c.config.rand(), selectedGroup)
+	if err != nil {
+		c.sendAlert(alertInternalError)
+		return err
 	}
+	hs.hello.serverShare = keyShare{group: selectedGroup, data: params.PublicKey()}
+	hs.sharedKey = params.SharedKey(clientKeyShare.data)
 	if hs.sharedKey == nil {
 		c.sendAlert(alertIllegalParameter)
 		return errors.New("tls: invalid client key share")
@@ -457,8 +438,6 @@ func (hs *serverHandshakeStateTLS13) sendDummyChangeCipherSpec() error {
 
 func (hs *serverHandshakeStateTLS13) doHelloRetryRequest(selectedGroup CurveID) error {
 	c := hs.c
-
-	raiseCFEvent(&cfEventHRR{serverSide: true})
 
 	// The first ClientHello gets double-hashed into the transcript upon a
 	// HelloRetryRequest. See RFC 8446, Section 4.4.1.

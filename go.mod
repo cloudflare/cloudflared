@@ -1,6 +1,6 @@
 module github.com/cloudflare/cloudflared
 
-go 1.19
+go 1.20
 
 require (
 	github.com/cloudflare/golibs v0.0.0-20170913112048-333127dbecfc
@@ -110,8 +110,5 @@ replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
 replace github.com/quic-go/quic-go => github.com/devincarr/quic-go v0.0.0-20230502200822-d1f4edacbee7
 
 // Post-quantum tunnel RTG-1339
-replace (
-	// Branches go1.19 go1.20 on github.com/cloudflare/qtls-pq
-	github.com/quic-go/qtls-go1-19 => github.com/cloudflare/qtls-pq v0.0.0-20230320123031-3faac1a945b2
-	github.com/quic-go/qtls-go1-20 => github.com/cloudflare/qtls-pq v0.0.0-20230320122459-4ed280d0d633
-)
+// Branches go1.20 on github.com/cloudflare/qtls-pq
+replace github.com/quic-go/qtls-go1-20 => github.com/cloudflare/qtls-pq v0.0.0-20230320122459-4ed280d0d633

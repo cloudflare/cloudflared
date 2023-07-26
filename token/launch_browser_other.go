@@ -1,5 +1,4 @@
 //go:build !windows && !darwin && !linux && !netbsd && !freebsd && !openbsd
-// +build !windows,!darwin,!linux,!netbsd,!freebsd,!openbsd
 
 package token
 
