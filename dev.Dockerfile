@@ -1,4 +1,4 @@
-FROM golang:1.19 as builder
+FROM golang:1.20.6 as builder
 ENV GO111MODULE=on \
     CGO_ENABLED=0
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
