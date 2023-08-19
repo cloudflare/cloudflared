@@ -1,6 +1,6 @@
 module github.com/cloudflare/cloudflared
 
-go 1.19
+go 1.20
 
 require (
 	github.com/cloudflare/brotli-go v0.0.0-20191101163834-d34379f7ff93
