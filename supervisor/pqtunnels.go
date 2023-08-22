@@ -12,16 +12,12 @@ import (
 // issue creating the tunnel, we'll report the first error
 // to https://pqtunnels.cloudflareresearch.com.
 
-var (
-	PQKexes = [...]tls.CurveID{
-		tls.CurveID(0xfe30), // X25519Kyber512Draft00
-		tls.CurveID(0xfe31), // X25519Kyber768Draft00
-	}
-	PQKexNames map[tls.CurveID]string = map[tls.CurveID]string{
-		tls.CurveID(0xfe30): "X25519Kyber512Draft00",
-		tls.CurveID(0xfe31): "X25519Kyber768Draft00",
-	}
+const (
+	PQKex     = tls.CurveID(0xfe31) // X25519Kyber768Draft00
+	PQKexName = "X25519Kyber768Draft00"
+)
 
+var (
 	pqtMux       sync.Mutex // protects pqtSubmitted and pqtWaitForMessage
 	pqtSubmitted bool       // whether an error has already been submitted
 
@@ -70,7 +66,7 @@ func submitPQTunnelError(rep error, config *TunnelConfig) {
 		Message string `json:"m"`
 		Version string `json:"v"`
 	}{
-		Group:   int(PQKexes[config.PQKexIdx]),
+		Group:   int(PQKex),
 		Message: rep.Error(),
 		Version: config.ReportedVersion,
 	})

@@ -3,7 +3,6 @@ package tunnel
 import (
 	"crypto/tls"
 	"fmt"
-	mathRand "math/rand"
 	"net"
 	"net/netip"
 	"os"
@@ -203,12 +202,10 @@ func prepareTunnelConfig(
 		log.Warn().Str("edgeIPVersion", edgeIPVersion.String()).Err(err).Msg("Overriding edge-ip-version")
 	}
 
-	var pqKexIdx int
 	if needPQ {
-		pqKexIdx = mathRand.Intn(len(supervisor.PQKexes))
 		log.Info().Msgf(
-			"Using experimental hybrid post-quantum key agreement %s",
-			supervisor.PQKexNames[supervisor.PQKexes[pqKexIdx]],
+			"Using hybrid post-quantum key agreement %s",
+			supervisor.PQKexName,
 		)
 	}
 
@@ -237,7 +234,6 @@ func prepareTunnelConfig(
 		ProtocolSelector:            protocolSelector,
 		EdgeTLSConfigs:              edgeTLSConfigs,
 		NeedPQ:                      needPQ,
-		PQKexIdx:                    pqKexIdx,
 		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
 		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
 		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),

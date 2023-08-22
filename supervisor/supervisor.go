@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"strings"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
+
+	qtls120 "github.com/quic-go/qtls-go1-20"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
@@ -77,6 +80,8 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	}
 
 	reconnectCredentialManager := newReconnectCredentialManager(connection.MetricsNamespace, connection.TunnelSubsystem, config.HAConnections)
+
+	registerTLSEventLogger(config.Log)
 
 	tracker := tunnelstate.NewConnTracker(config.Log)
 	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
@@ -335,4 +340,27 @@ func (s *Supervisor) waitForNextTunnel(index int) bool {
 
 func (s *Supervisor) unusedIPs() bool {
 	return s.edgeIPs.AvailableAddrs() > s.config.HAConnections
+}
+
+func registerTLSEventLogger(logger *zerolog.Logger) {
+	qtls120.SetCFEventHandler(func(ev qtls120.CFEvent) {
+		logger.Debug().Bool("handshake", ev.IsHandshake()).Str("handshake_duration", ev.Duration().String()).Str("curve", tlsCurveName(ev.KEX())).Msg("QUIC TLS event")
+	})
+}
+
+func tlsCurveName(curve tls.CurveID) string {
+	switch curve {
+	case tls.CurveP256:
+		return "p256"
+	case tls.CurveP384:
+		return "p384"
+	case tls.CurveP521:
+		return "p521"
+	case tls.X25519:
+		return "X25519"
+	case PQKex:
+		return PQKexName
+	default:
+		return "unknown"
+	}
 }

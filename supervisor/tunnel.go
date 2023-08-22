@@ -61,9 +61,6 @@ type TunnelConfig struct {
 
 	NeedPQ bool
 
-	// Index into PQKexes of post-quantum kex to use if NeedPQ is set.
-	PQKexIdx int
-
 	NamedTunnel      *connection.NamedTunnelProperties
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
@@ -585,16 +582,9 @@ func (e *EdgeTunnelServer) serveQUIC(
 	if e.config.NeedPQ {
 		// If the user passes the -post-quantum flag, we override
 		// CurvePreferences to only support hybrid post-quantum key agreements.
-		cs := make([]tls.CurveID, len(PQKexes))
-		copy(cs, PQKexes[:])
-
-		// It is unclear whether Kyber512 or Kyber768 will become the standard.
-		// Kyber768 is a bit bigger (and doesn't fit in one initial
-		// datagram anymore). We're enabling both, but pick randomly which
-		// one to put first. (TLS will use the first one in the list
-		// and allows a fallback to the second.)
-		cs[0], cs[e.config.PQKexIdx] = cs[e.config.PQKexIdx], cs[0]
-		tlsConfig.CurvePreferences = cs
+		tlsConfig.CurvePreferences = []tls.CurveID{
+			PQKex,
+		}
 	}
 
 	quicConfig := &quic.Config{
