@@ -1,3 +1,6 @@
+2023.8.0
+- 2023-07-26 TUN-7584: Bump go 1.20.6
+
 2023.7.3
 - 2023-07-25 TUN-7628: Correct Host parsing for Access
 - 2023-07-24 TUN-7624: Fix flaky TestBackoffGracePeriod test in cloudflared
