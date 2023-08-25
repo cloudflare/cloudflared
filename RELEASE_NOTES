@@ -1,3 +1,6 @@
+2023.8.1
+- 2023-08-23 TUN-7718: Update R2 Token to no longer encode secret
+
 2023.8.0
 - 2023-07-26 TUN-7584: Bump go 1.20.6
 
