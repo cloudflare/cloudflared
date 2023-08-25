@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
+
+	"github.com/cloudflare/cloudflared/features"
 )
 
 // When experimental post-quantum tunnels are enabled, and we're hitting an
@@ -93,4 +96,33 @@ func submitPQTunnelError(rep error, config *TunnelConfig) {
 		)
 	}
 	resp.Body.Close()
+}
+
+func curvePreference(pqMode features.PostQuantumMode, currentCurve []tls.CurveID) ([]tls.CurveID, error) {
+	switch pqMode {
+	case features.PostQuantumStrict:
+		// If the user passes the -post-quantum flag, we override
+		// CurvePreferences to only support hybrid post-quantum key agreements.
+		return []tls.CurveID{PQKex}, nil
+	case features.PostQuantumPrefer:
+		if len(currentCurve) == 0 {
+			return []tls.CurveID{PQKex}, nil
+		}
+
+		if currentCurve[0] != PQKex {
+			return append([]tls.CurveID{PQKex}, currentCurve...), nil
+		}
+		return currentCurve, nil
+	case features.PostQuantumDisabled:
+		curvePref := currentCurve
+		// Remove PQ from curve preference
+		for i, curve := range currentCurve {
+			if curve == PQKex {
+				curvePref = append(curvePref[:i], curvePref[i+1:]...)
+			}
+		}
+		return curvePref, nil
+	default:
+		return nil, fmt.Errorf("Unexpected post quantum mode")
+	}
 }
