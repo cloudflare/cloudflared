@@ -69,6 +69,8 @@ type TunnelConfig struct {
 	UDPUnregisterSessionTimeout time.Duration
 
 	DisableQUICPathMTUDiscovery bool
+
+	FeatureSelector *features.FeatureSelector
 }
 
 func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
@@ -536,7 +538,8 @@ func (e *EdgeTunnelServer) serveHTTP2(
 	controlStreamHandler connection.ControlStreamHandler,
 	connIndex uint8,
 ) error {
-	if e.config.NeedPQ {
+	pqMode := e.config.FeatureSelector.PostQuantumMode()
+	if pqMode == features.PostQuantumStrict {
 		return unrecoverableError{errors.New("HTTP/2 transport does not support post-quantum")}
 	}
 
@@ -579,13 +582,17 @@ func (e *EdgeTunnelServer) serveQUIC(
 ) (err error, recoverable bool) {
 	tlsConfig := e.config.EdgeTLSConfigs[connection.QUIC]
 
-	if e.config.NeedPQ {
-		// If the user passes the -post-quantum flag, we override
-		// CurvePreferences to only support hybrid post-quantum key agreements.
-		tlsConfig.CurvePreferences = []tls.CurveID{
-			PQKex,
-		}
+	pqMode := e.config.FeatureSelector.PostQuantumMode()
+	if pqMode == features.PostQuantumStrict || pqMode == features.PostQuantumPrefer {
+		connOptions.Client.Features = features.Dedup(append(connOptions.Client.Features, features.FeaturePostQuantum))
 	}
+
+	curvePref, err := curvePreference(pqMode, tlsConfig.CurvePreferences)
+	if err != nil {
+		return err, true
+	}
+
+	tlsConfig.CurvePreferences = curvePref
 
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout:    quicpogs.HandshakeIdleTimeout,
@@ -614,7 +621,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		e.config.UDPUnregisterSessionTimeout,
 	)
 	if err != nil {
-		if e.config.NeedPQ {
+		if pqMode == features.PostQuantumStrict || pqMode == features.PostQuantumPrefer {
 			handlePQTunnelError(err, e.config)
 		}
 

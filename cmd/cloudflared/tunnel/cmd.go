@@ -392,7 +392,7 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
+	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(ctx, c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
