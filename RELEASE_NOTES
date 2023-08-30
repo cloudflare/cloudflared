@@ -1,3 +1,7 @@
+2023.8.2
+- 2023-08-25 TUN-7700: Implement feature selector to determine if connections will prefer post quantum cryptography
+- 2023-08-22 TUN-7707: Use X25519Kyber768Draft00 curve when post-quantum feature is enabled
+
 2023.8.1
 - 2023-08-23 TUN-7718: Update R2 Token to no longer encode secret
 
