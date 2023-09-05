@@ -353,7 +353,7 @@ func selectNextProtocol(
 				"Cloudflare Network with `quic` protocol, then most likely your machine/network is getting its egress " +
 				"UDP to port 7844 (or others) blocked or dropped. Make sure to allow egress connectivity as per " +
 				"https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/ports-and-ips/\n" +
-				"If you are using private routing to this Tunnel, then UDP (and Private DNS Resolution) will not work " +
+				"If you are using private routing to this Tunnel, then ICMP, UDP (and Private DNS Resolution) will not work " +
 				"unless your cloudflared can connect with Cloudflare Network with `quic`.")
 		}
 
