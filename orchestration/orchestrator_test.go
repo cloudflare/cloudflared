@@ -55,7 +55,6 @@ func TestUpdateConfiguration(t *testing.T) {
 	initOriginProxy, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
 	require.Implements(t, (*connection.OriginProxy)(nil), initOriginProxy)
-	require.False(t, orchestrator.WarpRoutingEnabled())
 
 	configJSONV2 := []byte(`
 {
@@ -87,7 +86,6 @@ func TestUpdateConfiguration(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": true,
         "connectTimeout": 10
     }
 }
@@ -126,8 +124,6 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.Equal(t, config.CustomDuration{Duration: time.Second * 90}, configV2.Ingress.Rules[2].Config.ConnectTimeout)
 	require.Equal(t, false, configV2.Ingress.Rules[2].Config.NoTLSVerify)
 	require.Equal(t, true, configV2.Ingress.Rules[2].Config.NoHappyEyeballs)
-	require.True(t, configV2.WarpRouting.Enabled)
-	require.Equal(t, configV2.WarpRouting.Enabled, orchestrator.WarpRoutingEnabled())
 	require.Equal(t, configV2.WarpRouting.ConnectTimeout.Duration, 10*time.Second)
 
 	originProxyV2, err := orchestrator.GetOriginProxy()
@@ -162,7 +158,6 @@ func TestUpdateConfiguration(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": false
     }
 }
 `)
@@ -171,8 +166,6 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.Len(t, configV10.Ingress.Rules, 1)
 	require.True(t, configV10.Ingress.Rules[0].Matches("blogs.tunnel.io", "/2022/02/10"))
 	require.Equal(t, ingress.HelloWorldService, configV10.Ingress.Rules[0].Service.String())
-	require.False(t, configV10.WarpRouting.Enabled)
-	require.Equal(t, configV10.WarpRouting.Enabled, orchestrator.WarpRoutingEnabled())
 
 	originProxyV10, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
@@ -191,7 +184,6 @@ func TestUpdateConfiguration_FromMigration(t *testing.T) {
 	initOriginProxy, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
 	require.Implements(t, (*connection.OriginProxy)(nil), initOriginProxy)
-	require.False(t, orchestrator.WarpRoutingEnabled())
 
 	configJSONV2 := []byte(`
 {
@@ -201,7 +193,6 @@ func TestUpdateConfiguration_FromMigration(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": true
     }
 }
 `)
@@ -271,7 +262,6 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": true
     }
 }
 `, hostname, httpOrigin.URL, expectedHost))
@@ -283,7 +273,6 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": false
     }
 }
 `)
@@ -296,7 +285,6 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": true
     }
 }
 `)
@@ -516,7 +504,6 @@ func TestClosePreviousProxies(t *testing.T) {
 		}
     ],
     "warp-routing": {
-        "enabled": true
     }
 }
 `, hostname))
@@ -529,7 +516,6 @@ func TestClosePreviousProxies(t *testing.T) {
 		}
     ],
     "warp-routing": {
-        "enabled": true
     }
 }
 `)
@@ -612,7 +598,6 @@ func TestPersistentConnection(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": true
     }
 }
 `, wsOrigin.URL))
@@ -679,7 +664,6 @@ func TestPersistentConnection(t *testing.T) {
         }
     ],
     "warp-routing": {
-        "enabled": false
     }
 }
 `)

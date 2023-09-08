@@ -23,12 +23,11 @@ type muxer interface {
 
 // PacketRouter routes packets between Upstream and ICMPRouter. Currently it rejects all other type of ICMP packets
 type PacketRouter struct {
-	globalConfig           *GlobalRouterConfig
-	muxer                  muxer
-	logger                 *zerolog.Logger
-	checkRouterEnabledFunc func() bool
-	icmpDecoder            *packet.ICMPDecoder
-	encoder                *packet.Encoder
+	globalConfig *GlobalRouterConfig
+	muxer        muxer
+	logger       *zerolog.Logger
+	icmpDecoder  *packet.ICMPDecoder
+	encoder      *packet.Encoder
 }
 
 // GlobalRouterConfig is the configuration shared by all instance of Router.
@@ -40,14 +39,13 @@ type GlobalRouterConfig struct {
 }
 
 // NewPacketRouter creates a PacketRouter that handles ICMP packets. Packets are read from muxer but dropped if globalConfig is nil.
-func NewPacketRouter(globalConfig *GlobalRouterConfig, muxer muxer, logger *zerolog.Logger, checkRouterEnabledFunc func() bool) *PacketRouter {
+func NewPacketRouter(globalConfig *GlobalRouterConfig, muxer muxer, logger *zerolog.Logger) *PacketRouter {
 	return &PacketRouter{
-		globalConfig:           globalConfig,
-		muxer:                  muxer,
-		logger:                 logger,
-		checkRouterEnabledFunc: checkRouterEnabledFunc,
-		icmpDecoder:            packet.NewICMPDecoder(),
-		encoder:                packet.NewEncoder(),
+		globalConfig: globalConfig,
+		muxer:        muxer,
+		logger:       logger,
+		icmpDecoder:  packet.NewICMPDecoder(),
+		encoder:      packet.NewEncoder(),
 	}
 }
 
@@ -89,10 +87,6 @@ func (r *PacketRouter) nextPacket(ctx context.Context) (packet.RawPacket, *packe
 func (r *PacketRouter) handlePacket(ctx context.Context, rawPacket packet.RawPacket, responder *packetResponder) {
 	// ICMP Proxy feature is disabled, drop packets
 	if r.globalConfig == nil {
-		return
-	}
-
-	if enabled := r.checkRouterEnabledFunc(); !enabled {
 		return
 	}
 

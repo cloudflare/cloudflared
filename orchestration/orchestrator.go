@@ -29,11 +29,10 @@ type Orchestrator struct {
 	// Underlying value is proxy.Proxy, can be read without the lock, but still needs the lock to update
 	proxy atomic.Value
 	// Set of internal ingress rules defined at cloudflared startup (separate from user-defined ingress rules)
-	internalRules      []ingress.Rule
-	warpRoutingEnabled atomic.Bool
-	config             *Config
-	tags               []tunnelpogs.Tag
-	log                *zerolog.Logger
+	internalRules []ingress.Rule
+	config        *Config
+	tags          []tunnelpogs.Tag
+	log           *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -136,11 +135,6 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting
-	if warpRouting.Enabled {
-		o.warpRoutingEnabled.Store(true)
-	} else {
-		o.warpRoutingEnabled.Store(false)
-	}
 
 	// If proxyShutdownC is nil, there is no previous running proxy
 	if o.proxyShutdownC != nil {
@@ -207,10 +201,6 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 		return nil, err
 	}
 	return proxy, nil
-}
-
-func (o *Orchestrator) WarpRoutingEnabled() bool {
-	return o.warpRoutingEnabled.Load()
 }
 
 func (o *Orchestrator) waitToCloseLastProxy() {
