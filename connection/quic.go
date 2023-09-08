@@ -103,7 +103,7 @@ func NewQUICConnection(
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := quicpogs.NewDatagramMuxerV2(session, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
-	packetRouter := ingress.NewPacketRouter(packetRouterConfig, datagramMuxer, logger, orchestrator.WarpRoutingEnabled)
+	packetRouter := ingress.NewPacketRouter(packetRouterConfig, datagramMuxer, logger)
 
 	return &QUICConnection{
 		session:              session,

@@ -37,7 +37,6 @@ var (
 	testTags        = []tunnelpogs.Tag{{Name: "Name", Value: "value"}}
 	noWarpRouting   = ingress.WarpRoutingConfig{}
 	testWarpRouting = ingress.WarpRoutingConfig{
-		Enabled:        true,
 		ConnectTimeout: config.CustomDuration{Duration: time.Second},
 	}
 )

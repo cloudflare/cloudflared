@@ -44,14 +44,12 @@ const (
 )
 
 type WarpRoutingConfig struct {
-	Enabled        bool                  `yaml:"enabled" json:"enabled"`
 	ConnectTimeout config.CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
 	TCPKeepAlive   config.CustomDuration `yaml:"tcpKeepAlive" json:"tcpKeepAlive,omitempty"`
 }
 
 func NewWarpRoutingConfig(raw *config.WarpRoutingConfig) WarpRoutingConfig {
 	cfg := WarpRoutingConfig{
-		Enabled:        raw.Enabled,
 		ConnectTimeout: defaultWarpRoutingConnectTimeout,
 		TCPKeepAlive:   defaultTCPKeepAlive,
 	}
@@ -65,9 +63,7 @@ func NewWarpRoutingConfig(raw *config.WarpRoutingConfig) WarpRoutingConfig {
 }
 
 func (c *WarpRoutingConfig) RawConfig() config.WarpRoutingConfig {
-	raw := config.WarpRoutingConfig{
-		Enabled: c.Enabled,
-	}
+	raw := config.WarpRoutingConfig{}
 	if c.ConnectTimeout.Duration != defaultWarpRoutingConnectTimeout.Duration {
 		raw.ConnectTimeout = &c.ConnectTimeout
 	}

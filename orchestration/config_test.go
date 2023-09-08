@@ -60,7 +60,6 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 			}
 		],
         "warp-routing": {
-			"enabled": true,
 			"connectTimeout": 1
         }
 	}
@@ -83,7 +82,6 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, remoteConfig.WarpRouting, ingress.WarpRoutingConfig{
-		Enabled: true,
 		ConnectTimeout: config.CustomDuration{
 			Duration: time.Second,
 		},
