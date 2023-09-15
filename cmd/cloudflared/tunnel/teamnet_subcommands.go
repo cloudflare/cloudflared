@@ -21,6 +21,8 @@ var (
 		Aliases: []string{"vn"},
 		Usage:   "The ID or name of the virtual network to which the route is associated to.",
 	}
+
+	routeAddError = errors.New("You must supply exactly one argument, the ID or CIDR of the route you want to delete")
 )
 
 func buildRouteIPSubcommand() *cli.Command {
@@ -68,11 +70,9 @@ which virtual network's routing table you want to add the route to with:
 				Name:      "delete",
 				Action:    cliutil.ConfiguredAction(deleteRouteCommand),
 				Usage:     "Delete a row from your organization's private routing table",
-				UsageText: "cloudflared tunnel [--config FILEPATH] route ip delete [flags] [CIDR]",
-				Description: `Deletes the row for a given CIDR from your routing table. That portion of your network
-will no longer be reachable by the WARP clients. Note that if you use virtual
-networks, then you have to tell which virtual network whose routing table you
-have a row deleted from.`,
+				UsageText: "cloudflared tunnel [--config FILEPATH] route ip delete [flags] [Route ID or CIDR]",
+				Description: `Deletes the row for the given route ID from your routing table. That portion of your network
+will no longer be reachable.`,
 				Flags: []cli.Flag{vnetFlag},
 			},
 			{
@@ -187,33 +187,36 @@ func deleteRouteCommand(c *cli.Context) error {
 	}
 
 	if c.NArg() != 1 {
-		return errors.New("You must supply exactly one argument, the network whose route you want to delete (in CIDR form e.g. 1.2.3.4/32)")
+		return routeAddError
 	}
 
-	_, network, err := net.ParseCIDR(c.Args().First())
+	var routeId uuid.UUID
+	routeId, err = uuid.Parse(c.Args().First())
 	if err != nil {
-		return errors.Wrap(err, "Invalid network CIDR")
-	}
-	if network == nil {
-		return errors.New("Invalid network CIDR")
-	}
+		_, network, err := net.ParseCIDR(c.Args().First())
+		if err != nil || network == nil {
+			return routeAddError
+		}
 
-	params := cfapi.DeleteRouteParams{
-		Network: *network,
-	}
+		var vnetId *uuid.UUID
+		if c.IsSet(vnetFlag.Name) {
+			id, err := getVnetId(sc, c.String(vnetFlag.Name))
+			if err != nil {
+				return err
+			}
+			vnetId = &id
+		}
 
-	if c.IsSet(vnetFlag.Name) {
-		vnetId, err := getVnetId(sc, c.String(vnetFlag.Name))
+		routeId, err = sc.getRouteId(*network, vnetId)
 		if err != nil {
 			return err
 		}
-		params.VNetID = &vnetId
 	}
 
-	if err := sc.deleteRoute(params); err != nil {
+	if err := sc.deleteRoute(routeId); err != nil {
 		return errors.Wrap(err, "API error")
 	}
-	fmt.Printf("Successfully deleted route for %s\n", network)
+	fmt.Printf("Successfully deleted route with ID %s\n", routeId)
 	return nil
 }
 
@@ -269,7 +272,7 @@ func formatAndPrintRouteList(routes []*cfapi.DetailedRoute) {
 	defer writer.Flush()
 
 	// Print column headers with tabbed columns
-	_, _ = fmt.Fprintln(writer, "NETWORK\tVIRTUAL NET ID\tCOMMENT\tTUNNEL ID\tTUNNEL NAME\tCREATED\tDELETED\t")
+	_, _ = fmt.Fprintln(writer, "ID\tNETWORK\tVIRTUAL NET ID\tCOMMENT\tTUNNEL ID\tTUNNEL NAME\tCREATED\tDELETED\t")
 
 	// Loop through routes, create formatted string for each, and print using tabwriter
 	for _, route := range routes {

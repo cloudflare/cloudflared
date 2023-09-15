@@ -75,10 +75,12 @@ type NewRoute struct {
 // MarshalJSON handles fields with non-JSON types (e.g. net.IPNet).
 func (r NewRoute) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
+		Network  string     `json:"network"`
 		TunnelID uuid.UUID  `json:"tunnel_id"`
 		Comment  string     `json:"comment"`
 		VNetID   *uuid.UUID `json:"virtual_network_id,omitempty"`
 	}{
+		Network:  r.Network.String(),
 		TunnelID: r.TunnelID,
 		Comment:  r.Comment,
 		VNetID:   r.VNetID,
@@ -87,6 +89,7 @@ func (r NewRoute) MarshalJSON() ([]byte, error) {
 
 // DetailedRoute is just a Route with some extra fields, e.g. TunnelName.
 type DetailedRoute struct {
+	ID       uuid.UUID `json:"id"`
 	Network  CIDR      `json:"network"`
 	TunnelID uuid.UUID `json:"tunnel_id"`
 	// Optional field. When unset, it means the DetailedRoute belongs to the default virtual network.
@@ -115,7 +118,8 @@ func (r DetailedRoute) TableString() string {
 	}
 
 	return fmt.Sprintf(
-		"%s\t%s\t%s\t%s\t%s\t%s\t%s\t",
+		"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t",
+		r.ID,
 		r.Network.String(),
 		vnetColumn,
 		r.Comment,
@@ -124,12 +128,6 @@ func (r DetailedRoute) TableString() string {
 		r.CreatedAt.Format(time.RFC3339),
 		deletedColumn,
 	)
-}
-
-type DeleteRouteParams struct {
-	Network net.IPNet
-	// Optional field. If unset, backend will assume the default vnet for the account.
-	VNetID *uuid.UUID
 }
 
 type GetRouteByIpParams struct {
@@ -158,7 +156,7 @@ func (r *RESTClient) ListRoutes(filter *IpRouteFilter) ([]*DetailedRoute, error)
 // AddRoute calls the Tunnelstore POST endpoint for a given route.
 func (r *RESTClient) AddRoute(newRoute NewRoute) (Route, error) {
 	endpoint := r.baseEndpoints.accountRoutes
-	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(newRoute.Network.String()))
+	endpoint.Path = path.Join(endpoint.Path)
 	resp, err := r.sendRequest("POST", endpoint, newRoute)
 	if err != nil {
 		return Route{}, errors.Wrap(err, "REST request failed")
@@ -173,10 +171,9 @@ func (r *RESTClient) AddRoute(newRoute NewRoute) (Route, error) {
 }
 
 // DeleteRoute calls the Tunnelstore DELETE endpoint for a given route.
-func (r *RESTClient) DeleteRoute(params DeleteRouteParams) error {
+func (r *RESTClient) DeleteRoute(id uuid.UUID) error {
 	endpoint := r.baseEndpoints.accountRoutes
-	endpoint.Path = path.Join(endpoint.Path, "network", url.PathEscape(params.Network.String()))
-	setVnetParam(&endpoint, params.VNetID)
+	endpoint.Path = path.Join(endpoint.Path, url.PathEscape(id.String()))
 
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {

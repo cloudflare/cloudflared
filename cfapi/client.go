@@ -22,7 +22,7 @@ type HostnameClient interface {
 type IPRouteClient interface {
 	ListRoutes(filter *IpRouteFilter) ([]*DetailedRoute, error)
 	AddRoute(newRoute NewRoute) (Route, error)
-	DeleteRoute(params DeleteRouteParams) error
+	DeleteRoute(id uuid.UUID) error
 	GetByIP(params GetRouteByIpParams) (DetailedRoute, error)
 }
 
