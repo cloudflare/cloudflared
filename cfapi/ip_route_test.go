@@ -69,6 +69,7 @@ func TestDetailedRouteJsonRoundtrip(t *testing.T) {
 	}{
 		{
 			`{
+				"id":"91ebc578-cc99-4641-9937-0fb630505fa0",
 				"network":"10.1.2.40/29",
 				"tunnel_id":"fba6ffea-807f-4e7a-a740-4184ee1b82c8",
 				"comment":"test",
@@ -80,6 +81,7 @@ func TestDetailedRouteJsonRoundtrip(t *testing.T) {
 		},
 		{
 			`{
+				"id":"91ebc578-cc99-4641-9937-0fb630505fa0",
 				"network":"10.1.2.40/29",
 				"tunnel_id":"fba6ffea-807f-4e7a-a740-4184ee1b82c8",
 				"virtual_network_id":"38c95083-8191-4110-8339-3f438d44fdb9",
@@ -167,9 +169,10 @@ func TestRouteTableString(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, network)
 	r := DetailedRoute{
+		ID:      uuid.Nil,
 		Network: CIDR(*network),
 	}
 	row := r.TableString()
 	fmt.Println(row)
-	require.True(t, strings.HasPrefix(row, "1.2.3.4/32"))
+	require.True(t, strings.HasPrefix(row, "00000000-0000-0000-0000-000000000000\t1.2.3.4/32"))
 }
