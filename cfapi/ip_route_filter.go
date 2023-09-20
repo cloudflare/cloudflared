@@ -123,7 +123,12 @@ func cidrFromFlag(c *cli.Context, flag cli.StringFlag) (*net.IPNet, error) {
 }
 
 func NewIPRouteFilter() *IpRouteFilter {
-	return &IpRouteFilter{queryParams: url.Values{}}
+	values := &IpRouteFilter{queryParams: url.Values{}}
+
+	// always list cfd_tunnel routes only
+	values.queryParams.Set("tun_types", "cfd_tunnel")
+
+	return values
 }
 
 func (f *IpRouteFilter) CommentIs(comment string) {
