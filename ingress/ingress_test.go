@@ -43,6 +43,11 @@ ingress:
 	require.Equal(t, "https", s.scheme)
 }
 
+func TestParseIngressNilConfig(t *testing.T) {
+	_, err := ParseIngress(nil)
+	require.Error(t, err)
+}
+
 func TestParseIngress(t *testing.T) {
 	localhost8000 := MustParseURL(t, "https://localhost:8000")
 	localhost8001 := MustParseURL(t, "https://localhost:8001")
