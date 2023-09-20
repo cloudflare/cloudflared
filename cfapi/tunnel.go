@@ -159,9 +159,14 @@ func (r *RESTClient) GetManagementToken(tunnelID uuid.UUID) (token string, err e
 	return "", r.statusCodeToError("get tunnel token", resp)
 }
 
-func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID) error {
+func (r *RESTClient) DeleteTunnel(tunnelID uuid.UUID, cascade bool) error {
 	endpoint := r.baseEndpoints.accountLevel
 	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v", tunnelID))
+	// Cascade will delete all tunnel dependencies (connections, routes, etc.) that
+	// are linked to the deleted tunnel.
+	if cascade {
+		endpoint.RawQuery = "cascade=true"
+	}
 	resp, err := r.sendRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return errors.Wrap(err, "REST request failed")
