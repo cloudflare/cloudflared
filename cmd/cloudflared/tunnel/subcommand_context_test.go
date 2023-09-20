@@ -219,7 +219,7 @@ func (d *deleteMockTunnelStore) GetTunnelToken(tunnelID uuid.UUID) (string, erro
 	return "token", nil
 }
 
-func (d *deleteMockTunnelStore) DeleteTunnel(tunnelID uuid.UUID) error {
+func (d *deleteMockTunnelStore) DeleteTunnel(tunnelID uuid.UUID, cascade bool) error {
 	tunnel, ok := d.mockTunnels[tunnelID]
 	if !ok {
 		return fmt.Errorf("Couldn't find tunnel: %v", tunnelID)
