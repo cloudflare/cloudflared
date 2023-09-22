@@ -369,7 +369,7 @@ func uninstallSystemd(log *zerolog.Logger) error {
 	// Get only the installed services
 	installedServices := make(map[string]ServiceTemplate)
 	for serviceName, serviceTemplate := range systemdAllTemplates {
-		if err := runCommand("systemctl", "status", serviceName); err == nil {
+		if err := runCommand("systemctl", "list-units", "--all", "|", "grep", serviceName); err == nil {
 			installedServices[serviceName] = serviceTemplate
 		} else {
 			log.Info().Msgf("Service '%s' not installed, skipping its uninstall", serviceName)
