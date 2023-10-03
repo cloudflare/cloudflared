@@ -139,7 +139,7 @@ func testURLCommand(c *cli.Context) error {
 	}
 
 	_, i := ing.FindMatchingRule(requestURL.Hostname(), requestURL.Path)
-	fmt.Printf("Matched rule #%d\n", i+1)
+	fmt.Printf("Matched rule #%d\n", i)
 	fmt.Println(ing.Rules[i].MultiLineString())
 	return nil
 }

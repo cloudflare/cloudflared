@@ -36,17 +36,17 @@ class TestConfig:
         _ = start_cloudflared(tmp_path, config, validate_args)
 
         self.match_rule(tmp_path, config,
-                        "http://example.com/index.html", 1)
+                        "http://example.com/index.html", 0)
         self.match_rule(tmp_path, config,
-                        "https://example.com/index.html", 1)
+                        "https://example.com/index.html", 0)
         self.match_rule(tmp_path, config,
-                        "https://api.example.com/login", 2)
+                        "https://api.example.com/login", 1)
         self.match_rule(tmp_path, config,
-                        "https://wss.example.com", 3)
+                        "https://wss.example.com", 2)
         self.match_rule(tmp_path, config,
-                        "https://ssh.example.com", 4)
+                        "https://ssh.example.com", 3)
         self.match_rule(tmp_path, config,
-                        "https://api.example.com", 5)
+                        "https://api.example.com", 4)
 
     # This is used to check that the command tunnel ingress url <url> matches rule number <rule_num>. Note that rule number uses 1-based indexing
 
