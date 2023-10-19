@@ -41,6 +41,9 @@ var (
 const (
 	// BastionFlag is to enable bastion, or jump host, operation
 	BastionFlag = "bastion"
+
+	// DisableRemoteConfigFlag is to disable remote configuration
+	DisableRemoteConfigFlag = "no-remote-config"
 )
 
 // DefaultConfigDirectory returns the default directory of the config file

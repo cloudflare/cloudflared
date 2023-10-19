@@ -782,6 +782,12 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_MANAGEMENT_DIAGNOSTICS"},
 			Value:   false,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    config.DisableRemoteConfigFlag,
+			Usage:   "Disables remote configuration from the edge",
+			EnvVars: []string{"TUNNEL_NO_REMOTE_CONFIG"},
+			Value:   false,
+		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
 	}...)

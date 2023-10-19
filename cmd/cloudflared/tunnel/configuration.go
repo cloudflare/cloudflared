@@ -39,7 +39,7 @@ var (
 
 	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 
-	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address"}
+	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address", config.DisableRemoteConfigFlag}
 )
 
 func generateRandomClientID(log *zerolog.Logger) (string, error) {
@@ -135,6 +135,15 @@ func prepareTunnelConfig(
 	transportProtocol := c.String("protocol")
 
 	clientFeatures := features.Dedup(append(c.StringSlice("features"), features.DefaultFeatures...))
+	if c.Bool(config.DisableRemoteConfigFlag) {
+		log.Info().Msg("Remote configuration disabled")
+		for i, feature := range clientFeatures {
+			if feature == features.FeatureAllowRemoteConfig {
+				clientFeatures = append(clientFeatures[:i], clientFeatures[i+1:]...)
+				break
+			}
+		}
+	}
 
 	staticFeatures := features.StaticFeatures{}
 	if c.Bool("post-quantum") {

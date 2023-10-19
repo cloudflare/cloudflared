@@ -17,6 +17,11 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
+const (
+	// Get disableRemoteConfigFlag const from cloudflared/config as the package is later shadowed by a variable
+	disableRemoteConfigFlag = config.DisableRemoteConfigFlag
+)
+
 // Orchestrator manages configurations so they can be updatable during runtime
 // properties are static, so it can be read without lock
 // currentVersion and config are read/write infrequently, so their access are synchronized with RWMutex
@@ -63,6 +68,15 @@ func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag,
 func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
 	o.lock.Lock()
 	defer o.lock.Unlock()
+
+	if _, ok := o.config.ConfigurationFlags[disableRemoteConfigFlag]; ok {
+		o.log.Warn().
+			Int32("version", version).
+			Msg("Ignoring update because remote configuration is disabled")
+		return &tunnelpogs.UpdateConfigurationResponse{
+			LastAppliedVersion: o.currentVersion,
+		}
+	}
 
 	if o.currentVersion >= version {
 		o.log.Debug().

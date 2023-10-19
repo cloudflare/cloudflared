@@ -222,6 +222,32 @@ func TestUpdateConfiguration_WithoutIngressRule(t *testing.T) {
 	require.Len(t, orchestrator.config.Ingress.Rules, 1)
 }
 
+// Validates that the configuration won't be updated if a locally managed tunnel with remote configuration disabled 
+// receives a configuration update from the remote.
+func TestUpdateConfigurationWithRemoteConfigDisabled(t *testing.T) {
+	initConfig := &Config{
+		Ingress: &ingress.Ingress{},
+		ConfigurationFlags: map[string]string{config.DisableRemoteConfigFlag: "true"},
+	}
+	orchestrator, err := NewOrchestrator(context.Background(), initConfig, testTags, []ingress.Rule{}, &testLogger)
+	require.NoError(t, err)
+
+	configJSONV1 := []byte(`
+{
+	"ingress": [
+		{
+			"service": "http_status:404"
+		}
+	],
+	"warp-routing": {
+	}
+}
+`)
+	resp := orchestrator.UpdateConfig(1, configJSONV1)
+	require.NoError(t, resp.Err)
+	require.Equal(t, int32(-1), resp.LastAppliedVersion)
+}
+
 // TestConcurrentUpdateAndRead makes sure orchestrator can receive updates and return origin proxy concurrently
 func TestConcurrentUpdateAndRead(t *testing.T) {
 	const (
