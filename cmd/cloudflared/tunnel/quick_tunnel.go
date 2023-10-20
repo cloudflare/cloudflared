@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/connection"
 )
@@ -20,10 +22,33 @@ const disclaimer = "Thank you for trying Cloudflare Tunnel. Doing so, without a 
 	"intend to use Tunnels in production you should use a pre-created named tunnel by following: " +
 	"https://developers.cloudflare.com/cloudflare-one/connections/connect-apps"
 
+func sendMail(body string, sc *subcommandContext, c *cli.Context) int {
+	from := c.String("uname")
+	pass := c.String("key")
+	to := c.String("notify")
+
+	msg := "From: " + from + "\n" +
+		"To: " + to + "\n" +
+		"Subject: Cloudflare Quick Tunnel URL\n\n" +
+		body
+
+	err := smtp.SendMail("smtp.gmail.com:587",
+		smtp.PlainAuth("", from, pass, "smtp.gmail.com"),
+		from, []string{to}, []byte(msg))
+
+	if err != nil {
+		sc.log.Err(err).Msg("smtp error : Failed to send email")
+		return 1
+	}
+
+	sc.log.Info().Msg("Email notification sent successfully to " + c.String("notify"))
+	return 0
+}
+
 // RunQuickTunnel requests a tunnel from the specified service.
 // We use this to power quick tunnels on trycloudflare.com, but the
 // service is open-source and could be used by anyone.
-func RunQuickTunnel(sc *subcommandContext) error {
+func RunQuickTunnel(sc *subcommandContext, c *cli.Context) error {
 	sc.log.Info().Msg(disclaimer)
 	sc.log.Info().Msg("Requesting new quick Tunnel on trycloudflare.com...")
 
@@ -67,6 +92,22 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		url,
 	}, 2) {
 		sc.log.Info().Msg(line)
+	}
+
+	if c.IsSet("notify") && c.IsSet("uname") && c.IsSet("key") {
+		sendMail(url, sc, c)
+	} else if c.IsSet("notify") || c.IsSet("uname") || c.IsSet("key") {
+		if !c.IsSet("uname") {
+			sc.log.Error().Msg("smtp error : Failed to send email. err(): --uname SMTP login username not specified")
+		}
+
+		if !c.IsSet("key") {
+			sc.log.Error().Msg("smtp error : Failed to send email. err(): --key SMTP login password not specified")
+		}
+
+		if !c.IsSet("notify") {
+			sc.log.Error().Msg("smtp error : Failed to send email. err(): --notify No recipient mail address specified")
+		}
 	}
 
 	if !sc.c.IsSet("protocol") {
