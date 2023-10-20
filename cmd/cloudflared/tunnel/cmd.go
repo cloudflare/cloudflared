@@ -213,7 +213,7 @@ func TunnelCommand(c *cli.Context) error {
 	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
 	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
 	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
-		return RunQuickTunnel(sc)
+		return RunQuickTunnel(sc, c)
 	}
 
 	// If user provides a config, check to see if they meant to use `tunnel run` instead
@@ -842,6 +842,21 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Connect to the local webserver at `URL`.",
 			EnvVars: []string{"TUNNEL_URL"},
 			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:   "notify",
+			Usage:  "Email address of the recipient to whom to send the quick tunnel URL notification.",
+			Hidden: shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:   "uname",
+			Usage:  "Username/Email-id of the mail account to authenticate the SMTP server.",
+			Hidden: shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:   "key",
+			Usage:  "Password/key of the mail account to authenticate the SMTP server.",
+			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    ingress.HelloWorldFlag,
