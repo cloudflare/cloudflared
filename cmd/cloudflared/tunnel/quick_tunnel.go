@@ -49,6 +49,11 @@ func sendMail(body string, sc *subcommandContext, c *cli.Context) int {
 // We use this to power quick tunnels on trycloudflare.com, but the
 // service is open-source and could be used by anyone.
 func RunQuickTunnel(sc *subcommandContext, c *cli.Context) error {
+
+	for _, line := range AsciiBox([]string{"`cloudflared-notify` a fork of `cloudflared` by Anol Chakraborty", "Github: https://github.com/AnolChakraborty/cloudflared-notify"}, 2) {
+		sc.log.Info().Msg(line)
+	}
+
 	sc.log.Info().Msg(disclaimer)
 	sc.log.Info().Msg("Requesting new quick Tunnel on trycloudflare.com...")
 
