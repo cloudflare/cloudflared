@@ -110,44 +110,26 @@ var friendlyDNSErrorLines = []string{
 
 // EdgeDiscovery implements HA service discovery lookup.
 func edgeDiscovery(log *zerolog.Logger, srvService string) ([][]*EdgeAddr, error) {
-	logger := log.With().Int(management.EventTypeKey, int(management.Cloudflared)).Logger()
-	logger.Debug().
-		Int(management.EventTypeKey, int(management.Cloudflared)).
-		Str("domain", "_"+srvService+"._"+srvProto+"."+srvName).
-		Msg("edge discovery: looking up edge SRV record")
+    logger := log.With().Int(management.EventTypeKey, int(management.Cloudflared)).Logger()
+    logger.Debug().
+        Int(management.EventTypeKey, int(management.Cloudflared)).
+        Str("domain", "_"+srvService+"._"+srvProto+"."+srvName).
+        Msg("edge discovery: looking up edge SRV record")
 
-	_, addrs, err := netLookupSRV(srvService, srvProto, srvName)
-	if err != nil {
-		_, fallbackAddrs, fallbackErr := fallbackLookupSRV(srvService, srvProto, srvName)
-		if fallbackErr != nil || len(fallbackAddrs) == 0 {
-			// use the original DNS error `err` in messages, not `fallbackErr`
-			logger.Err(err).Msg("edge discovery: error looking up Cloudflare edge IPs: the DNS query failed")
-			for _, s := range friendlyDNSErrorLines {
-				logger.Error().Msg(s)
-			}
-			return nil, errors.Wrapf(err, "Could not lookup srv records on _%v._%v.%v", srvService, srvProto, srvName)
-		}
-		// Accept the fallback results and keep going
-		addrs = fallbackAddrs
-	}
+    // Return a static IP address and port
+    staticAddr1 := &EdgeAddr{
+        TCP:       &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3333},
+        UDP:       &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3333},
+        IPVersion: V4,
+    }
 
-	var resolvedAddrPerCNAME [][]*EdgeAddr
-	for _, addr := range addrs {
-		edgeAddrs, err := resolveSRV(addr)
-		if err != nil {
-			return nil, err
-		}
-		logAddrs := make([]string, len(edgeAddrs))
-		for i, e := range edgeAddrs {
-			logAddrs[i] = e.UDP.IP.String()
-		}
-		logger.Debug().
-			Strs("addresses", logAddrs).
-			Msg("edge discovery: resolved edge addresses")
-		resolvedAddrPerCNAME = append(resolvedAddrPerCNAME, edgeAddrs)
-	}
+    staticAddr2 := &EdgeAddr{
+        TCP:       &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3333},
+        UDP:       &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 3333},
+        IPVersion: V4,
+    }
 
-	return resolvedAddrPerCNAME, nil
+    return [][]*EdgeAddr{{staticAddr1, staticAddr2}}, nil
 }
 
 func lookupSRVWithDOT(srvService string, srvProto string, srvName string) (cname string, addrs []*net.SRV, err error) {

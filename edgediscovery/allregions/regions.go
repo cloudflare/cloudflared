@@ -20,17 +20,13 @@ type Regions struct {
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
 func ResolveEdge(log *zerolog.Logger, region string, overrideIPVersion ConfigIPVersion) (*Regions, error) {
-	edgeAddrs, err := edgeDiscovery(log, getRegionalServiceName(region))
-	if err != nil {
-		return nil, err
-	}
-	if len(edgeAddrs) < 2 {
-		return nil, fmt.Errorf("expected at least 2 Cloudflare Regions regions, but SRV only returned %v", len(edgeAddrs))
-	}
-	return &Regions{
-		region1: NewRegion(edgeAddrs[0], overrideIPVersion),
-		region2: NewRegion(edgeAddrs[1], overrideIPVersion),
-	}, nil
+    edgeAddrs, err := edgeDiscovery(log, getRegionalServiceName(region))
+    if err != nil {
+      return nil, err
+    }
+    return &Regions{
+      region1: NewRegion(edgeAddrs[0], overrideIPVersion),
+    }, nil
 }
 
 // StaticEdge creates a list of edge addresses from the list of hostnames.
