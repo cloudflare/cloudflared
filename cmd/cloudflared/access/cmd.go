@@ -26,19 +26,17 @@ import (
 )
 
 const (
-	sshHostnameFlag    = "hostname"
-	sshDestinationFlag = "destination"
-	sshURLFlag         = "url"
-	sshHeaderFlag      = "header"
-	sshTokenIDFlag     = "service-token-id"
-	sshTokenSecretFlag = "service-token-secret"
-	sshGenCertFlag     = "short-lived-cert"
-	sshConnectTo       = "connect-to"
-	sshDebugStream     = "debug-stream"
-	sshConfigTemplate  = `
-Add to your {{.Home}}/.ssh/config:
-
-{{- if .ShortLivedCerts}}
+	sshHostnameFlag         = "hostname"
+	sshDestinationFlag      = "destination"
+	sshURLFlag              = "url"
+	sshHeaderFlag           = "header"
+	sshTokenIDFlag          = "service-token-id"
+	sshTokenSecretFlag      = "service-token-secret"
+	sshGenCertFlag          = "short-lived-cert"
+	sshConnectTo            = "connect-to"
+	sshDebugStream          = "debug-stream"
+	sshConfigTemplateStdout = `
+{{- if .ShortLivedCerts -}}
 Match host {{.Hostname}} exec "{{.Cloudflared}} access ssh-gen --hostname %h"
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
   IdentityFile ~/.cloudflared/%h-cf_key
@@ -47,6 +45,9 @@ Match host {{.Hostname}} exec "{{.Cloudflared}} access ssh-gen --hostname %h"
 Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
 {{end}}
+`
+	sshConfigTemplateStderr = `Add to your {{.Home}}/.ssh/config:
+
 `
 )
 
@@ -372,8 +373,14 @@ func sshConfig(c *cli.Context) error {
 		Cloudflared     string
 	}
 
-	t := template.Must(template.New("sshConfig").Parse(sshConfigTemplate))
-	return t.Execute(os.Stdout, config{Home: os.Getenv("HOME"), ShortLivedCerts: genCertBool, Hostname: hostname, Cloudflared: cloudflaredPath()})
+	tc := config{Home: os.Getenv("HOME"), ShortLivedCerts: genCertBool, Hostname: hostname, Cloudflared: cloudflaredPath()}
+	t := template.Must(template.New("sshConfig").Parse(sshConfigTemplateStderr))
+	err := t.Execute(os.Stderr, tc)
+	if err != nil {
+		return err
+	}
+	t = template.Must(template.New("sshConfig").Parse(sshConfigTemplateStdout))
+	return t.Execute(os.Stdout, tc)
 }
 
 // sshGen generates a short lived certificate for provided hostname
