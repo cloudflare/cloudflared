@@ -1,3 +1,13 @@
+2023.10.0
+- 2023-10-06 TUN-7864: Document cloudflared versions support
+- 2023-10-03 CUSTESC-33731: Make rule match test report rule in 0-index base
+- 2023-09-22 TUN-7824: Fix usage of systemctl status to detect which services are installed
+- 2023-09-20 TUN-7813: Improve tunnel delete command to use cascade delete
+- 2023-09-20 TUN-7787: cloudflared only list ip routes targeted for cfd_tunnel
+- 2023-09-15 TUN-7787: Refactor cloudflared to use new route endpoints based on route IDs
+- 2023-09-08 TUN-7776: Remove warp-routing flag from cloudflared
+- 2023-09-05 TUN-7756: Clarify that QUIC is mandatory to support ICMP proxying
+
 2023.8.2
 - 2023-08-25 TUN-7700: Implement feature selector to determine if connections will prefer post quantum cryptography
 - 2023-08-22 TUN-7707: Use X25519Kyber768Draft00 curve when post-quantum feature is enabled
