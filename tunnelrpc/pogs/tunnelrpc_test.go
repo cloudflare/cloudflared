@@ -38,6 +38,7 @@ func TestTunnelRegistration(t *testing.T) {
 	}
 	for i, testCase := range testCases {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+		assert.NoError(t, err)
 		capnpEntity, err := tunnelrpc.NewTunnelRegistration(seg)
 		if !assert.NoError(t, err) {
 			t.Fatal("Couldn't initialize a new message")
