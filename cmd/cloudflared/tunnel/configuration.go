@@ -228,7 +228,6 @@ func prepareTunnelConfig(
 		EdgeIPVersion:   edgeIPVersion,
 		EdgeBindAddr:    edgeBindAddr,
 		HAConnections:   c.Int(haConnectionsFlag),
-		IncidentLookup:  supervisor.NewIncidentLookup(),
 		IsAutoupdated:   c.Bool("is-autoupdated"),
 		LBPool:          c.String("lb-pool"),
 		Tags:            tags,
