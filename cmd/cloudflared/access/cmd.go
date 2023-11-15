@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	loginQuietFlag     = "quiet"
 	sshHostnameFlag    = "hostname"
 	sshDestinationFlag = "destination"
 	sshURLFlag         = "url"
@@ -90,6 +91,13 @@ func Commands() []*cli.Command {
 					Once authenticated with your identity provider, the login command will generate a JSON Web Token (JWT)
 					scoped to your identity, the application you intend to reach, and valid for a session duration set by your
 					administrator. cloudflared stores the token in local storage.`,
+					Flags: []cli.Flag{
+						&cli.BoolFlag{
+							Name:    loginQuietFlag,
+							Aliases: []string{"q"},
+							Usage:   "do not print the jwt to the command line",
+						},
+					},
 				},
 				{
 					Name:   "curl",
@@ -245,6 +253,10 @@ func login(c *cli.Context) error {
 	} else if cfdToken == "" {
 		fmt.Fprintln(os.Stderr, "token for provided application was empty.")
 		return errors.New("empty application token")
+	}
+
+	if c.Bool(loginQuietFlag) {
+		return nil
 	}
 	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
 
