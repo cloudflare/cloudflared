@@ -40,7 +40,7 @@ class TestManagement:
             
             # Assert response json.
             assert resp.status_code == 200, "Expected cloudflared to return 200 for host details"
-            assert resp.json()["hostname"] == "custom:test", "Expected cloudflared to return hostname"
+            assert resp.json()["hostname"] == "test", "Expected cloudflared to return hostname"
             assert resp.json()["ip"] != "", "Expected cloudflared to return ip"
             assert resp.json()["connector_id"] == connector_id, "Expected cloudflared to return connector_id"
     
