@@ -134,7 +134,7 @@ func (m *ManagementService) getHostDetails(w http.ResponseWriter, r *http.Reques
 
 func (m *ManagementService) getLabel() string {
 	if m.label != "" {
-		return fmt.Sprintf("custom:%s", m.label)
+		return fmt.Sprintf("%s", m.label)
 	}
 
 	// If no label is provided we return the system hostname. This is not
