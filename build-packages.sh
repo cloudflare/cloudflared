@@ -38,3 +38,12 @@ for arch in ${linuxArchs[@]}; do
     # finally move the linux binary as well.
     mv ./cloudflared $ARTIFACT_DIR/cloudflared-linux-$arch
 done
+
+freebsdArchs=("386" "amd64" "arm" "arm64")
+export TARGET_OS=freebsd
+for arch in ${linuxArchs[@]}; do
+    export TARGET_ARCH=$arch
+    
+    make cloudflared
+    mv ./cloudflared $ARTIFACT_DIR/cloudflared-freebsd-$arch
+done
