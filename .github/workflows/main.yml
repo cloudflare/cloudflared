@@ -1,0 +1,40 @@
+name: Build & Upload Artifacts
+
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  build-container-and-deploy:
+    runs-on: ubuntu-latest
+    name: Build cloudflared for FreeBSD
+    env:
+      GOOS: freebsd
+    if: github.event_name == 'push'
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.20.x
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Build
+        shell: bash
+        run: |
+          sed -i "s/\(LDFLAGS.*\)'$/\1 -s -w'/" Makefile
+
+          for BUILD in amd64,amd64 arm64,aarch64 arm,armv7 386,i386; do
+            export GOARCH=${BUILD%,*}
+            export PLATFORM=${BUILD#*,}
+
+            make cloudflared
+            tar -cvJf cloudflared-${PLATFORM}.tar.xz cloudflared
+          done
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            cloudflared-aarch64.tar.xz
+            cloudflared-amd64.tar.xz
+            cloudflared-armv7.tar.xz
+            cloudflared-i386.tar.xz
