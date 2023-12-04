@@ -7,7 +7,10 @@ import (
 
 type packetNumberGenerator interface {
 	Peek() protocol.PacketNumber
-	Pop() protocol.PacketNumber
+	// Pop pops the packet number.
+	// It reports if the packet number (before the one just popped) was skipped.
+	// It never skips more than one packet number in a row.
+	Pop() (skipped bool, _ protocol.PacketNumber)
 }
 
 type sequentialPacketNumberGenerator struct {
@@ -24,10 +27,10 @@ func (p *sequentialPacketNumberGenerator) Peek() protocol.PacketNumber {
 	return p.next
 }
 
-func (p *sequentialPacketNumberGenerator) Pop() protocol.PacketNumber {
+func (p *sequentialPacketNumberGenerator) Pop() (bool, protocol.PacketNumber) {
 	next := p.next
 	p.next++
-	return next
+	return false, next
 }
 
 // The skippingPacketNumberGenerator generates the packet number for the next packet
@@ -56,21 +59,26 @@ func newSkippingPacketNumberGenerator(initial, initialPeriod, maxPeriod protocol
 }
 
 func (p *skippingPacketNumberGenerator) Peek() protocol.PacketNumber {
+	if p.next == p.nextToSkip {
+		return p.next + 1
+	}
 	return p.next
 }
 
-func (p *skippingPacketNumberGenerator) Pop() protocol.PacketNumber {
+func (p *skippingPacketNumberGenerator) Pop() (bool, protocol.PacketNumber) {
 	next := p.next
-	p.next++ // generate a new packet number for the next packet
 	if p.next == p.nextToSkip {
-		p.next++
+		next++
+		p.next += 2
 		p.generateNewSkip()
+		return true, next
 	}
-	return next
+	p.next++ // generate a new packet number for the next packet
+	return false, next
 }
 
 func (p *skippingPacketNumberGenerator) generateNewSkip() {
 	// make sure that there are never two consecutive packet numbers that are skipped
-	p.nextToSkip = p.next + 2 + protocol.PacketNumber(p.rng.Int31n(int32(2*p.period)))
+	p.nextToSkip = p.next + 3 + protocol.PacketNumber(p.rng.Int31n(int32(2*p.period)))
 	p.period = utils.Min(2*p.period, p.maxPeriod)
 }

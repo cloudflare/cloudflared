@@ -2,162 +2,176 @@ package ackhandler
 
 import (
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
-	list "github.com/quic-go/quic-go/internal/utils/linkedlist"
 )
 
 type sentPacketHistory struct {
-	rttStats              *utils.RTTStats
-	outstandingPacketList *list.List[*Packet]
-	etcPacketList         *list.List[*Packet]
-	packetMap             map[protocol.PacketNumber]*list.Element[*Packet]
-	highestSent           protocol.PacketNumber
+	packets []*packet
+
+	numOutstanding int
+
+	highestPacketNumber protocol.PacketNumber
 }
 
-var packetElementPool sync.Pool
-
-func init() {
-	packetElementPool = *list.NewPool[*Packet]()
-}
-
-func newSentPacketHistory(rttStats *utils.RTTStats) *sentPacketHistory {
+func newSentPacketHistory() *sentPacketHistory {
 	return &sentPacketHistory{
-		rttStats:              rttStats,
-		outstandingPacketList: list.NewWithPool[*Packet](&packetElementPool),
-		etcPacketList:         list.NewWithPool[*Packet](&packetElementPool),
-		packetMap:             make(map[protocol.PacketNumber]*list.Element[*Packet]),
-		highestSent:           protocol.InvalidPacketNumber,
+		packets:             make([]*packet, 0, 32),
+		highestPacketNumber: protocol.InvalidPacketNumber,
 	}
 }
 
-func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, t time.Time) {
-	h.registerSentPacket(pn, encLevel, t)
+func (h *sentPacketHistory) checkSequentialPacketNumberUse(pn protocol.PacketNumber) {
+	if h.highestPacketNumber != protocol.InvalidPacketNumber {
+		if pn != h.highestPacketNumber+1 {
+			panic("non-sequential packet number use")
+		}
+	}
 }
 
-func (h *sentPacketHistory) SentAckElicitingPacket(p *Packet) {
-	h.registerSentPacket(p.PacketNumber, p.EncryptionLevel, p.SendTime)
+func (h *sentPacketHistory) SkippedPacket(pn protocol.PacketNumber) {
+	h.checkSequentialPacketNumberUse(pn)
+	h.highestPacketNumber = pn
+	h.packets = append(h.packets, &packet{
+		PacketNumber:  pn,
+		skippedPacket: true,
+	})
+}
 
-	var el *list.Element[*Packet]
+func (h *sentPacketHistory) SentNonAckElicitingPacket(pn protocol.PacketNumber) {
+	h.checkSequentialPacketNumberUse(pn)
+	h.highestPacketNumber = pn
+	if len(h.packets) > 0 {
+		h.packets = append(h.packets, nil)
+	}
+}
+
+func (h *sentPacketHistory) SentAckElicitingPacket(p *packet) {
+	h.checkSequentialPacketNumberUse(p.PacketNumber)
+	h.highestPacketNumber = p.PacketNumber
+	h.packets = append(h.packets, p)
 	if p.outstanding() {
-		el = h.outstandingPacketList.PushBack(p)
-	} else {
-		el = h.etcPacketList.PushBack(p)
+		h.numOutstanding++
 	}
-	h.packetMap[p.PacketNumber] = el
-}
-
-func (h *sentPacketHistory) registerSentPacket(pn protocol.PacketNumber, encLevel protocol.EncryptionLevel, t time.Time) {
-	if pn <= h.highestSent {
-		panic("non-sequential packet number use")
-	}
-	// Skipped packet numbers.
-	for p := h.highestSent + 1; p < pn; p++ {
-		el := h.etcPacketList.PushBack(&Packet{
-			PacketNumber:    p,
-			EncryptionLevel: encLevel,
-			SendTime:        t,
-			skippedPacket:   true,
-		})
-		h.packetMap[p] = el
-	}
-	h.highestSent = pn
 }
 
 // Iterate iterates through all packets.
-func (h *sentPacketHistory) Iterate(cb func(*Packet) (cont bool, err error)) error {
-	cont := true
-	outstandingEl := h.outstandingPacketList.Front()
-	etcEl := h.etcPacketList.Front()
-	var el *list.Element[*Packet]
-	// whichever has the next packet number is returned first
-	for cont {
-		if outstandingEl == nil || (etcEl != nil && etcEl.Value.PacketNumber < outstandingEl.Value.PacketNumber) {
-			el = etcEl
-		} else {
-			el = outstandingEl
+func (h *sentPacketHistory) Iterate(cb func(*packet) (cont bool, err error)) error {
+	for _, p := range h.packets {
+		if p == nil {
+			continue
 		}
-		if el == nil {
-			return nil
-		}
-		if el == outstandingEl {
-			outstandingEl = outstandingEl.Next()
-		} else {
-			etcEl = etcEl.Next()
-		}
-		var err error
-		cont, err = cb(el.Value)
+		cont, err := cb(p)
 		if err != nil {
 			return err
+		}
+		if !cont {
+			return nil
 		}
 	}
 	return nil
 }
 
 // FirstOutstanding returns the first outstanding packet.
-func (h *sentPacketHistory) FirstOutstanding() *Packet {
-	el := h.outstandingPacketList.Front()
-	if el == nil {
+func (h *sentPacketHistory) FirstOutstanding() *packet {
+	if !h.HasOutstandingPackets() {
 		return nil
 	}
-	return el.Value
-}
-
-func (h *sentPacketHistory) Len() int {
-	return len(h.packetMap)
-}
-
-func (h *sentPacketHistory) Remove(p protocol.PacketNumber) error {
-	el, ok := h.packetMap[p]
-	if !ok {
-		return fmt.Errorf("packet %d not found in sent packet history", p)
+	for _, p := range h.packets {
+		if p != nil && p.outstanding() {
+			return p
+		}
 	}
-	el.List().Remove(el)
-	delete(h.packetMap, p)
 	return nil
 }
 
-func (h *sentPacketHistory) HasOutstandingPackets() bool {
-	return h.outstandingPacketList.Len() > 0
+func (h *sentPacketHistory) Len() int {
+	return len(h.packets)
 }
 
-func (h *sentPacketHistory) DeleteOldPackets(now time.Time) {
-	maxAge := 3 * h.rttStats.PTO(false)
-	var nextEl *list.Element[*Packet]
-	// we don't iterate outstandingPacketList, as we should not delete outstanding packets.
-	// being outstanding for more than 3*PTO should only happen in the case of drastic RTT changes.
-	for el := h.etcPacketList.Front(); el != nil; el = nextEl {
-		nextEl = el.Next()
-		p := el.Value
-		if p.SendTime.After(now.Add(-maxAge)) {
-			break
-		}
-		delete(h.packetMap, p.PacketNumber)
-		h.etcPacketList.Remove(el)
-	}
-}
-
-func (h *sentPacketHistory) DeclareLost(p *Packet) *Packet {
-	el, ok := h.packetMap[p.PacketNumber]
+func (h *sentPacketHistory) Remove(pn protocol.PacketNumber) error {
+	idx, ok := h.getIndex(pn)
 	if !ok {
-		return nil
+		return fmt.Errorf("packet %d not found in sent packet history", pn)
 	}
-	el.List().Remove(el)
-	p.declaredLost = true
-	// move it to the correct position in the etc list (based on the packet number)
-	for el = h.etcPacketList.Back(); el != nil; el = el.Prev() {
-		if el.Value.PacketNumber < p.PacketNumber {
-			break
+	p := h.packets[idx]
+	if p.outstanding() {
+		h.numOutstanding--
+		if h.numOutstanding < 0 {
+			panic("negative number of outstanding packets")
 		}
 	}
-	if el == nil {
-		el = h.etcPacketList.PushFront(p)
-	} else {
-		el = h.etcPacketList.InsertAfter(p, el)
+	h.packets[idx] = nil
+	// clean up all skipped packets directly before this packet number
+	for idx > 0 {
+		idx--
+		p := h.packets[idx]
+		if p == nil || !p.skippedPacket {
+			break
+		}
+		h.packets[idx] = nil
 	}
-	h.packetMap[p.PacketNumber] = el
-	return el.Value
+	if idx == 0 {
+		h.cleanupStart()
+	}
+	if len(h.packets) > 0 && h.packets[0] == nil {
+		panic("remove failed")
+	}
+	return nil
+}
+
+// getIndex gets the index of packet p in the packets slice.
+func (h *sentPacketHistory) getIndex(p protocol.PacketNumber) (int, bool) {
+	if len(h.packets) == 0 {
+		return 0, false
+	}
+	first := h.packets[0].PacketNumber
+	if p < first {
+		return 0, false
+	}
+	index := int(p - first)
+	if index > len(h.packets)-1 {
+		return 0, false
+	}
+	return index, true
+}
+
+func (h *sentPacketHistory) HasOutstandingPackets() bool {
+	return h.numOutstanding > 0
+}
+
+// delete all nil entries at the beginning of the packets slice
+func (h *sentPacketHistory) cleanupStart() {
+	for i, p := range h.packets {
+		if p != nil {
+			h.packets = h.packets[i:]
+			return
+		}
+	}
+	h.packets = h.packets[:0]
+}
+
+func (h *sentPacketHistory) LowestPacketNumber() protocol.PacketNumber {
+	if len(h.packets) == 0 {
+		return protocol.InvalidPacketNumber
+	}
+	return h.packets[0].PacketNumber
+}
+
+func (h *sentPacketHistory) DeclareLost(pn protocol.PacketNumber) {
+	idx, ok := h.getIndex(pn)
+	if !ok {
+		return
+	}
+	p := h.packets[idx]
+	if p.outstanding() {
+		h.numOutstanding--
+		if h.numOutstanding < 0 {
+			panic("negative number of outstanding packets")
+		}
+	}
+	h.packets[idx] = nil
+	if idx == 0 {
+		h.cleanupStart()
+	}
 }

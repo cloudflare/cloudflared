@@ -5,11 +5,10 @@ import (
 	"encoding/binary"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
-func createAEAD(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, v protocol.VersionNumber) cipher.AEAD {
+func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.VersionNumber) cipher.AEAD {
 	keyLabel := hkdfLabelKeyV1
 	ivLabel := hkdfLabelIVV1
 	if v == protocol.Version2 {
@@ -92,70 +91,4 @@ func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []
 
 func (o *longHeaderOpener) DecryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
 	o.headerProtector.DecryptHeader(sample, firstByte, pnBytes)
-}
-
-type handshakeSealer struct {
-	LongHeaderSealer
-
-	dropInitialKeys func()
-	dropped         bool
-}
-
-func newHandshakeSealer(
-	aead cipher.AEAD,
-	headerProtector headerProtector,
-	dropInitialKeys func(),
-	perspective protocol.Perspective,
-) LongHeaderSealer {
-	sealer := newLongHeaderSealer(aead, headerProtector)
-	// The client drops Initial keys when sending the first Handshake packet.
-	if perspective == protocol.PerspectiveServer {
-		return sealer
-	}
-	return &handshakeSealer{
-		LongHeaderSealer: sealer,
-		dropInitialKeys:  dropInitialKeys,
-	}
-}
-
-func (s *handshakeSealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
-	data := s.LongHeaderSealer.Seal(dst, src, pn, ad)
-	if !s.dropped {
-		s.dropInitialKeys()
-		s.dropped = true
-	}
-	return data
-}
-
-type handshakeOpener struct {
-	LongHeaderOpener
-
-	dropInitialKeys func()
-	dropped         bool
-}
-
-func newHandshakeOpener(
-	aead cipher.AEAD,
-	headerProtector headerProtector,
-	dropInitialKeys func(),
-	perspective protocol.Perspective,
-) LongHeaderOpener {
-	opener := newLongHeaderOpener(aead, headerProtector)
-	// The server drops Initial keys when first successfully processing a Handshake packet.
-	if perspective == protocol.PerspectiveClient {
-		return opener
-	}
-	return &handshakeOpener{
-		LongHeaderOpener: opener,
-		dropInitialKeys:  dropInitialKeys,
-	}
-}
-
-func (o *handshakeOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
-	dec, err := o.LongHeaderOpener.Open(dst, src, pn, ad)
-	if err == nil && !o.dropped {
-		o.dropInitialKeys()
-		o.dropped = true
-	}
-	return dec, err
 }

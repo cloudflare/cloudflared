@@ -6,10 +6,17 @@ package qtls
 
 import "strconv"
 
-type alert uint8
+// An AlertError is a TLS alert.
+//
+// When using a QUIC transport, QUICConn methods will return an error
+// which wraps AlertError rather than sending a TLS alert.
+type AlertError uint8
 
-// Alert is a TLS alert
-type Alert = alert
+func (e AlertError) Error() string {
+	return alert(e).String()
+}
+
+type alert uint8
 
 const (
 	// alert level

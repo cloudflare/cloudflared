@@ -40,7 +40,7 @@ func (e TransportErrorCode) Message() string {
 	if !e.IsCryptoError() {
 		return ""
 	}
-	return qtls.Alert(e - 0x100).Error()
+	return qtls.AlertError(e - 0x100).Error()
 }
 
 func (e TransportErrorCode) String() string {

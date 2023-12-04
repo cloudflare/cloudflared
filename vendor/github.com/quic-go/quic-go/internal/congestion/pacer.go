@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"math"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -26,7 +25,7 @@ func newPacer(getBandwidth func() Bandwidth) *pacer {
 			bw := uint64(getBandwidth() / BytesPerSecond)
 			// Use a slightly higher value than the actual measured bandwidth.
 			// RTT variations then won't result in under-utilization of the congestion window.
-			// Ultimately, this will  result in sending packets as acknowledgments are received rather than when timers fire,
+			// Ultimately, this will result in sending packets as acknowledgments are received rather than when timers fire,
 			// provided the congestion window is fully utilized and acknowledgments arrive at regular intervals.
 			return bw * 5 / 4
 		},
@@ -37,7 +36,7 @@ func newPacer(getBandwidth func() Bandwidth) *pacer {
 
 func (p *pacer) SentPacket(sendTime time.Time, size protocol.ByteCount) {
 	budget := p.Budget(sendTime)
-	if size > budget {
+	if size >= budget {
 		p.budgetAtLastSent = 0
 	} else {
 		p.budgetAtLastSent = budget - size
@@ -69,10 +68,16 @@ func (p *pacer) TimeUntilSend() time.Time {
 	if p.budgetAtLastSent >= p.maxDatagramSize {
 		return time.Time{}
 	}
-	return p.lastSentTime.Add(utils.Max(
-		protocol.MinPacingDelay,
-		time.Duration(math.Ceil(float64(p.maxDatagramSize-p.budgetAtLastSent)*1e9/float64(p.adjustedBandwidth())))*time.Nanosecond,
-	))
+	diff := 1e9 * uint64(p.maxDatagramSize-p.budgetAtLastSent)
+	bw := p.adjustedBandwidth()
+	// We might need to round up this value.
+	// Otherwise, we might have a budget (slightly) smaller than the datagram size when the timer expires.
+	d := diff / bw
+	// this is effectively a math.Ceil, but using only integer math
+	if diff%bw > 0 {
+		d++
+	}
+	return p.lastSentTime.Add(utils.Max(protocol.MinPacingDelay, time.Duration(d)*time.Nanosecond))
 }
 
 func (p *pacer) SetMaxDatagramSize(s protocol.ByteCount) {

@@ -29,6 +29,7 @@ type Conn struct {
 	conn        net.Conn
 	isClient    bool
 	handshakeFn func(context.Context) error // (*Conn).clientHandshake or serverHandshake
+	quic        *quicState                  // nil for non-QUIC connections
 
 	// isHandshakeComplete is true if the connection is currently transferring
 	// application data (i.e. is not currently processing a handshake).
@@ -40,11 +41,10 @@ type Conn struct {
 	vers           uint16  // TLS version
 	haveVers       bool    // version has been negotiated
 	config         *config // configuration passed to constructor
+	extraConfig    *ExtraConfig
 	// handshakes counts the number of handshakes performed on the
 	// connection so far. If renegotiation is disabled then this is either
 	// zero or one.
-	extraConfig *ExtraConfig
-
 	handshakes       int
 	didResume        bool // whether this connection was a session resumption
 	cipherSuite      uint16
@@ -65,13 +65,8 @@ type Conn struct {
 	secureRenegotiation bool
 	// ekm is a closure for exporting keying material.
 	ekm func(label string, context []byte, length int) ([]byte, error)
-	// For the client:
 	// resumptionSecret is the resumption_master_secret for handling
-	// NewSessionTicket messages. nil if config.SessionTicketsDisabled.
-	// For the server:
-	// resumptionSecret is the resumption_master_secret for generating
-	// NewSessionTicket messages. Only used when the alternative record
-	// layer is set. nil if config.SessionTicketsDisabled.
+	// or sending NewSessionTicket messages.
 	resumptionSecret []byte
 
 	// ticketKeys is the set of active session ticket keys for this
@@ -123,12 +118,7 @@ type Conn struct {
 	// the rest of the bits are the number of goroutines in Conn.Write.
 	activeCall atomic.Int32
 
-	used0RTT bool
-
 	tmp [16]byte
-
-	connStateMutex sync.Mutex
-	connState      ConnectionStateWith0RTT
 }
 
 // Access to net.Conn methods.
@@ -188,9 +178,8 @@ type halfConn struct {
 	nextCipher any       // next encryption state
 	nextMac    hash.Hash // next MAC algorithm
 
-	trafficSecret []byte // current TLS 1.3 traffic secret
-
-	setKeyCallback func(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte)
+	level         QUICEncryptionLevel // current QUIC encryption level
+	trafficSecret []byte              // current TLS 1.3 traffic secret
 }
 
 type permanentError struct {
@@ -235,20 +224,9 @@ func (hc *halfConn) changeCipherSpec() error {
 	return nil
 }
 
-func (hc *halfConn) exportKey(encLevel EncryptionLevel, suite *cipherSuiteTLS13, trafficSecret []byte) {
-	if hc.setKeyCallback != nil {
-		s := &CipherSuiteTLS13{
-			ID:     suite.id,
-			KeyLen: suite.keyLen,
-			Hash:   suite.hash,
-			AEAD:   func(key, fixedNonce []byte) cipher.AEAD { return suite.aead(key, fixedNonce) },
-		}
-		hc.setKeyCallback(encLevel, s, trafficSecret)
-	}
-}
-
-func (hc *halfConn) setTrafficSecret(suite *cipherSuiteTLS13, secret []byte) {
+func (hc *halfConn) setTrafficSecret(suite *cipherSuiteTLS13, level QUICEncryptionLevel, secret []byte) {
 	hc.trafficSecret = secret
+	hc.level = level
 	key, iv := suite.trafficKey(secret)
 	hc.cipher = suite.aead(key, iv)
 	for i := range hc.seq {
@@ -481,13 +459,6 @@ func (hc *halfConn) decrypt(record []byte) ([]byte, recordType, error) {
 	return plaintext, typ, nil
 }
 
-func (c *Conn) setAlternativeRecordLayer() {
-	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
-		c.in.setKeyCallback = c.extraConfig.AlternativeRecordLayer.SetReadKey
-		c.out.setKeyCallback = c.extraConfig.AlternativeRecordLayer.SetWriteKey
-	}
-}
-
 // sliceForAppend extends the input slice by n bytes. head is the full extended
 // slice, while tail is the appended part. If the original slice has sufficient
 // capacity no allocation is performed.
@@ -646,6 +617,10 @@ func (c *Conn) readRecordOrCCS(expectChangeCipherSpec bool) error {
 	}
 	c.input.Reset(nil)
 
+	if c.quic != nil {
+		return c.in.setErrorLocked(errors.New("tls: internal error: attempted to read record with QUIC transport"))
+	}
+
 	// Read header, payload.
 	if err := c.readFromUntil(c.conn, recordHeaderLen); err != nil {
 		// RFC 8446, Section 6.1 suggests that EOF without an alertCloseNotify
@@ -729,6 +704,9 @@ func (c *Conn) readRecordOrCCS(expectChangeCipherSpec bool) error {
 		return c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
 
 	case recordTypeAlert:
+		if c.quic != nil {
+			return c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
+		}
 		if len(data) != 2 {
 			return c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
 		}
@@ -846,6 +824,9 @@ func (c *Conn) readFromUntil(r io.Reader, n int) error {
 
 // sendAlert sends a TLS alert message.
 func (c *Conn) sendAlertLocked(err alert) error {
+	if c.quic != nil {
+		return c.out.setErrorLocked(&net.OpError{Op: "local error", Err: err})
+	}
 	switch err {
 	case alertNoRenegotiation, alertCloseNotify:
 		c.tmp[0] = alertLevelWarning
@@ -865,11 +846,6 @@ func (c *Conn) sendAlertLocked(err alert) error {
 
 // sendAlert sends a TLS alert message.
 func (c *Conn) sendAlert(err alert) error {
-	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
-		c.extraConfig.AlternativeRecordLayer.SendAlert(uint8(err))
-		return &net.OpError{Op: "local error", Err: err}
-	}
-
 	c.out.Lock()
 	defer c.out.Unlock()
 	return c.sendAlertLocked(err)
@@ -985,6 +961,19 @@ var outBufPool = sync.Pool{
 // writeRecordLocked writes a TLS record with the given type and payload to the
 // connection and updates the record layer state.
 func (c *Conn) writeRecordLocked(typ recordType, data []byte) (int, error) {
+	if c.quic != nil {
+		if typ != recordTypeHandshake {
+			return 0, errors.New("tls: internal error: sending non-handshake message to QUIC transport")
+		}
+		c.quicWriteCryptoData(c.out.level, data)
+		if !c.buffering {
+			if _, err := c.flush(); err != nil {
+				return 0, err
+			}
+		}
+		return len(data), nil
+	}
+
 	outBufPtr := outBufPool.Get().(*[]byte)
 	outBuf := *outBufPtr
 	defer func() {
@@ -1046,20 +1035,15 @@ func (c *Conn) writeRecordLocked(typ recordType, data []byte) (int, error) {
 // the record layer state. If transcript is non-nil the marshalled message is
 // written to it.
 func (c *Conn) writeHandshakeRecord(msg handshakeMessage, transcript transcriptHash) (int, error) {
+	c.out.Lock()
+	defer c.out.Unlock()
+
 	data, err := msg.marshal()
 	if err != nil {
 		return 0, err
 	}
-
-	c.out.Lock()
-	defer c.out.Unlock()
-
 	if transcript != nil {
 		transcript.Write(data)
-	}
-
-	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
-		return c.extraConfig.AlternativeRecordLayer.WriteRecord(data)
 	}
 
 	return c.writeRecordLocked(recordTypeHandshake, data)
@@ -1068,47 +1052,46 @@ func (c *Conn) writeHandshakeRecord(msg handshakeMessage, transcript transcriptH
 // writeChangeCipherRecord writes a ChangeCipherSpec message to the connection and
 // updates the record layer state.
 func (c *Conn) writeChangeCipherRecord() error {
-	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
-		return nil
-	}
-
 	c.out.Lock()
 	defer c.out.Unlock()
 	_, err := c.writeRecordLocked(recordTypeChangeCipherSpec, []byte{1})
 	return err
 }
 
+// readHandshakeBytes reads handshake data until c.hand contains at least n bytes.
+func (c *Conn) readHandshakeBytes(n int) error {
+	if c.quic != nil {
+		return c.quicReadHandshakeBytes(n)
+	}
+	for c.hand.Len() < n {
+		if err := c.readRecord(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // readHandshake reads the next handshake message from
 // the record layer. If transcript is non-nil, the message
 // is written to the passed transcriptHash.
 func (c *Conn) readHandshake(transcript transcriptHash) (any, error) {
-	var data []byte
-	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
-		var err error
-		data, err = c.extraConfig.AlternativeRecordLayer.ReadHandshakeMessage()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		for c.hand.Len() < 4 {
-			if err := c.readRecord(); err != nil {
-				return nil, err
-			}
-		}
-
-		data = c.hand.Bytes()
-		n := int(data[1])<<16 | int(data[2])<<8 | int(data[3])
-		if n > maxHandshake {
-			c.sendAlertLocked(alertInternalError)
-			return nil, c.in.setErrorLocked(fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake))
-		}
-		for c.hand.Len() < 4+n {
-			if err := c.readRecord(); err != nil {
-				return nil, err
-			}
-		}
-		data = c.hand.Next(4 + n)
+	if err := c.readHandshakeBytes(4); err != nil {
+		return nil, err
 	}
+	data := c.hand.Bytes()
+	n := int(data[1])<<16 | int(data[2])<<8 | int(data[3])
+	if n > maxHandshake {
+		c.sendAlertLocked(alertInternalError)
+		return nil, c.in.setErrorLocked(fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake))
+	}
+	if err := c.readHandshakeBytes(4 + n); err != nil {
+		return nil, err
+	}
+	data = c.hand.Next(4 + n)
+	return c.unmarshalHandshakeMessage(data, transcript)
+}
+
+func (c *Conn) unmarshalHandshakeMessage(data []byte, transcript transcriptHash) (handshakeMessage, error) {
 	var m handshakeMessage
 	switch data[0] {
 	case typeHelloRequest:
@@ -1288,10 +1271,6 @@ func (c *Conn) handleRenegotiation() error {
 	return c.handshakeErr
 }
 
-func (c *Conn) HandlePostHandshakeMessage() error {
-	return c.handlePostHandshakeMessage()
-}
-
 // handlePostHandshakeMessage processes a handshake message arrived after the
 // handshake is complete. Up to TLS 1.2, it indicates the start of a renegotiation.
 func (c *Conn) handlePostHandshakeMessage() error {
@@ -1303,7 +1282,6 @@ func (c *Conn) handlePostHandshakeMessage() error {
 	if err != nil {
 		return err
 	}
-
 	c.retryCount++
 	if c.retryCount > maxUselessRecords {
 		c.sendAlert(alertUnexpectedMessage)
@@ -1315,20 +1293,28 @@ func (c *Conn) handlePostHandshakeMessage() error {
 		return c.handleNewSessionTicket(msg)
 	case *keyUpdateMsg:
 		return c.handleKeyUpdate(msg)
-	default:
-		c.sendAlert(alertUnexpectedMessage)
-		return fmt.Errorf("tls: received unexpected handshake message of type %T", msg)
 	}
+	// The QUIC layer is supposed to treat an unexpected post-handshake CertificateRequest
+	// as a QUIC-level PROTOCOL_VIOLATION error (RFC 9001, Section 4.4). Returning an
+	// unexpected_message alert here doesn't provide it with enough information to distinguish
+	// this condition from other unexpected messages. This is probably fine.
+	c.sendAlert(alertUnexpectedMessage)
+	return fmt.Errorf("tls: received unexpected handshake message of type %T", msg)
 }
 
 func (c *Conn) handleKeyUpdate(keyUpdate *keyUpdateMsg) error {
+	if c.quic != nil {
+		c.sendAlert(alertUnexpectedMessage)
+		return c.in.setErrorLocked(errors.New("tls: received unexpected key update message"))
+	}
+
 	cipherSuite := cipherSuiteTLS13ByID(c.cipherSuite)
 	if cipherSuite == nil {
 		return c.in.setErrorLocked(c.sendAlert(alertInternalError))
 	}
 
 	newSecret := cipherSuite.nextTrafficSecret(c.in.trafficSecret)
-	c.in.setTrafficSecret(cipherSuite, newSecret)
+	c.in.setTrafficSecret(cipherSuite, QUICEncryptionLevelInitial, newSecret)
 
 	if keyUpdate.updateRequested {
 		c.out.Lock()
@@ -1347,7 +1333,7 @@ func (c *Conn) handleKeyUpdate(keyUpdate *keyUpdateMsg) error {
 		}
 
 		newSecret := cipherSuite.nextTrafficSecret(c.out.trafficSecret)
-		c.out.setTrafficSecret(cipherSuite, newSecret)
+		c.out.setTrafficSecret(cipherSuite, QUICEncryptionLevelInitial, newSecret)
 	}
 
 	return nil
@@ -1508,12 +1494,15 @@ func (c *Conn) handshakeContext(ctx context.Context) (ret error) {
 	// this cancellation. In the former case, we need to close the connection.
 	defer cancel()
 
-	// Start the "interrupter" goroutine, if this context might be canceled.
-	// (The background context cannot).
-	//
-	// The interrupter goroutine waits for the input context to be done and
-	// closes the connection if this happens before the function returns.
-	if ctx.Done() != nil {
+	if c.quic != nil {
+		c.quic.cancelc = handshakeCtx.Done()
+		c.quic.cancel = cancel
+	} else if ctx.Done() != nil {
+		// Start the "interrupter" goroutine, if this context might be canceled.
+		// (The background context cannot).
+		//
+		// The interrupter goroutine waits for the input context to be done and
+		// closes the connection if this happens before the function returns.
 		done := make(chan struct{})
 		interruptRes := make(chan error, 1)
 		defer func() {
@@ -1564,21 +1553,38 @@ func (c *Conn) handshakeContext(ctx context.Context) (ret error) {
 		panic("tls: internal error: handshake returned an error but is marked successful")
 	}
 
+	if c.quic != nil {
+		if c.handshakeErr == nil {
+			c.quicHandshakeComplete()
+			// Provide the 1-RTT read secret now that the handshake is complete.
+			// The QUIC layer MUST NOT decrypt 1-RTT packets prior to completing
+			// the handshake (RFC 9001, Section 5.7).
+			c.quicSetReadSecret(QUICEncryptionLevelApplication, c.cipherSuite, c.in.trafficSecret)
+		} else {
+			var a alert
+			c.out.Lock()
+			if !errors.As(c.out.err, &a) {
+				a = alertInternalError
+			}
+			c.out.Unlock()
+			// Return an error which wraps both the handshake error and
+			// any alert error we may have sent, or alertInternalError
+			// if we didn't send an alert.
+			// Truncate the text of the alert to 0 characters.
+			c.handshakeErr = fmt.Errorf("%w%.0w", c.handshakeErr, AlertError(a))
+		}
+		close(c.quic.blockedc)
+		close(c.quic.signalc)
+	}
+
 	return c.handshakeErr
 }
 
 // ConnectionState returns basic TLS details about the connection.
 func (c *Conn) ConnectionState() ConnectionState {
-	c.connStateMutex.Lock()
-	defer c.connStateMutex.Unlock()
-	return c.connState.ConnectionState
-}
-
-// ConnectionStateWith0RTT returns basic TLS details (incl. 0-RTT status) about the connection.
-func (c *Conn) ConnectionStateWith0RTT() ConnectionStateWith0RTT {
-	c.connStateMutex.Lock()
-	defer c.connStateMutex.Unlock()
-	return c.connState
+	c.handshakeMutex.Lock()
+	defer c.handshakeMutex.Unlock()
+	return c.connectionStateLocked()
 }
 
 func (c *Conn) connectionStateLocked() ConnectionState {
@@ -1607,15 +1613,6 @@ func (c *Conn) connectionStateLocked() ConnectionState {
 		state.ekm = c.ekm
 	}
 	return toConnectionState(state)
-}
-
-func (c *Conn) updateConnectionState() {
-	c.connStateMutex.Lock()
-	defer c.connStateMutex.Unlock()
-	c.connState = ConnectionStateWith0RTT{
-		Used0RTT:        c.used0RTT,
-		ConnectionState: c.connectionStateLocked(),
-	}
 }
 
 // OCSPResponse returns the stapled OCSP response from the TLS server, if

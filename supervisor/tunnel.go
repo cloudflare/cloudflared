@@ -597,7 +597,6 @@ func (e *EdgeTunnelServer) serveQUIC(
 		MaxIncomingStreams:      quicpogs.MaxIncomingStreams,
 		MaxIncomingUniStreams:   quicpogs.MaxIncomingStreams,
 		EnableDatagrams:         true,
-		MaxDatagramFrameSize:    quicpogs.MaxDatagramFrameSize,
 		Tracer:                  quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
 		DisablePathMTUDiscovery: e.config.DisableQUICPathMTUDiscovery,
 	}

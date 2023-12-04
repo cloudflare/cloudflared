@@ -5,10 +5,15 @@ package quic
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
+	"log"
 	"net"
+	"net/netip"
+	"os"
+	"strconv"
+	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -32,25 +37,31 @@ type batchConn interface {
 	ReadBatch(ms []ipv4.Message, flags int) (int, error)
 }
 
-func inspectReadBuffer(c interface{}) (int, error) {
-	conn, ok := c.(interface {
-		SyscallConn() (syscall.RawConn, error)
-	})
-	if !ok {
-		return 0, errors.New("doesn't have a SyscallConn")
-	}
-	rawConn, err := conn.SyscallConn()
-	if err != nil {
-		return 0, fmt.Errorf("couldn't get syscall.RawConn: %w", err)
-	}
+func inspectReadBuffer(c syscall.RawConn) (int, error) {
 	var size int
 	var serr error
-	if err := rawConn.Control(func(fd uintptr) {
+	if err := c.Control(func(fd uintptr) {
 		size, serr = unix.GetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_RCVBUF)
 	}); err != nil {
 		return 0, err
 	}
 	return size, serr
+}
+
+func inspectWriteBuffer(c syscall.RawConn) (int, error) {
+	var size int
+	var serr error
+	if err := c.Control(func(fd uintptr) {
+		size, serr = unix.GetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_SNDBUF)
+	}); err != nil {
+		return 0, err
+	}
+	return size, serr
+}
+
+func isECNDisabled() bool {
+	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_ECN"))
+	return err == nil && disabled
 }
 
 type oobConn struct {
@@ -61,11 +72,13 @@ type oobConn struct {
 	// Packets received from the kernel, but not yet returned by ReadPacket().
 	messages []ipv4.Message
 	buffers  [batchSize]*packetBuffer
+
+	cap connCapabilities
 }
 
 var _ rawConn = &oobConn{}
 
-func newConn(c OOBCapablePacketConn) (*oobConn, error) {
+func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	rawConn, err := c.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -83,8 +96,8 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		errECNIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVTCLASS, 1)
 
 		if needsPacketInfo {
-			errPIIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, ipv4RECVPKTINFO, 1)
-			errPIIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, ipv6RECVPKTINFO, 1)
+			errPIIPv4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, ipv4PKTINFO, 1)
+			errPIIPv6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVPKTINFO, 1)
 		}
 	}); err != nil {
 		return nil, err
@@ -132,6 +145,11 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 		batchConn:            bc,
 		messages:             msgs,
 		readPos:              batchSize,
+		cap: connCapabilities{
+			DF:  supportsDF,
+			GSO: isGSOSupported(rawConn),
+			ECN: !isECNDisabled(),
+		},
 	}
 	for i := 0; i < batchSize; i++ {
 		oobConn.messages[i].OOB = make([]byte, oobBufferSize)
@@ -139,7 +157,9 @@ func newConn(c OOBCapablePacketConn) (*oobConn, error) {
 	return oobConn, nil
 }
 
-func (c *oobConn) ReadPacket() (*receivedPacket, error) {
+var invalidCmsgOnceV4, invalidCmsgOnceV6 sync.Once
+
+func (c *oobConn) ReadPacket() (receivedPacket, error) {
 	if len(c.messages) == int(c.readPos) { // all messages read. Read the next batch of messages.
 		c.messages = c.messages[:batchSize]
 		// replace buffers data buffers up to the packet that has been consumed during the last ReadBatch call
@@ -153,7 +173,7 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 
 		n, err := c.batchConn.ReadBatch(c.messages, 0)
 		if n == 0 || err != nil {
-			return nil, err
+			return receivedPacket{}, err
 		}
 		c.messages = c.messages[:n]
 	}
@@ -163,102 +183,149 @@ func (c *oobConn) ReadPacket() (*receivedPacket, error) {
 	c.readPos++
 
 	data := msg.OOB[:msg.NN]
-	var ecn protocol.ECN
-	var destIP net.IP
-	var ifIndex uint32
+	p := receivedPacket{
+		remoteAddr: msg.Addr,
+		rcvTime:    time.Now(),
+		data:       msg.Buffers[0][:msg.N],
+		buffer:     buffer,
+	}
 	for len(data) > 0 {
 		hdr, body, remainder, err := unix.ParseOneSocketControlMessage(data)
 		if err != nil {
-			return nil, err
+			return receivedPacket{}, err
 		}
 		if hdr.Level == unix.IPPROTO_IP {
 			switch hdr.Type {
 			case msgTypeIPTOS:
-				ecn = protocol.ECN(body[0] & ecnMask)
-			case msgTypeIPv4PKTINFO:
-				// struct in_pktinfo {
-				// 	unsigned int   ipi_ifindex;  /* Interface index */
-				// 	struct in_addr ipi_spec_dst; /* Local address */
-				// 	struct in_addr ipi_addr;     /* Header Destination
-				// 									address */
-				// };
-				ip := make([]byte, 4)
-				if len(body) == 12 {
-					ifIndex = binary.LittleEndian.Uint32(body)
-					copy(ip, body[8:12])
-				} else if len(body) == 4 {
-					// FreeBSD
-					copy(ip, body)
+				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
+			case ipv4PKTINFO:
+				ip, ifIndex, ok := parseIPv4PktInfo(body)
+				if ok {
+					p.info.addr = ip
+					p.info.ifIndex = ifIndex
+				} else {
+					invalidCmsgOnceV4.Do(func() {
+						log.Printf("Received invalid IPv4 packet info control message: %+x. "+
+							"This should never occur, please open a new issue and include details about the architecture.", body)
+					})
 				}
-				destIP = net.IP(ip)
 			}
 		}
 		if hdr.Level == unix.IPPROTO_IPV6 {
 			switch hdr.Type {
 			case unix.IPV6_TCLASS:
-				ecn = protocol.ECN(body[0] & ecnMask)
-			case msgTypeIPv6PKTINFO:
+				p.ecn = protocol.ParseECNHeaderBits(body[0] & ecnMask)
+			case unix.IPV6_PKTINFO:
 				// struct in6_pktinfo {
 				// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 				// };
 				if len(body) == 20 {
-					ip := make([]byte, 16)
-					copy(ip, body[:16])
-					destIP = net.IP(ip)
-					ifIndex = binary.LittleEndian.Uint32(body[16:])
+					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16]))
+					p.info.ifIndex = binary.LittleEndian.Uint32(body[16:])
+				} else {
+					invalidCmsgOnceV6.Do(func() {
+						log.Printf("Received invalid IPv6 packet info control message: %+x. "+
+							"This should never occur, please open a new issue and include details about the architecture.", body)
+					})
 				}
 			}
 		}
 		data = remainder
 	}
-	var info *packetInfo
-	if destIP != nil {
-		info = &packetInfo{
-			addr:    destIP,
-			ifIndex: ifIndex,
-		}
-	}
-	return &receivedPacket{
-		remoteAddr: msg.Addr,
-		rcvTime:    time.Now(),
-		data:       msg.Buffers[0][:msg.N],
-		ecn:        ecn,
-		info:       info,
-		buffer:     buffer,
-	}, nil
+	return p, nil
 }
 
-func (c *oobConn) WritePacket(b []byte, addr net.Addr, oob []byte) (n int, err error) {
-	n, _, err = c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
+// WritePacket writes a new packet.
+func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error) {
+	oob := packetInfoOOB
+	if gsoSize > 0 {
+		if !c.capabilities().GSO {
+			panic("GSO disabled")
+		}
+		oob = appendUDPSegmentSizeMsg(oob, gsoSize)
+	}
+	if ecn != protocol.ECNUnsupported {
+		if !c.capabilities().ECN {
+			panic("tried to send a ECN-marked packet although ECN is disabled")
+		}
+		if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
+			if remoteUDPAddr.IP.To4() != nil {
+				oob = appendIPv4ECNMsg(oob, ecn)
+			} else {
+				oob = appendIPv6ECNMsg(oob, ecn)
+			}
+		}
+	}
+	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
+}
+
+func (c *oobConn) capabilities() connCapabilities {
+	return c.cap
+}
+
+type packetInfo struct {
+	addr    netip.Addr
+	ifIndex uint32
 }
 
 func (info *packetInfo) OOB() []byte {
 	if info == nil {
 		return nil
 	}
-	if ip4 := info.addr.To4(); ip4 != nil {
+	if info.addr.Is4() {
+		ip := info.addr.As4()
 		// struct in_pktinfo {
 		// 	unsigned int   ipi_ifindex;  /* Interface index */
 		// 	struct in_addr ipi_spec_dst; /* Local address */
 		// 	struct in_addr ipi_addr;     /* Header Destination address */
 		// };
 		cm := ipv4.ControlMessage{
-			Src:     ip4,
+			Src:     ip[:],
 			IfIndex: int(info.ifIndex),
 		}
 		return cm.Marshal()
-	} else if len(info.addr) == 16 {
+	} else if info.addr.Is6() {
+		ip := info.addr.As16()
 		// struct in6_pktinfo {
 		// 	struct in6_addr ipi6_addr;    /* src/dst IPv6 address */
 		// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 		// };
 		cm := ipv6.ControlMessage{
-			Src:     info.addr,
+			Src:     ip[:],
 			IfIndex: int(info.ifIndex),
 		}
 		return cm.Marshal()
 	}
 	return nil
+}
+
+func appendIPv4ECNMsg(b []byte, val protocol.ECN) []byte {
+	startLen := len(b)
+	b = append(b, make([]byte, unix.CmsgSpace(ecnIPv4DataLen))...)
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = syscall.IPPROTO_IP
+	h.Type = unix.IP_TOS
+	h.SetLen(unix.CmsgLen(ecnIPv4DataLen))
+
+	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
+	offset := startLen + unix.CmsgSpace(0)
+	b[offset] = val.ToHeaderBits()
+	return b
+}
+
+func appendIPv6ECNMsg(b []byte, val protocol.ECN) []byte {
+	startLen := len(b)
+	const dataLen = 4
+	b = append(b, make([]byte, unix.CmsgSpace(dataLen))...)
+	h := (*unix.Cmsghdr)(unsafe.Pointer(&b[startLen]))
+	h.Level = syscall.IPPROTO_IPV6
+	h.Type = unix.IPV6_TCLASS
+	h.SetLen(unix.CmsgLen(dataLen))
+
+	// UnixRights uses the private `data` method, but I *think* this achieves the same goal.
+	offset := startLen + unix.CmsgSpace(0)
+	b[offset] = val.ToHeaderBits()
+	return b
 }

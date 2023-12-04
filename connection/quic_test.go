@@ -621,7 +621,7 @@ func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.
 	muxedPayload, err = quicpogs.SuffixType(muxedPayload, quicpogs.DatagramTypeUDP)
 	require.NoError(t, err)
 
-	err = edgeQUICSession.SendMessage(muxedPayload)
+	err = edgeQUICSession.SendDatagram(muxedPayload)
 	require.NoError(t, err)
 
 	readBuffer := make([]byte, len(payload)+1)

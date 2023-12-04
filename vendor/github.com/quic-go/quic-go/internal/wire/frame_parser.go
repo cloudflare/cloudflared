@@ -39,9 +39,12 @@ const (
 type frameParser struct {
 	r bytes.Reader // cached bytes.Reader, so we don't have to repeatedly allocate them
 
-	ackDelayExponent uint8
-
+	ackDelayExponent  uint8
 	supportsDatagrams bool
+
+	// To avoid allocating when parsing, keep a single ACK frame struct.
+	// It is used over and over again.
+	ackFrame *AckFrame
 }
 
 var _ FrameParser = &frameParser{}
@@ -51,6 +54,7 @@ func NewFrameParser(supportsDatagrams bool) *frameParser {
 	return &frameParser{
 		r:                 *bytes.NewReader(nil),
 		supportsDatagrams: supportsDatagrams,
+		ackFrame:          &AckFrame{},
 	}
 }
 
@@ -105,7 +109,9 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.
 			if encLevel != protocol.Encryption1RTT {
 				ackDelayExponent = protocol.DefaultAckDelayExponent
 			}
-			frame, err = parseAckFrame(r, typ, ackDelayExponent, v)
+			p.ackFrame.Reset()
+			err = parseAckFrame(p.ackFrame, r, typ, ackDelayExponent, v)
+			frame = p.ackFrame
 		case resetStreamFrameType:
 			frame, err = parseResetStreamFrame(r, v)
 		case stopSendingFrameType:

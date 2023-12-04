@@ -37,11 +37,60 @@ func (t PacketType) String() string {
 type ECN uint8
 
 const (
-	ECNNon ECN = iota // 00
-	ECT1              // 01
-	ECT0              // 10
-	ECNCE             // 11
+	ECNUnsupported ECN = iota
+	ECNNon             // 00
+	ECT1               // 01
+	ECT0               // 10
+	ECNCE              // 11
 )
+
+func ParseECNHeaderBits(bits byte) ECN {
+	switch bits {
+	case 0:
+		return ECNNon
+	case 0b00000010:
+		return ECT0
+	case 0b00000001:
+		return ECT1
+	case 0b00000011:
+		return ECNCE
+	default:
+		panic("invalid ECN bits")
+	}
+}
+
+func (e ECN) ToHeaderBits() byte {
+	//nolint:exhaustive // There are only 4 values.
+	switch e {
+	case ECNNon:
+		return 0
+	case ECT0:
+		return 0b00000010
+	case ECT1:
+		return 0b00000001
+	case ECNCE:
+		return 0b00000011
+	default:
+		panic("ECN unsupported")
+	}
+}
+
+func (e ECN) String() string {
+	switch e {
+	case ECNUnsupported:
+		return "ECN unsupported"
+	case ECNNon:
+		return "Not-ECT"
+	case ECT1:
+		return "ECT(1)"
+	case ECT0:
+		return "ECT(0)"
+	case ECNCE:
+		return "CE"
+	default:
+		return fmt.Sprintf("invalid ECN value: %d", e)
+	}
+}
 
 // A ByteCount in QUIC
 type ByteCount int64
@@ -59,7 +108,10 @@ type StatelessResetToken [16]byte
 // ethernet's max size, minus the IP and UDP headers. IPv6 has a 40 byte header,
 // UDP adds an additional 8 bytes.  This is a total overhead of 48 bytes.
 // Ethernet's max packet size is 1500 bytes,  1500 - 48 = 1452.
-const MaxPacketBufferSize ByteCount = 1452
+const MaxPacketBufferSize = 1452
+
+// MaxLargePacketBufferSize is used when using GSO
+const MaxLargePacketBufferSize = 20 * 1024
 
 // MinInitialPacketSize is the minimum size an Initial packet is required to have.
 const MinInitialPacketSize = 1200
@@ -76,6 +128,9 @@ const MinConnectionIDLenInitial = 8
 
 // DefaultAckDelayExponent is the default ack delay exponent
 const DefaultAckDelayExponent = 3
+
+// DefaultActiveConnectionIDLimit is the default active connection ID limit
+const DefaultActiveConnectionIDLimit = 2
 
 // MaxAckDelayExponent is the maximum ack delay exponent
 const MaxAckDelayExponent = 20

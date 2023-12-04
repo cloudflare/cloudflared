@@ -31,11 +31,10 @@ import (
 // using conn as the underlying transport.
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
-func Server(conn net.Conn, config *Config, extraConfig *ExtraConfig) *Conn {
+func Server(conn net.Conn, config *Config) *Conn {
 	c := &Conn{
-		conn:        conn,
-		config:      fromConfig(config),
-		extraConfig: extraConfig,
+		conn:   conn,
+		config: fromConfig(config),
 	}
 	c.handshakeFn = c.serverHandshake
 	return c
@@ -45,12 +44,11 @@ func Server(conn net.Conn, config *Config, extraConfig *ExtraConfig) *Conn {
 // using conn as the underlying transport.
 // The config cannot be nil: users must set either ServerName or
 // InsecureSkipVerify in the config.
-func Client(conn net.Conn, config *Config, extraConfig *ExtraConfig) *Conn {
+func Client(conn net.Conn, config *Config) *Conn {
 	c := &Conn{
-		conn:        conn,
-		config:      fromConfig(config),
-		extraConfig: extraConfig,
-		isClient:    true,
+		conn:     conn,
+		config:   fromConfig(config),
+		isClient: true,
 	}
 	c.handshakeFn = c.clientHandshake
 	return c
@@ -59,8 +57,7 @@ func Client(conn net.Conn, config *Config, extraConfig *ExtraConfig) *Conn {
 // A listener implements a network listener (net.Listener) for TLS connections.
 type listener struct {
 	net.Listener
-	config      *Config
-	extraConfig *ExtraConfig
+	config *Config
 }
 
 // Accept waits for and returns the next incoming TLS connection.
@@ -70,18 +67,17 @@ func (l *listener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Server(c, l.config, l.extraConfig), nil
+	return Server(c, l.config), nil
 }
 
 // NewListener creates a Listener which accepts connections from an inner
 // Listener and wraps each connection with Server.
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
-func NewListener(inner net.Listener, config *Config, extraConfig *ExtraConfig) net.Listener {
+func NewListener(inner net.Listener, config *Config) net.Listener {
 	l := new(listener)
 	l.Listener = inner
 	l.config = config
-	l.extraConfig = extraConfig
 	return l
 }
 
@@ -89,7 +85,7 @@ func NewListener(inner net.Listener, config *Config, extraConfig *ExtraConfig) n
 // given network address using net.Listen.
 // The configuration config must be non-nil and must include
 // at least one certificate or else set GetCertificate.
-func Listen(network, laddr string, config *Config, extraConfig *ExtraConfig) (net.Listener, error) {
+func Listen(network, laddr string, config *Config) (net.Listener, error) {
 	if config == nil || len(config.Certificates) == 0 &&
 		config.GetCertificate == nil && config.GetConfigForClient == nil {
 		return nil, errors.New("tls: neither Certificates, GetCertificate, nor GetConfigForClient set in Config")
@@ -98,7 +94,7 @@ func Listen(network, laddr string, config *Config, extraConfig *ExtraConfig) (ne
 	if err != nil {
 		return nil, err
 	}
-	return NewListener(l, config, extraConfig), nil
+	return NewListener(l, config), nil
 }
 
 type timeoutError struct{}
@@ -117,11 +113,11 @@ func (timeoutError) Temporary() bool { return true }
 //
 // DialWithDialer uses context.Background internally; to specify the context,
 // use Dialer.DialContext with NetDialer set to the desired dialer.
-func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config, extraConfig *ExtraConfig) (*Conn, error) {
-	return dial(context.Background(), dialer, network, addr, config, extraConfig)
+func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*Conn, error) {
+	return dial(context.Background(), dialer, network, addr, config)
 }
 
-func dial(ctx context.Context, netDialer *net.Dialer, network, addr string, config *Config, extraConfig *ExtraConfig) (*Conn, error) {
+func dial(ctx context.Context, netDialer *net.Dialer, network, addr string, config *Config) (*Conn, error) {
 	if netDialer.Timeout != 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, netDialer.Timeout)
@@ -157,7 +153,7 @@ func dial(ctx context.Context, netDialer *net.Dialer, network, addr string, conf
 		config = c
 	}
 
-	conn := Client(rawConn, config, extraConfig)
+	conn := Client(rawConn, config)
 	if err := conn.HandshakeContext(ctx); err != nil {
 		rawConn.Close()
 		return nil, err
@@ -171,8 +167,8 @@ func dial(ctx context.Context, netDialer *net.Dialer, network, addr string, conf
 // Dial interprets a nil configuration as equivalent to
 // the zero configuration; see the documentation of Config
 // for the defaults.
-func Dial(network, addr string, config *Config, extraConfig *ExtraConfig) (*Conn, error) {
-	return DialWithDialer(new(net.Dialer), network, addr, config, extraConfig)
+func Dial(network, addr string, config *Config) (*Conn, error) {
+	return DialWithDialer(new(net.Dialer), network, addr, config)
 }
 
 // Dialer dials TLS connections given a configuration and a Dialer for the
@@ -188,8 +184,6 @@ type Dialer struct {
 	// configuration; see the documentation of Config for the
 	// defaults.
 	Config *Config
-
-	ExtraConfig *ExtraConfig
 }
 
 // Dial connects to the given network address and initiates a TLS
@@ -220,7 +214,7 @@ func (d *Dialer) netDialer() *net.Dialer {
 //
 // The returned Conn, if any, will always be of type *Conn.
 func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	c, err := dial(ctx, d.netDialer(), network, addr, d.Config, d.ExtraConfig)
+	c, err := dial(ctx, d.netDialer(), network, addr, d.Config)
 	if err != nil {
 		// Don't return c (a typed nil) in an interface.
 		return nil, err

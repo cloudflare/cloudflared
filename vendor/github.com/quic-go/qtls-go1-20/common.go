@@ -82,11 +82,6 @@ const (
 	compressionNone uint8 = 0
 )
 
-type Extension struct {
-	Type uint16
-	Data []byte
-}
-
 // TLS extension numbers
 const (
 	extensionServerName              uint16 = 0
@@ -105,20 +100,13 @@ const (
 	extensionCertificateAuthorities  uint16 = 47
 	extensionSignatureAlgorithmsCert uint16 = 50
 	extensionKeyShare                uint16 = 51
+	extensionQUICTransportParameters uint16 = 57
 	extensionRenegotiationInfo       uint16 = 0xff01
 )
 
 // TLS signaling cipher suite values
 const (
 	scsvRenegotiation uint16 = 0x00ff
-)
-
-type EncryptionLevel uint8
-
-const (
-	EncryptionHandshake EncryptionLevel = iota
-	Encryption0RTT
-	EncryptionApplication
 )
 
 // CurveID is a tls.CurveID
@@ -294,12 +282,6 @@ type connectionState struct {
 	ekm func(label string, context []byte, length int) ([]byte, error)
 }
 
-type ConnectionStateWith0RTT struct {
-	ConnectionState
-
-	Used0RTT bool // true if 0-RTT was both offered and accepted
-}
-
 // ClientAuthType is tls.ClientAuthType
 type ClientAuthType = tls.ClientAuthType
 
@@ -349,8 +331,6 @@ type clientSessionState struct {
 // goroutines. Up to TLS 1.2, only ticket-based resumption is supported, not
 // SessionID-based resumption. In TLS 1.3 they were merged into PSK modes, which
 // are supported via this interface.
-//
-//go:generate sh -c "mockgen -package qtls -destination mock_client_session_cache_test.go github.com/quic-go/qtls-go1-20 ClientSessionCache"
 type ClientSessionCache = tls.ClientSessionCache
 
 // SignatureScheme is a tls.SignatureScheme
@@ -736,63 +716,21 @@ type config struct {
 	autoSessionTicketKeys []ticketKey
 }
 
-// A RecordLayer handles encrypting and decrypting of TLS messages.
-type RecordLayer interface {
-	SetReadKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte)
-	SetWriteKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte)
-	ReadHandshakeMessage() ([]byte, error)
-	WriteRecord([]byte) (int, error)
-	SendAlert(uint8)
-}
-
 type ExtraConfig struct {
-	// GetExtensions, if not nil, is called before a message that allows
-	// sending of extensions is sent.
-	// Currently only implemented for the ClientHello message (for the client)
-	// and for the EncryptedExtensions message (for the server).
-	// Only valid for TLS 1.3.
-	GetExtensions func(handshakeMessageType uint8) []Extension
-
-	// ReceivedExtensions, if not nil, is called when a message that allows the
-	// inclusion of extensions is received.
-	// It is called with an empty slice of extensions, if the message didn't
-	// contain any extensions.
-	// Currently only implemented for the ClientHello message (sent by the
-	// client) and for the EncryptedExtensions message (sent by the server).
-	// Only valid for TLS 1.3.
-	ReceivedExtensions func(handshakeMessageType uint8, exts []Extension)
-
-	// AlternativeRecordLayer is used by QUIC
-	AlternativeRecordLayer RecordLayer
-
-	// Enforce the selection of a supported application protocol.
-	// Only works for TLS 1.3.
-	// If enabled, client and server have to agree on an application protocol.
-	// Otherwise, connection establishment fails.
-	EnforceNextProtoSelection bool
-
-	// If MaxEarlyData is greater than 0, the client will be allowed to send early
-	// data when resuming a session.
-	// Requires the AlternativeRecordLayer to be set.
+	// If Enable0RTT is enabled, the client will be allowed to send early data when resuming a session.
 	//
 	// It has no meaning on the client.
-	MaxEarlyData uint32
+	Enable0RTT bool
+
+	// GetAppDataForSessionTicket requests application data to be sent with a session ticket.
+	//
+	// It has no meaning on the client.
+	GetAppDataForSessionTicket func() []byte
 
 	// The Accept0RTT callback is called when the client offers 0-RTT.
 	// The server then has to decide if it wants to accept or reject 0-RTT.
 	// It is only used for servers.
 	Accept0RTT func(appData []byte) bool
-
-	// 0RTTRejected is called when the server rejectes 0-RTT.
-	// It is only used for clients.
-	Rejected0RTT func()
-
-	// If set, the client will export the 0-RTT key when resuming a session that
-	// allows sending of early data.
-	// Requires the AlternativeRecordLayer to be set.
-	//
-	// It has no meaning to the server.
-	Enable0RTT bool
 
 	// Is called when the client saves a session ticket to the session ticket.
 	// This gives the application the opportunity to save some data along with the ticket,
@@ -801,27 +739,18 @@ type ExtraConfig struct {
 
 	// Is called when the client uses a session ticket.
 	// Restores the application data that was saved earlier on GetAppDataForSessionTicket.
-	SetAppDataFromSessionState func([]byte)
+	SetAppDataFromSessionState func([]byte) (allowEarlyData bool)
 }
 
 // Clone clones.
 func (c *ExtraConfig) Clone() *ExtraConfig {
 	return &ExtraConfig{
-		GetExtensions:              c.GetExtensions,
-		ReceivedExtensions:         c.ReceivedExtensions,
-		AlternativeRecordLayer:     c.AlternativeRecordLayer,
-		EnforceNextProtoSelection:  c.EnforceNextProtoSelection,
-		MaxEarlyData:               c.MaxEarlyData,
 		Enable0RTT:                 c.Enable0RTT,
+		GetAppDataForSessionTicket: c.GetAppDataForSessionTicket,
 		Accept0RTT:                 c.Accept0RTT,
-		Rejected0RTT:               c.Rejected0RTT,
 		GetAppDataForSessionState:  c.GetAppDataForSessionState,
 		SetAppDataFromSessionState: c.SetAppDataFromSessionState,
 	}
-}
-
-func (c *ExtraConfig) usesAlternativeRecordLayer() bool {
-	return c != nil && c.AlternativeRecordLayer != nil
 }
 
 const (
@@ -1384,7 +1313,6 @@ func (c *config) BuildNameToCertificate() {
 
 const (
 	keyLogLabelTLS12           = "CLIENT_RANDOM"
-	keyLogLabelEarlyTraffic    = "CLIENT_EARLY_TRAFFIC_SECRET"
 	keyLogLabelClientHandshake = "CLIENT_HANDSHAKE_TRAFFIC_SECRET"
 	keyLogLabelServerHandshake = "SERVER_HANDSHAKE_TRAFFIC_SECRET"
 	keyLogLabelClientTraffic   = "CLIENT_TRAFFIC_SECRET_0"
@@ -1523,16 +1451,4 @@ func isSupportedSignatureAlgorithm(sigAlg SignatureScheme, supportedSignatureAlg
 }
 
 // CertificateVerificationError is returned when certificate verification fails during the handshake.
-type CertificateVerificationError struct {
-	// UnverifiedCertificates and its contents should not be modified.
-	UnverifiedCertificates []*x509.Certificate
-	Err                    error
-}
-
-func (e *CertificateVerificationError) Error() string {
-	return fmt.Sprintf("tls: failed to verify certificate: %s", e.Err)
-}
-
-func (e *CertificateVerificationError) Unwrap() error {
-	return e.Err
-}
+type CertificateVerificationError = tls.CertificateVerificationError

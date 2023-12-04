@@ -16,6 +16,10 @@ const (
 	SendPTOHandshake
 	// SendPTOAppData means that an Application data probe packet should be sent
 	SendPTOAppData
+	// SendPacingLimited means that the pacer doesn't allow sending of a packet right now,
+	// but will do in a little while.
+	// The timestamp when sending is allowed again can be obtained via the SentPacketHandler.TimeUntilSend.
+	SendPacingLimited
 	// SendAny means that any packet should be sent
 	SendAny
 )
@@ -34,6 +38,8 @@ func (s SendMode) String() string {
 		return "pto (Application Data)"
 	case SendAny:
 		return "any"
+	case SendPacingLimited:
+		return "pacing limited"
 	default:
 		return fmt.Sprintf("invalid send mode: %d", s)
 	}
