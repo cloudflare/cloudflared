@@ -13,92 +13,48 @@ import (
 
 func TestUnmarshalFeaturesRecord(t *testing.T) {
 	tests := []struct {
-		record             []byte
-		expectedPercentage int32
-		expectedErr        bool
+		record []byte
 	}{
 		{
-			record:             []byte(`{"pq":0}`),
-			expectedPercentage: 0,
+			record: []byte(`{"pq":0}`),
 		},
 		{
-			record:             []byte(`{"pq":39}`),
-			expectedPercentage: 39,
+			record: []byte(`{"pq":39}`),
 		},
 		{
-			record:             []byte(`{"pq":100}`),
-			expectedPercentage: 100,
+			record: []byte(`{"pq":100}`),
 		},
 		{
-			record:             []byte(`{}`),
-			expectedPercentage: 0, // Unmarshal to default struct if key is not present
+			record: []byte(`{}`), // Unmarshal to default struct if key is not present
 		},
 		{
-			record:             []byte(`{"kyber":768}`),
-			expectedPercentage: 0, // Unmarshal to default struct if key is not present
-		},
-		{
-			record:      []byte(`{"pq":"kyber768"}`),
-			expectedErr: true,
+			record: []byte(`{"kyber":768}`), // Unmarshal to default struct if key is not present
 		},
 	}
 
 	for _, test := range tests {
 		var features featuresRecord
 		err := json.Unmarshal(test.record, &features)
-		if test.expectedErr {
-			require.Error(t, err, test)
-		} else {
-			require.NoError(t, err)
-			require.Equal(t, test.expectedPercentage, features.PostQuantumPercentage, test)
-		}
+		require.NoError(t, err)
+		require.Equal(t, featuresRecord{}, features)
 	}
-}
-
-func TestRefreshFeaturesRecord(t *testing.T) {
-	// The hash of the accountTag is 82
-	accountTag := t.Name()
-	threshold := switchThreshold(accountTag)
-
-	percentages := []int32{0, 10, 80, 83, 100}
-	refreshFreq := time.Millisecond * 10
-	selector := newTestSelector(t, percentages, nil, refreshFreq)
-
-	for _, percentage := range percentages {
-		if percentage > threshold {
-			require.Equal(t, PostQuantumPrefer, selector.PostQuantumMode())
-		} else {
-			require.Equal(t, PostQuantumDisabled, selector.PostQuantumMode())
-		}
-
-		time.Sleep(refreshFreq + time.Millisecond)
-	}
-
-	// Make sure error doesn't override the last fetched features
-	require.Equal(t, PostQuantumPrefer, selector.PostQuantumMode())
 }
 
 func TestStaticFeatures(t *testing.T) {
-	percentages := []int32{0}
 	pqMode := PostQuantumStrict
-	selector := newTestSelector(t, percentages, &pqMode, time.Millisecond*10)
+	selector := newTestSelector(t, &pqMode, time.Millisecond*10)
 	require.Equal(t, PostQuantumStrict, selector.PostQuantumMode())
+
+	// No StaticFeatures configured
+	selector = newTestSelector(t, nil, time.Millisecond*10)
+	require.Equal(t, PostQuantumPrefer, selector.PostQuantumMode())
 }
 
-// Verify that if the first refresh fails, the selector will use default features
-func TestFailedRefreshInitToDefault(t *testing.T) {
-	selector := newTestSelector(t, []int32{}, nil, time.Second)
-	require.Equal(t, featuresRecord{}, selector.features)
-	require.Equal(t, PostQuantumDisabled, selector.PostQuantumMode())
-}
-
-func newTestSelector(t *testing.T, percentages []int32, pqMode *PostQuantumMode, refreshFreq time.Duration) *FeatureSelector {
+func newTestSelector(t *testing.T, pqMode *PostQuantumMode, refreshFreq time.Duration) *FeatureSelector {
 	accountTag := t.Name()
 	logger := zerolog.Nop()
 
-	resolver := &mockResolver{
-		percentages: percentages,
-	}
+	resolver := &mockResolver{}
 
 	staticFeatures := StaticFeatures{
 		PostQuantumMode: pqMode,
@@ -109,20 +65,8 @@ func newTestSelector(t *testing.T, percentages []int32, pqMode *PostQuantumMode,
 	return selector
 }
 
-type mockResolver struct {
-	nextIndex   int
-	percentages []int32
-}
+type mockResolver struct{}
 
 func (mr *mockResolver) lookupRecord(ctx context.Context) ([]byte, error) {
-	if mr.nextIndex >= len(mr.percentages) {
-		return nil, fmt.Errorf("no more record to lookup")
-	}
-
-	record, err := json.Marshal(featuresRecord{
-		PostQuantumPercentage: mr.percentages[mr.nextIndex],
-	})
-	mr.nextIndex++
-
-	return record, err
+	return nil, fmt.Errorf("mockResolver hasn't implement lookupRecord")
 }
