@@ -1,5 +1,4 @@
-pinned_go: &pinned_go go=1.20.6-1
-pinned_go_fips: &pinned_go_fips go-boring=1.20.6-1
+pinned_go: &pinned_go go-boring=1.21.5-1
 
 build_dir: &build_dir /cfsetup_build
 default-flavor: bullseye
@@ -19,16 +18,13 @@ buster: &buster
       - make cloudflared
   build-fips:
     build_dir: *build_dir
-    builddeps: &build_deps_fips
-      - *pinned_go_fips
-      - build-essential
-      - gotest-to-teamcity
+    builddeps: *build_deps
     pre-cache: *build_pre_cache
     post-cache:
       - export GOOS=linux
       - export GOARCH=amd64
-      - export FIPS=true
       - make cloudflared
+      - export FIPS=true
   cover: 
     build_dir: *build_dir
     builddeps: *build_deps
@@ -72,7 +68,7 @@ buster: &buster
   github-fips-release-pkgs:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go_fips
+      - *pinned_go
       - build-essential
       - fakeroot
       - rubygem-fpm
@@ -111,7 +107,7 @@ buster: &buster
   build-fips-internal-deb:
     build_dir: *build_dir
     builddeps: &build_fips_deb_deps
-      - *pinned_go_fips
+      - *pinned_go
       - build-essential
       - fakeroot
       - rubygem-fpm
@@ -195,7 +191,7 @@ buster: &buster
       - make test | gotest-to-teamcity
   test-fips:
     build_dir: *build_dir
-    builddeps: *build_deps_fips
+    builddeps: *build_deps
     pre-cache: *build_pre_cache
     post-cache:
       - export GOOS=linux
@@ -227,7 +223,7 @@ buster: &buster
   component-test-fips:
     build_dir: *build_dir
     builddeps:
-      - *pinned_go_fips
+      - *pinned_go
       - python3.7
       - python3-pip
       - python3-setuptools

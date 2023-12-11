@@ -126,7 +126,7 @@ ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
 	cp -f fips/fips.go.linux-amd64 cmd/cloudflared/fips.go
 endif
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -v -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
 ifeq ($(FIPS), true)
 	rm -f cmd/cloudflared/fips.go
 	./check-fips.sh cloudflared
@@ -260,7 +260,7 @@ quic-deps:
 
 .PHONY: vet
 vet:
-	go vet -v -mod=vendor github.com/cloudflare/cloudflared/...
+	go vet -mod=vendor github.com/cloudflare/cloudflared/...
 
 .PHONY: fmt
 fmt:

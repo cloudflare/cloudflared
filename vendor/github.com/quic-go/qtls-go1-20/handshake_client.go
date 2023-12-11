@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -39,7 +40,7 @@ type clientHandshakeState struct {
 
 var testingOnlyForceClientHelloSignatureAlgorithms []SignatureScheme
 
-func (c *Conn) makeClientHello() (*clientHelloMsg, clientKeySharePrivate, error) {
+func (c *Conn) makeClientHello() (*clientHelloMsg, *ecdh.PrivateKey, error) {
 	config := c.config
 	if len(config.ServerName) == 0 && !config.InsecureSkipVerify {
 		return nil, nil, errors.New("tls: either ServerName or InsecureSkipVerify must be specified in the tls.Config")
@@ -132,7 +133,7 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, clientKeySharePrivate, error)
 		hello.supportedSignatureAlgorithms = testingOnlyForceClientHelloSignatureAlgorithms
 	}
 
-	var secret clientKeySharePrivate
+	var key *ecdh.PrivateKey
 	if hello.supportedVersions[0] == VersionTLS13 {
 		if len(hello.supportedVersions) == 1 {
 			hello.cipherSuites = hello.cipherSuites[:0]
@@ -144,30 +145,14 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, clientKeySharePrivate, error)
 		}
 
 		curveID := config.curvePreferences()[0]
-		if scheme := curveIdToCirclScheme(curveID); scheme != nil {
-			pk, sk, err := generateKemKeyPair(scheme, config.rand())
-			if err != nil {
-				return nil, nil, fmt.Errorf("generateKemKeyPair %s: %w",
-					scheme.Name(), err)
-			}
-			packedPk, err := pk.MarshalBinary()
-			if err != nil {
-				return nil, nil, fmt.Errorf("pack circl public key %s: %w",
-					scheme.Name(), err)
-			}
-			hello.keyShares = []keyShare{{group: curveID, data: packedPk}}
-			secret = sk
-		} else {
-			if _, ok := curveForCurveID(curveID); !ok {
-				return nil, nil, errors.New("tls: CurvePreferences includes unsupported curve")
-			}
-			key, err := generateECDHEKey(config.rand(), curveID)
-			if err != nil {
-				return nil, nil, err
-			}
-			hello.keyShares = []keyShare{{group: curveID, data: key.PublicKey().Bytes()}}
-			secret = key
+		if _, ok := curveForCurveID(curveID); !ok {
+			return nil, nil, errors.New("tls: CurvePreferences includes unsupported curve")
 		}
+		key, err = generateECDHEKey(config.rand(), curveID)
+		if err != nil {
+			return nil, nil, err
+		}
+		hello.keyShares = []keyShare{{group: curveID, data: key.PublicKey().Bytes()}}
 	}
 
 	if c.quic != nil {
@@ -181,7 +166,7 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, clientKeySharePrivate, error)
 		hello.quicTransportParameters = p
 	}
 
-	return hello, secret, nil
+	return hello, key, nil
 }
 
 func (c *Conn) clientHandshake(ctx context.Context) (err error) {
@@ -261,14 +246,14 @@ func (c *Conn) clientHandshake(ctx context.Context) (err error) {
 
 	if c.vers == VersionTLS13 {
 		hs := &clientHandshakeStateTLS13{
-			c:               c,
-			ctx:             ctx,
-			serverHello:     serverHello,
-			hello:           hello,
-			keySharePrivate: ecdheKey,
-			session:         session,
-			earlySecret:     earlySecret,
-			binderKey:       binderKey,
+			c:           c,
+			ctx:         ctx,
+			serverHello: serverHello,
+			hello:       hello,
+			ecdheKey:    ecdheKey,
+			session:     session,
+			earlySecret: earlySecret,
+			binderKey:   binderKey,
 		}
 
 		// In TLS 1.3, session tickets are delivered after the handshake.
