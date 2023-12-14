@@ -124,8 +124,9 @@ func openFile(path string, create bool) (file *os.File, exists bool, err error) 
 	if err != nil {
 		return nil, false, err
 	}
+	var fileInfo os.FileInfo
 	if create {
-		fileInfo, err := os.Stat(expandedPath)
+		fileInfo, err = os.Stat(expandedPath)
 		if err == nil && fileInfo.Size() > 0 {
 			return nil, true, nil
 		}
