@@ -46,7 +46,7 @@
                 <!--Set the cloudflared bin location to the Path Environment Variable-->
                 <Environment Id="ENV0"
                     Name="PATH"
-                    Value="[INSTALLDIR]."
+                    Value="[INSTALLDIR]"
                     Permanent="no"
                     Part="last"
                     Action="create"
