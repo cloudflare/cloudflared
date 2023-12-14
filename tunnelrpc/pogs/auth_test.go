@@ -118,6 +118,7 @@ func TestSerializeAuthenticationResponse(t *testing.T) {
 
 	for i, testCase := range tests {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+		assert.NoError(t, err)
 		capnpEntity, err := tunnelrpc.NewAuthenticateResponse(seg)
 		if !assert.NoError(t, err) {
 			t.Fatal("Couldn't initialize a new message")
