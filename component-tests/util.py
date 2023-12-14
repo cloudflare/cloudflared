@@ -4,6 +4,7 @@ import platform
 import subprocess
 from contextlib import contextmanager
 from time import sleep
+import sys
 
 import pytest
 
@@ -14,8 +15,14 @@ from retrying import retry
 
 from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 
-LOGGER = logging.getLogger(__name__)
+def configure_logger():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stdout)
+    logger.addHandler(handler)
+    return logger
 
+LOGGER = configure_logger()
 
 def select_platform(plat):
     return pytest.mark.skipif(
