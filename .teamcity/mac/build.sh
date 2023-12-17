@@ -143,7 +143,7 @@ if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
   
  # notarize the binary
- # TODO: https://jira.cfdata.org/browse/TUN-5789
+ # TODO: TUN-5789
 fi
 
 # creating build directory
@@ -169,7 +169,7 @@ if [[ ! -z "$PKG_SIGN_NAME" ]]; then
       ${PKGNAME}
 
       # notarize the package
-      # TODO: https://jira.cfdata.org/browse/TUN-5789
+      # TODO: TUN-5789
 else
     pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
