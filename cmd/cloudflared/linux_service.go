@@ -55,7 +55,8 @@ var systemdAllTemplates = map[string]ServiceTemplate{
 		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredService),
 		Content: `[Unit]
 Description=cloudflared
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 TimeoutStartSec=0
@@ -72,7 +73,8 @@ WantedBy=multi-user.target
 		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredUpdateService),
 		Content: `[Unit]
 Description=Update cloudflared
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 11 ]; then systemctl restart cloudflared; exit 0; fi; exit $code'
