@@ -103,8 +103,12 @@ func (r *RTTStats) SetMaxAckDelay(mad time.Duration) {
 // SetInitialRTT sets the initial RTT.
 // It is used during the 0-RTT handshake when restoring the RTT stats from the session state.
 func (r *RTTStats) SetInitialRTT(t time.Duration) {
+	// On the server side, by the time we get to process the session ticket,
+	// we might already have obtained an RTT measurement.
+	// This can happen if we received the ClientHello in multiple pieces, and one of those pieces was lost.
+	// Discard the restored value. A fresh measurement is always better.
 	if r.hasMeasurement {
-		panic("initial RTT set after first measurement")
+		return
 	}
 	r.smoothedRTT = t
 	r.latestRTT = t

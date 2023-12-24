@@ -1,9 +1,9 @@
 package tunnel
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
-	mathRand "math/rand"
 	"net"
 	"net/netip"
 	"os"
@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/config"
@@ -33,9 +33,9 @@ import (
 const secretValue = "*****"
 
 var (
-	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
-	serviceUrl      = developerPortal + "/reference/service/"
-	argumentsUrl    = developerPortal + "/reference/arguments/"
+	developerPortal = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup"
+	serviceUrl      = developerPortal + "/tunnel-guide/local/as-a-service/"
+	argumentsUrl    = developerPortal + "/tunnel-guide/local/local-management/arguments/"
 
 	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 
@@ -113,6 +113,7 @@ func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelPrope
 }
 
 func prepareTunnelConfig(
+	ctx context.Context,
 	c *cli.Context,
 	info *cliutil.BuildInfo,
 	log, logTransport *zerolog.Logger,
@@ -132,22 +133,36 @@ func prepareTunnelConfig(
 	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID.String()})
 
 	transportProtocol := c.String("protocol")
-	needPQ := c.Bool("post-quantum")
-	if needPQ {
+
+	clientFeatures := features.Dedup(append(c.StringSlice("features"), features.DefaultFeatures...))
+
+	staticFeatures := features.StaticFeatures{}
+	if c.Bool("post-quantum") {
 		if FipsEnabled {
 			return nil, nil, fmt.Errorf("post-quantum not supported in FIPS mode")
 		}
+		pqMode := features.PostQuantumStrict
+		staticFeatures.PostQuantumMode = &pqMode
+	}
+	featureSelector, err := features.NewFeatureSelector(ctx, namedTunnel.Credentials.AccountTag, staticFeatures, log)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "Failed to create feature selector")
+	}
+	pqMode := featureSelector.PostQuantumMode()
+	if pqMode == features.PostQuantumStrict {
 		// Error if the user tries to force a non-quic transport protocol
 		if transportProtocol != connection.AutoSelectFlag && transportProtocol != connection.QUIC.String() {
 			return nil, nil, fmt.Errorf("post-quantum is only supported with the quic transport")
 		}
 		transportProtocol = connection.QUIC.String()
+		clientFeatures = append(clientFeatures, features.FeaturePostQuantum)
+
+		log.Info().Msgf(
+			"Using hybrid post-quantum key agreement %s",
+			supervisor.PQKexName,
+		)
 	}
 
-	clientFeatures := dedup(append(c.StringSlice("features"), features.DefaultFeatures...))
-	if needPQ {
-		clientFeatures = append(clientFeatures, features.FeaturePostQuantum)
-	}
 	namedTunnel.Client = tunnelpogs.ClientInfo{
 		ClientID: clientID[:],
 		Features: clientFeatures,
@@ -203,15 +218,6 @@ func prepareTunnelConfig(
 		log.Warn().Str("edgeIPVersion", edgeIPVersion.String()).Err(err).Msg("Overriding edge-ip-version")
 	}
 
-	var pqKexIdx int
-	if needPQ {
-		pqKexIdx = mathRand.Intn(len(supervisor.PQKexes))
-		log.Info().Msgf(
-			"Using experimental hybrid post-quantum key agreement %s",
-			supervisor.PQKexNames[supervisor.PQKexes[pqKexIdx]],
-		)
-	}
-
 	tunnelConfig := &supervisor.TunnelConfig{
 		GracePeriod:     gracePeriod,
 		ReplaceExisting: c.Bool("force"),
@@ -222,7 +228,6 @@ func prepareTunnelConfig(
 		EdgeIPVersion:   edgeIPVersion,
 		EdgeBindAddr:    edgeBindAddr,
 		HAConnections:   c.Int(haConnectionsFlag),
-		IncidentLookup:  supervisor.NewIncidentLookup(),
 		IsAutoupdated:   c.Bool("is-autoupdated"),
 		LBPool:          c.String("lb-pool"),
 		Tags:            tags,
@@ -236,8 +241,7 @@ func prepareTunnelConfig(
 		NamedTunnel:                 namedTunnel,
 		ProtocolSelector:            protocolSelector,
 		EdgeTLSConfigs:              edgeTLSConfigs,
-		NeedPQ:                      needPQ,
-		PQKexIdx:                    pqKexIdx,
+		FeatureSelector:             featureSelector,
 		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
 		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
 		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),
@@ -277,26 +281,7 @@ func gracePeriod(c *cli.Context) (time.Duration, error) {
 }
 
 func isRunningFromTerminal() bool {
-	return terminal.IsTerminal(int(os.Stdout.Fd()))
-}
-
-// Remove any duplicates from the slice
-func dedup(slice []string) []string {
-
-	// Convert the slice into a set
-	set := make(map[string]bool, 0)
-	for _, str := range slice {
-		set[str] = true
-	}
-
-	// Convert the set back into a slice
-	keys := make([]string, len(set))
-	i := 0
-	for str := range set {
-		keys[i] = str
-		i++
-	}
-	return keys
+	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
 // ParseConfigIPVersion returns the IP version from possible expected values from config

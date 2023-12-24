@@ -40,7 +40,10 @@ func ComposeVersionNegotiation(destConnID, srcConnID protocol.ArbitraryLenConnec
 	buf := bytes.NewBuffer(make([]byte, 0, expectedLen))
 	r := make([]byte, 1)
 	_, _ = rand.Read(r) // ignore the error here. It is not critical to have perfect random here.
-	buf.WriteByte(r[0] | 0x80)
+	// Setting the "QUIC bit" (0x40) is not required by the RFC,
+	// but it allows clients to demultiplex QUIC with a long list of other protocols.
+	// See RFC 9443 and https://mailarchive.ietf.org/arch/msg/quic/oR4kxGKY6mjtPC1CZegY1ED4beg/ for details.
+	buf.WriteByte(r[0] | 0xc0)
 	utils.BigEndian.WriteUint32(buf, 0) // version 0
 	buf.WriteByte(uint8(destConnID.Len()))
 	buf.Write(destConnID.Bytes())

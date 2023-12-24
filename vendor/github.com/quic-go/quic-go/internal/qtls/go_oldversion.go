@@ -1,4 +1,4 @@
-//go:build !go1.19
+//go:build !go1.20
 
 package qtls
 

@@ -10,7 +10,7 @@ func IsFrameAckEliciting(f wire.Frame) bool {
 }
 
 // HasAckElicitingFrames returns true if at least one frame is ack-eliciting.
-func HasAckElicitingFrames(fs []*Frame) bool {
+func HasAckElicitingFrames(fs []Frame) bool {
 	for _, f := range fs {
 		if IsFrameAckEliciting(f.Frame) {
 			return true

@@ -17,15 +17,16 @@ type TransportError struct {
 	FrameType    uint64
 	ErrorCode    TransportErrorCode
 	ErrorMessage string
+	error        error // only set for local errors, sometimes
 }
 
 var _ error = &TransportError{}
 
 // NewLocalCryptoError create a new TransportError instance for a crypto error
-func NewLocalCryptoError(tlsAlert uint8, errorMessage string) *TransportError {
+func NewLocalCryptoError(tlsAlert uint8, err error) *TransportError {
 	return &TransportError{
-		ErrorCode:    0x100 + TransportErrorCode(tlsAlert),
-		ErrorMessage: errorMessage,
+		ErrorCode: 0x100 + TransportErrorCode(tlsAlert),
+		error:     err,
 	}
 }
 
@@ -35,6 +36,9 @@ func (e *TransportError) Error() string {
 		str += fmt.Sprintf(" (frame type: %#x)", e.FrameType)
 	}
 	msg := e.ErrorMessage
+	if len(msg) == 0 && e.error != nil {
+		msg = e.error.Error()
+	}
 	if len(msg) == 0 {
 		msg = e.ErrorCode.Message()
 	}
@@ -46,6 +50,10 @@ func (e *TransportError) Error() string {
 
 func (e *TransportError) Is(target error) bool {
 	return target == net.ErrClosed
+}
+
+func (e *TransportError) Unwrap() error {
+	return e.error
 }
 
 // An ApplicationErrorCode is an application-defined error code.

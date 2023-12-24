@@ -15,8 +15,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"runtime"
 
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/sys/cpu"
 )
 
 // CipherSuite is a TLS cipher suite. Note that most functions in this package
@@ -195,17 +197,6 @@ type cipherSuiteTLS13 struct {
 	hash   crypto.Hash
 }
 
-type CipherSuiteTLS13 struct {
-	ID     uint16
-	KeyLen int
-	Hash   crypto.Hash
-	AEAD   func(key, fixedNonce []byte) cipher.AEAD
-}
-
-func (c *CipherSuiteTLS13) IVLen() int {
-	return aeadNonceLength
-}
-
 var cipherSuitesTLS13 = []*cipherSuiteTLS13{ // TODO: replace with a map.
 	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256},
 	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256},
@@ -362,6 +353,18 @@ var defaultCipherSuitesTLS13NoAES = []uint16{
 	TLS_AES_256_GCM_SHA384,
 }
 
+var (
+	hasGCMAsmAMD64 = cpu.X86.HasAES && cpu.X86.HasPCLMULQDQ
+	hasGCMAsmARM64 = cpu.ARM64.HasAES && cpu.ARM64.HasPMULL
+	// Keep in sync with crypto/aes/cipher_s390x.go.
+	hasGCMAsmS390X = cpu.S390X.HasAES && cpu.S390X.HasAESCBC && cpu.S390X.HasAESCTR &&
+		(cpu.S390X.HasGHASH || cpu.S390X.HasAESGCM)
+
+	hasAESGCMHardwareSupport = runtime.GOARCH == "amd64" && hasGCMAsmAMD64 ||
+		runtime.GOARCH == "arm64" && hasGCMAsmARM64 ||
+		runtime.GOARCH == "s390x" && hasGCMAsmS390X
+)
+
 var aesgcmCiphers = map[uint16]bool{
 	// TLS 1.2
 	TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:   true,
@@ -517,11 +520,6 @@ func aeadAESGCM(key, noncePrefix []byte) aead {
 	ret := &prefixNonceAEAD{aead: aead}
 	copy(ret.nonce[:], noncePrefix)
 	return ret
-}
-
-// AEADAESGCMTLS13 creates a new AES-GCM AEAD for TLS 1.3
-func AEADAESGCMTLS13(key, fixedNonce []byte) cipher.AEAD {
-	return aeadAESGCMTLS13(key, fixedNonce)
 }
 
 func aeadAESGCMTLS13(key, nonceMask []byte) aead {

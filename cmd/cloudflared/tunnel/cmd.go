@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"runtime/trace"
@@ -12,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/go-systemd/daemon"
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
@@ -305,7 +304,7 @@ func StartServer(
 	}
 
 	if c.IsSet("trace-output") {
-		tmpTraceFile, err := ioutil.TempFile("", "trace")
+		tmpTraceFile, err := os.CreateTemp("", "trace")
 		if err != nil {
 			log.Err(err).Msg("Failed to create new temporary file to save trace output")
 		}
@@ -341,7 +340,7 @@ func StartServer(
 	logClientOptions(c, log)
 
 	// this context drives the server, when it's cancelled tunnel and all other components (origins, dns, etc...) should stop
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 
 	go waitForSignal(graceShutdownC, log)
@@ -393,7 +392,7 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(c, info, log, logTransport, observer, namedTunnel)
+	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(ctx, c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err

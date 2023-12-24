@@ -112,8 +112,7 @@ type SpanLimits struct {
 //
 // • LinkCountLimit: OTEL_SPAN_LINK_COUNT_LIMIT (default: 128)
 //
-// • AttributePerLinkCountLimit: OTEL_LINK_ATTRIBUTE_COUNT_LIMIT (default:
-// 128)
+// • AttributePerLinkCountLimit: OTEL_LINK_ATTRIBUTE_COUNT_LIMIT (default: 128)
 func NewSpanLimits() SpanLimits {
 	return SpanLimits{
 		AttributeValueLengthLimit:   env.SpanAttributeValueLength(DefaultAttributeValueLengthLimit),

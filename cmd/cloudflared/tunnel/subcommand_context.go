@@ -156,7 +156,7 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 		var errorLines []string
 		errorLines = append(errorLines, fmt.Sprintf("Your tunnel '%v' was created with ID %v. However, cloudflared couldn't write tunnel credentials to %s.", tunnel.Name, tunnel.ID, credentialsFilePath))
 		errorLines = append(errorLines, fmt.Sprintf("The file-writing error is: %v", writeFileErr))
-		if deleteErr := client.DeleteTunnel(tunnel.ID); deleteErr != nil {
+		if deleteErr := client.DeleteTunnel(tunnel.ID, true); deleteErr != nil {
 			errorLines = append(errorLines, fmt.Sprintf("Cloudflared tried to delete the tunnel for you, but encountered an error. You should use `cloudflared tunnel delete %v` to delete the tunnel yourself, because the tunnel can't be run without the tunnelfile.", tunnel.ID))
 			errorLines = append(errorLines, fmt.Sprintf("The delete tunnel error is: %v", deleteErr))
 		} else {
@@ -206,13 +206,8 @@ func (sc *subcommandContext) delete(tunnelIDs []uuid.UUID) error {
 		if !tunnel.DeletedAt.IsZero() {
 			return fmt.Errorf("Tunnel %s has already been deleted", tunnel.ID)
 		}
-		if forceFlagSet {
-			if err := client.CleanupConnections(tunnel.ID, cfapi.NewCleanupParams()); err != nil {
-				return errors.Wrapf(err, "Error cleaning up connections for tunnel %s", tunnel.ID)
-			}
-		}
 
-		if err := client.DeleteTunnel(tunnel.ID); err != nil {
+		if err := client.DeleteTunnel(tunnel.ID, forceFlagSet); err != nil {
 			return errors.Wrapf(err, "Error deleting tunnel %s", tunnel.ID)
 		}
 

@@ -94,3 +94,8 @@ func compareStruct(a, b reflect.Type) bool {
 	}
 	return true
 }
+
+// InitSessionTicketKeys triggers the initialization of session ticket keys.
+func InitSessionTicketKeys(conf *Config) {
+	fromConfig(conf).ticketKeys(nil)
+}

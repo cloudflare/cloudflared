@@ -179,6 +179,10 @@ func (s *receiveStream) readImpl(p []byte) (bool /*stream completed */, int, err
 
 		if s.readPosInFrame >= len(s.currentFrame) && s.currentFrameIsLast {
 			s.finRead = true
+			s.currentFrame = nil
+			if s.currentFrameDone != nil {
+				s.currentFrameDone()
+			}
 			return true, bytesRead, io.EOF
 		}
 	}

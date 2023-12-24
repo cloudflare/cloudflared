@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"errors"
 	"hash"
 	"io"
 	"net"
@@ -15,27 +14,35 @@ import (
 	"github.com/quic-go/quic-go/internal/utils"
 )
 
+type connCapabilities struct {
+	// This connection has the Don't Fragment (DF) bit set.
+	// This means it makes to run DPLPMTUD.
+	DF bool
+	// GSO (Generic Segmentation Offload) supported
+	GSO bool
+	// ECN (Explicit Congestion Notifications) supported
+	ECN bool
+}
+
 // rawConn is a connection that allow reading of a receivedPackeh.
 type rawConn interface {
-	ReadPacket() (*receivedPacket, error)
-	WritePacket(b []byte, addr net.Addr, oob []byte) (int, error)
+	ReadPacket() (receivedPacket, error)
+	// WritePacket writes a packet on the wire.
+	// gsoSize is the size of a single packet, or 0 to disable GSO.
+	// It is invalid to set gsoSize if capabilities.GSO is not set.
+	WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gsoSize uint16, ecn protocol.ECN) (int, error)
 	LocalAddr() net.Addr
 	SetReadDeadline(time.Time) error
 	io.Closer
+
+	capabilities() connCapabilities
 }
 
 type closePacket struct {
 	payload []byte
 	addr    net.Addr
-	info    *packetInfo
+	info    packetInfo
 }
-
-type unknownPacketHandler interface {
-	handlePacket(*receivedPacket)
-	setCloseError(error)
-}
-
-var errListenerAlreadySet = errors.New("listener already set")
 
 type packetHandlerMap struct {
 	mutex       sync.Mutex
@@ -165,7 +172,7 @@ func (h *packetHandlerMap) ReplaceWithClosed(ids []protocol.ConnectionID, pers p
 	var handler packetHandler
 	if connClosePacket != nil {
 		handler = newClosedLocalConn(
-			func(addr net.Addr, info *packetInfo) {
+			func(addr net.Addr, info packetInfo) {
 				h.enqueueClosePacket(closePacket{payload: connClosePacket, addr: addr, info: info})
 			},
 			pers,
@@ -211,23 +218,6 @@ func (h *packetHandlerMap) GetByResetToken(token protocol.StatelessResetToken) (
 
 	handler, ok := h.resetTokens[token]
 	return handler, ok
-}
-
-func (h *packetHandlerMap) CloseServer() {
-	h.mutex.Lock()
-	var wg sync.WaitGroup
-	for _, handler := range h.handlers {
-		if handler.getPerspective() == protocol.PerspectiveServer {
-			wg.Add(1)
-			go func(handler packetHandler) {
-				// blocks until the CONNECTION_CLOSE has been sent and the run-loop has stopped
-				handler.shutdown()
-				wg.Done()
-			}(handler)
-		}
-	}
-	h.mutex.Unlock()
-	wg.Wait()
 }
 
 func (h *packetHandlerMap) Close(e error) {

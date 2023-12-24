@@ -1,10 +1,8 @@
 //go:build !windows
-// +build !windows
 
 package proxy
 
 import (
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +15,7 @@ import (
 )
 
 func TestUnixSocketOrigin(t *testing.T) {
-	file, err := ioutil.TempFile("", "unix.sock")
+	file, err := os.CreateTemp("", "unix.sock")
 	require.NoError(t, err)
 	os.Remove(file.Name()) // remove the file since binding the socket expects to create it
 

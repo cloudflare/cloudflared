@@ -9,7 +9,7 @@ type TunnelClient interface {
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	GetTunnelToken(tunnelID uuid.UUID) (string, error)
 	GetManagementToken(tunnelID uuid.UUID) (string, error)
-	DeleteTunnel(tunnelID uuid.UUID) error
+	DeleteTunnel(tunnelID uuid.UUID, cascade bool) error
 	ListTunnels(filter *TunnelFilter) ([]*Tunnel, error)
 	ListActiveClients(tunnelID uuid.UUID) ([]*ActiveClient, error)
 	CleanupConnections(tunnelID uuid.UUID, params *CleanupParams) error
@@ -22,7 +22,7 @@ type HostnameClient interface {
 type IPRouteClient interface {
 	ListRoutes(filter *IpRouteFilter) ([]*DetailedRoute, error)
 	AddRoute(newRoute NewRoute) (Route, error)
-	DeleteRoute(params DeleteRouteParams) error
+	DeleteRoute(id uuid.UUID) error
 	GetByIP(params GetRouteByIpParams) (DetailedRoute, error)
 }
 

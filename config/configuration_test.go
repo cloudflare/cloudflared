@@ -23,7 +23,6 @@ func TestConfigFileSettings(t *testing.T) {
 			Service:  "https://localhost:8001",
 		}
 		warpRouting = WarpRoutingConfig{
-			Enabled:        true,
 			ConnectTimeout: &CustomDuration{Duration: 2 * time.Second},
 			TCPKeepAlive:   &CustomDuration{Duration: 10 * time.Second},
 		}

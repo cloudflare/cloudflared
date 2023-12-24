@@ -8,6 +8,12 @@ import (
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
+// MaxDatagramSize is the maximum size of a DATAGRAM frame (RFC 9221).
+// By setting it to a large value, we allow all datagrams that fit into a QUIC packet.
+// The value is chosen such that it can still be encoded as a 2 byte varint.
+// This is a var and not a const so it can be set in tests.
+var MaxDatagramSize protocol.ByteCount = 16383
+
 // A DatagramFrame is a DATAGRAM frame
 type DatagramFrame struct {
 	DataLenPresent bool

@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	loginQuietFlag     = "quiet"
 	sshHostnameFlag    = "hostname"
 	sshDestinationFlag = "destination"
 	sshURLFlag         = "url"
@@ -90,6 +91,13 @@ func Commands() []*cli.Command {
 					Once authenticated with your identity provider, the login command will generate a JSON Web Token (JWT)
 					scoped to your identity, the application you intend to reach, and valid for a session duration set by your
 					administrator. cloudflared stores the token in local storage.`,
+					Flags: []cli.Flag{
+						&cli.BoolFlag{
+							Name:    loginQuietFlag,
+							Aliases: []string{"q"},
+							Usage:   "do not print the jwt to the command line",
+						},
+					},
 				},
 				{
 					Name:   "curl",
@@ -222,8 +230,7 @@ func login(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	args := c.Args()
-	rawURL := ensureURLScheme(args.First())
-	appURL, err := url.Parse(rawURL)
+	appURL, err := parseURL(args.First())
 	if args.Len() < 1 || err != nil {
 		log.Error().Msg("Please provide the url of the Access application")
 		return err
@@ -247,19 +254,13 @@ func login(c *cli.Context) error {
 		fmt.Fprintln(os.Stderr, "token for provided application was empty.")
 		return errors.New("empty application token")
 	}
+
+	if c.Bool(loginQuietFlag) {
+		return nil
+	}
 	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
 
 	return nil
-}
-
-// ensureURLScheme prepends a URL with https:// if it doesn't have a scheme. http:// URLs will not be converted.
-func ensureURLScheme(url string) string {
-	url = strings.Replace(strings.ToLower(url), "http://", "https://", 1)
-	if !strings.HasPrefix(url, "https://") {
-		url = fmt.Sprintf("https://%s", url)
-
-	}
-	return url
 }
 
 // curl provides a wrapper around curl, passing Access JWT along in request
@@ -345,7 +346,7 @@ func generateToken(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	appURL, err := url.Parse(ensureURLScheme(c.String("app")))
+	appURL, err := parseURL(c.String("app"))
 	if err != nil || c.NumFlags() < 1 {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
@@ -398,7 +399,7 @@ func sshGen(c *cli.Context) error {
 		return cli.ShowCommandHelp(c, "ssh-gen")
 	}
 
-	originURL, err := url.Parse(ensureURLScheme(hostname))
+	originURL, err := parseURL(hostname)
 	if err != nil {
 		return err
 	}
@@ -477,6 +478,11 @@ func processURL(s string) (*url.URL, error) {
 
 // cloudflaredPath pulls the full path of cloudflared on disk
 func cloudflaredPath() string {
+	path, err := os.Executable()
+	if err == nil && isFileThere(path) {
+		return path
+	}
+
 	for _, p := range strings.Split(os.Getenv("PATH"), ":") {
 		path := fmt.Sprintf("%s/%s", p, "cloudflared")
 		if isFileThere(path) {
@@ -499,7 +505,7 @@ func isFileThere(candidate string) bool {
 // Then makes a request to to the origin with the token to ensure it is valid.
 // Returns nil if token is valid.
 func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, log *zerolog.Logger) error {
-	headers := buildRequestHeaders(c.StringSlice(sshHeaderFlag))
+	headers := parseRequestHeaders(c.StringSlice(sshHeaderFlag))
 	if c.IsSet(sshTokenIDFlag) {
 		headers.Add(cfAccessClientIDHeader, c.String(sshTokenIDFlag))
 	}

@@ -61,3 +61,15 @@ func (e *StreamError) Error() string {
 	}
 	return fmt.Sprintf("stream %d canceled by %s with error code %d", e.StreamID, pers, e.ErrorCode)
 }
+
+// DatagramTooLargeError is returned from Connection.SendDatagram if the payload is too large to be sent.
+type DatagramTooLargeError struct {
+	PeerMaxDatagramFrameSize int64
+}
+
+func (e *DatagramTooLargeError) Is(target error) bool {
+	_, ok := target.(*DatagramTooLargeError)
+	return ok
+}
+
+func (e *DatagramTooLargeError) Error() string { return "DATAGRAM frame too large" }

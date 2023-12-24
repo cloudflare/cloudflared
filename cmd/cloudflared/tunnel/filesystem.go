@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"io/ioutil"
 	"os"
 )
 
@@ -23,5 +22,5 @@ func (fs realFileSystem) validFilePath(path string) bool {
 }
 
 func (fs realFileSystem) readFile(filePath string) ([]byte, error) {
-	return ioutil.ReadFile(filePath)
+	return os.ReadFile(filePath)
 }

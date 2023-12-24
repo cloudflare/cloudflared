@@ -57,9 +57,9 @@ func TestBackoffGracePeriod(t *testing.T) {
 		t.Fatalf("backoff failed immediately")
 	}
 	// the next call to Backoff would fail unless it's after the grace period
-	backoff.SetGracePeriod()
-	// advance time to after the grace period (~4 seconds) and see what happens
-	currentTime = currentTime.Add(time.Second * 5)
+	gracePeriod := backoff.SetGracePeriod()
+	// advance time to after the grace period, which at most will be 8 seconds, but we will advance +1 second.
+	currentTime = currentTime.Add(gracePeriod + time.Second)
 	if !backoff.Backoff(ctx) {
 		t.Fatalf("backoff failed after the grace period expired")
 	}

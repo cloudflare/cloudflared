@@ -86,7 +86,7 @@ func (dm *DatagramMuxerV2) SendToSession(session *packet.Session) error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix datagram type, it will be dropped")
 	}
-	if err := dm.session.SendMessage(msgWithIDAndType); err != nil {
+	if err := dm.session.SendDatagram(msgWithIDAndType); err != nil {
 		return errors.Wrap(err, "Failed to send datagram back to edge")
 	}
 	return nil
@@ -104,7 +104,7 @@ func (dm *DatagramMuxerV2) SendPacket(pk Packet) error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to suffix datagram type, it will be dropped")
 	}
-	if err := dm.session.SendMessage(payloadWithMetadataAndType); err != nil {
+	if err := dm.session.SendDatagram(payloadWithMetadataAndType); err != nil {
 		return errors.Wrap(err, "Failed to send datagram back to edge")
 	}
 	return nil
@@ -113,7 +113,7 @@ func (dm *DatagramMuxerV2) SendPacket(pk Packet) error {
 // Demux reads datagrams from the QUIC connection and demuxes depending on whether it's a session or packet
 func (dm *DatagramMuxerV2) ServeReceive(ctx context.Context) error {
 	for {
-		msg, err := dm.session.ReceiveMessage()
+		msg, err := dm.session.ReceiveDatagram(ctx)
 		if err != nil {
 			return err
 		}

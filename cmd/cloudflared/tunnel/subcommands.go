@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -120,8 +119,8 @@ var (
 	forceDeleteFlag = &cli.BoolFlag{
 		Name:    "force",
 		Aliases: []string{"f"},
-		Usage: "Cleans up any stale connections before the tunnel is deleted. cloudflared will not " +
-			"delete a tunnel with connections without this flag.",
+		Usage: "Deletes a tunnel even if tunnel is connected and it has dependencies associated to it. (eg. IP routes)." +
+			" It is not possible to delete tunnels that have connections or non-deleted dependencies, without this flag.",
 		EnvVars: []string{"TUNNEL_RUN_FORCE_OVERWRITE"},
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
@@ -241,7 +240,7 @@ func writeTunnelCredentials(filePath string, credentials *connection.Credentials
 	if err != nil {
 		return errors.Wrap(err, "Unable to marshal tunnel credentials to JSON")
 	}
-	return ioutil.WriteFile(filePath, body, 400)
+	return os.WriteFile(filePath, body, 0400)
 }
 
 func buildListCommand() *cli.Command {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,20 +12,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-jose/go-jose/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"gopkg.in/square/go-jose.v2"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/retry"
 )
 
 const (
-	keyName               = "token"
-	tokenCookie           = "CF_Authorization"
-	appDomainHeader       = "CF-Access-Domain"
-	appAUDHeader          = "CF-Access-Aud"
-	AccessLoginWorkerPath = "/cdn-cgi/access/login"
+	keyName                    = "token"
+	tokenCookie                = "CF_Authorization"
+	appSessionCookie           = "CF_AppSession"
+	appDomainHeader            = "CF-Access-Domain"
+	appAUDHeader               = "CF-Access-Aud"
+	AccessLoginWorkerPath      = "/cdn-cgi/access/login"
+	AccessAuthorizedWorkerPath = "/cdn-cgi/access/authorized"
 )
 
 var (
@@ -124,7 +125,7 @@ func (l *lock) Acquire() error {
 
 	// Create a lock file so other processes won't also try to get the token at
 	// the same time
-	if err := ioutil.WriteFile(l.lockFilePath, []byte{}, 0600); err != nil {
+	if err := os.WriteFile(l.lockFilePath, []byte{}, 0600); err != nil {
 		return err
 	}
 	return nil
@@ -208,7 +209,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.
 			log.Debug().Msgf("failed to exchange org token for app token: %s", err)
 		} else {
 			// generate app path
-			if err := ioutil.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
+			if err := os.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
 				return "", errors.Wrap(err, "failed to write app token to disk")
 			}
 			return appToken, nil
@@ -237,12 +238,12 @@ func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath strin
 
 	// If we were able to get the auth domain and generate an org token path, lets write it to disk.
 	if orgTokenPath != "" {
-		if err := ioutil.WriteFile(orgTokenPath, []byte(resp.OrgToken), 0600); err != nil {
+		if err := os.WriteFile(orgTokenPath, []byte(resp.OrgToken), 0600); err != nil {
 			return "", errors.Wrap(err, "failed to write org token to disk")
 		}
 	}
 
-	if err := ioutil.WriteFile(appTokenPath, []byte(resp.AppToken), 0600); err != nil {
+	if err := os.WriteFile(appTokenPath, []byte(resp.AppToken), 0600); err != nil {
 		return "", errors.Wrap(err, "failed to write app token to disk")
 	}
 
@@ -298,20 +299,41 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	return &AppInfo{location.Hostname(), aud, domain}, nil
 }
 
+func handleRedirects(req *http.Request, via []*http.Request, orgToken string) error {
+	// attach org token to login request
+	if strings.Contains(req.URL.Path, AccessLoginWorkerPath) {
+		req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken})
+	}
+
+	// attach app session cookie to authorized request
+	if strings.Contains(req.URL.Path, AccessAuthorizedWorkerPath) {
+		// We need to check and see if the CF_APP_SESSION cookie was set
+		for _, prevReq := range via {
+			if prevReq != nil && prevReq.Response != nil {
+				for _, c := range prevReq.Response.Cookies() {
+					if c.Name == appSessionCookie {
+						req.AddCookie(&http.Cookie{Name: appSessionCookie, Value: c.Value})
+						return nil
+					}
+				}
+			}
+		}
+
+	}
+
+	// stop after hitting authorized endpoint since it will contain the app token
+	if len(via) > 0 && strings.Contains(via[len(via)-1].URL.Path, AccessAuthorizedWorkerPath) {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
+
 // exchangeOrgToken attaches an org token to a request to the appURL and returns an app token. This uses the Access SSO
 // flow to automatically generate and return an app token without the login page.
 func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// attach org token to login request
-			if strings.Contains(req.URL.Path, AccessLoginWorkerPath) {
-				req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken})
-			}
-			// stop after hitting authorized endpoint since it will contain the app token
-			if strings.Contains(via[len(via)-1].URL.Path, "cdn-cgi/access/authorized") {
-				return http.ErrUseLastResponse
-			}
-			return nil
+			return handleRedirects(req, via, orgToken)
 		},
 		Timeout: time.Second * 7,
 	}
@@ -389,7 +411,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 
 // GetTokenIfExists will return the token from local storage if it exists and not expired
 func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}

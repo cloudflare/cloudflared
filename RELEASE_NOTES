@@ -1,3 +1,38 @@
+2023.10.0
+- 2023-10-06 TUN-7864: Document cloudflared versions support
+- 2023-10-03 CUSTESC-33731: Make rule match test report rule in 0-index base
+- 2023-09-22 TUN-7824: Fix usage of systemctl status to detect which services are installed
+- 2023-09-20 TUN-7813: Improve tunnel delete command to use cascade delete
+- 2023-09-20 TUN-7787: cloudflared only list ip routes targeted for cfd_tunnel
+- 2023-09-15 TUN-7787: Refactor cloudflared to use new route endpoints based on route IDs
+- 2023-09-08 TUN-7776: Remove warp-routing flag from cloudflared
+- 2023-09-05 TUN-7756: Clarify that QUIC is mandatory to support ICMP proxying
+
+2023.8.2
+- 2023-08-25 TUN-7700: Implement feature selector to determine if connections will prefer post quantum cryptography
+- 2023-08-22 TUN-7707: Use X25519Kyber768Draft00 curve when post-quantum feature is enabled
+
+2023.8.1
+- 2023-08-23 TUN-7718: Update R2 Token to no longer encode secret
+
+2023.8.0
+- 2023-07-26 TUN-7584: Bump go 1.20.6
+
+2023.7.3
+- 2023-07-25 TUN-7628: Correct Host parsing for Access
+- 2023-07-24 TUN-7624: Fix flaky TestBackoffGracePeriod test in cloudflared
+
+2023.7.2
+- 2023-07-19 TUN-7599: Onboard cloudflared to Software Dashboard
+- 2023-07-19 TUN-7587: Remove junos builds
+- 2023-07-18 TUN-7597: Add flag to disable auto-update services to be installed
+- 2023-07-17 TUN-7594: Add nightly arm64 cloudflared internal deb publishes
+- 2023-07-14 TUN-7586: Upgrade go-jose/go-jose/v3 and core-os/go-oidc/v3
+- 2023-07-14 TUN-7589: Remove legacy golang.org/x/crypto/ssh/terminal package usage
+- 2023-07-14 TUN-7590: Remove usages of ioutil
+- 2023-07-14 TUN-7585: Remove h2mux compression
+- 2023-07-14 TUN-7588: Update package coreos/go-systemd
+
 2023.7.1
 - 2023-07-13 TUN-7582: Correct changelog wording for --management-diagnostics
 - 2023-07-12 TUN-7575: Add option to disable PTMU discovery over QUIC
