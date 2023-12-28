@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -395,6 +396,31 @@ func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected boo
 		output = append(output, fmt.Sprintf("%dx%s", numConnsPerColo[coloName], coloName))
 	}
 	return strings.Join(output, ", ")
+}
+
+func buildHealthCommand() *cli.Command {
+	return &cli.Command{
+		Name:               "health",
+		Action:             cliutil.ConfiguredAction(healthCommand),
+		Usage:              "Tunnel health exit code",
+		UsageText:          "cloudflared tunnel [tunnel command options] health [subcommand options]",
+		Description:        "cloudflared tunnel health will return proper exit code if tunnel is healthy or unhealthy",
+		Flags:              []cli.Flag{},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func healthCommand(c *cli.Context) error {
+	metrics := strings.Split(c.String("metrics"), ":")
+	requestURL := fmt.Sprintf("http://%s:%s/ready", metrics[0], metrics[1])
+	res, err := http.Get(requestURL)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != 200 {
+		return fmt.Errorf("health /ready endpoint returned status code %d", res.StatusCode)
+	}
+	return nil
 }
 
 func buildInfoCommand() *cli.Command {
