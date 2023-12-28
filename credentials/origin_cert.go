@@ -7,10 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mitchellh/go-homedir"
-	"github.com/rs/zerolog"
-
 	"github.com/cloudflare/cloudflared/config"
+	"github.com/mitchellh/go-homedir"
 )
 
 const (
@@ -91,29 +89,18 @@ func readOriginCert(originCertPath string) ([]byte, error) {
 }
 
 // FindOriginCert will check to make sure that the certificate exists at the specified file path.
-func FindOriginCert(originCertPath string, log *zerolog.Logger) (string, error) {
+func FindOriginCert(originCertPath string) (string, error) {
 	if originCertPath == "" {
-		log.Error().Msgf("Cannot determine default origin certificate path. No file %s in %v. You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable", DefaultCredentialFile, config.DefaultConfigSearchDirectories())
 		return "", fmt.Errorf("client didn't specify origincert path")
 	}
 	var err error
 	originCertPath, err = homedir.Expand(originCertPath)
 	if err != nil {
-		log.Err(err).Msgf("Cannot resolve origin certificate path")
 		return "", fmt.Errorf("cannot resolve path %s", originCertPath)
 	}
 	// Check that the user has acquired a certificate using the login command
 	ok := fileExists(originCertPath)
 	if !ok {
-		log.Error().Msgf(`Cannot find a valid certificate for your origin at the path:
-
-    %s
-
-If the path above is wrong, specify the path with the -origincert option.
-If you don't have a certificate signed by Cloudflare, run the command:
-
-	cloudflared login
-`, originCertPath)
 		return "", fmt.Errorf("cannot find a valid certificate at the path %s", originCertPath)
 	}
 
