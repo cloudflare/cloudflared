@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
 const maxBurstSizePackets = 10
@@ -52,11 +51,11 @@ func (p *pacer) Budget(now time.Time) protocol.ByteCount {
 	if budget < 0 { // protect against overflows
 		budget = protocol.MaxByteCount
 	}
-	return utils.Min(p.maxBurstSize(), budget)
+	return min(p.maxBurstSize(), budget)
 }
 
 func (p *pacer) maxBurstSize() protocol.ByteCount {
-	return utils.Max(
+	return max(
 		protocol.ByteCount(uint64((protocol.MinPacingDelay+protocol.TimerGranularity).Nanoseconds())*p.adjustedBandwidth())/1e9,
 		maxBurstSizePackets*p.maxDatagramSize,
 	)
@@ -77,7 +76,7 @@ func (p *pacer) TimeUntilSend() time.Time {
 	if diff%bw > 0 {
 		d++
 	}
-	return p.lastSentTime.Add(utils.Max(protocol.MinPacingDelay, time.Duration(d)*time.Nanosecond))
+	return p.lastSentTime.Add(max(protocol.MinPacingDelay, time.Duration(d)*time.Nanosecond))
 }
 
 func (p *pacer) SetMaxDatagramSize(s protocol.ByteCount) {

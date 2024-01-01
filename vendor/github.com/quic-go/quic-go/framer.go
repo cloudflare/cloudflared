@@ -23,6 +23,8 @@ type framer interface {
 	Handle0RTTRejection() error
 }
 
+const maxPathResponses = 256
+
 type framerI struct {
 	mutex sync.Mutex
 
@@ -33,6 +35,7 @@ type framerI struct {
 
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
+	pathResponses     []*wire.PathResponseFrame
 }
 
 var _ framer = &framerI{}
@@ -52,20 +55,43 @@ func (f *framerI) HasData() bool {
 		return true
 	}
 	f.controlFrameMutex.Lock()
-	hasData = len(f.controlFrames) > 0
-	f.controlFrameMutex.Unlock()
-	return hasData
+	defer f.controlFrameMutex.Unlock()
+	return len(f.controlFrames) > 0 || len(f.pathResponses) > 0
 }
 
 func (f *framerI) QueueControlFrame(frame wire.Frame) {
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
+	if pr, ok := frame.(*wire.PathResponseFrame); ok {
+		// Only queue up to maxPathResponses PATH_RESPONSE frames.
+		// This limit should be high enough to never be hit in practice,
+		// unless the peer is doing something malicious.
+		if len(f.pathResponses) >= maxPathResponses {
+			return
+		}
+		f.pathResponses = append(f.pathResponses, pr)
+		return
+	}
 	f.controlFrames = append(f.controlFrames, frame)
-	f.controlFrameMutex.Unlock()
 }
 
 func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount) {
-	var length protocol.ByteCount
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
+	var length protocol.ByteCount
+	// add a PATH_RESPONSE first, but only pack a single PATH_RESPONSE per packet
+	if len(f.pathResponses) > 0 {
+		frame := f.pathResponses[0]
+		frameLen := frame.Length(v)
+		if frameLen <= maxLen {
+			frames = append(frames, ackhandler.Frame{Frame: frame})
+			length += frameLen
+			f.pathResponses = f.pathResponses[1:]
+		}
+	}
+
 	for len(f.controlFrames) > 0 {
 		frame := f.controlFrames[len(f.controlFrames)-1]
 		frameLen := frame.Length(v)
@@ -76,7 +102,6 @@ func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
-	f.controlFrameMutex.Unlock()
 	return frames, length
 }
 

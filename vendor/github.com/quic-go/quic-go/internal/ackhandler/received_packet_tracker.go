@@ -179,7 +179,7 @@ func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
 		ack = &wire.AckFrame{}
 	}
 	ack.Reset()
-	ack.DelayTime = utils.Max(0, now.Sub(h.largestObservedRcvdTime))
+	ack.DelayTime = max(0, now.Sub(h.largestObservedRcvdTime))
 	ack.ECT0 = h.ect0
 	ack.ECT1 = h.ect1
 	ack.ECNCE = h.ecnce

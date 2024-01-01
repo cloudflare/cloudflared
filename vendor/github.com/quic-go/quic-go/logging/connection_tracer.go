@@ -34,6 +34,7 @@ type ConnectionTracer struct {
 	LossTimerExpired                 func(TimerType, EncryptionLevel)
 	LossTimerCanceled                func()
 	ECNStateUpdated                  func(state ECNState, trigger ECNStateTrigger)
+	ChoseALPN                        func(protocol string)
 	// Close is called when the connection is closed.
 	Close func()
 	Debug func(name, msg string)
@@ -234,6 +235,13 @@ func NewMultiplexedConnectionTracer(tracers ...*ConnectionTracer) *ConnectionTra
 			for _, t := range tracers {
 				if t.ECNStateUpdated != nil {
 					t.ECNStateUpdated(state, trigger)
+				}
+			}
+		},
+		ChoseALPN: func(protocol string) {
+			for _, t := range tracers {
+				if t.ChoseALPN != nil {
+					t.ChoseALPN(protocol)
 				}
 			}
 		},

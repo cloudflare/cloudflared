@@ -3,15 +3,15 @@ run:
     - internal/handshake/cipher_suite.go
 linters-settings:
   depguard:
-    type: blacklist
-    packages:
-      - github.com/marten-seemann/qtls
-      - github.com/quic-go/qtls-go1-19
-      - github.com/quic-go/qtls-go1-20
-    packages-with-error-message:
-      - github.com/marten-seemann/qtls: "importing qtls only allowed in internal/qtls"
-      - github.com/quic-go/qtls-go1-19: "importing qtls only allowed in internal/qtls"
-      - github.com/quic-go/qtls-go1-20: "importing qtls only allowed in internal/qtls"
+    rules:
+      qtls:
+        list-mode: lax
+        files:
+          - "!internal/qtls/**"
+          - "$all"
+        deny:
+          - pkg: github.com/quic-go/qtls-go1-20
+            desc: "importing qtls only allowed in internal/qtls"
   misspell:
     ignore-words:
       - ect

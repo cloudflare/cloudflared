@@ -37,7 +37,7 @@ func parseAckFrame(frame *AckFrame, r *bytes.Reader, typ uint64, ackDelayExponen
 
 	delayTime := time.Duration(delay*1<<ackDelayExponent) * time.Microsecond
 	if delayTime < 0 {
-		// If the delay time overflows, set it to the maximum encodable value.
+		// If the delay time overflows, set it to the maximum encode-able value.
 		delayTime = utils.InfDuration
 	}
 	frame.DelayTime = delayTime
@@ -57,9 +57,9 @@ func parseAckFrame(frame *AckFrame, r *bytes.Reader, typ uint64, ackDelayExponen
 		return errors.New("invalid first ACK range")
 	}
 	smallest := largestAcked - ackBlock
+	frame.AckRanges = append(frame.AckRanges, AckRange{Smallest: smallest, Largest: largestAcked})
 
 	// read all the other ACK ranges
-	frame.AckRanges = append(frame.AckRanges, AckRange{Smallest: smallest, Largest: largestAcked})
 	for i := uint64(0); i < numBlocks; i++ {
 		g, err := quicvarint.Read(r)
 		if err != nil {

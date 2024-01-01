@@ -606,11 +606,17 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 	if p.datagramQueue != nil {
 		if f := p.datagramQueue.Peek(); f != nil {
 			size := f.Length(v)
-			if size <= maxFrameSize-pl.length {
+			if size <= maxFrameSize-pl.length { // DATAGRAM frame fits
 				pl.frames = append(pl.frames, ackhandler.Frame{Frame: f})
 				pl.length += size
 				p.datagramQueue.Pop()
+			} else if !hasAck {
+				// The DATAGRAM frame doesn't fit, and the packet doesn't contain an ACK.
+				// Discard this frame. There's no point in retrying this in the next packet,
+				// as it's unlikely that the available packet size will increase.
+				p.datagramQueue.Pop()
 			}
+			// If the DATAGRAM frame was too large and the packet contained an ACK, we'll try to send it out later.
 		}
 	}
 
@@ -640,7 +646,13 @@ func (p *packetPacker) composeNextPacket(maxFrameSize protocol.ByteCount, onlyAc
 		pl.length += lengthAdded
 		// add handlers for the control frames that were added
 		for i := startLen; i < len(pl.frames); i++ {
-			pl.frames[i].Handler = p.retransmissionQueue.AppDataAckHandler()
+			switch pl.frames[i].Frame.(type) {
+			case *wire.PathChallengeFrame, *wire.PathResponseFrame:
+				// Path probing is currently not supported, therefore we don't need to set the OnAcked callback yet.
+				// PATH_CHALLENGE and PATH_RESPONSE are never retransmitted.
+			default:
+				pl.frames[i].Handler = p.retransmissionQueue.AppDataAckHandler()
+			}
 		}
 
 		pl.streamFrames, lengthAdded = p.framer.AppendStreamFrames(pl.streamFrames, maxFrameSize-pl.length, v)

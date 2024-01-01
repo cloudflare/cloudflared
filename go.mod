@@ -24,7 +24,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
-	github.com/quic-go/quic-go v0.40.1-0.20231203135336-87ef8ec48d55
+	github.com/quic-go/quic-go v0.40.1-0.20240101045026-22b7f7744eb6
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.8.4
 	github.com/urfave/cli/v2 v2.3.0
