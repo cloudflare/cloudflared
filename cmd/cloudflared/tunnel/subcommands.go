@@ -411,7 +411,6 @@ func buildHealthCommand() *cli.Command {
 }
 
 func healthCommand(c *cli.Context) error {
-	metrics := strings.Split(c.String("metrics"), ":")
 	requestURL := fmt.Sprintf("http://%s/ready", c.String("metrics"))
 	res, err := http.Get(requestURL)
 	if err != nil {
