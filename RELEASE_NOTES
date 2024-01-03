@@ -1,3 +1,22 @@
+2024.1.0
+- 2024-01-01 TUN-7934: Update quic-go to a version that queues datagrams for better throughput and drops large datagram
+- 2023-12-20 TUN-8072: Need to set GOCACHE in mac go installation script
+- 2023-12-17 TUN-8072: Add script to download cloudflare go for Mac build agents
+- 2023-12-15 Fix nil pointer dereference segfault when passing "null" config json to cloudflared tunnel ingress validate (#1070)
+- 2023-12-15 configuration.go: fix developerPortal link (#960)
+- 2023-12-14 tunnelrpc/pogs: fix dropped test errors (#1106)
+- 2023-12-14 cmd/cloudflared/updater: fix dropped error (#1055)
+- 2023-12-14 use os.Executable to discover the path to cloudflared (#1040)
+- 2023-12-14 Remove extraneous `period` from Path Environment Variable (#1009)
+- 2023-12-14 Use CLI context when running tunnel (#597)
+- 2023-12-14 TUN-8066: Define scripts to build on Windows agents
+- 2023-12-11 TUN-8052: Update go to 1.21.5
+- 2023-12-07 TUN-7970: Default to enable post quantum encryption for quic transport
+- 2023-12-04 TUN-8006: Update quic-go to latest upstream
+- 2023-11-15 VULN-44842 Add a flag that allows users to not send the Access JWT to stdout
+- 2023-11-13 TUN-7965: Remove legacy incident status page check
+- 2023-11-13 AUTH-5682 Org token flow in Access logins should pass CF_AppSession cookie
+
 2023.10.0
 - 2023-10-06 TUN-7864: Document cloudflared versions support
 - 2023-10-03 CUSTESC-33731: Make rule match test report rule in 0-index base
