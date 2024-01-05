@@ -93,7 +93,7 @@ func (r *RESTClient) CreateTunnel(name string, tunnelSecret []byte) (*TunnelWith
 	switch resp.StatusCode {
 	case http.StatusOK:
 		var tunnel TunnelWithToken
-		if serdeErr := parseResponse(resp.Body, &tunnel); err != nil {
+		if serdeErr := parseResponse(resp.Body, &tunnel); serdeErr != nil {
 			return nil, serdeErr
 		}
 		return &tunnel, nil
