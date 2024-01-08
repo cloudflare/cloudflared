@@ -6,14 +6,16 @@ ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     TARGET_GOOS=${TARGET_GOOS} \
     TARGET_GOARCH=${TARGET_GOARCH}
-    
+
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
 # copy our sources into the builder image
 COPY . .
 
+RUN .teamcity/install-cloudflare-go.sh
+
 # compile cloudflared
-RUN make cloudflared
+RUN PATH="/go/src/github.com/cloudflare/cloudflared/go/bin:$PATH" make cloudflared
 
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian11:nonroot
