@@ -1,9 +1,8 @@
-cd /tmp/
-rm -rf go
-rm -rf gocache
+rm -rf /tmp/go
 export GOCACHE=/tmp/gocache
+rm -rf $GOCACHE
 
-../install-cloudflare-go.sh
+./.teamcity/install-cloudflare-go.sh
 
 export PATH="/tmp/go/bin:$PATH"
 go version
