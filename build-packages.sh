@@ -1,8 +1,10 @@
+#!/bin/bash
 VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
 
 # Disable FIPS module in go-boring
 export GOEXPERIMENT=noboringcrypto
+export CGO_ENABLED=0
 
 # This controls the directory the built artifacts go into
 export ARTIFACT_DIR=built_artifacts/

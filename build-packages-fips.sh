@@ -1,3 +1,4 @@
+#!/bin/bash
 VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
 
