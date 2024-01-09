@@ -11,7 +11,7 @@ COPY . .
 RUN .teamcity/install-cloudflare-go.sh
 
 # compile cloudflared
-RUN GOOS=linux GOARCH=arm64 PATH="/go/src/github.com/cloudflare/cloudflared/go/bin:$PATH" make cloudflared
+RUN GOOS=linux GOARCH=arm64 PATH="/tmp/go/bin:$PATH" make cloudflared
 
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian11:nonroot-arm64

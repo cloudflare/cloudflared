@@ -6,5 +6,5 @@ RUN apt-get update
 COPY . .
 RUN .teamcity/install-cloudflare-go.sh
 # compile cloudflared
-RUN PATH="/go/src/github.com/cloudflare/cloudflared/go/bin:$PATH" make cloudflared
+RUN PATH="/tmp/go/bin:$PATH" make cloudflared
 RUN cp /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
