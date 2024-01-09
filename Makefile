@@ -46,7 +46,7 @@ endif
 
 IMPORT_PATH    := github.com/cloudflare/cloudflared
 PACKAGE_DIR    := $(CURDIR)/packaging
-PREFIX         := /usr
+PREFIX         := /usr/local
 INSTALL_BINDIR := $(PREFIX)/bin/
 INSTALL_MANDIR := $(PREFIX)/share/man/man1/
 
@@ -164,10 +164,19 @@ cover:
 test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
+.PHONY: install-go
+install-go:
+	./.teamcity/install-cloudflare-go.sh
+	export PATH="tmp/go/bin:${PATH}"
+
+.PHONY: cleanup-go
+cleanup-go:
+	rm -rf /tmp/go
+
 cloudflared.1: cloudflared_man_template
 	sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' cloudflared_man_template > cloudflared.1
 
-install: cloudflared cloudflared.1
+install: install-go cloudflared cloudflared.1 cleanup-go
 	mkdir -p $(DESTDIR)$(INSTALL_BINDIR) $(DESTDIR)$(INSTALL_MANDIR)
 	install -m755 cloudflared $(DESTDIR)$(INSTALL_BINDIR)/cloudflared
 	install -m644 cloudflared.1 $(DESTDIR)$(INSTALL_MANDIR)/cloudflared.1
