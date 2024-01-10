@@ -242,16 +242,6 @@ buster: &buster
       - component-tests/requirements.txt
     pre-cache: *component_test_pre_cache
     post-cache: *component_test_post_cache
-  update-homebrew:
-    builddeps:
-      - openssh-client
-      - s3cmd
-      - jq
-      - build-essential
-      - procps
-    post-cache:
-      - .teamcity/update-homebrew.sh
-      - .teamcity/update-homebrew-core.sh
   github-message-release:
     build_dir: *build_dir
     builddeps: *build_pygithub
