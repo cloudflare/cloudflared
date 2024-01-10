@@ -1,3 +1,11 @@
+2024.1.1
+- 2024-01-10 TUN-8134: Revert installed prefix to /usr
+- 2024-01-09 TUN-8130: Fix path to install go for mac build
+- 2024-01-09 TUN-8129: Use the same build command between branch and release builds
+- 2024-01-09 TUN-8130: Install go tool chain in /tmp on build agents
+- 2024-01-09 TUN-8134: Install cloudflare go as part of make install
+- 2024-01-08 TUN-8118: Disable FIPS module to build with go-boring without CGO_ENABLED
+
 2024.1.0
 - 2024-01-01 TUN-7934: Update quic-go to a version that queues datagrams for better throughput and drops large datagram
 - 2023-12-20 TUN-8072: Need to set GOCACHE in mac go installation script
