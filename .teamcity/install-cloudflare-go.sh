@@ -1,3 +1,5 @@
+# !/usr/bin/env bash
+
 cd /tmp
 git clone -q https://github.com/cloudflare/go
 cd go/src

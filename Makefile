@@ -1,3 +1,6 @@
+# The targets cannot be run in parallel
+.NOTPARALLEL:
+
 VERSION       := $(shell git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
