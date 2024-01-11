@@ -49,6 +49,8 @@ PACKAGE_DIR    := $(CURDIR)/packaging
 PREFIX         := /usr
 INSTALL_BINDIR := $(PREFIX)/bin/
 INSTALL_MANDIR := $(PREFIX)/share/man/man1/
+CF_GO_PATH     := /tmp/go
+PATH           := $(CF_GO_PATH)/bin:$(PATH)
 
 LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
@@ -166,12 +168,12 @@ test-ssh-server:
 
 .PHONY: install-go
 install-go:
+	rm -rf ${CF_GO_PATH}
 	./.teamcity/install-cloudflare-go.sh
-	export PATH="tmp/go/bin:${PATH}"
 
 .PHONY: cleanup-go
 cleanup-go:
-	rm -rf /tmp/go
+	rm -rf ${CF_GO_PATH}
 
 cloudflared.1: cloudflared_man_template
 	sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' cloudflared_man_template > cloudflared.1
