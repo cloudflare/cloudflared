@@ -85,7 +85,7 @@ type Ingress struct {
 
 // ParseIngress parses ingress rules, but does not send HTTP requests to the origins.
 func ParseIngress(conf *config.Configuration) (Ingress, error) {
-	if len(conf.Ingress) == 0 {
+	if conf == nil || len(conf.Ingress) == 0 {
 		return Ingress{}, ErrNoIngressRules
 	}
 	return validateIngress(conf.Ingress, originRequestFromConfig(conf.OriginRequest))

@@ -21,9 +21,8 @@ const (
 type PostQuantumMode uint8
 
 const (
-	PostQuantumDisabled PostQuantumMode = iota
 	// Prefer post quantum, but fallback if connection cannot be established
-	PostQuantumPrefer
+	PostQuantumPrefer PostQuantumMode = iota
 	// If the user passes the --post-quantum flag, we override
 	// CurvePreferences to only support hybrid post-quantum key agreements.
 	PostQuantumStrict
@@ -31,9 +30,8 @@ const (
 
 // If the TXT record adds other fields, the umarshal logic will ignore those keys
 // If the TXT record is missing a key, the field will unmarshal to the default Go value
-type featuresRecord struct {
-	PostQuantumPercentage int32 `json:"pq"`
-}
+// pq was removed in TUN-7970
+type featuresRecord struct{}
 
 func NewFeatureSelector(ctx context.Context, accountTag string, staticFeatures StaticFeatures, logger *zerolog.Logger) (*FeatureSelector, error) {
 	return newFeatureSelector(ctx, accountTag, logger, newDNSResolver(), staticFeatures, defaultRefreshFreq)
@@ -70,7 +68,7 @@ func newFeatureSelector(ctx context.Context, accountTag string, logger *zerolog.
 		logger.Err(err).Msg("Failed to fetch features, default to disable")
 	}
 
-	go selector.refreshLoop(ctx, refreshFreq)
+	// Run refreshLoop next time we have a new feature to rollout
 
 	return selector, nil
 }
@@ -80,13 +78,7 @@ func (fs *FeatureSelector) PostQuantumMode() PostQuantumMode {
 		return *fs.staticFeatures.PostQuantumMode
 	}
 
-	fs.lock.RLock()
-	defer fs.lock.RUnlock()
-
-	if fs.features.PostQuantumPercentage > fs.accountHash {
-		return PostQuantumPrefer
-	}
-	return PostQuantumDisabled
+	return PostQuantumPrefer
 }
 
 func (fs *FeatureSelector) refreshLoop(ctx context.Context, refreshFreq time.Duration) {
@@ -114,9 +106,6 @@ func (fs *FeatureSelector) refresh(ctx context.Context) error {
 	if err := json.Unmarshal(record, &features); err != nil {
 		return err
 	}
-
-	pq_enabled := features.PostQuantumPercentage > fs.accountHash
-	fs.logger.Debug().Int32("account_hash", fs.accountHash).Int32("pq_perct", features.PostQuantumPercentage).Bool("pq_enabled", pq_enabled).Msg("Refreshed feature")
 
 	fs.lock.Lock()
 	defer fs.lock.Unlock()

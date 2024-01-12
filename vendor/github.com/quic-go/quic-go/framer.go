@@ -6,6 +6,7 @@ import (
 
 	"github.com/quic-go/quic-go/internal/ackhandler"
 	"github.com/quic-go/quic-go/internal/protocol"
+	"github.com/quic-go/quic-go/internal/utils/ringbuffer"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/quicvarint"
 )
@@ -14,13 +15,15 @@ type framer interface {
 	HasData() bool
 
 	QueueControlFrame(wire.Frame)
-	AppendControlFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount)
 
 	AddActiveStream(protocol.StreamID)
-	AppendStreamFrames([]*ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount)
+	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)
 
 	Handle0RTTRejection() error
 }
+
+const maxPathResponses = 256
 
 type framerI struct {
 	mutex sync.Mutex
@@ -28,10 +31,11 @@ type framerI struct {
 	streamGetter streamGetter
 
 	activeStreams map[protocol.StreamID]struct{}
-	streamQueue   []protocol.StreamID
+	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
 
 	controlFrameMutex sync.Mutex
 	controlFrames     []wire.Frame
+	pathResponses     []*wire.PathResponseFrame
 }
 
 var _ framer = &framerI{}
@@ -45,63 +49,82 @@ func newFramer(streamGetter streamGetter) framer {
 
 func (f *framerI) HasData() bool {
 	f.mutex.Lock()
-	hasData := len(f.streamQueue) > 0
+	hasData := !f.streamQueue.Empty()
 	f.mutex.Unlock()
 	if hasData {
 		return true
 	}
 	f.controlFrameMutex.Lock()
-	hasData = len(f.controlFrames) > 0
-	f.controlFrameMutex.Unlock()
-	return hasData
+	defer f.controlFrameMutex.Unlock()
+	return len(f.controlFrames) > 0 || len(f.pathResponses) > 0
 }
 
 func (f *framerI) QueueControlFrame(frame wire.Frame) {
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
+	if pr, ok := frame.(*wire.PathResponseFrame); ok {
+		// Only queue up to maxPathResponses PATH_RESPONSE frames.
+		// This limit should be high enough to never be hit in practice,
+		// unless the peer is doing something malicious.
+		if len(f.pathResponses) >= maxPathResponses {
+			return
+		}
+		f.pathResponses = append(f.pathResponses, pr)
+		return
+	}
 	f.controlFrames = append(f.controlFrames, frame)
-	f.controlFrameMutex.Unlock()
 }
 
-func (f *framerI) AppendControlFrames(frames []*ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
-	var length protocol.ByteCount
+func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount) {
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
+	var length protocol.ByteCount
+	// add a PATH_RESPONSE first, but only pack a single PATH_RESPONSE per packet
+	if len(f.pathResponses) > 0 {
+		frame := f.pathResponses[0]
+		frameLen := frame.Length(v)
+		if frameLen <= maxLen {
+			frames = append(frames, ackhandler.Frame{Frame: frame})
+			length += frameLen
+			f.pathResponses = f.pathResponses[1:]
+		}
+	}
+
 	for len(f.controlFrames) > 0 {
 		frame := f.controlFrames[len(f.controlFrames)-1]
 		frameLen := frame.Length(v)
 		if length+frameLen > maxLen {
 			break
 		}
-		af := ackhandler.GetFrame()
-		af.Frame = frame
-		frames = append(frames, af)
+		frames = append(frames, ackhandler.Frame{Frame: frame})
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
-	f.controlFrameMutex.Unlock()
 	return frames, length
 }
 
 func (f *framerI) AddActiveStream(id protocol.StreamID) {
 	f.mutex.Lock()
 	if _, ok := f.activeStreams[id]; !ok {
-		f.streamQueue = append(f.streamQueue, id)
+		f.streamQueue.PushBack(id)
 		f.activeStreams[id] = struct{}{}
 	}
 	f.mutex.Unlock()
 }
 
-func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]*ackhandler.Frame, protocol.ByteCount) {
+func (f *framerI) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount) {
+	startLen := len(frames)
 	var length protocol.ByteCount
-	var lastFrame *ackhandler.Frame
 	f.mutex.Lock()
 	// pop STREAM frames, until less than MinStreamFrameSize bytes are left in the packet
-	numActiveStreams := len(f.streamQueue)
+	numActiveStreams := f.streamQueue.Len()
 	for i := 0; i < numActiveStreams; i++ {
 		if protocol.MinStreamFrameSize+length > maxLen {
 			break
 		}
-		id := f.streamQueue[0]
-		f.streamQueue = f.streamQueue[1:]
+		id := f.streamQueue.PopFront()
 		// This should never return an error. Better check it anyway.
 		// The stream will only be in the streamQueue, if it enqueued itself there.
 		str, err := f.streamGetter.GetOrOpenSendStream(id)
@@ -115,28 +138,27 @@ func (f *framerI) AppendStreamFrames(frames []*ackhandler.Frame, maxLen protocol
 		// Therefore, we can pretend to have more bytes available when popping
 		// the STREAM frame (which will always have the DataLen set).
 		remainingLen += quicvarint.Len(uint64(remainingLen))
-		frame, hasMoreData := str.popStreamFrame(remainingLen, v)
+		frame, ok, hasMoreData := str.popStreamFrame(remainingLen, v)
 		if hasMoreData { // put the stream back in the queue (at the end)
-			f.streamQueue = append(f.streamQueue, id)
-		} else { // no more data to send. Stream is not active any more
+			f.streamQueue.PushBack(id)
+		} else { // no more data to send. Stream is not active
 			delete(f.activeStreams, id)
 		}
-		// The frame can be nil
+		// The frame can be "nil"
 		// * if the receiveStream was canceled after it said it had data
 		// * the remaining size doesn't allow us to add another STREAM frame
-		if frame == nil {
+		if !ok {
 			continue
 		}
 		frames = append(frames, frame)
-		length += frame.Length(v)
-		lastFrame = frame
+		length += frame.Frame.Length(v)
 	}
 	f.mutex.Unlock()
-	if lastFrame != nil {
-		lastFrameLen := lastFrame.Length(v)
+	if len(frames) > startLen {
+		l := frames[len(frames)-1].Frame.Length(v)
 		// account for the smaller size of the last STREAM frame
-		lastFrame.Frame.(*wire.StreamFrame).DataLenPresent = false
-		length += lastFrame.Length(v) - lastFrameLen
+		frames[len(frames)-1].Frame.DataLenPresent = false
+		length += frames[len(frames)-1].Frame.Length(v) - l
 	}
 	return frames, length
 }
@@ -146,7 +168,7 @@ func (f *framerI) Handle0RTTRejection() error {
 	defer f.mutex.Unlock()
 
 	f.controlFrameMutex.Lock()
-	f.streamQueue = f.streamQueue[:0]
+	f.streamQueue.Clear()
 	for id := range f.activeStreams {
 		delete(f.activeStreams, id)
 	}

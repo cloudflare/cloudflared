@@ -478,6 +478,11 @@ func processURL(s string) (*url.URL, error) {
 
 // cloudflaredPath pulls the full path of cloudflared on disk
 func cloudflaredPath() string {
+	path, err := os.Executable()
+	if err == nil && isFileThere(path) {
+		return path
+	}
+
 	for _, p := range strings.Split(os.Getenv("PATH"), ":") {
 		path := fmt.Sprintf("%s/%s", p, "cloudflared")
 		if isFileThere(path) {

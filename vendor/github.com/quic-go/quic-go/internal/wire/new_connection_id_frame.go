@@ -2,6 +2,7 @@ package wire
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 
@@ -33,6 +34,9 @@ func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewC
 	connIDLen, err := r.ReadByte()
 	if err != nil {
 		return nil, err
+	}
+	if connIDLen == 0 {
+		return nil, errors.New("invalid zero-length connection ID")
 	}
 	connID, err := protocol.ReadConnectionID(r, int(connIDLen))
 	if err != nil {

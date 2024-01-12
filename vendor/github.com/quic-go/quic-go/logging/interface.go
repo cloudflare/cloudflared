@@ -3,9 +3,6 @@
 package logging
 
 import (
-	"net"
-	"time"
-
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -15,6 +12,8 @@ import (
 type (
 	// A ByteCount is used to count bytes.
 	ByteCount = protocol.ByteCount
+	// ECN is the ECN value
+	ECN = protocol.ECN
 	// A ConnectionID is a QUIC Connection ID.
 	ConnectionID = protocol.ConnectionID
 	// An ArbitraryLenConnectionID is a QUIC Connection ID that can be up to 255 bytes long.
@@ -59,6 +58,19 @@ type (
 )
 
 const (
+	// ECNUnsupported means that no ECN value was set / received
+	ECNUnsupported = protocol.ECNUnsupported
+	// ECTNot is Not-ECT
+	ECTNot = protocol.ECNNon
+	// ECT0 is ECT(0)
+	ECT0 = protocol.ECT0
+	// ECT1 is ECT(1)
+	ECT1 = protocol.ECT1
+	// ECNCE is CE
+	ECNCE = protocol.ECNCE
+)
+
+const (
 	// KeyPhaseZero is key phase bit 0
 	KeyPhaseZero KeyPhaseBit = protocol.KeyPhaseZero
 	// KeyPhaseOne is key phase bit 1
@@ -96,44 +108,4 @@ type ShortHeader struct {
 	PacketNumber     PacketNumber
 	PacketNumberLen  protocol.PacketNumberLen
 	KeyPhase         KeyPhaseBit
-}
-
-// A Tracer traces events.
-type Tracer interface {
-	SentPacket(net.Addr, *Header, ByteCount, []Frame)
-	SentVersionNegotiationPacket(_ net.Addr, dest, src ArbitraryLenConnectionID, _ []VersionNumber)
-	DroppedPacket(net.Addr, PacketType, ByteCount, PacketDropReason)
-}
-
-// A ConnectionTracer records events.
-type ConnectionTracer interface {
-	StartedConnection(local, remote net.Addr, srcConnID, destConnID ConnectionID)
-	NegotiatedVersion(chosen VersionNumber, clientVersions, serverVersions []VersionNumber)
-	ClosedConnection(error)
-	SentTransportParameters(*TransportParameters)
-	ReceivedTransportParameters(*TransportParameters)
-	RestoredTransportParameters(parameters *TransportParameters) // for 0-RTT
-	SentLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, ack *AckFrame, frames []Frame)
-	SentShortHeaderPacket(hdr *ShortHeader, size ByteCount, ack *AckFrame, frames []Frame)
-	ReceivedVersionNegotiationPacket(dest, src ArbitraryLenConnectionID, _ []VersionNumber)
-	ReceivedRetry(*Header)
-	ReceivedLongHeaderPacket(hdr *ExtendedHeader, size ByteCount, frames []Frame)
-	ReceivedShortHeaderPacket(hdr *ShortHeader, size ByteCount, frames []Frame)
-	BufferedPacket(PacketType, ByteCount)
-	DroppedPacket(PacketType, ByteCount, PacketDropReason)
-	UpdatedMetrics(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
-	AcknowledgedPacket(EncryptionLevel, PacketNumber)
-	LostPacket(EncryptionLevel, PacketNumber, PacketLossReason)
-	UpdatedCongestionState(CongestionState)
-	UpdatedPTOCount(value uint32)
-	UpdatedKeyFromTLS(EncryptionLevel, Perspective)
-	UpdatedKey(generation KeyPhase, remote bool)
-	DroppedEncryptionLevel(EncryptionLevel)
-	DroppedKey(generation KeyPhase)
-	SetLossTimer(TimerType, EncryptionLevel, time.Time)
-	LossTimerExpired(TimerType, EncryptionLevel)
-	LossTimerCanceled()
-	// Close is called when the connection is closed.
-	Close()
-	Debug(name, msg string)
 }

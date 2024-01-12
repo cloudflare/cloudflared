@@ -123,7 +123,7 @@ func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	return utils.Min(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
+	return min(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
 }
 
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {

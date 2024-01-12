@@ -9,12 +9,12 @@ import (
 // A SendAlgorithm performs congestion control
 type SendAlgorithm interface {
 	TimeUntilSend(bytesInFlight protocol.ByteCount) time.Time
-	HasPacingBudget() bool
+	HasPacingBudget(now time.Time) bool
 	OnPacketSent(sentTime time.Time, bytesInFlight protocol.ByteCount, packetNumber protocol.PacketNumber, bytes protocol.ByteCount, isRetransmittable bool)
 	CanSend(bytesInFlight protocol.ByteCount) bool
 	MaybeExitSlowStart()
 	OnPacketAcked(number protocol.PacketNumber, ackedBytes protocol.ByteCount, priorInFlight protocol.ByteCount, eventTime time.Time)
-	OnPacketLost(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
+	OnCongestionEvent(number protocol.PacketNumber, lostBytes protocol.ByteCount, priorInFlight protocol.ByteCount)
 	OnRetransmissionTimeout(packetsRetransmitted bool)
 	SetMaxDatagramSize(protocol.ByteCount)
 }

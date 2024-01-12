@@ -597,7 +597,6 @@ func (e *EdgeTunnelServer) serveQUIC(
 		MaxIncomingStreams:      quicpogs.MaxIncomingStreams,
 		MaxIncomingUniStreams:   quicpogs.MaxIncomingStreams,
 		EnableDatagrams:         true,
-		MaxDatagramFrameSize:    quicpogs.MaxDatagramFrameSize,
 		Tracer:                  quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
 		DisablePathMTUDiscovery: e.config.DisableQUICPathMTUDiscovery,
 	}
@@ -617,10 +616,6 @@ func (e *EdgeTunnelServer) serveQUIC(
 		e.config.UDPUnregisterSessionTimeout,
 	)
 	if err != nil {
-		if pqMode == features.PostQuantumStrict || pqMode == features.PostQuantumPrefer {
-			handlePQTunnelError(err, e.config)
-		}
-
 		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
 		return err, true
 	}

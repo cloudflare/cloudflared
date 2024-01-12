@@ -340,7 +340,7 @@ func StartServer(
 	logClientOptions(c, log)
 
 	// this context drives the server, when it's cancelled tunnel and all other components (origins, dns, etc...) should stop
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 
 	go waitForSignal(graceShutdownC, log)

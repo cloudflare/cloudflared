@@ -21,7 +21,7 @@ type tracerConfig struct {
 	index uint8
 }
 
-func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, logging.Perspective, logging.ConnectionID) logging.ConnectionTracer {
+func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, logging.Perspective, logging.ConnectionID) *logging.ConnectionTracer {
 	t := &tracer{
 		logger: logger,
 		config: &tracerConfig{
@@ -32,41 +32,60 @@ func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, 
 	return t.TracerForConnection
 }
 
-func NewServerTracer(logger *zerolog.Logger) logging.Tracer {
-	return &tracer{
-		logger: logger,
-		config: &tracerConfig{
-			isClient: false,
-		},
+func NewServerTracer(logger *zerolog.Logger) *logging.Tracer {
+	return &logging.Tracer{
+		SentPacket:                   func(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {},
+		SentVersionNegotiationPacket: func(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {},
+		DroppedPacket:                func(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {},
 	}
 }
 
-func (t *tracer) TracerForConnection(_ctx context.Context, _p logging.Perspective, _odcid logging.ConnectionID) logging.ConnectionTracer {
+func (t *tracer) TracerForConnection(_ctx context.Context, _p logging.Perspective, _odcid logging.ConnectionID) *logging.ConnectionTracer {
 	if t.config.isClient {
 		return newConnTracer(newClientCollector(t.config.index))
 	}
 	return newConnTracer(newServiceCollector())
 }
 
-func (*tracer) SentPacket(net.Addr, *logging.Header, logging.ByteCount, []logging.Frame) {
-}
-func (*tracer) SentVersionNegotiationPacket(_ net.Addr, dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
-}
-func (*tracer) DroppedPacket(net.Addr, logging.PacketType, logging.ByteCount, logging.PacketDropReason) {
-}
-
-var _ logging.Tracer = (*tracer)(nil)
-
 // connTracer collects connection level metrics
 type connTracer struct {
 	metricsCollector MetricsCollector
 }
 
-var _ logging.ConnectionTracer = (*connTracer)(nil)
-
-func newConnTracer(metricsCollector MetricsCollector) logging.ConnectionTracer {
-	return &connTracer{
+func newConnTracer(metricsCollector MetricsCollector) *logging.ConnectionTracer {
+	tracer := connTracer{
 		metricsCollector: metricsCollector,
+	}
+	return &logging.ConnectionTracer{
+		StartedConnection:                tracer.StartedConnection,
+		NegotiatedVersion:                tracer.NegotiatedVersion,
+		ClosedConnection:                 tracer.ClosedConnection,
+		SentTransportParameters:          tracer.SentTransportParameters,
+		ReceivedTransportParameters:      tracer.ReceivedTransportParameters,
+		RestoredTransportParameters:      tracer.RestoredTransportParameters,
+		SentLongHeaderPacket:             tracer.SentLongHeaderPacket,
+		SentShortHeaderPacket:            tracer.SentShortHeaderPacket,
+		ReceivedVersionNegotiationPacket: tracer.ReceivedVersionNegotiationPacket,
+		ReceivedRetry:                    tracer.ReceivedRetry,
+		ReceivedLongHeaderPacket:         tracer.ReceivedLongHeaderPacket,
+		ReceivedShortHeaderPacket:        tracer.ReceivedShortHeaderPacket,
+		BufferedPacket:                   tracer.BufferedPacket,
+		DroppedPacket:                    tracer.DroppedPacket,
+		UpdatedMetrics:                   tracer.UpdatedMetrics,
+		AcknowledgedPacket:               tracer.AcknowledgedPacket,
+		LostPacket:                       tracer.LostPacket,
+		UpdatedCongestionState:           tracer.UpdatedCongestionState,
+		UpdatedPTOCount:                  tracer.UpdatedPTOCount,
+		UpdatedKeyFromTLS:                tracer.UpdatedKeyFromTLS,
+		UpdatedKey:                       tracer.UpdatedKey,
+		DroppedEncryptionLevel:           tracer.DroppedEncryptionLevel,
+		DroppedKey:                       tracer.DroppedKey,
+		SetLossTimer:                     tracer.SetLossTimer,
+		LossTimerExpired:                 tracer.LossTimerExpired,
+		LossTimerCanceled:                tracer.LossTimerCanceled,
+		ECNStateUpdated:                  tracer.ECNStateUpdated,
+		Close:                            tracer.Close,
+		Debug:                            tracer.Debug,
 	}
 }
 
@@ -90,7 +109,7 @@ func (ct *connTracer) BufferedPacket(pt logging.PacketType, size logging.ByteCou
 	ct.metricsCollector.bufferedPackets(pt)
 }
 
-func (ct *connTracer) DroppedPacket(pt logging.PacketType, size logging.ByteCount, reason logging.PacketDropReason) {
+func (ct *connTracer) DroppedPacket(pt logging.PacketType, number logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
 	ct.metricsCollector.droppedPackets(pt, size, reason)
 }
 
@@ -114,10 +133,10 @@ func (ct *connTracer) ReceivedTransportParameters(parameters *logging.TransportP
 func (ct *connTracer) RestoredTransportParameters(parameters *logging.TransportParameters) {
 }
 
-func (ct *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+func (ct *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
 }
 
-func (ct *connTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ack *logging.AckFrame, frames []logging.Frame) {
+func (ct *connTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
 }
 
 func (ct *connTracer) ReceivedVersionNegotiationPacket(dest, src logging.ArbitraryLenConnectionID, _ []logging.VersionNumber) {
@@ -126,10 +145,10 @@ func (ct *connTracer) ReceivedVersionNegotiationPacket(dest, src logging.Arbitra
 func (ct *connTracer) ReceivedRetry(header *logging.Header) {
 }
 
-func (ct *connTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, frames []logging.Frame) {
+func (ct *connTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
 }
 
-func (ct *connTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, frames []logging.Frame) {
+func (ct *connTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
 }
 
 func (ct *connTracer) AcknowledgedPacket(level logging.EncryptionLevel, number logging.PacketNumber) {
@@ -160,6 +179,10 @@ func (ct *connTracer) LossTimerExpired(timerType logging.TimerType, level loggin
 }
 
 func (ct *connTracer) LossTimerCanceled() {
+}
+
+func (ct *connTracer) ECNStateUpdated(state logging.ECNState, trigger logging.ECNStateTrigger) {
+
 }
 
 func (ct *connTracer) Close() {

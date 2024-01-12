@@ -74,7 +74,7 @@ def delete_tunnel(config):
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
 def create_dns(config, hostname, type, content):
-    cf = CloudFlare.CloudFlare(debug=True, token=get_env("DNS_API_TOKEN"))
+    cf = CloudFlare.CloudFlare(debug=False, token=get_env("DNS_API_TOKEN"))
     cf.zones.dns_records.post(
         config["zone_tag"],
         data={'name': hostname, 'type': type, 'content': content, 'proxied': True}
@@ -89,7 +89,7 @@ def create_named_dns(config, random_uuid):
 
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
 def delete_dns(config, hostname):
-    cf = CloudFlare.CloudFlare(debug=True, token=get_env("DNS_API_TOKEN"))
+    cf = CloudFlare.CloudFlare(debug=False, token=get_env("DNS_API_TOKEN"))
     zone_tag = config["zone_tag"]
     dns_records = cf.zones.dns_records.get(zone_tag, params={'name': hostname})
     if len(dns_records) > 0:

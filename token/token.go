@@ -21,11 +21,13 @@ import (
 )
 
 const (
-	keyName               = "token"
-	tokenCookie           = "CF_Authorization"
-	appDomainHeader       = "CF-Access-Domain"
-	appAUDHeader          = "CF-Access-Aud"
-	AccessLoginWorkerPath = "/cdn-cgi/access/login"
+	keyName                    = "token"
+	tokenCookie                = "CF_Authorization"
+	appSessionCookie           = "CF_AppSession"
+	appDomainHeader            = "CF-Access-Domain"
+	appAUDHeader               = "CF-Access-Aud"
+	AccessLoginWorkerPath      = "/cdn-cgi/access/login"
+	AccessAuthorizedWorkerPath = "/cdn-cgi/access/authorized"
 )
 
 var (
@@ -297,20 +299,41 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	return &AppInfo{location.Hostname(), aud, domain}, nil
 }
 
+func handleRedirects(req *http.Request, via []*http.Request, orgToken string) error {
+	// attach org token to login request
+	if strings.Contains(req.URL.Path, AccessLoginWorkerPath) {
+		req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken})
+	}
+
+	// attach app session cookie to authorized request
+	if strings.Contains(req.URL.Path, AccessAuthorizedWorkerPath) {
+		// We need to check and see if the CF_APP_SESSION cookie was set
+		for _, prevReq := range via {
+			if prevReq != nil && prevReq.Response != nil {
+				for _, c := range prevReq.Response.Cookies() {
+					if c.Name == appSessionCookie {
+						req.AddCookie(&http.Cookie{Name: appSessionCookie, Value: c.Value})
+						return nil
+					}
+				}
+			}
+		}
+
+	}
+
+	// stop after hitting authorized endpoint since it will contain the app token
+	if len(via) > 0 && strings.Contains(via[len(via)-1].URL.Path, AccessAuthorizedWorkerPath) {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
+
 // exchangeOrgToken attaches an org token to a request to the appURL and returns an app token. This uses the Access SSO
 // flow to automatically generate and return an app token without the login page.
 func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// attach org token to login request
-			if strings.Contains(req.URL.Path, AccessLoginWorkerPath) {
-				req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken})
-			}
-			// stop after hitting authorized endpoint since it will contain the app token
-			if strings.Contains(via[len(via)-1].URL.Path, "cdn-cgi/access/authorized") {
-				return http.ErrUseLastResponse
-			}
-			return nil
+			return handleRedirects(req, via, orgToken)
 		},
 		Timeout: time.Second * 7,
 	}

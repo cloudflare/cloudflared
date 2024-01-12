@@ -3,12 +3,16 @@ package handshake
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"io"
 
 	"golang.org/x/crypto/hkdf"
 )
+
+// TokenProtectorKey is the key used to encrypt both Retry and session resumption tokens.
+type TokenProtectorKey [32]byte
 
 // TokenProtector is used to create and verify a token
 type tokenProtector interface {
@@ -18,40 +22,29 @@ type tokenProtector interface {
 	DecodeToken([]byte) ([]byte, error)
 }
 
-const (
-	tokenSecretSize = 32
-	tokenNonceSize  = 32
-)
+const tokenNonceSize = 32
 
 // tokenProtector is used to create and verify a token
 type tokenProtectorImpl struct {
-	rand   io.Reader
-	secret []byte
+	key TokenProtectorKey
 }
 
 // newTokenProtector creates a source for source address tokens
-func newTokenProtector(rand io.Reader) (tokenProtector, error) {
-	secret := make([]byte, tokenSecretSize)
-	if _, err := rand.Read(secret); err != nil {
-		return nil, err
-	}
-	return &tokenProtectorImpl{
-		rand:   rand,
-		secret: secret,
-	}, nil
+func newTokenProtector(key TokenProtectorKey) tokenProtector {
+	return &tokenProtectorImpl{key: key}
 }
 
 // NewToken encodes data into a new token.
 func (s *tokenProtectorImpl) NewToken(data []byte) ([]byte, error) {
-	nonce := make([]byte, tokenNonceSize)
-	if _, err := s.rand.Read(nonce); err != nil {
+	var nonce [tokenNonceSize]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err
 	}
-	aead, aeadNonce, err := s.createAEAD(nonce)
+	aead, aeadNonce, err := s.createAEAD(nonce[:])
 	if err != nil {
 		return nil, err
 	}
-	return append(nonce, aead.Seal(nil, aeadNonce, data, nil)...), nil
+	return append(nonce[:], aead.Seal(nil, aeadNonce, data, nil)...), nil
 }
 
 // DecodeToken decodes a token.
@@ -68,7 +61,7 @@ func (s *tokenProtectorImpl) DecodeToken(p []byte) ([]byte, error) {
 }
 
 func (s *tokenProtectorImpl) createAEAD(nonce []byte) (cipher.AEAD, []byte, error) {
-	h := hkdf.New(sha256.New, s.secret, nonce, []byte("quic-go token source"))
+	h := hkdf.New(sha256.New, s.key[:], nonce, []byte("quic-go token source"))
 	key := make([]byte, 32) // use a 32 byte key, in order to select AES-256
 	if _, err := io.ReadFull(h, key); err != nil {
 		return nil, nil, err

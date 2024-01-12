@@ -92,3 +92,37 @@ const (
 	// CongestionStateApplicationLimited means that the congestion controller is application limited
 	CongestionStateApplicationLimited
 )
+
+// ECNState is the state of the ECN state machine (see Appendix A.4 of RFC 9000)
+type ECNState uint8
+
+const (
+	// ECNStateTesting is the testing state
+	ECNStateTesting ECNState = 1 + iota
+	// ECNStateUnknown is the unknown state
+	ECNStateUnknown
+	// ECNStateFailed is the failed state
+	ECNStateFailed
+	// ECNStateCapable is the capable state
+	ECNStateCapable
+)
+
+// ECNStateTrigger is a trigger for an ECN state transition.
+type ECNStateTrigger uint8
+
+const (
+	ECNTriggerNoTrigger ECNStateTrigger = iota
+	// ECNFailedNoECNCounts is emitted when an ACK acknowledges ECN-marked packets,
+	// but doesn't contain any ECN counts
+	ECNFailedNoECNCounts
+	// ECNFailedDecreasedECNCounts is emitted when an ACK frame decreases ECN counts
+	ECNFailedDecreasedECNCounts
+	// ECNFailedLostAllTestingPackets is emitted when all ECN testing packets are declared lost
+	ECNFailedLostAllTestingPackets
+	// ECNFailedMoreECNCountsThanSent is emitted when an ACK contains more ECN counts than ECN-marked packets were sent
+	ECNFailedMoreECNCountsThanSent
+	// ECNFailedTooFewECNCounts is emitted when an ACK contains fewer ECN counts than it acknowledges packets
+	ECNFailedTooFewECNCounts
+	// ECNFailedManglingDetected is emitted when the path marks all ECN-marked packets as CE
+	ECNFailedManglingDetected
+)

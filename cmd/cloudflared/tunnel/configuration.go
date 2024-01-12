@@ -33,9 +33,9 @@ import (
 const secretValue = "*****"
 
 var (
-	developerPortal = "https://developers.cloudflare.com/argo-tunnel"
-	serviceUrl      = developerPortal + "/reference/service/"
-	argumentsUrl    = developerPortal + "/reference/arguments/"
+	developerPortal = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup"
+	serviceUrl      = developerPortal + "/tunnel-guide/local/as-a-service/"
+	argumentsUrl    = developerPortal + "/tunnel-guide/local/local-management/arguments/"
 
 	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 

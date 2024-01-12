@@ -10,7 +10,6 @@ import (
 	"golang.org/x/crypto/chacha20"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qtls"
 )
 
 type headerProtector interface {
@@ -25,7 +24,7 @@ func hkdfHeaderProtectionLabel(v protocol.VersionNumber) string {
 	return "quic hp"
 }
 
-func newHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool, v protocol.VersionNumber) headerProtector {
+func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, v protocol.VersionNumber) headerProtector {
 	hkdfLabel := hkdfHeaderProtectionLabel(v)
 	switch suite.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
@@ -45,7 +44,7 @@ type aesHeaderProtector struct {
 
 var _ headerProtector = &aesHeaderProtector{}
 
-func newAESHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
+func newAESHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
 	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
 	block, err := aes.NewCipher(hpKey)
 	if err != nil {
@@ -90,7 +89,7 @@ type chachaHeaderProtector struct {
 
 var _ headerProtector = &chachaHeaderProtector{}
 
-func newChaChaHeaderProtector(suite *qtls.CipherSuiteTLS13, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
+func newChaChaHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, hkdfLabel string) headerProtector {
 	hpKey := hkdfExpandLabel(suite.Hash, trafficSecret, []byte{}, hkdfLabel, suite.KeyLen)
 
 	p := &chachaHeaderProtector{

@@ -56,6 +56,9 @@ func (s *WorkersService) Check() (CheckResult, error) {
 	}
 
 	req, err := http.NewRequest(http.MethodGet, s.url, nil)
+	if err != nil {
+		return nil, err
+	}
 	q := req.URL.Query()
 	q.Add(OSKeyName, runtime.GOOS)
 	q.Add(ArchitectureKeyName, runtime.GOARCH)
