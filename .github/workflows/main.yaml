@@ -1,0 +1,43 @@
+name: Build & Upload Artifacts
+on:
+  push:
+    tags:
+      - '*'
+jobs:
+  build-container-and-deploy:
+    runs-on: ubuntu-latest
+    name: Build cloudflared for FreeBSD
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Build
+        shell: bash
+        run: |
+          # Install cloudflare-go
+          ./.teamcity/install-cloudflare-go.sh
+
+          # Disable FIPS module in go-boring
+          export GOEXPERIMENT=noboringcrypto
+          export CGO_ENABLED=0
+
+          freebsdArchs=("386" "amd64" "arm" "arm64")
+          export TARGET_OS=freebsd
+
+          for arch in ${freebsdArchs[@]}; do
+            export TARGET_ARCH=$arch
+
+            echo "Building cloudflared-freebsd-$arch"
+
+            make cloudflared
+            tar -cJvf /tmp/cloudflared-freebsd-$arch.tar.xz ./cloudflared 
+            rm ./cloudflared
+          done
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            /tmp/cloudflared-freebsd-arm64.tar.xz
+            /tmp/cloudflared-freebsd-amd64.tar.xz
+            /tmp/cloudflared-freebsd-386.tar.xz
+            /tmp/cloudflared-freebsd-arm.tar.xz
