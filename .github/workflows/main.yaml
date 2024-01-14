@@ -33,7 +33,6 @@ jobs:
 
             make cloudflared
             mv ./cloudflared /tmp/cloudflared-freebsd-$arch
-            rm ./cloudflared
 
             echo "    cloudflared-freebsd-$arch: $(sha256sum /tmp/cloudflared-freebsd-$arch | cut -d ' ' -f 1)" > /tmp/release.txt
           done
