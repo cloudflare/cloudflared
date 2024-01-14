@@ -24,20 +24,26 @@ jobs:
           freebsdArchs=("386" "amd64" "arm" "arm64")
           export TARGET_OS=freebsd
 
+          echo "#### SHA256 Checksums:" > /tmp/release.txt
+
           for arch in ${freebsdArchs[@]}; do
             export TARGET_ARCH=$arch
 
             echo "Building cloudflared-freebsd-$arch"
 
             make cloudflared
-            tar -cJvf /tmp/cloudflared-freebsd-$arch.tar.xz ./cloudflared 
+            mv ./cloudflared /tmp/cloudflared-freebsd-$arch
             rm ./cloudflared
+
+            echo "    cloudflared-freebsd-$arch: $(sha256sum /tmp/cloudflared-freebsd-$arch | cut -d ' ' -f 1)" > /tmp/release.txt
           done
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
+          body_path: /tmp/release.txt
           files: |
-            /tmp/cloudflared-freebsd-arm64.tar.xz
-            /tmp/cloudflared-freebsd-amd64.tar.xz
-            /tmp/cloudflared-freebsd-386.tar.xz
-            /tmp/cloudflared-freebsd-arm.tar.xz
+            /tmp/cloudflared-freebsd-386
+            /tmp/cloudflared-freebsd-amd64
+            /tmp/cloudflared-freebsd-arm
+            /tmp/cloudflared-freebsd-arm64
+
