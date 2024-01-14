@@ -34,7 +34,7 @@ jobs:
             make cloudflared
             mv ./cloudflared /tmp/cloudflared-freebsd-$arch
 
-            echo "    cloudflared-freebsd-$arch: $(sha256sum /tmp/cloudflared-freebsd-$arch | cut -d ' ' -f 1)" > /tmp/release.txt
+            echo "    cloudflared-freebsd-$arch: $(sha256sum /tmp/cloudflared-freebsd-$arch | cut -d ' ' -f 1)" >> /tmp/release.txt
           done
       - name: Release
         uses: softprops/action-gh-release@v1
