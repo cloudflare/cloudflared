@@ -15,6 +15,12 @@ export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do
     unset TARGET_ARM
     export TARGET_ARCH=$arch
+
+    ## Support for armv6 builds
+    if [[ $arch == arm ]] ; then
+        export TARGET_ARCH=arm
+        export TARGET_ARM=6
+    fi
     
     ## Support for armhf builds 
     if [[ $arch == armhf ]] ; then
