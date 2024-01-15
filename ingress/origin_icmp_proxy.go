@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
@@ -101,4 +103,26 @@ func getICMPEcho(msg *icmp.Message) (*icmp.Echo, error) {
 
 func isEchoReply(msg *icmp.Message) bool {
 	return msg.Type == ipv4.ICMPTypeEchoReply || msg.Type == ipv6.ICMPTypeEchoReply
+}
+
+func observeICMPRequest(logger *zerolog.Logger, span trace.Span, src string, dst string, echoID int, seq int) {
+	logger.Debug().
+		Str("src", src).
+		Str("dst", dst).
+		Int("originalEchoID", echoID).
+		Int("originalEchoSeq", seq).
+		Msg("Received ICMP request")
+	span.SetAttributes(
+		attribute.Int("originalEchoID", echoID),
+		attribute.Int("seq", seq),
+	)
+}
+
+func observeICMPReply(logger *zerolog.Logger, span trace.Span, dst string, echoID int, seq int) {
+	logger.Debug().Str("dst", dst).Int("echoID", echoID).Int("seq", seq).Msg("Sent ICMP reply to edge")
+	span.SetAttributes(
+		attribute.String("dst", dst),
+		attribute.Int("echoID", echoID),
+		attribute.Int("seq", seq),
+	)
 }

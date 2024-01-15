@@ -281,10 +281,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	if err != nil {
 		return err
 	}
-	requestSpan.SetAttributes(
-		attribute.Int("originalEchoID", echo.ID),
-		attribute.Int("seq", echo.Seq),
-	)
+	observeICMPRequest(ip.logger, requestSpan, pk.Src.String(), pk.Dst.String(), echo.ID, echo.Seq)
 
 	resp, err := ip.icmpEchoRoundtrip(pk.Dst, echo)
 	if err != nil {
@@ -296,17 +293,17 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	responder.exportSpan()
 
 	_, replySpan := responder.replySpan(ctx, ip.logger)
-	replySpan.SetAttributes(
-		attribute.Int("originalEchoID", echo.ID),
-		attribute.Int("seq", echo.Seq),
-		attribute.Int64("rtt", int64(resp.rtt())),
-		attribute.String("status", resp.status().String()),
-	)
 	err = ip.handleEchoReply(pk, echo, resp, responder)
 	if err != nil {
+		ip.logger.Err(err).Msg("Failed to send ICMP reply")
 		tracing.EndWithErrorStatus(replySpan, err)
 		return errors.Wrap(err, "failed to handle ICMP echo reply")
 	}
+	observeICMPReply(ip.logger, replySpan, pk.Dst.String(), echo.ID, echo.Seq)
+	replySpan.SetAttributes(
+		attribute.Int64("rtt", int64(resp.rtt())),
+		attribute.String("status", resp.status().String()),
+	)
 	tracing.End(replySpan)
 	return nil
 }
