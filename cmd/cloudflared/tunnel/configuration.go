@@ -30,7 +30,10 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-const secretValue = "*****"
+const (
+	secretValue       = "*****"
+	icmpFunnelTimeout = time.Second * 10
+)
 
 var (
 	developerPortal = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup"
@@ -361,7 +364,7 @@ func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRou
 		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
 	}
 
-	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, zone, logger)
+	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, zone, logger, icmpFunnelTimeout)
 	if err != nil {
 		return nil, err
 	}

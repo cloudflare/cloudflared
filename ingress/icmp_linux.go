@@ -107,10 +107,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
-	span.SetAttributes(
-		attribute.Int("originalEchoID", originalEcho.ID),
-		attribute.Int("seq", originalEcho.Seq),
-	)
+	observeICMPRequest(ip.logger, span, pk.Src.String(), pk.Dst.String(), originalEcho.ID, originalEcho.Seq)
 
 	shouldReplaceFunnelFunc := createShouldReplaceFunnelFunc(ip.logger, responder.datagramMuxer, pk, originalEcho.ID)
 	newFunnelFunc := func() (packet.Funnel, error) {
@@ -156,14 +153,8 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 			Int("originalEchoID", originalEcho.ID).
 			Msg("New flow")
 		go func() {
-			defer ip.srcFunnelTracker.Unregister(funnelID, icmpFlow)
-			if err := ip.listenResponse(ctx, icmpFlow); err != nil {
-				ip.logger.Debug().Err(err).
-					Str("src", pk.Src.String()).
-					Str("dst", pk.Dst.String()).
-					Int("originalEchoID", originalEcho.ID).
-					Msg("Failed to listen for ICMP echo response")
-			}
+			ip.listenResponse(ctx, icmpFlow)
+			ip.srcFunnelTracker.Unregister(funnelID, icmpFlow)
 		}()
 	}
 	if err := icmpFlow.sendToDst(pk.Dst, pk.Message); err != nil {
@@ -179,17 +170,17 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (ip *icmpProxy) listenResponse(ctx context.Context, flow *icmpEchoFlow) error {
+func (ip *icmpProxy) listenResponse(ctx context.Context, flow *icmpEchoFlow) {
 	buf := make([]byte, mtu)
 	for {
-		retryable, err := ip.handleResponse(ctx, flow, buf)
-		if err != nil && !retryable {
-			return err
+		if done := ip.handleResponse(ctx, flow, buf); done {
+			return
 		}
 	}
 }
 
-func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf []byte) (retryableErr bool, err error) {
+// Listens for ICMP response and handles error logging
+func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf []byte) (done bool) {
 	_, span := flow.responder.replySpan(ctx, ip.logger)
 	defer flow.responder.exportSpan()
 
@@ -199,33 +190,36 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 
 	n, from, err := flow.originConn.ReadFrom(buf)
 	if err != nil {
+		if flow.IsClosed() {
+			tracing.EndWithErrorStatus(span, fmt.Errorf("flow was closed"))
+			return true
+		}
+		ip.logger.Error().Err(err).Str("socket", flow.originConn.LocalAddr().String()).Msg("Failed to read from ICMP socket")
 		tracing.EndWithErrorStatus(span, err)
-		return false, err
+		return true
 	}
 	reply, err := parseReply(from, buf[:n])
 	if err != nil {
 		ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply")
 		tracing.EndWithErrorStatus(span, err)
-		return true, err
+		return false
 	}
 	if !isEchoReply(reply.msg) {
 		err := fmt.Errorf("Expect ICMP echo reply, got %s", reply.msg.Type)
 		ip.logger.Debug().Str("dst", from.String()).Msgf("Drop ICMP %s from reply", reply.msg.Type)
 		tracing.EndWithErrorStatus(span, err)
-		return true, err
+		return false
 	}
-	span.SetAttributes(
-		attribute.String("dst", reply.from.String()),
-		attribute.Int("echoID", reply.echo.ID),
-		attribute.Int("seq", reply.echo.Seq),
-	)
+
 	if err := flow.returnToSrc(reply); err != nil {
-		ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
+		ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 		tracing.EndWithErrorStatus(span, err)
-		return true, err
+		return false
 	}
+
+	observeICMPReply(ip.logger, span, from.String(), reply.echo.ID, reply.echo.Seq)
 	tracing.End(span)
-	return true, nil
+	return false
 }
 
 // Only linux uses flow3Tuple as FunnelID

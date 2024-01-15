@@ -71,6 +71,9 @@ github.com/facebookgo/grace/gracenet
 # github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568
 ## explicit
 github.com/flynn/go-shlex
+# github.com/fortytw2/leaktest v1.3.0
+## explicit
+github.com/fortytw2/leaktest
 # github.com/fsnotify/fsnotify v1.4.9
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify

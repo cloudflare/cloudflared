@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -23,9 +25,10 @@ import (
 )
 
 var (
-	noopLogger    = zerolog.Nop()
-	localhostIP   = netip.MustParseAddr("127.0.0.1")
-	localhostIPv6 = netip.MustParseAddr("::1")
+	noopLogger            = zerolog.Nop()
+	localhostIP           = netip.MustParseAddr("127.0.0.1")
+	localhostIPv6         = netip.MustParseAddr("::1")
+	testFunnelIdleTimeout = time.Millisecond * 10
 )
 
 // TestICMPProxyEcho makes sure we can send ICMP echo via the Request method and receives response via the
@@ -40,12 +43,14 @@ func TestICMPRouterEcho(t *testing.T) {
 }
 
 func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
+	defer leaktest.Check(t)()
+
 	const (
 		echoID = 36571
 		endSeq = 20
 	)
 
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -97,14 +102,19 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 			validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
 		}
 	}
+
+	// Make sure funnel cleanup kicks in
+	time.Sleep(testFunnelIdleTimeout * 2)
 	cancel()
 	<-proxyDone
 }
 
 func TestTraceICMPRouterEcho(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	tracingCtx := "ec31ad8a01fde11fdcabe2efdce36873:52726f6cabc144f5:0:1"
 
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -196,6 +206,7 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 	default:
 	}
 
+	time.Sleep(testFunnelIdleTimeout * 2)
 	cancel()
 	<-proxyDone
 }
@@ -203,12 +214,14 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 // TestConcurrentRequests makes sure icmpRouter can send concurrent requests to the same destination with different
 // echo ID. This simulates concurrent ping to the same destination.
 func TestConcurrentRequestsToSameDst(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	const (
 		concurrentPings = 5
 		endSeq          = 5
 	)
 
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -282,12 +295,16 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+
+	time.Sleep(testFunnelIdleTimeout * 2)
 	cancel()
 	<-proxyDone
 }
 
 // TestICMPProxyRejectNotEcho makes sure it rejects messages other than echo
 func TestICMPRouterRejectNotEcho(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	msgs := []icmp.Message{
 		{
 			Type: ipv4.ICMPTypeDestinationUnreachable,
@@ -341,7 +358,7 @@ func TestICMPRouterRejectNotEcho(t *testing.T) {
 }
 
 func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.Message) {
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	muxer := newMockMuxer(1)
