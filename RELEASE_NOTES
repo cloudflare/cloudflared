@@ -1,3 +1,7 @@
+2024.1.3
+- 2024-01-15 TUN-8161: Fix broken ARM build for armv6
+- 2024-01-15 TUN-8158: Add logging to confirm when ICMP reply is returned to the edge
+
 2024.1.2
 - 2024-01-11 TUN-8147: Disable ECN usage due to bugs in detecting if supported
 - 2024-01-11 TUN-8146: Fix export path for install-go command
