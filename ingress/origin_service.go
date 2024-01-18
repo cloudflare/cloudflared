@@ -68,9 +68,10 @@ func (o unixSocketPath) MarshalJSON() ([]byte, error) {
 }
 
 type httpService struct {
-	url        *url.URL
-	hostHeader string
-	transport  *http.Transport
+	url            *url.URL
+	hostHeader     string
+	transport      *http.Transport
+	matchSNIToHost bool
 }
 
 func (o *httpService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
@@ -80,6 +81,7 @@ func (o *httpService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRe
 	}
 	o.hostHeader = cfg.HTTPHostHeader
 	o.transport = transport
+	o.matchSNIToHost = cfg.MatchSNIToHost
 	return nil
 }
 
