@@ -107,7 +107,10 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
-	observeICMPRequest(ip.logger, span, pk.Src.String(), pk.Dst.String(), originalEcho.ID, originalEcho.Seq)
+	span.SetAttributes(
+		attribute.Int("originalEchoID", originalEcho.ID),
+		attribute.Int("seq", originalEcho.Seq),
+	)
 
 	shouldReplaceFunnelFunc := createShouldReplaceFunnelFunc(ip.logger, responder.datagramMuxer, pk, originalEcho.ID)
 	newFunnelFunc := func() (packet.Funnel, error) {
@@ -196,10 +199,6 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 
 	n, from, err := flow.originConn.ReadFrom(buf)
 	if err != nil {
-		if flow.IsClosed() {
-			tracing.EndWithErrorStatus(span, fmt.Errorf("flow was closed"))
-			return false, nil
-		}
 		tracing.EndWithErrorStatus(span, err)
 		return false, err
 	}
@@ -215,14 +214,16 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 		tracing.EndWithErrorStatus(span, err)
 		return true, err
 	}
-
+	span.SetAttributes(
+		attribute.String("dst", reply.from.String()),
+		attribute.Int("echoID", reply.echo.ID),
+		attribute.Int("seq", reply.echo.Seq),
+	)
 	if err := flow.returnToSrc(reply); err != nil {
-		ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
+		ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 		tracing.EndWithErrorStatus(span, err)
 		return true, err
 	}
-
-	observeICMPReply(ip.logger, span, from.String(), reply.echo.ID, reply.echo.Seq)
 	tracing.End(span)
 	return true, nil
 }

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"sync/atomic"
 
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
@@ -47,7 +46,6 @@ type flow3Tuple struct {
 type icmpEchoFlow struct {
 	*packet.ActivityTracker
 	closeCallback  func() error
-	closed         *atomic.Bool
 	src            netip.Addr
 	originConn     *icmp.PacketConn
 	responder      *packetResponder
@@ -61,7 +59,6 @@ func newICMPEchoFlow(src netip.Addr, closeCallback func() error, originConn *icm
 	return &icmpEchoFlow{
 		ActivityTracker: packet.NewActivityTracker(),
 		closeCallback:   closeCallback,
-		closed:          &atomic.Bool{},
 		src:             src,
 		originConn:      originConn,
 		responder:       responder,
@@ -89,12 +86,7 @@ func (ief *icmpEchoFlow) Equal(other packet.Funnel) bool {
 }
 
 func (ief *icmpEchoFlow) Close() error {
-	ief.closed.Store(true)
 	return ief.closeCallback()
-}
-
-func (ief *icmpEchoFlow) IsClosed() bool {
-	return ief.closed.Load()
 }
 
 // sendToDst rewrites the echo ID to the one assigned to this flow

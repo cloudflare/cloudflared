@@ -131,7 +131,7 @@ func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idle
 }
 
 func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
-	_, span := responder.requestSpan(ctx, pk)
+	ctx, span := responder.requestSpan(ctx, pk)
 	defer responder.exportSpan()
 
 	originalEcho, err := getICMPEcho(pk.Message)
@@ -139,8 +139,10 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
-	observeICMPRequest(ip.logger, span, pk.Src.String(), pk.Dst.String(), originalEcho.ID, originalEcho.Seq)
-
+	span.SetAttributes(
+		attribute.Int("originalEchoID", originalEcho.ID),
+		attribute.Int("seq", originalEcho.Seq),
+	)
 	echoIDTrackerKey := flow3Tuple{
 		srcIP:          pk.Src,
 		dstIP:          pk.Dst,
@@ -187,7 +189,6 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		tracing.EndWithErrorStatus(span, err)
 		return err
 	}
-
 	err = icmpFlow.sendToDst(pk.Dst, pk.Message)
 	if err != nil {
 		tracing.EndWithErrorStatus(span, err)
@@ -268,12 +269,15 @@ func (ip *icmpProxy) sendReply(ctx context.Context, reply *echoReply) error {
 	_, span := icmpFlow.responder.replySpan(ctx, ip.logger)
 	defer icmpFlow.responder.exportSpan()
 
+	span.SetAttributes(
+		attribute.String("dst", reply.from.String()),
+		attribute.Int("echoID", reply.echo.ID),
+		attribute.Int("seq", reply.echo.Seq),
+		attribute.Int("originalEchoID", icmpFlow.originalEchoID),
+	)
 	if err := icmpFlow.returnToSrc(reply); err != nil {
 		tracing.EndWithErrorStatus(span, err)
-		return err
 	}
-	observeICMPReply(ip.logger, span, reply.from.String(), reply.echo.ID, reply.echo.Seq)
-	span.SetAttributes(attribute.Int("originalEchoID", icmpFlow.originalEchoID))
 	tracing.End(span)
 	return nil
 }
