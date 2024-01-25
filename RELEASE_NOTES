@@ -1,3 +1,7 @@
+2024.1.5
+- 2024-01-22 TUN-8176: Support ARM platforms that don't have an FPU or have it enabled in kernel
+- 2024-01-15 TUN-8158: Bring back commit e6537418859afcac29e56a39daa08bcabc09e048 and fixes infinite loop on linux when the socket is closed
+
 2024.1.4
 - 2024-01-19 Revert "TUN-8158: Add logging to confirm when ICMP reply is returned to the edge"
 
