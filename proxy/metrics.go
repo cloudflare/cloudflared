@@ -59,6 +59,23 @@ var (
 			Help:      "Total count of TCP sessions that have been proxied to any origin",
 		},
 	)
+	connectLatency = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: connection.MetricsNamespace,
+			Subsystem: "proxy",
+			Name:      "connect_latency",
+			Help:      "Time it takes to establish and acknowledge connections in milliseconds",
+			Buckets:   []float64{1, 10, 25, 50, 100, 500, 1000, 5000},
+		},
+	)
+	connectStreamErrors = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: connection.MetricsNamespace,
+			Subsystem: "proxy",
+			Name:      "connect_streams_errors",
+			Help:      "Total count of failure to establish and acknowledge connections",
+		},
+	)
 )
 
 func init() {
@@ -69,6 +86,8 @@ func init() {
 		requestErrors,
 		activeTCPSessions,
 		totalTCPSessions,
+		connectLatency,
+		connectStreamErrors,
 	)
 }
 
