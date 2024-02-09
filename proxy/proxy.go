@@ -140,11 +140,12 @@ func (p *Proxy) ProxyHTTP(
 			return fmt.Errorf("response writer is not a flusher")
 		}
 		rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
-		connectedLogger := p.log.Debug().
+		logger := p.log.With().
 			Int(management.EventTypeKey, int(management.HTTP)).
 			Str(LogFieldDestAddr, dest).
-			Uint8(LogFieldConnIndex, tr.ConnIndex)
-		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, originProxy, connectedLogger); err != nil {
+			Uint8(LogFieldConnIndex, tr.ConnIndex).
+			Logger()
+		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, originProxy, logger); err != nil {
 			rule, srv := ruleField(p.ingressRules, ruleNum)
 			p.logRequestError(err, cfRay, "", rule, srv)
 			return err
@@ -178,22 +179,21 @@ func (p *Proxy) ProxyTCP(
 
 	tracedCtx := tracing.NewTracedContext(serveCtx, req.CfTraceID, p.log)
 
-	debugLogger := func() *zerolog.Event {
-		return p.log.Debug().
-			Int(management.EventTypeKey, int(management.TCP)).
-			Str(LogFieldFlowID, req.FlowID).
-			Str(LogFieldDestAddr, req.Dest).
-			Uint8(LogFieldConnIndex, req.ConnIndex)
-	}
+	logger := p.log.With().
+		Int(management.EventTypeKey, int(management.TCP)).
+		Str(LogFieldFlowID, req.FlowID).
+		Str(LogFieldDestAddr, req.Dest).
+		Uint8(LogFieldConnIndex, req.ConnIndex).
+		Logger()
 
-	debugLogger().Msg("tcp proxy stream started")
+	logger.Debug().Msg("tcp proxy stream started")
 
-	if err := p.proxyStream(tracedCtx, rwa, req.Dest, p.warpRouting.Proxy, debugLogger()); err != nil {
+	if err := p.proxyStream(tracedCtx, rwa, req.Dest, p.warpRouting.Proxy, logger); err != nil {
 		p.logRequestError(err, req.CFRay, req.FlowID, "", ingress.ServiceWarpRouting)
 		return err
 	}
 
-	debugLogger().Msg("tcp proxy stream finished successfully")
+	logger.Debug().Msg("tcp proxy stream finished successfully")
 
 	return nil
 }
@@ -303,7 +303,7 @@ func (p *Proxy) proxyStream(
 	rwa connection.ReadWriteAcker,
 	dest string,
 	connectionProxy ingress.StreamBasedOriginProxy,
-	connectedLogger *zerolog.Event,
+	logger zerolog.Logger,
 ) error {
 	ctx := tr.Context
 	_, connectSpan := tr.Tracer().Start(ctx, "stream-connect")
@@ -317,6 +317,7 @@ func (p *Proxy) proxyStream(
 	}
 	connectSpan.End()
 	defer originConn.Close()
+	logger.Debug().Msg("origin connection established")
 
 	encodedSpans := tr.GetSpans()
 
@@ -326,7 +327,7 @@ func (p *Proxy) proxyStream(
 	}
 
 	connectLatency.Observe(float64(time.Since(start).Milliseconds()))
-	connectedLogger.Msg("proxy stream established")
+	logger.Debug().Msg("proxy stream acknowledged")
 
 	originConn.Stream(ctx, rwa, p.log)
 	return nil
