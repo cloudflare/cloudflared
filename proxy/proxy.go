@@ -51,6 +51,7 @@ func NewOriginProxy(
 	ingressRules ingress.Ingress,
 	warpRouting ingress.WarpRoutingConfig,
 	tags []tunnelpogs.Tag,
+	writeTimeout time.Duration,
 	log *zerolog.Logger,
 ) *Proxy {
 	proxy := &Proxy{
@@ -59,7 +60,7 @@ func NewOriginProxy(
 		log:          log,
 	}
 
-	proxy.warpRouting = ingress.NewWarpRoutingService(warpRouting)
+	proxy.warpRouting = ingress.NewWarpRoutingService(warpRouting, writeTimeout)
 
 	return proxy
 }
@@ -309,7 +310,7 @@ func (p *Proxy) proxyStream(
 	_, connectSpan := tr.Tracer().Start(ctx, "stream-connect")
 
 	start := time.Now()
-	originConn, err := connectionProxy.EstablishConnection(ctx, dest)
+	originConn, err := connectionProxy.EstablishConnection(ctx, dest, &logger)
 	if err != nil {
 		connectStreamErrors.Inc()
 		tracing.EndWithErrorStatus(connectSpan, err)

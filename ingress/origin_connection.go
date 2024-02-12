@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -31,15 +32,32 @@ func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn, log *ze
 
 // tcpConnection is an OriginConnection that directly streams to raw TCP.
 type tcpConnection struct {
-	conn net.Conn
+	net.Conn
+	writeTimeout time.Duration
+	logger       *zerolog.Logger
 }
 
-func (tc *tcpConnection) Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger) {
-	stream.Pipe(tunnelConn, tc.conn, log)
+func (tc *tcpConnection) Stream(_ context.Context, tunnelConn io.ReadWriter, _ *zerolog.Logger) {
+	stream.Pipe(tunnelConn, tc, tc.logger)
+}
+
+func (tc *tcpConnection) Write(b []byte) (int, error) {
+	if tc.writeTimeout > 0 {
+		if err := tc.Conn.SetWriteDeadline(time.Now().Add(tc.writeTimeout)); err != nil {
+			tc.logger.Err(err).Msg("Error setting write deadline for TCP connection")
+		}
+	}
+
+	nBytes, err := tc.Conn.Write(b)
+	if err != nil {
+		tc.logger.Err(err).Msg("Error writing to the TCP connection")
+	}
+
+	return nBytes, err
 }
 
 func (tc *tcpConnection) Close() {
-	tc.conn.Close()
+	tc.Conn.Close()
 }
 
 // tcpOverWSConnection is an OriginConnection that streams to TCP over WS.

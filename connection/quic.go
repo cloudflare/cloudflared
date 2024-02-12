@@ -66,6 +66,7 @@ type QUICConnection struct {
 	connIndex            uint8
 
 	udpUnregisterTimeout time.Duration
+	streamWriteTimeout   time.Duration
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -82,6 +83,7 @@ func NewQUICConnection(
 	logger *zerolog.Logger,
 	packetRouterConfig *ingress.GlobalRouterConfig,
 	udpUnregisterTimeout time.Duration,
+	streamWriteTimeout time.Duration,
 ) (*QUICConnection, error) {
 	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, logger)
 	if err != nil {
@@ -117,6 +119,7 @@ func NewQUICConnection(
 		connOptions:          connOptions,
 		connIndex:            connIndex,
 		udpUnregisterTimeout: udpUnregisterTimeout,
+		streamWriteTimeout:   streamWriteTimeout,
 	}, nil
 }
 
@@ -195,7 +198,7 @@ func (q *QUICConnection) acceptStream(ctx context.Context) error {
 
 func (q *QUICConnection) runStream(quicStream quic.Stream) {
 	ctx := quicStream.Context()
-	stream := quicpogs.NewSafeStreamCloser(quicStream)
+	stream := quicpogs.NewSafeStreamCloser(quicStream, q.streamWriteTimeout, q.logger)
 	defer stream.Close()
 
 	// we are going to fuse readers/writers from stream <- cloudflared -> origin, and we want to guarantee that
@@ -373,7 +376,7 @@ func (q *QUICConnection) closeUDPSession(ctx context.Context, sessionID uuid.UUI
 		return
 	}
 
-	stream := quicpogs.NewSafeStreamCloser(quicStream)
+	stream := quicpogs.NewSafeStreamCloser(quicStream, q.streamWriteTimeout, q.logger)
 	defer stream.Close()
 	rpcClientStream, err := quicpogs.NewRPCClientStream(ctx, stream, q.udpUnregisterTimeout, q.logger)
 	if err != nil {

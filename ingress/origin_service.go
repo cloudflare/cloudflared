@@ -94,15 +94,17 @@ func (o httpService) MarshalJSON() ([]byte, error) {
 // rawTCPService dials TCP to the destination specified by the client
 // It's used by warp routing
 type rawTCPService struct {
-	name   string
-	dialer net.Dialer
+	name         string
+	dialer       net.Dialer
+	writeTimeout time.Duration
+	logger       *zerolog.Logger
 }
 
 func (o *rawTCPService) String() string {
 	return o.name
 }
 
-func (o *rawTCPService) start(log *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
+func (o *rawTCPService) start(_ *zerolog.Logger, _ <-chan struct{}, _ OriginRequestConfig) error {
 	return nil
 }
 
@@ -285,13 +287,14 @@ type WarpRoutingService struct {
 	Proxy StreamBasedOriginProxy
 }
 
-func NewWarpRoutingService(config WarpRoutingConfig) *WarpRoutingService {
+func NewWarpRoutingService(config WarpRoutingConfig, writeTimeout time.Duration) *WarpRoutingService {
 	svc := &rawTCPService{
 		name: ServiceWarpRouting,
 		dialer: net.Dialer{
 			Timeout:   config.ConnectTimeout.Duration,
 			KeepAlive: config.TCPKeepAlive.Duration,
 		},
+		writeTimeout: writeTimeout,
 	}
 
 	return &WarpRoutingService{Proxy: svc}

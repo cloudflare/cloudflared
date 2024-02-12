@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/rs/zerolog"
 )
 
 // HTTPOriginProxy can be implemented by origin services that want to proxy http requests.
@@ -14,7 +16,7 @@ type HTTPOriginProxy interface {
 
 // StreamBasedOriginProxy can be implemented by origin services that want to proxy ws/TCP.
 type StreamBasedOriginProxy interface {
-	EstablishConnection(ctx context.Context, dest string) (OriginConnection, error)
+	EstablishConnection(ctx context.Context, dest string, log *zerolog.Logger) (OriginConnection, error)
 }
 
 // HTTPLocalProxy can be implemented by cloudflared services that want to handle incoming http requests.
@@ -62,19 +64,21 @@ func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func (o *rawTCPService) EstablishConnection(ctx context.Context, dest string) (OriginConnection, error) {
+func (o *rawTCPService) EstablishConnection(ctx context.Context, dest string, logger *zerolog.Logger) (OriginConnection, error) {
 	conn, err := o.dialer.DialContext(ctx, "tcp", dest)
 	if err != nil {
 		return nil, err
 	}
 
 	originConn := &tcpConnection{
-		conn: conn,
+		Conn:         conn,
+		writeTimeout: o.writeTimeout,
+		logger:       logger,
 	}
 	return originConn, nil
 }
 
-func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string) (OriginConnection, error) {
+func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string, _ *zerolog.Logger) (OriginConnection, error) {
 	var err error
 	if !o.isBastion {
 		dest = o.dest
@@ -92,6 +96,6 @@ func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string)
 
 }
 
-func (o *socksProxyOverWSService) EstablishConnection(_ctx context.Context, _dest string) (OriginConnection, error) {
+func (o *socksProxyOverWSService) EstablishConnection(_ context.Context, _ string, _ *zerolog.Logger) (OriginConnection, error) {
 	return o.conn, nil
 }

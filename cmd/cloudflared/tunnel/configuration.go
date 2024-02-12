@@ -247,6 +247,7 @@ func prepareTunnelConfig(
 		FeatureSelector:             featureSelector,
 		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
 		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
+		WriteStreamTimeout:          c.Duration(writeStreamTimeout),
 		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),
 	}
 	packetConfig, err := newPacketConfig(c, log)
@@ -259,6 +260,7 @@ func prepareTunnelConfig(
 		Ingress:            &ingressRules,
 		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
 		ConfigurationFlags: parseConfigFlags(c),
+		WriteTimeout:       c.Duration(writeStreamTimeout),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }

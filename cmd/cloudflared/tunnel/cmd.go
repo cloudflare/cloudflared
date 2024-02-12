@@ -81,6 +81,9 @@ const (
 	// udpUnregisterSessionTimeout is how long we wait before we stop trying to unregister a UDP session from the edge
 	udpUnregisterSessionTimeoutFlag = "udp-unregister-session-timeout"
 
+	// writeStreamTimeout sets if we should have a timeout when writing data to a stream towards the destination (edge/origin).
+	writeStreamTimeout = "write-stream-timeout"
+
 	// quicDisablePathMTUDiscovery sets if QUIC should not perform PTMU discovery and use a smaller (safe) packet size.
 	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	// Note that this may result in packet drops for UDP proxying, since we expect being able to send at least 1280 bytes of inner packets.
@@ -695,6 +698,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:   udpUnregisterSessionTimeoutFlag,
 			Value:  5 * time.Second,
 			Hidden: true,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    writeStreamTimeout,
+			EnvVars: []string{"TUNNEL_STREAM_WRITE_TIMEOUT"},
+			Usage:   "Use this option to add a stream write timeout for connections when writing towards the origin or edge. Default is 0 which disables the write timeout.",
+			Value:   0 * time.Second,
+			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    quicDisablePathMTUDiscovery,
