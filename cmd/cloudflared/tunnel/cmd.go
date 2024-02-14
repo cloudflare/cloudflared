@@ -790,7 +790,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    "management-diagnostics",
 			Usage:   "Enables the in-depth diagnostic routes to be made available over the management service (/debug/pprof, /metrics, etc.)",
 			EnvVars: []string{"TUNNEL_MANAGEMENT_DIAGNOSTICS"},
-			Value:   false,
+			Value:   true,
 		}),
 		selectProtocolFlag,
 		overwriteDNSFlag,
