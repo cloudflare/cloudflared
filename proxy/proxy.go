@@ -272,7 +272,7 @@ func (p *Proxy) proxyStream(
 	_, connectSpan := tr.Tracer().Start(ctx, "stream-connect")
 
 	start := time.Now()
-	originConn, err := connectionProxy.EstablishConnection(ctx, dest, &logger)
+	originConn, err := connectionProxy.EstablishConnection(ctx, dest, logger)
 	if err != nil {
 		connectStreamErrors.Inc()
 		tracing.EndWithErrorStatus(connectSpan, err)
