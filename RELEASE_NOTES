@@ -1,3 +1,12 @@
+2024.2.1
+- 2024-02-20 TUN-8242: Update Changes.md file with new remote diagnostics behaviour
+- 2024-02-19 TUN-8238: Fix type mismatch introduced by fast-forward
+- 2024-02-16 TUN-8243: Collect metrics on the number of QUIC frames sent/received
+- 2024-02-15 TUN-8238: Refactor proxy logging
+- 2024-02-14 TUN-8242: Enable remote diagnostics by default
+- 2024-02-12 TUN-8236: Add write timeout to quic and tcp connections
+- 2024-02-09 TUN-8224: Fix safety of TCP stream logging, separate connect and ack log messages
+
 2024.2.0
 - 2024-02-07 TUN-8224: Count and collect metrics on stream connect successes/errors
 
