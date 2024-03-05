@@ -11,6 +11,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// The error that is throw by the writer when there is `no network activity`.
+var idleTimeoutError = quic.IdleTimeoutError{}
+
 type SafeStreamCloser struct {
 	lock         sync.Mutex
 	stream       quic.Stream
@@ -52,7 +55,10 @@ func (s *SafeStreamCloser) handleTimeout(err error) {
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		if netErr.Timeout() {
-			s.log.Error().Err(netErr).Msg("Closing quic stream due to timeout while writing")
+			// We don't need to log if what cause the timeout was `no network activity`.
+			if !errors.Is(netErr, &idleTimeoutError) {
+				s.log.Error().Err(netErr).Msg("Closing quic stream due to timeout while writing")
+			}
 			s.stream.CancelWrite(0)
 		}
 	}
