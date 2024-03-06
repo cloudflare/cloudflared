@@ -502,7 +502,7 @@ func isFileThere(candidate string) bool {
 }
 
 // verifyTokenAtEdge checks for a token on disk, or generates a new one.
-// Then makes a request to to the origin with the token to ensure it is valid.
+// Then makes a request to the origin with the token to ensure it is valid.
 // Returns nil if token is valid.
 func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, log *zerolog.Logger) error {
 	headers := parseRequestHeaders(c.StringSlice(sshHeaderFlag))
