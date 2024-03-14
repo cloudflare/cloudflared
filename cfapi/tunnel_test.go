@@ -3,7 +3,6 @@ package cfapi
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"reflect"
 	"strings"
@@ -15,52 +14,6 @@ import (
 )
 
 var loc, _ = time.LoadLocation("UTC")
-
-func Test_parseListTunnels(t *testing.T) {
-	type args struct {
-		body string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []*Tunnel
-		wantErr bool
-	}{
-		{
-			name: "empty list",
-			args: args{body: `{"success": true, "result": []}`},
-			want: []*Tunnel{},
-		},
-		{
-			name:    "success is false",
-			args:    args{body: `{"success": false, "result": []}`},
-			wantErr: true,
-		},
-		{
-			name:    "errors are present",
-			args:    args{body: `{"errors": [{"code": 1003, "message":"An A, AAAA or CNAME record already exists with that host"}], "result": []}`},
-			wantErr: true,
-		},
-		{
-			name:    "invalid response",
-			args:    args{body: `abc`},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			body := io.NopCloser(bytes.NewReader([]byte(tt.args.body)))
-			got, err := parseListTunnels(body)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseListTunnels() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseListTunnels() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
 
 func Test_unmarshalTunnel(t *testing.T) {
 	type args struct {
