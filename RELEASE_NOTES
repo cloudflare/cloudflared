@@ -1,3 +1,15 @@
+2024.3.0
+- 2024-03-14 TUN-8281: Run cloudflared query list tunnels/routes endpoint in a paginated way
+- 2024-03-13 TUN-8297: Improve write timeout logging on safe_stream.go
+- 2024-03-07 TUN-8290: Remove `|| true` from postrm.sh
+- 2024-03-05 TUN-8275: Skip write timeout log on "no network activity"
+- 2024-01-23 Update postrm.sh to fix incomplete uninstall
+- 2024-01-05 fix typo in errcheck for response parsing logic in CreateTunnel routine
+- 2023-12-23 Update linux_service.go
+- 2023-12-07 ci: bump actions/checkout to v4
+- 2023-12-07 ci/check: bump actions/setup-go to v5
+- 2023-04-28 check.yaml: bump actions/setup-go to v4
+
 2024.2.1
 - 2024-02-20 TUN-8242: Update Changes.md file with new remote diagnostics behaviour
 - 2024-02-19 TUN-8238: Fix type mismatch introduced by fast-forward
