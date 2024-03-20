@@ -131,6 +131,7 @@ func Commands() []*cli.Command {
 		buildVirtualNetworkSubcommand(false),
 		buildRunCommand(),
 		buildListCommand(),
+		buildHealthCommand(),
 		buildInfoCommand(),
 		buildIngressSubcommand(),
 		buildDeleteCommand(),
