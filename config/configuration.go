@@ -205,6 +205,8 @@ type OriginRequestConfig struct {
 	HTTPHostHeader *string `yaml:"httpHostHeader" json:"httpHostHeader,omitempty"`
 	// Hostname on the origin server certificate.
 	OriginServerName *string `yaml:"originServerName" json:"originServerName,omitempty"`
+	// Auto configure the Hostname on the origin server certificate.
+	MatchSNIToHost *bool `yaml:"matchSNItoHost" json:"matchSNItoHost,omitempty"`
 	// Path to the CA for the certificate of your origin.
 	// This option should be used only if your certificate is not signed by Cloudflare.
 	CAPool *string `yaml:"caPool" json:"caPool,omitempty"`
