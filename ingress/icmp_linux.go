@@ -78,19 +78,19 @@ func checkInPingGroup() error {
 	if err != nil {
 		return err
 	}
-	groupID := os.Getgid()
+	groupID := uint64(os.Getegid())
 	// Example content: 999	   59999
 	found := findGroupIDRegex.FindAll(file, 2)
 	if len(found) == 2 {
-		groupMin, err := strconv.ParseInt(string(found[0]), 10, 32)
+		groupMin, err := strconv.ParseUint(string(found[0]), 10, 32)
 		if err != nil {
 			return errors.Wrapf(err, "failed to determine minimum ping group ID")
 		}
-		groupMax, err := strconv.ParseInt(string(found[1]), 10, 32)
+		groupMax, err := strconv.ParseUint(string(found[1]), 10, 32)
 		if err != nil {
-			return errors.Wrapf(err, "failed to determine minimum ping group ID")
+			return errors.Wrapf(err, "failed to determine maximum ping group ID")
 		}
-		if groupID < int(groupMin) || groupID > int(groupMax) {
+		if groupID < groupMin || groupID > groupMax {
 			return fmt.Errorf("Group ID %d is not between ping group %d to %d", groupID, groupMin, groupMax)
 		}
 		return nil
