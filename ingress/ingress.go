@@ -24,6 +24,7 @@ var (
 	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all URLs (i.e. it should not have a hostname or path filter)")
 	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
 	errHostnameContainsPort       = errors.New("Hostname cannot contain a port")
+	errHostnameContainsScheme     = errors.New("Hostname cannot contain a scheme (e.g. http://, https://, etc.)")
 	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
@@ -359,6 +360,10 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 }
 
 func validateHostname(r config.UnvalidatedIngressRule, ruleIndex, totalRules int) error {
+	// Ensure the hostname doesn't contain a scheme so a less confusing error is returned.
+	if u, e := url.Parse(r.Hostname); e == nil && isHTTPService(u) {
+		return errHostnameContainsScheme
+	}
 	// Ensure that the hostname doesn't contain port
 	_, _, err := net.SplitHostPort(r.Hostname)
 	if err == nil {
