@@ -135,8 +135,8 @@ func Commands() []*cli.Command {
 							EnvVars: []string{"TUNNEL_SERVICE_HOSTNAME"},
 						},
 						&cli.StringFlag{
-							Name:  sshDestinationFlag,
-							Usage: "specify the destination address of your SSH server.",
+							Name:    sshDestinationFlag,
+							Usage:   "specify the destination address of your SSH server.",
 							EnvVars: []string{"TUNNEL_SERVICE_DESTINATION"},
 						},
 						&cli.StringFlag{
