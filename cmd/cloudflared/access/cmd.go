@@ -132,15 +132,18 @@ func Commands() []*cli.Command {
 							Name:    sshHostnameFlag,
 							Aliases: []string{"tunnel-host", "T"},
 							Usage:   "specify the hostname of your application.",
+							EnvVars: []string{"TUNNEL_SERVICE_HOSTNAME"},
 						},
 						&cli.StringFlag{
 							Name:  sshDestinationFlag,
 							Usage: "specify the destination address of your SSH server.",
+							EnvVars: []string{"TUNNEL_SERVICE_DESTINATION"},
 						},
 						&cli.StringFlag{
 							Name:    sshURLFlag,
 							Aliases: []string{"listener", "L"},
 							Usage:   "specify the host:port to forward data to Cloudflare edge.",
+							EnvVars: []string{"TUNNEL_SERVICE_URL"},
 						},
 						&cli.StringSliceFlag{
 							Name:    sshHeaderFlag,
