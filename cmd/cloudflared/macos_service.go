@@ -119,7 +119,7 @@ func installLaunchd(c *cli.Context) error {
 		log.Info().Msg("Installing cloudflared client as an user launch agent. " +
 			"Note that cloudflared client will only run when the user is logged in. " +
 			"If you want to run cloudflared client at boot, install with root permission. " +
-			"For more information, visit https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configure-tunnels/local-management/as-a-service")
+			"For more information, visit https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/configure-tunnels/local-management/as-a-service/macos/")
 	}
 	etPath, err := os.Executable()
 	if err != nil {
