@@ -8,12 +8,12 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sync"
 	"time"
 
-	jose "github.com/go-jose/go-jose/v3"
+	jose "github.com/go-jose/go-jose/v4"
 )
 
 // StaticKeySet is a verifier that validates JWT against a static set of public keys.
@@ -25,7 +25,9 @@ type StaticKeySet struct {
 
 // VerifySignature compares the signature against a static set of public keys.
 func (s *StaticKeySet) VerifySignature(ctx context.Context, jwt string) ([]byte, error) {
-	jws, err := jose.ParseSigned(jwt)
+	// Algorithms are already checked by Verifier, so this parse method accepts
+	// any algorithm.
+	jws, err := jose.ParseSigned(jwt, allAlgs)
 	if err != nil {
 		return nil, fmt.Errorf("parsing jwt: %v", err)
 	}
@@ -127,8 +129,13 @@ var parsedJWTKey contextKey
 func (r *RemoteKeySet) VerifySignature(ctx context.Context, jwt string) ([]byte, error) {
 	jws, ok := ctx.Value(parsedJWTKey).(*jose.JSONWebSignature)
 	if !ok {
+		// The algorithm values are already enforced by the Validator, which also sets
+		// the context value above to pre-parsed signature.
+		//
+		// Practically, this codepath isn't called in normal use of this package, but
+		// if it is, the algorithms have already been checked.
 		var err error
-		jws, err = jose.ParseSigned(jwt)
+		jws, err = jose.ParseSigned(jwt, allAlgs)
 		if err != nil {
 			return nil, fmt.Errorf("oidc: malformed jwt: %v", err)
 		}
@@ -159,7 +166,7 @@ func (r *RemoteKeySet) verify(ctx context.Context, jws *jose.JSONWebSignature) (
 	// https://openid.net/specs/openid-connect-core-1_0.html#RotateSigKeys
 	keys, err := r.keysFromRemote(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("fetching keys %v", err)
+		return nil, fmt.Errorf("fetching keys %w", err)
 	}
 
 	for _, key := range keys {
@@ -228,11 +235,11 @@ func (r *RemoteKeySet) updateKeys() ([]jose.JSONWebKey, error) {
 
 	resp, err := doRequest(r.ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("oidc: get keys failed %v", err)
+		return nil, fmt.Errorf("oidc: get keys failed %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read response body: %v", err)
 	}

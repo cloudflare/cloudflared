@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 	"strings"
@@ -79,7 +79,7 @@ func getClient(ctx context.Context) *http.Client {
 //	provider, err := oidc.NewProvider(ctx, discoveryBaseURL)
 //
 // This is insecure because validating the correct issuer is critical for multi-tenant
-// proivders. Any overrides here MUST be carefully reviewed.
+// providers. Any overrides here MUST be carefully reviewed.
 func InsecureIssuerURLContext(ctx context.Context, issuerURL string) context.Context {
 	return context.WithValue(ctx, issuerURLKey, issuerURL)
 }
@@ -94,12 +94,13 @@ func doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
 
 // Provider represents an OpenID Connect server's configuration.
 type Provider struct {
-	issuer      string
-	authURL     string
-	tokenURL    string
-	userInfoURL string
-	jwksURL     string
-	algorithms  []string
+	issuer        string
+	authURL       string
+	tokenURL      string
+	deviceAuthURL string
+	userInfoURL   string
+	jwksURL       string
+	algorithms    []string
 
 	// Raw claims returned by the server.
 	rawClaims []byte
@@ -128,12 +129,13 @@ func (p *Provider) remoteKeySet() KeySet {
 }
 
 type providerJSON struct {
-	Issuer      string   `json:"issuer"`
-	AuthURL     string   `json:"authorization_endpoint"`
-	TokenURL    string   `json:"token_endpoint"`
-	JWKSURL     string   `json:"jwks_uri"`
-	UserInfoURL string   `json:"userinfo_endpoint"`
-	Algorithms  []string `json:"id_token_signing_alg_values_supported"`
+	Issuer        string   `json:"issuer"`
+	AuthURL       string   `json:"authorization_endpoint"`
+	TokenURL      string   `json:"token_endpoint"`
+	DeviceAuthURL string   `json:"device_authorization_endpoint"`
+	JWKSURL       string   `json:"jwks_uri"`
+	UserInfoURL   string   `json:"userinfo_endpoint"`
+	Algorithms    []string `json:"id_token_signing_alg_values_supported"`
 }
 
 // supportedAlgorithms is a list of algorithms explicitly supported by this
@@ -165,6 +167,9 @@ type ProviderConfig struct {
 	// TokenURL is the endpoint used by the provider to support the OAuth 2.0
 	// token endpoint.
 	TokenURL string
+	// DeviceAuthURL is the endpoint used by the provider to support the OAuth 2.0
+	// device authorization endpoint.
+	DeviceAuthURL string
 	// UserInfoURL is the endpoint used by the provider to support the OpenID
 	// Connect UserInfo flow.
 	//
@@ -185,13 +190,14 @@ type ProviderConfig struct {
 // through discovery.
 func (p *ProviderConfig) NewProvider(ctx context.Context) *Provider {
 	return &Provider{
-		issuer:      p.IssuerURL,
-		authURL:     p.AuthURL,
-		tokenURL:    p.TokenURL,
-		userInfoURL: p.UserInfoURL,
-		jwksURL:     p.JWKSURL,
-		algorithms:  p.Algorithms,
-		client:      getClient(ctx),
+		issuer:        p.IssuerURL,
+		authURL:       p.AuthURL,
+		tokenURL:      p.TokenURL,
+		deviceAuthURL: p.DeviceAuthURL,
+		userInfoURL:   p.UserInfoURL,
+		jwksURL:       p.JWKSURL,
+		algorithms:    p.Algorithms,
+		client:        getClient(ctx),
 	}
 }
 
@@ -211,7 +217,7 @@ func NewProvider(ctx context.Context, issuer string) (*Provider, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read response body: %v", err)
 	}
@@ -240,14 +246,15 @@ func NewProvider(ctx context.Context, issuer string) (*Provider, error) {
 		}
 	}
 	return &Provider{
-		issuer:      issuerURL,
-		authURL:     p.AuthURL,
-		tokenURL:    p.TokenURL,
-		userInfoURL: p.UserInfoURL,
-		jwksURL:     p.JWKSURL,
-		algorithms:  algs,
-		rawClaims:   body,
-		client:      getClient(ctx),
+		issuer:        issuerURL,
+		authURL:       p.AuthURL,
+		tokenURL:      p.TokenURL,
+		deviceAuthURL: p.DeviceAuthURL,
+		userInfoURL:   p.UserInfoURL,
+		jwksURL:       p.JWKSURL,
+		algorithms:    algs,
+		rawClaims:     body,
+		client:        getClient(ctx),
 	}, nil
 }
 
@@ -273,7 +280,7 @@ func (p *Provider) Claims(v interface{}) error {
 
 // Endpoint returns the OAuth2 auth and token endpoints for the given provider.
 func (p *Provider) Endpoint() oauth2.Endpoint {
-	return oauth2.Endpoint{AuthURL: p.authURL, TokenURL: p.tokenURL}
+	return oauth2.Endpoint{AuthURL: p.authURL, DeviceAuthURL: p.deviceAuthURL, TokenURL: p.tokenURL}
 }
 
 // UserInfoEndpoint returns the OpenID Connect userinfo endpoint for the given
@@ -332,7 +339,7 @@ func (p *Provider) UserInfo(ctx context.Context, tokenSource oauth2.TokenSource)
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
