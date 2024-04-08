@@ -1,3 +1,10 @@
+2024.4.0
+- 2024-04-02 feat: provide short version (#1206)
+- 2024-04-02 Format code
+- 2024-01-18 feat: auto tls sni
+- 2023-12-24 fix checkInPingGroup bugs
+- 2023-12-15 Add environment variables for TCP tunnel hostname / destination / URL.
+
 2024.3.0
 - 2024-03-14 TUN-8281: Run cloudflared query list tunnels/routes endpoint in a paginated way
 - 2024-03-13 TUN-8297: Improve write timeout logging on safe_stream.go
