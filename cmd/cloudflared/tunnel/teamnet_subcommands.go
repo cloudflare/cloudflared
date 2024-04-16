@@ -32,7 +32,7 @@ func buildRouteIPSubcommand() *cli.Command {
 		UsageText: "cloudflared tunnel [--config FILEPATH] route COMMAND [arguments...]",
 		Description: `cloudflared can provision routes for any IP space in your corporate network. Users enrolled in
 your Cloudflare for Teams organization can reach those IPs through the Cloudflare WARP
-client. You can then configure L7/L4 filtering on https://dash.teams.cloudflare.com to
+client. You can then configure L7/L4 filtering on https://one.dash.cloudflare.com to
 determine who can reach certain routes.
 By default IP routes all exist within a single virtual network. If you use the same IP
 space(s) in different physical private networks, all meant to be reachable via IP routes,
