@@ -14,7 +14,7 @@ type CryptoFrame struct {
 	Data   []byte
 }
 
-func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, error) {
+func parseCryptoFrame(r *bytes.Reader, _ protocol.Version) (*CryptoFrame, error) {
 	frame := &CryptoFrame{}
 	offset, err := quicvarint.Read(r)
 	if err != nil {
@@ -38,7 +38,7 @@ func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, 
 	return frame, nil
 }
 
-func (f *CryptoFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *CryptoFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, cryptoFrameType)
 	b = quicvarint.Append(b, uint64(f.Offset))
 	b = quicvarint.Append(b, uint64(len(f.Data)))
@@ -47,7 +47,7 @@ func (f *CryptoFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error)
 }
 
 // Length of a written frame
-func (f *CryptoFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
+func (f *CryptoFrame) Length(_ protocol.Version) protocol.ByteCount {
 	return 1 + quicvarint.Len(uint64(f.Offset)) + quicvarint.Len(uint64(len(f.Data))) + protocol.ByteCount(len(f.Data))
 }
 
@@ -71,7 +71,7 @@ func (f *CryptoFrame) MaxDataLen(maxSize protocol.ByteCount) protocol.ByteCount 
 // The frame might not be split if:
 // * the size is large enough to fit the whole frame
 // * the size is too small to fit even a 1-byte frame. In that case, the frame returned is nil.
-func (f *CryptoFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version protocol.VersionNumber) (*CryptoFrame, bool /* was splitting required */) {
+func (f *CryptoFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version protocol.Version) (*CryptoFrame, bool /* was splitting required */) {
 	if f.Length(version) <= maxSize {
 		return nil, false
 	}

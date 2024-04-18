@@ -18,7 +18,7 @@ type NewConnectionIDFrame struct {
 	StatelessResetToken protocol.StatelessResetToken
 }
 
-func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewConnectionIDFrame, error) {
+func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.Version) (*NewConnectionIDFrame, error) {
 	seq, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func parseNewConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewC
 	return frame, nil
 }
 
-func (f *NewConnectionIDFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *NewConnectionIDFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, newConnectionIDFrameType)
 	b = quicvarint.Append(b, f.SequenceNumber)
 	b = quicvarint.Append(b, f.RetirePriorTo)
@@ -72,6 +72,6 @@ func (f *NewConnectionIDFrame) Append(b []byte, _ protocol.VersionNumber) ([]byt
 }
 
 // Length of a written frame
-func (f *NewConnectionIDFrame) Length(protocol.VersionNumber) protocol.ByteCount {
+func (f *NewConnectionIDFrame) Length(protocol.Version) protocol.ByteCount {
 	return 1 + quicvarint.Len(f.SequenceNumber) + quicvarint.Len(f.RetirePriorTo) + 1 /* connection ID length */ + protocol.ByteCount(f.ConnectionID.Len()) + 16
 }

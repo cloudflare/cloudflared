@@ -1,22 +1,10 @@
 package qtls
 
 import (
-	"crypto"
-	"crypto/cipher"
 	"crypto/tls"
 	"fmt"
 	"unsafe"
 )
-
-type cipherSuiteTLS13 struct {
-	ID     uint16
-	KeyLen int
-	AEAD   func(key, fixedNonce []byte) cipher.AEAD
-	Hash   crypto.Hash
-}
-
-//go:linkname cipherSuiteTLS13ByID crypto/tls.cipherSuiteTLS13ByID
-func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
 
 //go:linkname cipherSuitesTLS13 crypto/tls.cipherSuitesTLS13
 var cipherSuitesTLS13 []unsafe.Pointer

@@ -101,8 +101,8 @@ func (e *HandshakeTimeoutError) Is(target error) bool { return target == net.Err
 
 // A VersionNegotiationError occurs when the client and the server can't agree on a QUIC version.
 type VersionNegotiationError struct {
-	Ours   []protocol.VersionNumber
-	Theirs []protocol.VersionNumber
+	Ours   []protocol.Version
+	Theirs []protocol.Version
 }
 
 func (e *VersionNegotiationError) Error() string {

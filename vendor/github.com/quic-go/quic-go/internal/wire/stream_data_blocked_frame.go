@@ -13,7 +13,7 @@ type StreamDataBlockedFrame struct {
 	MaximumStreamData protocol.ByteCount
 }
 
-func parseStreamDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*StreamDataBlockedFrame, error) {
+func parseStreamDataBlockedFrame(r *bytes.Reader, _ protocol.Version) (*StreamDataBlockedFrame, error) {
 	sid, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func parseStreamDataBlockedFrame(r *bytes.Reader, _ protocol.VersionNumber) (*St
 	}, nil
 }
 
-func (f *StreamDataBlockedFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *StreamDataBlockedFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, 0x15)
 	b = quicvarint.Append(b, uint64(f.StreamID))
 	b = quicvarint.Append(b, uint64(f.MaximumStreamData))
@@ -37,6 +37,6 @@ func (f *StreamDataBlockedFrame) Append(b []byte, _ protocol.VersionNumber) ([]b
 }
 
 // Length of a written frame
-func (f *StreamDataBlockedFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
+func (f *StreamDataBlockedFrame) Length(version protocol.Version) protocol.ByteCount {
 	return 1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.MaximumStreamData))
 }

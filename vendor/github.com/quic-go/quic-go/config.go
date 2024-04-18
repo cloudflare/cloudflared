@@ -2,7 +2,6 @@ package quic
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -47,16 +46,6 @@ func validateConfig(config *Config) error {
 		}
 	}
 	return nil
-}
-
-// populateServerConfig populates fields in the quic.Config with their default values, if none are set
-// it may be called with nil
-func populateServerConfig(config *Config) *Config {
-	config = populateConfig(config)
-	if config.RequireAddressValidation == nil {
-		config.RequireAddressValidation = func(net.Addr) bool { return false }
-	}
-	return config
 }
 
 // populateConfig populates fields in the quic.Config with their default values, if none are set
@@ -111,7 +100,6 @@ func populateConfig(config *Config) *Config {
 		Versions:                       versions,
 		HandshakeIdleTimeout:           handshakeIdleTimeout,
 		MaxIdleTimeout:                 idleTimeout,
-		RequireAddressValidation:       config.RequireAddressValidation,
 		KeepAlivePeriod:                config.KeepAlivePeriod,
 		InitialStreamReceiveWindow:     initialStreamReceiveWindow,
 		MaxStreamReceiveWindow:         maxStreamReceiveWindow,

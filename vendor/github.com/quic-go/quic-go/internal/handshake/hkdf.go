@@ -7,7 +7,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-// hkdfExpandLabel HKDF expands a label.
+// hkdfExpandLabel HKDF expands a label as defined in RFC 8446, section 7.1.
 // Since this implementation avoids using a cryptobyte.Builder, it is about 15% faster than the
 // hkdfExpandLabel in the standard library.
 func hkdfExpandLabel(hash crypto.Hash, secret, context []byte, label string, length int) []byte {

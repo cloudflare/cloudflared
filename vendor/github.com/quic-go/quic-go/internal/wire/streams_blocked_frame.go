@@ -14,7 +14,7 @@ type StreamsBlockedFrame struct {
 	StreamLimit protocol.StreamNum
 }
 
-func parseStreamsBlockedFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (*StreamsBlockedFrame, error) {
+func parseStreamsBlockedFrame(r *bytes.Reader, typ uint64, _ protocol.Version) (*StreamsBlockedFrame, error) {
 	f := &StreamsBlockedFrame{}
 	switch typ {
 	case bidiStreamBlockedFrameType:
@@ -33,7 +33,7 @@ func parseStreamsBlockedFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNum
 	return f, nil
 }
 
-func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
 		b = append(b, bidiStreamBlockedFrameType)
@@ -45,6 +45,6 @@ func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte
 }
 
 // Length of a written frame
-func (f *StreamsBlockedFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
+func (f *StreamsBlockedFrame) Length(_ protocol.Version) protocol.ByteCount {
 	return 1 + quicvarint.Len(uint64(f.StreamLimit))
 }

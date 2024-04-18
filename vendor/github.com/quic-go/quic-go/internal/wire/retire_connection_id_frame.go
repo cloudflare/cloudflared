@@ -12,7 +12,7 @@ type RetireConnectionIDFrame struct {
 	SequenceNumber uint64
 }
 
-func parseRetireConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*RetireConnectionIDFrame, error) {
+func parseRetireConnectionIDFrame(r *bytes.Reader, _ protocol.Version) (*RetireConnectionIDFrame, error) {
 	seq, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
@@ -20,13 +20,13 @@ func parseRetireConnectionIDFrame(r *bytes.Reader, _ protocol.VersionNumber) (*R
 	return &RetireConnectionIDFrame{SequenceNumber: seq}, nil
 }
 
-func (f *RetireConnectionIDFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *RetireConnectionIDFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, retireConnectionIDFrameType)
 	b = quicvarint.Append(b, f.SequenceNumber)
 	return b, nil
 }
 
 // Length of a written frame
-func (f *RetireConnectionIDFrame) Length(protocol.VersionNumber) protocol.ByteCount {
+func (f *RetireConnectionIDFrame) Length(protocol.Version) protocol.ByteCount {
 	return 1 + quicvarint.Len(f.SequenceNumber)
 }

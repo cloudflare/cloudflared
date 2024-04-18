@@ -40,7 +40,7 @@ var (
 )
 
 // GetRetryIntegrityTag calculates the integrity tag on a Retry packet
-func GetRetryIntegrityTag(retry []byte, origDestConnID protocol.ConnectionID, version protocol.VersionNumber) *[16]byte {
+func GetRetryIntegrityTag(retry []byte, origDestConnID protocol.ConnectionID, version protocol.Version) *[16]byte {
 	retryMutex.Lock()
 	defer retryMutex.Unlock()
 

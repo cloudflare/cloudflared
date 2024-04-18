@@ -11,8 +11,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
+	"go/token"
 	"strings"
 
 	"go.uber.org/mock/mockgen/model"
@@ -98,6 +100,16 @@ func (p *fileParser) parseGenericMethod(field *ast.Field, it *namedInterface, if
 	case *ast.IndexListExpr:
 		indices = v.Indices
 		typ = v.X
+	case *ast.UnaryExpr:
+		if v.Op == token.TILDE {
+			return nil, errConstraintInterface
+		}
+		return nil, fmt.Errorf("~T may only appear as constraint for %T", field.Type)
+	case *ast.BinaryExpr:
+		if v.Op == token.OR {
+			return nil, errConstraintInterface
+		}
+		return nil, fmt.Errorf("A|B may only appear as constraint for %T", field.Type)
 	default:
 		return nil, fmt.Errorf("don't know how to mock method of type %T", field.Type)
 	}
@@ -114,3 +126,5 @@ func (p *fileParser) parseGenericMethod(field *ast.Field, it *namedInterface, if
 
 	return p.parseMethod(nf, it, iface, pkg, tps)
 }
+
+var errConstraintInterface = errors.New("interface contains constraints")
