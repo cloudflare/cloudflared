@@ -324,6 +324,7 @@ func (q *QUICConnection) RegisterUdpSession(ctx context.Context, sessionID uuid.
 
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
+		originProxy.Close()
 		log.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
