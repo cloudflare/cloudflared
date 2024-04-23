@@ -398,10 +398,10 @@ func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected boo
 	return strings.Join(output, ", ")
 }
 
-func buildHealthCommand() *cli.Command {
+func buildReadyCommand() *cli.Command {
 	return &cli.Command{
 		Name:               "health",
-		Action:             cliutil.ConfiguredAction(healthCommand),
+		Action:             cliutil.ConfiguredAction(readyCommand),
 		Usage:              "Tunnel health exit code",
 		UsageText:          "cloudflared tunnel [tunnel command options] health [subcommand options]",
 		Description:        "cloudflared tunnel health will return proper exit code if tunnel is healthy or unhealthy",
@@ -410,8 +410,8 @@ func buildHealthCommand() *cli.Command {
 	}
 }
 
-func healthCommand(c *cli.Context) error {
-	requestURL := fmt.Sprintf("http://%s/healthcheck", c.String("metrics"))
+func readyCommand(c *cli.Context) error {
+	requestURL := fmt.Sprintf("http://%s/ready", c.String("metrics"))
 	res, err := http.Get(requestURL)
 	if err != nil {
 		return err
