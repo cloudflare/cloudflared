@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,8 @@ import (
 )
 
 func TestFunnelIdleTimeout(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	const (
 		idleTimeout = time.Second
 		echoID      = 42573
@@ -73,13 +76,16 @@ func TestFunnelIdleTimeout(t *testing.T) {
 	require.NoError(t, proxy.Request(ctx, &pk, &newResponder))
 	validateEchoFlow(t, <-newMuxer.cfdToEdge, &pk)
 
+	time.Sleep(idleTimeout * 2)
 	cancel()
 	<-proxyDone
 }
 
 func TestReuseFunnel(t *testing.T) {
+	defer leaktest.Check(t)()
+
 	const (
-		idleTimeout = time.Second
+		idleTimeout = time.Millisecond * 100
 		echoID      = 42573
 		startSeq    = 8129
 	)
@@ -134,6 +140,8 @@ func TestReuseFunnel(t *testing.T) {
 	funnel2, found := getFunnel(t, proxy, tuple)
 	require.True(t, found)
 	require.Equal(t, funnel1, funnel2)
+
+	time.Sleep(idleTimeout * 2)
 
 	cancel()
 	<-proxyDone

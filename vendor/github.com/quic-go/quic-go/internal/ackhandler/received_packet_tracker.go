@@ -9,40 +9,19 @@ import (
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
-// number of ack-eliciting packets received before sending an ack.
-const packetsBeforeAck = 2
-
+// The receivedPacketTracker tracks packets for the Initial and Handshake packet number space.
+// Every received packet is acknowledged immediately.
 type receivedPacketTracker struct {
-	largestObserved         protocol.PacketNumber
-	ignoreBelow             protocol.PacketNumber
-	largestObservedRcvdTime time.Time
-	ect0, ect1, ecnce       uint64
+	ect0, ect1, ecnce uint64
 
-	packetHistory *receivedPacketHistory
+	packetHistory receivedPacketHistory
 
-	maxAckDelay time.Duration
-	rttStats    *utils.RTTStats
-
+	lastAck   *wire.AckFrame
 	hasNewAck bool // true as soon as we received an ack-eliciting new packet
-	ackQueued bool // true once we received more than 2 (or later in the connection 10) ack-eliciting packets
-
-	ackElicitingPacketsReceivedSinceLastAck int
-	ackAlarm                                time.Time
-	lastAck                                 *wire.AckFrame
-
-	logger utils.Logger
 }
 
-func newReceivedPacketTracker(
-	rttStats *utils.RTTStats,
-	logger utils.Logger,
-) *receivedPacketTracker {
-	return &receivedPacketTracker{
-		packetHistory: newReceivedPacketHistory(),
-		maxAckDelay:   protocol.MaxAckDelay,
-		rttStats:      rttStats,
-		logger:        logger,
-	}
+func newReceivedPacketTracker() *receivedPacketTracker {
+	return &receivedPacketTracker{packetHistory: *newReceivedPacketHistory()}
 }
 
 func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, ackEliciting bool) error {
@@ -50,16 +29,6 @@ func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn pro
 		return fmt.Errorf("recevedPacketTracker BUG: ReceivedPacket called for old / duplicate packet %d", pn)
 	}
 
-	isMissing := h.isMissing(pn)
-	if pn >= h.largestObserved {
-		h.largestObserved = pn
-		h.largestObservedRcvdTime = rcvTime
-	}
-
-	if ackEliciting {
-		h.hasNewAck = true
-		h.maybeQueueACK(pn, rcvTime, ecn, isMissing)
-	}
 	//nolint:exhaustive // Only need to count ECT(0), ECT(1) and ECN-CE.
 	switch ecn {
 	case protocol.ECT0:
@@ -69,12 +38,99 @@ func (h *receivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn pro
 	case protocol.ECNCE:
 		h.ecnce++
 	}
+	if !ackEliciting {
+		return nil
+	}
+	h.hasNewAck = true
+	return nil
+}
+
+func (h *receivedPacketTracker) GetAckFrame() *wire.AckFrame {
+	if !h.hasNewAck {
+		return nil
+	}
+
+	// This function always returns the same ACK frame struct, filled with the most recent values.
+	ack := h.lastAck
+	if ack == nil {
+		ack = &wire.AckFrame{}
+	}
+	ack.Reset()
+	ack.ECT0 = h.ect0
+	ack.ECT1 = h.ect1
+	ack.ECNCE = h.ecnce
+	ack.AckRanges = h.packetHistory.AppendAckRanges(ack.AckRanges)
+
+	h.lastAck = ack
+	h.hasNewAck = false
+	return ack
+}
+
+func (h *receivedPacketTracker) IsPotentiallyDuplicate(pn protocol.PacketNumber) bool {
+	return h.packetHistory.IsPotentiallyDuplicate(pn)
+}
+
+// number of ack-eliciting packets received before sending an ACK
+const packetsBeforeAck = 2
+
+// The appDataReceivedPacketTracker tracks packets received in the Application Data packet number space.
+// It waits until at least 2 packets were received before queueing an ACK, or until the max_ack_delay was reached.
+type appDataReceivedPacketTracker struct {
+	receivedPacketTracker
+
+	largestObservedRcvdTime time.Time
+
+	largestObserved protocol.PacketNumber
+	ignoreBelow     protocol.PacketNumber
+
+	maxAckDelay time.Duration
+	ackQueued   bool // true if we need send a new ACK
+
+	ackElicitingPacketsReceivedSinceLastAck int
+	ackAlarm                                time.Time
+
+	logger utils.Logger
+}
+
+func newAppDataReceivedPacketTracker(logger utils.Logger) *appDataReceivedPacketTracker {
+	h := &appDataReceivedPacketTracker{
+		receivedPacketTracker: *newReceivedPacketTracker(),
+		maxAckDelay:           protocol.MaxAckDelay,
+		logger:                logger,
+	}
+	return h
+}
+
+func (h *appDataReceivedPacketTracker) ReceivedPacket(pn protocol.PacketNumber, ecn protocol.ECN, rcvTime time.Time, ackEliciting bool) error {
+	if err := h.receivedPacketTracker.ReceivedPacket(pn, ecn, rcvTime, ackEliciting); err != nil {
+		return err
+	}
+	if pn >= h.largestObserved {
+		h.largestObserved = pn
+		h.largestObservedRcvdTime = rcvTime
+	}
+	if !ackEliciting {
+		return nil
+	}
+	h.ackElicitingPacketsReceivedSinceLastAck++
+	isMissing := h.isMissing(pn)
+	if !h.ackQueued && h.shouldQueueACK(pn, ecn, isMissing) {
+		h.ackQueued = true
+		h.ackAlarm = time.Time{} // cancel the ack alarm
+	}
+	if !h.ackQueued {
+		// No ACK queued, but we'll need to acknowledge the packet after max_ack_delay.
+		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
+		if h.logger.Debug() {
+			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
+		}
+	}
 	return nil
 }
 
 // IgnoreBelow sets a lower limit for acknowledging packets.
 // Packets with packet numbers smaller than p will not be acked.
-func (h *receivedPacketTracker) IgnoreBelow(pn protocol.PacketNumber) {
+func (h *appDataReceivedPacketTracker) IgnoreBelow(pn protocol.PacketNumber) {
 	if pn <= h.ignoreBelow {
 		return
 	}
@@ -86,14 +142,14 @@ func (h *receivedPacketTracker) IgnoreBelow(pn protocol.PacketNumber) {
 }
 
 // isMissing says if a packet was reported missing in the last ACK.
-func (h *receivedPacketTracker) isMissing(p protocol.PacketNumber) bool {
+func (h *appDataReceivedPacketTracker) isMissing(p protocol.PacketNumber) bool {
 	if h.lastAck == nil || p < h.ignoreBelow {
 		return false
 	}
 	return p < h.lastAck.LargestAcked() && !h.lastAck.AcksPacket(p)
 }
 
-func (h *receivedPacketTracker) hasNewMissingPackets() bool {
+func (h *appDataReceivedPacketTracker) hasNewMissingPackets() bool {
 	if h.lastAck == nil {
 		return false
 	}
@@ -101,31 +157,21 @@ func (h *receivedPacketTracker) hasNewMissingPackets() bool {
 	return highestRange.Smallest > h.lastAck.LargestAcked()+1 && highestRange.Len() == 1
 }
 
-// maybeQueueACK queues an ACK, if necessary.
-func (h *receivedPacketTracker) maybeQueueACK(pn protocol.PacketNumber, rcvTime time.Time, ecn protocol.ECN, wasMissing bool) {
+func (h *appDataReceivedPacketTracker) shouldQueueACK(pn protocol.PacketNumber, ecn protocol.ECN, wasMissing bool) bool {
 	// always acknowledge the first packet
 	if h.lastAck == nil {
-		if !h.ackQueued {
-			h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
-		}
-		h.ackQueued = true
-		return
+		h.logger.Debugf("\tQueueing ACK because the first packet should be acknowledged.")
+		return true
 	}
-
-	if h.ackQueued {
-		return
-	}
-
-	h.ackElicitingPacketsReceivedSinceLastAck++
 
 	// Send an ACK if this packet was reported missing in an ACK sent before.
 	// Ack decimation with reordering relies on the timer to send an ACK, but if
-	// missing packets we reported in the previous ack, send an ACK immediately.
+	// missing packets we reported in the previous ACK, send an ACK immediately.
 	if wasMissing {
 		if h.logger.Debug() {
 			h.logger.Debugf("\tQueueing ACK because packet %d was missing before.", pn)
 		}
-		h.ackQueued = true
+		return true
 	}
 
 	// send an ACK every 2 ack-eliciting packets
@@ -133,68 +179,42 @@ func (h *receivedPacketTracker) maybeQueueACK(pn protocol.PacketNumber, rcvTime 
 		if h.logger.Debug() {
 			h.logger.Debugf("\tQueueing ACK because packet %d packets were received after the last ACK (using initial threshold: %d).", h.ackElicitingPacketsReceivedSinceLastAck, packetsBeforeAck)
 		}
-		h.ackQueued = true
-	} else if h.ackAlarm.IsZero() {
-		if h.logger.Debug() {
-			h.logger.Debugf("\tSetting ACK timer to max ack delay: %s", h.maxAckDelay)
-		}
-		h.ackAlarm = rcvTime.Add(h.maxAckDelay)
+		return true
 	}
 
 	// queue an ACK if there are new missing packets to report
 	if h.hasNewMissingPackets() {
 		h.logger.Debugf("\tQueuing ACK because there's a new missing packet to report.")
-		h.ackQueued = true
+		return true
 	}
 
 	// queue an ACK if the packet was ECN-CE marked
 	if ecn == protocol.ECNCE {
 		h.logger.Debugf("\tQueuing ACK because the packet was ECN-CE marked.")
-		h.ackQueued = true
+		return true
 	}
-
-	if h.ackQueued {
-		// cancel the ack alarm
-		h.ackAlarm = time.Time{}
-	}
+	return false
 }
 
-func (h *receivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
-	if !h.hasNewAck {
-		return nil
-	}
+func (h *appDataReceivedPacketTracker) GetAckFrame(onlyIfQueued bool) *wire.AckFrame {
 	now := time.Now()
-	if onlyIfQueued {
-		if !h.ackQueued && (h.ackAlarm.IsZero() || h.ackAlarm.After(now)) {
+	if onlyIfQueued && !h.ackQueued {
+		if h.ackAlarm.IsZero() || h.ackAlarm.After(now) {
 			return nil
 		}
-		if h.logger.Debug() && !h.ackQueued && !h.ackAlarm.IsZero() {
+		if h.logger.Debug() && !h.ackAlarm.IsZero() {
 			h.logger.Debugf("Sending ACK because the ACK timer expired.")
 		}
 	}
-
-	// This function always returns the same ACK frame struct, filled with the most recent values.
-	ack := h.lastAck
+	ack := h.receivedPacketTracker.GetAckFrame()
 	if ack == nil {
-		ack = &wire.AckFrame{}
+		return nil
 	}
-	ack.Reset()
-	ack.DelayTime = utils.Max(0, now.Sub(h.largestObservedRcvdTime))
-	ack.ECT0 = h.ect0
-	ack.ECT1 = h.ect1
-	ack.ECNCE = h.ecnce
-	ack.AckRanges = h.packetHistory.AppendAckRanges(ack.AckRanges)
-
-	h.lastAck = ack
-	h.ackAlarm = time.Time{}
+	ack.DelayTime = max(0, now.Sub(h.largestObservedRcvdTime))
 	h.ackQueued = false
-	h.hasNewAck = false
+	h.ackAlarm = time.Time{}
 	h.ackElicitingPacketsReceivedSinceLastAck = 0
 	return ack
 }
 
-func (h *receivedPacketTracker) GetAlarmTimeout() time.Time { return h.ackAlarm }
-
-func (h *receivedPacketTracker) IsPotentiallyDuplicate(pn protocol.PacketNumber) bool {
-	return h.packetHistory.IsPotentiallyDuplicate(pn)
-}
+func (h *appDataReceivedPacketTracker) GetAlarmTimeout() time.Time { return h.ackAlarm }

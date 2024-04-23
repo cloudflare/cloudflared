@@ -3,6 +3,8 @@
 package sshgen
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v3"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudflare/cloudflared/config"
@@ -103,13 +105,16 @@ func tokenGenerator() string {
 		Expiry:   jwt.NewNumericDate(exp),
 	}
 
-	key := []byte("secret")
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.HS256, Key: key}, (&jose.SignerOptions{}).WithType("JWT"))
+	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		panic(err)
+	}
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, (&jose.SignerOptions{}).WithType("JWT"))
 	if err != nil {
 		panic(err)
 	}
 
-	signedToken, err := jwt.Signed(signer).Claims(claims).CompactSerialize()
+	signedToken, err := jwt.Signed(signer).Claims(claims).Serialize()
 	if err != nil {
 		panic(err)
 	}

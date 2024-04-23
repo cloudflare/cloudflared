@@ -19,7 +19,6 @@ import (
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/socks"
 	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -31,7 +30,6 @@ const (
 )
 
 var (
-	testLogger   = logger.Create(nil)
 	testMessage  = []byte("TestStreamOriginConnection")
 	testResponse = []byte(fmt.Sprintf("echo-%s", testMessage))
 )
@@ -39,7 +37,8 @@ var (
 func TestStreamTCPConnection(t *testing.T) {
 	cfdConn, originConn := net.Pipe()
 	tcpConn := tcpConnection{
-		conn: cfdConn,
+		Conn:         cfdConn,
+		writeTimeout: 30 * time.Second,
 	}
 
 	eyeballConn, edgeConn := net.Pipe()
@@ -66,7 +65,7 @@ func TestStreamTCPConnection(t *testing.T) {
 		return nil
 	})
 
-	tcpConn.Stream(ctx, edgeConn, testLogger)
+	tcpConn.Stream(ctx, edgeConn, TestLogger)
 	require.NoError(t, errGroup.Wait())
 }
 
@@ -93,7 +92,7 @@ func TestDefaultStreamWSOverTCPConnection(t *testing.T) {
 		return nil
 	})
 
-	tcpOverWSConn.Stream(ctx, edgeConn, testLogger)
+	tcpOverWSConn.Stream(ctx, edgeConn, TestLogger)
 	require.NoError(t, errGroup.Wait())
 }
 
@@ -147,7 +146,7 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 
 		errGroup, ctx := errgroup.WithContext(ctx)
 		errGroup.Go(func() error {
-			tcpOverWSConn.Stream(ctx, edgeConn, testLogger)
+			tcpOverWSConn.Stream(ctx, edgeConn, TestLogger)
 			return nil
 		})
 
@@ -159,7 +158,7 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 			require.NoError(t, err)
 			defer wsForwarderInConn.Close()
 
-			stream.Pipe(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, testLogger)
+			stream.Pipe(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, TestLogger)
 			return nil
 		})
 
@@ -209,7 +208,7 @@ func TestWsConnReturnsBeforeStreamReturns(t *testing.T) {
 			originConn.Close()
 		}()
 		ctx := context.WithValue(r.Context(), websocket.PingPeriodContextKey, time.Microsecond)
-		tcpOverWSConn.Stream(ctx, eyeballConn, testLogger)
+		tcpOverWSConn.Stream(ctx, eyeballConn, TestLogger)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()

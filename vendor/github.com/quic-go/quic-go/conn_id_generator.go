@@ -5,7 +5,6 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
@@ -20,7 +19,7 @@ type connIDGenerator struct {
 	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken
 	removeConnectionID     func(protocol.ConnectionID)
 	retireConnectionID     func(protocol.ConnectionID)
-	replaceWithClosed      func([]protocol.ConnectionID, protocol.Perspective, []byte)
+	replaceWithClosed      func([]protocol.ConnectionID, []byte)
 	queueControlFrame      func(wire.Frame)
 }
 
@@ -31,7 +30,7 @@ func newConnIDGenerator(
 	getStatelessResetToken func(protocol.ConnectionID) protocol.StatelessResetToken,
 	removeConnectionID func(protocol.ConnectionID),
 	retireConnectionID func(protocol.ConnectionID),
-	replaceWithClosed func([]protocol.ConnectionID, protocol.Perspective, []byte),
+	replaceWithClosed func([]protocol.ConnectionID, []byte),
 	queueControlFrame func(wire.Frame),
 	generator ConnectionIDGenerator,
 ) *connIDGenerator {
@@ -60,7 +59,7 @@ func (m *connIDGenerator) SetMaxActiveConnIDs(limit uint64) error {
 	// transport parameter.
 	// We currently don't send the preferred_address transport parameter,
 	// so we can issue (limit - 1) connection IDs.
-	for i := uint64(len(m.activeSrcConnIDs)); i < utils.Min(limit, protocol.MaxIssuedConnectionIDs); i++ {
+	for i := uint64(len(m.activeSrcConnIDs)); i < min(limit, protocol.MaxIssuedConnectionIDs); i++ {
 		if err := m.issueNewConnID(); err != nil {
 			return err
 		}
@@ -127,7 +126,7 @@ func (m *connIDGenerator) RemoveAll() {
 	}
 }
 
-func (m *connIDGenerator) ReplaceWithClosed(pers protocol.Perspective, connClose []byte) {
+func (m *connIDGenerator) ReplaceWithClosed(connClose []byte) {
 	connIDs := make([]protocol.ConnectionID, 0, len(m.activeSrcConnIDs)+1)
 	if m.initialClientDestConnID != nil {
 		connIDs = append(connIDs, *m.initialClientDestConnID)
@@ -135,5 +134,5 @@ func (m *connIDGenerator) ReplaceWithClosed(pers protocol.Perspective, connClose
 	for _, connID := range m.activeSrcConnIDs {
 		connIDs = append(connIDs, connID)
 	}
-	m.replaceWithClosed(connIDs, pers, connClose)
+	m.replaceWithClosed(connIDs, connClose)
 }

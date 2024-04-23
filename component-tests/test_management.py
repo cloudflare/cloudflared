@@ -55,7 +55,7 @@ class TestManagement:
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
-        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_url("metrics", config, config_path)
@@ -76,7 +76,7 @@ class TestManagement:
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
-        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_url("debug/pprof/heap", config, config_path)
@@ -97,7 +97,7 @@ class TestManagement:
         config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
-        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
+        with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics=false"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             url = cfd_cli.get_management_url("metrics", config, config_path)

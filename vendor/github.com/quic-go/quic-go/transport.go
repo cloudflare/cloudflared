@@ -41,7 +41,8 @@ type Transport struct {
 	Conn net.PacketConn
 
 	// The length of the connection ID in bytes.
-	// It can be 0, or any value between 4 and 18.
+	// It can be any value between 1 and 20.
+	// Due to the increased risk of collisions, it is not recommended to use connection IDs shorter than 4 bytes.
 	// If unset, a 4 byte connection ID will be used.
 	ConnectionIDLength int
 
@@ -77,7 +78,19 @@ type Transport struct {
 	// It has no effect for clients.
 	DisableVersionNegotiationPackets bool
 
+	// VerifySourceAddress decides if a connection attempt originating from unvalidated source
+	// addresses first needs to go through source address validation using QUIC's Retry mechanism,
+	// as described in RFC 9000 section 8.1.2.
+	// Note that the address passed to this callback is unvalidated, and might be spoofed in case
+	// of an attack.
+	// Validating the source address adds one additional network roundtrip to the handshake,
+	// and should therefore only be used if a suspiciously high number of incoming connection is recorded.
+	// For most use cases, wrapping the Allow function of a rate.Limiter will be a reasonable
+	// implementation of this callback (negating its return value).
+	VerifySourceAddress func(net.Addr) bool
+
 	// A Tracer traces events that don't belong to a single QUIC connection.
+	// Tracer.Close is called when the transport is closed.
 	Tracer *logging.Tracer
 
 	handlerMap packetHandlerManager
@@ -147,7 +160,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 	if t.server != nil {
 		return nil, errListenerAlreadySet
 	}
-	conf = populateServerConfig(conf)
+	conf = populateConfig(conf)
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
@@ -161,6 +174,7 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		t.closeServer,
 		*t.TokenGeneratorKey,
 		t.MaxTokenAge,
+		t.VerifySourceAddress,
 		t.DisableVersionNegotiationPackets,
 		allow0RTT,
 	)
@@ -323,6 +337,9 @@ func (t *Transport) close(e error) {
 	if t.server != nil {
 		t.server.close(e, false)
 	}
+	if t.Tracer != nil && t.Tracer.Close != nil {
+		t.Tracer.Close()
+	}
 	t.closed = true
 }
 
@@ -379,11 +396,19 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 
-	if isStatelessReset := t.maybeHandleStatelessReset(p.data); isStatelessReset {
-		return
-	}
+	// If there's a connection associated with the connection ID, pass the packet there.
 	if handler, ok := t.handlerMap.Get(connID); ok {
 		handler.handlePacket(p)
+		return
+	}
+	// RFC 9000 section 10.3.1 requires that the stateless reset detection logic is run for both
+	// packets that cannot be associated with any connections, and for packets that can't be decrypted.
+	// We deviate from the RFC and ignore the latter: If a packet's connection ID is associated with an
+	// existing connection, it is dropped there if if it can't be decrypted.
+	// Stateless resets use random connection IDs, and at reasonable connection ID lengths collisions are
+	// exceedingly rare. In the unlikely event that a stateless reset is misrouted to an existing connection,
+	// it is to be expected that the next stateless reset will be correctly detected.
+	if isStatelessReset := t.maybeHandleStatelessReset(p.data); isStatelessReset {
 		return
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {

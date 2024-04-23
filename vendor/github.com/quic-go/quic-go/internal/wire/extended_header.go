@@ -32,7 +32,7 @@ type ExtendedHeader struct {
 	parsedLen protocol.ByteCount
 }
 
-func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool /* reserved bits valid */, error) {
+func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.Version) (bool /* reserved bits valid */, error) {
 	startLen := b.Len()
 	// read the (now unencrypted) first byte
 	var err error
@@ -51,7 +51,7 @@ func (h *ExtendedHeader) parse(b *bytes.Reader, v protocol.VersionNumber) (bool 
 	return reservedBitsValid, err
 }
 
-func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.VersionNumber) (bool /* reserved bits valid */, error) {
+func (h *ExtendedHeader) parseLongHeader(b *bytes.Reader, _ protocol.Version) (bool /* reserved bits valid */, error) {
 	if err := h.readPacketNumber(b); err != nil {
 		return false, err
 	}
@@ -95,7 +95,7 @@ func (h *ExtendedHeader) readPacketNumber(b *bytes.Reader) error {
 }
 
 // Append appends the Header.
-func (h *ExtendedHeader) Append(b []byte, v protocol.VersionNumber) ([]byte, error) {
+func (h *ExtendedHeader) Append(b []byte, v protocol.Version) ([]byte, error) {
 	if h.DestConnectionID.Len() > protocol.MaxConnIDLen {
 		return nil, fmt.Errorf("invalid connection ID length: %d bytes", h.DestConnectionID.Len())
 	}
@@ -162,7 +162,7 @@ func (h *ExtendedHeader) ParsedLen() protocol.ByteCount {
 }
 
 // GetLength determines the length of the Header.
-func (h *ExtendedHeader) GetLength(_ protocol.VersionNumber) protocol.ByteCount {
+func (h *ExtendedHeader) GetLength(_ protocol.Version) protocol.ByteCount {
 	length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + 2 /* length */
 	if h.Type == protocol.PacketTypeInitial {
 		length += quicvarint.Len(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))

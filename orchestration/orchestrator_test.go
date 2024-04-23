@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	testLogger = zerolog.Logger{}
+	testLogger = zerolog.Nop()
 	testTags   = []tunnelpogs.Tag{
 		{
 			Name:  "package",

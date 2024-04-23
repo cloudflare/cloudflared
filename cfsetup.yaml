@@ -9,22 +9,30 @@ buster: &buster
       - *pinned_go
       - build-essential
       - gotest-to-teamcity
+      - fakeroot
+      - rubygem-fpm
+      - rpm
+      - libffi-dev
+      - reprepro
+      - createrepo
     pre-cache: &build_pre_cache
       - export GOCACHE=/cfsetup_build/.cache/go-build
       - go install golang.org/x/tools/cmd/goimports@latest
     post-cache:
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - make cloudflared
+      # TODO: TUN-8126 this is temporary to make sure packages can be built before release
+      - ./build-packages.sh
+      # Build binary for component test
+      - GOOS=linux GOARCH=amd64 make cloudflared
   build-fips:
     build_dir: *build_dir
     builddeps: *build_deps
     pre-cache: *build_pre_cache
     post-cache:
-      - export GOOS=linux
-      - export GOARCH=amd64
-      - make cloudflared
       - export FIPS=true
+      # TODO: TUN-8126 this is temporary to make sure packages can be built before release
+      - ./build-packages-fips.sh
+      # Build binary for component test
+      - GOOS=linux GOARCH=amd64 make cloudflared
   cover: 
     build_dir: *build_dir
     builddeps: *build_deps
@@ -234,16 +242,6 @@ buster: &buster
       - component-tests/requirements.txt
     pre-cache: *component_test_pre_cache
     post-cache: *component_test_post_cache
-  update-homebrew:
-    builddeps:
-      - openssh-client
-      - s3cmd
-      - jq
-      - build-essential
-      - procps
-    post-cache:
-      - .teamcity/update-homebrew.sh
-      - .teamcity/update-homebrew-core.sh
   github-message-release:
     build_dir: *build_dir
     builddeps: *build_pygithub

@@ -305,7 +305,7 @@ type PredeclaredType string
 func (pt PredeclaredType) String(map[string]string, string) string { return string(pt) }
 func (pt PredeclaredType) addImports(map[string]bool)              {}
 
-// TypeParametersType contains type paramters for a NamedType.
+// TypeParametersType contains type parameters for a NamedType.
 type TypeParametersType struct {
 	TypeParameters []Type
 }

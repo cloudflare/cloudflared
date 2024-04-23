@@ -1,3 +1,78 @@
+2024.4.0
+- 2024-04-02 feat: provide short version (#1206)
+- 2024-04-02 Format code
+- 2024-01-18 feat: auto tls sni
+- 2023-12-24 fix checkInPingGroup bugs
+- 2023-12-15 Add environment variables for TCP tunnel hostname / destination / URL.
+
+2024.3.0
+- 2024-03-14 TUN-8281: Run cloudflared query list tunnels/routes endpoint in a paginated way
+- 2024-03-13 TUN-8297: Improve write timeout logging on safe_stream.go
+- 2024-03-07 TUN-8290: Remove `|| true` from postrm.sh
+- 2024-03-05 TUN-8275: Skip write timeout log on "no network activity"
+- 2024-01-23 Update postrm.sh to fix incomplete uninstall
+- 2024-01-05 fix typo in errcheck for response parsing logic in CreateTunnel routine
+- 2023-12-23 Update linux_service.go
+- 2023-12-07 ci: bump actions/checkout to v4
+- 2023-12-07 ci/check: bump actions/setup-go to v5
+- 2023-04-28 check.yaml: bump actions/setup-go to v4
+
+2024.2.1
+- 2024-02-20 TUN-8242: Update Changes.md file with new remote diagnostics behaviour
+- 2024-02-19 TUN-8238: Fix type mismatch introduced by fast-forward
+- 2024-02-16 TUN-8243: Collect metrics on the number of QUIC frames sent/received
+- 2024-02-15 TUN-8238: Refactor proxy logging
+- 2024-02-14 TUN-8242: Enable remote diagnostics by default
+- 2024-02-12 TUN-8236: Add write timeout to quic and tcp connections
+- 2024-02-09 TUN-8224: Fix safety of TCP stream logging, separate connect and ack log messages
+
+2024.2.0
+- 2024-02-07 TUN-8224: Count and collect metrics on stream connect successes/errors
+
+2024.1.5
+- 2024-01-22 TUN-8176: Support ARM platforms that don't have an FPU or have it enabled in kernel
+- 2024-01-15 TUN-8158: Bring back commit e6537418859afcac29e56a39daa08bcabc09e048 and fixes infinite loop on linux when the socket is closed
+
+2024.1.4
+- 2024-01-19 Revert "TUN-8158: Add logging to confirm when ICMP reply is returned to the edge"
+
+2024.1.3
+- 2024-01-15 TUN-8161: Fix broken ARM build for armv6
+- 2024-01-15 TUN-8158: Add logging to confirm when ICMP reply is returned to the edge
+
+2024.1.2
+- 2024-01-11 TUN-8147: Disable ECN usage due to bugs in detecting if supported
+- 2024-01-11 TUN-8146: Fix export path for install-go command
+- 2024-01-11 TUN-8146: Fix Makefile targets should not be run in parallel and install-go script was missing shebang
+- 2024-01-10 TUN-8140: Remove homebrew scripts
+
+2024.1.1
+- 2024-01-10 TUN-8134: Revert installed prefix to /usr
+- 2024-01-09 TUN-8130: Fix path to install go for mac build
+- 2024-01-09 TUN-8129: Use the same build command between branch and release builds
+- 2024-01-09 TUN-8130: Install go tool chain in /tmp on build agents
+- 2024-01-09 TUN-8134: Install cloudflare go as part of make install
+- 2024-01-08 TUN-8118: Disable FIPS module to build with go-boring without CGO_ENABLED
+
+2024.1.0
+- 2024-01-01 TUN-7934: Update quic-go to a version that queues datagrams for better throughput and drops large datagram
+- 2023-12-20 TUN-8072: Need to set GOCACHE in mac go installation script
+- 2023-12-17 TUN-8072: Add script to download cloudflare go for Mac build agents
+- 2023-12-15 Fix nil pointer dereference segfault when passing "null" config json to cloudflared tunnel ingress validate (#1070)
+- 2023-12-15 configuration.go: fix developerPortal link (#960)
+- 2023-12-14 tunnelrpc/pogs: fix dropped test errors (#1106)
+- 2023-12-14 cmd/cloudflared/updater: fix dropped error (#1055)
+- 2023-12-14 use os.Executable to discover the path to cloudflared (#1040)
+- 2023-12-14 Remove extraneous `period` from Path Environment Variable (#1009)
+- 2023-12-14 Use CLI context when running tunnel (#597)
+- 2023-12-14 TUN-8066: Define scripts to build on Windows agents
+- 2023-12-11 TUN-8052: Update go to 1.21.5
+- 2023-12-07 TUN-7970: Default to enable post quantum encryption for quic transport
+- 2023-12-04 TUN-8006: Update quic-go to latest upstream
+- 2023-11-15 VULN-44842 Add a flag that allows users to not send the Access JWT to stdout
+- 2023-11-13 TUN-7965: Remove legacy incident status page check
+- 2023-11-13 AUTH-5682 Org token flow in Access logins should pass CF_AppSession cookie
+
 2023.10.0
 - 2023-10-06 TUN-7864: Document cloudflared versions support
 - 2023-10-03 CUSTESC-33731: Make rule match test report rule in 0-index base

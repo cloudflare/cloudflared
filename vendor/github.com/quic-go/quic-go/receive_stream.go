@@ -292,10 +292,6 @@ func (s *receiveStream) handleResetStreamFrameImpl(frame *wire.ResetStreamFrame)
 	return newlyRcvdFinalOffset, nil
 }
 
-func (s *receiveStream) CloseRemote(offset protocol.ByteCount) {
-	s.handleStreamFrame(&wire.StreamFrame{Fin: true, Offset: offset})
-}
-
 func (s *receiveStream) SetReadDeadline(t time.Time) error {
 	s.mutex.Lock()
 	s.deadline = t

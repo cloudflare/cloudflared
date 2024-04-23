@@ -35,6 +35,7 @@ var (
 		KeepAlivePeriod: 5 * time.Second,
 		EnableDatagrams: true,
 	}
+	defaultQUICTimeout = 30 * time.Second
 )
 
 var _ ReadWriteAcker = (*streamReadWriteAcker)(nil)
@@ -197,7 +198,7 @@ func quicServer(
 
 	quicStream, err := session.OpenStreamSync(context.Background())
 	require.NoError(t, err)
-	stream := quicpogs.NewSafeStreamCloser(quicStream)
+	stream := quicpogs.NewSafeStreamCloser(quicStream, defaultQUICTimeout, &log)
 
 	reqClientStream := quicpogs.RequestClientStream{ReadWriteCloser: stream}
 	err = reqClientStream.WriteConnectRequestData(dest, connectionType, metadata...)
@@ -726,6 +727,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QU
 		&log,
 		nil,
 		5*time.Second,
+		0*time.Second,
 	)
 	require.NoError(t, err)
 	return qc

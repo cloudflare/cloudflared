@@ -1,3 +1,6 @@
+# The targets cannot be run in parallel
+.NOTPARALLEL:
+
 VERSION       := $(shell git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 MSI_VERSION   := $(shell git tag -l --sort=v:refname | grep "w" | tail -1 | cut -c2-)
 #MSI_VERSION expects the format of the tag to be: (wX.X.X). Starts with the w character to not break cfsetup.
@@ -49,6 +52,8 @@ PACKAGE_DIR    := $(CURDIR)/packaging
 PREFIX         := /usr
 INSTALL_BINDIR := $(PREFIX)/bin/
 INSTALL_MANDIR := $(PREFIX)/share/man/man1/
+CF_GO_PATH     := /tmp/go
+PATH           := $(CF_GO_PATH)/bin:$(PATH)
 
 LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
@@ -164,10 +169,19 @@ cover:
 test-ssh-server:
 	docker-compose -f ssh_server_tests/docker-compose.yml up
 
+.PHONY: install-go
+install-go:
+	rm -rf ${CF_GO_PATH}
+	./.teamcity/install-cloudflare-go.sh
+
+.PHONY: cleanup-go
+cleanup-go:
+	rm -rf ${CF_GO_PATH}
+
 cloudflared.1: cloudflared_man_template
 	sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' cloudflared_man_template > cloudflared.1
 
-install: cloudflared cloudflared.1
+install: install-go cloudflared cloudflared.1 cleanup-go
 	mkdir -p $(DESTDIR)$(INSTALL_BINDIR) $(DESTDIR)$(INSTALL_MANDIR)
 	install -m755 cloudflared $(DESTDIR)$(INSTALL_BINDIR)/cloudflared
 	install -m644 cloudflared.1 $(DESTDIR)$(INSTALL_MANDIR)/cloudflared.1
@@ -208,15 +222,6 @@ cloudflared-msi:
 cloudflared-darwin-amd64.tgz: cloudflared
 	tar czf cloudflared-darwin-amd64.tgz cloudflared
 	rm cloudflared
-
-.PHONY: homebrew-upload
-homebrew-upload: cloudflared-darwin-amd64.tgz
-	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $$^ $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz
-	aws s3 --endpoint-url $(S3_ENDPOINT) cp --acl public-read $(S3_URI)/cloudflared-$$(VERSION)-$1.tgz  $(S3_URI)/cloudflared-stable-$1.tgz
-
-.PHONY: homebrew-release
-homebrew-release: homebrew-upload
-	./publish-homebrew-formula.sh cloudflared-darwin-amd64.tgz $(VERSION) homebrew-cloudflare
 
 .PHONY: github-release
 github-release: cloudflared

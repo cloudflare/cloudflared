@@ -17,10 +17,10 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-// Orchestrator manages configurations so they can be updatable during runtime
+// Orchestrator manages configurations, so they can be updatable during runtime
 // properties are static, so it can be read without lock
 // currentVersion and config are read/write infrequently, so their access are synchronized with RWMutex
-// access to proxy is synchronized with atmoic.Value, because it uses copy-on-write to provide scalable frequently
+// access to proxy is synchronized with atomic.Value, because it uses copy-on-write to provide scalable frequently
 // read when update is infrequent
 type Orchestrator struct {
 	currentVersion int32
@@ -30,9 +30,10 @@ type Orchestrator struct {
 	proxy atomic.Value
 	// Set of internal ingress rules defined at cloudflared startup (separate from user-defined ingress rules)
 	internalRules []ingress.Rule
-	config        *Config
-	tags          []tunnelpogs.Tag
-	log           *zerolog.Logger
+	// cloudflared Configuration
+	config *Config
+	tags   []tunnelpogs.Tag
+	log    *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -40,7 +41,11 @@ type Orchestrator struct {
 	proxyShutdownC chan<- struct{}
 }
 
-func NewOrchestrator(ctx context.Context, config *Config, tags []tunnelpogs.Tag, internalRules []ingress.Rule, log *zerolog.Logger) (*Orchestrator, error) {
+func NewOrchestrator(ctx context.Context,
+	config *Config,
+	tags []tunnelpogs.Tag,
+	internalRules []ingress.Rule,
+	log *zerolog.Logger) (*Orchestrator, error) {
 	o := &Orchestrator{
 		// Lowest possible version, any remote configuration will have version higher than this
 		// Starting at -1 allows a configuration migration (local to remote) to override the current configuration as it
@@ -131,7 +136,7 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	if err := ingressRules.StartOrigins(o.log, proxyShutdownC); err != nil {
 		return errors.Wrap(err, "failed to start origin")
 	}
-	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.log)
+	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.config.WriteTimeout, o.log)
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting

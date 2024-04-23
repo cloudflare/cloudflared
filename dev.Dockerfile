@@ -4,6 +4,7 @@ ENV GO111MODULE=on \
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 RUN apt-get update
 COPY . .
+RUN .teamcity/install-cloudflare-go.sh
 # compile cloudflared
-RUN make cloudflared
+RUN PATH="/tmp/go/bin:$PATH" make cloudflared
 RUN cp /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/

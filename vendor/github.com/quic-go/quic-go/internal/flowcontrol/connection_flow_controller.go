@@ -87,7 +87,7 @@ func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCoun
 	c.mutex.Lock()
 	if inc > c.receiveWindowSize {
 		c.logger.Debugf("Increasing receive flow control window for the connection to %d kB, in response to stream flow control window increase", c.receiveWindowSize/(1<<10))
-		newSize := utils.Min(inc, c.maxReceiveWindowSize)
+		newSize := min(inc, c.maxReceiveWindowSize)
 		if delta := newSize - c.receiveWindowSize; delta > 0 && c.allowWindowIncrease(delta) {
 			c.receiveWindowSize = newSize
 		}

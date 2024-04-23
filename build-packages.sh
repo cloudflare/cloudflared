@@ -1,7 +1,9 @@
+#!/bin/bash
 VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
 
-# Avoid depending on C code since we don't need it.
+# Disable FIPS module in go-boring
+export GOEXPERIMENT=noboringcrypto
 export CGO_ENABLED=0
 
 # This controls the directory the built artifacts go into
@@ -13,6 +15,12 @@ export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do
     unset TARGET_ARM
     export TARGET_ARCH=$arch
+
+    ## Support for arm platforms without hardware FPU enabled
+    if [[ $arch == arm ]] ; then
+        export TARGET_ARCH=arm
+        export TARGET_ARM=5
+    fi
     
     ## Support for armhf builds 
     if [[ $arch == armhf ]] ; then

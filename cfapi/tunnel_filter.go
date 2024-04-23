@@ -50,6 +50,10 @@ func (f *TunnelFilter) MaxFetchSize(max uint) {
 	f.queryParams.Set("per_page", strconv.Itoa(int(max)))
 }
 
+func (f *TunnelFilter) Page(page int) {
+	f.queryParams.Set("page", strconv.Itoa(page))
+}
+
 func (f TunnelFilter) encode() string {
 	return f.queryParams.Encode()
 }

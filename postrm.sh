@@ -1,4 +1,4 @@
 #!/bin/bash
 set -eu
-rm /usr/local/bin/cloudflared
-rm /usr/local/etc/cloudflared/.installedFromPackageManager || true
+rm -f /usr/local/bin/cloudflared
+rm -f /usr/local/etc/cloudflared/.installedFromPackageManager

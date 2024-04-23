@@ -15,13 +15,25 @@ type framer interface {
 	HasData() bool
 
 	QueueControlFrame(wire.Frame)
-	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount)
+	AppendControlFrames([]ackhandler.Frame, protocol.ByteCount, protocol.Version) ([]ackhandler.Frame, protocol.ByteCount)
 
 	AddActiveStream(protocol.StreamID)
-	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount)
+	AppendStreamFrames([]ackhandler.StreamFrame, protocol.ByteCount, protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount)
 
 	Handle0RTTRejection() error
+
+	// QueuedTooManyControlFrames says if the control frame queue exceeded its maximum queue length.
+	// This is a hack.
+	// It is easier to implement than propagating an error return value in QueueControlFrame.
+	// The correct solution would be to queue frames with their respective structs.
+	// See https://github.com/quic-go/quic-go/issues/4271 for the queueing of stream-related control frames.
+	QueuedTooManyControlFrames() bool
 }
+
+const (
+	maxPathResponses = 256
+	maxControlFrames = 16 << 10
+)
 
 type framerI struct {
 	mutex sync.Mutex
@@ -31,8 +43,10 @@ type framerI struct {
 	activeStreams map[protocol.StreamID]struct{}
 	streamQueue   ringbuffer.RingBuffer[protocol.StreamID]
 
-	controlFrameMutex sync.Mutex
-	controlFrames     []wire.Frame
+	controlFrameMutex          sync.Mutex
+	controlFrames              []wire.Frame
+	pathResponses              []*wire.PathResponseFrame
+	queuedTooManyControlFrames bool
 }
 
 var _ framer = &framerI{}
@@ -52,20 +66,48 @@ func (f *framerI) HasData() bool {
 		return true
 	}
 	f.controlFrameMutex.Lock()
-	hasData = len(f.controlFrames) > 0
-	f.controlFrameMutex.Unlock()
-	return hasData
+	defer f.controlFrameMutex.Unlock()
+	return len(f.controlFrames) > 0 || len(f.pathResponses) > 0
 }
 
 func (f *framerI) QueueControlFrame(frame wire.Frame) {
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
+	if pr, ok := frame.(*wire.PathResponseFrame); ok {
+		// Only queue up to maxPathResponses PATH_RESPONSE frames.
+		// This limit should be high enough to never be hit in practice,
+		// unless the peer is doing something malicious.
+		if len(f.pathResponses) >= maxPathResponses {
+			return
+		}
+		f.pathResponses = append(f.pathResponses, pr)
+		return
+	}
+	// This is a hack.
+	if len(f.controlFrames) >= maxControlFrames {
+		f.queuedTooManyControlFrames = true
+		return
+	}
 	f.controlFrames = append(f.controlFrames, frame)
-	f.controlFrameMutex.Unlock()
 }
 
-func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.Frame, protocol.ByteCount) {
-	var length protocol.ByteCount
+func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol.ByteCount, v protocol.Version) ([]ackhandler.Frame, protocol.ByteCount) {
 	f.controlFrameMutex.Lock()
+	defer f.controlFrameMutex.Unlock()
+
+	var length protocol.ByteCount
+	// add a PATH_RESPONSE first, but only pack a single PATH_RESPONSE per packet
+	if len(f.pathResponses) > 0 {
+		frame := f.pathResponses[0]
+		frameLen := frame.Length(v)
+		if frameLen <= maxLen {
+			frames = append(frames, ackhandler.Frame{Frame: frame})
+			length += frameLen
+			f.pathResponses = f.pathResponses[1:]
+		}
+	}
+
 	for len(f.controlFrames) > 0 {
 		frame := f.controlFrames[len(f.controlFrames)-1]
 		frameLen := frame.Length(v)
@@ -76,8 +118,11 @@ func (f *framerI) AppendControlFrames(frames []ackhandler.Frame, maxLen protocol
 		length += frameLen
 		f.controlFrames = f.controlFrames[:len(f.controlFrames)-1]
 	}
-	f.controlFrameMutex.Unlock()
 	return frames, length
+}
+
+func (f *framerI) QueuedTooManyControlFrames() bool {
+	return f.queuedTooManyControlFrames
 }
 
 func (f *framerI) AddActiveStream(id protocol.StreamID) {
@@ -89,7 +134,7 @@ func (f *framerI) AddActiveStream(id protocol.StreamID) {
 	f.mutex.Unlock()
 }
 
-func (f *framerI) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.VersionNumber) ([]ackhandler.StreamFrame, protocol.ByteCount) {
+func (f *framerI) AppendStreamFrames(frames []ackhandler.StreamFrame, maxLen protocol.ByteCount, v protocol.Version) ([]ackhandler.StreamFrame, protocol.ByteCount) {
 	startLen := len(frames)
 	var length protocol.ByteCount
 	f.mutex.Lock()

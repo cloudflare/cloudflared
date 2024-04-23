@@ -109,20 +109,34 @@ func (r *RESTClient) sendRequest(method string, url url.URL, body interface{}) (
 	return r.client.Do(req)
 }
 
-func parseResponse(reader io.Reader, data interface{}) error {
+func parseResponseEnvelope(reader io.Reader) (*response, error) {
 	// Schema for Tunnelstore responses in the v1 API.
 	// Roughly, it's a wrapper around a particular result that adds failures/errors/etc
 	var result response
 	// First, parse the wrapper and check the API call succeeded
 	if err := json.NewDecoder(reader).Decode(&result); err != nil {
-		return errors.Wrap(err, "failed to decode response")
+		return nil, errors.Wrap(err, "failed to decode response")
 	}
 	if err := result.checkErrors(); err != nil {
-		return err
+		return nil, err
 	}
 	if !result.Success {
-		return ErrAPINoSuccess
+		return nil, ErrAPINoSuccess
 	}
+
+	return &result, nil
+}
+
+func parseResponse(reader io.Reader, data interface{}) error {
+	result, err := parseResponseEnvelope(reader)
+	if err != nil {
+		return err
+	}
+
+	return parseResponseBody(result, data)
+}
+
+func parseResponseBody(result *response, data interface{}) error {
 	// At this point we know the API call succeeded, so, parse out the inner
 	// result into the datatype provided as a parameter.
 	if err := json.Unmarshal(result.Result, &data); err != nil {
@@ -131,11 +145,58 @@ func parseResponse(reader io.Reader, data interface{}) error {
 	return nil
 }
 
+func fetchExhaustively[T any](requestFn func(int) (*http.Response, error)) ([]*T, error) {
+	page := 0
+	var fullResponse []*T
+
+	for {
+		page += 1
+		envelope, parsedBody, err := fetchPage[T](requestFn, page)
+
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("Error Parsing page %d", page))
+		}
+
+		fullResponse = append(fullResponse, parsedBody...)
+		if envelope.Pagination.Count < envelope.Pagination.PerPage || len(fullResponse) >= envelope.Pagination.TotalCount {
+			break
+		}
+
+	}
+	return fullResponse, nil
+}
+
+func fetchPage[T any](requestFn func(int) (*http.Response, error), page int) (*response, []*T, error) {
+	pageResp, err := requestFn(page)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "REST request failed")
+	}
+	defer pageResp.Body.Close()
+	if pageResp.StatusCode == http.StatusOK {
+		envelope, err := parseResponseEnvelope(pageResp.Body)
+		if err != nil {
+			return nil, nil, err
+		}
+		var parsedRspBody []*T
+		return envelope, parsedRspBody, parseResponseBody(envelope, &parsedRspBody)
+
+	}
+	return nil, nil, errors.New(fmt.Sprintf("Failed to fetch page. Server returned: %d", pageResp.StatusCode))
+}
+
 type response struct {
-	Success  bool            `json:"success,omitempty"`
-	Errors   []apiErr        `json:"errors,omitempty"`
-	Messages []string        `json:"messages,omitempty"`
-	Result   json.RawMessage `json:"result,omitempty"`
+	Success    bool            `json:"success,omitempty"`
+	Errors     []apiErr        `json:"errors,omitempty"`
+	Messages   []string        `json:"messages,omitempty"`
+	Result     json.RawMessage `json:"result,omitempty"`
+	Pagination Pagination      `json:"result_info,omitempty"`
+}
+
+type Pagination struct {
+	Count      int `json:"count,omitempty"`
+	Page       int `json:"page,omitempty"`
+	PerPage    int `json:"per_page,omitempty"`
+	TotalCount int `json:"total_count,omitempty"`
 }
 
 func (r *response) checkErrors() error {

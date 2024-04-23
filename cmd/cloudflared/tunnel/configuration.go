@@ -30,7 +30,10 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-const secretValue = "*****"
+const (
+	secretValue       = "*****"
+	icmpFunnelTimeout = time.Second * 10
+)
 
 var (
 	developerPortal = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup"
@@ -244,6 +247,7 @@ func prepareTunnelConfig(
 		FeatureSelector:             featureSelector,
 		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
 		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
+		WriteStreamTimeout:          c.Duration(writeStreamTimeout),
 		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),
 	}
 	packetConfig, err := newPacketConfig(c, log)
@@ -256,6 +260,7 @@ func prepareTunnelConfig(
 		Ingress:            &ingressRules,
 		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
 		ConfigurationFlags: parseConfigFlags(c),
+		WriteTimeout:       c.Duration(writeStreamTimeout),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }
@@ -361,7 +366,7 @@ func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRou
 		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
 	}
 
-	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, zone, logger)
+	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, zone, logger, icmpFunnelTimeout)
 	if err != nil {
 		return nil, err
 	}

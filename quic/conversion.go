@@ -7,17 +7,6 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
-func perspectiveString(p logging.Perspective) string {
-	switch p {
-	case logging.PerspectiveClient:
-		return "client"
-	case logging.PerspectiveServer:
-		return "server"
-	default:
-		return ""
-	}
-}
-
 // Helper to convert logging.ByteCount(alias for int64) to float64 used in prometheus
 func byteCountToPromCount(count logging.ByteCount) float64 {
 	return float64(count)

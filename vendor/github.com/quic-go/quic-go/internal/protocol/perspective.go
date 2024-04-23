@@ -17,9 +17,9 @@ func (p Perspective) Opposite() Perspective {
 func (p Perspective) String() string {
 	switch p {
 	case PerspectiveServer:
-		return "Server"
+		return "server"
 	case PerspectiveClient:
-		return "Client"
+		return "client"
 	default:
 		return "invalid perspective"
 	}

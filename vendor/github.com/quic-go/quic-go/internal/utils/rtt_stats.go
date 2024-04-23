@@ -55,7 +55,7 @@ func (r *RTTStats) PTO(includeMaxAckDelay bool) time.Duration {
 	if r.SmoothedRTT() == 0 {
 		return 2 * defaultInitialRTT
 	}
-	pto := r.SmoothedRTT() + Max(4*r.MeanDeviation(), protocol.TimerGranularity)
+	pto := r.SmoothedRTT() + max(4*r.MeanDeviation(), protocol.TimerGranularity)
 	if includeMaxAckDelay {
 		pto += r.MaxAckDelay()
 	}
@@ -90,7 +90,7 @@ func (r *RTTStats) UpdateRTT(sendDelta, ackDelay time.Duration, now time.Time) {
 		r.smoothedRTT = sample
 		r.meanDeviation = sample / 2
 	} else {
-		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32(AbsDuration(r.smoothedRTT-sample)/time.Microsecond)) * time.Microsecond
+		r.meanDeviation = time.Duration(oneMinusBeta*float32(r.meanDeviation/time.Microsecond)+rttBeta*float32((r.smoothedRTT-sample).Abs()/time.Microsecond)) * time.Microsecond
 		r.smoothedRTT = time.Duration((float32(r.smoothedRTT/time.Microsecond)*oneMinusAlpha)+(float32(sample/time.Microsecond)*rttAlpha)) * time.Microsecond
 	}
 }
@@ -126,6 +126,6 @@ func (r *RTTStats) OnConnectionMigration() {
 // is larger. The mean deviation is increased to the most recent deviation if
 // it's larger.
 func (r *RTTStats) ExpireSmoothedMetrics() {
-	r.meanDeviation = Max(r.meanDeviation, AbsDuration(r.smoothedRTT-r.latestRTT))
-	r.smoothedRTT = Max(r.smoothedRTT, r.latestRTT)
+	r.meanDeviation = max(r.meanDeviation, (r.smoothedRTT - r.latestRTT).Abs())
+	r.smoothedRTT = max(r.smoothedRTT, r.latestRTT)
 }

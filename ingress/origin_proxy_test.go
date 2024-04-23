@@ -36,7 +36,7 @@ func TestRawTCPServiceEstablishConnection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Origin not listening for new connection, should return an error
-	_, err = rawTCPService.EstablishConnection(context.Background(), req.URL.String())
+	_, err = rawTCPService.EstablishConnection(context.Background(), req.URL.String(), TestLogger)
 	require.Error(t, err)
 }
 
@@ -87,7 +87,7 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 		t.Run(test.testCase, func(t *testing.T) {
 			if test.expectErr {
 				bastionHost, _ := carrier.ResolveBastionDest(test.req)
-				_, err := test.service.EstablishConnection(context.Background(), bastionHost)
+				_, err := test.service.EstablishConnection(context.Background(), bastionHost, TestLogger)
 				assert.Error(t, err)
 			}
 		})
@@ -99,7 +99,7 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 	for _, service := range []*tcpOverWSService{newTCPOverWSService(originURL), newBastionService()} {
 		// Origin not listening for new connection, should return an error
 		bastionHost, _ := carrier.ResolveBastionDest(bastionReq)
-		_, err := service.EstablishConnection(context.Background(), bastionHost)
+		_, err := service.EstablishConnection(context.Background(), bastionHost, TestLogger)
 		assert.Error(t, err)
 	}
 }
@@ -132,7 +132,7 @@ func TestHTTPServiceHostHeaderOverride(t *testing.T) {
 		url: originURL,
 	}
 	shutdownC := make(chan struct{})
-	require.NoError(t, httpService.start(testLogger, shutdownC, cfg))
+	require.NoError(t, httpService.start(TestLogger, shutdownC, cfg))
 
 	req, err := http.NewRequest(http.MethodGet, originURL.String(), nil)
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestHTTPServiceUsesIngressRuleScheme(t *testing.T) {
 		url: originURL,
 	}
 	shutdownC := make(chan struct{})
-	require.NoError(t, httpService.start(testLogger, shutdownC, cfg))
+	require.NoError(t, httpService.start(TestLogger, shutdownC, cfg))
 
 	// Tunnel uses scheme defined in the service field of the ingress rule, independent of the X-Forwarded-Proto header
 	protos := []string{"https", "http", "dne"}

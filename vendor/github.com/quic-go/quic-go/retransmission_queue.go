@@ -74,7 +74,7 @@ func (q *retransmissionQueue) addAppData(f wire.Frame) {
 	q.appData = append(q.appData, f)
 }
 
-func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount, v protocol.VersionNumber) wire.Frame {
+func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
 	if len(q.initialCryptoData) > 0 {
 		f := q.initialCryptoData[0]
 		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
@@ -97,7 +97,7 @@ func (q *retransmissionQueue) GetInitialFrame(maxLen protocol.ByteCount, v proto
 	return f
 }
 
-func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount, v protocol.VersionNumber) wire.Frame {
+func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
 	if len(q.handshakeCryptoData) > 0 {
 		f := q.handshakeCryptoData[0]
 		newFrame, needsSplit := f.MaybeSplitOffFrame(maxLen, v)
@@ -120,7 +120,7 @@ func (q *retransmissionQueue) GetHandshakeFrame(maxLen protocol.ByteCount, v pro
 	return f
 }
 
-func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount, v protocol.VersionNumber) wire.Frame {
+func (q *retransmissionQueue) GetAppDataFrame(maxLen protocol.ByteCount, v protocol.Version) wire.Frame {
 	if len(q.appData) == 0 {
 		return nil
 	}

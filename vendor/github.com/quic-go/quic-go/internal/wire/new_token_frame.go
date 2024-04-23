@@ -14,7 +14,7 @@ type NewTokenFrame struct {
 	Token []byte
 }
 
-func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFrame, error) {
+func parseNewTokenFrame(r *bytes.Reader, _ protocol.Version) (*NewTokenFrame, error) {
 	tokenLen, err := quicvarint.Read(r)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFra
 	return &NewTokenFrame{Token: token}, nil
 }
 
-func (f *NewTokenFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *NewTokenFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, newTokenFrameType)
 	b = quicvarint.Append(b, uint64(len(f.Token)))
 	b = append(b, f.Token...)
@@ -40,6 +40,6 @@ func (f *NewTokenFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, erro
 }
 
 // Length of a written frame
-func (f *NewTokenFrame) Length(protocol.VersionNumber) protocol.ByteCount {
+func (f *NewTokenFrame) Length(protocol.Version) protocol.ByteCount {
 	return 1 + quicvarint.Len(uint64(len(f.Token))) + protocol.ByteCount(len(f.Token))
 }

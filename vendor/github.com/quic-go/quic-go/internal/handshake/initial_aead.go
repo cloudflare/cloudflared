@@ -21,7 +21,7 @@ const (
 	hkdfLabelIVV2  = "quicv2 iv"
 )
 
-func getSalt(v protocol.VersionNumber) []byte {
+func getSalt(v protocol.Version) []byte {
 	if v == protocol.Version2 {
 		return quicSaltV2
 	}
@@ -31,7 +31,7 @@ func getSalt(v protocol.VersionNumber) []byte {
 var initialSuite = getCipherSuite(tls.TLS_AES_128_GCM_SHA256)
 
 // NewInitialAEAD creates a new AEAD for Initial encryption / decryption.
-func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v protocol.VersionNumber) (LongHeaderSealer, LongHeaderOpener) {
+func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v protocol.Version) (LongHeaderSealer, LongHeaderOpener) {
 	clientSecret, serverSecret := computeSecrets(connID, v)
 	var mySecret, otherSecret []byte
 	if pers == protocol.PerspectiveClient {
@@ -51,14 +51,14 @@ func NewInitialAEAD(connID protocol.ConnectionID, pers protocol.Perspective, v p
 		newLongHeaderOpener(decrypter, newAESHeaderProtector(initialSuite, otherSecret, true, hkdfHeaderProtectionLabel(v)))
 }
 
-func computeSecrets(connID protocol.ConnectionID, v protocol.VersionNumber) (clientSecret, serverSecret []byte) {
+func computeSecrets(connID protocol.ConnectionID, v protocol.Version) (clientSecret, serverSecret []byte) {
 	initialSecret := hkdf.Extract(crypto.SHA256.New, connID.Bytes(), getSalt(v))
 	clientSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
 	serverSecret = hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "server in", crypto.SHA256.Size())
 	return
 }
 
-func computeInitialKeyAndIV(secret []byte, v protocol.VersionNumber) (key, iv []byte) {
+func computeInitialKeyAndIV(secret []byte, v protocol.Version) (key, iv []byte) {
 	keyLabel := hkdfLabelKeyV1
 	ivLabel := hkdfLabelIVV1
 	if v == protocol.Version2 {

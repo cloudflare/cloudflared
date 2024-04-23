@@ -8,8 +8,10 @@ WORKDIR /go/src/github.com/cloudflare/cloudflared/
 # copy our sources into the builder image
 COPY . .
 
+RUN .teamcity/install-cloudflare-go.sh
+
 # compile cloudflared
-RUN GOOS=linux GOARCH=amd64 make cloudflared
+RUN GOOS=linux GOARCH=amd64 PATH="/tmp/go/bin:$PATH" make cloudflared
 
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian11:nonroot

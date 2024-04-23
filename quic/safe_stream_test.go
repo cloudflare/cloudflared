@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +72,8 @@ func quicClient(t *testing.T, addr net.Addr) {
 		go func(iter int) {
 			defer wg.Done()
 
-			stream := NewSafeStreamCloser(quicStream)
+			log := zerolog.Nop()
+			stream := NewSafeStreamCloser(quicStream, 30*time.Second, &log)
 			defer stream.Close()
 
 			// Do a bunch of round trips over this stream that should work.
@@ -107,7 +110,8 @@ func quicServer(t *testing.T, serverReady *sync.WaitGroup, conn net.PacketConn) 
 		go func(iter int) {
 			defer wg.Done()
 
-			stream := NewSafeStreamCloser(quicStream)
+			log := zerolog.Nop()
+			stream := NewSafeStreamCloser(quicStream, 30*time.Second, &log)
 			defer stream.Close()
 
 			// Do a bunch of round trips over this stream that should work.

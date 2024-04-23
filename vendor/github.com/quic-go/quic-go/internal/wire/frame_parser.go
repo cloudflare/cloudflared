@@ -36,7 +36,8 @@ const (
 	handshakeDoneFrameType      = 0x1e
 )
 
-type frameParser struct {
+// The FrameParser parses QUIC frames, one by one.
+type FrameParser struct {
 	r bytes.Reader // cached bytes.Reader, so we don't have to repeatedly allocate them
 
 	ackDelayExponent  uint8
@@ -47,11 +48,9 @@ type frameParser struct {
 	ackFrame *AckFrame
 }
 
-var _ FrameParser = &frameParser{}
-
 // NewFrameParser creates a new frame parser.
-func NewFrameParser(supportsDatagrams bool) *frameParser {
-	return &frameParser{
+func NewFrameParser(supportsDatagrams bool) *FrameParser {
+	return &FrameParser{
 		r:                 *bytes.NewReader(nil),
 		supportsDatagrams: supportsDatagrams,
 		ackFrame:          &AckFrame{},
@@ -60,7 +59,7 @@ func NewFrameParser(supportsDatagrams bool) *frameParser {
 
 // ParseNext parses the next frame.
 // It skips PADDING frames.
-func (p *frameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, v protocol.VersionNumber) (int, Frame, error) {
+func (p *FrameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, v protocol.Version) (int, Frame, error) {
 	startLen := len(data)
 	p.r.Reset(data)
 	frame, err := p.parseNext(&p.r, encLevel, v)
@@ -69,7 +68,7 @@ func (p *frameParser) ParseNext(data []byte, encLevel protocol.EncryptionLevel, 
 	return n, frame, err
 }
 
-func (p *frameParser) parseNext(r *bytes.Reader, encLevel protocol.EncryptionLevel, v protocol.VersionNumber) (Frame, error) {
+func (p *FrameParser) parseNext(r *bytes.Reader, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, error) {
 	for r.Len() != 0 {
 		typ, err := quicvarint.Read(r)
 		if err != nil {
@@ -95,7 +94,7 @@ func (p *frameParser) parseNext(r *bytes.Reader, encLevel protocol.EncryptionLev
 	return nil, nil
 }
 
-func (p *frameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.EncryptionLevel, v protocol.VersionNumber) (Frame, error) {
+func (p *FrameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.EncryptionLevel, v protocol.Version) (Frame, error) {
 	var frame Frame
 	var err error
 	if typ&0xf8 == 0x8 {
@@ -163,7 +162,7 @@ func (p *frameParser) parseFrame(r *bytes.Reader, typ uint64, encLevel protocol.
 	return frame, nil
 }
 
-func (p *frameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionLevel) bool {
+func (p *FrameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionLevel) bool {
 	switch encLevel {
 	case protocol.EncryptionInitial, protocol.EncryptionHandshake:
 		switch f.(type) {
@@ -186,6 +185,8 @@ func (p *frameParser) isAllowedAtEncLevel(f Frame, encLevel protocol.EncryptionL
 	}
 }
 
-func (p *frameParser) SetAckDelayExponent(exp uint8) {
+// SetAckDelayExponent sets the acknowledgment delay exponent (sent in the transport parameters).
+// This value is used to scale the ACK Delay field in the ACK frame.
+func (p *FrameParser) SetAckDelayExponent(exp uint8) {
 	p.ackDelayExponent = exp
 }

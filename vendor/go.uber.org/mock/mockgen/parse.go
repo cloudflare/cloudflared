@@ -232,6 +232,9 @@ func (p *fileParser) parseFile(importPath string, file *ast.File) (*model.Packag
 			continue
 		}
 		i, err := p.parseInterface(ni.name.String(), importPath, ni)
+		if errors.Is(err, errConstraintInterface) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

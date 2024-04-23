@@ -221,7 +221,7 @@ func (c *oobConn) ReadPacket() (receivedPacket, error) {
 				// 	unsigned int    ipi6_ifindex; /* send/recv interface index */
 				// };
 				if len(body) == 20 {
-					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16]))
+					p.info.addr = netip.AddrFrom16(*(*[16]byte)(body[:16])).Unmap()
 					p.info.ifIndex = binary.LittleEndian.Uint32(body[16:])
 				} else {
 					invalidCmsgOnceV6.Do(func() {

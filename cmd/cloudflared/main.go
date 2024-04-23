@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -49,6 +50,9 @@ var (
 )
 
 func main() {
+	// FIXME: TUN-8148: Disable QUIC_GO ECN due to bugs in proper detection if supported
+	os.Setenv("QUIC_GO_DISABLE_ECN", "1")
+
 	rand.Seed(time.Now().UnixNano())
 	metrics.RegisterBuildInfo(BuildType, BuildTime, Version)
 	maxprocs.Set()
@@ -130,11 +134,22 @@ To determine if an update happened in a script, check for error code 11.`,
 		{
 			Name: "version",
 			Action: func(c *cli.Context) (err error) {
+				if c.Bool("short") {
+					fmt.Println(strings.Split(c.App.Version, " ")[0])
+					return nil
+				}
 				version(c)
 				return nil
 			},
 			Usage:       versionText,
 			Description: versionText,
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:    "short",
+					Aliases: []string{"s"},
+					Usage:   "print just the version number",
+				},
+			},
 		},
 	}
 	cmds = append(cmds, tunnel.Commands()...)

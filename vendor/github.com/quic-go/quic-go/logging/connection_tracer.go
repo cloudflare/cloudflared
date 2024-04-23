@@ -27,13 +27,14 @@ type ConnectionTracer struct {
 	UpdatedCongestionState           func(CongestionState)
 	UpdatedPTOCount                  func(value uint32)
 	UpdatedKeyFromTLS                func(EncryptionLevel, Perspective)
-	UpdatedKey                       func(generation KeyPhase, remote bool)
+	UpdatedKey                       func(keyPhase KeyPhase, remote bool)
 	DroppedEncryptionLevel           func(EncryptionLevel)
-	DroppedKey                       func(generation KeyPhase)
+	DroppedKey                       func(keyPhase KeyPhase)
 	SetLossTimer                     func(TimerType, EncryptionLevel, time.Time)
 	LossTimerExpired                 func(TimerType, EncryptionLevel)
 	LossTimerCanceled                func()
 	ECNStateUpdated                  func(state ECNState, trigger ECNStateTrigger)
+	ChoseALPN                        func(protocol string)
 	// Close is called when the connection is closed.
 	Close func()
 	Debug func(name, msg string)
@@ -234,6 +235,13 @@ func NewMultiplexedConnectionTracer(tracers ...*ConnectionTracer) *ConnectionTra
 			for _, t := range tracers {
 				if t.ECNStateUpdated != nil {
 					t.ECNStateUpdated(state, trigger)
+				}
+			}
+		},
+		ChoseALPN: func(protocol string) {
+			for _, t := range tracers {
+				if t.ChoseALPN != nil {
+					t.ChoseALPN(protocol)
 				}
 			}
 		},

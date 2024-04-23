@@ -66,6 +66,7 @@ type TunnelConfig struct {
 	PacketConfig     *ingress.GlobalRouterConfig
 
 	UDPUnregisterSessionTimeout time.Duration
+	WriteStreamTimeout          time.Duration
 
 	DisableQUICPathMTUDiscovery bool
 
@@ -614,6 +615,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		connLogger.Logger(),
 		e.config.PacketConfig,
 		e.config.UDPUnregisterSessionTimeout,
+		e.config.WriteStreamTimeout,
 	)
 	if err != nil {
 		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")

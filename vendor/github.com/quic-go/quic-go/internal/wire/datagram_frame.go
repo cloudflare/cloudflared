@@ -20,7 +20,7 @@ type DatagramFrame struct {
 	Data           []byte
 }
 
-func parseDatagramFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (*DatagramFrame, error) {
+func parseDatagramFrame(r *bytes.Reader, typ uint64, _ protocol.Version) (*DatagramFrame, error) {
 	f := &DatagramFrame{}
 	f.DataLenPresent = typ&0x1 > 0
 
@@ -45,7 +45,7 @@ func parseDatagramFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (
 	return f, nil
 }
 
-func (f *DatagramFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *DatagramFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	typ := uint8(0x30)
 	if f.DataLenPresent {
 		typ ^= 0b1
@@ -59,7 +59,7 @@ func (f *DatagramFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, erro
 }
 
 // MaxDataLen returns the maximum data length
-func (f *DatagramFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.VersionNumber) protocol.ByteCount {
+func (f *DatagramFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.Version) protocol.ByteCount {
 	headerLen := protocol.ByteCount(1)
 	if f.DataLenPresent {
 		// pretend that the data size will be 1 bytes
@@ -77,7 +77,7 @@ func (f *DatagramFrame) MaxDataLen(maxSize protocol.ByteCount, version protocol.
 }
 
 // Length of a written frame
-func (f *DatagramFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
+func (f *DatagramFrame) Length(_ protocol.Version) protocol.ByteCount {
 	length := 1 + protocol.ByteCount(len(f.Data))
 	if f.DataLenPresent {
 		length += quicvarint.Len(uint64(len(f.Data)))

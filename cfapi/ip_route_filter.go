@@ -167,6 +167,10 @@ func (f *IpRouteFilter) MaxFetchSize(max uint) {
 	f.queryParams.Set("per_page", strconv.Itoa(int(max)))
 }
 
+func (f *IpRouteFilter) Page(page int) {
+	f.queryParams.Set("page", strconv.Itoa(page))
+}
+
 func (f IpRouteFilter) Encode() string {
 	return f.queryParams.Encode()
 }

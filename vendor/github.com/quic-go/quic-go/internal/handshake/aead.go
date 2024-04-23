@@ -1,14 +1,12 @@
 package handshake
 
 import (
-	"crypto/cipher"
 	"encoding/binary"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 )
 
-func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.VersionNumber) cipher.AEAD {
+func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.Version) *xorNonceAEAD {
 	keyLabel := hkdfLabelKeyV1
 	ivLabel := hkdfLabelIVV1
 	if v == protocol.Version2 {
@@ -21,28 +19,26 @@ func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.VersionNumb
 }
 
 type longHeaderSealer struct {
-	aead            cipher.AEAD
+	aead            *xorNonceAEAD
 	headerProtector headerProtector
-
-	// use a single slice to avoid allocations
-	nonceBuf []byte
+	nonceBuf        [8]byte
 }
 
 var _ LongHeaderSealer = &longHeaderSealer{}
 
-func newLongHeaderSealer(aead cipher.AEAD, headerProtector headerProtector) LongHeaderSealer {
+func newLongHeaderSealer(aead *xorNonceAEAD, headerProtector headerProtector) LongHeaderSealer {
+	if aead.NonceSize() != 8 {
+		panic("unexpected nonce size")
+	}
 	return &longHeaderSealer{
 		aead:            aead,
 		headerProtector: headerProtector,
-		nonceBuf:        make([]byte, aead.NonceSize()),
 	}
 }
 
 func (s *longHeaderSealer) Seal(dst, src []byte, pn protocol.PacketNumber, ad []byte) []byte {
-	binary.BigEndian.PutUint64(s.nonceBuf[len(s.nonceBuf)-8:], uint64(pn))
-	// The AEAD we're using here will be the qtls.aeadAESGCM13.
-	// It uses the nonce provided here and XOR it with the IV.
-	return s.aead.Seal(dst, s.nonceBuf, src, ad)
+	binary.BigEndian.PutUint64(s.nonceBuf[:], uint64(pn))
+	return s.aead.Seal(dst, s.nonceBuf[:], src, ad)
 }
 
 func (s *longHeaderSealer) EncryptHeader(sample []byte, firstByte *byte, pnBytes []byte) {
@@ -54,21 +50,23 @@ func (s *longHeaderSealer) Overhead() int {
 }
 
 type longHeaderOpener struct {
-	aead            cipher.AEAD
+	aead            *xorNonceAEAD
 	headerProtector headerProtector
 	highestRcvdPN   protocol.PacketNumber // highest packet number received (which could be successfully unprotected)
 
-	// use a single slice to avoid allocations
-	nonceBuf []byte
+	// use a single array to avoid allocations
+	nonceBuf [8]byte
 }
 
 var _ LongHeaderOpener = &longHeaderOpener{}
 
-func newLongHeaderOpener(aead cipher.AEAD, headerProtector headerProtector) LongHeaderOpener {
+func newLongHeaderOpener(aead *xorNonceAEAD, headerProtector headerProtector) LongHeaderOpener {
+	if aead.NonceSize() != 8 {
+		panic("unexpected nonce size")
+	}
 	return &longHeaderOpener{
 		aead:            aead,
 		headerProtector: headerProtector,
-		nonceBuf:        make([]byte, aead.NonceSize()),
 	}
 }
 
@@ -77,12 +75,10 @@ func (o *longHeaderOpener) DecodePacketNumber(wirePN protocol.PacketNumber, wire
 }
 
 func (o *longHeaderOpener) Open(dst, src []byte, pn protocol.PacketNumber, ad []byte) ([]byte, error) {
-	binary.BigEndian.PutUint64(o.nonceBuf[len(o.nonceBuf)-8:], uint64(pn))
-	// The AEAD we're using here will be the qtls.aeadAESGCM13.
-	// It uses the nonce provided here and XOR it with the IV.
-	dec, err := o.aead.Open(dst, o.nonceBuf, src, ad)
+	binary.BigEndian.PutUint64(o.nonceBuf[:], uint64(pn))
+	dec, err := o.aead.Open(dst, o.nonceBuf[:], src, ad)
 	if err == nil {
-		o.highestRcvdPN = utils.Max(o.highestRcvdPN, pn)
+		o.highestRcvdPN = max(o.highestRcvdPN, pn)
 	} else {
 		err = ErrDecryptionFailed
 	}

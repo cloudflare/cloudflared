@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"net/netip"
 	"sort"
 	"time"
 
@@ -51,10 +51,7 @@ const (
 
 // PreferredAddress is the value encoding in the preferred_address transport parameter
 type PreferredAddress struct {
-	IPv4                net.IP
-	IPv4Port            uint16
-	IPv6                net.IP
-	IPv6Port            uint16
+	IPv4, IPv6          netip.AddrPort
 	ConnectionID        protocol.ConnectionID
 	StatelessResetToken protocol.StatelessResetToken
 }
@@ -218,26 +215,24 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 func (p *TransportParameters) readPreferredAddress(r *bytes.Reader, expectedLen int) error {
 	remainingLen := r.Len()
 	pa := &PreferredAddress{}
-	ipv4 := make([]byte, 4)
-	if _, err := io.ReadFull(r, ipv4); err != nil {
+	var ipv4 [4]byte
+	if _, err := io.ReadFull(r, ipv4[:]); err != nil {
 		return err
 	}
-	pa.IPv4 = net.IP(ipv4)
 	port, err := utils.BigEndian.ReadUint16(r)
 	if err != nil {
 		return err
 	}
-	pa.IPv4Port = port
-	ipv6 := make([]byte, 16)
-	if _, err := io.ReadFull(r, ipv6); err != nil {
+	pa.IPv4 = netip.AddrPortFrom(netip.AddrFrom4(ipv4), port)
+	var ipv6 [16]byte
+	if _, err := io.ReadFull(r, ipv6[:]); err != nil {
 		return err
 	}
-	pa.IPv6 = net.IP(ipv6)
 	port, err = utils.BigEndian.ReadUint16(r)
 	if err != nil {
 		return err
 	}
-	pa.IPv6Port = port
+	pa.IPv6 = netip.AddrPortFrom(netip.AddrFrom16(ipv6), port)
 	connIDLen, err := r.ReadByte()
 	if err != nil {
 		return err
@@ -294,7 +289,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 			return fmt.Errorf("initial_max_streams_uni too large: %d (maximum %d)", p.MaxUniStreamNum, protocol.MaxStreamCount)
 		}
 	case maxIdleTimeoutParameterID:
-		p.MaxIdleTimeout = utils.Max(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
+		p.MaxIdleTimeout = max(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxUDPPayloadSizeParameterID:
 		if val < 1200 {
 			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
@@ -384,13 +379,12 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 		if p.PreferredAddress != nil {
 			b = quicvarint.Append(b, uint64(preferredAddressParameterID))
 			b = quicvarint.Append(b, 4+2+16+2+1+uint64(p.PreferredAddress.ConnectionID.Len())+16)
-			ipv4 := p.PreferredAddress.IPv4
-			b = append(b, ipv4[len(ipv4)-4:]...)
-			b = append(b, []byte{0, 0}...)
-			binary.BigEndian.PutUint16(b[len(b)-2:], p.PreferredAddress.IPv4Port)
-			b = append(b, p.PreferredAddress.IPv6...)
-			b = append(b, []byte{0, 0}...)
-			binary.BigEndian.PutUint16(b[len(b)-2:], p.PreferredAddress.IPv6Port)
+			ip4 := p.PreferredAddress.IPv4.Addr().As4()
+			b = append(b, ip4[:]...)
+			b = binary.BigEndian.AppendUint16(b, p.PreferredAddress.IPv4.Port())
+			ip6 := p.PreferredAddress.IPv6.Addr().As16()
+			b = append(b, ip6[:]...)
+			b = binary.BigEndian.AppendUint16(b, p.PreferredAddress.IPv6.Port())
 			b = append(b, uint8(p.PreferredAddress.ConnectionID.Len()))
 			b = append(b, p.PreferredAddress.ConnectionID.Bytes()...)
 			b = append(b, p.PreferredAddress.StatelessResetToken[:]...)

@@ -8,7 +8,7 @@ type RingBuffer[T any] struct {
 	full             bool
 }
 
-// Init preallocs a buffer with a certain size.
+// Init preallocates a buffer with a certain size.
 func (r *RingBuffer[T]) Init(size int) {
 	r.ring = make([]T, size)
 }
@@ -60,6 +60,16 @@ func (r *RingBuffer[T]) PopFront() T {
 		r.headPos = 0
 	}
 	return t
+}
+
+// PeekFront returns the next element.
+// It must not be called when the buffer is empty, that means that
+// callers might need to check if there are elements in the buffer first.
+func (r *RingBuffer[T]) PeekFront() T {
+	if r.Empty() {
+		panic("github.com/quic-go/quic-go/internal/utils/ringbuffer: peek from an empty queue")
+	}
+	return r.ring[r.headPos]
 }
 
 // Grow the maximum size of the queue.
