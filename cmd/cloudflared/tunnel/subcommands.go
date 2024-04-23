@@ -402,9 +402,9 @@ func buildReadyCommand() *cli.Command {
 	return &cli.Command{
 		Name:               "ready",
 		Action:             cliutil.ConfiguredAction(readyCommand),
-		Usage:              "Tunnel /ready exit code",
+		Usage:              "Call /ready endpoint and returns proper exit code",
 		UsageText:          "cloudflared tunnel [tunnel command options] ready [subcommand options]",
-		Description:        "cloudflared tunnel ready will return proper exit code if tunnel is ready or not",
+		Description:        "cloudflared tunnel ready will return proper exit code based on the /ready endpoint",
 		Flags:              []cli.Flag{},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
