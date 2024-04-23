@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -411,13 +412,18 @@ func buildReadyCommand() *cli.Command {
 }
 
 func readyCommand(c *cli.Context) error {
-	requestURL := fmt.Sprintf("http://%s/ready", c.String("metrics"))
+	metricsOpts := c.String("metrics")
+	requestURL := fmt.Sprintf("http://%s/ready", metricsOpts)
 	res, err := http.Get(requestURL)
 	if err != nil {
 		return err
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("/ready endpoint returned status code %d\n%s", res.StatusCode, res.Body)
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("http://%s/ready endpoint returned status code %d\n%s", metricsOpts, res.StatusCode, body)
 	}
 	return nil
 }
