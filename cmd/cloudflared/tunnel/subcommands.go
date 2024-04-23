@@ -400,11 +400,11 @@ func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected boo
 
 func buildReadyCommand() *cli.Command {
 	return &cli.Command{
-		Name:               "health",
+		Name:               "ready",
 		Action:             cliutil.ConfiguredAction(readyCommand),
-		Usage:              "Tunnel health exit code",
-		UsageText:          "cloudflared tunnel [tunnel command options] health [subcommand options]",
-		Description:        "cloudflared tunnel health will return proper exit code if tunnel is healthy or unhealthy",
+		Usage:              "Tunnel /ready exit code",
+		UsageText:          "cloudflared tunnel [tunnel command options] ready [subcommand options]",
+		Description:        "cloudflared tunnel ready will return proper exit code if tunnel is ready or not",
 		Flags:              []cli.Flag{},
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
@@ -417,7 +417,7 @@ func readyCommand(c *cli.Context) error {
 		return err
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("health /ready endpoint returned status code %d\n%s", res.StatusCode, res.Body)
+		return fmt.Errorf("/ready endpoint returned status code %d\n%s", res.StatusCode, res.Body)
 	}
 	return nil
 }
