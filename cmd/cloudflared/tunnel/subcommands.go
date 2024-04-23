@@ -411,13 +411,13 @@ func buildHealthCommand() *cli.Command {
 }
 
 func healthCommand(c *cli.Context) error {
-	requestURL := fmt.Sprintf("http://%s/ready", c.String("metrics"))
+	requestURL := fmt.Sprintf("http://%s/healthcheck", c.String("metrics"))
 	res, err := http.Get(requestURL)
 	if err != nil {
 		return err
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("health /ready endpoint returned status code %d", res.StatusCode)
+		return fmt.Errorf("health /ready endpoint returned status code %d\n%s", res.StatusCode, res.Body)
 	}
 	return nil
 }
