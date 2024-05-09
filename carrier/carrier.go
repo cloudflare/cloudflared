@@ -16,13 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/token"
 )
 
 const (
 	LogFieldOriginURL       = "originURL"
 	CFAccessTokenHeader     = "Cf-Access-Token"
-	cfJumpDestinationHeader = "Cf-Access-Jump-Destination"
+	CFJumpDestinationHeader = "Cf-Access-Jump-Destination"
 )
 
 type StartOptions struct {
@@ -163,12 +164,16 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 
 func SetBastionDest(header http.Header, destination string) {
 	if destination != "" {
-		header.Set(cfJumpDestinationHeader, destination)
+		header.Set(CFJumpDestinationHeader, destination)
 	}
 }
 
-func ResolveBastionDest(r *http.Request) (string, error) {
-	jumpDestination := r.Header.Get(cfJumpDestinationHeader)
+func ResolveBastionDest(req *http.Request, bastionMode bool, service string) (string, error) {
+	jumpDestination := req.Header.Get(CFJumpDestinationHeader)
+	if bastionMode && service != config.BastionFlag {
+		jumpDestination = service
+	}
+
 	if jumpDestination == "" {
 		return "", fmt.Errorf("Did not receive final destination from client. The --destination flag is likely not set on the client side")
 	}

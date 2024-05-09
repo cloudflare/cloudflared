@@ -138,7 +138,7 @@ func testURLCommand(c *cli.Context) error {
 		return errors.Wrap(err, "Validation failed")
 	}
 
-	_, i := ing.FindMatchingRule(requestURL.Hostname(), requestURL.Path)
+	_, i := ing.FindMatchingRule(requestURL.Hostname(), requestURL.Path, "")
 	fmt.Printf("Matched rule #%d\n", i)
 	fmt.Println(ing.Rules[i].MultiLineString())
 	return nil

@@ -28,7 +28,6 @@ var (
 )
 
 const (
-	ServiceBastion     = "bastion"
 	ServiceSocksProxy  = "socks-proxy"
 	ServiceWarpRouting = "warp-routing"
 )
@@ -38,12 +37,13 @@ const (
 // which is the case if the rules were instantiated via the ingress#Validate method.
 //
 // Negative index rule signifies local cloudflared rules (not-user defined).
-func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
+func (ing Ingress) FindMatchingRule(hostname, path string, cfJumpDestinationHeader string) (*Rule, int) {
 	// The hostname might contain port. We only want to compare the host part with the rule
 	host, _, err := net.SplitHostPort(hostname)
 	if err == nil {
 		hostname = host
 	}
+	derivedHostName := hostname
 	for i, rule := range ing.InternalRules {
 		if rule.Matches(hostname, path) {
 			// Local rule matches return a negative rule index to distiguish local rules from user-defined rules in logs
@@ -52,7 +52,15 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 		}
 	}
 	for i, rule := range ing.Rules {
-		if rule.Matches(hostname, path) {
+		// If bastion mode is turned on and request is made as bastion, attempt
+		// to match a rule where jump destination header matches the hostname
+		if rule.Config.BastionMode && len(cfJumpDestinationHeader) > 0 {
+			jumpDestinationUri, err := url.Parse(cfJumpDestinationHeader)
+			if err == nil {
+				derivedHostName = jumpDestinationUri.Hostname()
+			}
+		}
+		if rule.Matches(derivedHostName, path) {
 			return &rule, i
 		}
 	}
@@ -265,6 +273,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			}
 			srv := newStatusCode(statusCode)
 			service = &srv
+
 		} else if r.Service == HelloWorldFlag || r.Service == HelloWorldService {
 			service = new(helloWorld)
 		} else if r.Service == ServiceSocksProxy {
@@ -284,12 +293,21 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			}
 
 			service = newSocksProxyOverWSService(accessPolicy)
-		} else if r.Service == ServiceBastion || cfg.BastionMode {
+		} else if r.Service == config.BastionFlag || cfg.BastionMode {
 			// Bastion mode will always start a Websocket proxy server, which will
 			// overwrite the localService.URL field when `start` is called. So,
 			// leave the URL field empty for now.
 			cfg.BastionMode = true
-			service = newBastionService()
+
+			if cfg.BastionMode && r.Service != config.BastionFlag {
+				u, err := url.Parse(r.Service)
+				if err != nil {
+					return Ingress{}, err
+				}
+				service = newBastionServiceWithDest(u)
+			} else {
+				service = newBastionService()
+			}
 		} else {
 			// Validate URL services
 			u, err := url.Parse(r.Service)

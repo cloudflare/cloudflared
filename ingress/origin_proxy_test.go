@@ -58,6 +58,8 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 
 	bastionReq := baseReq.Clone(context.Background())
 	carrier.SetBastionDest(bastionReq.Header, originListener.Addr().String())
+	u, err := url.Parse("https://place-holder1")
+	require.NoError(t, err)
 
 	tests := []struct {
 		testCase  string
@@ -81,12 +83,23 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 			req:       baseReq,
 			expectErr: true,
 		},
+		{
+			testCase: "bastion service",
+			service:  newBastionServiceWithDest(u),
+			req:      bastionReq,
+		},
+		{
+			testCase:  "bastion service",
+			service:   newBastionServiceWithDest(u),
+			req:       bastionReq,
+			expectErr: true,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.testCase, func(t *testing.T) {
 			if test.expectErr {
-				bastionHost, _ := carrier.ResolveBastionDest(test.req)
+				bastionHost, _ := carrier.ResolveBastionDest(test.req, false, "bastion")
 				_, err := test.service.EstablishConnection(context.Background(), bastionHost, TestLogger)
 				assert.Error(t, err)
 			}
@@ -98,7 +111,7 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 
 	for _, service := range []*tcpOverWSService{newTCPOverWSService(originURL), newBastionService()} {
 		// Origin not listening for new connection, should return an error
-		bastionHost, _ := carrier.ResolveBastionDest(bastionReq)
+		bastionHost, _ := carrier.ResolveBastionDest(bastionReq, false, "bastion")
 		_, err := service.EstablishConnection(context.Background(), bastionHost, TestLogger)
 		assert.Error(t, err)
 	}

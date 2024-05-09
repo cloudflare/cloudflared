@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ipaccess"
 	"github.com/cloudflare/cloudflared/management"
@@ -151,6 +152,14 @@ func newBastionService() *tcpOverWSService {
 	}
 }
 
+func newBastionServiceWithDest(url *url.URL) *tcpOverWSService {
+	return &tcpOverWSService{
+		isBastion: true,
+		scheme:    url.Scheme,
+		dest:      url.Host,
+	}
+}
+
 func newSocksProxyOverWSService(accessPolicy *ipaccess.Policy) *socksProxyOverWSService {
 	proxy := socksProxyOverWSService{
 		conn: &socksProxyOverWSConnection{
@@ -170,8 +179,8 @@ func addPortIfMissing(uri *url.URL, port int) {
 }
 
 func (o *tcpOverWSService) String() string {
-	if o.isBastion {
-		return ServiceBastion
+	if o.isBastion && len(o.dest) == 0 {
+		return config.BastionFlag
 	}
 
 	if o.scheme != "" {

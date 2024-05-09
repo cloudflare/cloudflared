@@ -440,6 +440,50 @@ ingress:
 			},
 		},
 		{
+			name: "Bastion mode turned on with with custom service",
+			args: args{rawYAML: `
+ingress:
+- hostname: bastiondest.foo.com
+  service: http://localhost:9000
+  originRequest:
+    bastionMode: true
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "bastiondest.foo.com",
+					Service:  newBastionServiceWithDest(MustParseURL(t, "http://localhost:9000")),
+					Config:   setConfig(originRequestFromConfig(config.OriginRequestConfig{}), config.OriginRequestConfig{BastionMode: &tr}),
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "TCP service with Bastion mode turned off",
+			args: args{rawYAML: `
+ingress:
+- hostname: tcp.foo.com
+  service: tcp://localhost:9000
+  originRequest:
+    bastionMode: false
+- service: http_status:404
+`},
+			want: []Rule{
+				{
+					Hostname: "tcp.foo.com",
+					Service:  newTCPOverWSService(MustParseURL(t, "tcp://localhost:9000")),
+					Config:   defaultConfig,
+				},
+				{
+					Service: &fourOhFour,
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
 			name: "Hostname contains port",
 			args: args{rawYAML: `
 ingress:
@@ -656,6 +700,7 @@ func TestSingleOriginServices_URL(t *testing.T) {
 }
 
 func TestFindMatchingRule(t *testing.T) {
+
 	ingress := Ingress{
 		Rules: []Rule{
 			{
@@ -667,51 +712,77 @@ func TestFindMatchingRule(t *testing.T) {
 				Path:     MustParsePath(t, "/health"),
 			},
 			{
+				Hostname: "tunnel-d.example.com",
+				Path:     nil,
+				Config: OriginRequestConfig{
+					BastionMode: true,
+				},
+			},
+			{
 				Hostname: "*",
 			},
 		},
 	}
 
 	tests := []struct {
-		host          string
-		path          string
-		req           *http.Request
-		wantRuleIndex int
+		host                    string
+		path                    string
+		cfJumpDestinationHeader string
+		req                     *http.Request
+		wantRuleIndex           int
 	}{
 		{
-			host:          "tunnel-a.example.com",
-			path:          "/",
-			wantRuleIndex: 0,
+			host:                    "tunnel-a.example.com",
+			path:                    "/",
+			cfJumpDestinationHeader: "",
+			wantRuleIndex:           0,
 		},
 		{
-			host:          "tunnel-a.example.com",
-			path:          "/pages/about",
-			wantRuleIndex: 0,
+			host:                    "tunnel-a.example.com",
+			path:                    "/pages/about",
+			cfJumpDestinationHeader: "",
+			wantRuleIndex:           0,
 		},
 		{
-			host:          "tunnel-a.example.com:443",
-			path:          "/pages/about",
-			wantRuleIndex: 0,
+			host:                    "tunnel-a.example.com:443",
+			path:                    "/pages/about",
+			cfJumpDestinationHeader: "",
+			wantRuleIndex:           0,
 		},
 		{
-			host:          "tunnel-b.example.com",
-			path:          "/health",
-			wantRuleIndex: 1,
+			host:                    "tunnel-b.example.com",
+			path:                    "/health",
+			cfJumpDestinationHeader: "",
+			wantRuleIndex:           1,
 		},
 		{
-			host:          "tunnel-b.example.com",
-			path:          "/index.html",
-			wantRuleIndex: 2,
+			host:                    "tunnel-b.example.com",
+			path:                    "/index.html",
+			cfJumpDestinationHeader: "",
+			wantRuleIndex:           3,
 		},
 		{
-			host:          "tunnel-c.example.com",
-			path:          "/",
-			wantRuleIndex: 2,
+			host:                    "tunnel-d.example.com",
+			path:                    "/",
+			cfJumpDestinationHeader: "https://tunnel-d.example.com",
+			wantRuleIndex:           2,
+		},
+		{
+			host:                    "tunnel-d.example.com",
+			path:                    "/",
+			cfJumpDestinationHeader: "https://tunnel-d.example.com",
+			wantRuleIndex:           2,
+		},
+		{
+			host:                    "tunnel-c.example.com",
+			path:                    "/",
+			cfJumpDestinationHeader: "",
+			wantRuleIndex:           3,
 		},
 	}
 
 	for _, test := range tests {
-		_, ruleIndex := ingress.FindMatchingRule(test.host, test.path)
+		_, ruleIndex := ingress.FindMatchingRule(test.host, test.path, test.cfJumpDestinationHeader)
 		assert.Equal(t, test.wantRuleIndex, ruleIndex, fmt.Sprintf("Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, ruleIndex))
 	}
 }
@@ -786,9 +857,9 @@ ingress:
 	}
 
 	for n := 0; n < b.N; n++ {
-		ing.FindMatchingRule("tunnel1.example.com", "")
-		ing.FindMatchingRule("tunnel2.example.com", "")
-		ing.FindMatchingRule("tunnel3.example.com", "")
+		ing.FindMatchingRule("tunnel1.example.com", "", "")
+		ing.FindMatchingRule("tunnel2.example.com", "", "")
+		ing.FindMatchingRule("tunnel3.example.com", "", "")
 	}
 }
 

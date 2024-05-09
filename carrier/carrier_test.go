@@ -158,80 +158,110 @@ func testRequest(t *testing.T, url string, stream io.ReadWriter) *http.Request {
 }
 
 func TestBastionDestination(t *testing.T) {
+
 	tests := []struct {
 		name         string
 		header       http.Header
 		expectedDest string
 		wantErr      bool
+		bastionMode  bool
+		service      string
 	}{
 		{
 			name: "hostname destination",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"localhost"},
+				CFJumpDestinationHeader: []string{"localhost"},
 			},
 			expectedDest: "localhost",
 		},
 		{
 			name: "hostname destination with port",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"localhost:9000"},
+				CFJumpDestinationHeader: []string{"localhost:9000"},
 			},
 			expectedDest: "localhost:9000",
 		},
 		{
 			name: "hostname destination with scheme and port",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"ssh://localhost:9000"},
+				CFJumpDestinationHeader: []string{"ssh://localhost:9000"},
 			},
 			expectedDest: "localhost:9000",
 		},
 		{
 			name: "full hostname url",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"ssh://localhost:9000/metrics"},
+				CFJumpDestinationHeader: []string{"ssh://localhost:9000/metrics"},
 			},
 			expectedDest: "localhost:9000",
 		},
 		{
 			name: "hostname destination with port and path",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"localhost:9000/metrics"},
+				CFJumpDestinationHeader: []string{"localhost:9000/metrics"},
 			},
 			expectedDest: "localhost:9000",
 		},
 		{
 			name: "ip destination",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"127.0.0.1"},
+				CFJumpDestinationHeader: []string{"127.0.0.1"},
 			},
 			expectedDest: "127.0.0.1",
 		},
 		{
 			name: "ip destination with port",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"127.0.0.1:9000"},
+				CFJumpDestinationHeader: []string{"127.0.0.1:9000"},
 			},
 			expectedDest: "127.0.0.1:9000",
 		},
 		{
 			name: "ip destination with port and path",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"127.0.0.1:9000/metrics"},
+				CFJumpDestinationHeader: []string{"127.0.0.1:9000/metrics"},
 			},
 			expectedDest: "127.0.0.1:9000",
 		},
 		{
 			name: "ip destination with schem and port",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"tcp://127.0.0.1:9000"},
+				CFJumpDestinationHeader: []string{"tcp://127.0.0.1:9000"},
 			},
 			expectedDest: "127.0.0.1:9000",
 		},
 		{
 			name: "full ip url",
 			header: http.Header{
-				cfJumpDestinationHeader: []string{"ssh://127.0.0.1:9000/metrics"},
+				CFJumpDestinationHeader: []string{"ssh://127.0.0.1:9000/metrics"},
 			},
+			expectedDest: "127.0.0.1:9000",
+		},
+		{
+			name: "full ip url with bastion mode",
+			header: http.Header{
+				CFJumpDestinationHeader: []string{"ssh://127.0.0.1:9000/metrics"},
+			},
+			bastionMode:  true,
+			service:      "ssh://127.0.0.1:9002/metrics",
+			expectedDest: "127.0.0.1:9002",
+		},
+		{
+			name: "ip destination with port and path with bastion mode",
+			header: http.Header{
+				CFJumpDestinationHeader: []string{"127.0.0.1:9000/metrics"},
+			},
+			bastionMode:  true,
+			service:      "127.0.0.1:9002/metrics",
+			expectedDest: "127.0.0.1:9002",
+		},
+		{
+			name: "ip destination with port and path without bastion mode",
+			header: http.Header{
+				CFJumpDestinationHeader: []string{"127.0.0.1:9000/metrics"},
+			},
+			bastionMode:  false,
+			service:      "127.0.0.1:9002/metrics",
 			expectedDest: "127.0.0.1:9000",
 		},
 		{
@@ -243,7 +273,7 @@ func TestBastionDestination(t *testing.T) {
 		r := &http.Request{
 			Header: test.header,
 		}
-		dest, err := ResolveBastionDest(r)
+		dest, err := ResolveBastionDest(r, test.bastionMode, test.service)
 		if test.wantErr {
 			assert.Error(t, err, "Test %s expects error", test.name)
 		} else {

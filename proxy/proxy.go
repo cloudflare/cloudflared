@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cfio"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/stream"
@@ -86,7 +87,7 @@ func (p *Proxy) ProxyHTTP(
 
 	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
 		trace.WithAttributes(attribute.String("req-host", req.Host)))
-	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path, req.Header.Get(carrier.CFJumpDestinationHeader))
 	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
 	ruleSpan.End()
 	logger := newHTTPLogger(p.log, tr.ConnIndex, req, ruleNum, rule.Service.String())
@@ -97,6 +98,29 @@ func (p *Proxy) ProxyHTTP(
 			return nil
 		}
 		return err
+	}
+	// Handling for StreamBasedOriginProxy or BastionMode
+	if _, ok := rule.Service.(ingress.StreamBasedOriginProxy); ok || rule.Config.BastionMode {
+		if _, ok := rule.Service.(ingress.StreamBasedOriginProxy); !ok && rule.Config.BastionMode {
+			return fmt.Errorf("Unrecognized service: %s", rule.Service)
+		}
+
+		dest, err := getDestFromRule(rule, req)
+		if err != nil {
+			return err
+		}
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return fmt.Errorf("response writer is not a flusher")
+		}
+		rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
+		logger := logger.With().Str(logFieldDestAddr, dest).Logger()
+		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, rule.Service.(ingress.StreamBasedOriginProxy), &logger); err != nil {
+			logRequestError(&logger, err)
+			return err
+		}
+		return nil
 	}
 
 	switch originProxy := rule.Service.(type) {
@@ -109,22 +133,6 @@ func (p *Proxy) ProxyHTTP(
 			rule.Config.DisableChunkedEncoding,
 			&logger,
 		); err != nil {
-			logRequestError(&logger, err)
-			return err
-		}
-		return nil
-	case ingress.StreamBasedOriginProxy:
-		dest, err := getDestFromRule(rule, req)
-		if err != nil {
-			return err
-		}
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return fmt.Errorf("response writer is not a flusher")
-		}
-		rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
-		logger := logger.With().Str(logFieldDestAddr, dest).Logger()
-		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, originProxy, &logger); err != nil {
 			logRequestError(&logger, err)
 			return err
 		}
@@ -335,10 +343,9 @@ func copyTrailers(w connection.ResponseWriter, response *http.Response) {
 }
 
 func getDestFromRule(rule *ingress.Rule, req *http.Request) (string, error) {
-	switch rule.Service.String() {
-	case ingress.ServiceBastion:
-		return carrier.ResolveBastionDest(req)
-	default:
+	if rule.Config.BastionMode || rule.Service.String() == config.BastionFlag {
+		return carrier.ResolveBastionDest(req, rule.Config.BastionMode, rule.Service.String())
+	} else {
 		return rule.Service.String(), nil
 	}
 }
