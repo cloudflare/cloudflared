@@ -59,7 +59,6 @@ func (r *Rule) Matches(hostname, path string) bool {
 	} else {
 		hostMatch = matchHost(r.Hostname, hostname)
 	}
-
 	punycodeHostMatch := false
 	if r.punycodeHostname != "" {
 		punycodeHostMatch = matchHost(r.punycodeHostname, hostname)

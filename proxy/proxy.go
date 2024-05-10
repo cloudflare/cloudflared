@@ -99,10 +99,11 @@ func (p *Proxy) ProxyHTTP(
 		}
 		return err
 	}
-	// Handling for StreamBasedOriginProxy or BastionMode
+
+	// Check if config is for Bastion Mode and service is a stream based origin proxy, if so stream service in bastion mode
 	if _, ok := rule.Service.(ingress.StreamBasedOriginProxy); ok || rule.Config.BastionMode {
 		if _, ok := rule.Service.(ingress.StreamBasedOriginProxy); !ok && rule.Config.BastionMode {
-			return fmt.Errorf("Unrecognized service: %s", rule.Service)
+			return fmt.Errorf("Unsupported service to stream to in bastion mode: %s", rule.Service)
 		}
 
 		dest, err := getDestFromRule(rule, req)
@@ -116,6 +117,7 @@ func (p *Proxy) ProxyHTTP(
 		}
 		rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
 		logger := logger.With().Str(logFieldDestAddr, dest).Logger()
+		// We know that Bastion mode is supported by StreamBasedOriginProxy, hence use the same
 		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, rule.Service.(ingress.StreamBasedOriginProxy), &logger); err != nil {
 			logRequestError(&logger, err)
 			return err

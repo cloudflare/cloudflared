@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/websocket"
 )
 
@@ -58,14 +59,13 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 
 	bastionReq := baseReq.Clone(context.Background())
 	carrier.SetBastionDest(bastionReq.Header, originListener.Addr().String())
-	u, err := url.Parse("https://place-holder1")
-	require.NoError(t, err)
 
 	tests := []struct {
-		testCase  string
-		service   *tcpOverWSService
-		req       *http.Request
-		expectErr bool
+		testCase    string
+		service     *tcpOverWSService
+		req         *http.Request
+		bastionMode bool
+		expectErr   bool
 	}{
 		{
 			testCase: "specific TCP service",
@@ -73,33 +73,37 @@ func TestTCPOverWSServiceEstablishConnection(t *testing.T) {
 			req:      baseReq,
 		},
 		{
-			testCase: "bastion service",
-			service:  newBastionService(),
-			req:      bastionReq,
+			testCase:    "bastion service",
+			service:     newBastionService(),
+			bastionMode: true,
+			req:         bastionReq,
 		},
 		{
-			testCase:  "invalid bastion request",
-			service:   newBastionService(),
-			req:       baseReq,
-			expectErr: true,
+			testCase:    "invalid bastion request",
+			service:     newBastionService(),
+			bastionMode: true,
+			req:         baseReq,
+			expectErr:   true,
 		},
 		{
-			testCase: "bastion service",
-			service:  newBastionServiceWithDest(u),
-			req:      bastionReq,
+			testCase:    "bastion service",
+			service:     newBastionServiceWithDest(MustParseURL(t, "https://place-holder1")),
+			req:         bastionReq,
+			bastionMode: true,
 		},
 		{
-			testCase:  "bastion service",
-			service:   newBastionServiceWithDest(u),
-			req:       bastionReq,
-			expectErr: true,
+			testCase:    "bastion service",
+			service:     newBastionServiceWithDest(MustParseURL(t, "https://place-holder1")),
+			req:         baseReq,
+			bastionMode: true,
+			expectErr:   true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.testCase, func(t *testing.T) {
 			if test.expectErr {
-				bastionHost, _ := carrier.ResolveBastionDest(test.req, false, "bastion")
+				bastionHost, _ := carrier.ResolveBastionDest(test.req, test.bastionMode, config.BastionFlag)
 				_, err := test.service.EstablishConnection(context.Background(), bastionHost, TestLogger)
 				assert.Error(t, err)
 			}
