@@ -158,7 +158,6 @@ func testRequest(t *testing.T, url string, stream io.ReadWriter) *http.Request {
 }
 
 func TestBastionDestination(t *testing.T) {
-
 	tests := []struct {
 		name         string
 		header       http.Header

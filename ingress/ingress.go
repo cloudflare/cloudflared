@@ -54,7 +54,7 @@ func (ing Ingress) FindMatchingRule(hostname, path string, cfJumpDestinationHead
 	for i, rule := range ing.Rules {
 		// If bastion mode is turned on and request is made as bastion, attempt
 		// to match a rule where jump destination header matches the hostname
-		if rule.Config.BastionMode && len(cfJumpDestinationHeader) > 0 {
+		if matchBastionDest(rule, cfJumpDestinationHeader) {
 			jumpDestinationUri, err := url.Parse(cfJumpDestinationHeader)
 			if err == nil {
 				derivedHostName = jumpDestinationUri.Hostname()
@@ -67,6 +67,10 @@ func (ing Ingress) FindMatchingRule(hostname, path string, cfJumpDestinationHead
 
 	i := len(ing.Rules) - 1
 	return &ing.Rules[i], i
+}
+
+func matchBastionDest(rule Rule, cfJumpDestinationHeader string) bool {
+	return rule.Config.BastionMode && len(cfJumpDestinationHeader) > 0 && rule.Service != nil && rule.Service.String() != config.BastionFlag
 }
 
 func matchHost(ruleHost, reqHost string) bool {
