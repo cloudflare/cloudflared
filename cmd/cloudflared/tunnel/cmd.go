@@ -78,8 +78,8 @@ const (
 	// hostKeyPath is the path of the dir to save SSH host keys too
 	hostKeyPath = "host-key-path"
 
-	// udpUnregisterSessionTimeout is how long we wait before we stop trying to unregister a UDP session from the edge
-	udpUnregisterSessionTimeoutFlag = "udp-unregister-session-timeout"
+	// rpcTimeout is how long to wait for a Capnp RPC request to the edge
+	rpcTimeout = "rpc-timeout"
 
 	// writeStreamTimeout sets if we should have a timeout when writing data to a stream towards the destination (edge/origin).
 	writeStreamTimeout = "write-stream-timeout"
@@ -695,7 +695,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden: true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   udpUnregisterSessionTimeoutFlag,
+			Name:   rpcTimeout,
 			Value:  5 * time.Second,
 			Hidden: true,
 		}),

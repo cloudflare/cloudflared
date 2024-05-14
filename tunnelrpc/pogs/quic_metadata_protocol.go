@@ -1,4 +1,4 @@
-package quic
+package pogs
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/pogs"
 
-	"github.com/cloudflare/cloudflared/quic/schema"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 // ConnectionType indicates the type of underlying connection proxied within the QUIC stream.
@@ -52,26 +52,26 @@ func (r *ConnectRequest) MetadataMap() map[string]string {
 	return metadataMap
 }
 
-func (r *ConnectRequest) fromPogs(msg *capnp.Message) error {
-	metadata, err := schema.ReadRootConnectRequest(msg)
+func (r *ConnectRequest) FromPogs(msg *capnp.Message) error {
+	metadata, err := proto.ReadRootConnectRequest(msg)
 	if err != nil {
 		return err
 	}
-	return pogs.Extract(r, schema.ConnectRequest_TypeID, metadata.Struct)
+	return pogs.Extract(r, proto.ConnectRequest_TypeID, metadata.Struct)
 }
 
-func (r *ConnectRequest) toPogs() (*capnp.Message, error) {
+func (r *ConnectRequest) ToPogs() (*capnp.Message, error) {
 	msg, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
 	if err != nil {
 		return nil, err
 	}
 
-	root, err := schema.NewRootConnectRequest(seg)
+	root, err := proto.NewRootConnectRequest(seg)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := pogs.Insert(schema.ConnectRequest_TypeID, root.Struct, r); err != nil {
+	if err := pogs.Insert(proto.ConnectRequest_TypeID, root.Struct, r); err != nil {
 		return nil, err
 	}
 
@@ -84,26 +84,26 @@ type ConnectResponse struct {
 	Metadata []Metadata `capnp:"metadata"`
 }
 
-func (r *ConnectResponse) fromPogs(msg *capnp.Message) error {
-	metadata, err := schema.ReadRootConnectResponse(msg)
+func (r *ConnectResponse) FromPogs(msg *capnp.Message) error {
+	metadata, err := proto.ReadRootConnectResponse(msg)
 	if err != nil {
 		return err
 	}
-	return pogs.Extract(r, schema.ConnectResponse_TypeID, metadata.Struct)
+	return pogs.Extract(r, proto.ConnectResponse_TypeID, metadata.Struct)
 }
 
-func (r *ConnectResponse) toPogs() (*capnp.Message, error) {
+func (r *ConnectResponse) ToPogs() (*capnp.Message, error) {
 	msg, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
 	if err != nil {
 		return nil, err
 	}
 
-	root, err := schema.NewRootConnectResponse(seg)
+	root, err := proto.NewRootConnectResponse(seg)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := pogs.Insert(schema.ConnectResponse_TypeID, root.Struct, r); err != nil {
+	if err := pogs.Insert(proto.ConnectResponse_TypeID, root.Struct, r); err != nil {
 		return nil, err
 	}
 

@@ -9,7 +9,6 @@ import (
 	"github.com/rs/zerolog"
 	"zombiezen.com/go/capnproto2/rpc"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -25,11 +24,8 @@ func NewTunnelServerClient(
 	stream io.ReadWriteCloser,
 	log *zerolog.Logger,
 ) *tunnelServerClient {
-	transport := tunnelrpc.NewTransportLogger(log, rpc.StreamTransport(stream))
-	conn := rpc.NewConn(
-		transport,
-		tunnelrpc.ConnLog(log),
-	)
+	transport := rpc.StreamTransport(stream)
+	conn := rpc.NewConn(transport)
 	registrationClient := tunnelpogs.RegistrationServer_PogsClient{Client: conn.Bootstrap(ctx), Conn: conn}
 	return &tunnelServerClient{
 		client:    tunnelpogs.TunnelServer_PogsClient{RegistrationServer_PogsClient: registrationClient, Client: conn.Bootstrap(ctx), Conn: conn},
@@ -79,11 +75,8 @@ func newRegistrationRPCClient(
 	stream io.ReadWriteCloser,
 	log *zerolog.Logger,
 ) NamedTunnelRPCClient {
-	transport := tunnelrpc.NewTransportLogger(log, rpc.StreamTransport(stream))
-	conn := rpc.NewConn(
-		transport,
-		tunnelrpc.ConnLog(log),
-	)
+	transport := rpc.StreamTransport(stream)
+	conn := rpc.NewConn(transport)
 	return &registrationServerClient{
 		client:    tunnelpogs.RegistrationServer_PogsClient{Client: conn.Bootstrap(ctx), Conn: conn},
 		transport: transport,

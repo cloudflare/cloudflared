@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
@@ -26,14 +25,14 @@ func TestConnectRequestData(t *testing.T) {
 	var tests = []struct {
 		name           string
 		hostname       string
-		connectionType ConnectionType
-		metadata       []Metadata
+		connectionType pogs.ConnectionType
+		metadata       []pogs.Metadata
 	}{
 		{
 			name:           "Signature verified and request metadata is unmarshaled and read correctly",
 			hostname:       "tunnel.com",
-			connectionType: ConnectionTypeHTTP,
-			metadata: []Metadata{
+			connectionType: pogs.ConnectionTypeHTTP,
+			metadata: []pogs.Metadata{
 				{
 					Key: "key",
 					Val: "1234",
@@ -47,10 +46,10 @@ func TestConnectRequestData(t *testing.T) {
 			reqClientStream := RequestClientStream{noopCloser{b}}
 			err := reqClientStream.WriteConnectRequestData(test.hostname, test.connectionType, test.metadata...)
 			require.NoError(t, err)
-			protocol, err := DetermineProtocol(b)
+			protocol, err := determineProtocol(b)
 			require.NoError(t, err)
-			reqServerStream, err := NewRequestServerStream(noopCloser{b}, protocol)
-			require.NoError(t, err)
+			require.Equal(t, dataStreamProtocolSignature, protocol)
+			reqServerStream := RequestServerStream{&noopCloser{b}}
 
 			reqMeta, err := reqServerStream.ReadConnectRequestData()
 			require.NoError(t, err)
@@ -66,11 +65,11 @@ func TestConnectResponseMeta(t *testing.T) {
 	var tests = []struct {
 		name     string
 		err      error
-		metadata []Metadata
+		metadata []pogs.Metadata
 	}{
 		{
 			name: "Signature verified and response metadata is unmarshaled and read correctly",
-			metadata: []Metadata{
+			metadata: []pogs.Metadata{
 				{
 					Key: "key",
 					Val: "1234",
@@ -80,7 +79,7 @@ func TestConnectResponseMeta(t *testing.T) {
 		{
 			name: "If error is not empty, other fields should be blank",
 			err:  errors.New("something happened"),
-			metadata: []Metadata{
+			metadata: []pogs.Metadata{
 				{
 					Key: "key",
 					Val: "1234",
@@ -142,22 +141,18 @@ func TestRegisterUdpSession(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			logger := zerolog.Nop()
 			clientStream, serverStream := newMockRPCStreams()
 			sessionRegisteredChan := make(chan struct{})
 			go func() {
-				protocol, err := DetermineProtocol(serverStream)
-				assert.NoError(t, err)
-				rpcServerStream, err := NewRPCServerStream(serverStream, protocol)
-				assert.NoError(t, err)
-				err = rpcServerStream.Serve(test.sessionRPCServer, nil, &logger)
+				ss := NewCloudflaredServer(nil, test.sessionRPCServer, nil, 10*time.Second)
+				err := ss.Serve(context.Background(), serverStream)
 				assert.NoError(t, err)
 
 				serverStream.Close()
 				close(sessionRegisteredChan)
 			}()
 
-			rpcClientStream, err := NewRPCClientStream(context.Background(), clientStream, 5*time.Second, &logger)
+			rpcClientStream, err := NewCloudflaredClient(context.Background(), clientStream, 5*time.Second)
 			assert.NoError(t, err)
 
 			reg, err := rpcClientStream.RegisterUdpSession(context.Background(), test.sessionRPCServer.sessionID, test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
@@ -192,14 +187,10 @@ func TestManageConfiguration(t *testing.T) {
 		config:  config,
 	}
 
-	logger := zerolog.Nop()
 	updatedChan := make(chan struct{})
 	go func() {
-		protocol, err := DetermineProtocol(serverStream)
-		assert.NoError(t, err)
-		rpcServerStream, err := NewRPCServerStream(serverStream, protocol)
-		assert.NoError(t, err)
-		err = rpcServerStream.Serve(nil, configRPCServer, &logger)
+		server := NewCloudflaredServer(nil, nil, configRPCServer, 10*time.Second)
+		err := server.Serve(context.Background(), serverStream)
 		assert.NoError(t, err)
 
 		serverStream.Close()
@@ -208,7 +199,7 @@ func TestManageConfiguration(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	rpcClientStream, err := NewRPCClientStream(ctx, clientStream, 5*time.Second, &logger)
+	rpcClientStream, err := NewCloudflaredClient(ctx, clientStream, 5*time.Second)
 	assert.NoError(t, err)
 
 	result, err := rpcClientStream.UpdateConfiguration(ctx, version, config)
@@ -230,7 +221,7 @@ type mockSessionRPCServer struct {
 	traceContext      string
 }
 
-func (s mockSessionRPCServer) RegisterUdpSession(_ context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) (*tunnelpogs.RegisterUdpSessionResponse, error) {
+func (s mockSessionRPCServer) RegisterUdpSession(_ context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfter time.Duration, traceContext string) (*pogs.RegisterUdpSessionResponse, error) {
 	if s.sessionID != sessionID {
 		return nil, fmt.Errorf("expect session ID %s, got %s", s.sessionID, sessionID)
 	}
@@ -246,7 +237,7 @@ func (s mockSessionRPCServer) RegisterUdpSession(_ context.Context, sessionID uu
 	if s.traceContext != traceContext {
 		return nil, fmt.Errorf("expect traceContext %s, got %s", s.traceContext, traceContext)
 	}
-	return &tunnelpogs.RegisterUdpSessionResponse{}, nil
+	return &pogs.RegisterUdpSessionResponse{}, nil
 }
 
 func (s mockSessionRPCServer) UnregisterUdpSession(_ context.Context, sessionID uuid.UUID, message string) error {
@@ -264,18 +255,18 @@ type mockConfigRPCServer struct {
 	config  []byte
 }
 
-func (s mockConfigRPCServer) UpdateConfiguration(_ context.Context, version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
+func (s mockConfigRPCServer) UpdateConfiguration(_ context.Context, version int32, config []byte) *pogs.UpdateConfigurationResponse {
 	if s.version != version {
-		return &tunnelpogs.UpdateConfigurationResponse{
+		return &pogs.UpdateConfigurationResponse{
 			Err: fmt.Errorf("expect version %d, got %d", s.version, version),
 		}
 	}
 	if !bytes.Equal(s.config, config) {
-		return &tunnelpogs.UpdateConfigurationResponse{
+		return &pogs.UpdateConfigurationResponse{
 			Err: fmt.Errorf("expect config %v, got %v", s.config, config),
 		}
 	}
-	return &tunnelpogs.UpdateConfigurationResponse{LastAppliedVersion: version}
+	return &pogs.UpdateConfigurationResponse{LastAppliedVersion: version}
 }
 
 type mockRPCStream struct {

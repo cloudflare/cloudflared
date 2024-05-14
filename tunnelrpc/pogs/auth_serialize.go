@@ -6,10 +6,10 @@ import (
 	"zombiezen.com/go/capnproto2/pogs"
 	"zombiezen.com/go/capnproto2/server"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
-func (i TunnelServer_PogsImpl) Authenticate(p tunnelrpc.TunnelServer_authenticate) error {
+func (i TunnelServer_PogsImpl) Authenticate(p proto.TunnelServer_authenticate) error {
 	originCert, err := p.Params.OriginCert()
 	if err != nil {
 		return err
@@ -39,13 +39,13 @@ func (i TunnelServer_PogsImpl) Authenticate(p tunnelrpc.TunnelServer_authenticat
 	return MarshalAuthenticateResponse(result, resp)
 }
 
-func MarshalAuthenticateResponse(s tunnelrpc.AuthenticateResponse, p *AuthenticateResponse) error {
-	return pogs.Insert(tunnelrpc.AuthenticateResponse_TypeID, s.Struct, p)
+func MarshalAuthenticateResponse(s proto.AuthenticateResponse, p *AuthenticateResponse) error {
+	return pogs.Insert(proto.AuthenticateResponse_TypeID, s.Struct, p)
 }
 
 func (c TunnelServer_PogsClient) Authenticate(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) (*AuthenticateResponse, error) {
-	client := tunnelrpc.TunnelServer{Client: c.Client}
-	promise := client.Authenticate(ctx, func(p tunnelrpc.TunnelServer_authenticate_Params) error {
+	client := proto.TunnelServer{Client: c.Client}
+	promise := client.Authenticate(ctx, func(p proto.TunnelServer_authenticate_Params) error {
 		err := p.SetOriginCert(originCert)
 		if err != nil {
 			return err
@@ -71,8 +71,8 @@ func (c TunnelServer_PogsClient) Authenticate(ctx context.Context, originCert []
 	return UnmarshalAuthenticateResponse(retval)
 }
 
-func UnmarshalAuthenticateResponse(s tunnelrpc.AuthenticateResponse) (*AuthenticateResponse, error) {
+func UnmarshalAuthenticateResponse(s proto.AuthenticateResponse) (*AuthenticateResponse, error) {
 	p := new(AuthenticateResponse)
-	err := pogs.Extract(p, tunnelrpc.AuthenticateResponse_TypeID, s.Struct)
+	err := pogs.Extract(p, proto.AuthenticateResponse_TypeID, s.Struct)
 	return p, err
 }

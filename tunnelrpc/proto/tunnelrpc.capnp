@@ -1,15 +1,15 @@
 using Go = import "go.capnp";
 @0xdb8274f9144abc7e;
-$Go.package("tunnelrpc");
+$Go.package("proto");
 $Go.import("github.com/cloudflare/cloudflared/tunnelrpc");
 
-struct Authentication {
+struct Authentication @0xc082ef6e0d42ed1d {
     key @0 :Text;
     email @1 :Text;
     originCAKey @2 :Text;
 }
 
-struct TunnelRegistration {
+struct TunnelRegistration @0xf41a0f001ad49e46 {
     err @0 :Text;
     # the url to access the tunnel
     url @1 :Text;
@@ -27,7 +27,7 @@ struct TunnelRegistration {
     connDigest @7 :Data;
 }
 
-struct RegistrationOptions {
+struct RegistrationOptions @0xc793e50592935b4a {
     # The tunnel client's unique identifier, used to verify a reconnection.
     clientId @0 :Text;
     # Information about the running binary.
@@ -56,29 +56,29 @@ struct RegistrationOptions {
     features @13 :List(Text);
 }
 
-struct Tag {
+struct Tag @0xcbd96442ae3bb01a {
     name @0 :Text;
     value @1 :Text;
 }
 
-enum ExistingTunnelPolicy {
+enum ExistingTunnelPolicy @0x84cb9536a2cf6d3c {
     ignore @0;
     disconnect @1;
     balance @2;
 }
 
-struct ServerInfo {
+struct ServerInfo @0xf2c68e2547ec3866 {
     locationName @0 :Text;
 }
 
-struct AuthenticateResponse {
+struct AuthenticateResponse @0x82c325a07ad22a65 {
     permanentErr @0 :Text;
     retryableErr @1 :Text;
     jwt @2 :Data;
     hoursUntilRefresh @3 :UInt8;
 }
 
-struct ClientInfo {
+struct ClientInfo @0x83ced0145b2f114b {
     # The tunnel client's unique identifier, used to verify a reconnection.
     clientId @0 :Data;
     # Set of features this cloudflared knows it supports
@@ -89,7 +89,7 @@ struct ClientInfo {
     arch @3 :Text;
 }
 
-struct ConnectionOptions {
+struct ConnectionOptions @0xb4bf9861fe035d04 {
     # client details
     client @0 :ClientInfo;
     # origin LAN IP
@@ -102,21 +102,21 @@ struct ConnectionOptions {
     numPreviousAttempts @4 :UInt8;
 }
 
-struct ConnectionResponse {
+struct ConnectionResponse @0xdbaa9d03d52b62dc {
     result :union {
         error @0 :ConnectionError;
         connectionDetails @1 :ConnectionDetails;
     }
 }
 
-struct ConnectionError {
+struct ConnectionError @0xf5f383d2785edb86 {
     cause @0 :Text;
     # How long should this connection wait to retry in ns
     retryAfter @1 :Int64;
     shouldRetry @2 :Bool;
 }
 
-struct ConnectionDetails {
+struct ConnectionDetails @0xb5f39f082b9ac18a {
     # identifier of this connection
     uuid @0 :Data;
     # airport code of the colo where this connection landed
@@ -125,18 +125,18 @@ struct ConnectionDetails {
     tunnelIsRemotelyManaged @2: Bool;
 }
 
-struct TunnelAuth {
+struct TunnelAuth @0x9496331ab9cd463f {
   accountTag @0 :Text;
   tunnelSecret @1 :Data;
 }
 
-interface RegistrationServer {
+interface RegistrationServer @0xf71695ec7fe85497 {
     registerConnection @0 (auth :TunnelAuth, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
     unregisterConnection @1 () -> ();
     updateLocalConfiguration @2 (config :Data) -> ();
 }
 
-interface TunnelServer extends (RegistrationServer) {
+interface TunnelServer @0xea58385c65416035 extends (RegistrationServer) {
     registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
     getServerInfo @1 () -> (result :ServerInfo);
     unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
@@ -146,18 +146,18 @@ interface TunnelServer extends (RegistrationServer) {
     reconnectTunnel @5 (jwt :Data, eventDigest :Data, connDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }
 
-struct RegisterUdpSessionResponse {
+struct RegisterUdpSessionResponse @0xab6d5210c1f26687 {
     err @0 :Text;
     spans @1 :Data;
 }
 
-interface SessionManager {
+interface SessionManager @0x839445a59fb01686 {
     # Let the edge decide closeAfterIdle to make sure cloudflared doesn't close session before the edge closes its side
     registerUdpSession @0 (sessionId :Data, dstIp :Data, dstPort :UInt16, closeAfterIdleHint :Int64, traceContext :Text = "") -> (result :RegisterUdpSessionResponse);
     unregisterUdpSession @1 (sessionId :Data, message :Text) -> ();
 }
 
-struct UpdateConfigurationResponse {
+struct UpdateConfigurationResponse @0xdb58ff694ba05cf9 {
     # Latest configuration that was applied successfully. The err field might be populated at the same time to indicate
     # that cloudflared is using an older configuration because the latest cannot be applied
     latestAppliedVersion @0 :Int32;
@@ -166,8 +166,8 @@ struct UpdateConfigurationResponse {
 }
 
 # ConfigurationManager defines RPC to manage cloudflared configuration remotely
-interface ConfigurationManager {
+interface ConfigurationManager @0xb48edfbdaa25db04 {
     updateConfiguration @0 (version :Int32, config :Data) -> (result: UpdateConfigurationResponse);
 }
 
-interface CloudflaredServer extends(SessionManager, ConfigurationManager) {}
+interface CloudflaredServer @0xf548cef9dea2a4a1 extends(SessionManager, ConfigurationManager) {}

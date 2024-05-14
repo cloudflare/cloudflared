@@ -6,11 +6,12 @@ import (
 	"net"
 	"time"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/google/uuid"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 type SessionManager interface {
@@ -26,11 +27,11 @@ type SessionManager_PogsImpl struct {
 	impl SessionManager
 }
 
-func SessionManager_ServerToClient(s SessionManager) tunnelrpc.SessionManager {
-	return tunnelrpc.SessionManager_ServerToClient(SessionManager_PogsImpl{s})
+func SessionManager_ServerToClient(s SessionManager) proto.SessionManager {
+	return proto.SessionManager_ServerToClient(SessionManager_PogsImpl{s})
 }
 
-func (i SessionManager_PogsImpl) RegisterUdpSession(p tunnelrpc.SessionManager_registerUdpSession) error {
+func (i SessionManager_PogsImpl) RegisterUdpSession(p proto.SessionManager_registerUdpSession) error {
 	server.Ack(p.Options)
 
 	sessionIDRaw, err := p.Params.SessionId()
@@ -76,7 +77,7 @@ func (i SessionManager_PogsImpl) RegisterUdpSession(p tunnelrpc.SessionManager_r
 	return resp.Marshal(result)
 }
 
-func (i SessionManager_PogsImpl) UnregisterUdpSession(p tunnelrpc.SessionManager_unregisterUdpSession) error {
+func (i SessionManager_PogsImpl) UnregisterUdpSession(p proto.SessionManager_unregisterUdpSession) error {
 	server.Ack(p.Options)
 
 	sessionIDRaw, err := p.Params.SessionId()
@@ -101,7 +102,7 @@ type RegisterUdpSessionResponse struct {
 	Spans []byte // Spans in protobuf format
 }
 
-func (p *RegisterUdpSessionResponse) Marshal(s tunnelrpc.RegisterUdpSessionResponse) error {
+func (p *RegisterUdpSessionResponse) Marshal(s proto.RegisterUdpSessionResponse) error {
 	if p.Err != nil {
 		return s.SetErr(p.Err.Error())
 	}
@@ -111,7 +112,7 @@ func (p *RegisterUdpSessionResponse) Marshal(s tunnelrpc.RegisterUdpSessionRespo
 	return nil
 }
 
-func (p *RegisterUdpSessionResponse) Unmarshal(s tunnelrpc.RegisterUdpSessionResponse) error {
+func (p *RegisterUdpSessionResponse) Unmarshal(s proto.RegisterUdpSessionResponse) error {
 	respErr, err := s.Err()
 	if err != nil {
 		return err
@@ -131,14 +132,21 @@ type SessionManager_PogsClient struct {
 	Conn   *rpc.Conn
 }
 
+func NewSessionManager_PogsClient(client capnp.Client, conn *rpc.Conn) SessionManager_PogsClient {
+	return SessionManager_PogsClient{
+		Client: client,
+		Conn:   conn,
+	}
+}
+
 func (c SessionManager_PogsClient) Close() error {
 	c.Client.Close()
 	return c.Conn.Close()
 }
 
 func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*RegisterUdpSessionResponse, error) {
-	client := tunnelrpc.SessionManager{Client: c.Client}
-	promise := client.RegisterUdpSession(ctx, func(p tunnelrpc.SessionManager_registerUdpSession_Params) error {
+	client := proto.SessionManager{Client: c.Client}
+	promise := client.RegisterUdpSession(ctx, func(p proto.SessionManager_registerUdpSession_Params) error {
 		if err := p.SetSessionId(sessionID[:]); err != nil {
 			return err
 		}
@@ -164,8 +172,8 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 }
 
 func (c SessionManager_PogsClient) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
-	client := tunnelrpc.SessionManager{Client: c.Client}
-	promise := client.UnregisterUdpSession(ctx, func(p tunnelrpc.SessionManager_unregisterUdpSession_Params) error {
+	client := proto.SessionManager{Client: c.Client}
+	promise := client.UnregisterUdpSession(ctx, func(p proto.SessionManager_unregisterUdpSession_Params) error {
 		if err := p.SetSessionId(sessionID[:]); err != nil {
 			return err
 		}

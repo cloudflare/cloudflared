@@ -9,7 +9,7 @@ import (
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 const (
@@ -22,13 +22,13 @@ type Authentication struct {
 	OriginCAKey string
 }
 
-func MarshalAuthentication(s tunnelrpc.Authentication, p *Authentication) error {
-	return pogs.Insert(tunnelrpc.Authentication_TypeID, s.Struct, p)
+func MarshalAuthentication(s proto.Authentication, p *Authentication) error {
+	return pogs.Insert(proto.Authentication_TypeID, s.Struct, p)
 }
 
-func UnmarshalAuthentication(s tunnelrpc.Authentication) (*Authentication, error) {
+func UnmarshalAuthentication(s proto.Authentication) (*Authentication, error) {
 	p := new(Authentication)
-	err := pogs.Extract(p, tunnelrpc.Authentication_TypeID, s.Struct)
+	err := pogs.Extract(p, proto.Authentication_TypeID, s.Struct)
 	return p, err
 }
 
@@ -144,13 +144,13 @@ func (*RetryableRegistrationError) IsPermanent() bool {
 	return false
 }
 
-func MarshalTunnelRegistration(s tunnelrpc.TunnelRegistration, p *TunnelRegistration) error {
-	return pogs.Insert(tunnelrpc.TunnelRegistration_TypeID, s.Struct, p)
+func MarshalTunnelRegistration(s proto.TunnelRegistration, p *TunnelRegistration) error {
+	return pogs.Insert(proto.TunnelRegistration_TypeID, s.Struct, p)
 }
 
-func UnmarshalTunnelRegistration(s tunnelrpc.TunnelRegistration) (*TunnelRegistration, error) {
+func UnmarshalTunnelRegistration(s proto.TunnelRegistration) (*TunnelRegistration, error) {
 	p := new(TunnelRegistration)
-	err := pogs.Extract(p, tunnelrpc.TunnelRegistration_TypeID, s.Struct)
+	err := pogs.Extract(p, proto.TunnelRegistration_TypeID, s.Struct)
 	return p, err
 }
 
@@ -158,7 +158,7 @@ type RegistrationOptions struct {
 	ClientID             string `capnp:"clientId"`
 	Version              string
 	OS                   string `capnp:"os"`
-	ExistingTunnelPolicy tunnelrpc.ExistingTunnelPolicy
+	ExistingTunnelPolicy proto.ExistingTunnelPolicy
 	PoolName             string `capnp:"poolName"`
 	Tags                 []Tag
 	ConnectionID         uint8  `capnp:"connectionId"`
@@ -171,13 +171,13 @@ type RegistrationOptions struct {
 	Features             []string
 }
 
-func MarshalRegistrationOptions(s tunnelrpc.RegistrationOptions, p *RegistrationOptions) error {
-	return pogs.Insert(tunnelrpc.RegistrationOptions_TypeID, s.Struct, p)
+func MarshalRegistrationOptions(s proto.RegistrationOptions, p *RegistrationOptions) error {
+	return pogs.Insert(proto.RegistrationOptions_TypeID, s.Struct, p)
 }
 
-func UnmarshalRegistrationOptions(s tunnelrpc.RegistrationOptions) (*RegistrationOptions, error) {
+func UnmarshalRegistrationOptions(s proto.RegistrationOptions) (*RegistrationOptions, error) {
 	p := new(RegistrationOptions)
-	err := pogs.Extract(p, tunnelrpc.RegistrationOptions_TypeID, s.Struct)
+	err := pogs.Extract(p, proto.RegistrationOptions_TypeID, s.Struct)
 	return p, err
 }
 
@@ -190,13 +190,13 @@ type ServerInfo struct {
 	LocationName string
 }
 
-func MarshalServerInfo(s tunnelrpc.ServerInfo, p *ServerInfo) error {
-	return pogs.Insert(tunnelrpc.ServerInfo_TypeID, s.Struct, p)
+func MarshalServerInfo(s proto.ServerInfo, p *ServerInfo) error {
+	return pogs.Insert(proto.ServerInfo_TypeID, s.Struct, p)
 }
 
-func UnmarshalServerInfo(s tunnelrpc.ServerInfo) (*ServerInfo, error) {
+func UnmarshalServerInfo(s proto.ServerInfo) (*ServerInfo, error) {
 	p := new(ServerInfo)
-	err := pogs.Extract(p, tunnelrpc.ServerInfo_TypeID, s.Struct)
+	err := pogs.Extract(p, proto.ServerInfo_TypeID, s.Struct)
 	return p, err
 }
 
@@ -209,8 +209,8 @@ type TunnelServer interface {
 	ReconnectTunnel(ctx context.Context, jwt, eventDigest, connDigest []byte, hostname string, options *RegistrationOptions) (*TunnelRegistration, error)
 }
 
-func TunnelServer_ServerToClient(s TunnelServer) tunnelrpc.TunnelServer {
-	return tunnelrpc.TunnelServer_ServerToClient(TunnelServer_PogsImpl{RegistrationServer_PogsImpl{s}, s})
+func TunnelServer_ServerToClient(s TunnelServer) proto.TunnelServer {
+	return proto.TunnelServer_ServerToClient(TunnelServer_PogsImpl{RegistrationServer_PogsImpl{s}, s})
 }
 
 type TunnelServer_PogsImpl struct {
@@ -218,7 +218,7 @@ type TunnelServer_PogsImpl struct {
 	impl TunnelServer
 }
 
-func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerTunnel) error {
+func (i TunnelServer_PogsImpl) RegisterTunnel(p proto.TunnelServer_registerTunnel) error {
 	originCert, err := p.Params.OriginCert()
 	if err != nil {
 		return err
@@ -245,7 +245,7 @@ func (i TunnelServer_PogsImpl) RegisterTunnel(p tunnelrpc.TunnelServer_registerT
 	return MarshalTunnelRegistration(result, registration)
 }
 
-func (i TunnelServer_PogsImpl) GetServerInfo(p tunnelrpc.TunnelServer_getServerInfo) error {
+func (i TunnelServer_PogsImpl) GetServerInfo(p proto.TunnelServer_getServerInfo) error {
 	server.Ack(p.Options)
 	serverInfo, err := i.impl.GetServerInfo(p.Ctx)
 	if err != nil {
@@ -258,13 +258,13 @@ func (i TunnelServer_PogsImpl) GetServerInfo(p tunnelrpc.TunnelServer_getServerI
 	return MarshalServerInfo(result, serverInfo)
 }
 
-func (i TunnelServer_PogsImpl) UnregisterTunnel(p tunnelrpc.TunnelServer_unregisterTunnel) error {
+func (i TunnelServer_PogsImpl) UnregisterTunnel(p proto.TunnelServer_unregisterTunnel) error {
 	gracePeriodNanoSec := p.Params.GracePeriodNanoSec()
 	server.Ack(p.Options)
 	return i.impl.UnregisterTunnel(p.Ctx, gracePeriodNanoSec)
 }
 
-func (i TunnelServer_PogsImpl) ObsoleteDeclarativeTunnelConnect(p tunnelrpc.TunnelServer_obsoleteDeclarativeTunnelConnect) error {
+func (i TunnelServer_PogsImpl) ObsoleteDeclarativeTunnelConnect(p proto.TunnelServer_obsoleteDeclarativeTunnelConnect) error {
 	return fmt.Errorf("RPC to create declarative tunnel connection has been deprecated")
 }
 
@@ -280,8 +280,8 @@ func (c TunnelServer_PogsClient) Close() error {
 }
 
 func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert []byte, hostname string, options *RegistrationOptions) *TunnelRegistration {
-	client := tunnelrpc.TunnelServer{Client: c.Client}
-	promise := client.RegisterTunnel(ctx, func(p tunnelrpc.TunnelServer_registerTunnel_Params) error {
+	client := proto.TunnelServer{Client: c.Client}
+	promise := client.RegisterTunnel(ctx, func(p proto.TunnelServer_registerTunnel_Params) error {
 		err := p.SetOriginCert(originCert)
 		if err != nil {
 			return err
@@ -312,8 +312,8 @@ func (c TunnelServer_PogsClient) RegisterTunnel(ctx context.Context, originCert 
 }
 
 func (c TunnelServer_PogsClient) GetServerInfo(ctx context.Context) (*ServerInfo, error) {
-	client := tunnelrpc.TunnelServer{Client: c.Client}
-	promise := client.GetServerInfo(ctx, func(p tunnelrpc.TunnelServer_getServerInfo_Params) error {
+	client := proto.TunnelServer{Client: c.Client}
+	promise := client.GetServerInfo(ctx, func(p proto.TunnelServer_getServerInfo_Params) error {
 		return nil
 	})
 	retval, err := promise.Result().Struct()
@@ -324,8 +324,8 @@ func (c TunnelServer_PogsClient) GetServerInfo(ctx context.Context) (*ServerInfo
 }
 
 func (c TunnelServer_PogsClient) UnregisterTunnel(ctx context.Context, gracePeriodNanoSec int64) error {
-	client := tunnelrpc.TunnelServer{Client: c.Client}
-	promise := client.UnregisterTunnel(ctx, func(p tunnelrpc.TunnelServer_unregisterTunnel_Params) error {
+	client := proto.TunnelServer{Client: c.Client}
+	promise := client.UnregisterTunnel(ctx, func(p proto.TunnelServer_unregisterTunnel_Params) error {
 		p.SetGracePeriodNanoSec(gracePeriodNanoSec)
 		return nil
 	})
