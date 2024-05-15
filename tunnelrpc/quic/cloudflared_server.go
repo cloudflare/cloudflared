@@ -8,6 +8,7 @@ import (
 
 	"zombiezen.com/go/capnproto2/rpc"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -53,7 +54,7 @@ func (s *CloudflaredServer) Serve(ctx context.Context, stream io.ReadWriteCloser
 func (s *CloudflaredServer) handleRPC(ctx context.Context, stream io.ReadWriteCloser) error {
 	ctx, cancel := context.WithTimeout(ctx, s.responseTimeout)
 	defer cancel()
-	transport := rpc.StreamTransport(stream)
+	transport := tunnelrpc.SafeTransport(stream)
 	defer transport.Close()
 
 	main := pogs.CloudflaredServer_ServerToClient(s.sessionManager, s.configManager)

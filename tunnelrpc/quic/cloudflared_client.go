@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -29,7 +30,7 @@ func NewCloudflaredClient(ctx context.Context, stream io.ReadWriteCloser, reques
 	if n != len(rpcStreamProtocolSignature) {
 		return nil, fmt.Errorf("expect to write %d bytes for RPC stream protocol signature, wrote %d", len(rpcStreamProtocolSignature), n)
 	}
-	transport := rpc.StreamTransport(stream)
+	transport := tunnelrpc.SafeTransport(stream)
 	conn := rpc.NewConn(transport)
 	client := pogs.NewCloudflaredServer_PogsClient(conn.Bootstrap(ctx), conn)
 	return &CloudflaredClient{

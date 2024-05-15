@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"zombiezen.com/go/capnproto2/rpc"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -28,7 +29,7 @@ func NewSessionClient(ctx context.Context, stream io.ReadWriteCloser, requestTim
 	if n != len(rpcStreamProtocolSignature) {
 		return nil, fmt.Errorf("expect to write %d bytes for RPC stream protocol signature, wrote %d", len(rpcStreamProtocolSignature), n)
 	}
-	transport := rpc.StreamTransport(stream)
+	transport := tunnelrpc.SafeTransport(stream)
 	conn := rpc.NewConn(transport)
 	return &SessionClient{
 		client:         pogs.NewSessionManager_PogsClient(conn.Bootstrap(ctx), conn),
