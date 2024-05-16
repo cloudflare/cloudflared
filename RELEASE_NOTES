@@ -1,3 +1,6 @@
+2024.5.0
+- 2024-05-07 TUN-8407: Upgrade go to version 1.22.2
+
 2024.4.1
 - 2024-04-22 TUN-8380: Add sleep before requesting quick tunnel as temporary fix for component tests
 - 2024-04-19 TUN-8374: Close UDP socket if registration fails
