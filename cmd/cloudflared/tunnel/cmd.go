@@ -663,9 +663,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "tag",
-			Usage:   "Custom tags used to identify this tunnel, in format `KEY=VALUE`. Multiple tags may be specified",
+			Usage:   "Custom tags used to identify this tunnel via added HTTP request headers to the origin, in format `KEY=VALUE`. Multiple tags may be specified.",
 			EnvVars: []string{"TUNNEL_TAG"},
-			Hidden:  shouldHide,
+			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   "heartbeat-interval",

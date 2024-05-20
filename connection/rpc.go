@@ -12,41 +12,6 @@ import (
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-type tunnelServerClient struct {
-	client    tunnelpogs.TunnelServer_PogsClient
-	transport rpc.Transport
-}
-
-// NewTunnelRPCClient creates and returns a new RPC client, which will communicate using a stream on the given muxer.
-// This method is exported for supervisor to call Authenticate RPC
-func NewTunnelServerClient(
-	ctx context.Context,
-	stream io.ReadWriteCloser,
-	log *zerolog.Logger,
-) *tunnelServerClient {
-	transport := rpc.StreamTransport(stream)
-	conn := rpc.NewConn(transport)
-	registrationClient := tunnelpogs.RegistrationServer_PogsClient{Client: conn.Bootstrap(ctx), Conn: conn}
-	return &tunnelServerClient{
-		client:    tunnelpogs.TunnelServer_PogsClient{RegistrationServer_PogsClient: registrationClient, Client: conn.Bootstrap(ctx), Conn: conn},
-		transport: transport,
-	}
-}
-
-func (tsc *tunnelServerClient) Authenticate(ctx context.Context, classicTunnel *ClassicTunnelProperties, registrationOptions *tunnelpogs.RegistrationOptions) (tunnelpogs.AuthOutcome, error) {
-	authResp, err := tsc.client.Authenticate(ctx, classicTunnel.OriginCert, classicTunnel.Hostname, registrationOptions)
-	if err != nil {
-		return nil, err
-	}
-	return authResp.Outcome(), nil
-}
-
-func (tsc *tunnelServerClient) Close() {
-	// Closing the client will also close the connection
-	_ = tsc.client.Close()
-	_ = tsc.transport.Close()
-}
-
 type NamedTunnelRPCClient interface {
 	RegisterConnection(
 		c context.Context,

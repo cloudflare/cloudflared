@@ -3,7 +3,7 @@ package tunnel
 import (
 	"testing"
 
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -11,12 +11,12 @@ import (
 func TestSingleTag(t *testing.T) {
 	testCases := []struct {
 		Input  string
-		Output tunnelpogs.Tag
+		Output pogs.Tag
 		Fail   bool
 	}{
-		{Input: "x=y", Output: tunnelpogs.Tag{Name: "x", Value: "y"}},
-		{Input: "More-Complex=Tag Values", Output: tunnelpogs.Tag{Name: "More-Complex", Value: "Tag Values"}},
-		{Input: "First=Equals=Wins", Output: tunnelpogs.Tag{Name: "First", Value: "Equals=Wins"}},
+		{Input: "x=y", Output: pogs.Tag{Name: "x", Value: "y"}},
+		{Input: "More-Complex=Tag Values", Output: pogs.Tag{Name: "More-Complex", Value: "Tag Values"}},
+		{Input: "First=Equals=Wins", Output: pogs.Tag{Name: "First", Value: "Equals=Wins"}},
 		{Input: "x=", Fail: true},
 		{Input: "=y", Fail: true},
 		{Input: "=", Fail: true},

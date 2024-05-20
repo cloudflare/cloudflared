@@ -54,18 +54,14 @@ func TestConnectionRegistrationRPC(t *testing.T) {
 
 	// Server-side
 	testImpl := testConnectionRegistrationServer{}
-	srv := TunnelServer_ServerToClient(&testImpl)
+	srv := RegistrationServer_ServerToClient(&testImpl)
 	serverConn := rpc.NewConn(t1, rpc.MainInterface(srv.Client))
 	defer serverConn.Wait()
 
 	ctx := context.Background()
 	clientConn := rpc.NewConn(t2)
 	defer clientConn.Close()
-	client := TunnelServer_PogsClient{
-		RegistrationServer_PogsClient: RegistrationServer_PogsClient{
-			Client: clientConn.Bootstrap(ctx),
-			Conn:   clientConn,
-		},
+	client := RegistrationServer_PogsClient{
 		Client: clientConn.Bootstrap(ctx),
 		Conn:   clientConn,
 	}
@@ -123,8 +119,6 @@ func TestConnectionRegistrationRPC(t *testing.T) {
 }
 
 type testConnectionRegistrationServer struct {
-	mockTunnelServerBase
-
 	details *ConnectionDetails
 	err     error
 }
@@ -146,4 +140,8 @@ func (t *testConnectionRegistrationServer) RegisterConnection(ctx context.Contex
 	}
 
 	panic("either details or err mush be set")
+}
+
+func (t *testConnectionRegistrationServer) UnregisterConnection(ctx context.Context) {
+	panic("unimplemented: UnregisterConnection")
 }
