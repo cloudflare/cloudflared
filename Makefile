@@ -251,17 +251,11 @@ github-windows-upload:
 	python3 github_release.py --path built_artifacts/cloudflared-windows-386.exe --release-version $(VERSION) --name cloudflared-windows-386.exe
 	python3 github_release.py --path built_artifacts/cloudflared-windows-386.msi --release-version $(VERSION) --name cloudflared-windows-386.msi
 
-.PHONY: tunnelrpc-deps
-tunnelrpc-deps:
+.PHONY: capnp
+capnp:
 	which capnp  # https://capnproto.org/install.html
 	which capnpc-go  # go install zombiezen.com/go/capnproto2/capnpc-go@latest
-	capnp compile -ogo tunnelrpc/tunnelrpc.capnp
-
-.PHONY: quic-deps
-quic-deps:
-	which capnp
-	which capnpc-go
-	capnp compile -ogo quic/schema/quic_metadata_protocol.capnp
+	capnp compile -ogo tunnelrpc/proto/tunnelrpc.capnp tunnelrpc/proto/quic_metadata_protocol.capnp
 
 .PHONY: vet
 vet:
@@ -269,4 +263,4 @@ vet:
 
 .PHONY: fmt
 fmt:
-	goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc)
+	goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)

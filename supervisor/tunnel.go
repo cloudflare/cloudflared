@@ -27,8 +27,8 @@ import (
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
@@ -65,8 +65,8 @@ type TunnelConfig struct {
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 	PacketConfig     *ingress.GlobalRouterConfig
 
-	UDPUnregisterSessionTimeout time.Duration
-	WriteStreamTimeout          time.Duration
+	RPCTimeout         time.Duration
+	WriteStreamTimeout time.Duration
 
 	DisableQUICPathMTUDiscovery bool
 
@@ -74,9 +74,9 @@ type TunnelConfig struct {
 }
 
 func (c *TunnelConfig) registrationOptions(connectionID uint8, OriginLocalIP string, uuid uuid.UUID) *tunnelpogs.RegistrationOptions {
-	policy := tunnelrpc.ExistingTunnelPolicy_balance
+	policy := proto.ExistingTunnelPolicy_balance
 	if c.HAConnections <= 1 && c.LBPool == "" {
-		policy = tunnelrpc.ExistingTunnelPolicy_disconnect
+		policy = proto.ExistingTunnelPolicy_disconnect
 	}
 	return &tunnelpogs.RegistrationOptions{
 		ClientID:             c.ClientID,
@@ -614,7 +614,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		controlStreamHandler,
 		connLogger.Logger(),
 		e.config.PacketConfig,
-		e.config.UDPUnregisterSessionTimeout,
+		e.config.RPCTimeout,
 		e.config.WriteStreamTimeout,
 	)
 	if err != nil {

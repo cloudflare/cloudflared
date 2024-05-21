@@ -1,4 +1,4 @@
-pinned_go: &pinned_go go-boring=1.21.5-1
+pinned_go: &pinned_go go-boring=1.22.2-1
 
 build_dir: &build_dir /cfsetup_build
 default-flavor: bullseye
@@ -33,11 +33,11 @@ buster: &buster
       - ./build-packages-fips.sh
       # Build binary for component test
       - GOOS=linux GOARCH=amd64 make cloudflared
-  cover: 
+  cover:
     build_dir: *build_dir
     builddeps: *build_deps
     pre-cache: *build_pre_cache
-    post-cache: 
+    post-cache:
      - make cover
   # except FIPS (handled in github-fips-release-pkgs) and macos (handled in github-release-macos-amd64)
   github-release-pkgs:
@@ -96,7 +96,7 @@ buster: &buster
       - make github-release-built-pkgs
   generate-versions-file:
     build_dir: *build_dir
-    builddeps: 
+    builddeps:
       - *pinned_go
       - build-essential
     post-cache:

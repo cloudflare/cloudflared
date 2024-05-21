@@ -13,7 +13,7 @@ import (
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 const testAccountTag = "abc123"
@@ -34,7 +34,7 @@ func TestMarshalConnectionOptions(t *testing.T) {
 
 	_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
 	require.NoError(t, err)
-	capnpOpts, err := tunnelrpc.NewConnectionOptions(seg)
+	capnpOpts, err := proto.NewConnectionOptions(seg)
 	require.NoError(t, err)
 
 	err = orig.MarshalCapnproto(capnpOpts)

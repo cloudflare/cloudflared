@@ -246,7 +246,7 @@ func prepareTunnelConfig(
 		EdgeTLSConfigs:              edgeTLSConfigs,
 		FeatureSelector:             featureSelector,
 		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
-		UDPUnregisterSessionTimeout: c.Duration(udpUnregisterSessionTimeoutFlag),
+		RPCTimeout:                  c.Duration(rpcTimeout),
 		WriteStreamTimeout:          c.Duration(writeStreamTimeout),
 		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),
 	}

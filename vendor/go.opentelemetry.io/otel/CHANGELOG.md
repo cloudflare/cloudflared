@@ -8,6 +8,192 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.26.0/0.48.0/0.2.0-alpha] 2024-04-24
+
+### Added
+
+- Add `Recorder` in `go.opentelemetry.io/otel/log/logtest` to facilitate testing the log bridge implementations. (#5134)
+- Add span flags to OTLP spans and links exported by `go.opentelemetry.io/otel/exporters/otlp/otlptrace`. (#5194)
+- Make the initial alpha release of `go.opentelemetry.io/otel/sdk/log`.
+  This new module contains the Go implementation of the OpenTelemetry Logs SDK.
+  This module is unstable and breaking changes may be introduced.
+  See our [versioning policy](VERSIONING.md) for more information about these stability guarantees. (#5240)
+- Make the initial alpha release of `go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp`.
+  This new module contains an OTLP exporter that transmits log telemetry using HTTP.
+  This module is unstable and breaking changes may be introduced.
+  See our [versioning policy](VERSIONING.md) for more information about these stability guarantees. (#5240)
+- Make the initial alpha release of `go.opentelemetry.io/otel/exporters/stdout/stdoutlog`.
+  This new module contains an exporter prints log records to STDOUT.
+  This module is unstable and breaking changes may be introduced.
+  See our [versioning policy](VERSIONING.md) for more information about these stability guarantees. (#5240)
+- The `go.opentelemetry.io/otel/semconv/v1.25.0` package.
+  The package contains semantic conventions from the `v1.25.0` version of the OpenTelemetry Semantic Conventions. (#5254)
+
+### Changed
+
+- Update `go.opentelemetry.io/proto/otlp` from v1.1.0 to v1.2.0. (#5177)
+- Improve performance of baggage member character validation in `go.opentelemetry.io/otel/baggage`. (#5214)
+
+## [1.25.0/0.47.0/0.0.8/0.1.0-alpha] 2024-04-05
+
+### Added
+
+- Add `WithProxy` option in `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp`. (#4906)
+- Add `WithProxy` option in `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlptracehttp`. (#4906)
+- Add `AddLink` method to the `Span` interface in `go.opentelemetry.io/otel/trace`. (#5032)
+- The `Enabled` method is added to the `Logger` interface in `go.opentelemetry.io/otel/log`.
+  This method is used to notify users if a log record will be emitted or not. (#5071)
+- Add `SeverityUndefined` `const` to `go.opentelemetry.io/otel/log`.
+  This value represents an unset severity level. (#5072)
+- Add `Empty` function in `go.opentelemetry.io/otel/log` to return a `KeyValue` for an empty value. (#5076)
+- Add `go.opentelemetry.io/otel/log/global` to manage the global `LoggerProvider`.
+  This package is provided with the anticipation that all functionality will be migrate to `go.opentelemetry.io/otel` when `go.opentelemetry.io/otel/log` stabilizes.
+  At which point, users will be required to migrage their code, and this package will be deprecated then removed. (#5085)
+- Add support for `Summary` metrics in the `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp` and `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc` exporters. (#5100)
+- Add `otel.scope.name` and `otel.scope.version` tags to spans exported by `go.opentelemetry.io/otel/exporters/zipkin`. (#5108)
+- Add support for `AddLink` to `go.opentelemetry.io/otel/bridge/opencensus`. (#5116)
+- Add `String` method to `Value` and `KeyValue` in `go.opentelemetry.io/otel/log`. (#5117)
+- Add Exemplar support to `go.opentelemetry.io/otel/exporters/prometheus`. (#5111)
+- Add metric semantic conventions to `go.opentelemetry.io/otel/semconv/v1.24.0`. Future `semconv` packages will include metric semantic conventions as well. (#4528)
+
+### Changed
+
+- `SpanFromContext` and `SpanContextFromContext` in `go.opentelemetry.io/otel/trace` no longer make a heap allocation when the passed context has no span. (#5049)
+- `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc` and `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc` now create a gRPC client in idle mode and with "dns" as the default resolver using [`grpc.NewClient`](https://pkg.go.dev/google.golang.org/grpc#NewClient). (#5151)
+  Because of that `WithDialOption` ignores [`grpc.WithBlock`](https://pkg.go.dev/google.golang.org/grpc#WithBlock), [`grpc.WithTimeout`](https://pkg.go.dev/google.golang.org/grpc#WithTimeout), and [`grpc.WithReturnConnectionError`](https://pkg.go.dev/google.golang.org/grpc#WithReturnConnectionError).
+  Notice that [`grpc.DialContext`](https://pkg.go.dev/google.golang.org/grpc#DialContext) which was used before is now deprecated.
+
+### Fixed
+
+- Clarify the documentation about equivalence guarantees for the `Set` and `Distinct` types in `go.opentelemetry.io/otel/attribute`. (#5027)
+- Prevent default `ErrorHandler` self-delegation. (#5137)
+- Update all dependencies to address [GO-2024-2687]. (#5139)
+
+### Removed
+
+- Drop support for [Go 1.20]. (#4967)
+
+### Deprecated
+
+- Deprecate `go.opentelemetry.io/otel/attribute.Sortable` type. (#4734)
+- Deprecate `go.opentelemetry.io/otel/attribute.NewSetWithSortable` function. (#4734)
+- Deprecate `go.opentelemetry.io/otel/attribute.NewSetWithSortableFiltered` function. (#4734)
+
+## [1.24.0/0.46.0/0.0.1-alpha] 2024-02-23
+
+This release is the last to support [Go 1.20].
+The next release will require at least [Go 1.21].
+
+### Added
+
+- Support [Go 1.22]. (#4890)
+- Add exemplar support to `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc`. (#4900)
+- Add exemplar support to `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp`. (#4900)
+- The `go.opentelemetry.io/otel/log` module is added.
+  This module includes OpenTelemetry Go's implementation of the Logs Bridge API.
+  This module is in an alpha state, it is subject to breaking changes.
+  See our [versioning policy](./VERSIONING.md) for more info. (#4961)
+- ARM64 platform to the compatibility testing suite. (#4994)
+
+### Fixed
+
+- Fix registration of multiple callbacks when using the global meter provider from `go.opentelemetry.io/otel`. (#4945)
+- Fix negative buckets in output of exponential histograms. (#4956)
+
+## [1.23.1] 2024-02-07
+
+### Fixed
+
+- Register all callbacks passed during observable instrument creation instead of just the last one multiple times in `go.opentelemetry.io/otel/sdk/metric`. (#4888)
+
+## [1.23.0] 2024-02-06
+
+This release contains the first stable, `v1`, release of the following modules:
+
+- `go.opentelemetry.io/otel/bridge/opencensus`
+- `go.opentelemetry.io/otel/bridge/opencensus/test`
+- `go.opentelemetry.io/otel/example/opencensus`
+- `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc`
+- `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp`
+- `go.opentelemetry.io/otel/exporters/stdout/stdoutmetric`
+
+See our [versioning policy](VERSIONING.md) for more information about these stability guarantees.
+
+### Added
+
+- Add `WithEndpointURL` option to the `exporters/otlp/otlpmetric/otlpmetricgrpc`, `exporters/otlp/otlpmetric/otlpmetrichttp`, `exporters/otlp/otlptrace/otlptracegrpc` and `exporters/otlp/otlptrace/otlptracehttp` packages. (#4808)
+- Experimental exemplar exporting is added to the metric SDK.
+  See [metric documentation](./sdk/metric/internal/x/README.md#exemplars) for more information about this feature and how to enable it. (#4871)
+- `ErrSchemaURLConflict` is added to `go.opentelemetry.io/otel/sdk/resource`.
+  This error is returned when a merge of two `Resource`s with different (non-empty) schema URL is attempted. (#4876)
+
+### Changed
+
+- The `Merge` and `New` functions in `go.opentelemetry.io/otel/sdk/resource` now returns a partial result if there is a schema URL merge conflict.
+  Instead of returning `nil` when two `Resource`s with different (non-empty) schema URLs are merged the merged `Resource`, along with the new `ErrSchemaURLConflict` error, is returned.
+  It is up to the user to decide if they want to use the returned `Resource` or not.
+  It may have desired attributes overwritten or include stale semantic conventions. (#4876)
+
+### Fixed
+
+- Fix `ContainerID` resource detection on systemd when cgroup path has a colon. (#4449)
+- Fix `go.opentelemetry.io/otel/sdk/metric` to cache instruments to avoid leaking memory when the same instrument is created multiple times. (#4820)
+- Fix missing `Mix` and `Max` values for `go.opentelemetry.io/otel/exporters/stdout/stdoutmetric` by introducing `MarshalText` and `MarshalJSON` for the `Extrema` type in `go.opentelemetry.io/sdk/metric/metricdata`. (#4827)
+
+## [1.23.0-rc.1] 2024-01-18
+
+This is a release candidate for the v1.23.0 release.
+That release is expected to include the `v1` release of the following modules:
+
+- `go.opentelemetry.io/otel/bridge/opencensus`
+- `go.opentelemetry.io/otel/bridge/opencensus/test`
+- `go.opentelemetry.io/otel/example/opencensus`
+- `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc`
+- `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp`
+- `go.opentelemetry.io/otel/exporters/stdout/stdoutmetric`
+
+See our [versioning policy](VERSIONING.md) for more information about these stability guarantees.
+
+## [1.22.0/0.45.0] 2024-01-17
+
+### Added
+
+- The `go.opentelemetry.io/otel/semconv/v1.22.0` package.
+  The package contains semantic conventions from the `v1.22.0` version of the OpenTelemetry Semantic Conventions. (#4735)
+- The `go.opentelemetry.io/otel/semconv/v1.23.0` package.
+  The package contains semantic conventions from the `v1.23.0` version of the OpenTelemetry Semantic Conventions. (#4746)
+- The `go.opentelemetry.io/otel/semconv/v1.23.1` package.
+  The package contains semantic conventions from the `v1.23.1` version of the OpenTelemetry Semantic Conventions. (#4749)
+- The `go.opentelemetry.io/otel/semconv/v1.24.0` package.
+  The package contains semantic conventions from the `v1.24.0` version of the OpenTelemetry Semantic Conventions. (#4770)
+- Add `WithResourceAsConstantLabels` option to apply resource attributes for every metric emitted by the Prometheus exporter. (#4733)
+- Experimental cardinality limiting is added to the metric SDK.
+  See [metric documentation](./sdk/metric/internal/x/README.md#cardinality-limit) for more information about this feature and how to enable it. (#4457)
+- Add `NewMemberRaw` and `NewKeyValuePropertyRaw` in `go.opentelemetry.io/otel/baggage`. (#4804)
+
+### Changed
+
+- Upgrade all use of `go.opentelemetry.io/otel/semconv` to use `v1.24.0`. (#4754)
+- Update transformations in `go.opentelemetry.io/otel/exporters/zipkin` to follow `v1.24.0` version of the OpenTelemetry specification. (#4754)
+- Record synchronous measurements when the passed context is canceled instead of dropping in `go.opentelemetry.io/otel/sdk/metric`.
+  If you do not want to make a measurement when the context is cancelled, you need to handle it yourself (e.g  `if ctx.Err() != nil`). (#4671)
+- Improve `go.opentelemetry.io/otel/trace.TraceState`'s performance. (#4722)
+- Improve `go.opentelemetry.io/otel/propagation.TraceContext`'s performance. (#4721)
+- Improve `go.opentelemetry.io/otel/baggage` performance. (#4743)
+- Improve performance of the `(*Set).Filter` method in `go.opentelemetry.io/otel/attribute` when the passed filter does not filter out any attributes from the set. (#4774)
+- `Member.String` in `go.opentelemetry.io/otel/baggage` percent-encodes only when necessary. (#4775)
+- Improve `go.opentelemetry.io/otel/trace.Span`'s performance when adding multiple attributes. (#4818)
+- `Property.Value` in `go.opentelemetry.io/otel/baggage` now returns a raw string instead of a percent-encoded value. (#4804)
+
+### Fixed
+
+- Fix `Parse` in `go.opentelemetry.io/otel/baggage` to validate member value before percent-decoding. (#4755)
+- Fix whitespace encoding of `Member.String` in `go.opentelemetry.io/otel/baggage`. (#4756)
+- Fix observable not registered error when the asynchronous instrument has a drop aggregation in `go.opentelemetry.io/otel/sdk/metric`. (#4772)
+- Fix baggage item key so that it is not canonicalized in `go.opentelemetry.io/otel/bridge/opentracing`. (#4776)
+- Fix `go.opentelemetry.io/otel/bridge/opentracing` to properly handle baggage values that requires escaping during propagation. (#4804)
+- Fix a bug where using multiple readers resulted in incorrect asynchronous counter values in `go.opentelemetry.io/otel/sdk/metric`. (#4742)
+
 ## [1.21.0/0.44.0] 2023-11-16
 
 ### Removed
@@ -2735,7 +2921,14 @@ It contains api and sdk for trace and meter.
 - CircleCI build CI manifest files.
 - CODEOWNERS file to track owners of this project.
 
-[Unreleased]: https://github.com/open-telemetry/opentelemetry-go/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/open-telemetry/opentelemetry-go/compare/v1.26.0...HEAD
+[1.26.0/0.48.0/0.2.0-alpha]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.26.0
+[1.25.0/0.47.0/0.0.8/0.1.0-alpha]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.25.0
+[1.24.0/0.46.0/0.0.1-alpha]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.24.0
+[1.23.1]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.23.1
+[1.23.0]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.23.0
+[1.23.0-rc.1]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.23.0-rc.1
+[1.22.0/0.45.0]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.22.0
 [1.21.0/0.44.0]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.21.0
 [1.20.0/0.43.0]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.20.0
 [1.19.0/0.42.0/0.0.7]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.19.0
@@ -2809,6 +3002,8 @@ It contains api and sdk for trace and meter.
 [0.1.1]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v0.1.1
 [0.1.0]: https://github.com/open-telemetry/opentelemetry-go/releases/tag/v0.1.0
 
+[Go 1.22]: https://go.dev/doc/go1.22
+[Go 1.21]: https://go.dev/doc/go1.21
 [Go 1.20]: https://go.dev/doc/go1.20
 [Go 1.19]: https://go.dev/doc/go1.19
 [Go 1.18]: https://go.dev/doc/go1.18
@@ -2816,3 +3011,5 @@ It contains api and sdk for trace and meter.
 [metric API]:https://pkg.go.dev/go.opentelemetry.io/otel/metric
 [metric SDK]:https://pkg.go.dev/go.opentelemetry.io/otel/sdk/metric
 [trace API]:https://pkg.go.dev/go.opentelemetry.io/otel/trace
+
+[GO-2024-2687]: https://pkg.go.dev/vuln/GO-2024-2687

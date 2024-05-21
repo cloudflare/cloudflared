@@ -5,10 +5,10 @@ import (
 
 	"zombiezen.com/go/capnproto2/server"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
-func (i TunnelServer_PogsImpl) ReconnectTunnel(p tunnelrpc.TunnelServer_reconnectTunnel) error {
+func (i TunnelServer_PogsImpl) ReconnectTunnel(p proto.TunnelServer_reconnectTunnel) error {
 	jwt, err := p.Params.Jwt()
 	if err != nil {
 		return err
@@ -53,8 +53,8 @@ func (c TunnelServer_PogsClient) ReconnectTunnel(
 	hostname string,
 	options *RegistrationOptions,
 ) *TunnelRegistration {
-	client := tunnelrpc.TunnelServer{Client: c.Client}
-	promise := client.ReconnectTunnel(ctx, func(p tunnelrpc.TunnelServer_reconnectTunnel_Params) error {
+	client := proto.TunnelServer{Client: c.Client}
+	promise := client.ReconnectTunnel(ctx, func(p proto.TunnelServer_reconnectTunnel_Params) error {
 		err := p.SetJwt(jwt)
 		if err != nil {
 			return err

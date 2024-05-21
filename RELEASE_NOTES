@@ -1,3 +1,13 @@
+2024.5.0
+- 2024-05-07 TUN-8407: Upgrade go to version 1.22.2
+
+2024.4.1
+- 2024-04-22 TUN-8380: Add sleep before requesting quick tunnel as temporary fix for component tests
+- 2024-04-19 TUN-8374: Close UDP socket if registration fails
+- 2024-04-18 TUN-8371: Bump quic-go to v0.42.0
+- 2024-04-03 TUN-8333: Bump go-jose dependency to v4
+- 2024-04-02 TUN-8331: Add unit testing for AccessJWTValidator middleware
+
 2024.4.0
 - 2024-04-02 feat: provide short version (#1206)
 - 2024-04-02 Format code

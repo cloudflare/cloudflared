@@ -1,9 +1,10 @@
 package pogs
 
 import (
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 type CloudflaredServer interface {
@@ -16,8 +17,8 @@ type CloudflaredServer_PogsImpl struct {
 	ConfigurationManager_PogsImpl
 }
 
-func CloudflaredServer_ServerToClient(s SessionManager, c ConfigurationManager) tunnelrpc.CloudflaredServer {
-	return tunnelrpc.CloudflaredServer_ServerToClient(CloudflaredServer_PogsImpl{
+func CloudflaredServer_ServerToClient(s SessionManager, c ConfigurationManager) proto.CloudflaredServer {
+	return proto.CloudflaredServer_ServerToClient(CloudflaredServer_PogsImpl{
 		SessionManager_PogsImpl:       SessionManager_PogsImpl{s},
 		ConfigurationManager_PogsImpl: ConfigurationManager_PogsImpl{c},
 	})

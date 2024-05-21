@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	capnp "zombiezen.com/go/capnproto2"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 // Ensure the AuthOutcome sum is correct
@@ -119,7 +119,7 @@ func TestSerializeAuthenticationResponse(t *testing.T) {
 	for i, testCase := range tests {
 		_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
 		assert.NoError(t, err)
-		capnpEntity, err := tunnelrpc.NewAuthenticateResponse(seg)
+		capnpEntity, err := proto.NewAuthenticateResponse(seg)
 		if !assert.NoError(t, err) {
 			t.Fatal("Couldn't initialize a new message")
 		}

@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
+
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 type ConfigurationManager interface {
@@ -18,11 +19,11 @@ type ConfigurationManager_PogsImpl struct {
 	impl ConfigurationManager
 }
 
-func ConfigurationManager_ServerToClient(c ConfigurationManager) tunnelrpc.ConfigurationManager {
-	return tunnelrpc.ConfigurationManager_ServerToClient(ConfigurationManager_PogsImpl{c})
+func ConfigurationManager_ServerToClient(c ConfigurationManager) proto.ConfigurationManager {
+	return proto.ConfigurationManager_ServerToClient(ConfigurationManager_PogsImpl{c})
 }
 
-func (i ConfigurationManager_PogsImpl) UpdateConfiguration(p tunnelrpc.ConfigurationManager_updateConfiguration) error {
+func (i ConfigurationManager_PogsImpl) UpdateConfiguration(p proto.ConfigurationManager_updateConfiguration) error {
 	server.Ack(p.Options)
 
 	version := p.Params.Version()
@@ -51,8 +52,8 @@ func (c ConfigurationManager_PogsClient) Close() error {
 }
 
 func (c ConfigurationManager_PogsClient) UpdateConfiguration(ctx context.Context, version int32, config []byte) (*UpdateConfigurationResponse, error) {
-	client := tunnelrpc.ConfigurationManager{Client: c.Client}
-	promise := client.UpdateConfiguration(ctx, func(p tunnelrpc.ConfigurationManager_updateConfiguration_Params) error {
+	client := proto.ConfigurationManager{Client: c.Client}
+	promise := client.UpdateConfiguration(ctx, func(p proto.ConfigurationManager_updateConfiguration_Params) error {
 		p.SetVersion(version)
 		return p.SetConfig(config)
 	})
@@ -74,7 +75,7 @@ type UpdateConfigurationResponse struct {
 	Err                error `json:"err"`
 }
 
-func (p *UpdateConfigurationResponse) Marshal(s tunnelrpc.UpdateConfigurationResponse) error {
+func (p *UpdateConfigurationResponse) Marshal(s proto.UpdateConfigurationResponse) error {
 	s.SetLatestAppliedVersion(p.LastAppliedVersion)
 	if p.Err != nil {
 		return s.SetErr(p.Err.Error())
@@ -82,7 +83,7 @@ func (p *UpdateConfigurationResponse) Marshal(s tunnelrpc.UpdateConfigurationRes
 	return nil
 }
 
-func (p *UpdateConfigurationResponse) Unmarshal(s tunnelrpc.UpdateConfigurationResponse) error {
+func (p *UpdateConfigurationResponse) Unmarshal(s proto.UpdateConfigurationResponse) error {
 	p.LastAppliedVersion = s.LatestAppliedVersion()
 	respErr, err := s.Err()
 	if err != nil {
