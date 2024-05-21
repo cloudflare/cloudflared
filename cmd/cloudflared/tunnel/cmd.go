@@ -409,6 +409,11 @@ func StartServer(
 		}
 	}
 
+	// Disable ICMP packet routing for quick tunnels
+	if quickTunnelURL != "" {
+		tunnelConfig.PacketConfig = nil
+	}
+
 	internalRules := []ingress.Rule{}
 	if features.Contains(features.FeatureManagementLogs) {
 		serviceIP := c.String("service-op-ip")
