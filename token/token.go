@@ -94,9 +94,10 @@ func errDeleteTokenFailed(lockFilePath string) error {
 // newLock will get a new file lock
 func newLock(path string) *lock {
 	lockPath := path + ".lock"
+	backoff := retry.NewBackoff(uint(7), retry.DefaultBaseTime, false)
 	return &lock{
 		lockFilePath: lockPath,
-		backoff:      &retry.BackoffHandler{MaxRetries: 7},
+		backoff:      &backoff,
 		sigHandler: &signalHandler{
 			signals: []os.Signal{syscall.SIGINT, syscall.SIGTERM},
 		},

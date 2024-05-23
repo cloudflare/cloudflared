@@ -24,14 +24,18 @@ func (dmf *dynamicMockFetcher) fetch() edgediscovery.PercentageFetcher {
 	}
 }
 
+func immediateTimeAfter(time.Duration) <-chan time.Time {
+	c := make(chan time.Time, 1)
+	c <- time.Now()
+	return c
+}
+
 func TestWaitForBackoffFallback(t *testing.T) {
 	maxRetries := uint(3)
-	backoff := retry.BackoffHandler{
-		MaxRetries: maxRetries,
-		BaseTime:   time.Millisecond * 10,
-	}
+	backoff := retry.NewBackoff(maxRetries, 40*time.Millisecond, false)
+	backoff.Clock.After = immediateTimeAfter
 	log := zerolog.Nop()
-	resolveTTL := time.Duration(0)
+	resolveTTL := 10 * time.Second
 	mockFetcher := dynamicMockFetcher{
 		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}},
 	}
@@ -64,21 +68,23 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	}
 
 	// Retry fallback protocol
-	for i := 0; i < int(maxRetries); i++ {
-		protoFallback.BackoffTimer() // simulate retry
-		ok := selectNextProtocol(&log, protoFallback, protocolSelector, nil)
-		assert.True(t, ok)
-		fallback, ok := protocolSelector.Fallback()
-		assert.True(t, ok)
-		assert.Equal(t, fallback, protoFallback.protocol)
-	}
+	protoFallback.BackoffTimer() // simulate retry
+	ok := selectNextProtocol(&log, protoFallback, protocolSelector, nil)
+	assert.True(t, ok)
+	fallback, ok := protocolSelector.Fallback()
+	assert.True(t, ok)
+	assert.Equal(t, fallback, protoFallback.protocol)
+	assert.Equal(t, connection.HTTP2, protoFallback.protocol)
 
 	currentGlobalProtocol := protocolSelector.Current()
 	assert.Equal(t, initProtocol, currentGlobalProtocol)
 
+	// Simulate max retries again (retries reset after protocol switch)
+	for i := 0; i < int(maxRetries); i++ {
+		protoFallback.BackoffTimer()
+	}
 	// No protocol to fallback, return error
-	protoFallback.BackoffTimer() // simulate retry
-	ok := selectNextProtocol(&log, protoFallback, protocolSelector, nil)
+	ok = selectNextProtocol(&log, protoFallback, protocolSelector, nil)
 	assert.False(t, ok)
 
 	protoFallback.reset()

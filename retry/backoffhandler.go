@@ -6,15 +6,14 @@ import (
 	"time"
 )
 
+const (
+	DefaultBaseTime time.Duration = time.Second
+)
+
 // Redeclare time functions so they can be overridden in tests.
-type clock struct {
+type Clock struct {
 	Now   func() time.Time
 	After func(d time.Duration) <-chan time.Time
-}
-
-var Clock = clock{
-	Now:   time.Now,
-	After: time.After,
 }
 
 // BackoffHandler manages exponential backoff and limits the maximum number of retries.
@@ -25,15 +24,26 @@ var Clock = clock{
 type BackoffHandler struct {
 	// MaxRetries sets the maximum number of retries to perform. The default value
 	// of 0 disables retry completely.
-	MaxRetries uint
+	maxRetries uint
 	// RetryForever caps the exponential backoff period according to MaxRetries
 	// but allows you to retry indefinitely.
-	RetryForever bool
+	retryForever bool
 	// BaseTime sets the initial backoff period.
-	BaseTime time.Duration
+	baseTime time.Duration
 
 	retries       uint
 	resetDeadline time.Time
+
+	Clock Clock
+}
+
+func NewBackoff(maxRetries uint, baseTime time.Duration, retryForever bool) BackoffHandler {
+	return BackoffHandler{
+		maxRetries:   maxRetries,
+		baseTime:     baseTime,
+		retryForever: retryForever,
+		Clock:        Clock{Now: time.Now, After: time.After},
+	}
 }
 
 func (b BackoffHandler) GetMaxBackoffDuration(ctx context.Context) (time.Duration, bool) {
@@ -44,11 +54,11 @@ func (b BackoffHandler) GetMaxBackoffDuration(ctx context.Context) (time.Duratio
 		return time.Duration(0), false
 	default:
 	}
-	if !b.resetDeadline.IsZero() && Clock.Now().After(b.resetDeadline) {
+	if !b.resetDeadline.IsZero() && b.Clock.Now().After(b.resetDeadline) {
 		// b.retries would be set to 0 at this point
 		return time.Second, true
 	}
-	if b.retries >= b.MaxRetries && !b.RetryForever {
+	if b.retries >= b.maxRetries && !b.retryForever {
 		return time.Duration(0), false
 	}
 	maxTimeToWait := b.GetBaseTime() * 1 << (b.retries + 1)
@@ -58,12 +68,12 @@ func (b BackoffHandler) GetMaxBackoffDuration(ctx context.Context) (time.Duratio
 // BackoffTimer returns a channel that sends the current time when the exponential backoff timeout expires.
 // Returns nil if the maximum number of retries have been used.
 func (b *BackoffHandler) BackoffTimer() <-chan time.Time {
-	if !b.resetDeadline.IsZero() && Clock.Now().After(b.resetDeadline) {
+	if !b.resetDeadline.IsZero() && b.Clock.Now().After(b.resetDeadline) {
 		b.retries = 0
 		b.resetDeadline = time.Time{}
 	}
-	if b.retries >= b.MaxRetries {
-		if !b.RetryForever {
+	if b.retries >= b.maxRetries {
+		if !b.retryForever {
 			return nil
 		}
 	} else {
@@ -71,7 +81,7 @@ func (b *BackoffHandler) BackoffTimer() <-chan time.Time {
 	}
 	maxTimeToWait := time.Duration(b.GetBaseTime() * 1 << (b.retries))
 	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
-	return Clock.After(timeToWait)
+	return b.Clock.After(timeToWait)
 }
 
 // Backoff is used to wait according to exponential backoff. Returns false if the
@@ -94,16 +104,16 @@ func (b *BackoffHandler) Backoff(ctx context.Context) bool {
 func (b *BackoffHandler) SetGracePeriod() time.Duration {
 	maxTimeToWait := b.GetBaseTime() * 2 << (b.retries + 1)
 	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
-	b.resetDeadline = Clock.Now().Add(timeToWait)
+	b.resetDeadline = b.Clock.Now().Add(timeToWait)
 
 	return timeToWait
 }
 
 func (b BackoffHandler) GetBaseTime() time.Duration {
-	if b.BaseTime == 0 {
-		return time.Second
+	if b.baseTime == 0 {
+		return DefaultBaseTime
 	}
-	return b.BaseTime
+	return b.baseTime
 }
 
 // Retries returns the number of retries consumed so far.
@@ -112,9 +122,10 @@ func (b *BackoffHandler) Retries() int {
 }
 
 func (b *BackoffHandler) ReachedMaxRetries() bool {
-	return b.retries == b.MaxRetries
+	return b.retries == b.maxRetries
 }
 
 func (b *BackoffHandler) ResetNow() {
-	b.resetDeadline = time.Now()
+	b.resetDeadline = b.Clock.Now()
+	b.retries = 0
 }
