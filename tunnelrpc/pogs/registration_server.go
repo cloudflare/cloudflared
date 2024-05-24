@@ -105,6 +105,13 @@ type RegistrationServer_PogsClient struct {
 	Conn   *rpc.Conn
 }
 
+func NewRegistrationServer_PogsClient(client capnp.Client, conn *rpc.Conn) RegistrationServer_PogsClient {
+	return RegistrationServer_PogsClient{
+		Client: client,
+		Conn:   conn,
+	}
+}
+
 func (c RegistrationServer_PogsClient) Close() error {
 	c.Client.Close()
 	return c.Conn.Close()

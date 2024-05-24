@@ -58,7 +58,7 @@ type TunnelConfig struct {
 
 	NeedPQ bool
 
-	NamedTunnel      *connection.NamedTunnelProperties
+	NamedTunnel      *connection.TunnelProperties
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 	PacketConfig     *ingress.GlobalRouterConfig
@@ -454,6 +454,7 @@ func (e *EdgeTunnelServer) serveConnection(
 		connIndex,
 		addr.UDP.IP,
 		nil,
+		e.config.RPCTimeout,
 		e.gracefulShutdownC,
 		e.config.GracePeriod,
 		protocol,

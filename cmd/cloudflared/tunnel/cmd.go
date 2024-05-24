@@ -287,7 +287,7 @@ func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
 func StartServer(
 	c *cli.Context,
 	info *cliutil.BuildInfo,
-	namedTunnel *connection.NamedTunnelProperties,
+	namedTunnel *connection.TunnelProperties,
 	log *zerolog.Logger,
 ) error {
 	err := sentry.Init(sentry.ClientOptions{

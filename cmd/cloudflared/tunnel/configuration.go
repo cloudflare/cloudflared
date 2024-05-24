@@ -108,7 +108,7 @@ func isSecretEnvVar(key string) bool {
 	return false
 }
 
-func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelProperties) bool {
+func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.TunnelProperties) bool {
 	return c.IsSet("proxy-dns") &&
 		!(c.IsSet("name") || // adhoc-named tunnel
 			c.IsSet(ingress.HelloWorldFlag) || // quick or named tunnel
@@ -121,7 +121,7 @@ func prepareTunnelConfig(
 	info *cliutil.BuildInfo,
 	log, logTransport *zerolog.Logger,
 	observer *connection.Observer,
-	namedTunnel *connection.NamedTunnelProperties,
+	namedTunnel *connection.TunnelProperties,
 ) (*supervisor.TunnelConfig, *orchestration.Config, error) {
 	clientID, err := uuid.NewRandom()
 	if err != nil {

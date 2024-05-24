@@ -40,8 +40,6 @@ type HTTP2Connection struct {
 	connOptions  *tunnelpogs.ConnectionOptions
 	observer     *Observer
 	connIndex    uint8
-	// newRPCClientFunc allows us to mock RPCs during testing
-	newRPCClientFunc func(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient
 
 	log                  *zerolog.Logger
 	activeRequestsWG     sync.WaitGroup
@@ -69,7 +67,6 @@ func NewHTTP2Connection(
 		connOptions:          connOptions,
 		observer:             observer,
 		connIndex:            connIndex,
-		newRPCClientFunc:     newRegistrationRPCClient,
 		controlStreamHandler: controlStreamHandler,
 		log:                  log,
 	}
