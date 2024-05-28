@@ -12,12 +12,18 @@ import (
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
 	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 type RegistrationServer interface {
+	// RegisterConnection is the call typically handled by the edge to initiate and authenticate a new connection
+	// for cloudflared.
 	RegisterConnection(ctx context.Context, auth TunnelAuth, tunnelID uuid.UUID, connIndex byte, options *ConnectionOptions) (*ConnectionDetails, error)
+	// UnregisterConnection is the call typically handled by the edge to close an existing connection for cloudflared.
 	UnregisterConnection(ctx context.Context)
+	// UpdateLocalConfiguration is the call typically handled by the edge for cloudflared to provide the current
+	// configuration it is operating with.
 	UpdateLocalConfiguration(ctx context.Context, config []byte) error
 }
 
@@ -30,6 +36,10 @@ func RegistrationServer_ServerToClient(s RegistrationServer) proto.RegistrationS
 }
 
 func (i RegistrationServer_PogsImpl) RegisterConnection(p proto.RegistrationServer_registerConnection) error {
+	return metrics.ObserveServerHandler(func() error { return i.registerConnection(p) }, metrics.Registration, metrics.OperationRegisterConnection)
+}
+
+func (i RegistrationServer_PogsImpl) registerConnection(p proto.RegistrationServer_registerConnection) error {
 	server.Ack(p.Options)
 
 	auth, err := p.Params.Auth()
@@ -83,13 +93,18 @@ func (i RegistrationServer_PogsImpl) RegisterConnection(p proto.RegistrationServ
 }
 
 func (i RegistrationServer_PogsImpl) UnregisterConnection(p proto.RegistrationServer_unregisterConnection) error {
-	server.Ack(p.Options)
-
-	i.impl.UnregisterConnection(p.Ctx)
-	return nil
+	return metrics.ObserveServerHandler(func() error {
+		server.Ack(p.Options)
+		i.impl.UnregisterConnection(p.Ctx)
+		return nil // No metrics will be reported for failure as this method has no return value
+	}, metrics.Registration, metrics.OperationUnregisterConnection)
 }
 
-func (i RegistrationServer_PogsImpl) UpdateLocalConfiguration(c proto.RegistrationServer_updateLocalConfiguration) error {
+func (i RegistrationServer_PogsImpl) UpdateLocalConfiguration(p proto.RegistrationServer_updateLocalConfiguration) error {
+	return metrics.ObserveServerHandler(func() error { return i.updateLocalConfiguration(p) }, metrics.Registration, metrics.OperationUpdateLocalConfiguration)
+}
+
+func (i RegistrationServer_PogsImpl) updateLocalConfiguration(c proto.RegistrationServer_updateLocalConfiguration) error {
 	server.Ack(c.Options)
 
 	configBytes, err := c.Params.Config()

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"zombiezen.com/go/capnproto2/rpc"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -53,19 +54,41 @@ func (r *registrationClient) RegisterConnection(
 ) (*pogs.ConnectionDetails, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.requestTimeout)
 	defer cancel()
-	return r.client.RegisterConnection(ctx, auth, tunnelID, connIndex, options)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Registration, metrics.OperationRegisterConnection).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.Registration, metrics.OperationRegisterConnection)
+	defer timer.ObserveDuration()
+
+	conn, err := r.client.RegisterConnection(ctx, auth, tunnelID, connIndex, options)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Registration, metrics.OperationRegisterConnection).Inc()
+	}
+	return conn, err
 }
 
 func (r *registrationClient) SendLocalConfiguration(ctx context.Context, config []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, r.requestTimeout)
 	defer cancel()
-	return r.client.SendLocalConfiguration(ctx, config)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Registration, metrics.OperationUpdateLocalConfiguration).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.Registration, metrics.OperationUpdateLocalConfiguration)
+	defer timer.ObserveDuration()
+
+	err := r.client.SendLocalConfiguration(ctx, config)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Registration, metrics.OperationUpdateLocalConfiguration).Inc()
+	}
+	return err
 }
 
 func (r *registrationClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
 	ctx, cancel := context.WithTimeout(ctx, gracePeriod)
 	defer cancel()
-	_ = r.client.UnregisterConnection(ctx)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Registration, metrics.OperationUnregisterConnection).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.Registration, metrics.OperationUnregisterConnection)
+	defer timer.ObserveDuration()
+	err := r.client.UnregisterConnection(ctx)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Registration, metrics.OperationUnregisterConnection).Inc()
+	}
 }
 
 func (r *registrationClient) Close() {

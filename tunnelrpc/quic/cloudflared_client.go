@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -43,19 +44,43 @@ func NewCloudflaredClient(ctx context.Context, stream io.ReadWriteCloser, reques
 func (c *CloudflaredClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfterHint time.Duration, traceContext string) (*pogs.RegisterUdpSessionResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	return c.client.RegisterUdpSession(ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Cloudflared, metrics.OperationRegisterUdpSession).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.Cloudflared, metrics.OperationRegisterUdpSession)
+	defer timer.ObserveDuration()
+
+	resp, err := c.client.RegisterUdpSession(ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Cloudflared, metrics.OperationRegisterUdpSession).Inc()
+	}
+	return resp, err
 }
 
 func (c *CloudflaredClient) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
 	ctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	return c.client.UnregisterUdpSession(ctx, sessionID, message)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Cloudflared, metrics.OperationUnregisterUdpSession).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.Cloudflared, metrics.OperationUnregisterUdpSession)
+	defer timer.ObserveDuration()
+
+	err := c.client.UnregisterUdpSession(ctx, sessionID, message)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Cloudflared, metrics.OperationUnregisterUdpSession).Inc()
+	}
+	return err
 }
 
 func (c *CloudflaredClient) UpdateConfiguration(ctx context.Context, version int32, config []byte) (*pogs.UpdateConfigurationResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	return c.client.UpdateConfiguration(ctx, version, config)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Cloudflared, metrics.OperationUpdateConfiguration).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.Cloudflared, metrics.OperationUpdateConfiguration)
+	defer timer.ObserveDuration()
+
+	resp, err := c.client.UpdateConfiguration(ctx, version, config)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Cloudflared, metrics.OperationUpdateConfiguration).Inc()
+	}
+	return resp, err
 }
 
 func (c *CloudflaredClient) Close() {

@@ -11,6 +11,7 @@ import (
 	"zombiezen.com/go/capnproto2/rpc"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -41,13 +42,29 @@ func NewSessionClient(ctx context.Context, stream io.ReadWriteCloser, requestTim
 func (c *SessionClient) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeIdleAfterHint time.Duration, traceContext string) (*pogs.RegisterUdpSessionResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	return c.client.RegisterUdpSession(ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.SessionManager, metrics.OperationRegisterUdpSession).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.SessionManager, metrics.OperationRegisterUdpSession)
+	defer timer.ObserveDuration()
+
+	resp, err := c.client.RegisterUdpSession(ctx, sessionID, dstIP, dstPort, closeIdleAfterHint, traceContext)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.SessionManager, metrics.OperationRegisterUdpSession).Inc()
+	}
+	return resp, err
 }
 
 func (c *SessionClient) UnregisterUdpSession(ctx context.Context, sessionID uuid.UUID, message string) error {
 	ctx, cancel := context.WithTimeout(ctx, c.requestTimeout)
 	defer cancel()
-	return c.client.UnregisterUdpSession(ctx, sessionID, message)
+	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.SessionManager, metrics.OperationUnregisterUdpSession).Inc()
+	timer := metrics.NewClientOperationLatencyObserver(metrics.SessionManager, metrics.OperationUnregisterUdpSession)
+	defer timer.ObserveDuration()
+
+	err := c.client.UnregisterUdpSession(ctx, sessionID, message)
+	if err != nil {
+		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.SessionManager, metrics.OperationUnregisterUdpSession).Inc()
+	}
+	return err
 }
 
 func (c *SessionClient) Close() {

@@ -8,10 +8,12 @@ import (
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
 	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 type ConfigurationManager interface {
+	// UpdateConfiguration is the call provided to cloudflared to load the latest remote configuration.
 	UpdateConfiguration(ctx context.Context, version int32, config []byte) *UpdateConfigurationResponse
 }
 
@@ -24,6 +26,10 @@ func ConfigurationManager_ServerToClient(c ConfigurationManager) proto.Configura
 }
 
 func (i ConfigurationManager_PogsImpl) UpdateConfiguration(p proto.ConfigurationManager_updateConfiguration) error {
+	return metrics.ObserveServerHandler(func() error { return i.updateConfiguration(p) }, metrics.ConfigurationManager, metrics.OperationUpdateConfiguration)
+}
+
+func (i ConfigurationManager_PogsImpl) updateConfiguration(p proto.ConfigurationManager_updateConfiguration) error {
 	server.Ack(p.Options)
 
 	version := p.Params.Version()
