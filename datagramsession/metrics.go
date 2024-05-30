@@ -15,7 +15,7 @@ var (
 		Name:      "active_sessions",
 		Help:      "Concurrent count of UDP sessions that are being proxied to any origin",
 	})
-	totalUDPSessions = prometheus.NewGauge(prometheus.GaugeOpts{
+	totalUDPSessions = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: "udp",
 		Name:      "total_sessions",
