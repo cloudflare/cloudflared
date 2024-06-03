@@ -1,3 +1,13 @@
+2024.6.0
+- 2024-05-30 TUN-8441: Correct UDP total sessions metric to a counter and add new ICMP metrics
+- 2024-05-28 TUN-8422: Add metrics for capnp method calls
+- 2024-05-24 TUN-8424: Refactor capnp registration server
+- 2024-05-23 TUN-8427: Fix BackoffHandler's internally shared clock structure
+- 2024-05-21 TUN-8425: Remove ICMP binding for quick tunnels
+- 2024-05-20 TUN-8423: Deprecate older legacy tunnel capnp interfaces
+- 2024-05-15 TUN-8419: Add capnp safe transport
+- 2024-05-13 TUN-8415: Refactor capnp rpc into a single module
+
 2024.5.0
 - 2024-05-07 TUN-8407: Upgrade go to version 1.22.2
 
