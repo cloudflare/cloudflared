@@ -89,6 +89,8 @@ const (
 	// Note that this may result in packet drops for UDP proxying, since we expect being able to send at least 1280 bytes of inner packets.
 	quicDisablePathMTUDiscovery = "quic-disable-pmtu-discovery"
 
+	quicConnLevelFlowControlLimit = "quic-connection-level-flow-control-limit"
+
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
 
@@ -716,6 +718,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_DISABLE_QUIC_PMTU"},
 			Usage:   "Use this option to disable PTMU discovery for QUIC connections. This will result in lower packet sizes. Not however, that this may cause instability for UDP proxying.",
 			Value:   false,
+			Hidden:  true,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    quicConnLevelFlowControlLimit,
+			EnvVars: []string{"TUNNEL_QUIC_CONN_LEVEL_FLOW_CONTROL_LIMIT"},
+			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
+			Value:   30 * (1 << 20), // 30 MB
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{

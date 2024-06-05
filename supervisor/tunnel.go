@@ -66,7 +66,8 @@ type TunnelConfig struct {
 	RPCTimeout         time.Duration
 	WriteStreamTimeout time.Duration
 
-	DisableQUICPathMTUDiscovery bool
+	DisableQUICPathMTUDiscovery         bool
+	QUICConnectionLevelFlowControlLimit uint64
 
 	FeatureSelector *features.FeatureSelector
 }
@@ -568,14 +569,15 @@ func (e *EdgeTunnelServer) serveQUIC(
 	tlsConfig.CurvePreferences = curvePref
 
 	quicConfig := &quic.Config{
-		HandshakeIdleTimeout:    quicpogs.HandshakeIdleTimeout,
-		MaxIdleTimeout:          quicpogs.MaxIdleTimeout,
-		KeepAlivePeriod:         quicpogs.MaxIdlePingPeriod,
-		MaxIncomingStreams:      quicpogs.MaxIncomingStreams,
-		MaxIncomingUniStreams:   quicpogs.MaxIncomingStreams,
-		EnableDatagrams:         true,
-		Tracer:                  quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
-		DisablePathMTUDiscovery: e.config.DisableQUICPathMTUDiscovery,
+		HandshakeIdleTimeout:       quicpogs.HandshakeIdleTimeout,
+		MaxIdleTimeout:             quicpogs.MaxIdleTimeout,
+		KeepAlivePeriod:            quicpogs.MaxIdlePingPeriod,
+		MaxIncomingStreams:         quicpogs.MaxIncomingStreams,
+		MaxIncomingUniStreams:      quicpogs.MaxIncomingStreams,
+		EnableDatagrams:            true,
+		Tracer:                     quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
+		DisablePathMTUDiscovery:    e.config.DisableQUICPathMTUDiscovery,
+		MaxConnectionReceiveWindow: e.config.QUICConnectionLevelFlowControlLimit,
 	}
 
 	quicConn, err := connection.NewQUICConnection(
