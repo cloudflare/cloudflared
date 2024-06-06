@@ -68,6 +68,7 @@ type TunnelConfig struct {
 
 	DisableQUICPathMTUDiscovery         bool
 	QUICConnectionLevelFlowControlLimit uint64
+	QUICStreamLevelFlowControlLimit     uint64
 
 	FeatureSelector *features.FeatureSelector
 }
@@ -578,6 +579,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		Tracer:                     quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
 		DisablePathMTUDiscovery:    e.config.DisableQUICPathMTUDiscovery,
 		MaxConnectionReceiveWindow: e.config.QUICConnectionLevelFlowControlLimit,
+		MaxStreamReceiveWindow:     e.config.QUICStreamLevelFlowControlLimit,
 	}
 
 	quicConn, err := connection.NewQUICConnection(

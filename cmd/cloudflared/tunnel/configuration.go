@@ -250,6 +250,7 @@ func prepareTunnelConfig(
 		WriteStreamTimeout:                  c.Duration(writeStreamTimeout),
 		DisableQUICPathMTUDiscovery:         c.Bool(quicDisablePathMTUDiscovery),
 		QUICConnectionLevelFlowControlLimit: c.Uint64(quicConnLevelFlowControlLimit),
+		QUICStreamLevelFlowControlLimit:     c.Uint64(quicStreamLevelFlowControlLimit),
 	}
 	packetConfig, err := newPacketConfig(c, log)
 	if err != nil {

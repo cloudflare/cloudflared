@@ -89,7 +89,13 @@ const (
 	// Note that this may result in packet drops for UDP proxying, since we expect being able to send at least 1280 bytes of inner packets.
 	quicDisablePathMTUDiscovery = "quic-disable-pmtu-discovery"
 
+	// quicConnLevelFlowControlLimit controls the max flow control limit allocated for a QUIC connection. This controls how much data is the
+	// receiver willing to buffer. Once the limit is reached, the sender will send a DATA_BLOCKED frame to indicate it has more data to write,
+	// but it's blocked by flow control
 	quicConnLevelFlowControlLimit = "quic-connection-level-flow-control-limit"
+	// quicStreamLevelFlowControlLimit is similar to quicConnLevelFlowControlLimit but for each QUIC stream. When the sender is blocked,
+	// it will send a STREAM_DATA_BLOCKED frame
+	quicStreamLevelFlowControlLimit = "quic-stream-level-flow-control-limit"
 
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
@@ -725,6 +731,13 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_QUIC_CONN_LEVEL_FLOW_CONTROL_LIMIT"},
 			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
 			Value:   30 * (1 << 20), // 30 MB
+			Hidden:  true,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    quicStreamLevelFlowControlLimit,
+			EnvVars: []string{"TUNNEL_QUIC_STREAM_LEVEL_FLOW_CONTROL_LIMIT"},
+			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
+			Value:   6 * (1 << 20), // 6 MB
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
