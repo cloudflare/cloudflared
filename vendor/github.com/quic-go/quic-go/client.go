@@ -35,7 +35,7 @@ type client struct {
 	conn quicConn
 
 	tracer    *logging.ConnectionTracer
-	tracingID uint64
+	tracingID ConnectionTracingID
 	logger    utils.Logger
 }
 
@@ -191,6 +191,7 @@ func (c *client) dial(ctx context.Context) error {
 	c.logger.Infof("Starting new connection to %s (%s -> %s), source connection ID %s, destination connection ID %s, version %s", c.tlsConf.ServerName, c.sendConn.LocalAddr(), c.sendConn.RemoteAddr(), c.srcConnID, c.destConnID, c.version)
 
 	c.conn = newClientConnection(
+		context.WithValue(context.WithoutCancel(ctx), ConnectionTracingKey, c.tracingID),
 		c.sendConn,
 		c.packetHandlers,
 		c.destConnID,
@@ -202,7 +203,6 @@ func (c *client) dial(ctx context.Context) error {
 		c.use0RTT,
 		c.hasNegotiatedVersion,
 		c.tracer,
-		c.tracingID,
 		c.logger,
 		c.version,
 	)

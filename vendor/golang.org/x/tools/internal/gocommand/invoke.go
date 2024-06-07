@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -21,9 +22,9 @@ import (
 	"sync"
 	"time"
 
-	exec "golang.org/x/sys/execabs"
-
 	"golang.org/x/tools/internal/event"
+	"golang.org/x/tools/internal/event/keys"
+	"golang.org/x/tools/internal/event/label"
 )
 
 // An Runner will run go command invocations and serialize
@@ -53,9 +54,22 @@ func (runner *Runner) initialize() {
 // 1.14: go: updating go.mod: existing contents have changed since last read
 var modConcurrencyError = regexp.MustCompile(`go:.*go.mod.*contents have changed`)
 
+// event keys for go command invocations
+var (
+	verb      = keys.NewString("verb", "go command verb")
+	directory = keys.NewString("directory", "")
+)
+
+func invLabels(inv Invocation) []label.Label {
+	return []label.Label{verb.Of(inv.Verb), directory.Of(inv.WorkingDir)}
+}
+
 // Run is a convenience wrapper around RunRaw.
 // It returns only stdout and a "friendly" error.
 func (runner *Runner) Run(ctx context.Context, inv Invocation) (*bytes.Buffer, error) {
+	ctx, done := event.Start(ctx, "gocommand.Runner.Run", invLabels(inv)...)
+	defer done()
+
 	stdout, _, friendly, _ := runner.RunRaw(ctx, inv)
 	return stdout, friendly
 }
@@ -63,13 +77,19 @@ func (runner *Runner) Run(ctx context.Context, inv Invocation) (*bytes.Buffer, e
 // RunPiped runs the invocation serially, always waiting for any concurrent
 // invocations to complete first.
 func (runner *Runner) RunPiped(ctx context.Context, inv Invocation, stdout, stderr io.Writer) error {
+	ctx, done := event.Start(ctx, "gocommand.Runner.RunPiped", invLabels(inv)...)
+	defer done()
+
 	_, err := runner.runPiped(ctx, inv, stdout, stderr)
 	return err
 }
 
 // RunRaw runs the invocation, serializing requests only if they fight over
 // go.mod changes.
+// Postcondition: both error results have same nilness.
 func (runner *Runner) RunRaw(ctx context.Context, inv Invocation) (*bytes.Buffer, *bytes.Buffer, error, error) {
+	ctx, done := event.Start(ctx, "gocommand.Runner.RunRaw", invLabels(inv)...)
+	defer done()
 	// Make sure the runner is always initialized.
 	runner.initialize()
 
@@ -77,23 +97,24 @@ func (runner *Runner) RunRaw(ctx context.Context, inv Invocation) (*bytes.Buffer
 	stdout, stderr, friendlyErr, err := runner.runConcurrent(ctx, inv)
 
 	// If we encounter a load concurrency error, we need to retry serially.
-	if friendlyErr == nil || !modConcurrencyError.MatchString(friendlyErr.Error()) {
-		return stdout, stderr, friendlyErr, err
-	}
-	event.Error(ctx, "Load concurrency error, will retry serially", err)
+	if friendlyErr != nil && modConcurrencyError.MatchString(friendlyErr.Error()) {
+		event.Error(ctx, "Load concurrency error, will retry serially", err)
 
-	// Run serially by calling runPiped.
-	stdout.Reset()
-	stderr.Reset()
-	friendlyErr, err = runner.runPiped(ctx, inv, stdout, stderr)
+		// Run serially by calling runPiped.
+		stdout.Reset()
+		stderr.Reset()
+		friendlyErr, err = runner.runPiped(ctx, inv, stdout, stderr)
+	}
+
 	return stdout, stderr, friendlyErr, err
 }
 
+// Postcondition: both error results have same nilness.
 func (runner *Runner) runConcurrent(ctx context.Context, inv Invocation) (*bytes.Buffer, *bytes.Buffer, error, error) {
 	// Wait for 1 worker to become available.
 	select {
 	case <-ctx.Done():
-		return nil, nil, nil, ctx.Err()
+		return nil, nil, ctx.Err(), ctx.Err()
 	case runner.inFlight <- struct{}{}:
 		defer func() { <-runner.inFlight }()
 	}
@@ -103,6 +124,7 @@ func (runner *Runner) runConcurrent(ctx context.Context, inv Invocation) (*bytes
 	return stdout, stderr, friendlyErr, err
 }
 
+// Postcondition: both error results have same nilness.
 func (runner *Runner) runPiped(ctx context.Context, inv Invocation, stdout, stderr io.Writer) (error, error) {
 	// Make sure the runner is always initialized.
 	runner.initialize()
@@ -111,7 +133,7 @@ func (runner *Runner) runPiped(ctx context.Context, inv Invocation, stdout, stde
 	// runPiped commands.
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ctx.Err(), ctx.Err()
 	case runner.serialized <- struct{}{}:
 		defer func() { <-runner.serialized }()
 	}
@@ -121,7 +143,7 @@ func (runner *Runner) runPiped(ctx context.Context, inv Invocation, stdout, stde
 	for i := 0; i < maxInFlight; i++ {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return ctx.Err(), ctx.Err()
 		case runner.inFlight <- struct{}{}:
 			// Make sure we always "return" any workers we took.
 			defer func() { <-runner.inFlight }()
@@ -138,12 +160,15 @@ type Invocation struct {
 	BuildFlags []string
 
 	// If ModFlag is set, the go command is invoked with -mod=ModFlag.
+	// TODO(rfindley): remove, in favor of Args.
 	ModFlag string
 
 	// If ModFile is set, the go command is invoked with -modfile=ModFile.
+	// TODO(rfindley): remove, in favor of Args.
 	ModFile string
 
 	// If Overlay is set, the go command is invoked with -overlay=Overlay.
+	// TODO(rfindley): remove, in favor of Args.
 	Overlay string
 
 	// If CleanEnv is set, the invocation will run only with the environment
@@ -154,6 +179,7 @@ type Invocation struct {
 	Logf       func(format string, args ...interface{})
 }
 
+// Postcondition: both error results have same nilness.
 func (i *Invocation) runWithFriendlyError(ctx context.Context, stdout, stderr io.Writer) (friendlyError error, rawError error) {
 	rawError = i.run(ctx, stdout, stderr)
 	if rawError != nil {
@@ -301,7 +327,7 @@ func runCmdContext(ctx context.Context, cmd *exec.Cmd) (err error) {
 					// Per https://pkg.go.dev/os#File.Close, the call to stdoutR.Close
 					// should cause the Read call in io.Copy to unblock and return
 					// immediately, but we still need to receive from stdoutErr to confirm
-					// that that has happened.
+					// that it has happened.
 					<-stdoutErr
 					err2 = ctx.Err()
 				}
@@ -315,7 +341,7 @@ func runCmdContext(ctx context.Context, cmd *exec.Cmd) (err error) {
 			// one goroutine at a time will call Write.”
 			//
 			// Since we're starting a goroutine that writes to cmd.Stdout, we must
-			// also update cmd.Stderr so that that still holds.
+			// also update cmd.Stderr so that it still holds.
 			func() {
 				defer func() { recover() }()
 				if cmd.Stderr == prevStdout {

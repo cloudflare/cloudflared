@@ -65,7 +65,7 @@ type Comments struct {
 }
 
 // Comment returns the receiver. This isn't useful by itself, but
-// a Comments struct is embedded into all the expression
+// a [Comments] struct is embedded into all the expression
 // implementation types, and this gives each of those a Comment
 // method to satisfy the Expr interface.
 func (c *Comments) Comment() *Comments {
@@ -225,7 +225,7 @@ func (x *FileSyntax) Cleanup() {
 			if ww == 0 {
 				continue
 			}
-			if ww == 1 {
+			if ww == 1 && len(stmt.RParen.Comments.Before) == 0 {
 				// Collapse block into single line.
 				line := &Line{
 					Comments: Comments{

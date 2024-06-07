@@ -569,6 +569,13 @@ func (e *EdgeTunnelServer) serveQUIC(
 
 	tlsConfig.CurvePreferences = curvePref
 
+	// quic-go 0.44 increases the initial packet size to 1280 by default. That breaks anyone running tunnel through WARP
+	// because WARP MTU is 1280.
+	var initialPacketSize uint16 = 1252
+	if edgeAddr.IP.To4() == nil {
+		initialPacketSize = 1232
+	}
+
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout:       quicpogs.HandshakeIdleTimeout,
 		MaxIdleTimeout:             quicpogs.MaxIdleTimeout,
@@ -580,6 +587,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		DisablePathMTUDiscovery:    e.config.DisableQUICPathMTUDiscovery,
 		MaxConnectionReceiveWindow: e.config.QUICConnectionLevelFlowControlLimit,
 		MaxStreamReceiveWindow:     e.config.QUICStreamLevelFlowControlLimit,
+		InitialPacketSize:          initialPacketSize,
 	}
 
 	quicConn, err := connection.NewQUICConnection(

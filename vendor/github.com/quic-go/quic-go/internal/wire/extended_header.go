@@ -165,7 +165,7 @@ func (h *ExtendedHeader) ParsedLen() protocol.ByteCount {
 func (h *ExtendedHeader) GetLength(_ protocol.Version) protocol.ByteCount {
 	length := 1 /* type byte */ + 4 /* version */ + 1 /* dest conn ID len */ + protocol.ByteCount(h.DestConnectionID.Len()) + 1 /* src conn ID len */ + protocol.ByteCount(h.SrcConnectionID.Len()) + protocol.ByteCount(h.PacketNumberLen) + 2 /* length */
 	if h.Type == protocol.PacketTypeInitial {
-		length += quicvarint.Len(uint64(len(h.Token))) + protocol.ByteCount(len(h.Token))
+		length += protocol.ByteCount(quicvarint.Len(uint64(len(h.Token))) + len(h.Token))
 	}
 	return length
 }

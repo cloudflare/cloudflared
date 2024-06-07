@@ -30,6 +30,9 @@ var (
 		minRTT            *prometheus.GaugeVec
 		latestRTT         *prometheus.GaugeVec
 		smoothedRTT       *prometheus.GaugeVec
+		mtu               *prometheus.GaugeVec
+		congestionWindow  *prometheus.GaugeVec
+		congestionState   *prometheus.GaugeVec
 	}{
 		totalConnections: prometheus.NewCounter(
 			prometheus.CounterOpts{
@@ -146,6 +149,33 @@ var (
 			},
 			clientConnLabels,
 		),
+		mtu: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "mtu",
+				Help:      "Current maximum transmission unit (MTU) of a connection",
+			},
+			clientConnLabels,
+		),
+		congestionWindow: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "congestion_window",
+				Help:      "Current congestion window size",
+			},
+			clientConnLabels,
+		),
+		congestionState: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "congestion_state",
+				Help:      "Current congestion control state. See https://pkg.go.dev/github.com/quic-go/quic-go@v0.45.0/logging#CongestionState for what each value maps to",
+			},
+			clientConnLabels,
+		),
 	}
 
 	registerClient = sync.Once{}
@@ -179,6 +209,9 @@ func newClientCollector(index string, logger *zerolog.Logger) *clientCollector {
 			clientMetrics.minRTT,
 			clientMetrics.latestRTT,
 			clientMetrics.smoothedRTT,
+			clientMetrics.mtu,
+			clientMetrics.congestionWindow,
+			clientMetrics.congestionState,
 			packetTooBigDropped,
 		)
 	})
@@ -230,6 +263,19 @@ func (cc *clientCollector) updatedRTT(rtt *logging.RTTStats) {
 	clientMetrics.minRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.MinRTT()))
 	clientMetrics.latestRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.LatestRTT()))
 	clientMetrics.smoothedRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.SmoothedRTT()))
+}
+
+func (cc *clientCollector) updateCongestionWindow(size logging.ByteCount) {
+	clientMetrics.congestionWindow.WithLabelValues(cc.index).Set(float64(size))
+}
+
+func (cc *clientCollector) updatedCongestionState(state logging.CongestionState) {
+	clientMetrics.congestionState.WithLabelValues(cc.index).Set(float64(state))
+}
+
+func (cc *clientCollector) updateMTU(mtu logging.ByteCount) {
+	clientMetrics.mtu.WithLabelValues(cc.index).Set(float64(mtu))
+	cc.logger.Debug().Msgf("QUIC MTU updated to %d", mtu)
 }
 
 func (cc *clientCollector) collectPackets(size logging.ByteCount, frames []logging.Frame, counter, bandwidth *prometheus.CounterVec, direction direction) {

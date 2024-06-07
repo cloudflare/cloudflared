@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -14,7 +13,7 @@ type StreamsBlockedFrame struct {
 	StreamLimit protocol.StreamNum
 }
 
-func parseStreamsBlockedFrame(r *bytes.Reader, typ uint64, _ protocol.Version) (*StreamsBlockedFrame, error) {
+func parseStreamsBlockedFrame(b []byte, typ uint64, _ protocol.Version) (*StreamsBlockedFrame, int, error) {
 	f := &StreamsBlockedFrame{}
 	switch typ {
 	case bidiStreamBlockedFrameType:
@@ -22,15 +21,15 @@ func parseStreamsBlockedFrame(r *bytes.Reader, typ uint64, _ protocol.Version) (
 	case uniStreamBlockedFrameType:
 		f.Type = protocol.StreamTypeUni
 	}
-	streamLimit, err := quicvarint.Read(r)
+	streamLimit, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	f.StreamLimit = protocol.StreamNum(streamLimit)
 	if f.StreamLimit > protocol.MaxStreamCount {
-		return nil, fmt.Errorf("%d exceeds the maximum stream count", f.StreamLimit)
+		return nil, 0, fmt.Errorf("%d exceeds the maximum stream count", f.StreamLimit)
 	}
-	return f, nil
+	return f, l, nil
 }
 
 func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
@@ -46,5 +45,5 @@ func (f *StreamsBlockedFrame) Append(b []byte, _ protocol.Version) ([]byte, erro
 
 // Length of a written frame
 func (f *StreamsBlockedFrame) Length(_ protocol.Version) protocol.ByteCount {
-	return 1 + quicvarint.Len(uint64(f.StreamLimit))
+	return 1 + protocol.ByteCount(quicvarint.Len(uint64(f.StreamLimit)))
 }

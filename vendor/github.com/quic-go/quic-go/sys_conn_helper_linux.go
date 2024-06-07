@@ -23,6 +23,12 @@ const ecnIPv4DataLen = 1
 
 const batchSize = 8 // needs to smaller than MaxUint8 (otherwise the type of oobConn.readPos has to be changed)
 
+var kernelVersionMajor int
+
+func init() {
+	kernelVersionMajor, _ = kernelVersion()
+}
+
 func forceSetReceiveBuffer(c syscall.RawConn, bytes int) error {
 	var serr error
 	if err := c.Control(func(fd uintptr) {
@@ -55,9 +61,12 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.LittleEndian.Uint32(body), true
 }
 
-// isGSOSupported tests if the kernel supports GSO.
+// isGSOEnabled tests if the kernel supports GSO.
 // Sending with GSO might still fail later on, if the interface doesn't support it (see isGSOError).
-func isGSOSupported(conn syscall.RawConn) bool {
+func isGSOEnabled(conn syscall.RawConn) bool {
+	if kernelVersionMajor < 5 {
+		return false
+	}
 	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO"))
 	if err == nil && disabled {
 		return false
@@ -107,4 +116,41 @@ func isPermissionError(err error) bool {
 		return serr.Syscall == "sendmsg" && serr.Err == unix.EPERM
 	}
 	return false
+}
+
+func isECNEnabled() bool {
+	return kernelVersionMajor >= 5 && !isECNDisabledUsingEnv()
+}
+
+// kernelVersion returns major and minor kernel version numbers, parsed from
+// the syscall.Uname's Release field, or 0, 0 if the version can't be obtained
+// or parsed.
+//
+// copied from the standard library's internal/syscall/unix/kernel_version_linux.go
+func kernelVersion() (major, minor int) {
+	var uname syscall.Utsname
+	if err := syscall.Uname(&uname); err != nil {
+		return
+	}
+
+	var (
+		values    [2]int
+		value, vi int
+	)
+	for _, c := range uname.Release {
+		if '0' <= c && c <= '9' {
+			value = (value * 10) + int(c-'0')
+		} else {
+			// Note that we're assuming N.N.N here.
+			// If we see anything else, we are likely to mis-parse it.
+			values[vi] = value
+			vi++
+			if vi >= len(values) {
+				break
+			}
+			value = 0
+		}
+	}
+
+	return values[0], values[1]
 }

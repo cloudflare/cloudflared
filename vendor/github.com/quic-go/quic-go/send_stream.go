@@ -42,7 +42,11 @@ type sendStream struct {
 
 	finishedWriting bool // set once Close() is called
 	finSent         bool // set when a STREAM_FRAME with FIN bit has been sent
-	completed       bool // set when this stream has been reported to the streamSender as completed
+	// Set when the application knows about the cancellation.
+	// This can happen because the application called CancelWrite,
+	// or because Write returned the error (for remote cancellations).
+	cancellationFlagged bool
+	completed           bool // set when this stream has been reported to the streamSender as completed
 
 	dataForWriting []byte // during a Write() call, this slice is the part of p that still needs to be sent out
 	nextFrame      *wire.StreamFrame
@@ -60,6 +64,7 @@ var (
 )
 
 func newSendStream(
+	ctx context.Context,
 	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
@@ -71,7 +76,7 @@ func newSendStream(
 		writeChan:      make(chan struct{}, 1),
 		writeOnce:      make(chan struct{}, 1), // cap: 1, to protect against concurrent use of Write
 	}
-	s.ctx, s.ctxCancel = context.WithCancelCause(context.Background())
+	s.ctx, s.ctxCancel = context.WithCancelCause(ctx)
 	return s
 }
 
@@ -86,23 +91,32 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	s.writeOnce <- struct{}{}
 	defer func() { <-s.writeOnce }()
 
+	isNewlyCompleted, n, err := s.write(p)
+	if isNewlyCompleted {
+		s.sender.onStreamCompleted(s.streamID)
+	}
+	return n, err
+}
+
+func (s *sendStream) write(p []byte) (bool /* is newly completed */, int, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	if s.finishedWriting {
-		return 0, fmt.Errorf("write on closed stream %d", s.streamID)
+		return false, 0, fmt.Errorf("write on closed stream %d", s.streamID)
 	}
 	if s.cancelWriteErr != nil {
-		return 0, s.cancelWriteErr
+		s.cancellationFlagged = true
+		return s.isNewlyCompleted(), 0, s.cancelWriteErr
 	}
 	if s.closeForShutdownErr != nil {
-		return 0, s.closeForShutdownErr
+		return false, 0, s.closeForShutdownErr
 	}
 	if !s.deadline.IsZero() && !time.Now().Before(s.deadline) {
-		return 0, errDeadline
+		return false, 0, errDeadline
 	}
 	if len(p) == 0 {
-		return 0, nil
+		return false, 0, nil
 	}
 
 	s.dataForWriting = p
@@ -143,7 +157,7 @@ func (s *sendStream) Write(p []byte) (int, error) {
 			if !deadline.IsZero() {
 				if !time.Now().Before(deadline) {
 					s.dataForWriting = nil
-					return bytesWritten, errDeadline
+					return false, bytesWritten, errDeadline
 				}
 				if deadlineTimer == nil {
 					deadlineTimer = utils.NewTimer()
@@ -178,14 +192,15 @@ func (s *sendStream) Write(p []byte) (int, error) {
 	}
 
 	if bytesWritten == len(p) {
-		return bytesWritten, nil
+		return false, bytesWritten, nil
 	}
 	if s.closeForShutdownErr != nil {
-		return bytesWritten, s.closeForShutdownErr
+		return false, bytesWritten, s.closeForShutdownErr
 	} else if s.cancelWriteErr != nil {
-		return bytesWritten, s.cancelWriteErr
+		s.cancellationFlagged = true
+		return s.isNewlyCompleted(), bytesWritten, s.cancelWriteErr
 	}
-	return bytesWritten, nil
+	return false, bytesWritten, nil
 }
 
 func (s *sendStream) canBufferStreamFrame() bool {
@@ -348,8 +363,24 @@ func (s *sendStream) getDataForWriting(f *wire.StreamFrame, maxBytes protocol.By
 }
 
 func (s *sendStream) isNewlyCompleted() bool {
-	completed := (s.finSent || s.cancelWriteErr != nil) && s.numOutstandingFrames == 0 && len(s.retransmissionQueue) == 0
-	if completed && !s.completed {
+	if s.completed {
+		return false
+	}
+	// We need to keep the stream around until all frames have been sent and acknowledged.
+	if s.numOutstandingFrames > 0 || len(s.retransmissionQueue) > 0 {
+		return false
+	}
+	// The stream is completed if we sent the FIN.
+	if s.finSent {
+		s.completed = true
+		return true
+	}
+	// The stream is also completed if:
+	// 1. the application called CancelWrite, or
+	// 2. we received a STOP_SENDING, and
+	// 		* the application consumed the error via Write, or
+	//		* the application called CLsoe
+	if s.cancelWriteErr != nil && (s.cancellationFlagged || s.finishedWriting) {
 		s.completed = true
 		return true
 	}
@@ -362,15 +393,23 @@ func (s *sendStream) Close() error {
 		s.mutex.Unlock()
 		return nil
 	}
-	if s.cancelWriteErr != nil {
-		s.mutex.Unlock()
-		return fmt.Errorf("close called for canceled stream %d", s.streamID)
-	}
-	s.ctxCancel(nil)
 	s.finishedWriting = true
+	cancelWriteErr := s.cancelWriteErr
+	if cancelWriteErr != nil {
+		s.cancellationFlagged = true
+	}
+	completed := s.isNewlyCompleted()
 	s.mutex.Unlock()
 
+	if completed {
+		s.sender.onStreamCompleted(s.streamID)
+	}
+	if cancelWriteErr != nil {
+		return fmt.Errorf("close called for canceled stream %d", s.streamID)
+	}
 	s.sender.onHasStreamData(s.streamID) // need to send the FIN, must be called without holding the mutex
+
+	s.ctxCancel(nil)
 	return nil
 }
 
@@ -378,9 +417,11 @@ func (s *sendStream) CancelWrite(errorCode StreamErrorCode) {
 	s.cancelWriteImpl(errorCode, false)
 }
 
-// must be called after locking the mutex
 func (s *sendStream) cancelWriteImpl(errorCode qerr.StreamErrorCode, remote bool) {
 	s.mutex.Lock()
+	if !remote {
+		s.cancellationFlagged = true
+	}
 	if s.cancelWriteErr != nil {
 		s.mutex.Unlock()
 		return
@@ -437,7 +478,6 @@ func (s *sendStream) SetWriteDeadline(t time.Time) error {
 // The peer will NOT be informed about this: the stream is closed without sending a FIN or RST.
 func (s *sendStream) closeForShutdown(err error) {
 	s.mutex.Lock()
-	s.ctxCancel(err)
 	s.closeForShutdownErr = err
 	s.mutex.Unlock()
 	s.signalWrite()

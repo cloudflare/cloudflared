@@ -111,6 +111,7 @@ func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) {
 func (c *streamFlowController) Abandon() {
 	c.mutex.Lock()
 	unread := c.highestReceived - c.bytesRead
+	c.bytesRead = c.highestReceived
 	c.mutex.Unlock()
 	if unread > 0 {
 		c.connection.AddBytesRead(unread)
