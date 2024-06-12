@@ -57,7 +57,7 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 		readBuffer := make([]byte, maxPacketSize)
 		for {
 			if closeSession, err := s.dstToTransport(readBuffer); err != nil {
-				if errors.Is(err, net.ErrClosed) {
+				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 					s.log.Debug().Msg("Destination connection closed")
 				} else {
 					level := zerolog.ErrorLevel
