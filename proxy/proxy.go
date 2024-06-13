@@ -199,6 +199,16 @@ func (p *Proxy) proxyHTTPRequest(
 		roundTripReq.Header.Set("Connection", "keep-alive")
 	}
 
+    // Handle GOAWAY frame to correctly retry a request
+    if roundTripReq.Body != nil {
+        roundTripReq.GetBody = func() (io.ReadCloser, err error) {
+            if err.Error() == "http2: Transport received Server's graceful shutdown GOAWAY" {
+                return roundTripReq.Body, nil
+            }
+            return nil, err
+        }
+    }
+
 	// Set the User-Agent as an empty string if not provided to avoid inserting golang default UA
 	if roundTripReq.Header.Get("User-Agent") == "" {
 		roundTripReq.Header.Set("User-Agent", "")
