@@ -1,3 +1,10 @@
+2024.6.1
+- 2024-06-12 TUN-8461: Don't log Failed to send session payload if the error is EOF
+- 2024-06-07 TUN-8456: Update quic-go to 0.45 and collect mtu and congestion control metrics
+- 2024-06-06 TUN-8452: Add flag to control QUIC stream-level flow control limit
+- 2024-06-06 TUN-8451: Log QUIC flow control frames and transport parameters received
+- 2024-06-05 TUN-8449: Add flag to control QUIC connection-level flow control limit and increase default to 30MB
+
 2024.6.0
 - 2024-05-30 TUN-8441: Correct UDP total sessions metric to a counter and add new ICMP metrics
 - 2024-05-28 TUN-8422: Add metrics for capnp method calls
