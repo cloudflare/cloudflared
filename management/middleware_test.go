@@ -52,13 +52,11 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path string, body io
 	req, err := http.NewRequest(method, ts.URL+path, body)
 	if err != nil {
 		t.Fatal(err)
-		return nil, nil
 	}
 
 	resp, err := ts.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
-		return nil, nil
 	}
 	var claims managementErrorResponse
 	err = json.NewDecoder(resp.Body).Decode(&claims)
