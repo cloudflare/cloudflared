@@ -23,12 +23,12 @@ import (
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/tracing"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 var (
 	testLogger = zerolog.Nop()
-	testTags   = []tunnelpogs.Tag{
+	testTags   = []pogs.Tag{
 		{
 			Name:  "package",
 			Value: "orchestration",

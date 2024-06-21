@@ -261,7 +261,7 @@ func (sc *subcommandContext) runWithCredentials(credentials connection.Credentia
 	return StartServer(
 		sc.c,
 		buildInfo,
-		&connection.NamedTunnelProperties{Credentials: credentials},
+		&connection.TunnelProperties{Credentials: credentials},
 		sc.log,
 	)
 }

@@ -43,7 +43,6 @@ type localConfigMetrics struct {
 }
 
 type tunnelMetrics struct {
-	timerRetries    prometheus.Gauge
 	serverLocations *prometheus.GaugeVec
 	// locationLock is a mutex for oldServerLocations
 	locationLock sync.Mutex
@@ -351,15 +350,6 @@ func initTunnelMetrics() *tunnelMetrics {
 	)
 	prometheus.MustRegister(maxConcurrentRequestsPerTunnel)
 
-	timerRetries := prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Namespace: MetricsNamespace,
-			Subsystem: TunnelSubsystem,
-			Name:      "timer_retries",
-			Help:      "Unacknowledged heart beats count",
-		})
-	prometheus.MustRegister(timerRetries)
-
 	serverLocations := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: MetricsNamespace,
@@ -416,7 +406,6 @@ func initTunnelMetrics() *tunnelMetrics {
 	prometheus.MustRegister(registerSuccess)
 
 	return &tunnelMetrics{
-		timerRetries:        timerRetries,
 		serverLocations:     serverLocations,
 		oldServerLocations:  make(map[string]string),
 		muxerMetrics:        newMuxerMetrics(),

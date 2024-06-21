@@ -568,95 +568,6 @@ func (p RegistrationOptions_Promise) Struct() (RegistrationOptions, error) {
 	return RegistrationOptions{s}, err
 }
 
-type Tag struct{ capnp.Struct }
-
-// Tag_TypeID is the unique identifier for the type Tag.
-const Tag_TypeID = 0xcbd96442ae3bb01a
-
-func NewTag(s *capnp.Segment) (Tag, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
-	return Tag{st}, err
-}
-
-func NewRootTag(s *capnp.Segment) (Tag, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
-	return Tag{st}, err
-}
-
-func ReadRootTag(msg *capnp.Message) (Tag, error) {
-	root, err := msg.RootPtr()
-	return Tag{root.Struct()}, err
-}
-
-func (s Tag) String() string {
-	str, _ := text.Marshal(0xcbd96442ae3bb01a, s.Struct)
-	return str
-}
-
-func (s Tag) Name() (string, error) {
-	p, err := s.Struct.Ptr(0)
-	return p.Text(), err
-}
-
-func (s Tag) HasName() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s Tag) NameBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(0)
-	return p.TextBytes(), err
-}
-
-func (s Tag) SetName(v string) error {
-	return s.Struct.SetText(0, v)
-}
-
-func (s Tag) Value() (string, error) {
-	p, err := s.Struct.Ptr(1)
-	return p.Text(), err
-}
-
-func (s Tag) HasValue() bool {
-	p, err := s.Struct.Ptr(1)
-	return p.IsValid() || err != nil
-}
-
-func (s Tag) ValueBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(1)
-	return p.TextBytes(), err
-}
-
-func (s Tag) SetValue(v string) error {
-	return s.Struct.SetText(1, v)
-}
-
-// Tag_List is a list of Tag.
-type Tag_List struct{ capnp.List }
-
-// NewTag creates a new list of Tag.
-func NewTag_List(s *capnp.Segment, sz int32) (Tag_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2}, sz)
-	return Tag_List{l}, err
-}
-
-func (s Tag_List) At(i int) Tag { return Tag{s.List.Struct(i)} }
-
-func (s Tag_List) Set(i int, v Tag) error { return s.List.SetStruct(i, v.Struct) }
-
-func (s Tag_List) String() string {
-	str, _ := text.MarshalList(0xcbd96442ae3bb01a, s.List)
-	return str
-}
-
-// Tag_Promise is a wrapper for a Tag promised by a client call.
-type Tag_Promise struct{ *capnp.Pipeline }
-
-func (p Tag_Promise) Struct() (Tag, error) {
-	s, err := p.Pipeline.Struct()
-	return Tag{s}, err
-}
-
 type ExistingTunnelPolicy uint16
 
 // ExistingTunnelPolicy_TypeID is the unique identifier for the type ExistingTunnelPolicy.
@@ -900,1297 +811,6 @@ type AuthenticateResponse_Promise struct{ *capnp.Pipeline }
 func (p AuthenticateResponse_Promise) Struct() (AuthenticateResponse, error) {
 	s, err := p.Pipeline.Struct()
 	return AuthenticateResponse{s}, err
-}
-
-type ClientInfo struct{ capnp.Struct }
-
-// ClientInfo_TypeID is the unique identifier for the type ClientInfo.
-const ClientInfo_TypeID = 0x83ced0145b2f114b
-
-func NewClientInfo(s *capnp.Segment) (ClientInfo, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4})
-	return ClientInfo{st}, err
-}
-
-func NewRootClientInfo(s *capnp.Segment) (ClientInfo, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4})
-	return ClientInfo{st}, err
-}
-
-func ReadRootClientInfo(msg *capnp.Message) (ClientInfo, error) {
-	root, err := msg.RootPtr()
-	return ClientInfo{root.Struct()}, err
-}
-
-func (s ClientInfo) String() string {
-	str, _ := text.Marshal(0x83ced0145b2f114b, s.Struct)
-	return str
-}
-
-func (s ClientInfo) ClientId() ([]byte, error) {
-	p, err := s.Struct.Ptr(0)
-	return []byte(p.Data()), err
-}
-
-func (s ClientInfo) HasClientId() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s ClientInfo) SetClientId(v []byte) error {
-	return s.Struct.SetData(0, v)
-}
-
-func (s ClientInfo) Features() (capnp.TextList, error) {
-	p, err := s.Struct.Ptr(1)
-	return capnp.TextList{List: p.List()}, err
-}
-
-func (s ClientInfo) HasFeatures() bool {
-	p, err := s.Struct.Ptr(1)
-	return p.IsValid() || err != nil
-}
-
-func (s ClientInfo) SetFeatures(v capnp.TextList) error {
-	return s.Struct.SetPtr(1, v.List.ToPtr())
-}
-
-// NewFeatures sets the features field to a newly
-// allocated capnp.TextList, preferring placement in s's segment.
-func (s ClientInfo) NewFeatures(n int32) (capnp.TextList, error) {
-	l, err := capnp.NewTextList(s.Struct.Segment(), n)
-	if err != nil {
-		return capnp.TextList{}, err
-	}
-	err = s.Struct.SetPtr(1, l.List.ToPtr())
-	return l, err
-}
-
-func (s ClientInfo) Version() (string, error) {
-	p, err := s.Struct.Ptr(2)
-	return p.Text(), err
-}
-
-func (s ClientInfo) HasVersion() bool {
-	p, err := s.Struct.Ptr(2)
-	return p.IsValid() || err != nil
-}
-
-func (s ClientInfo) VersionBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(2)
-	return p.TextBytes(), err
-}
-
-func (s ClientInfo) SetVersion(v string) error {
-	return s.Struct.SetText(2, v)
-}
-
-func (s ClientInfo) Arch() (string, error) {
-	p, err := s.Struct.Ptr(3)
-	return p.Text(), err
-}
-
-func (s ClientInfo) HasArch() bool {
-	p, err := s.Struct.Ptr(3)
-	return p.IsValid() || err != nil
-}
-
-func (s ClientInfo) ArchBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(3)
-	return p.TextBytes(), err
-}
-
-func (s ClientInfo) SetArch(v string) error {
-	return s.Struct.SetText(3, v)
-}
-
-// ClientInfo_List is a list of ClientInfo.
-type ClientInfo_List struct{ capnp.List }
-
-// NewClientInfo creates a new list of ClientInfo.
-func NewClientInfo_List(s *capnp.Segment, sz int32) (ClientInfo_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4}, sz)
-	return ClientInfo_List{l}, err
-}
-
-func (s ClientInfo_List) At(i int) ClientInfo { return ClientInfo{s.List.Struct(i)} }
-
-func (s ClientInfo_List) Set(i int, v ClientInfo) error { return s.List.SetStruct(i, v.Struct) }
-
-func (s ClientInfo_List) String() string {
-	str, _ := text.MarshalList(0x83ced0145b2f114b, s.List)
-	return str
-}
-
-// ClientInfo_Promise is a wrapper for a ClientInfo promised by a client call.
-type ClientInfo_Promise struct{ *capnp.Pipeline }
-
-func (p ClientInfo_Promise) Struct() (ClientInfo, error) {
-	s, err := p.Pipeline.Struct()
-	return ClientInfo{s}, err
-}
-
-type ConnectionOptions struct{ capnp.Struct }
-
-// ConnectionOptions_TypeID is the unique identifier for the type ConnectionOptions.
-const ConnectionOptions_TypeID = 0xb4bf9861fe035d04
-
-func NewConnectionOptions(s *capnp.Segment) (ConnectionOptions, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
-	return ConnectionOptions{st}, err
-}
-
-func NewRootConnectionOptions(s *capnp.Segment) (ConnectionOptions, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
-	return ConnectionOptions{st}, err
-}
-
-func ReadRootConnectionOptions(msg *capnp.Message) (ConnectionOptions, error) {
-	root, err := msg.RootPtr()
-	return ConnectionOptions{root.Struct()}, err
-}
-
-func (s ConnectionOptions) String() string {
-	str, _ := text.Marshal(0xb4bf9861fe035d04, s.Struct)
-	return str
-}
-
-func (s ConnectionOptions) Client() (ClientInfo, error) {
-	p, err := s.Struct.Ptr(0)
-	return ClientInfo{Struct: p.Struct()}, err
-}
-
-func (s ConnectionOptions) HasClient() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionOptions) SetClient(v ClientInfo) error {
-	return s.Struct.SetPtr(0, v.Struct.ToPtr())
-}
-
-// NewClient sets the client field to a newly
-// allocated ClientInfo struct, preferring placement in s's segment.
-func (s ConnectionOptions) NewClient() (ClientInfo, error) {
-	ss, err := NewClientInfo(s.Struct.Segment())
-	if err != nil {
-		return ClientInfo{}, err
-	}
-	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
-	return ss, err
-}
-
-func (s ConnectionOptions) OriginLocalIp() ([]byte, error) {
-	p, err := s.Struct.Ptr(1)
-	return []byte(p.Data()), err
-}
-
-func (s ConnectionOptions) HasOriginLocalIp() bool {
-	p, err := s.Struct.Ptr(1)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionOptions) SetOriginLocalIp(v []byte) error {
-	return s.Struct.SetData(1, v)
-}
-
-func (s ConnectionOptions) ReplaceExisting() bool {
-	return s.Struct.Bit(0)
-}
-
-func (s ConnectionOptions) SetReplaceExisting(v bool) {
-	s.Struct.SetBit(0, v)
-}
-
-func (s ConnectionOptions) CompressionQuality() uint8 {
-	return s.Struct.Uint8(1)
-}
-
-func (s ConnectionOptions) SetCompressionQuality(v uint8) {
-	s.Struct.SetUint8(1, v)
-}
-
-func (s ConnectionOptions) NumPreviousAttempts() uint8 {
-	return s.Struct.Uint8(2)
-}
-
-func (s ConnectionOptions) SetNumPreviousAttempts(v uint8) {
-	s.Struct.SetUint8(2, v)
-}
-
-// ConnectionOptions_List is a list of ConnectionOptions.
-type ConnectionOptions_List struct{ capnp.List }
-
-// NewConnectionOptions creates a new list of ConnectionOptions.
-func NewConnectionOptions_List(s *capnp.Segment, sz int32) (ConnectionOptions_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2}, sz)
-	return ConnectionOptions_List{l}, err
-}
-
-func (s ConnectionOptions_List) At(i int) ConnectionOptions {
-	return ConnectionOptions{s.List.Struct(i)}
-}
-
-func (s ConnectionOptions_List) Set(i int, v ConnectionOptions) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s ConnectionOptions_List) String() string {
-	str, _ := text.MarshalList(0xb4bf9861fe035d04, s.List)
-	return str
-}
-
-// ConnectionOptions_Promise is a wrapper for a ConnectionOptions promised by a client call.
-type ConnectionOptions_Promise struct{ *capnp.Pipeline }
-
-func (p ConnectionOptions_Promise) Struct() (ConnectionOptions, error) {
-	s, err := p.Pipeline.Struct()
-	return ConnectionOptions{s}, err
-}
-
-func (p ConnectionOptions_Promise) Client() ClientInfo_Promise {
-	return ClientInfo_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
-}
-
-type ConnectionResponse struct{ capnp.Struct }
-type ConnectionResponse_result ConnectionResponse
-type ConnectionResponse_result_Which uint16
-
-const (
-	ConnectionResponse_result_Which_error             ConnectionResponse_result_Which = 0
-	ConnectionResponse_result_Which_connectionDetails ConnectionResponse_result_Which = 1
-)
-
-func (w ConnectionResponse_result_Which) String() string {
-	const s = "errorconnectionDetails"
-	switch w {
-	case ConnectionResponse_result_Which_error:
-		return s[0:5]
-	case ConnectionResponse_result_Which_connectionDetails:
-		return s[5:22]
-
-	}
-	return "ConnectionResponse_result_Which(" + strconv.FormatUint(uint64(w), 10) + ")"
-}
-
-// ConnectionResponse_TypeID is the unique identifier for the type ConnectionResponse.
-const ConnectionResponse_TypeID = 0xdbaa9d03d52b62dc
-
-func NewConnectionResponse(s *capnp.Segment) (ConnectionResponse, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 1})
-	return ConnectionResponse{st}, err
-}
-
-func NewRootConnectionResponse(s *capnp.Segment) (ConnectionResponse, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 1})
-	return ConnectionResponse{st}, err
-}
-
-func ReadRootConnectionResponse(msg *capnp.Message) (ConnectionResponse, error) {
-	root, err := msg.RootPtr()
-	return ConnectionResponse{root.Struct()}, err
-}
-
-func (s ConnectionResponse) String() string {
-	str, _ := text.Marshal(0xdbaa9d03d52b62dc, s.Struct)
-	return str
-}
-
-func (s ConnectionResponse) Result() ConnectionResponse_result { return ConnectionResponse_result(s) }
-
-func (s ConnectionResponse_result) Which() ConnectionResponse_result_Which {
-	return ConnectionResponse_result_Which(s.Struct.Uint16(0))
-}
-func (s ConnectionResponse_result) Error() (ConnectionError, error) {
-	if s.Struct.Uint16(0) != 0 {
-		panic("Which() != error")
-	}
-	p, err := s.Struct.Ptr(0)
-	return ConnectionError{Struct: p.Struct()}, err
-}
-
-func (s ConnectionResponse_result) HasError() bool {
-	if s.Struct.Uint16(0) != 0 {
-		return false
-	}
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionResponse_result) SetError(v ConnectionError) error {
-	s.Struct.SetUint16(0, 0)
-	return s.Struct.SetPtr(0, v.Struct.ToPtr())
-}
-
-// NewError sets the error field to a newly
-// allocated ConnectionError struct, preferring placement in s's segment.
-func (s ConnectionResponse_result) NewError() (ConnectionError, error) {
-	s.Struct.SetUint16(0, 0)
-	ss, err := NewConnectionError(s.Struct.Segment())
-	if err != nil {
-		return ConnectionError{}, err
-	}
-	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
-	return ss, err
-}
-
-func (s ConnectionResponse_result) ConnectionDetails() (ConnectionDetails, error) {
-	if s.Struct.Uint16(0) != 1 {
-		panic("Which() != connectionDetails")
-	}
-	p, err := s.Struct.Ptr(0)
-	return ConnectionDetails{Struct: p.Struct()}, err
-}
-
-func (s ConnectionResponse_result) HasConnectionDetails() bool {
-	if s.Struct.Uint16(0) != 1 {
-		return false
-	}
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionResponse_result) SetConnectionDetails(v ConnectionDetails) error {
-	s.Struct.SetUint16(0, 1)
-	return s.Struct.SetPtr(0, v.Struct.ToPtr())
-}
-
-// NewConnectionDetails sets the connectionDetails field to a newly
-// allocated ConnectionDetails struct, preferring placement in s's segment.
-func (s ConnectionResponse_result) NewConnectionDetails() (ConnectionDetails, error) {
-	s.Struct.SetUint16(0, 1)
-	ss, err := NewConnectionDetails(s.Struct.Segment())
-	if err != nil {
-		return ConnectionDetails{}, err
-	}
-	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
-	return ss, err
-}
-
-// ConnectionResponse_List is a list of ConnectionResponse.
-type ConnectionResponse_List struct{ capnp.List }
-
-// NewConnectionResponse creates a new list of ConnectionResponse.
-func NewConnectionResponse_List(s *capnp.Segment, sz int32) (ConnectionResponse_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 1}, sz)
-	return ConnectionResponse_List{l}, err
-}
-
-func (s ConnectionResponse_List) At(i int) ConnectionResponse {
-	return ConnectionResponse{s.List.Struct(i)}
-}
-
-func (s ConnectionResponse_List) Set(i int, v ConnectionResponse) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s ConnectionResponse_List) String() string {
-	str, _ := text.MarshalList(0xdbaa9d03d52b62dc, s.List)
-	return str
-}
-
-// ConnectionResponse_Promise is a wrapper for a ConnectionResponse promised by a client call.
-type ConnectionResponse_Promise struct{ *capnp.Pipeline }
-
-func (p ConnectionResponse_Promise) Struct() (ConnectionResponse, error) {
-	s, err := p.Pipeline.Struct()
-	return ConnectionResponse{s}, err
-}
-
-func (p ConnectionResponse_Promise) Result() ConnectionResponse_result_Promise {
-	return ConnectionResponse_result_Promise{p.Pipeline}
-}
-
-// ConnectionResponse_result_Promise is a wrapper for a ConnectionResponse_result promised by a client call.
-type ConnectionResponse_result_Promise struct{ *capnp.Pipeline }
-
-func (p ConnectionResponse_result_Promise) Struct() (ConnectionResponse_result, error) {
-	s, err := p.Pipeline.Struct()
-	return ConnectionResponse_result{s}, err
-}
-
-func (p ConnectionResponse_result_Promise) Error() ConnectionError_Promise {
-	return ConnectionError_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
-}
-
-func (p ConnectionResponse_result_Promise) ConnectionDetails() ConnectionDetails_Promise {
-	return ConnectionDetails_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
-}
-
-type ConnectionError struct{ capnp.Struct }
-
-// ConnectionError_TypeID is the unique identifier for the type ConnectionError.
-const ConnectionError_TypeID = 0xf5f383d2785edb86
-
-func NewConnectionError(s *capnp.Segment) (ConnectionError, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1})
-	return ConnectionError{st}, err
-}
-
-func NewRootConnectionError(s *capnp.Segment) (ConnectionError, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1})
-	return ConnectionError{st}, err
-}
-
-func ReadRootConnectionError(msg *capnp.Message) (ConnectionError, error) {
-	root, err := msg.RootPtr()
-	return ConnectionError{root.Struct()}, err
-}
-
-func (s ConnectionError) String() string {
-	str, _ := text.Marshal(0xf5f383d2785edb86, s.Struct)
-	return str
-}
-
-func (s ConnectionError) Cause() (string, error) {
-	p, err := s.Struct.Ptr(0)
-	return p.Text(), err
-}
-
-func (s ConnectionError) HasCause() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionError) CauseBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(0)
-	return p.TextBytes(), err
-}
-
-func (s ConnectionError) SetCause(v string) error {
-	return s.Struct.SetText(0, v)
-}
-
-func (s ConnectionError) RetryAfter() int64 {
-	return int64(s.Struct.Uint64(0))
-}
-
-func (s ConnectionError) SetRetryAfter(v int64) {
-	s.Struct.SetUint64(0, uint64(v))
-}
-
-func (s ConnectionError) ShouldRetry() bool {
-	return s.Struct.Bit(64)
-}
-
-func (s ConnectionError) SetShouldRetry(v bool) {
-	s.Struct.SetBit(64, v)
-}
-
-// ConnectionError_List is a list of ConnectionError.
-type ConnectionError_List struct{ capnp.List }
-
-// NewConnectionError creates a new list of ConnectionError.
-func NewConnectionError_List(s *capnp.Segment, sz int32) (ConnectionError_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1}, sz)
-	return ConnectionError_List{l}, err
-}
-
-func (s ConnectionError_List) At(i int) ConnectionError { return ConnectionError{s.List.Struct(i)} }
-
-func (s ConnectionError_List) Set(i int, v ConnectionError) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s ConnectionError_List) String() string {
-	str, _ := text.MarshalList(0xf5f383d2785edb86, s.List)
-	return str
-}
-
-// ConnectionError_Promise is a wrapper for a ConnectionError promised by a client call.
-type ConnectionError_Promise struct{ *capnp.Pipeline }
-
-func (p ConnectionError_Promise) Struct() (ConnectionError, error) {
-	s, err := p.Pipeline.Struct()
-	return ConnectionError{s}, err
-}
-
-type ConnectionDetails struct{ capnp.Struct }
-
-// ConnectionDetails_TypeID is the unique identifier for the type ConnectionDetails.
-const ConnectionDetails_TypeID = 0xb5f39f082b9ac18a
-
-func NewConnectionDetails(s *capnp.Segment) (ConnectionDetails, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
-	return ConnectionDetails{st}, err
-}
-
-func NewRootConnectionDetails(s *capnp.Segment) (ConnectionDetails, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
-	return ConnectionDetails{st}, err
-}
-
-func ReadRootConnectionDetails(msg *capnp.Message) (ConnectionDetails, error) {
-	root, err := msg.RootPtr()
-	return ConnectionDetails{root.Struct()}, err
-}
-
-func (s ConnectionDetails) String() string {
-	str, _ := text.Marshal(0xb5f39f082b9ac18a, s.Struct)
-	return str
-}
-
-func (s ConnectionDetails) Uuid() ([]byte, error) {
-	p, err := s.Struct.Ptr(0)
-	return []byte(p.Data()), err
-}
-
-func (s ConnectionDetails) HasUuid() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionDetails) SetUuid(v []byte) error {
-	return s.Struct.SetData(0, v)
-}
-
-func (s ConnectionDetails) LocationName() (string, error) {
-	p, err := s.Struct.Ptr(1)
-	return p.Text(), err
-}
-
-func (s ConnectionDetails) HasLocationName() bool {
-	p, err := s.Struct.Ptr(1)
-	return p.IsValid() || err != nil
-}
-
-func (s ConnectionDetails) LocationNameBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(1)
-	return p.TextBytes(), err
-}
-
-func (s ConnectionDetails) SetLocationName(v string) error {
-	return s.Struct.SetText(1, v)
-}
-
-func (s ConnectionDetails) TunnelIsRemotelyManaged() bool {
-	return s.Struct.Bit(0)
-}
-
-func (s ConnectionDetails) SetTunnelIsRemotelyManaged(v bool) {
-	s.Struct.SetBit(0, v)
-}
-
-// ConnectionDetails_List is a list of ConnectionDetails.
-type ConnectionDetails_List struct{ capnp.List }
-
-// NewConnectionDetails creates a new list of ConnectionDetails.
-func NewConnectionDetails_List(s *capnp.Segment, sz int32) (ConnectionDetails_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2}, sz)
-	return ConnectionDetails_List{l}, err
-}
-
-func (s ConnectionDetails_List) At(i int) ConnectionDetails {
-	return ConnectionDetails{s.List.Struct(i)}
-}
-
-func (s ConnectionDetails_List) Set(i int, v ConnectionDetails) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s ConnectionDetails_List) String() string {
-	str, _ := text.MarshalList(0xb5f39f082b9ac18a, s.List)
-	return str
-}
-
-// ConnectionDetails_Promise is a wrapper for a ConnectionDetails promised by a client call.
-type ConnectionDetails_Promise struct{ *capnp.Pipeline }
-
-func (p ConnectionDetails_Promise) Struct() (ConnectionDetails, error) {
-	s, err := p.Pipeline.Struct()
-	return ConnectionDetails{s}, err
-}
-
-type TunnelAuth struct{ capnp.Struct }
-
-// TunnelAuth_TypeID is the unique identifier for the type TunnelAuth.
-const TunnelAuth_TypeID = 0x9496331ab9cd463f
-
-func NewTunnelAuth(s *capnp.Segment) (TunnelAuth, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
-	return TunnelAuth{st}, err
-}
-
-func NewRootTunnelAuth(s *capnp.Segment) (TunnelAuth, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
-	return TunnelAuth{st}, err
-}
-
-func ReadRootTunnelAuth(msg *capnp.Message) (TunnelAuth, error) {
-	root, err := msg.RootPtr()
-	return TunnelAuth{root.Struct()}, err
-}
-
-func (s TunnelAuth) String() string {
-	str, _ := text.Marshal(0x9496331ab9cd463f, s.Struct)
-	return str
-}
-
-func (s TunnelAuth) AccountTag() (string, error) {
-	p, err := s.Struct.Ptr(0)
-	return p.Text(), err
-}
-
-func (s TunnelAuth) HasAccountTag() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s TunnelAuth) AccountTagBytes() ([]byte, error) {
-	p, err := s.Struct.Ptr(0)
-	return p.TextBytes(), err
-}
-
-func (s TunnelAuth) SetAccountTag(v string) error {
-	return s.Struct.SetText(0, v)
-}
-
-func (s TunnelAuth) TunnelSecret() ([]byte, error) {
-	p, err := s.Struct.Ptr(1)
-	return []byte(p.Data()), err
-}
-
-func (s TunnelAuth) HasTunnelSecret() bool {
-	p, err := s.Struct.Ptr(1)
-	return p.IsValid() || err != nil
-}
-
-func (s TunnelAuth) SetTunnelSecret(v []byte) error {
-	return s.Struct.SetData(1, v)
-}
-
-// TunnelAuth_List is a list of TunnelAuth.
-type TunnelAuth_List struct{ capnp.List }
-
-// NewTunnelAuth creates a new list of TunnelAuth.
-func NewTunnelAuth_List(s *capnp.Segment, sz int32) (TunnelAuth_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2}, sz)
-	return TunnelAuth_List{l}, err
-}
-
-func (s TunnelAuth_List) At(i int) TunnelAuth { return TunnelAuth{s.List.Struct(i)} }
-
-func (s TunnelAuth_List) Set(i int, v TunnelAuth) error { return s.List.SetStruct(i, v.Struct) }
-
-func (s TunnelAuth_List) String() string {
-	str, _ := text.MarshalList(0x9496331ab9cd463f, s.List)
-	return str
-}
-
-// TunnelAuth_Promise is a wrapper for a TunnelAuth promised by a client call.
-type TunnelAuth_Promise struct{ *capnp.Pipeline }
-
-func (p TunnelAuth_Promise) Struct() (TunnelAuth, error) {
-	s, err := p.Pipeline.Struct()
-	return TunnelAuth{s}, err
-}
-
-type RegistrationServer struct{ Client capnp.Client }
-
-// RegistrationServer_TypeID is the unique identifier for the type RegistrationServer.
-const RegistrationServer_TypeID = 0xf71695ec7fe85497
-
-func (c RegistrationServer) RegisterConnection(ctx context.Context, params func(RegistrationServer_registerConnection_Params) error, opts ...capnp.CallOption) RegistrationServer_registerConnection_Results_Promise {
-	if c.Client == nil {
-		return RegistrationServer_registerConnection_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
-	}
-	call := &capnp.Call{
-		Ctx: ctx,
-		Method: capnp.Method{
-			InterfaceID:   0xf71695ec7fe85497,
-			MethodID:      0,
-			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
-			MethodName:    "registerConnection",
-		},
-		Options: capnp.NewCallOptions(opts),
-	}
-	if params != nil {
-		call.ParamsSize = capnp.ObjectSize{DataSize: 8, PointerCount: 3}
-		call.ParamsFunc = func(s capnp.Struct) error { return params(RegistrationServer_registerConnection_Params{Struct: s}) }
-	}
-	return RegistrationServer_registerConnection_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
-}
-func (c RegistrationServer) UnregisterConnection(ctx context.Context, params func(RegistrationServer_unregisterConnection_Params) error, opts ...capnp.CallOption) RegistrationServer_unregisterConnection_Results_Promise {
-	if c.Client == nil {
-		return RegistrationServer_unregisterConnection_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
-	}
-	call := &capnp.Call{
-		Ctx: ctx,
-		Method: capnp.Method{
-			InterfaceID:   0xf71695ec7fe85497,
-			MethodID:      1,
-			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
-			MethodName:    "unregisterConnection",
-		},
-		Options: capnp.NewCallOptions(opts),
-	}
-	if params != nil {
-		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 0}
-		call.ParamsFunc = func(s capnp.Struct) error { return params(RegistrationServer_unregisterConnection_Params{Struct: s}) }
-	}
-	return RegistrationServer_unregisterConnection_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
-}
-func (c RegistrationServer) UpdateLocalConfiguration(ctx context.Context, params func(RegistrationServer_updateLocalConfiguration_Params) error, opts ...capnp.CallOption) RegistrationServer_updateLocalConfiguration_Results_Promise {
-	if c.Client == nil {
-		return RegistrationServer_updateLocalConfiguration_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
-	}
-	call := &capnp.Call{
-		Ctx: ctx,
-		Method: capnp.Method{
-			InterfaceID:   0xf71695ec7fe85497,
-			MethodID:      2,
-			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
-			MethodName:    "updateLocalConfiguration",
-		},
-		Options: capnp.NewCallOptions(opts),
-	}
-	if params != nil {
-		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 1}
-		call.ParamsFunc = func(s capnp.Struct) error {
-			return params(RegistrationServer_updateLocalConfiguration_Params{Struct: s})
-		}
-	}
-	return RegistrationServer_updateLocalConfiguration_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
-}
-
-type RegistrationServer_Server interface {
-	RegisterConnection(RegistrationServer_registerConnection) error
-
-	UnregisterConnection(RegistrationServer_unregisterConnection) error
-
-	UpdateLocalConfiguration(RegistrationServer_updateLocalConfiguration) error
-}
-
-func RegistrationServer_ServerToClient(s RegistrationServer_Server) RegistrationServer {
-	c, _ := s.(server.Closer)
-	return RegistrationServer{Client: server.New(RegistrationServer_Methods(nil, s), c)}
-}
-
-func RegistrationServer_Methods(methods []server.Method, s RegistrationServer_Server) []server.Method {
-	if cap(methods) == 0 {
-		methods = make([]server.Method, 0, 3)
-	}
-
-	methods = append(methods, server.Method{
-		Method: capnp.Method{
-			InterfaceID:   0xf71695ec7fe85497,
-			MethodID:      0,
-			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
-			MethodName:    "registerConnection",
-		},
-		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
-			call := RegistrationServer_registerConnection{c, opts, RegistrationServer_registerConnection_Params{Struct: p}, RegistrationServer_registerConnection_Results{Struct: r}}
-			return s.RegisterConnection(call)
-		},
-		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
-	})
-
-	methods = append(methods, server.Method{
-		Method: capnp.Method{
-			InterfaceID:   0xf71695ec7fe85497,
-			MethodID:      1,
-			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
-			MethodName:    "unregisterConnection",
-		},
-		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
-			call := RegistrationServer_unregisterConnection{c, opts, RegistrationServer_unregisterConnection_Params{Struct: p}, RegistrationServer_unregisterConnection_Results{Struct: r}}
-			return s.UnregisterConnection(call)
-		},
-		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 0},
-	})
-
-	methods = append(methods, server.Method{
-		Method: capnp.Method{
-			InterfaceID:   0xf71695ec7fe85497,
-			MethodID:      2,
-			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
-			MethodName:    "updateLocalConfiguration",
-		},
-		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
-			call := RegistrationServer_updateLocalConfiguration{c, opts, RegistrationServer_updateLocalConfiguration_Params{Struct: p}, RegistrationServer_updateLocalConfiguration_Results{Struct: r}}
-			return s.UpdateLocalConfiguration(call)
-		},
-		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 0},
-	})
-
-	return methods
-}
-
-// RegistrationServer_registerConnection holds the arguments for a server call to RegistrationServer.registerConnection.
-type RegistrationServer_registerConnection struct {
-	Ctx     context.Context
-	Options capnp.CallOptions
-	Params  RegistrationServer_registerConnection_Params
-	Results RegistrationServer_registerConnection_Results
-}
-
-// RegistrationServer_unregisterConnection holds the arguments for a server call to RegistrationServer.unregisterConnection.
-type RegistrationServer_unregisterConnection struct {
-	Ctx     context.Context
-	Options capnp.CallOptions
-	Params  RegistrationServer_unregisterConnection_Params
-	Results RegistrationServer_unregisterConnection_Results
-}
-
-// RegistrationServer_updateLocalConfiguration holds the arguments for a server call to RegistrationServer.updateLocalConfiguration.
-type RegistrationServer_updateLocalConfiguration struct {
-	Ctx     context.Context
-	Options capnp.CallOptions
-	Params  RegistrationServer_updateLocalConfiguration_Params
-	Results RegistrationServer_updateLocalConfiguration_Results
-}
-
-type RegistrationServer_registerConnection_Params struct{ capnp.Struct }
-
-// RegistrationServer_registerConnection_Params_TypeID is the unique identifier for the type RegistrationServer_registerConnection_Params.
-const RegistrationServer_registerConnection_Params_TypeID = 0xe6646dec8feaa6ee
-
-func NewRegistrationServer_registerConnection_Params(s *capnp.Segment) (RegistrationServer_registerConnection_Params, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
-	return RegistrationServer_registerConnection_Params{st}, err
-}
-
-func NewRootRegistrationServer_registerConnection_Params(s *capnp.Segment) (RegistrationServer_registerConnection_Params, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
-	return RegistrationServer_registerConnection_Params{st}, err
-}
-
-func ReadRootRegistrationServer_registerConnection_Params(msg *capnp.Message) (RegistrationServer_registerConnection_Params, error) {
-	root, err := msg.RootPtr()
-	return RegistrationServer_registerConnection_Params{root.Struct()}, err
-}
-
-func (s RegistrationServer_registerConnection_Params) String() string {
-	str, _ := text.Marshal(0xe6646dec8feaa6ee, s.Struct)
-	return str
-}
-
-func (s RegistrationServer_registerConnection_Params) Auth() (TunnelAuth, error) {
-	p, err := s.Struct.Ptr(0)
-	return TunnelAuth{Struct: p.Struct()}, err
-}
-
-func (s RegistrationServer_registerConnection_Params) HasAuth() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s RegistrationServer_registerConnection_Params) SetAuth(v TunnelAuth) error {
-	return s.Struct.SetPtr(0, v.Struct.ToPtr())
-}
-
-// NewAuth sets the auth field to a newly
-// allocated TunnelAuth struct, preferring placement in s's segment.
-func (s RegistrationServer_registerConnection_Params) NewAuth() (TunnelAuth, error) {
-	ss, err := NewTunnelAuth(s.Struct.Segment())
-	if err != nil {
-		return TunnelAuth{}, err
-	}
-	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
-	return ss, err
-}
-
-func (s RegistrationServer_registerConnection_Params) TunnelId() ([]byte, error) {
-	p, err := s.Struct.Ptr(1)
-	return []byte(p.Data()), err
-}
-
-func (s RegistrationServer_registerConnection_Params) HasTunnelId() bool {
-	p, err := s.Struct.Ptr(1)
-	return p.IsValid() || err != nil
-}
-
-func (s RegistrationServer_registerConnection_Params) SetTunnelId(v []byte) error {
-	return s.Struct.SetData(1, v)
-}
-
-func (s RegistrationServer_registerConnection_Params) ConnIndex() uint8 {
-	return s.Struct.Uint8(0)
-}
-
-func (s RegistrationServer_registerConnection_Params) SetConnIndex(v uint8) {
-	s.Struct.SetUint8(0, v)
-}
-
-func (s RegistrationServer_registerConnection_Params) Options() (ConnectionOptions, error) {
-	p, err := s.Struct.Ptr(2)
-	return ConnectionOptions{Struct: p.Struct()}, err
-}
-
-func (s RegistrationServer_registerConnection_Params) HasOptions() bool {
-	p, err := s.Struct.Ptr(2)
-	return p.IsValid() || err != nil
-}
-
-func (s RegistrationServer_registerConnection_Params) SetOptions(v ConnectionOptions) error {
-	return s.Struct.SetPtr(2, v.Struct.ToPtr())
-}
-
-// NewOptions sets the options field to a newly
-// allocated ConnectionOptions struct, preferring placement in s's segment.
-func (s RegistrationServer_registerConnection_Params) NewOptions() (ConnectionOptions, error) {
-	ss, err := NewConnectionOptions(s.Struct.Segment())
-	if err != nil {
-		return ConnectionOptions{}, err
-	}
-	err = s.Struct.SetPtr(2, ss.Struct.ToPtr())
-	return ss, err
-}
-
-// RegistrationServer_registerConnection_Params_List is a list of RegistrationServer_registerConnection_Params.
-type RegistrationServer_registerConnection_Params_List struct{ capnp.List }
-
-// NewRegistrationServer_registerConnection_Params creates a new list of RegistrationServer_registerConnection_Params.
-func NewRegistrationServer_registerConnection_Params_List(s *capnp.Segment, sz int32) (RegistrationServer_registerConnection_Params_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3}, sz)
-	return RegistrationServer_registerConnection_Params_List{l}, err
-}
-
-func (s RegistrationServer_registerConnection_Params_List) At(i int) RegistrationServer_registerConnection_Params {
-	return RegistrationServer_registerConnection_Params{s.List.Struct(i)}
-}
-
-func (s RegistrationServer_registerConnection_Params_List) Set(i int, v RegistrationServer_registerConnection_Params) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s RegistrationServer_registerConnection_Params_List) String() string {
-	str, _ := text.MarshalList(0xe6646dec8feaa6ee, s.List)
-	return str
-}
-
-// RegistrationServer_registerConnection_Params_Promise is a wrapper for a RegistrationServer_registerConnection_Params promised by a client call.
-type RegistrationServer_registerConnection_Params_Promise struct{ *capnp.Pipeline }
-
-func (p RegistrationServer_registerConnection_Params_Promise) Struct() (RegistrationServer_registerConnection_Params, error) {
-	s, err := p.Pipeline.Struct()
-	return RegistrationServer_registerConnection_Params{s}, err
-}
-
-func (p RegistrationServer_registerConnection_Params_Promise) Auth() TunnelAuth_Promise {
-	return TunnelAuth_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
-}
-
-func (p RegistrationServer_registerConnection_Params_Promise) Options() ConnectionOptions_Promise {
-	return ConnectionOptions_Promise{Pipeline: p.Pipeline.GetPipeline(2)}
-}
-
-type RegistrationServer_registerConnection_Results struct{ capnp.Struct }
-
-// RegistrationServer_registerConnection_Results_TypeID is the unique identifier for the type RegistrationServer_registerConnection_Results.
-const RegistrationServer_registerConnection_Results_TypeID = 0xea50d822450d1f17
-
-func NewRegistrationServer_registerConnection_Results(s *capnp.Segment) (RegistrationServer_registerConnection_Results, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
-	return RegistrationServer_registerConnection_Results{st}, err
-}
-
-func NewRootRegistrationServer_registerConnection_Results(s *capnp.Segment) (RegistrationServer_registerConnection_Results, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
-	return RegistrationServer_registerConnection_Results{st}, err
-}
-
-func ReadRootRegistrationServer_registerConnection_Results(msg *capnp.Message) (RegistrationServer_registerConnection_Results, error) {
-	root, err := msg.RootPtr()
-	return RegistrationServer_registerConnection_Results{root.Struct()}, err
-}
-
-func (s RegistrationServer_registerConnection_Results) String() string {
-	str, _ := text.Marshal(0xea50d822450d1f17, s.Struct)
-	return str
-}
-
-func (s RegistrationServer_registerConnection_Results) Result() (ConnectionResponse, error) {
-	p, err := s.Struct.Ptr(0)
-	return ConnectionResponse{Struct: p.Struct()}, err
-}
-
-func (s RegistrationServer_registerConnection_Results) HasResult() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s RegistrationServer_registerConnection_Results) SetResult(v ConnectionResponse) error {
-	return s.Struct.SetPtr(0, v.Struct.ToPtr())
-}
-
-// NewResult sets the result field to a newly
-// allocated ConnectionResponse struct, preferring placement in s's segment.
-func (s RegistrationServer_registerConnection_Results) NewResult() (ConnectionResponse, error) {
-	ss, err := NewConnectionResponse(s.Struct.Segment())
-	if err != nil {
-		return ConnectionResponse{}, err
-	}
-	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
-	return ss, err
-}
-
-// RegistrationServer_registerConnection_Results_List is a list of RegistrationServer_registerConnection_Results.
-type RegistrationServer_registerConnection_Results_List struct{ capnp.List }
-
-// NewRegistrationServer_registerConnection_Results creates a new list of RegistrationServer_registerConnection_Results.
-func NewRegistrationServer_registerConnection_Results_List(s *capnp.Segment, sz int32) (RegistrationServer_registerConnection_Results_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
-	return RegistrationServer_registerConnection_Results_List{l}, err
-}
-
-func (s RegistrationServer_registerConnection_Results_List) At(i int) RegistrationServer_registerConnection_Results {
-	return RegistrationServer_registerConnection_Results{s.List.Struct(i)}
-}
-
-func (s RegistrationServer_registerConnection_Results_List) Set(i int, v RegistrationServer_registerConnection_Results) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s RegistrationServer_registerConnection_Results_List) String() string {
-	str, _ := text.MarshalList(0xea50d822450d1f17, s.List)
-	return str
-}
-
-// RegistrationServer_registerConnection_Results_Promise is a wrapper for a RegistrationServer_registerConnection_Results promised by a client call.
-type RegistrationServer_registerConnection_Results_Promise struct{ *capnp.Pipeline }
-
-func (p RegistrationServer_registerConnection_Results_Promise) Struct() (RegistrationServer_registerConnection_Results, error) {
-	s, err := p.Pipeline.Struct()
-	return RegistrationServer_registerConnection_Results{s}, err
-}
-
-func (p RegistrationServer_registerConnection_Results_Promise) Result() ConnectionResponse_Promise {
-	return ConnectionResponse_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
-}
-
-type RegistrationServer_unregisterConnection_Params struct{ capnp.Struct }
-
-// RegistrationServer_unregisterConnection_Params_TypeID is the unique identifier for the type RegistrationServer_unregisterConnection_Params.
-const RegistrationServer_unregisterConnection_Params_TypeID = 0xf9cb7f4431a307d0
-
-func NewRegistrationServer_unregisterConnection_Params(s *capnp.Segment) (RegistrationServer_unregisterConnection_Params, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
-	return RegistrationServer_unregisterConnection_Params{st}, err
-}
-
-func NewRootRegistrationServer_unregisterConnection_Params(s *capnp.Segment) (RegistrationServer_unregisterConnection_Params, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
-	return RegistrationServer_unregisterConnection_Params{st}, err
-}
-
-func ReadRootRegistrationServer_unregisterConnection_Params(msg *capnp.Message) (RegistrationServer_unregisterConnection_Params, error) {
-	root, err := msg.RootPtr()
-	return RegistrationServer_unregisterConnection_Params{root.Struct()}, err
-}
-
-func (s RegistrationServer_unregisterConnection_Params) String() string {
-	str, _ := text.Marshal(0xf9cb7f4431a307d0, s.Struct)
-	return str
-}
-
-// RegistrationServer_unregisterConnection_Params_List is a list of RegistrationServer_unregisterConnection_Params.
-type RegistrationServer_unregisterConnection_Params_List struct{ capnp.List }
-
-// NewRegistrationServer_unregisterConnection_Params creates a new list of RegistrationServer_unregisterConnection_Params.
-func NewRegistrationServer_unregisterConnection_Params_List(s *capnp.Segment, sz int32) (RegistrationServer_unregisterConnection_Params_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
-	return RegistrationServer_unregisterConnection_Params_List{l}, err
-}
-
-func (s RegistrationServer_unregisterConnection_Params_List) At(i int) RegistrationServer_unregisterConnection_Params {
-	return RegistrationServer_unregisterConnection_Params{s.List.Struct(i)}
-}
-
-func (s RegistrationServer_unregisterConnection_Params_List) Set(i int, v RegistrationServer_unregisterConnection_Params) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s RegistrationServer_unregisterConnection_Params_List) String() string {
-	str, _ := text.MarshalList(0xf9cb7f4431a307d0, s.List)
-	return str
-}
-
-// RegistrationServer_unregisterConnection_Params_Promise is a wrapper for a RegistrationServer_unregisterConnection_Params promised by a client call.
-type RegistrationServer_unregisterConnection_Params_Promise struct{ *capnp.Pipeline }
-
-func (p RegistrationServer_unregisterConnection_Params_Promise) Struct() (RegistrationServer_unregisterConnection_Params, error) {
-	s, err := p.Pipeline.Struct()
-	return RegistrationServer_unregisterConnection_Params{s}, err
-}
-
-type RegistrationServer_unregisterConnection_Results struct{ capnp.Struct }
-
-// RegistrationServer_unregisterConnection_Results_TypeID is the unique identifier for the type RegistrationServer_unregisterConnection_Results.
-const RegistrationServer_unregisterConnection_Results_TypeID = 0xb046e578094b1ead
-
-func NewRegistrationServer_unregisterConnection_Results(s *capnp.Segment) (RegistrationServer_unregisterConnection_Results, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
-	return RegistrationServer_unregisterConnection_Results{st}, err
-}
-
-func NewRootRegistrationServer_unregisterConnection_Results(s *capnp.Segment) (RegistrationServer_unregisterConnection_Results, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
-	return RegistrationServer_unregisterConnection_Results{st}, err
-}
-
-func ReadRootRegistrationServer_unregisterConnection_Results(msg *capnp.Message) (RegistrationServer_unregisterConnection_Results, error) {
-	root, err := msg.RootPtr()
-	return RegistrationServer_unregisterConnection_Results{root.Struct()}, err
-}
-
-func (s RegistrationServer_unregisterConnection_Results) String() string {
-	str, _ := text.Marshal(0xb046e578094b1ead, s.Struct)
-	return str
-}
-
-// RegistrationServer_unregisterConnection_Results_List is a list of RegistrationServer_unregisterConnection_Results.
-type RegistrationServer_unregisterConnection_Results_List struct{ capnp.List }
-
-// NewRegistrationServer_unregisterConnection_Results creates a new list of RegistrationServer_unregisterConnection_Results.
-func NewRegistrationServer_unregisterConnection_Results_List(s *capnp.Segment, sz int32) (RegistrationServer_unregisterConnection_Results_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
-	return RegistrationServer_unregisterConnection_Results_List{l}, err
-}
-
-func (s RegistrationServer_unregisterConnection_Results_List) At(i int) RegistrationServer_unregisterConnection_Results {
-	return RegistrationServer_unregisterConnection_Results{s.List.Struct(i)}
-}
-
-func (s RegistrationServer_unregisterConnection_Results_List) Set(i int, v RegistrationServer_unregisterConnection_Results) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s RegistrationServer_unregisterConnection_Results_List) String() string {
-	str, _ := text.MarshalList(0xb046e578094b1ead, s.List)
-	return str
-}
-
-// RegistrationServer_unregisterConnection_Results_Promise is a wrapper for a RegistrationServer_unregisterConnection_Results promised by a client call.
-type RegistrationServer_unregisterConnection_Results_Promise struct{ *capnp.Pipeline }
-
-func (p RegistrationServer_unregisterConnection_Results_Promise) Struct() (RegistrationServer_unregisterConnection_Results, error) {
-	s, err := p.Pipeline.Struct()
-	return RegistrationServer_unregisterConnection_Results{s}, err
-}
-
-type RegistrationServer_updateLocalConfiguration_Params struct{ capnp.Struct }
-
-// RegistrationServer_updateLocalConfiguration_Params_TypeID is the unique identifier for the type RegistrationServer_updateLocalConfiguration_Params.
-const RegistrationServer_updateLocalConfiguration_Params_TypeID = 0xc5d6e311876a3604
-
-func NewRegistrationServer_updateLocalConfiguration_Params(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Params, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
-	return RegistrationServer_updateLocalConfiguration_Params{st}, err
-}
-
-func NewRootRegistrationServer_updateLocalConfiguration_Params(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Params, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
-	return RegistrationServer_updateLocalConfiguration_Params{st}, err
-}
-
-func ReadRootRegistrationServer_updateLocalConfiguration_Params(msg *capnp.Message) (RegistrationServer_updateLocalConfiguration_Params, error) {
-	root, err := msg.RootPtr()
-	return RegistrationServer_updateLocalConfiguration_Params{root.Struct()}, err
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params) String() string {
-	str, _ := text.Marshal(0xc5d6e311876a3604, s.Struct)
-	return str
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params) Config() ([]byte, error) {
-	p, err := s.Struct.Ptr(0)
-	return []byte(p.Data()), err
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params) HasConfig() bool {
-	p, err := s.Struct.Ptr(0)
-	return p.IsValid() || err != nil
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params) SetConfig(v []byte) error {
-	return s.Struct.SetData(0, v)
-}
-
-// RegistrationServer_updateLocalConfiguration_Params_List is a list of RegistrationServer_updateLocalConfiguration_Params.
-type RegistrationServer_updateLocalConfiguration_Params_List struct{ capnp.List }
-
-// NewRegistrationServer_updateLocalConfiguration_Params creates a new list of RegistrationServer_updateLocalConfiguration_Params.
-func NewRegistrationServer_updateLocalConfiguration_Params_List(s *capnp.Segment, sz int32) (RegistrationServer_updateLocalConfiguration_Params_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
-	return RegistrationServer_updateLocalConfiguration_Params_List{l}, err
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params_List) At(i int) RegistrationServer_updateLocalConfiguration_Params {
-	return RegistrationServer_updateLocalConfiguration_Params{s.List.Struct(i)}
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params_List) Set(i int, v RegistrationServer_updateLocalConfiguration_Params) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Params_List) String() string {
-	str, _ := text.MarshalList(0xc5d6e311876a3604, s.List)
-	return str
-}
-
-// RegistrationServer_updateLocalConfiguration_Params_Promise is a wrapper for a RegistrationServer_updateLocalConfiguration_Params promised by a client call.
-type RegistrationServer_updateLocalConfiguration_Params_Promise struct{ *capnp.Pipeline }
-
-func (p RegistrationServer_updateLocalConfiguration_Params_Promise) Struct() (RegistrationServer_updateLocalConfiguration_Params, error) {
-	s, err := p.Pipeline.Struct()
-	return RegistrationServer_updateLocalConfiguration_Params{s}, err
-}
-
-type RegistrationServer_updateLocalConfiguration_Results struct{ capnp.Struct }
-
-// RegistrationServer_updateLocalConfiguration_Results_TypeID is the unique identifier for the type RegistrationServer_updateLocalConfiguration_Results.
-const RegistrationServer_updateLocalConfiguration_Results_TypeID = 0xe5ceae5d6897d7be
-
-func NewRegistrationServer_updateLocalConfiguration_Results(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Results, error) {
-	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
-	return RegistrationServer_updateLocalConfiguration_Results{st}, err
-}
-
-func NewRootRegistrationServer_updateLocalConfiguration_Results(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Results, error) {
-	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
-	return RegistrationServer_updateLocalConfiguration_Results{st}, err
-}
-
-func ReadRootRegistrationServer_updateLocalConfiguration_Results(msg *capnp.Message) (RegistrationServer_updateLocalConfiguration_Results, error) {
-	root, err := msg.RootPtr()
-	return RegistrationServer_updateLocalConfiguration_Results{root.Struct()}, err
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Results) String() string {
-	str, _ := text.Marshal(0xe5ceae5d6897d7be, s.Struct)
-	return str
-}
-
-// RegistrationServer_updateLocalConfiguration_Results_List is a list of RegistrationServer_updateLocalConfiguration_Results.
-type RegistrationServer_updateLocalConfiguration_Results_List struct{ capnp.List }
-
-// NewRegistrationServer_updateLocalConfiguration_Results creates a new list of RegistrationServer_updateLocalConfiguration_Results.
-func NewRegistrationServer_updateLocalConfiguration_Results_List(s *capnp.Segment, sz int32) (RegistrationServer_updateLocalConfiguration_Results_List, error) {
-	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
-	return RegistrationServer_updateLocalConfiguration_Results_List{l}, err
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Results_List) At(i int) RegistrationServer_updateLocalConfiguration_Results {
-	return RegistrationServer_updateLocalConfiguration_Results{s.List.Struct(i)}
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Results_List) Set(i int, v RegistrationServer_updateLocalConfiguration_Results) error {
-	return s.List.SetStruct(i, v.Struct)
-}
-
-func (s RegistrationServer_updateLocalConfiguration_Results_List) String() string {
-	str, _ := text.MarshalList(0xe5ceae5d6897d7be, s.List)
-	return str
-}
-
-// RegistrationServer_updateLocalConfiguration_Results_Promise is a wrapper for a RegistrationServer_updateLocalConfiguration_Results promised by a client call.
-type RegistrationServer_updateLocalConfiguration_Results_Promise struct{ *capnp.Pipeline }
-
-func (p RegistrationServer_updateLocalConfiguration_Results_Promise) Struct() (RegistrationServer_updateLocalConfiguration_Results, error) {
-	s, err := p.Pipeline.Struct()
-	return RegistrationServer_updateLocalConfiguration_Results{s}, err
 }
 
 type TunnelServer struct{ Client capnp.Client }
@@ -3586,6 +2206,1386 @@ func (p TunnelServer_reconnectTunnel_Results_Promise) Struct() (TunnelServer_rec
 
 func (p TunnelServer_reconnectTunnel_Results_Promise) Result() TunnelRegistration_Promise {
 	return TunnelRegistration_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+type Tag struct{ capnp.Struct }
+
+// Tag_TypeID is the unique identifier for the type Tag.
+const Tag_TypeID = 0xcbd96442ae3bb01a
+
+func NewTag(s *capnp.Segment) (Tag, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
+	return Tag{st}, err
+}
+
+func NewRootTag(s *capnp.Segment) (Tag, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
+	return Tag{st}, err
+}
+
+func ReadRootTag(msg *capnp.Message) (Tag, error) {
+	root, err := msg.RootPtr()
+	return Tag{root.Struct()}, err
+}
+
+func (s Tag) String() string {
+	str, _ := text.Marshal(0xcbd96442ae3bb01a, s.Struct)
+	return str
+}
+
+func (s Tag) Name() (string, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.Text(), err
+}
+
+func (s Tag) HasName() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s Tag) NameBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.TextBytes(), err
+}
+
+func (s Tag) SetName(v string) error {
+	return s.Struct.SetText(0, v)
+}
+
+func (s Tag) Value() (string, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.Text(), err
+}
+
+func (s Tag) HasValue() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s Tag) ValueBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.TextBytes(), err
+}
+
+func (s Tag) SetValue(v string) error {
+	return s.Struct.SetText(1, v)
+}
+
+// Tag_List is a list of Tag.
+type Tag_List struct{ capnp.List }
+
+// NewTag creates a new list of Tag.
+func NewTag_List(s *capnp.Segment, sz int32) (Tag_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2}, sz)
+	return Tag_List{l}, err
+}
+
+func (s Tag_List) At(i int) Tag { return Tag{s.List.Struct(i)} }
+
+func (s Tag_List) Set(i int, v Tag) error { return s.List.SetStruct(i, v.Struct) }
+
+func (s Tag_List) String() string {
+	str, _ := text.MarshalList(0xcbd96442ae3bb01a, s.List)
+	return str
+}
+
+// Tag_Promise is a wrapper for a Tag promised by a client call.
+type Tag_Promise struct{ *capnp.Pipeline }
+
+func (p Tag_Promise) Struct() (Tag, error) {
+	s, err := p.Pipeline.Struct()
+	return Tag{s}, err
+}
+
+type ClientInfo struct{ capnp.Struct }
+
+// ClientInfo_TypeID is the unique identifier for the type ClientInfo.
+const ClientInfo_TypeID = 0x83ced0145b2f114b
+
+func NewClientInfo(s *capnp.Segment) (ClientInfo, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4})
+	return ClientInfo{st}, err
+}
+
+func NewRootClientInfo(s *capnp.Segment) (ClientInfo, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4})
+	return ClientInfo{st}, err
+}
+
+func ReadRootClientInfo(msg *capnp.Message) (ClientInfo, error) {
+	root, err := msg.RootPtr()
+	return ClientInfo{root.Struct()}, err
+}
+
+func (s ClientInfo) String() string {
+	str, _ := text.Marshal(0x83ced0145b2f114b, s.Struct)
+	return str
+}
+
+func (s ClientInfo) ClientId() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s ClientInfo) HasClientId() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s ClientInfo) SetClientId(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+func (s ClientInfo) Features() (capnp.TextList, error) {
+	p, err := s.Struct.Ptr(1)
+	return capnp.TextList{List: p.List()}, err
+}
+
+func (s ClientInfo) HasFeatures() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s ClientInfo) SetFeatures(v capnp.TextList) error {
+	return s.Struct.SetPtr(1, v.List.ToPtr())
+}
+
+// NewFeatures sets the features field to a newly
+// allocated capnp.TextList, preferring placement in s's segment.
+func (s ClientInfo) NewFeatures(n int32) (capnp.TextList, error) {
+	l, err := capnp.NewTextList(s.Struct.Segment(), n)
+	if err != nil {
+		return capnp.TextList{}, err
+	}
+	err = s.Struct.SetPtr(1, l.List.ToPtr())
+	return l, err
+}
+
+func (s ClientInfo) Version() (string, error) {
+	p, err := s.Struct.Ptr(2)
+	return p.Text(), err
+}
+
+func (s ClientInfo) HasVersion() bool {
+	p, err := s.Struct.Ptr(2)
+	return p.IsValid() || err != nil
+}
+
+func (s ClientInfo) VersionBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(2)
+	return p.TextBytes(), err
+}
+
+func (s ClientInfo) SetVersion(v string) error {
+	return s.Struct.SetText(2, v)
+}
+
+func (s ClientInfo) Arch() (string, error) {
+	p, err := s.Struct.Ptr(3)
+	return p.Text(), err
+}
+
+func (s ClientInfo) HasArch() bool {
+	p, err := s.Struct.Ptr(3)
+	return p.IsValid() || err != nil
+}
+
+func (s ClientInfo) ArchBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(3)
+	return p.TextBytes(), err
+}
+
+func (s ClientInfo) SetArch(v string) error {
+	return s.Struct.SetText(3, v)
+}
+
+// ClientInfo_List is a list of ClientInfo.
+type ClientInfo_List struct{ capnp.List }
+
+// NewClientInfo creates a new list of ClientInfo.
+func NewClientInfo_List(s *capnp.Segment, sz int32) (ClientInfo_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 4}, sz)
+	return ClientInfo_List{l}, err
+}
+
+func (s ClientInfo_List) At(i int) ClientInfo { return ClientInfo{s.List.Struct(i)} }
+
+func (s ClientInfo_List) Set(i int, v ClientInfo) error { return s.List.SetStruct(i, v.Struct) }
+
+func (s ClientInfo_List) String() string {
+	str, _ := text.MarshalList(0x83ced0145b2f114b, s.List)
+	return str
+}
+
+// ClientInfo_Promise is a wrapper for a ClientInfo promised by a client call.
+type ClientInfo_Promise struct{ *capnp.Pipeline }
+
+func (p ClientInfo_Promise) Struct() (ClientInfo, error) {
+	s, err := p.Pipeline.Struct()
+	return ClientInfo{s}, err
+}
+
+type ConnectionOptions struct{ capnp.Struct }
+
+// ConnectionOptions_TypeID is the unique identifier for the type ConnectionOptions.
+const ConnectionOptions_TypeID = 0xb4bf9861fe035d04
+
+func NewConnectionOptions(s *capnp.Segment) (ConnectionOptions, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
+	return ConnectionOptions{st}, err
+}
+
+func NewRootConnectionOptions(s *capnp.Segment) (ConnectionOptions, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
+	return ConnectionOptions{st}, err
+}
+
+func ReadRootConnectionOptions(msg *capnp.Message) (ConnectionOptions, error) {
+	root, err := msg.RootPtr()
+	return ConnectionOptions{root.Struct()}, err
+}
+
+func (s ConnectionOptions) String() string {
+	str, _ := text.Marshal(0xb4bf9861fe035d04, s.Struct)
+	return str
+}
+
+func (s ConnectionOptions) Client() (ClientInfo, error) {
+	p, err := s.Struct.Ptr(0)
+	return ClientInfo{Struct: p.Struct()}, err
+}
+
+func (s ConnectionOptions) HasClient() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionOptions) SetClient(v ClientInfo) error {
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewClient sets the client field to a newly
+// allocated ClientInfo struct, preferring placement in s's segment.
+func (s ConnectionOptions) NewClient() (ClientInfo, error) {
+	ss, err := NewClientInfo(s.Struct.Segment())
+	if err != nil {
+		return ClientInfo{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+func (s ConnectionOptions) OriginLocalIp() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return []byte(p.Data()), err
+}
+
+func (s ConnectionOptions) HasOriginLocalIp() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionOptions) SetOriginLocalIp(v []byte) error {
+	return s.Struct.SetData(1, v)
+}
+
+func (s ConnectionOptions) ReplaceExisting() bool {
+	return s.Struct.Bit(0)
+}
+
+func (s ConnectionOptions) SetReplaceExisting(v bool) {
+	s.Struct.SetBit(0, v)
+}
+
+func (s ConnectionOptions) CompressionQuality() uint8 {
+	return s.Struct.Uint8(1)
+}
+
+func (s ConnectionOptions) SetCompressionQuality(v uint8) {
+	s.Struct.SetUint8(1, v)
+}
+
+func (s ConnectionOptions) NumPreviousAttempts() uint8 {
+	return s.Struct.Uint8(2)
+}
+
+func (s ConnectionOptions) SetNumPreviousAttempts(v uint8) {
+	s.Struct.SetUint8(2, v)
+}
+
+// ConnectionOptions_List is a list of ConnectionOptions.
+type ConnectionOptions_List struct{ capnp.List }
+
+// NewConnectionOptions creates a new list of ConnectionOptions.
+func NewConnectionOptions_List(s *capnp.Segment, sz int32) (ConnectionOptions_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2}, sz)
+	return ConnectionOptions_List{l}, err
+}
+
+func (s ConnectionOptions_List) At(i int) ConnectionOptions {
+	return ConnectionOptions{s.List.Struct(i)}
+}
+
+func (s ConnectionOptions_List) Set(i int, v ConnectionOptions) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s ConnectionOptions_List) String() string {
+	str, _ := text.MarshalList(0xb4bf9861fe035d04, s.List)
+	return str
+}
+
+// ConnectionOptions_Promise is a wrapper for a ConnectionOptions promised by a client call.
+type ConnectionOptions_Promise struct{ *capnp.Pipeline }
+
+func (p ConnectionOptions_Promise) Struct() (ConnectionOptions, error) {
+	s, err := p.Pipeline.Struct()
+	return ConnectionOptions{s}, err
+}
+
+func (p ConnectionOptions_Promise) Client() ClientInfo_Promise {
+	return ClientInfo_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+type ConnectionResponse struct{ capnp.Struct }
+type ConnectionResponse_result ConnectionResponse
+type ConnectionResponse_result_Which uint16
+
+const (
+	ConnectionResponse_result_Which_error             ConnectionResponse_result_Which = 0
+	ConnectionResponse_result_Which_connectionDetails ConnectionResponse_result_Which = 1
+)
+
+func (w ConnectionResponse_result_Which) String() string {
+	const s = "errorconnectionDetails"
+	switch w {
+	case ConnectionResponse_result_Which_error:
+		return s[0:5]
+	case ConnectionResponse_result_Which_connectionDetails:
+		return s[5:22]
+
+	}
+	return "ConnectionResponse_result_Which(" + strconv.FormatUint(uint64(w), 10) + ")"
+}
+
+// ConnectionResponse_TypeID is the unique identifier for the type ConnectionResponse.
+const ConnectionResponse_TypeID = 0xdbaa9d03d52b62dc
+
+func NewConnectionResponse(s *capnp.Segment) (ConnectionResponse, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 1})
+	return ConnectionResponse{st}, err
+}
+
+func NewRootConnectionResponse(s *capnp.Segment) (ConnectionResponse, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 1})
+	return ConnectionResponse{st}, err
+}
+
+func ReadRootConnectionResponse(msg *capnp.Message) (ConnectionResponse, error) {
+	root, err := msg.RootPtr()
+	return ConnectionResponse{root.Struct()}, err
+}
+
+func (s ConnectionResponse) String() string {
+	str, _ := text.Marshal(0xdbaa9d03d52b62dc, s.Struct)
+	return str
+}
+
+func (s ConnectionResponse) Result() ConnectionResponse_result { return ConnectionResponse_result(s) }
+
+func (s ConnectionResponse_result) Which() ConnectionResponse_result_Which {
+	return ConnectionResponse_result_Which(s.Struct.Uint16(0))
+}
+func (s ConnectionResponse_result) Error() (ConnectionError, error) {
+	if s.Struct.Uint16(0) != 0 {
+		panic("Which() != error")
+	}
+	p, err := s.Struct.Ptr(0)
+	return ConnectionError{Struct: p.Struct()}, err
+}
+
+func (s ConnectionResponse_result) HasError() bool {
+	if s.Struct.Uint16(0) != 0 {
+		return false
+	}
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionResponse_result) SetError(v ConnectionError) error {
+	s.Struct.SetUint16(0, 0)
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewError sets the error field to a newly
+// allocated ConnectionError struct, preferring placement in s's segment.
+func (s ConnectionResponse_result) NewError() (ConnectionError, error) {
+	s.Struct.SetUint16(0, 0)
+	ss, err := NewConnectionError(s.Struct.Segment())
+	if err != nil {
+		return ConnectionError{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+func (s ConnectionResponse_result) ConnectionDetails() (ConnectionDetails, error) {
+	if s.Struct.Uint16(0) != 1 {
+		panic("Which() != connectionDetails")
+	}
+	p, err := s.Struct.Ptr(0)
+	return ConnectionDetails{Struct: p.Struct()}, err
+}
+
+func (s ConnectionResponse_result) HasConnectionDetails() bool {
+	if s.Struct.Uint16(0) != 1 {
+		return false
+	}
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionResponse_result) SetConnectionDetails(v ConnectionDetails) error {
+	s.Struct.SetUint16(0, 1)
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewConnectionDetails sets the connectionDetails field to a newly
+// allocated ConnectionDetails struct, preferring placement in s's segment.
+func (s ConnectionResponse_result) NewConnectionDetails() (ConnectionDetails, error) {
+	s.Struct.SetUint16(0, 1)
+	ss, err := NewConnectionDetails(s.Struct.Segment())
+	if err != nil {
+		return ConnectionDetails{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// ConnectionResponse_List is a list of ConnectionResponse.
+type ConnectionResponse_List struct{ capnp.List }
+
+// NewConnectionResponse creates a new list of ConnectionResponse.
+func NewConnectionResponse_List(s *capnp.Segment, sz int32) (ConnectionResponse_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 1}, sz)
+	return ConnectionResponse_List{l}, err
+}
+
+func (s ConnectionResponse_List) At(i int) ConnectionResponse {
+	return ConnectionResponse{s.List.Struct(i)}
+}
+
+func (s ConnectionResponse_List) Set(i int, v ConnectionResponse) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s ConnectionResponse_List) String() string {
+	str, _ := text.MarshalList(0xdbaa9d03d52b62dc, s.List)
+	return str
+}
+
+// ConnectionResponse_Promise is a wrapper for a ConnectionResponse promised by a client call.
+type ConnectionResponse_Promise struct{ *capnp.Pipeline }
+
+func (p ConnectionResponse_Promise) Struct() (ConnectionResponse, error) {
+	s, err := p.Pipeline.Struct()
+	return ConnectionResponse{s}, err
+}
+
+func (p ConnectionResponse_Promise) Result() ConnectionResponse_result_Promise {
+	return ConnectionResponse_result_Promise{p.Pipeline}
+}
+
+// ConnectionResponse_result_Promise is a wrapper for a ConnectionResponse_result promised by a client call.
+type ConnectionResponse_result_Promise struct{ *capnp.Pipeline }
+
+func (p ConnectionResponse_result_Promise) Struct() (ConnectionResponse_result, error) {
+	s, err := p.Pipeline.Struct()
+	return ConnectionResponse_result{s}, err
+}
+
+func (p ConnectionResponse_result_Promise) Error() ConnectionError_Promise {
+	return ConnectionError_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+func (p ConnectionResponse_result_Promise) ConnectionDetails() ConnectionDetails_Promise {
+	return ConnectionDetails_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+type ConnectionError struct{ capnp.Struct }
+
+// ConnectionError_TypeID is the unique identifier for the type ConnectionError.
+const ConnectionError_TypeID = 0xf5f383d2785edb86
+
+func NewConnectionError(s *capnp.Segment) (ConnectionError, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1})
+	return ConnectionError{st}, err
+}
+
+func NewRootConnectionError(s *capnp.Segment) (ConnectionError, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1})
+	return ConnectionError{st}, err
+}
+
+func ReadRootConnectionError(msg *capnp.Message) (ConnectionError, error) {
+	root, err := msg.RootPtr()
+	return ConnectionError{root.Struct()}, err
+}
+
+func (s ConnectionError) String() string {
+	str, _ := text.Marshal(0xf5f383d2785edb86, s.Struct)
+	return str
+}
+
+func (s ConnectionError) Cause() (string, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.Text(), err
+}
+
+func (s ConnectionError) HasCause() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionError) CauseBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.TextBytes(), err
+}
+
+func (s ConnectionError) SetCause(v string) error {
+	return s.Struct.SetText(0, v)
+}
+
+func (s ConnectionError) RetryAfter() int64 {
+	return int64(s.Struct.Uint64(0))
+}
+
+func (s ConnectionError) SetRetryAfter(v int64) {
+	s.Struct.SetUint64(0, uint64(v))
+}
+
+func (s ConnectionError) ShouldRetry() bool {
+	return s.Struct.Bit(64)
+}
+
+func (s ConnectionError) SetShouldRetry(v bool) {
+	s.Struct.SetBit(64, v)
+}
+
+// ConnectionError_List is a list of ConnectionError.
+type ConnectionError_List struct{ capnp.List }
+
+// NewConnectionError creates a new list of ConnectionError.
+func NewConnectionError_List(s *capnp.Segment, sz int32) (ConnectionError_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 16, PointerCount: 1}, sz)
+	return ConnectionError_List{l}, err
+}
+
+func (s ConnectionError_List) At(i int) ConnectionError { return ConnectionError{s.List.Struct(i)} }
+
+func (s ConnectionError_List) Set(i int, v ConnectionError) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s ConnectionError_List) String() string {
+	str, _ := text.MarshalList(0xf5f383d2785edb86, s.List)
+	return str
+}
+
+// ConnectionError_Promise is a wrapper for a ConnectionError promised by a client call.
+type ConnectionError_Promise struct{ *capnp.Pipeline }
+
+func (p ConnectionError_Promise) Struct() (ConnectionError, error) {
+	s, err := p.Pipeline.Struct()
+	return ConnectionError{s}, err
+}
+
+type ConnectionDetails struct{ capnp.Struct }
+
+// ConnectionDetails_TypeID is the unique identifier for the type ConnectionDetails.
+const ConnectionDetails_TypeID = 0xb5f39f082b9ac18a
+
+func NewConnectionDetails(s *capnp.Segment) (ConnectionDetails, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
+	return ConnectionDetails{st}, err
+}
+
+func NewRootConnectionDetails(s *capnp.Segment) (ConnectionDetails, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2})
+	return ConnectionDetails{st}, err
+}
+
+func ReadRootConnectionDetails(msg *capnp.Message) (ConnectionDetails, error) {
+	root, err := msg.RootPtr()
+	return ConnectionDetails{root.Struct()}, err
+}
+
+func (s ConnectionDetails) String() string {
+	str, _ := text.Marshal(0xb5f39f082b9ac18a, s.Struct)
+	return str
+}
+
+func (s ConnectionDetails) Uuid() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s ConnectionDetails) HasUuid() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionDetails) SetUuid(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+func (s ConnectionDetails) LocationName() (string, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.Text(), err
+}
+
+func (s ConnectionDetails) HasLocationName() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s ConnectionDetails) LocationNameBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return p.TextBytes(), err
+}
+
+func (s ConnectionDetails) SetLocationName(v string) error {
+	return s.Struct.SetText(1, v)
+}
+
+func (s ConnectionDetails) TunnelIsRemotelyManaged() bool {
+	return s.Struct.Bit(0)
+}
+
+func (s ConnectionDetails) SetTunnelIsRemotelyManaged(v bool) {
+	s.Struct.SetBit(0, v)
+}
+
+// ConnectionDetails_List is a list of ConnectionDetails.
+type ConnectionDetails_List struct{ capnp.List }
+
+// NewConnectionDetails creates a new list of ConnectionDetails.
+func NewConnectionDetails_List(s *capnp.Segment, sz int32) (ConnectionDetails_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 2}, sz)
+	return ConnectionDetails_List{l}, err
+}
+
+func (s ConnectionDetails_List) At(i int) ConnectionDetails {
+	return ConnectionDetails{s.List.Struct(i)}
+}
+
+func (s ConnectionDetails_List) Set(i int, v ConnectionDetails) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s ConnectionDetails_List) String() string {
+	str, _ := text.MarshalList(0xb5f39f082b9ac18a, s.List)
+	return str
+}
+
+// ConnectionDetails_Promise is a wrapper for a ConnectionDetails promised by a client call.
+type ConnectionDetails_Promise struct{ *capnp.Pipeline }
+
+func (p ConnectionDetails_Promise) Struct() (ConnectionDetails, error) {
+	s, err := p.Pipeline.Struct()
+	return ConnectionDetails{s}, err
+}
+
+type TunnelAuth struct{ capnp.Struct }
+
+// TunnelAuth_TypeID is the unique identifier for the type TunnelAuth.
+const TunnelAuth_TypeID = 0x9496331ab9cd463f
+
+func NewTunnelAuth(s *capnp.Segment) (TunnelAuth, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
+	return TunnelAuth{st}, err
+}
+
+func NewRootTunnelAuth(s *capnp.Segment) (TunnelAuth, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
+	return TunnelAuth{st}, err
+}
+
+func ReadRootTunnelAuth(msg *capnp.Message) (TunnelAuth, error) {
+	root, err := msg.RootPtr()
+	return TunnelAuth{root.Struct()}, err
+}
+
+func (s TunnelAuth) String() string {
+	str, _ := text.Marshal(0x9496331ab9cd463f, s.Struct)
+	return str
+}
+
+func (s TunnelAuth) AccountTag() (string, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.Text(), err
+}
+
+func (s TunnelAuth) HasAccountTag() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelAuth) AccountTagBytes() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return p.TextBytes(), err
+}
+
+func (s TunnelAuth) SetAccountTag(v string) error {
+	return s.Struct.SetText(0, v)
+}
+
+func (s TunnelAuth) TunnelSecret() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return []byte(p.Data()), err
+}
+
+func (s TunnelAuth) HasTunnelSecret() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s TunnelAuth) SetTunnelSecret(v []byte) error {
+	return s.Struct.SetData(1, v)
+}
+
+// TunnelAuth_List is a list of TunnelAuth.
+type TunnelAuth_List struct{ capnp.List }
+
+// NewTunnelAuth creates a new list of TunnelAuth.
+func NewTunnelAuth_List(s *capnp.Segment, sz int32) (TunnelAuth_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2}, sz)
+	return TunnelAuth_List{l}, err
+}
+
+func (s TunnelAuth_List) At(i int) TunnelAuth { return TunnelAuth{s.List.Struct(i)} }
+
+func (s TunnelAuth_List) Set(i int, v TunnelAuth) error { return s.List.SetStruct(i, v.Struct) }
+
+func (s TunnelAuth_List) String() string {
+	str, _ := text.MarshalList(0x9496331ab9cd463f, s.List)
+	return str
+}
+
+// TunnelAuth_Promise is a wrapper for a TunnelAuth promised by a client call.
+type TunnelAuth_Promise struct{ *capnp.Pipeline }
+
+func (p TunnelAuth_Promise) Struct() (TunnelAuth, error) {
+	s, err := p.Pipeline.Struct()
+	return TunnelAuth{s}, err
+}
+
+type RegistrationServer struct{ Client capnp.Client }
+
+// RegistrationServer_TypeID is the unique identifier for the type RegistrationServer.
+const RegistrationServer_TypeID = 0xf71695ec7fe85497
+
+func (c RegistrationServer) RegisterConnection(ctx context.Context, params func(RegistrationServer_registerConnection_Params) error, opts ...capnp.CallOption) RegistrationServer_registerConnection_Results_Promise {
+	if c.Client == nil {
+		return RegistrationServer_registerConnection_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0xf71695ec7fe85497,
+			MethodID:      0,
+			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
+			MethodName:    "registerConnection",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 8, PointerCount: 3}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(RegistrationServer_registerConnection_Params{Struct: s}) }
+	}
+	return RegistrationServer_registerConnection_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
+func (c RegistrationServer) UnregisterConnection(ctx context.Context, params func(RegistrationServer_unregisterConnection_Params) error, opts ...capnp.CallOption) RegistrationServer_unregisterConnection_Results_Promise {
+	if c.Client == nil {
+		return RegistrationServer_unregisterConnection_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0xf71695ec7fe85497,
+			MethodID:      1,
+			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
+			MethodName:    "unregisterConnection",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 0}
+		call.ParamsFunc = func(s capnp.Struct) error { return params(RegistrationServer_unregisterConnection_Params{Struct: s}) }
+	}
+	return RegistrationServer_unregisterConnection_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
+func (c RegistrationServer) UpdateLocalConfiguration(ctx context.Context, params func(RegistrationServer_updateLocalConfiguration_Params) error, opts ...capnp.CallOption) RegistrationServer_updateLocalConfiguration_Results_Promise {
+	if c.Client == nil {
+		return RegistrationServer_updateLocalConfiguration_Results_Promise{Pipeline: capnp.NewPipeline(capnp.ErrorAnswer(capnp.ErrNullClient))}
+	}
+	call := &capnp.Call{
+		Ctx: ctx,
+		Method: capnp.Method{
+			InterfaceID:   0xf71695ec7fe85497,
+			MethodID:      2,
+			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
+			MethodName:    "updateLocalConfiguration",
+		},
+		Options: capnp.NewCallOptions(opts),
+	}
+	if params != nil {
+		call.ParamsSize = capnp.ObjectSize{DataSize: 0, PointerCount: 1}
+		call.ParamsFunc = func(s capnp.Struct) error {
+			return params(RegistrationServer_updateLocalConfiguration_Params{Struct: s})
+		}
+	}
+	return RegistrationServer_updateLocalConfiguration_Results_Promise{Pipeline: capnp.NewPipeline(c.Client.Call(call))}
+}
+
+type RegistrationServer_Server interface {
+	RegisterConnection(RegistrationServer_registerConnection) error
+
+	UnregisterConnection(RegistrationServer_unregisterConnection) error
+
+	UpdateLocalConfiguration(RegistrationServer_updateLocalConfiguration) error
+}
+
+func RegistrationServer_ServerToClient(s RegistrationServer_Server) RegistrationServer {
+	c, _ := s.(server.Closer)
+	return RegistrationServer{Client: server.New(RegistrationServer_Methods(nil, s), c)}
+}
+
+func RegistrationServer_Methods(methods []server.Method, s RegistrationServer_Server) []server.Method {
+	if cap(methods) == 0 {
+		methods = make([]server.Method, 0, 3)
+	}
+
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0xf71695ec7fe85497,
+			MethodID:      0,
+			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
+			MethodName:    "registerConnection",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := RegistrationServer_registerConnection{c, opts, RegistrationServer_registerConnection_Params{Struct: p}, RegistrationServer_registerConnection_Results{Struct: r}}
+			return s.RegisterConnection(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 1},
+	})
+
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0xf71695ec7fe85497,
+			MethodID:      1,
+			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
+			MethodName:    "unregisterConnection",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := RegistrationServer_unregisterConnection{c, opts, RegistrationServer_unregisterConnection_Params{Struct: p}, RegistrationServer_unregisterConnection_Results{Struct: r}}
+			return s.UnregisterConnection(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 0},
+	})
+
+	methods = append(methods, server.Method{
+		Method: capnp.Method{
+			InterfaceID:   0xf71695ec7fe85497,
+			MethodID:      2,
+			InterfaceName: "tunnelrpc/proto/tunnelrpc.capnp:RegistrationServer",
+			MethodName:    "updateLocalConfiguration",
+		},
+		Impl: func(c context.Context, opts capnp.CallOptions, p, r capnp.Struct) error {
+			call := RegistrationServer_updateLocalConfiguration{c, opts, RegistrationServer_updateLocalConfiguration_Params{Struct: p}, RegistrationServer_updateLocalConfiguration_Results{Struct: r}}
+			return s.UpdateLocalConfiguration(call)
+		},
+		ResultsSize: capnp.ObjectSize{DataSize: 0, PointerCount: 0},
+	})
+
+	return methods
+}
+
+// RegistrationServer_registerConnection holds the arguments for a server call to RegistrationServer.registerConnection.
+type RegistrationServer_registerConnection struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  RegistrationServer_registerConnection_Params
+	Results RegistrationServer_registerConnection_Results
+}
+
+// RegistrationServer_unregisterConnection holds the arguments for a server call to RegistrationServer.unregisterConnection.
+type RegistrationServer_unregisterConnection struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  RegistrationServer_unregisterConnection_Params
+	Results RegistrationServer_unregisterConnection_Results
+}
+
+// RegistrationServer_updateLocalConfiguration holds the arguments for a server call to RegistrationServer.updateLocalConfiguration.
+type RegistrationServer_updateLocalConfiguration struct {
+	Ctx     context.Context
+	Options capnp.CallOptions
+	Params  RegistrationServer_updateLocalConfiguration_Params
+	Results RegistrationServer_updateLocalConfiguration_Results
+}
+
+type RegistrationServer_registerConnection_Params struct{ capnp.Struct }
+
+// RegistrationServer_registerConnection_Params_TypeID is the unique identifier for the type RegistrationServer_registerConnection_Params.
+const RegistrationServer_registerConnection_Params_TypeID = 0xe6646dec8feaa6ee
+
+func NewRegistrationServer_registerConnection_Params(s *capnp.Segment) (RegistrationServer_registerConnection_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
+	return RegistrationServer_registerConnection_Params{st}, err
+}
+
+func NewRootRegistrationServer_registerConnection_Params(s *capnp.Segment) (RegistrationServer_registerConnection_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3})
+	return RegistrationServer_registerConnection_Params{st}, err
+}
+
+func ReadRootRegistrationServer_registerConnection_Params(msg *capnp.Message) (RegistrationServer_registerConnection_Params, error) {
+	root, err := msg.RootPtr()
+	return RegistrationServer_registerConnection_Params{root.Struct()}, err
+}
+
+func (s RegistrationServer_registerConnection_Params) String() string {
+	str, _ := text.Marshal(0xe6646dec8feaa6ee, s.Struct)
+	return str
+}
+
+func (s RegistrationServer_registerConnection_Params) Auth() (TunnelAuth, error) {
+	p, err := s.Struct.Ptr(0)
+	return TunnelAuth{Struct: p.Struct()}, err
+}
+
+func (s RegistrationServer_registerConnection_Params) HasAuth() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s RegistrationServer_registerConnection_Params) SetAuth(v TunnelAuth) error {
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewAuth sets the auth field to a newly
+// allocated TunnelAuth struct, preferring placement in s's segment.
+func (s RegistrationServer_registerConnection_Params) NewAuth() (TunnelAuth, error) {
+	ss, err := NewTunnelAuth(s.Struct.Segment())
+	if err != nil {
+		return TunnelAuth{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+func (s RegistrationServer_registerConnection_Params) TunnelId() ([]byte, error) {
+	p, err := s.Struct.Ptr(1)
+	return []byte(p.Data()), err
+}
+
+func (s RegistrationServer_registerConnection_Params) HasTunnelId() bool {
+	p, err := s.Struct.Ptr(1)
+	return p.IsValid() || err != nil
+}
+
+func (s RegistrationServer_registerConnection_Params) SetTunnelId(v []byte) error {
+	return s.Struct.SetData(1, v)
+}
+
+func (s RegistrationServer_registerConnection_Params) ConnIndex() uint8 {
+	return s.Struct.Uint8(0)
+}
+
+func (s RegistrationServer_registerConnection_Params) SetConnIndex(v uint8) {
+	s.Struct.SetUint8(0, v)
+}
+
+func (s RegistrationServer_registerConnection_Params) Options() (ConnectionOptions, error) {
+	p, err := s.Struct.Ptr(2)
+	return ConnectionOptions{Struct: p.Struct()}, err
+}
+
+func (s RegistrationServer_registerConnection_Params) HasOptions() bool {
+	p, err := s.Struct.Ptr(2)
+	return p.IsValid() || err != nil
+}
+
+func (s RegistrationServer_registerConnection_Params) SetOptions(v ConnectionOptions) error {
+	return s.Struct.SetPtr(2, v.Struct.ToPtr())
+}
+
+// NewOptions sets the options field to a newly
+// allocated ConnectionOptions struct, preferring placement in s's segment.
+func (s RegistrationServer_registerConnection_Params) NewOptions() (ConnectionOptions, error) {
+	ss, err := NewConnectionOptions(s.Struct.Segment())
+	if err != nil {
+		return ConnectionOptions{}, err
+	}
+	err = s.Struct.SetPtr(2, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// RegistrationServer_registerConnection_Params_List is a list of RegistrationServer_registerConnection_Params.
+type RegistrationServer_registerConnection_Params_List struct{ capnp.List }
+
+// NewRegistrationServer_registerConnection_Params creates a new list of RegistrationServer_registerConnection_Params.
+func NewRegistrationServer_registerConnection_Params_List(s *capnp.Segment, sz int32) (RegistrationServer_registerConnection_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 8, PointerCount: 3}, sz)
+	return RegistrationServer_registerConnection_Params_List{l}, err
+}
+
+func (s RegistrationServer_registerConnection_Params_List) At(i int) RegistrationServer_registerConnection_Params {
+	return RegistrationServer_registerConnection_Params{s.List.Struct(i)}
+}
+
+func (s RegistrationServer_registerConnection_Params_List) Set(i int, v RegistrationServer_registerConnection_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegistrationServer_registerConnection_Params_List) String() string {
+	str, _ := text.MarshalList(0xe6646dec8feaa6ee, s.List)
+	return str
+}
+
+// RegistrationServer_registerConnection_Params_Promise is a wrapper for a RegistrationServer_registerConnection_Params promised by a client call.
+type RegistrationServer_registerConnection_Params_Promise struct{ *capnp.Pipeline }
+
+func (p RegistrationServer_registerConnection_Params_Promise) Struct() (RegistrationServer_registerConnection_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return RegistrationServer_registerConnection_Params{s}, err
+}
+
+func (p RegistrationServer_registerConnection_Params_Promise) Auth() TunnelAuth_Promise {
+	return TunnelAuth_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+func (p RegistrationServer_registerConnection_Params_Promise) Options() ConnectionOptions_Promise {
+	return ConnectionOptions_Promise{Pipeline: p.Pipeline.GetPipeline(2)}
+}
+
+type RegistrationServer_registerConnection_Results struct{ capnp.Struct }
+
+// RegistrationServer_registerConnection_Results_TypeID is the unique identifier for the type RegistrationServer_registerConnection_Results.
+const RegistrationServer_registerConnection_Results_TypeID = 0xea50d822450d1f17
+
+func NewRegistrationServer_registerConnection_Results(s *capnp.Segment) (RegistrationServer_registerConnection_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return RegistrationServer_registerConnection_Results{st}, err
+}
+
+func NewRootRegistrationServer_registerConnection_Results(s *capnp.Segment) (RegistrationServer_registerConnection_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return RegistrationServer_registerConnection_Results{st}, err
+}
+
+func ReadRootRegistrationServer_registerConnection_Results(msg *capnp.Message) (RegistrationServer_registerConnection_Results, error) {
+	root, err := msg.RootPtr()
+	return RegistrationServer_registerConnection_Results{root.Struct()}, err
+}
+
+func (s RegistrationServer_registerConnection_Results) String() string {
+	str, _ := text.Marshal(0xea50d822450d1f17, s.Struct)
+	return str
+}
+
+func (s RegistrationServer_registerConnection_Results) Result() (ConnectionResponse, error) {
+	p, err := s.Struct.Ptr(0)
+	return ConnectionResponse{Struct: p.Struct()}, err
+}
+
+func (s RegistrationServer_registerConnection_Results) HasResult() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s RegistrationServer_registerConnection_Results) SetResult(v ConnectionResponse) error {
+	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+}
+
+// NewResult sets the result field to a newly
+// allocated ConnectionResponse struct, preferring placement in s's segment.
+func (s RegistrationServer_registerConnection_Results) NewResult() (ConnectionResponse, error) {
+	ss, err := NewConnectionResponse(s.Struct.Segment())
+	if err != nil {
+		return ConnectionResponse{}, err
+	}
+	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
+	return ss, err
+}
+
+// RegistrationServer_registerConnection_Results_List is a list of RegistrationServer_registerConnection_Results.
+type RegistrationServer_registerConnection_Results_List struct{ capnp.List }
+
+// NewRegistrationServer_registerConnection_Results creates a new list of RegistrationServer_registerConnection_Results.
+func NewRegistrationServer_registerConnection_Results_List(s *capnp.Segment, sz int32) (RegistrationServer_registerConnection_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
+	return RegistrationServer_registerConnection_Results_List{l}, err
+}
+
+func (s RegistrationServer_registerConnection_Results_List) At(i int) RegistrationServer_registerConnection_Results {
+	return RegistrationServer_registerConnection_Results{s.List.Struct(i)}
+}
+
+func (s RegistrationServer_registerConnection_Results_List) Set(i int, v RegistrationServer_registerConnection_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegistrationServer_registerConnection_Results_List) String() string {
+	str, _ := text.MarshalList(0xea50d822450d1f17, s.List)
+	return str
+}
+
+// RegistrationServer_registerConnection_Results_Promise is a wrapper for a RegistrationServer_registerConnection_Results promised by a client call.
+type RegistrationServer_registerConnection_Results_Promise struct{ *capnp.Pipeline }
+
+func (p RegistrationServer_registerConnection_Results_Promise) Struct() (RegistrationServer_registerConnection_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return RegistrationServer_registerConnection_Results{s}, err
+}
+
+func (p RegistrationServer_registerConnection_Results_Promise) Result() ConnectionResponse_Promise {
+	return ConnectionResponse_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+}
+
+type RegistrationServer_unregisterConnection_Params struct{ capnp.Struct }
+
+// RegistrationServer_unregisterConnection_Params_TypeID is the unique identifier for the type RegistrationServer_unregisterConnection_Params.
+const RegistrationServer_unregisterConnection_Params_TypeID = 0xf9cb7f4431a307d0
+
+func NewRegistrationServer_unregisterConnection_Params(s *capnp.Segment) (RegistrationServer_unregisterConnection_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return RegistrationServer_unregisterConnection_Params{st}, err
+}
+
+func NewRootRegistrationServer_unregisterConnection_Params(s *capnp.Segment) (RegistrationServer_unregisterConnection_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return RegistrationServer_unregisterConnection_Params{st}, err
+}
+
+func ReadRootRegistrationServer_unregisterConnection_Params(msg *capnp.Message) (RegistrationServer_unregisterConnection_Params, error) {
+	root, err := msg.RootPtr()
+	return RegistrationServer_unregisterConnection_Params{root.Struct()}, err
+}
+
+func (s RegistrationServer_unregisterConnection_Params) String() string {
+	str, _ := text.Marshal(0xf9cb7f4431a307d0, s.Struct)
+	return str
+}
+
+// RegistrationServer_unregisterConnection_Params_List is a list of RegistrationServer_unregisterConnection_Params.
+type RegistrationServer_unregisterConnection_Params_List struct{ capnp.List }
+
+// NewRegistrationServer_unregisterConnection_Params creates a new list of RegistrationServer_unregisterConnection_Params.
+func NewRegistrationServer_unregisterConnection_Params_List(s *capnp.Segment, sz int32) (RegistrationServer_unregisterConnection_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
+	return RegistrationServer_unregisterConnection_Params_List{l}, err
+}
+
+func (s RegistrationServer_unregisterConnection_Params_List) At(i int) RegistrationServer_unregisterConnection_Params {
+	return RegistrationServer_unregisterConnection_Params{s.List.Struct(i)}
+}
+
+func (s RegistrationServer_unregisterConnection_Params_List) Set(i int, v RegistrationServer_unregisterConnection_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegistrationServer_unregisterConnection_Params_List) String() string {
+	str, _ := text.MarshalList(0xf9cb7f4431a307d0, s.List)
+	return str
+}
+
+// RegistrationServer_unregisterConnection_Params_Promise is a wrapper for a RegistrationServer_unregisterConnection_Params promised by a client call.
+type RegistrationServer_unregisterConnection_Params_Promise struct{ *capnp.Pipeline }
+
+func (p RegistrationServer_unregisterConnection_Params_Promise) Struct() (RegistrationServer_unregisterConnection_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return RegistrationServer_unregisterConnection_Params{s}, err
+}
+
+type RegistrationServer_unregisterConnection_Results struct{ capnp.Struct }
+
+// RegistrationServer_unregisterConnection_Results_TypeID is the unique identifier for the type RegistrationServer_unregisterConnection_Results.
+const RegistrationServer_unregisterConnection_Results_TypeID = 0xb046e578094b1ead
+
+func NewRegistrationServer_unregisterConnection_Results(s *capnp.Segment) (RegistrationServer_unregisterConnection_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return RegistrationServer_unregisterConnection_Results{st}, err
+}
+
+func NewRootRegistrationServer_unregisterConnection_Results(s *capnp.Segment) (RegistrationServer_unregisterConnection_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return RegistrationServer_unregisterConnection_Results{st}, err
+}
+
+func ReadRootRegistrationServer_unregisterConnection_Results(msg *capnp.Message) (RegistrationServer_unregisterConnection_Results, error) {
+	root, err := msg.RootPtr()
+	return RegistrationServer_unregisterConnection_Results{root.Struct()}, err
+}
+
+func (s RegistrationServer_unregisterConnection_Results) String() string {
+	str, _ := text.Marshal(0xb046e578094b1ead, s.Struct)
+	return str
+}
+
+// RegistrationServer_unregisterConnection_Results_List is a list of RegistrationServer_unregisterConnection_Results.
+type RegistrationServer_unregisterConnection_Results_List struct{ capnp.List }
+
+// NewRegistrationServer_unregisterConnection_Results creates a new list of RegistrationServer_unregisterConnection_Results.
+func NewRegistrationServer_unregisterConnection_Results_List(s *capnp.Segment, sz int32) (RegistrationServer_unregisterConnection_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
+	return RegistrationServer_unregisterConnection_Results_List{l}, err
+}
+
+func (s RegistrationServer_unregisterConnection_Results_List) At(i int) RegistrationServer_unregisterConnection_Results {
+	return RegistrationServer_unregisterConnection_Results{s.List.Struct(i)}
+}
+
+func (s RegistrationServer_unregisterConnection_Results_List) Set(i int, v RegistrationServer_unregisterConnection_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegistrationServer_unregisterConnection_Results_List) String() string {
+	str, _ := text.MarshalList(0xb046e578094b1ead, s.List)
+	return str
+}
+
+// RegistrationServer_unregisterConnection_Results_Promise is a wrapper for a RegistrationServer_unregisterConnection_Results promised by a client call.
+type RegistrationServer_unregisterConnection_Results_Promise struct{ *capnp.Pipeline }
+
+func (p RegistrationServer_unregisterConnection_Results_Promise) Struct() (RegistrationServer_unregisterConnection_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return RegistrationServer_unregisterConnection_Results{s}, err
+}
+
+type RegistrationServer_updateLocalConfiguration_Params struct{ capnp.Struct }
+
+// RegistrationServer_updateLocalConfiguration_Params_TypeID is the unique identifier for the type RegistrationServer_updateLocalConfiguration_Params.
+const RegistrationServer_updateLocalConfiguration_Params_TypeID = 0xc5d6e311876a3604
+
+func NewRegistrationServer_updateLocalConfiguration_Params(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Params, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return RegistrationServer_updateLocalConfiguration_Params{st}, err
+}
+
+func NewRootRegistrationServer_updateLocalConfiguration_Params(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Params, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
+	return RegistrationServer_updateLocalConfiguration_Params{st}, err
+}
+
+func ReadRootRegistrationServer_updateLocalConfiguration_Params(msg *capnp.Message) (RegistrationServer_updateLocalConfiguration_Params, error) {
+	root, err := msg.RootPtr()
+	return RegistrationServer_updateLocalConfiguration_Params{root.Struct()}, err
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params) String() string {
+	str, _ := text.Marshal(0xc5d6e311876a3604, s.Struct)
+	return str
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params) Config() ([]byte, error) {
+	p, err := s.Struct.Ptr(0)
+	return []byte(p.Data()), err
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params) HasConfig() bool {
+	p, err := s.Struct.Ptr(0)
+	return p.IsValid() || err != nil
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params) SetConfig(v []byte) error {
+	return s.Struct.SetData(0, v)
+}
+
+// RegistrationServer_updateLocalConfiguration_Params_List is a list of RegistrationServer_updateLocalConfiguration_Params.
+type RegistrationServer_updateLocalConfiguration_Params_List struct{ capnp.List }
+
+// NewRegistrationServer_updateLocalConfiguration_Params creates a new list of RegistrationServer_updateLocalConfiguration_Params.
+func NewRegistrationServer_updateLocalConfiguration_Params_List(s *capnp.Segment, sz int32) (RegistrationServer_updateLocalConfiguration_Params_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
+	return RegistrationServer_updateLocalConfiguration_Params_List{l}, err
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params_List) At(i int) RegistrationServer_updateLocalConfiguration_Params {
+	return RegistrationServer_updateLocalConfiguration_Params{s.List.Struct(i)}
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params_List) Set(i int, v RegistrationServer_updateLocalConfiguration_Params) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Params_List) String() string {
+	str, _ := text.MarshalList(0xc5d6e311876a3604, s.List)
+	return str
+}
+
+// RegistrationServer_updateLocalConfiguration_Params_Promise is a wrapper for a RegistrationServer_updateLocalConfiguration_Params promised by a client call.
+type RegistrationServer_updateLocalConfiguration_Params_Promise struct{ *capnp.Pipeline }
+
+func (p RegistrationServer_updateLocalConfiguration_Params_Promise) Struct() (RegistrationServer_updateLocalConfiguration_Params, error) {
+	s, err := p.Pipeline.Struct()
+	return RegistrationServer_updateLocalConfiguration_Params{s}, err
+}
+
+type RegistrationServer_updateLocalConfiguration_Results struct{ capnp.Struct }
+
+// RegistrationServer_updateLocalConfiguration_Results_TypeID is the unique identifier for the type RegistrationServer_updateLocalConfiguration_Results.
+const RegistrationServer_updateLocalConfiguration_Results_TypeID = 0xe5ceae5d6897d7be
+
+func NewRegistrationServer_updateLocalConfiguration_Results(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Results, error) {
+	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return RegistrationServer_updateLocalConfiguration_Results{st}, err
+}
+
+func NewRootRegistrationServer_updateLocalConfiguration_Results(s *capnp.Segment) (RegistrationServer_updateLocalConfiguration_Results, error) {
+	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0})
+	return RegistrationServer_updateLocalConfiguration_Results{st}, err
+}
+
+func ReadRootRegistrationServer_updateLocalConfiguration_Results(msg *capnp.Message) (RegistrationServer_updateLocalConfiguration_Results, error) {
+	root, err := msg.RootPtr()
+	return RegistrationServer_updateLocalConfiguration_Results{root.Struct()}, err
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Results) String() string {
+	str, _ := text.Marshal(0xe5ceae5d6897d7be, s.Struct)
+	return str
+}
+
+// RegistrationServer_updateLocalConfiguration_Results_List is a list of RegistrationServer_updateLocalConfiguration_Results.
+type RegistrationServer_updateLocalConfiguration_Results_List struct{ capnp.List }
+
+// NewRegistrationServer_updateLocalConfiguration_Results creates a new list of RegistrationServer_updateLocalConfiguration_Results.
+func NewRegistrationServer_updateLocalConfiguration_Results_List(s *capnp.Segment, sz int32) (RegistrationServer_updateLocalConfiguration_Results_List, error) {
+	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 0}, sz)
+	return RegistrationServer_updateLocalConfiguration_Results_List{l}, err
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Results_List) At(i int) RegistrationServer_updateLocalConfiguration_Results {
+	return RegistrationServer_updateLocalConfiguration_Results{s.List.Struct(i)}
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Results_List) Set(i int, v RegistrationServer_updateLocalConfiguration_Results) error {
+	return s.List.SetStruct(i, v.Struct)
+}
+
+func (s RegistrationServer_updateLocalConfiguration_Results_List) String() string {
+	str, _ := text.MarshalList(0xe5ceae5d6897d7be, s.List)
+	return str
+}
+
+// RegistrationServer_updateLocalConfiguration_Results_Promise is a wrapper for a RegistrationServer_updateLocalConfiguration_Results promised by a client call.
+type RegistrationServer_updateLocalConfiguration_Results_Promise struct{ *capnp.Pipeline }
+
+func (p RegistrationServer_updateLocalConfiguration_Results_Promise) Struct() (RegistrationServer_updateLocalConfiguration_Results, error) {
+	s, err := p.Pipeline.Struct()
+	return RegistrationServer_updateLocalConfiguration_Results{s}, err
 }
 
 type RegisterUdpSessionResponse struct{ capnp.Struct }

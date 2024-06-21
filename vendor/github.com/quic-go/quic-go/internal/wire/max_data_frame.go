@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"bytes"
-
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/quicvarint"
 )
@@ -13,14 +11,14 @@ type MaxDataFrame struct {
 }
 
 // parseMaxDataFrame parses a MAX_DATA frame
-func parseMaxDataFrame(r *bytes.Reader, _ protocol.Version) (*MaxDataFrame, error) {
+func parseMaxDataFrame(b []byte, _ protocol.Version) (*MaxDataFrame, int, error) {
 	frame := &MaxDataFrame{}
-	byteOffset, err := quicvarint.Read(r)
+	byteOffset, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	frame.MaximumData = protocol.ByteCount(byteOffset)
-	return frame, nil
+	return frame, l, nil
 }
 
 func (f *MaxDataFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
@@ -31,5 +29,5 @@ func (f *MaxDataFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 
 // Length of a written frame
 func (f *MaxDataFrame) Length(_ protocol.Version) protocol.ByteCount {
-	return 1 + quicvarint.Len(uint64(f.MaximumData))
+	return 1 + protocol.ByteCount(quicvarint.Len(uint64(f.MaximumData)))
 }

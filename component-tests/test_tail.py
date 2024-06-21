@@ -47,7 +47,12 @@ class TestTail:
             url = cfd_cli.get_management_wsurl("logs", config, config_path)
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming
-                await websocket.send('{"type": "start_streaming"}')
+                await websocket.send(json.dumps({
+                    "type": "start_streaming",
+                    "filters": {
+                        "events": ["http"]
+                    }
+                }))
                 # send some http requests to the tunnel to trigger some logs
                 await generate_and_validate_http_events(websocket, config.get_url(), 10)
                 # send stop_streaming
@@ -99,7 +104,8 @@ class TestTail:
                 await websocket.send(json.dumps({
                     "type": "start_streaming",
                     "filters": {
-                        "sampling": 0.5
+                        "sampling": 0.5,
+                        "events": ["http"]
                     }
                 }))
                 # don't expect any http logs

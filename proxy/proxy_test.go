@@ -30,11 +30,11 @@ import (
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tracing"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 var (
-	testTags        = []tunnelpogs.Tag{{Name: "Name", Value: "value"}}
+	testTags        = []pogs.Tag{{Name: "Name", Value: "value"}}
 	noWarpRouting   = ingress.WarpRoutingConfig{}
 	testWarpRouting = ingress.WarpRoutingConfig{
 		ConnectTimeout: config.CustomDuration{Duration: time.Second},

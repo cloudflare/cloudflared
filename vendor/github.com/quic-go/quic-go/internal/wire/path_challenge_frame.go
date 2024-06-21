@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -12,15 +11,13 @@ type PathChallengeFrame struct {
 	Data [8]byte
 }
 
-func parsePathChallengeFrame(r *bytes.Reader, _ protocol.Version) (*PathChallengeFrame, error) {
-	frame := &PathChallengeFrame{}
-	if _, err := io.ReadFull(r, frame.Data[:]); err != nil {
-		if err == io.ErrUnexpectedEOF {
-			return nil, io.EOF
-		}
-		return nil, err
+func parsePathChallengeFrame(b []byte, _ protocol.Version) (*PathChallengeFrame, int, error) {
+	f := &PathChallengeFrame{}
+	if len(b) < 8 {
+		return nil, 0, io.EOF
 	}
-	return frame, nil
+	copy(f.Data[:], b)
+	return f, 8, nil
 }
 
 func (f *PathChallengeFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {

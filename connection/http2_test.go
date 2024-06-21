@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 var (
@@ -36,10 +36,11 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelProperties{},
+		&TunnelProperties{},
 		connIndex,
 		nil,
 		nil,
+		1*time.Second,
 		nil,
 		1*time.Second,
 		HTTP2,
@@ -168,23 +169,23 @@ type mockNamedTunnelRPCClient struct {
 	unregistered chan struct{}
 }
 
-func (mc mockNamedTunnelRPCClient) SendLocalConfiguration(c context.Context, config []byte, observer *Observer) error {
+func (mc mockNamedTunnelRPCClient) SendLocalConfiguration(c context.Context, config []byte) error {
 	return nil
 }
 
 func (mc mockNamedTunnelRPCClient) RegisterConnection(
-	c context.Context,
-	properties *NamedTunnelProperties,
-	options *tunnelpogs.ConnectionOptions,
+	ctx context.Context,
+	auth pogs.TunnelAuth,
+	tunnelID uuid.UUID,
+	options *pogs.ConnectionOptions,
 	connIndex uint8,
 	edgeAddress net.IP,
-	observer *Observer,
-) (*tunnelpogs.ConnectionDetails, error) {
+) (*pogs.ConnectionDetails, error) {
 	if mc.shouldFail != nil {
 		return nil, mc.shouldFail
 	}
 	close(mc.registered)
-	return &tunnelpogs.ConnectionDetails{
+	return &pogs.ConnectionDetails{
 		Location:                "LIS",
 		UUID:                    uuid.New(),
 		TunnelIsRemotelyManaged: false,
@@ -203,8 +204,8 @@ type mockRPCClientFactory struct {
 	unregistered chan struct{}
 }
 
-func (mf *mockRPCClientFactory) newMockRPCClient(context.Context, io.ReadWriteCloser, *zerolog.Logger) NamedTunnelRPCClient {
-	return mockNamedTunnelRPCClient{
+func (mf *mockRPCClientFactory) newMockRPCClient(context.Context, io.ReadWriteCloser, time.Duration) tunnelrpc.RegistrationClient {
+	return &mockNamedTunnelRPCClient{
 		shouldFail:   mf.shouldFail,
 		registered:   mf.registered,
 		unregistered: mf.unregistered,
@@ -360,10 +361,11 @@ func TestServeControlStream(t *testing.T) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelProperties{},
+		&TunnelProperties{},
 		1,
 		nil,
 		rpcClientFactory.newMockRPCClient,
+		1*time.Second,
 		nil,
 		1*time.Second,
 		HTTP2,
@@ -412,10 +414,11 @@ func TestFailRegistration(t *testing.T) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelProperties{},
+		&TunnelProperties{},
 		http2Conn.connIndex,
 		nil,
 		rpcClientFactory.newMockRPCClient,
+		1*time.Second,
 		nil,
 		1*time.Second,
 		HTTP2,
@@ -460,10 +463,11 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
-		&NamedTunnelProperties{},
+		&TunnelProperties{},
 		http2Conn.connIndex,
 		nil,
 		rpcClientFactory.newMockRPCClient,
+		1*time.Second,
 		shutdownC,
 		1*time.Second,
 		HTTP2,

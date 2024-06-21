@@ -42,7 +42,7 @@ type Orchestrator interface {
 	GetOriginProxy() (OriginProxy, error)
 }
 
-type NamedTunnelProperties struct {
+type TunnelProperties struct {
 	Credentials    Credentials
 	Client         pogs.ClientInfo
 	QuickTunnelUrl string

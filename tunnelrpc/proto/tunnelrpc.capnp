@@ -3,13 +3,21 @@ using Go = import "go.capnp";
 $Go.package("proto");
 $Go.import("github.com/cloudflare/cloudflared/tunnelrpc");
 
+# === DEPRECATED Legacy Tunnel Authentication and Registration methods/servers ===
+# 
+# These structs and interfaces are no longer used but it is important to keep
+# them around to make sure backwards compatibility within the rpc protocol is
+# maintained.
+
 struct Authentication @0xc082ef6e0d42ed1d {
+    # DEPRECATED: Legacy tunnel authentication mechanism
     key @0 :Text;
     email @1 :Text;
     originCAKey @2 :Text;
 }
 
 struct TunnelRegistration @0xf41a0f001ad49e46 {
+    # DEPRECATED: Legacy tunnel authentication mechanism
     err @0 :Text;
     # the url to access the tunnel
     url @1 :Text;
@@ -28,6 +36,8 @@ struct TunnelRegistration @0xf41a0f001ad49e46 {
 }
 
 struct RegistrationOptions @0xc793e50592935b4a {
+    # DEPRECATED: Legacy tunnel authentication mechanism
+    
     # The tunnel client's unique identifier, used to verify a reconnection.
     clientId @0 :Text;
     # Information about the running binary.
@@ -56,27 +66,49 @@ struct RegistrationOptions @0xc793e50592935b4a {
     features @13 :List(Text);
 }
 
-struct Tag @0xcbd96442ae3bb01a {
-    name @0 :Text;
-    value @1 :Text;
-}
-
 enum ExistingTunnelPolicy @0x84cb9536a2cf6d3c {
+    # DEPRECATED: Legacy tunnel registration mechanism
+
     ignore @0;
     disconnect @1;
     balance @2;
 }
 
 struct ServerInfo @0xf2c68e2547ec3866 {
+    # DEPRECATED: Legacy tunnel registration mechanism
+
     locationName @0 :Text;
 }
 
 struct AuthenticateResponse @0x82c325a07ad22a65 {
+    # DEPRECATED: Legacy tunnel registration mechanism
+
     permanentErr @0 :Text;
     retryableErr @1 :Text;
     jwt @2 :Data;
     hoursUntilRefresh @3 :UInt8;
 }
+
+interface TunnelServer @0xea58385c65416035 extends (RegistrationServer) {
+    # DEPRECATED: Legacy tunnel authentication server
+
+    registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
+    getServerInfo @1 () -> (result :ServerInfo);
+    unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
+    # obsoleteDeclarativeTunnelConnect RPC deprecated in TUN-3019
+    obsoleteDeclarativeTunnelConnect @3 () -> ();
+    authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
+    reconnectTunnel @5 (jwt :Data, eventDigest :Data, connDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
+}
+
+struct Tag @0xcbd96442ae3bb01a {
+    # DEPRECATED: Legacy tunnel additional HTTP header mechanism 
+
+    name @0 :Text;
+    value @1 :Text;
+}
+
+# === End DEPRECATED Objects ===
 
 struct ClientInfo @0x83ced0145b2f114b {
     # The tunnel client's unique identifier, used to verify a reconnection.
@@ -134,16 +166,6 @@ interface RegistrationServer @0xf71695ec7fe85497 {
     registerConnection @0 (auth :TunnelAuth, tunnelId :Data, connIndex :UInt8, options :ConnectionOptions) -> (result :ConnectionResponse);
     unregisterConnection @1 () -> ();
     updateLocalConfiguration @2 (config :Data) -> ();
-}
-
-interface TunnelServer @0xea58385c65416035 extends (RegistrationServer) {
-    registerTunnel @0 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
-    getServerInfo @1 () -> (result :ServerInfo);
-    unregisterTunnel @2 (gracePeriodNanoSec :Int64) -> ();
-    # obsoleteDeclarativeTunnelConnect RPC deprecated in TUN-3019
-    obsoleteDeclarativeTunnelConnect @3 () -> ();
-    authenticate @4 (originCert :Data, hostname :Text, options :RegistrationOptions) -> (result :AuthenticateResponse);
-    reconnectTunnel @5 (jwt :Data, eventDigest :Data, connDigest :Data, hostname :Text, options :RegistrationOptions) -> (result :TunnelRegistration);
 }
 
 struct RegisterUdpSessionResponse @0xab6d5210c1f26687 {

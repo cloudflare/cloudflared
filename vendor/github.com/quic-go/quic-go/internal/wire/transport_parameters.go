@@ -1,19 +1,17 @@
 package wire
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net/netip"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -89,7 +87,7 @@ type TransportParameters struct {
 
 // Unmarshal the transport parameters
 func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective) error {
-	if err := p.unmarshal(bytes.NewReader(data), sentBy, false); err != nil {
+	if err := p.unmarshal(data, sentBy, false); err != nil {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.TransportParameterError,
 			ErrorMessage: err.Error(),
@@ -98,9 +96,9 @@ func (p *TransportParameters) Unmarshal(data []byte, sentBy protocol.Perspective
 	return nil
 }
 
-func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspective, fromSessionTicket bool) error {
+func (p *TransportParameters) unmarshal(b []byte, sentBy protocol.Perspective, fromSessionTicket bool) error {
 	// needed to check that every parameter is only sent at most once
-	var parameterIDs []transportParameterID
+	parameterIDs := make([]transportParameterID, 0, 32)
 
 	var (
 		readOriginalDestinationConnectionID bool
@@ -112,18 +110,20 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 	p.MaxAckDelay = protocol.DefaultMaxAckDelay
 	p.MaxDatagramFrameSize = protocol.InvalidByteCount
 
-	for r.Len() > 0 {
-		paramIDInt, err := quicvarint.Read(r)
+	for len(b) > 0 {
+		paramIDInt, l, err := quicvarint.Parse(b)
 		if err != nil {
 			return err
 		}
 		paramID := transportParameterID(paramIDInt)
-		paramLen, err := quicvarint.Read(r)
+		b = b[l:]
+		paramLen, l, err := quicvarint.Parse(b)
 		if err != nil {
 			return err
 		}
-		if uint64(r.Len()) < paramLen {
-			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", r.Len(), paramLen)
+		b = b[l:]
+		if uint64(len(b)) < paramLen {
+			return fmt.Errorf("remaining length (%d) smaller than parameter length (%d)", len(b), paramLen)
 		}
 		parameterIDs = append(parameterIDs, paramID)
 		switch paramID {
@@ -141,16 +141,18 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 			maxAckDelayParameterID,
 			maxDatagramFrameSizeParameterID,
 			ackDelayExponentParameterID:
-			if err := p.readNumericTransportParameter(r, paramID, int(paramLen)); err != nil {
+			if err := p.readNumericTransportParameter(b, paramID, int(paramLen)); err != nil {
 				return err
 			}
+			b = b[paramLen:]
 		case preferredAddressParameterID:
 			if sentBy == protocol.PerspectiveClient {
 				return errors.New("client sent a preferred_address")
 			}
-			if err := p.readPreferredAddress(r, int(paramLen)); err != nil {
+			if err := p.readPreferredAddress(b, int(paramLen)); err != nil {
 				return err
 			}
+			b = b[paramLen:]
 		case disableActiveMigrationParameterID:
 			if paramLen != 0 {
 				return fmt.Errorf("wrong length for disable_active_migration: %d (expected empty)", paramLen)
@@ -164,25 +166,41 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 				return fmt.Errorf("wrong length for stateless_reset_token: %d (expected 16)", paramLen)
 			}
 			var token protocol.StatelessResetToken
-			r.Read(token[:])
+			if len(b) < len(token) {
+				return io.EOF
+			}
+			copy(token[:], b)
+			b = b[len(token):]
 			p.StatelessResetToken = &token
 		case originalDestinationConnectionIDParameterID:
 			if sentBy == protocol.PerspectiveClient {
 				return errors.New("client sent an original_destination_connection_id")
 			}
-			p.OriginalDestinationConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+			if paramLen > protocol.MaxConnIDLen {
+				return protocol.ErrInvalidConnectionIDLen
+			}
+			p.OriginalDestinationConnectionID = protocol.ParseConnectionID(b[:paramLen])
+			b = b[paramLen:]
 			readOriginalDestinationConnectionID = true
 		case initialSourceConnectionIDParameterID:
-			p.InitialSourceConnectionID, _ = protocol.ReadConnectionID(r, int(paramLen))
+			if paramLen > protocol.MaxConnIDLen {
+				return protocol.ErrInvalidConnectionIDLen
+			}
+			p.InitialSourceConnectionID = protocol.ParseConnectionID(b[:paramLen])
+			b = b[paramLen:]
 			readInitialSourceConnectionID = true
 		case retrySourceConnectionIDParameterID:
 			if sentBy == protocol.PerspectiveClient {
 				return errors.New("client sent a retry_source_connection_id")
 			}
-			connID, _ := protocol.ReadConnectionID(r, int(paramLen))
+			if paramLen > protocol.MaxConnIDLen {
+				return protocol.ErrInvalidConnectionIDLen
+			}
+			connID := protocol.ParseConnectionID(b[:paramLen])
+			b = b[paramLen:]
 			p.RetrySourceConnectionID = &connID
 		default:
-			r.Seek(int64(paramLen), io.SeekCurrent)
+			b = b[paramLen:]
 		}
 	}
 
@@ -202,7 +220,12 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 	}
 
 	// check that every transport parameter was sent at most once
-	sort.Slice(parameterIDs, func(i, j int) bool { return parameterIDs[i] < parameterIDs[j] })
+	slices.SortFunc(parameterIDs, func(a, b transportParameterID) int {
+		if a < b {
+			return -1
+		}
+		return 1
+	})
 	for i := 0; i < len(parameterIDs)-1; i++ {
 		if parameterIDs[i] == parameterIDs[i+1] {
 			return fmt.Errorf("received duplicate transport parameter %#x", parameterIDs[i])
@@ -212,60 +235,47 @@ func (p *TransportParameters) unmarshal(r *bytes.Reader, sentBy protocol.Perspec
 	return nil
 }
 
-func (p *TransportParameters) readPreferredAddress(r *bytes.Reader, expectedLen int) error {
-	remainingLen := r.Len()
+func (p *TransportParameters) readPreferredAddress(b []byte, expectedLen int) error {
+	remainingLen := len(b)
 	pa := &PreferredAddress{}
+	if len(b) < 4+2+16+2+1 {
+		return io.EOF
+	}
 	var ipv4 [4]byte
-	if _, err := io.ReadFull(r, ipv4[:]); err != nil {
-		return err
-	}
-	port, err := utils.BigEndian.ReadUint16(r)
-	if err != nil {
-		return err
-	}
-	pa.IPv4 = netip.AddrPortFrom(netip.AddrFrom4(ipv4), port)
+	copy(ipv4[:], b[:4])
+	port4 := binary.BigEndian.Uint16(b[4:])
+	b = b[4+2:]
+	pa.IPv4 = netip.AddrPortFrom(netip.AddrFrom4(ipv4), port4)
 	var ipv6 [16]byte
-	if _, err := io.ReadFull(r, ipv6[:]); err != nil {
-		return err
-	}
-	port, err = utils.BigEndian.ReadUint16(r)
-	if err != nil {
-		return err
-	}
-	pa.IPv6 = netip.AddrPortFrom(netip.AddrFrom16(ipv6), port)
-	connIDLen, err := r.ReadByte()
-	if err != nil {
-		return err
-	}
+	copy(ipv6[:], b[:16])
+	port6 := binary.BigEndian.Uint16(b[16:])
+	pa.IPv6 = netip.AddrPortFrom(netip.AddrFrom16(ipv6), port6)
+	b = b[16+2:]
+	connIDLen := int(b[0])
+	b = b[1:]
 	if connIDLen == 0 || connIDLen > protocol.MaxConnIDLen {
 		return fmt.Errorf("invalid connection ID length: %d", connIDLen)
 	}
-	connID, err := protocol.ReadConnectionID(r, int(connIDLen))
-	if err != nil {
-		return err
+	if len(b) < connIDLen+len(pa.StatelessResetToken) {
+		return io.EOF
 	}
-	pa.ConnectionID = connID
-	if _, err := io.ReadFull(r, pa.StatelessResetToken[:]); err != nil {
-		return err
-	}
-	if bytesRead := remainingLen - r.Len(); bytesRead != expectedLen {
+	pa.ConnectionID = protocol.ParseConnectionID(b[:connIDLen])
+	b = b[connIDLen:]
+	copy(pa.StatelessResetToken[:], b)
+	b = b[len(pa.StatelessResetToken):]
+	if bytesRead := remainingLen - len(b); bytesRead != expectedLen {
 		return fmt.Errorf("expected preferred_address to be %d long, read %d bytes", expectedLen, bytesRead)
 	}
 	p.PreferredAddress = pa
 	return nil
 }
 
-func (p *TransportParameters) readNumericTransportParameter(
-	r *bytes.Reader,
-	paramID transportParameterID,
-	expectedLen int,
-) error {
-	remainingLen := r.Len()
-	val, err := quicvarint.Read(r)
+func (p *TransportParameters) readNumericTransportParameter(b []byte, paramID transportParameterID, expectedLen int) error {
+	val, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return fmt.Errorf("error while reading transport parameter %d: %s", paramID, err)
 	}
-	if remainingLen-r.Len() != expectedLen {
+	if l != expectedLen {
 		return fmt.Errorf("inconsistent transport parameter length for transport parameter %#x", paramID)
 	}
 	//nolint:exhaustive // This only covers the numeric transport parameters.
@@ -292,7 +302,7 @@ func (p *TransportParameters) readNumericTransportParameter(
 		p.MaxIdleTimeout = max(protocol.MinRemoteIdleTimeout, time.Duration(val)*time.Millisecond)
 	case maxUDPPayloadSizeParameterID:
 		if val < 1200 {
-			return fmt.Errorf("invalid value for max_packet_size: %d (minimum 1200)", val)
+			return fmt.Errorf("invalid value for max_udp_payload_size: %d (minimum 1200)", val)
 		}
 		p.MaxUDPPayloadSize = protocol.ByteCount(val)
 	case ackDelayExponentParameterID:
@@ -347,8 +357,10 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 	b = p.marshalVarintParam(b, initialMaxStreamsUniParameterID, uint64(p.MaxUniStreamNum))
 	// idle_timeout
 	b = p.marshalVarintParam(b, maxIdleTimeoutParameterID, uint64(p.MaxIdleTimeout/time.Millisecond))
-	// max_packet_size
-	b = p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(protocol.MaxPacketBufferSize))
+	// max_udp_payload_size
+	if p.MaxUDPPayloadSize > 0 {
+		b = p.marshalVarintParam(b, maxUDPPayloadSizeParameterID, uint64(p.MaxUDPPayloadSize))
+	}
 	// max_ack_delay
 	// Only send it if is different from the default value.
 	if p.MaxAckDelay != protocol.DefaultMaxAckDelay {
@@ -457,15 +469,15 @@ func (p *TransportParameters) MarshalForSessionTicket(b []byte) []byte {
 }
 
 // UnmarshalFromSessionTicket unmarshals transport parameters from a session ticket.
-func (p *TransportParameters) UnmarshalFromSessionTicket(r *bytes.Reader) error {
-	version, err := quicvarint.Read(r)
+func (p *TransportParameters) UnmarshalFromSessionTicket(b []byte) error {
+	version, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return err
 	}
 	if version != transportParameterMarshalingVersion {
 		return fmt.Errorf("unknown transport parameter marshaling version: %d", version)
 	}
-	return p.unmarshal(r, protocol.PerspectiveServer, true)
+	return p.unmarshal(b[l:], protocol.PerspectiveServer, true)
 }
 
 // ValidFor0RTT checks if the transport parameters match those saved in the session ticket.

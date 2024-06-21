@@ -105,6 +105,7 @@ func isEchoReply(msg *icmp.Message) bool {
 }
 
 func observeICMPRequest(logger *zerolog.Logger, span trace.Span, src string, dst string, echoID int, seq int) {
+	incrementICMPRequest()
 	logger.Debug().
 		Str("src", src).
 		Str("dst", dst).
@@ -118,6 +119,7 @@ func observeICMPRequest(logger *zerolog.Logger, span trace.Span, src string, dst
 }
 
 func observeICMPReply(logger *zerolog.Logger, span trace.Span, dst string, echoID int, seq int) {
+	incrementICMPReply()
 	logger.Debug().Str("dst", dst).Int("echoID", echoID).Int("seq", seq).Msg("Sent ICMP reply to edge")
 	span.SetAttributes(
 		attribute.String("dst", dst),

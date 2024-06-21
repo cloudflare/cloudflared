@@ -27,7 +27,7 @@ import (
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
@@ -108,7 +108,7 @@ func isSecretEnvVar(key string) bool {
 	return false
 }
 
-func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.NamedTunnelProperties) bool {
+func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.TunnelProperties) bool {
 	return c.IsSet("proxy-dns") &&
 		!(c.IsSet("name") || // adhoc-named tunnel
 			c.IsSet(ingress.HelloWorldFlag) || // quick or named tunnel
@@ -121,7 +121,7 @@ func prepareTunnelConfig(
 	info *cliutil.BuildInfo,
 	log, logTransport *zerolog.Logger,
 	observer *connection.Observer,
-	namedTunnel *connection.NamedTunnelProperties,
+	namedTunnel *connection.TunnelProperties,
 ) (*supervisor.TunnelConfig, *orchestration.Config, error) {
 	clientID, err := uuid.NewRandom()
 	if err != nil {
@@ -133,7 +133,7 @@ func prepareTunnelConfig(
 		log.Err(err).Msg("Tag parse failure")
 		return nil, nil, errors.Wrap(err, "Tag parse failure")
 	}
-	tags = append(tags, tunnelpogs.Tag{Name: "ID", Value: clientID.String()})
+	tags = append(tags, pogs.Tag{Name: "ID", Value: clientID.String()})
 
 	transportProtocol := c.String("protocol")
 
@@ -166,7 +166,7 @@ func prepareTunnelConfig(
 		)
 	}
 
-	namedTunnel.Client = tunnelpogs.ClientInfo{
+	namedTunnel.Client = pogs.ClientInfo{
 		ClientID: clientID[:],
 		Features: clientFeatures,
 		Version:  info.Version(),
@@ -239,16 +239,18 @@ func prepareTunnelConfig(
 		Observer:        observer,
 		ReportedVersion: info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
-		Retries:                     uint(c.Int("retries")),
-		RunFromTerminal:             isRunningFromTerminal(),
-		NamedTunnel:                 namedTunnel,
-		ProtocolSelector:            protocolSelector,
-		EdgeTLSConfigs:              edgeTLSConfigs,
-		FeatureSelector:             featureSelector,
-		MaxEdgeAddrRetries:          uint8(c.Int("max-edge-addr-retries")),
-		RPCTimeout:                  c.Duration(rpcTimeout),
-		WriteStreamTimeout:          c.Duration(writeStreamTimeout),
-		DisableQUICPathMTUDiscovery: c.Bool(quicDisablePathMTUDiscovery),
+		Retries:                             uint(c.Int("retries")),
+		RunFromTerminal:                     isRunningFromTerminal(),
+		NamedTunnel:                         namedTunnel,
+		ProtocolSelector:                    protocolSelector,
+		EdgeTLSConfigs:                      edgeTLSConfigs,
+		FeatureSelector:                     featureSelector,
+		MaxEdgeAddrRetries:                  uint8(c.Int("max-edge-addr-retries")),
+		RPCTimeout:                          c.Duration(rpcTimeout),
+		WriteStreamTimeout:                  c.Duration(writeStreamTimeout),
+		DisableQUICPathMTUDiscovery:         c.Bool(quicDisablePathMTUDiscovery),
+		QUICConnectionLevelFlowControlLimit: c.Uint64(quicConnLevelFlowControlLimit),
+		QUICStreamLevelFlowControlLimit:     c.Uint64(quicStreamLevelFlowControlLimit),
 	}
 	packetConfig, err := newPacketConfig(c, log)
 	if err != nil {

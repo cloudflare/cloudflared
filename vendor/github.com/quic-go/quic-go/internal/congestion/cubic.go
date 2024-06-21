@@ -17,11 +17,11 @@ import (
 // 1024*1024^3 (first 1024 is from 0.100^3)
 // where 0.100 is 100 ms which is the scaling round trip time.
 const (
-	cubeScale                                    = 40
-	cubeCongestionWindowScale                    = 410
-	cubeFactor                protocol.ByteCount = 1 << cubeScale / cubeCongestionWindowScale / maxDatagramSize
+	cubeScale                 = 40
+	cubeCongestionWindowScale = 410
+	cubeFactor                = 1 << cubeScale / cubeCongestionWindowScale / maxDatagramSize
 	// TODO: when re-enabling cubic, make sure to use the actual packet size here
-	maxDatagramSize = protocol.ByteCount(protocol.InitialPacketSizeIPv4)
+	maxDatagramSize = protocol.ByteCount(protocol.InitialPacketSize)
 )
 
 const defaultNumConnections = 1
