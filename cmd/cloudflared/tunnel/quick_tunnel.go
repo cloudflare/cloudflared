@@ -35,7 +35,13 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		Timeout: httpTimeout,
 	}
 
-	resp, err := client.Post(fmt.Sprintf("%s/tunnel", sc.c.String("quick-service")), "application/json", nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/tunnel", sc.c.String("quick-service")), nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to build quick tunnel request")
+	}
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("User-Agent", buildInfo.UserAgent())
+	resp, err := client.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "failed to request quick Tunnel")
 	}
