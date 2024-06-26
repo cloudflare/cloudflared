@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -44,8 +45,17 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 	defer resp.Body.Close()
 
+	// This will read the entire response into memory so we can print it in case of error
+	rsp_body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "failed to read quick-tunnel response")
+	}
+
 	var data QuickTunnelResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.Unmarshal(rsp_body, &data); err != nil {
+		rsp_string := string(rsp_body)
+		fields := map[string]interface{}{"status_code": resp.Status}
+		sc.log.Err(err).Fields(fields).Msgf("Error unmarshaling QuickTunnel response: %s", rsp_string)
 		return errors.Wrap(err, "failed to unmarshal quick Tunnel")
 	}
 
