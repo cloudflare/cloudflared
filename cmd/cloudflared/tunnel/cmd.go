@@ -170,7 +170,7 @@ then protect with Cloudflare Access).
   B) Locally reachable TCP/UDP-based private services to Cloudflare connected private users in the same account, e.g.,
 those enrolled to a Zero Trust WARP Client.
 
-You can manage your Tunnels via dash.teams.cloudflare.com. This approach will only require you to run a single command
+You can manage your Tunnels via one.dash.cloudflare.com. This approach will only require you to run a single command
 later in each machine where you wish to run a Tunnel.
 
 Alternatively, you can manage your Tunnels via the command line. Begin by obtaining a certificate to be able to do so:
