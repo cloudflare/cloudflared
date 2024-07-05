@@ -218,37 +218,14 @@ cloudflared-pkg: cloudflared cloudflared.1
 cloudflared-msi:
 	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) --output cloudflared-$(VERSION)-$(TARGET_ARCH).msi cloudflared.wxs
 
-.PHONY: cloudflared-darwin-amd64.tgz
-cloudflared-darwin-amd64.tgz: cloudflared
-	tar czf cloudflared-darwin-amd64.tgz cloudflared
-	rm cloudflared
-
 .PHONY: github-release
-github-release: cloudflared
-	python3 github_release.py --path $(EXECUTABLE_PATH) --release-version $(VERSION)
-
-.PHONY: github-release-built-pkgs
-github-release-built-pkgs:
+github-release:
 	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION)
-
-.PHONY: release-pkgs-linux
-release-pkgs-linux:
-	python3 ./release_pkgs.py
-
-.PHONY: github-message
-github-message:
 	python3 github_message.py --release-version $(VERSION)
 
-.PHONY: github-mac-upload
-github-mac-upload:
-	python3 github_release.py --path artifacts --release-version $(VERSION) 
-
-.PHONY: github-windows-upload
-github-windows-upload:
-	python3 github_release.py --path built_artifacts/cloudflared-windows-amd64.exe --release-version $(VERSION) --name cloudflared-windows-amd64.exe
-	python3 github_release.py --path built_artifacts/cloudflared-windows-amd64.msi --release-version $(VERSION) --name cloudflared-windows-amd64.msi
-	python3 github_release.py --path built_artifacts/cloudflared-windows-386.exe --release-version $(VERSION) --name cloudflared-windows-386.exe
-	python3 github_release.py --path built_artifacts/cloudflared-windows-386.msi --release-version $(VERSION) --name cloudflared-windows-386.msi
+.PHONY: r2-linux-release
+r2-linux-release:
+	python3 ./release_pkgs.py
 
 .PHONY: capnp
 capnp:

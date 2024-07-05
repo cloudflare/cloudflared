@@ -188,6 +188,6 @@ for arch in ${archs[@]}; do
   fi
 done
 
-# cleanup build the build directory because this script is not ran within containers,
+# cleanup build directory because this script is not ran within containers,
 # which might lead to future issues in subsequent runs.
 rm -rf "${TARGET_DIRECTORY}"
