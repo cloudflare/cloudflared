@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"os"
 
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
@@ -90,12 +91,19 @@ func CreateListener(address string, port uint16, upstreams []string, bootstraps 
 		upstreamList = append(upstreamList, upstream)
 	}
 
+	
+	
 	// Create a local cache with HTTPS proxy plugin
 	chain := cache.New()
 	chain.Next = ProxyPlugin{
 		Upstreams: upstreamList,
-	}
+	}	
 
+	// Optionally disable http response caching
+	if os.Getenv("DISABLE_TUNNELDNS_CACHE") == "true" { 
+		chain.Next = ProxyPlugin{}
+	}
+	
 	// Format an endpoint
 	endpoint := "dns://" + net.JoinHostPort(address, strconv.FormatUint(uint64(port), 10))
 
