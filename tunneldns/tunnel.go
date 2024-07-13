@@ -94,14 +94,15 @@ func CreateListener(address string, port uint16, upstreams []string, bootstraps 
 	
 	
 	// Create a local cache with HTTPS proxy plugin
-	chain := cache.New()
-	chain.Next = ProxyPlugin{
+	proxyPlugin := ProxyPlugin{
 		Upstreams: upstreamList,
-	}	
+	}
+	chain := cache.New()
+	chain.Next = proxyPlugin	
 
 	// Optionally disable http response caching
 	if os.Getenv("DISABLE_TUNNELDNS_CACHE") == "true" { 
-		chain.Next = ProxyPlugin{}
+		chain = proxyPlugin 
 	}
 	
 	// Format an endpoint
