@@ -1,3 +1,11 @@
+2024.7.0
+- 2024-07-05 TUN-8520: add macos arm64 build
+- 2024-07-05 TUN-8523: refactor makefile and cfsetup
+- 2024-07-02 TUN-8504: Use pre-installed python version instead of downloading it on Windows builds
+- 2024-06-26 TUN-8489: Add default noop logger for capnprpc
+- 2024-06-25 TUN-8487: Add user-agent for quick-tunnel requests
+- 2023-12-12 TUN-8057: cloudflared uses new PQ curve ID
+
 2024.6.1
 - 2024-06-12 TUN-8461: Don't log Failed to send session payload if the error is EOF
 - 2024-06-07 TUN-8456: Update quic-go to 0.45 and collect mtu and congestion control metrics
