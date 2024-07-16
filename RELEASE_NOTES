@@ -1,3 +1,6 @@
+2024.7.1
+- 2024-07-16 TUN-8543: use -p flag to create intermediate directories
+
 2024.7.0
 - 2024-07-05 TUN-8520: add macos arm64 build
 - 2024-07-05 TUN-8523: refactor makefile and cfsetup
