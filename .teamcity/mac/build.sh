@@ -156,8 +156,8 @@ for arch in ${archs[@]}; do
   ARCH_TARGET_DIRECTORY="${TARGET_DIRECTORY}/${arch}-build"
   # creating build directory
   rm -rf $ARCH_TARGET_DIRECTORY
-  mkdir "${ARCH_TARGET_DIRECTORY}"
-  mkdir "${ARCH_TARGET_DIRECTORY}/contents"
+  mkdir -p "${ARCH_TARGET_DIRECTORY}"
+  mkdir -p "${ARCH_TARGET_DIRECTORY}/contents"
   cp -r ".mac_resources/scripts" "${ARCH_TARGET_DIRECTORY}/scripts"
 
   # copy cloudflared into the build directory
