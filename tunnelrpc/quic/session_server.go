@@ -6,8 +6,6 @@ import (
 	"io"
 	"time"
 
-	"zombiezen.com/go/capnproto2/rpc"
-
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -48,7 +46,7 @@ func (s *SessionManagerServer) Serve(ctx context.Context, stream io.ReadWriteClo
 	defer transport.Close()
 
 	main := pogs.SessionManager_ServerToClient(s.sessionManager)
-	rpcConn := rpc.NewConn(transport, rpc.MainInterface(main.Client))
+	rpcConn := tunnelrpc.NewServerConn(transport, main.Client)
 	defer rpcConn.Close()
 
 	select {

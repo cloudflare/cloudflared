@@ -35,7 +35,7 @@ type registrationClient struct {
 
 func NewRegistrationClient(ctx context.Context, stream io.ReadWriteCloser, requestTimeout time.Duration) RegistrationClient {
 	transport := SafeTransport(stream)
-	conn := rpc.NewConn(transport)
+	conn := NewClientConn(transport)
 	client := pogs.NewRegistrationServer_PogsClient(conn.Bootstrap(ctx), conn)
 	return &registrationClient{
 		client:         client,

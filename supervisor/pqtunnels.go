@@ -12,7 +12,7 @@ import (
 // to https://pqtunnels.cloudflareresearch.com.
 
 const (
-	PQKex     = tls.CurveID(0xfe31) // X25519Kyber768Draft00
+	PQKex     = tls.CurveID(0x6399) // X25519Kyber768Draft00
 	PQKexName = "X25519Kyber768Draft00"
 )
 

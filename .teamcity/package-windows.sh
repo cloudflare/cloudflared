@@ -9,8 +9,7 @@ windowsArchs=("amd64" "386")
 for arch in ${windowsArchs[@]}; do
     export TARGET_ARCH=$arch
     # Copy exe into final directory
-    cp ./artifacts/cloudflared-windows-$arch.exe $ARTIFACT_DIR/cloudflared-windows-$arch.exe
-    cp ./artifacts/cloudflared-windows-$arch.exe ./cloudflared.exe
+    cp $ARTIFACT_DIR/cloudflared-windows-$arch.exe ./cloudflared.exe
     make cloudflared-msi
     # Copy msi into final directory
     mv cloudflared-$VERSION-$arch.msi $ARTIFACT_DIR/cloudflared-windows-$arch.msi
