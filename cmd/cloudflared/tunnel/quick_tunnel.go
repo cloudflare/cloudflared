@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -47,9 +48,23 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 	defer resp.Body.Close()
 
+	// Report sensible errors rather than just failing to parse the non-JSON body
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return errors.New("rate limit exceeded; wait a while and try again")
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("HTTP error %d", resp.StatusCode))
+	}
+
+	// Need to read the body, so we can include it in the error if we fail to parse it
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "error reading HTTP response")
+	}
+
 	var data QuickTunnelResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return errors.Wrap(err, "failed to unmarshal quick Tunnel")
+	if err := json.Unmarshal(body, &data); err != nil {
+		message := fmt.Sprintf("failed to unmarshal quick Tunnel \"%v\"", string(body))
+		return errors.Wrap(err, message)
 	}
 
 	tunnelID, err := uuid.Parse(data.Result.ID)
