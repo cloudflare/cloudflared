@@ -29,6 +29,8 @@ INSTALLER_CERT="installer.cer"
 BUNDLE_ID="com.cloudflare.cloudflared"
 SEC_DUP_MSG="security: SecKeychainItemImport: The specified item already exists in the keychain."
 export PATH="$PATH:/usr/local/bin"
+FILENAME="$(pwd)/artifacts/cloudflared-darwin-$TARGET_ARCH.tgz"
+PKGNAME="$(pwd)/artifacts/cloudflared-$TARGET_ARCH.pkg"
 mkdir -p ../src/github.com/cloudflare/    
 cp -r . ../src/github.com/cloudflare/cloudflared
 cd ../src/github.com/cloudflare/cloudflared 
@@ -144,8 +146,6 @@ fi
 # cleanup the build directory because the previous execution might have failed without cleaning up.
 rm -rf "${TARGET_DIRECTORY}"
 export TARGET_OS="darwin"
-FILENAME="$(pwd)/artifacts/cloudflared-darwin-$TARGET_ARCH.tgz"
-PKGNAME="$(pwd)/artifacts/cloudflared-$TARGET_ARCH.pkg"
 GOCACHE="$PWD/../../../../" GOPATH="$PWD/../../../../" CGO_ENABLED=1 make cloudflared
 
 # sign the cloudflared binary
@@ -156,7 +156,7 @@ if [[ ! -z "$CODE_SIGN_NAME" ]]; then
  # TODO: TUN-5789
 fi
 
-ARCH_TARGET_DIRECTORY="${TARGET_DIRECTORY}/${arch}-build"
+ARCH_TARGET_DIRECTORY="${TARGET_DIRECTORY}/${TARGET_ARCH}-build"
 # creating build directory
 rm -rf $ARCH_TARGET_DIRECTORY
 mkdir -p "${ARCH_TARGET_DIRECTORY}"
