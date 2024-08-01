@@ -209,7 +209,6 @@ buster: &buster
       - pip3 install pygithub==1.55
     post-cache:
       - make github-release
-      - make github-message
   r2-linux-release:
     build_dir: *build_dir
     builddeps:
