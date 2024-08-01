@@ -195,9 +195,23 @@ buster: &buster
       - component-tests/requirements.txt
     pre-cache: *component_test_pre_cache
     post-cache: *component_test_post_cache
+  github-release-dryrun:
+    build_dir: *build_dir
+    builddeps:
+      - *pinned_go
+      - build-essential
+      - python3-dev
+      - libffi-dev
+      - python3-setuptools
+      - python3-pip
+    pre-cache:
+      - pip3 install pynacl==1.4.0
+      - pip3 install pygithub==1.55
+    post-cache:
+      - make github-release-dryrun
   github-release:
     build_dir: *build_dir
-    builddeps: 
+    builddeps:
       - *pinned_go
       - build-essential
       - python3-dev
