@@ -1,3 +1,6 @@
+2024.8.1
+- 2024-08-01 TUN-8581: create dry run for github release
+
 2024.7.3
 - 2024-07-31 TUN-8546: Fix final artifacts paths
 
