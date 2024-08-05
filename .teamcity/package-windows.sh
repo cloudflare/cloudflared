@@ -15,4 +15,5 @@ for arch in ${windowsArchs[@]}; do
     make cloudflared-msi
     # Copy msi into final directory
     mv cloudflared-$VERSION-$arch.msi $FINAL_ARTIFACT_DIR/cloudflared-windows-$arch.msi
+    cp $BUILT_ARTIFACT_DIR/cloudflared-windows-$arch.exe $FINAL_ARTIFACT_DIR/cloudflared-windows-$arch.exe 
 done
