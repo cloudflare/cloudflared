@@ -4,6 +4,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"os"
 
 	"github.com/coredns/coredns/core/dnsserver"
 	"github.com/coredns/coredns/plugin"
@@ -90,20 +91,37 @@ func CreateListener(address string, port uint16, upstreams []string, bootstraps 
 		upstreamList = append(upstreamList, upstream)
 	}
 
-	// Create a local cache with HTTPS proxy plugin
-	chain := cache.New()
-	chain.Next = ProxyPlugin{
-		Upstreams: upstreamList,
-	}
-
 	// Format an endpoint
 	endpoint := "dns://" + net.JoinHostPort(address, strconv.FormatUint(uint64(port), 10))
 
+	// get middlewares for DNS Server
+	middlewares := getMiddlewares(upstreamList)
+	chain := NewMetricsPlugin(middlewares)
+
 	// Create the actual middleware server
-	server, err := dnsserver.NewServer(endpoint, []*dnsserver.Config{createConfig(address, port, NewMetricsPlugin(chain))})
+	server, err := dnsserver.NewServer(endpoint, []*dnsserver.Config{createConfig(address, port, chain)})
 	if err != nil {
 		return nil, err
 	}
+	
 
 	return &Listener{server: server, log: log}, nil
+}
+
+// getMiddlewares() returns the middleware chain for DNS Server
+// 
+// Middleware includes features like...
+// * Response Cache
+// * HTTP Proxy Settings
+func getMiddlewares(upstreamList []Upstream) plugin.Handler { 
+	proxyPlugin := ProxyPlugin{
+		Upstreams: upstreamList,
+	}
+	cachePlugin := cache.New()
+	cachePlugin.Next = proxyPlugin
+
+	if os.Getenv("DISABLE_TUNNELDNS_CACHE") == "true" { 
+		return cachePlugin 
+	} 
+	return proxyPlugin
 }
