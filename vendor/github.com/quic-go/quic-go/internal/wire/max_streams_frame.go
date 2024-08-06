@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -14,7 +13,7 @@ type MaxStreamsFrame struct {
 	MaxStreamNum protocol.StreamNum
 }
 
-func parseMaxStreamsFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (*MaxStreamsFrame, error) {
+func parseMaxStreamsFrame(b []byte, typ uint64, _ protocol.Version) (*MaxStreamsFrame, int, error) {
 	f := &MaxStreamsFrame{}
 	switch typ {
 	case bidiMaxStreamsFrameType:
@@ -22,18 +21,18 @@ func parseMaxStreamsFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber)
 	case uniMaxStreamsFrameType:
 		f.Type = protocol.StreamTypeUni
 	}
-	streamID, err := quicvarint.Read(r)
+	streamID, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	f.MaxStreamNum = protocol.StreamNum(streamID)
 	if f.MaxStreamNum > protocol.MaxStreamCount {
-		return nil, fmt.Errorf("%d exceeds the maximum stream count", f.MaxStreamNum)
+		return nil, 0, fmt.Errorf("%d exceeds the maximum stream count", f.MaxStreamNum)
 	}
-	return f, nil
+	return f, l, nil
 }
 
-func (f *MaxStreamsFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *MaxStreamsFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	switch f.Type {
 	case protocol.StreamTypeBidi:
 		b = append(b, bidiMaxStreamsFrameType)
@@ -45,6 +44,6 @@ func (f *MaxStreamsFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, er
 }
 
 // Length of a written frame
-func (f *MaxStreamsFrame) Length(protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.Len(uint64(f.MaxStreamNum))
+func (f *MaxStreamsFrame) Length(protocol.Version) protocol.ByteCount {
+	return 1 + protocol.ByteCount(quicvarint.Len(uint64(f.MaxStreamNum)))
 }

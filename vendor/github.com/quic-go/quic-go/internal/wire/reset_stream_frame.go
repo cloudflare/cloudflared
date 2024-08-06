@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"bytes"
-
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/quicvarint"
@@ -15,21 +13,24 @@ type ResetStreamFrame struct {
 	FinalSize protocol.ByteCount
 }
 
-func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStreamFrame, error) {
+func parseResetStreamFrame(b []byte, _ protocol.Version) (*ResetStreamFrame, int, error) {
+	startLen := len(b)
 	var streamID protocol.StreamID
 	var byteOffset protocol.ByteCount
-	sid, err := quicvarint.Read(r)
+	sid, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
+	b = b[l:]
 	streamID = protocol.StreamID(sid)
-	errorCode, err := quicvarint.Read(r)
+	errorCode, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
-	bo, err := quicvarint.Read(r)
+	b = b[l:]
+	bo, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
 	byteOffset = protocol.ByteCount(bo)
 
@@ -37,10 +38,10 @@ func parseResetStreamFrame(r *bytes.Reader, _ protocol.VersionNumber) (*ResetStr
 		StreamID:  streamID,
 		ErrorCode: qerr.StreamErrorCode(errorCode),
 		FinalSize: byteOffset,
-	}, nil
+	}, startLen - len(b) + l, nil
 }
 
-func (f *ResetStreamFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *ResetStreamFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, resetStreamFrameType)
 	b = quicvarint.Append(b, uint64(f.StreamID))
 	b = quicvarint.Append(b, uint64(f.ErrorCode))
@@ -49,6 +50,6 @@ func (f *ResetStreamFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, e
 }
 
 // Length of a written frame
-func (f *ResetStreamFrame) Length(version protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.Len(uint64(f.StreamID)) + quicvarint.Len(uint64(f.ErrorCode)) + quicvarint.Len(uint64(f.FinalSize))
+func (f *ResetStreamFrame) Length(protocol.Version) protocol.ByteCount {
+	return 1 + protocol.ByteCount(quicvarint.Len(uint64(f.StreamID))+quicvarint.Len(uint64(f.ErrorCode))+quicvarint.Len(uint64(f.FinalSize)))
 }

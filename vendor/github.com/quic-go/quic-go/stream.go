@@ -1,6 +1,7 @@
 package quic
 
 import (
+	"context"
 	"net"
 	"os"
 	"sync"
@@ -60,7 +61,7 @@ type streamI interface {
 	// for sending
 	hasData() bool
 	handleStopSendingFrame(*wire.StopSendingFrame)
-	popStreamFrame(maxBytes protocol.ByteCount, v protocol.VersionNumber) (ackhandler.StreamFrame, bool, bool)
+	popStreamFrame(maxBytes protocol.ByteCount, v protocol.Version) (ackhandler.StreamFrame, bool, bool)
 	updateSendWindow(protocol.ByteCount)
 }
 
@@ -85,7 +86,9 @@ type stream struct {
 var _ Stream = &stream{}
 
 // newStream creates a new Stream
-func newStream(streamID protocol.StreamID,
+func newStream(
+	ctx context.Context,
+	streamID protocol.StreamID,
 	sender streamSender,
 	flowController flowcontrol.StreamFlowController,
 ) *stream {
@@ -99,7 +102,7 @@ func newStream(streamID protocol.StreamID,
 			s.completedMutex.Unlock()
 		},
 	}
-	s.sendStream = *newSendStream(streamID, senderForSendStream, flowController)
+	s.sendStream = *newSendStream(ctx, streamID, senderForSendStream, flowController)
 	senderForReceiveStream := &uniStreamSender{
 		streamSender: sender,
 		onStreamCompletedImpl: func() {

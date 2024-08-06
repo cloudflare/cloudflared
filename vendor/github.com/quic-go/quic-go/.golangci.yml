@@ -1,20 +1,16 @@
-run:
-  skip-files:
-    - internal/handshake/cipher_suite.go
 linters-settings:
-  depguard:
-    rules:
-      qtls:
-        list-mode: lax
-        files:
-          - "!internal/qtls/**"
-          - "$all"
-        deny:
-          - pkg: github.com/quic-go/qtls-go1-20
-            desc: "importing qtls only allowed in internal/qtls"
   misspell:
     ignore-words:
       - ect
+  depguard:
+    rules:
+      quicvarint:
+        list-mode: strict
+        files:
+          - "**/github.com/quic-go/quic-go/quicvarint/*"
+          - "!$test"
+        allow:
+          - $gostd
 
 linters:
   disable-all: true
@@ -27,6 +23,7 @@ linters:
     - gofmt # redundant, since gofmt *should* be a no-op after gofumpt
     - gofumpt
     - gosimple
+    - govet
     - ineffassign
     - misspell
     - prealloc
@@ -35,10 +32,14 @@ linters:
     - unconvert
     - unparam
     - unused
-    - vet
 
 issues:
+  exclude-files:
+    - internal/handshake/cipher_suite.go
   exclude-rules:
     - path: internal/qtls
       linters:
         - depguard
+    - path: _test\.go
+      linters:
+        - exhaustive

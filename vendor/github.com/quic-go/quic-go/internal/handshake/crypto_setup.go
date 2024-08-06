@@ -1,14 +1,12 @@
 package handshake
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,7 +31,7 @@ type cryptoSetup struct {
 
 	events []Event
 
-	version protocol.VersionNumber
+	version protocol.Version
 
 	ourParams  *wire.TransportParameters
 	peerParams *wire.TransportParameters
@@ -47,8 +45,6 @@ type cryptoSetup struct {
 	logger utils.Logger
 
 	perspective protocol.Perspective
-
-	mutex sync.Mutex // protects all members below
 
 	handshakeCompleteTime time.Time
 
@@ -79,7 +75,7 @@ func NewCryptoSetupClient(
 	rttStats *utils.RTTStats,
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
-	version protocol.VersionNumber,
+	version protocol.Version,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
@@ -114,7 +110,7 @@ func NewCryptoSetupServer(
 	rttStats *utils.RTTStats,
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
-	version protocol.VersionNumber,
+	version protocol.Version,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
@@ -127,42 +123,10 @@ func NewCryptoSetupServer(
 	)
 	cs.allow0RTT = allow0RTT
 
-	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
-	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
-
-	cs.tlsConf = quicConf.TLSConfig
-	cs.conn = tls.QUICServer(quicConf)
-
+	tlsConf = qtls.SetupConfigForServer(tlsConf, localAddr, remoteAddr, cs.getDataForSessionTicket, cs.handleSessionTicket)
+	cs.tlsConf = tlsConf
+	cs.conn = tls.QUICServer(&tls.QUICConfig{TLSConfig: tlsConf})
 	return cs
-}
-
-// The tls.Config contains two callbacks that pass in a tls.ClientHelloInfo.
-// Since crypto/tls doesn't do it, we need to make sure to set the Conn field with a fake net.Conn
-// that allows the caller to get the local and the remote address.
-func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) {
-	if conf.GetConfigForClient != nil {
-		gcfc := conf.GetConfigForClient
-		conf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			c, err := gcfc(info)
-			if c != nil {
-				c = c.Clone()
-				// This won't be necessary anymore once https://github.com/golang/go/issues/63722 is accepted.
-				c.MinVersion = tls.VersionTLS13
-				// We're returning a tls.Config here, so we need to apply this recursively.
-				addConnToClientHelloInfo(c, localAddr, remoteAddr)
-			}
-			return c, err
-		}
-	}
-	if conf.GetCertificate != nil {
-		gc := conf.GetCertificate
-		conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			return gc(info)
-		}
-	}
 }
 
 func newCryptoSetup(
@@ -172,7 +136,7 @@ func newCryptoSetup(
 	tracer *logging.ConnectionTracer,
 	logger utils.Logger,
 	perspective protocol.Perspective,
-	version protocol.VersionNumber,
+	version protocol.Version,
 ) *cryptoSetup {
 	initialSealer, initialOpener := NewInitialAEAD(connID, perspective, version)
 	if tracer != nil && tracer.UpdatedKeyFromTLS != nil {
@@ -207,8 +171,8 @@ func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
 	return h.aead.SetLargestAcked(pn)
 }
 
-func (h *cryptoSetup) StartHandshake() error {
-	err := h.conn.Start(context.WithValue(context.Background(), QUICVersionContextKey, h.version))
+func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
+	err := h.conn.Start(context.WithValue(ctx, QUICVersionContextKey, h.version))
 	if err != nil {
 		return wrapError(err)
 	}
@@ -269,10 +233,10 @@ func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
 	case tls.QUICNoEvent:
 		return true, nil
 	case tls.QUICSetReadSecret:
-		h.SetReadKey(ev.Level, ev.Suite, ev.Data)
+		h.setReadKey(ev.Level, ev.Suite, ev.Data)
 		return false, nil
 	case tls.QUICSetWriteSecret:
-		h.SetWriteKey(ev.Level, ev.Suite, ev.Data)
+		h.setWriteKey(ev.Level, ev.Suite, ev.Data)
 		return false, nil
 	case tls.QUICTransportParameters:
 		return false, h.handleTransportParameters(ev.Data)
@@ -341,25 +305,26 @@ func (h *cryptoSetup) handleDataFromSessionState(data []byte, earlyData bool) (a
 	return false
 }
 
-func decodeDataFromSessionState(data []byte, earlyData bool) (time.Duration, *wire.TransportParameters, error) {
-	r := bytes.NewReader(data)
-	ver, err := quicvarint.Read(r)
+func decodeDataFromSessionState(b []byte, earlyData bool) (time.Duration, *wire.TransportParameters, error) {
+	ver, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return 0, nil, err
 	}
+	b = b[l:]
 	if ver != clientSessionStateRevision {
 		return 0, nil, fmt.Errorf("mismatching version. Got %d, expected %d", ver, clientSessionStateRevision)
 	}
-	rttEncoded, err := quicvarint.Read(r)
+	rttEncoded, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return 0, nil, err
 	}
+	b = b[l:]
 	rtt := time.Duration(rttEncoded) * time.Microsecond
 	if !earlyData {
 		return rtt, nil, nil
 	}
 	var tp wire.TransportParameters
-	if err := tp.UnmarshalFromSessionTicket(r); err != nil {
+	if err := tp.UnmarshalFromSessionTicket(b); err != nil {
 		return 0, nil, err
 	}
 	return rtt, &tp, nil
@@ -379,9 +344,7 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 // Due to limitations in crypto/tls, it's only possible to generate a single session ticket per connection.
 // It is only valid for the server.
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
-	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{
-		EarlyData: h.allow0RTT,
-	}); err != nil {
+	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{EarlyData: h.allow0RTT}); err != nil {
 		// Session tickets might be disabled by tls.Config.SessionTicketsDisabled.
 		// We can't check h.tlsConfig here, since the actual config might have been obtained from
 		// the GetConfigForClient callback.
@@ -434,19 +397,16 @@ func (h *cryptoSetup) handleSessionTicket(sessionTicketData []byte, using0RTT bo
 func (h *cryptoSetup) rejected0RTT() {
 	h.logger.Debugf("0-RTT was rejected. Dropping 0-RTT keys.")
 
-	h.mutex.Lock()
 	had0RTTKeys := h.zeroRTTSealer != nil
 	h.zeroRTTSealer = nil
-	h.mutex.Unlock()
 
 	if had0RTTKeys {
 		h.events = append(h.events, Event{Kind: EventDiscard0RTTKeys})
 	}
 }
 
-func (h *cryptoSetup) SetReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
-	h.mutex.Lock()
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
 	case tls.QUICEncryptionLevelEarly:
@@ -478,16 +438,14 @@ func (h *cryptoSetup) SetReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 	default:
 		panic("unexpected read encryption level")
 	}
-	h.mutex.Unlock()
 	h.events = append(h.events, Event{Kind: EventReceivedReadKeys})
 	if h.tracer != nil && h.tracer.UpdatedKeyFromTLS != nil {
 		h.tracer.UpdatedKeyFromTLS(qtls.FromTLSEncryptionLevel(el), h.perspective.Opposite())
 	}
 }
 
-func (h *cryptoSetup) SetWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
+func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, trafficSecret []byte) {
 	suite := getCipherSuite(suiteID)
-	h.mutex.Lock()
 	//nolint:exhaustive // The TLS stack doesn't export Initial keys.
 	switch el {
 	case tls.QUICEncryptionLevelEarly:
@@ -498,7 +456,6 @@ func (h *cryptoSetup) SetWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 			createAEAD(suite, trafficSecret, h.version),
 			newHeaderProtector(suite, trafficSecret, true, h.version),
 		)
-		h.mutex.Unlock()
 		if h.logger.Debug() {
 			h.logger.Debugf("Installed 0-RTT Write keys (using %s)", tls.CipherSuiteName(suite.ID))
 		}
@@ -533,7 +490,6 @@ func (h *cryptoSetup) SetWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 	default:
 		panic("unexpected write encryption level")
 	}
-	h.mutex.Unlock()
 	if h.tracer != nil && h.tracer.UpdatedKeyFromTLS != nil {
 		h.tracer.UpdatedKeyFromTLS(qtls.FromTLSEncryptionLevel(el), h.perspective)
 	}
@@ -555,11 +511,9 @@ func (h *cryptoSetup) writeRecord(encLevel tls.QUICEncryptionLevel, p []byte) {
 }
 
 func (h *cryptoSetup) DiscardInitialKeys() {
-	h.mutex.Lock()
 	dropped := h.initialOpener != nil
 	h.initialOpener = nil
 	h.initialSealer = nil
-	h.mutex.Unlock()
 	if dropped {
 		h.logger.Debugf("Dropping Initial keys.")
 	}
@@ -574,22 +528,17 @@ func (h *cryptoSetup) SetHandshakeConfirmed() {
 	h.aead.SetHandshakeConfirmed()
 	// drop Handshake keys
 	var dropped bool
-	h.mutex.Lock()
 	if h.handshakeOpener != nil {
 		h.handshakeOpener = nil
 		h.handshakeSealer = nil
 		dropped = true
 	}
-	h.mutex.Unlock()
 	if dropped {
 		h.logger.Debugf("Dropping Handshake keys.")
 	}
 }
 
 func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.initialSealer == nil {
 		return nil, ErrKeysDropped
 	}
@@ -597,9 +546,6 @@ func (h *cryptoSetup) GetInitialSealer() (LongHeaderSealer, error) {
 }
 
 func (h *cryptoSetup) Get0RTTSealer() (LongHeaderSealer, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.zeroRTTSealer == nil {
 		return nil, ErrKeysDropped
 	}
@@ -607,9 +553,6 @@ func (h *cryptoSetup) Get0RTTSealer() (LongHeaderSealer, error) {
 }
 
 func (h *cryptoSetup) GetHandshakeSealer() (LongHeaderSealer, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.handshakeSealer == nil {
 		if h.initialSealer == nil {
 			return nil, ErrKeysDropped
@@ -620,9 +563,6 @@ func (h *cryptoSetup) GetHandshakeSealer() (LongHeaderSealer, error) {
 }
 
 func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if !h.has1RTTSealer {
 		return nil, ErrKeysNotYetAvailable
 	}
@@ -630,9 +570,6 @@ func (h *cryptoSetup) Get1RTTSealer() (ShortHeaderSealer, error) {
 }
 
 func (h *cryptoSetup) GetInitialOpener() (LongHeaderOpener, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.initialOpener == nil {
 		return nil, ErrKeysDropped
 	}
@@ -640,9 +577,6 @@ func (h *cryptoSetup) GetInitialOpener() (LongHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) Get0RTTOpener() (LongHeaderOpener, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.zeroRTTOpener == nil {
 		if h.initialOpener != nil {
 			return nil, ErrKeysNotYetAvailable
@@ -654,9 +588,6 @@ func (h *cryptoSetup) Get0RTTOpener() (LongHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.handshakeOpener == nil {
 		if h.initialOpener != nil {
 			return nil, ErrKeysNotYetAvailable
@@ -668,9 +599,6 @@ func (h *cryptoSetup) GetHandshakeOpener() (LongHeaderOpener, error) {
 }
 
 func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
-	h.mutex.Lock()
-	defer h.mutex.Unlock()
-
 	if h.zeroRTTOpener != nil && time.Since(h.handshakeCompleteTime) > 3*h.rttStats.PTO(true) {
 		h.zeroRTTOpener = nil
 		h.logger.Debugf("Dropping 0-RTT keys.")

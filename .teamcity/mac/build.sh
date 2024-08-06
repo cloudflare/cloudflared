@@ -7,13 +7,17 @@ if [[ "$(uname)" != "Darwin" ]] ; then
     exit 1
 fi
 
+if [[ "amd64" != "${TARGET_ARCH}" && "arm64" != "${TARGET_ARCH}" ]]
+then
+  echo "TARGET_ARCH must be amd64 or arm64"
+  exit 1
+fi
+
 go version
 export GO111MODULE=on
 
 # build 'cloudflared-darwin-amd64.tgz'
 mkdir -p artifacts
-FILENAME="$(pwd)/artifacts/cloudflared-darwin-amd64.tgz"
-PKGNAME="$(pwd)/artifacts/cloudflared-amd64.pkg"
 TARGET_DIRECTORY=".build"
 BINARY_NAME="cloudflared"
 VERSION=$(git describe --tags --always --dirty="-dev")
@@ -25,10 +29,11 @@ INSTALLER_CERT="installer.cer"
 BUNDLE_ID="com.cloudflare.cloudflared"
 SEC_DUP_MSG="security: SecKeychainItemImport: The specified item already exists in the keychain."
 export PATH="$PATH:/usr/local/bin"
+FILENAME="$(pwd)/artifacts/cloudflared-darwin-$TARGET_ARCH.tgz"
+PKGNAME="$(pwd)/artifacts/cloudflared-$TARGET_ARCH.pkg"
 mkdir -p ../src/github.com/cloudflare/    
 cp -r . ../src/github.com/cloudflare/cloudflared
 cd ../src/github.com/cloudflare/cloudflared 
-GOCACHE="$PWD/../../../../" GOPATH="$PWD/../../../../" CGO_ENABLED=1 make cloudflared
 
 # Add code signing private key to the key chain
 if [[ ! -z "$CFD_CODE_SIGN_KEY" ]]; then
@@ -138,22 +143,28 @@ else
   fi
 fi
 
+# cleanup the build directory because the previous execution might have failed without cleaning up.
+rm -rf "${TARGET_DIRECTORY}"
+export TARGET_OS="darwin"
+GOCACHE="$PWD/../../../../" GOPATH="$PWD/../../../../" CGO_ENABLED=1 make cloudflared
+
 # sign the cloudflared binary
 if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   codesign -s "${CODE_SIGN_NAME}" -f -v --timestamp --options runtime ${BINARY_NAME}
-  
+
  # notarize the binary
  # TODO: TUN-5789
 fi
 
+ARCH_TARGET_DIRECTORY="${TARGET_DIRECTORY}/${TARGET_ARCH}-build"
 # creating build directory
-rm -rf $TARGET_DIRECTORY
-mkdir "${TARGET_DIRECTORY}"
-mkdir "${TARGET_DIRECTORY}/contents"
-cp -r ".mac_resources/scripts" "${TARGET_DIRECTORY}/scripts"
+rm -rf $ARCH_TARGET_DIRECTORY
+mkdir -p "${ARCH_TARGET_DIRECTORY}"
+mkdir -p "${ARCH_TARGET_DIRECTORY}/contents"
+cp -r ".mac_resources/scripts" "${ARCH_TARGET_DIRECTORY}/scripts"
 
 # copy cloudflared into the build directory
-cp ${BINARY_NAME} "${TARGET_DIRECTORY}/contents/${PRODUCT}"
+cp ${BINARY_NAME} "${ARCH_TARGET_DIRECTORY}/contents/${PRODUCT}"
 
 # compress cloudflared into a tar and gzipped file
 tar czf "$FILENAME" "${BINARY_NAME}"
@@ -162,8 +173,8 @@ tar czf "$FILENAME" "${BINARY_NAME}"
 if [[ ! -z "$PKG_SIGN_NAME" ]]; then
   pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
-      --scripts ${TARGET_DIRECTORY}/scripts \
-      --root ${TARGET_DIRECTORY}/contents \
+      --scripts ${ARCH_TARGET_DIRECTORY}/scripts \
+      --root ${ARCH_TARGET_DIRECTORY}/contents \
       --install-location /usr/local/bin \
       --sign "${PKG_SIGN_NAME}" \
       ${PKGNAME}
@@ -173,12 +184,12 @@ if [[ ! -z "$PKG_SIGN_NAME" ]]; then
 else
     pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
-      --scripts ${TARGET_DIRECTORY}/scripts \
-      --root ${TARGET_DIRECTORY}/contents \
+      --scripts ${ARCH_TARGET_DIRECTORY}/scripts \
+      --root ${ARCH_TARGET_DIRECTORY}/contents \
       --install-location /usr/local/bin \
       ${PKGNAME}
 fi
 
-
-# cleaning up the build directory
-rm -rf $TARGET_DIRECTORY
+# cleanup build directory because this script is not ran within containers,
+# which might lead to future issues in subsequent runs.
+rm -rf "${TARGET_DIRECTORY}"

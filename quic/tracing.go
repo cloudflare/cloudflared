@@ -10,26 +10,20 @@ import (
 
 // QUICTracer is a wrapper to create new quicConnTracer
 type tracer struct {
+	index  string
 	logger *zerolog.Logger
-	config *tracerConfig
-}
-
-type tracerConfig struct {
-	index uint8
 }
 
 func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, logging.Perspective, logging.ConnectionID) *logging.ConnectionTracer {
 	t := &tracer{
+		index:  uint8ToString(index),
 		logger: logger,
-		config: &tracerConfig{
-			index: index,
-		},
 	}
 	return t.TracerForConnection
 }
 
 func (t *tracer) TracerForConnection(_ctx context.Context, _p logging.Perspective, _odcid logging.ConnectionID) *logging.ConnectionTracer {
-	return newConnTracer(newClientCollector(t.config.index))
+	return newConnTracer(newClientCollector(t.index, t.logger))
 }
 
 // connTracer collects connection level metrics
@@ -42,16 +36,19 @@ func newConnTracer(metricsCollector *clientCollector) *logging.ConnectionTracer 
 		metricsCollector: metricsCollector,
 	}
 	return &logging.ConnectionTracer{
-		StartedConnection:         tracer.StartedConnection,
-		ClosedConnection:          tracer.ClosedConnection,
-		SentLongHeaderPacket:      tracer.SentLongHeaderPacket,
-		SentShortHeaderPacket:     tracer.SentShortHeaderPacket,
-		ReceivedLongHeaderPacket:  tracer.ReceivedLongHeaderPacket,
-		ReceivedShortHeaderPacket: tracer.ReceivedShortHeaderPacket,
-		BufferedPacket:            tracer.BufferedPacket,
-		DroppedPacket:             tracer.DroppedPacket,
-		UpdatedMetrics:            tracer.UpdatedMetrics,
-		LostPacket:                tracer.LostPacket,
+		StartedConnection:           tracer.StartedConnection,
+		ClosedConnection:            tracer.ClosedConnection,
+		ReceivedTransportParameters: tracer.ReceivedTransportParameters,
+		SentLongHeaderPacket:        tracer.SentLongHeaderPacket,
+		SentShortHeaderPacket:       tracer.SentShortHeaderPacket,
+		ReceivedLongHeaderPacket:    tracer.ReceivedLongHeaderPacket,
+		ReceivedShortHeaderPacket:   tracer.ReceivedShortHeaderPacket,
+		BufferedPacket:              tracer.BufferedPacket,
+		DroppedPacket:               tracer.DroppedPacket,
+		UpdatedMetrics:              tracer.UpdatedMetrics,
+		LostPacket:                  tracer.LostPacket,
+		UpdatedMTU:                  tracer.UpdatedMTU,
+		UpdatedCongestionState:      tracer.UpdatedCongestionState,
 	}
 }
 
@@ -61,6 +58,10 @@ func (ct *connTracer) StartedConnection(local, remote net.Addr, srcConnID, destC
 
 func (ct *connTracer) ClosedConnection(err error) {
 	ct.metricsCollector.closedConnection(err)
+}
+
+func (ct *connTracer) ReceivedTransportParameters(params *logging.TransportParameters) {
+	ct.metricsCollector.receivedTransportParameters(params)
 }
 
 func (ct *connTracer) BufferedPacket(pt logging.PacketType, size logging.ByteCount) {
@@ -77,6 +78,7 @@ func (ct *connTracer) LostPacket(level logging.EncryptionLevel, number logging.P
 
 func (ct *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
 	ct.metricsCollector.updatedRTT(rttStats)
+	ct.metricsCollector.updateCongestionWindow(cwnd)
 }
 
 func (ct *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
@@ -95,16 +97,10 @@ func (ct *connTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size l
 	ct.metricsCollector.receivedPackets(size, frames)
 }
 
-type quicLogger struct {
-	logger       *zerolog.Logger
-	connectionID string
+func (ct *connTracer) UpdatedMTU(mtu logging.ByteCount, done bool) {
+	ct.metricsCollector.updateMTU(mtu)
 }
 
-func (qt *quicLogger) Write(p []byte) (n int, err error) {
-	qt.logger.Trace().Str("quicConnection", qt.connectionID).RawJSON("event", p).Msg("Quic event")
-	return len(p), nil
-}
-
-func (*quicLogger) Close() error {
-	return nil
+func (ct *connTracer) UpdatedCongestionState(state logging.CongestionState) {
+	ct.metricsCollector.updatedCongestionState(state)
 }

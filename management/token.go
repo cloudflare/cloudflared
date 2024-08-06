@@ -3,7 +3,8 @@ package management
 import (
 	"fmt"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 )
 
 type managementTokenClaims struct {
@@ -37,7 +38,7 @@ func (t *actor) verify() bool {
 }
 
 func parseToken(token string) (*managementTokenClaims, error) {
-	jwt, err := jwt.ParseSigned(token)
+	jwt, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.ES256})
 	if err != nil {
 		return nil, fmt.Errorf("malformed jwt: %v", err)
 	}

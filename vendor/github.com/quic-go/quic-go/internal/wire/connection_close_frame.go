@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -16,52 +15,50 @@ type ConnectionCloseFrame struct {
 	ReasonPhrase       string
 }
 
-func parseConnectionCloseFrame(r *bytes.Reader, typ uint64, _ protocol.VersionNumber) (*ConnectionCloseFrame, error) {
+func parseConnectionCloseFrame(b []byte, typ uint64, _ protocol.Version) (*ConnectionCloseFrame, int, error) {
+	startLen := len(b)
 	f := &ConnectionCloseFrame{IsApplicationError: typ == applicationCloseFrameType}
-	ec, err := quicvarint.Read(r)
+	ec, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
+	b = b[l:]
 	f.ErrorCode = ec
 	// read the Frame Type, if this is not an application error
 	if !f.IsApplicationError {
-		ft, err := quicvarint.Read(r)
+		ft, l, err := quicvarint.Parse(b)
 		if err != nil {
-			return nil, err
+			return nil, 0, replaceUnexpectedEOF(err)
 		}
+		b = b[l:]
 		f.FrameType = ft
 	}
 	var reasonPhraseLen uint64
-	reasonPhraseLen, err = quicvarint.Read(r)
+	reasonPhraseLen, l, err = quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
-	// shortcut to prevent the unnecessary allocation of dataLen bytes
-	// if the dataLen is larger than the remaining length of the packet
-	// reading the whole reason phrase would result in EOF when attempting to READ
-	if int(reasonPhraseLen) > r.Len() {
-		return nil, io.EOF
+	b = b[l:]
+	if int(reasonPhraseLen) > len(b) {
+		return nil, 0, io.EOF
 	}
 
 	reasonPhrase := make([]byte, reasonPhraseLen)
-	if _, err := io.ReadFull(r, reasonPhrase); err != nil {
-		// this should never happen, since we already checked the reasonPhraseLen earlier
-		return nil, err
-	}
+	copy(reasonPhrase, b)
 	f.ReasonPhrase = string(reasonPhrase)
-	return f, nil
+	return f, startLen - len(b) + int(reasonPhraseLen), nil
 }
 
 // Length of a written frame
-func (f *ConnectionCloseFrame) Length(protocol.VersionNumber) protocol.ByteCount {
-	length := 1 + quicvarint.Len(f.ErrorCode) + quicvarint.Len(uint64(len(f.ReasonPhrase))) + protocol.ByteCount(len(f.ReasonPhrase))
+func (f *ConnectionCloseFrame) Length(protocol.Version) protocol.ByteCount {
+	length := 1 + protocol.ByteCount(quicvarint.Len(f.ErrorCode)+quicvarint.Len(uint64(len(f.ReasonPhrase)))) + protocol.ByteCount(len(f.ReasonPhrase))
 	if !f.IsApplicationError {
-		length += quicvarint.Len(f.FrameType) // for the frame type
+		length += protocol.ByteCount(quicvarint.Len(f.FrameType)) // for the frame type
 	}
 	return length
 }
 
-func (f *ConnectionCloseFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *ConnectionCloseFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	if f.IsApplicationError {
 		b = append(b, applicationCloseFrameType)
 	} else {

@@ -48,10 +48,12 @@ func (c *baseFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 // UpdateSendWindow is called after receiving a MAX_{STREAM_}DATA frame.
-func (c *baseFlowController) UpdateSendWindow(offset protocol.ByteCount) {
+func (c *baseFlowController) UpdateSendWindow(offset protocol.ByteCount) (updated bool) {
 	if offset > c.sendWindow {
 		c.sendWindow = offset
+		return true
 	}
+	return false
 }
 
 func (c *baseFlowController) sendWindowSize() protocol.ByteCount {

@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"errors"
 	"io"
 
@@ -14,25 +13,24 @@ type NewTokenFrame struct {
 	Token []byte
 }
 
-func parseNewTokenFrame(r *bytes.Reader, _ protocol.VersionNumber) (*NewTokenFrame, error) {
-	tokenLen, err := quicvarint.Read(r)
+func parseNewTokenFrame(b []byte, _ protocol.Version) (*NewTokenFrame, int, error) {
+	tokenLen, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
-	if uint64(r.Len()) < tokenLen {
-		return nil, io.EOF
-	}
+	b = b[l:]
 	if tokenLen == 0 {
-		return nil, errors.New("token must not be empty")
+		return nil, 0, errors.New("token must not be empty")
+	}
+	if uint64(len(b)) < tokenLen {
+		return nil, 0, io.EOF
 	}
 	token := make([]byte, int(tokenLen))
-	if _, err := io.ReadFull(r, token); err != nil {
-		return nil, err
-	}
-	return &NewTokenFrame{Token: token}, nil
+	copy(token, b)
+	return &NewTokenFrame{Token: token}, l + int(tokenLen), nil
 }
 
-func (f *NewTokenFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *NewTokenFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, newTokenFrameType)
 	b = quicvarint.Append(b, uint64(len(f.Token)))
 	b = append(b, f.Token...)
@@ -40,6 +38,6 @@ func (f *NewTokenFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, erro
 }
 
 // Length of a written frame
-func (f *NewTokenFrame) Length(protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.Len(uint64(len(f.Token))) + protocol.ByteCount(len(f.Token))
+func (f *NewTokenFrame) Length(protocol.Version) protocol.ByteCount {
+	return 1 + protocol.ByteCount(quicvarint.Len(uint64(len(f.Token)))+len(f.Token))
 }

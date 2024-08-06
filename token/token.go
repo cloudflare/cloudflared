@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-jose/go-jose/v3"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
@@ -31,7 +31,8 @@ const (
 )
 
 var (
-	userAgent = "DEV"
+	userAgent     = "DEV"
+	signatureAlgs = []jose.SignatureAlgorithm{jose.RS256}
 )
 
 type AppInfo struct {
@@ -93,9 +94,10 @@ func errDeleteTokenFailed(lockFilePath string) error {
 // newLock will get a new file lock
 func newLock(path string) *lock {
 	lockPath := path + ".lock"
+	backoff := retry.NewBackoff(uint(7), retry.DefaultBaseTime, false)
 	return &lock{
 		lockFilePath: lockPath,
-		backoff:      &retry.BackoffHandler{MaxRetries: 7},
+		backoff:      &backoff,
 		sigHandler: &signalHandler{
 			signals: []os.Signal{syscall.SIGINT, syscall.SIGTERM},
 		},
@@ -415,7 +417,7 @@ func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
 	if err != nil {
 		return nil, err
 	}
-	token, err := jose.ParseSigned(string(content))
+	token, err := jose.ParseSigned(string(content), signatureAlgs)
 	if err != nil {
 		return nil, err
 	}

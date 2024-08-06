@@ -17,14 +17,14 @@ type headerProtector interface {
 	DecryptHeader(sample []byte, firstByte *byte, hdrBytes []byte)
 }
 
-func hkdfHeaderProtectionLabel(v protocol.VersionNumber) string {
+func hkdfHeaderProtectionLabel(v protocol.Version) string {
 	if v == protocol.Version2 {
 		return "quicv2 hp"
 	}
 	return "quic hp"
 }
 
-func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, v protocol.VersionNumber) headerProtector {
+func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader bool, v protocol.Version) headerProtector {
 	hkdfLabel := hkdfHeaderProtectionLabel(v)
 	switch suite.ID {
 	case tls.TLS_AES_128_GCM_SHA256, tls.TLS_AES_256_GCM_SHA384:
@@ -37,7 +37,7 @@ func newHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeader b
 }
 
 type aesHeaderProtector struct {
-	mask         []byte
+	mask         [16]byte // AES always has a 16 byte block size
 	block        cipher.Block
 	isLongHeader bool
 }
@@ -52,7 +52,6 @@ func newAESHeaderProtector(suite *cipherSuite, trafficSecret []byte, isLongHeade
 	}
 	return &aesHeaderProtector{
 		block:        block,
-		mask:         make([]byte, block.BlockSize()),
 		isLongHeader: isLongHeader,
 	}
 }
@@ -69,7 +68,7 @@ func (p *aesHeaderProtector) apply(sample []byte, firstByte *byte, hdrBytes []by
 	if len(sample) != len(p.mask) {
 		panic("invalid sample size")
 	}
-	p.block.Encrypt(p.mask, sample)
+	p.block.Encrypt(p.mask[:], sample)
 	if p.isLongHeader {
 		*firstByte ^= p.mask[0] & 0xf
 	} else {

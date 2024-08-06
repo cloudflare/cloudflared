@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -91,7 +92,7 @@ type Event struct {
 
 // CryptoSetup handles the handshake and protecting / unprotecting packets
 type CryptoSetup interface {
-	StartHandshake() error
+	StartHandshake(context.Context) error
 	io.Closer
 	ChangeConnectionID(protocol.ConnectionID)
 	GetSessionTicket() ([]byte, error)

@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -14,31 +13,31 @@ type CryptoFrame struct {
 	Data   []byte
 }
 
-func parseCryptoFrame(r *bytes.Reader, _ protocol.VersionNumber) (*CryptoFrame, error) {
+func parseCryptoFrame(b []byte, _ protocol.Version) (*CryptoFrame, int, error) {
+	startLen := len(b)
 	frame := &CryptoFrame{}
-	offset, err := quicvarint.Read(r)
+	offset, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
+	b = b[l:]
 	frame.Offset = protocol.ByteCount(offset)
-	dataLen, err := quicvarint.Read(r)
+	dataLen, l, err := quicvarint.Parse(b)
 	if err != nil {
-		return nil, err
+		return nil, 0, replaceUnexpectedEOF(err)
 	}
-	if dataLen > uint64(r.Len()) {
-		return nil, io.EOF
+	b = b[l:]
+	if dataLen > uint64(len(b)) {
+		return nil, 0, io.EOF
 	}
 	if dataLen != 0 {
 		frame.Data = make([]byte, dataLen)
-		if _, err := io.ReadFull(r, frame.Data); err != nil {
-			// this should never happen, since we already checked the dataLen earlier
-			return nil, err
-		}
+		copy(frame.Data, b)
 	}
-	return frame, nil
+	return frame, startLen - len(b) + int(dataLen), nil
 }
 
-func (f *CryptoFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error) {
+func (f *CryptoFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
 	b = append(b, cryptoFrameType)
 	b = quicvarint.Append(b, uint64(f.Offset))
 	b = quicvarint.Append(b, uint64(len(f.Data)))
@@ -47,15 +46,15 @@ func (f *CryptoFrame) Append(b []byte, _ protocol.VersionNumber) ([]byte, error)
 }
 
 // Length of a written frame
-func (f *CryptoFrame) Length(_ protocol.VersionNumber) protocol.ByteCount {
-	return 1 + quicvarint.Len(uint64(f.Offset)) + quicvarint.Len(uint64(len(f.Data))) + protocol.ByteCount(len(f.Data))
+func (f *CryptoFrame) Length(_ protocol.Version) protocol.ByteCount {
+	return protocol.ByteCount(1 + quicvarint.Len(uint64(f.Offset)) + quicvarint.Len(uint64(len(f.Data))) + len(f.Data))
 }
 
 // MaxDataLen returns the maximum data length
 func (f *CryptoFrame) MaxDataLen(maxSize protocol.ByteCount) protocol.ByteCount {
 	// pretend that the data size will be 1 bytes
 	// if it turns out that varint encoding the length will consume 2 bytes, we need to adjust the data length afterwards
-	headerLen := 1 + quicvarint.Len(uint64(f.Offset)) + 1
+	headerLen := protocol.ByteCount(1 + quicvarint.Len(uint64(f.Offset)) + 1)
 	if headerLen > maxSize {
 		return 0
 	}
@@ -71,7 +70,7 @@ func (f *CryptoFrame) MaxDataLen(maxSize protocol.ByteCount) protocol.ByteCount 
 // The frame might not be split if:
 // * the size is large enough to fit the whole frame
 // * the size is too small to fit even a 1-byte frame. In that case, the frame returned is nil.
-func (f *CryptoFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version protocol.VersionNumber) (*CryptoFrame, bool /* was splitting required */) {
+func (f *CryptoFrame) MaybeSplitOffFrame(maxSize protocol.ByteCount, version protocol.Version) (*CryptoFrame, bool /* was splitting required */) {
 	if f.Length(version) <= maxSize {
 		return nil, false
 	}

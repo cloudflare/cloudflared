@@ -7,6 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/quic-go/quic-go/logging"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -18,6 +19,7 @@ var (
 	clientMetrics    = struct {
 		totalConnections  prometheus.Counter
 		closedConnections prometheus.Counter
+		maxUDPPayloadSize *prometheus.GaugeVec
 		sentFrames        *prometheus.CounterVec
 		sentBytes         *prometheus.CounterVec
 		receivedFrames    *prometheus.CounterVec
@@ -28,6 +30,9 @@ var (
 		minRTT            *prometheus.GaugeVec
 		latestRTT         *prometheus.GaugeVec
 		smoothedRTT       *prometheus.GaugeVec
+		mtu               *prometheus.GaugeVec
+		congestionWindow  *prometheus.GaugeVec
+		congestionState   *prometheus.GaugeVec
 	}{
 		totalConnections: prometheus.NewCounter(
 			prometheus.CounterOpts{
@@ -44,6 +49,15 @@ var (
 				Name:      "closed_connections",
 				Help:      "Number of connections that has been closed",
 			},
+		),
+		maxUDPPayloadSize: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "max_udp_payload",
+				Help:      "Maximum UDP payload size in bytes for a QUIC packet",
+			},
+			clientConnLabels,
 		),
 		sentFrames: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -135,6 +149,33 @@ var (
 			},
 			clientConnLabels,
 		),
+		mtu: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "mtu",
+				Help:      "Current maximum transmission unit (MTU) of a connection",
+			},
+			clientConnLabels,
+		),
+		congestionWindow: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "congestion_window",
+				Help:      "Current congestion window size",
+			},
+			clientConnLabels,
+		),
+		congestionState: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "client",
+				Name:      "congestion_state",
+				Help:      "Current congestion control state. See https://pkg.go.dev/github.com/quic-go/quic-go@v0.45.0/logging#CongestionState for what each value maps to",
+			},
+			clientConnLabels,
+		),
 	}
 
 	registerClient = sync.Once{}
@@ -148,14 +189,16 @@ var (
 )
 
 type clientCollector struct {
-	index string
+	index  string
+	logger *zerolog.Logger
 }
 
-func newClientCollector(index uint8) *clientCollector {
+func newClientCollector(index string, logger *zerolog.Logger) *clientCollector {
 	registerClient.Do(func() {
 		prometheus.MustRegister(
 			clientMetrics.totalConnections,
 			clientMetrics.closedConnections,
+			clientMetrics.maxUDPPayloadSize,
 			clientMetrics.sentFrames,
 			clientMetrics.sentBytes,
 			clientMetrics.receivedFrames,
@@ -166,11 +209,16 @@ func newClientCollector(index uint8) *clientCollector {
 			clientMetrics.minRTT,
 			clientMetrics.latestRTT,
 			clientMetrics.smoothedRTT,
+			clientMetrics.mtu,
+			clientMetrics.congestionWindow,
+			clientMetrics.congestionState,
 			packetTooBigDropped,
 		)
 	})
+
 	return &clientCollector{
-		index: uint8ToString(index),
+		index:  index,
+		logger: logger,
 	}
 }
 
@@ -178,16 +226,21 @@ func (cc *clientCollector) startedConnection() {
 	clientMetrics.totalConnections.Inc()
 }
 
-func (cc *clientCollector) closedConnection(err error) {
+func (cc *clientCollector) closedConnection(error) {
 	clientMetrics.closedConnections.Inc()
 }
 
+func (cc *clientCollector) receivedTransportParameters(params *logging.TransportParameters) {
+	clientMetrics.maxUDPPayloadSize.WithLabelValues(cc.index).Set(float64(params.MaxUDPPayloadSize))
+	cc.logger.Debug().Msgf("Received transport parameters: MaxUDPPayloadSize=%d, MaxIdleTimeout=%v, MaxDatagramFrameSize=%d", params.MaxUDPPayloadSize, params.MaxIdleTimeout, params.MaxDatagramFrameSize)
+}
+
 func (cc *clientCollector) sentPackets(size logging.ByteCount, frames []logging.Frame) {
-	cc.collectPackets(size, frames, clientMetrics.sentFrames, clientMetrics.sentBytes)
+	cc.collectPackets(size, frames, clientMetrics.sentFrames, clientMetrics.sentBytes, sent)
 }
 
 func (cc *clientCollector) receivedPackets(size logging.ByteCount, frames []logging.Frame) {
-	cc.collectPackets(size, frames, clientMetrics.receivedFrames, clientMetrics.receivedBytes)
+	cc.collectPackets(size, frames, clientMetrics.receivedFrames, clientMetrics.receivedBytes, received)
 }
 
 func (cc *clientCollector) bufferedPackets(packetType logging.PacketType) {
@@ -212,8 +265,27 @@ func (cc *clientCollector) updatedRTT(rtt *logging.RTTStats) {
 	clientMetrics.smoothedRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.SmoothedRTT()))
 }
 
-func (cc *clientCollector) collectPackets(size logging.ByteCount, frames []logging.Frame, counter, bandwidth *prometheus.CounterVec) {
+func (cc *clientCollector) updateCongestionWindow(size logging.ByteCount) {
+	clientMetrics.congestionWindow.WithLabelValues(cc.index).Set(float64(size))
+}
+
+func (cc *clientCollector) updatedCongestionState(state logging.CongestionState) {
+	clientMetrics.congestionState.WithLabelValues(cc.index).Set(float64(state))
+}
+
+func (cc *clientCollector) updateMTU(mtu logging.ByteCount) {
+	clientMetrics.mtu.WithLabelValues(cc.index).Set(float64(mtu))
+	cc.logger.Debug().Msgf("QUIC MTU updated to %d", mtu)
+}
+
+func (cc *clientCollector) collectPackets(size logging.ByteCount, frames []logging.Frame, counter, bandwidth *prometheus.CounterVec, direction direction) {
 	for _, frame := range frames {
+		switch f := frame.(type) {
+		case logging.DataBlockedFrame:
+			cc.logger.Debug().Msgf("%s data_blocked frame", direction)
+		case logging.StreamDataBlockedFrame:
+			cc.logger.Debug().Int64("streamID", int64(f.StreamID)).Msgf("%s stream_data_blocked frame", direction)
+		}
 		counter.WithLabelValues(cc.index, frameName(frame)).Inc()
 	}
 	bandwidth.WithLabelValues(cc.index).Add(byteCountToPromCount(size))
@@ -226,4 +298,18 @@ func frameName(frame logging.Frame) string {
 		name := reflect.TypeOf(frame).Elem().Name()
 		return strings.TrimSuffix(name, "Frame")
 	}
+}
+
+type direction uint8
+
+const (
+	sent direction = iota
+	received
+)
+
+func (d direction) String() string {
+	if d == sent {
+		return "sent"
+	}
+	return "received"
 }

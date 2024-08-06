@@ -5,6 +5,8 @@ coverage:
     - interop/
     - internal/handshake/cipher_suite.go
     - internal/utils/linkedlist/linkedlist.go
+    - internal/testdata
+    - testutils/
     - fuzzing/
     - metrics/
   status:

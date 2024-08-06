@@ -78,8 +78,8 @@ const (
 	// hostKeyPath is the path of the dir to save SSH host keys too
 	hostKeyPath = "host-key-path"
 
-	// udpUnregisterSessionTimeout is how long we wait before we stop trying to unregister a UDP session from the edge
-	udpUnregisterSessionTimeoutFlag = "udp-unregister-session-timeout"
+	// rpcTimeout is how long to wait for a Capnp RPC request to the edge
+	rpcTimeout = "rpc-timeout"
 
 	// writeStreamTimeout sets if we should have a timeout when writing data to a stream towards the destination (edge/origin).
 	writeStreamTimeout = "write-stream-timeout"
@@ -88,6 +88,14 @@ const (
 	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
 	// Note that this may result in packet drops for UDP proxying, since we expect being able to send at least 1280 bytes of inner packets.
 	quicDisablePathMTUDiscovery = "quic-disable-pmtu-discovery"
+
+	// quicConnLevelFlowControlLimit controls the max flow control limit allocated for a QUIC connection. This controls how much data is the
+	// receiver willing to buffer. Once the limit is reached, the sender will send a DATA_BLOCKED frame to indicate it has more data to write,
+	// but it's blocked by flow control
+	quicConnLevelFlowControlLimit = "quic-connection-level-flow-control-limit"
+	// quicStreamLevelFlowControlLimit is similar to quicConnLevelFlowControlLimit but for each QUIC stream. When the sender is blocked,
+	// it will send a STREAM_DATA_BLOCKED frame
+	quicStreamLevelFlowControlLimit = "quic-stream-level-flow-control-limit"
 
 	// uiFlag is to enable launching cloudflared in interactive UI mode
 	uiFlag = "ui"
@@ -287,7 +295,7 @@ func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
 func StartServer(
 	c *cli.Context,
 	info *cliutil.BuildInfo,
-	namedTunnel *connection.NamedTunnelProperties,
+	namedTunnel *connection.TunnelProperties,
 	log *zerolog.Logger,
 ) error {
 	err := sentry.Init(sentry.ClientOptions{
@@ -407,6 +415,11 @@ func StartServer(
 			// set to nil for classic tunnels
 			clientID = uuid.Nil
 		}
+	}
+
+	// Disable ICMP packet routing for quick tunnels
+	if quickTunnelURL != "" {
+		tunnelConfig.PacketConfig = nil
 	}
 
 	internalRules := []ingress.Rule{}
@@ -658,9 +671,9 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:    "tag",
-			Usage:   "Custom tags used to identify this tunnel, in format `KEY=VALUE`. Multiple tags may be specified",
+			Usage:   "Custom tags used to identify this tunnel via added HTTP request headers to the origin, in format `KEY=VALUE`. Multiple tags may be specified.",
 			EnvVars: []string{"TUNNEL_TAG"},
-			Hidden:  shouldHide,
+			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   "heartbeat-interval",
@@ -695,7 +708,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden: true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   udpUnregisterSessionTimeoutFlag,
+			Name:   rpcTimeout,
 			Value:  5 * time.Second,
 			Hidden: true,
 		}),
@@ -711,6 +724,20 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_DISABLE_QUIC_PMTU"},
 			Usage:   "Use this option to disable PTMU discovery for QUIC connections. This will result in lower packet sizes. Not however, that this may cause instability for UDP proxying.",
 			Value:   false,
+			Hidden:  true,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    quicConnLevelFlowControlLimit,
+			EnvVars: []string{"TUNNEL_QUIC_CONN_LEVEL_FLOW_CONTROL_LIMIT"},
+			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
+			Value:   30 * (1 << 20), // 30 MB
+			Hidden:  true,
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:    quicStreamLevelFlowControlLimit,
+			EnvVars: []string{"TUNNEL_QUIC_STREAM_LEVEL_FLOW_CONTROL_LIMIT"},
+			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
+			Value:   6 * (1 << 20), // 6 MB
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{

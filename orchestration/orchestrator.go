@@ -14,7 +14,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/proxy"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // Orchestrator manages configurations, so they can be updatable during runtime
@@ -32,7 +32,7 @@ type Orchestrator struct {
 	internalRules []ingress.Rule
 	// cloudflared Configuration
 	config *Config
-	tags   []tunnelpogs.Tag
+	tags   []pogs.Tag
 	log    *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
@@ -43,7 +43,7 @@ type Orchestrator struct {
 
 func NewOrchestrator(ctx context.Context,
 	config *Config,
-	tags []tunnelpogs.Tag,
+	tags []pogs.Tag,
 	internalRules []ingress.Rule,
 	log *zerolog.Logger) (*Orchestrator, error) {
 	o := &Orchestrator{
@@ -65,7 +65,7 @@ func NewOrchestrator(ctx context.Context,
 }
 
 // UpdateConfig creates a new proxy with the new ingress rules
-func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
+func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
@@ -74,7 +74,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 			Int32("current_version", o.currentVersion).
 			Int32("received_version", version).
 			Msg("Current version is equal or newer than received version")
-		return &tunnelpogs.UpdateConfigurationResponse{
+		return &pogs.UpdateConfigurationResponse{
 			LastAppliedVersion: o.currentVersion,
 		}
 	}
@@ -84,7 +84,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 			Int32("version", version).
 			Str("config", string(config)).
 			Msgf("Failed to deserialize new configuration")
-		return &tunnelpogs.UpdateConfigurationResponse{
+		return &pogs.UpdateConfigurationResponse{
 			LastAppliedVersion: o.currentVersion,
 			Err:                err,
 		}
@@ -95,7 +95,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 			Int32("version", version).
 			Str("config", string(config)).
 			Msgf("Failed to update ingress")
-		return &tunnelpogs.UpdateConfigurationResponse{
+		return &pogs.UpdateConfigurationResponse{
 			LastAppliedVersion: o.currentVersion,
 			Err:                err,
 		}
@@ -107,7 +107,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *tunnelpogs.Up
 		Str("config", string(config)).
 		Msg("Updated to new configuration")
 	configVersion.Set(float64(version))
-	return &tunnelpogs.UpdateConfigurationResponse{
+	return &pogs.UpdateConfigurationResponse{
 		LastAppliedVersion: o.currentVersion,
 	}
 }

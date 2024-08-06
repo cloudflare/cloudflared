@@ -15,7 +15,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
@@ -50,6 +51,8 @@ type errorResponse struct {
 }
 
 var mockRequest func(url, contentType string, body io.Reader) (*http.Response, error) = nil
+
+var signatureAlgs = []jose.SignatureAlgorithm{jose.RS256}
 
 // GenerateShortLivedCertificate generates and stores a keypair for short lived certs
 func GenerateShortLivedCertificate(appURL *url.URL, token string) error {
@@ -87,7 +90,7 @@ func SignCert(token, pubKey string) (string, error) {
 		return "", errors.New("invalid token")
 	}
 
-	parsedToken, err := jwt.ParseSigned(token)
+	parsedToken, err := jwt.ParseSigned(token, signatureAlgs)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse JWT")
 	}

@@ -3,8 +3,6 @@ package quicvarint
 import (
 	"fmt"
 	"io"
-
-	"github.com/quic-go/quic-go/internal/protocol"
 )
 
 // taken from the QUIC draft
@@ -28,16 +26,16 @@ func Read(r io.ByteReader) (uint64, error) {
 		return 0, err
 	}
 	// the first two bits of the first byte encode the length
-	len := 1 << ((firstByte & 0xc0) >> 6)
+	l := 1 << ((firstByte & 0xc0) >> 6)
 	b1 := firstByte & (0xff - 0xc0)
-	if len == 1 {
+	if l == 1 {
 		return uint64(b1), nil
 	}
 	b2, err := r.ReadByte()
 	if err != nil {
 		return 0, err
 	}
-	if len == 2 {
+	if l == 2 {
 		return uint64(b2) + uint64(b1)<<8, nil
 	}
 	b3, err := r.ReadByte()
@@ -48,7 +46,7 @@ func Read(r io.ByteReader) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if len == 4 {
+	if l == 4 {
 		return uint64(b4) + uint64(b3)<<8 + uint64(b2)<<16 + uint64(b1)<<24, nil
 	}
 	b5, err := r.ReadByte()
@@ -68,6 +66,31 @@ func Read(r io.ByteReader) (uint64, error) {
 		return 0, err
 	}
 	return uint64(b8) + uint64(b7)<<8 + uint64(b6)<<16 + uint64(b5)<<24 + uint64(b4)<<32 + uint64(b3)<<40 + uint64(b2)<<48 + uint64(b1)<<56, nil
+}
+
+// Parse reads a number in the QUIC varint format.
+// It returns the number of bytes consumed.
+func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
+	if len(b) == 0 {
+		return 0, 0, io.EOF
+	}
+	firstByte := b[0]
+	// the first two bits of the first byte encode the length
+	l := 1 << ((firstByte & 0xc0) >> 6)
+	if len(b) < l {
+		return 0, 0, io.ErrUnexpectedEOF
+	}
+	b0 := firstByte & (0xff - 0xc0)
+	if l == 1 {
+		return uint64(b0), 1, nil
+	}
+	if l == 2 {
+		return uint64(b[1]) + uint64(b0)<<8, 2, nil
+	}
+	if l == 4 {
+		return uint64(b[3]) + uint64(b[2])<<8 + uint64(b[1])<<16 + uint64(b0)<<24, 4, nil
+	}
+	return uint64(b[7]) + uint64(b[6])<<8 + uint64(b[5])<<16 + uint64(b[4])<<24 + uint64(b[3])<<32 + uint64(b[2])<<40 + uint64(b[1])<<48 + uint64(b0)<<56, 8, nil
 }
 
 // Append appends i in the QUIC varint format.
@@ -91,7 +114,7 @@ func Append(b []byte, i uint64) []byte {
 }
 
 // AppendWithLen append i in the QUIC varint format with the desired length.
-func AppendWithLen(b []byte, i uint64, length protocol.ByteCount) []byte {
+func AppendWithLen(b []byte, i uint64, length int) []byte {
 	if length != 1 && length != 2 && length != 4 && length != 8 {
 		panic("invalid varint length")
 	}
@@ -109,17 +132,17 @@ func AppendWithLen(b []byte, i uint64, length protocol.ByteCount) []byte {
 	} else if length == 8 {
 		b = append(b, 0b11000000)
 	}
-	for j := protocol.ByteCount(1); j < length-l; j++ {
+	for j := 1; j < length-l; j++ {
 		b = append(b, 0)
 	}
-	for j := protocol.ByteCount(0); j < l; j++ {
+	for j := 0; j < l; j++ {
 		b = append(b, uint8(i>>(8*(l-1-j))))
 	}
 	return b
 }
 
 // Len determines the number of bytes that will be needed to write the number i.
-func Len(i uint64) protocol.ByteCount {
+func Len(i uint64) int {
 	if i <= maxVarInt1 {
 		return 1
 	}

@@ -37,7 +37,7 @@ type (
 	// The StreamType is the type of the stream (unidirectional or bidirectional).
 	StreamType = protocol.StreamType
 	// The VersionNumber is the QUIC version.
-	VersionNumber = protocol.VersionNumber
+	VersionNumber = protocol.Version
 
 	// The Header is the QUIC packet header, before removing header protection.
 	Header = wire.Header

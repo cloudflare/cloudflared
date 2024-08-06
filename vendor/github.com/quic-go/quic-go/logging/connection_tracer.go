@@ -24,12 +24,13 @@ type ConnectionTracer struct {
 	UpdatedMetrics                   func(rttStats *RTTStats, cwnd, bytesInFlight ByteCount, packetsInFlight int)
 	AcknowledgedPacket               func(EncryptionLevel, PacketNumber)
 	LostPacket                       func(EncryptionLevel, PacketNumber, PacketLossReason)
+	UpdatedMTU                       func(mtu ByteCount, done bool)
 	UpdatedCongestionState           func(CongestionState)
 	UpdatedPTOCount                  func(value uint32)
 	UpdatedKeyFromTLS                func(EncryptionLevel, Perspective)
-	UpdatedKey                       func(generation KeyPhase, remote bool)
+	UpdatedKey                       func(keyPhase KeyPhase, remote bool)
 	DroppedEncryptionLevel           func(EncryptionLevel)
-	DroppedKey                       func(generation KeyPhase)
+	DroppedKey                       func(keyPhase KeyPhase)
 	SetLossTimer                     func(TimerType, EncryptionLevel, time.Time)
 	LossTimerExpired                 func(TimerType, EncryptionLevel)
 	LossTimerCanceled                func()
@@ -165,6 +166,13 @@ func NewMultiplexedConnectionTracer(tracers ...*ConnectionTracer) *ConnectionTra
 			for _, t := range tracers {
 				if t.LostPacket != nil {
 					t.LostPacket(encLevel, pn, reason)
+				}
+			}
+		},
+		UpdatedMTU: func(mtu ByteCount, done bool) {
+			for _, t := range tracers {
+				if t.UpdatedMTU != nil {
+					t.UpdatedMTU(mtu, done)
 				}
 			}
 		},

@@ -5,7 +5,7 @@ import "github.com/quic-go/quic-go/internal/protocol"
 type flowController interface {
 	// for sending
 	SendWindowSize() protocol.ByteCount
-	UpdateSendWindow(protocol.ByteCount)
+	UpdateSendWindow(protocol.ByteCount) (updated bool)
 	AddBytesSent(protocol.ByteCount)
 	// for receiving
 	AddBytesRead(protocol.ByteCount)
@@ -16,12 +16,11 @@ type flowController interface {
 // A StreamFlowController is a flow controller for a QUIC stream.
 type StreamFlowController interface {
 	flowController
-	// for receiving
-	// UpdateHighestReceived should be called when a new highest offset is received
+	// UpdateHighestReceived is called when a new highest offset is received
 	// final has to be to true if this is the final offset of the stream,
 	// as contained in a STREAM frame with FIN bit, and the RESET_STREAM frame
 	UpdateHighestReceived(offset protocol.ByteCount, final bool) error
-	// Abandon should be called when reading from the stream is aborted early,
+	// Abandon is called when reading from the stream is aborted early,
 	// and there won't be any further calls to AddBytesRead.
 	Abandon()
 }
