@@ -47,6 +47,13 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 	defer resp.Body.Close()
 
+	// Report sensible errors rather than just failing to parse the non-JSON body
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return errors.New("rate limit exceeded; wait a while and try again")
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("HTTP error %d", resp.StatusCode))
+	}
+
 	var data QuickTunnelResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return errors.Wrap(err, "failed to unmarshal quick Tunnel")
