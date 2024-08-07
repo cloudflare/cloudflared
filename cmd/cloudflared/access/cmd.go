@@ -27,6 +27,7 @@ import (
 
 const (
 	loginQuietFlag     = "quiet"
+	noPrettyFlag       = "no-pretty"
 	sshHostnameFlag    = "hostname"
 	sshDestinationFlag = "destination"
 	sshURLFlag         = "url"
@@ -96,6 +97,10 @@ func Commands() []*cli.Command {
 							Name:    loginQuietFlag,
 							Aliases: []string{"q"},
 							Usage:   "do not print the jwt to the command line",
+						},
+						&cli.BoolFlag{
+							Name:  noPrettyFlag,
+							Usage: "only print the jwt to the command line",
 						},
 					},
 				},
@@ -261,7 +266,12 @@ func login(c *cli.Context) error {
 	if c.Bool(loginQuietFlag) {
 		return nil
 	}
-	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
+
+	if c.Bool(noPrettyFlag) {
+		fmt.Fprintf(os.Stdout, cfdToken)
+	} else {
+		fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
+	}
 
 	return nil
 }
