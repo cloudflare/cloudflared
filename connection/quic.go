@@ -42,11 +42,25 @@ const (
 	HTTPMethodKey = "HttpMethod"
 	// HTTPHostKey is used to get or set http Method in QUIC ALPN if the underlying proxy connection type is HTTP.
 	HTTPHostKey = "HttpHost"
+	// HTTPRequestBodyHintKey is used in ConnectRequest metadata to indicate if the request has body
+	HTTPRequestBodyHintKey = "HttpReqBodyHint"
 
 	QUICMetadataFlowID = "FlowID"
 	// emperically this capacity has been working well
 	demuxChanCapacity = 16
 )
+
+type RequestBodyHint uint64
+
+const (
+	RequestBodyHintMissing RequestBodyHint = iota
+	RequestBodyHintEmpty
+	RequestBodyHintHasData
+)
+
+func (rbh RequestBodyHint) String() string {
+	return [...]string{"missing", "empty", "data"}[rbh]
+}
 
 var (
 	portForConnIndex = make(map[uint8]int, 0)
@@ -474,7 +488,6 @@ func buildHTTPRequest(
 	dest := connectRequest.Dest
 	method := metadata[HTTPMethodKey]
 	host := metadata[HTTPHostKey]
-	isWebsocket := connectRequest.Type == pogs.ConnectionTypeWebsocket
 
 	req, err := http.NewRequestWithContext(ctx, method, dest, body)
 	if err != nil {
@@ -499,13 +512,8 @@ func buildHTTPRequest(
 		return nil, fmt.Errorf("Error setting content-length: %w", err)
 	}
 
-	// Go's client defaults to chunked encoding after a 200ms delay if the following cases are true:
-	//   * the request body blocks
-	//   * the content length is not set (or set to -1)
-	//   * the method doesn't usually have a body (GET, HEAD, DELETE, ...)
-	//   * there is no transfer-encoding=chunked already set.
-	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
-	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
+	if shouldSetRequestBodyToEmpty(connectRequest, metadata, req) {
+		log.Debug().Str("host", req.Host).Str("method", req.Method).Msg("Set request to have no body")
 		req.Body = http.NoBody
 	}
 	stripWebsocketUpgradeHeader(req)
@@ -528,6 +536,35 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
+}
+
+// Borrowed from https://github.com/golang/go/blob/go1.22.6/src/net/http/request.go#L1541
+func requestMethodUsuallyLacksBody(req *http.Request) bool {
+	switch strings.ToUpper(req.Method) {
+	case "GET", "HEAD", "DELETE", "OPTIONS", "PROPFIND", "SEARCH":
+		return true
+	}
+	return false
+}
+
+func shouldSetRequestBodyToEmpty(connectRequest *pogs.ConnectRequest, metadata map[string]string, req *http.Request) bool {
+	switch metadata[HTTPRequestBodyHintKey] {
+	case RequestBodyHintEmpty.String():
+		return true
+	case RequestBodyHintHasData.String():
+		return false
+	default:
+	}
+
+	isWebsocket := connectRequest.Type == pogs.ConnectionTypeWebsocket
+	// Go's client defaults to chunked encoding after a 200ms delay if the following cases are true:
+	//   * the request body blocks
+	//   * the content length is not set (or set to -1)
+	//   * the method doesn't usually have a body (GET, HEAD, DELETE, ...)
+	//   * there is no transfer-encoding=chunked already set.
+	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
+	// Reference: https://github.com/golang/go/blob/go1.22.2/src/net/http/transfer.go#L192-L206
+	return !isWebsocket && requestMethodUsuallyLacksBody(req) && !isTransferEncodingChunked(req) && req.ContentLength == 0
 }
 
 // A helper struct that guarantees a call to close only affects read side, but not write side.
