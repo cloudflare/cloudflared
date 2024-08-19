@@ -63,6 +63,10 @@ type jwtPayload struct {
 	Subt  string   `json:"sub"`
 }
 
+type lockFile struct {
+	Pid int `json:"pid"`
+}
+
 type transferServiceResponse struct {
 	AppToken string `json:"app_token"`
 	OrgToken string `json:"org_token"`
@@ -125,12 +129,34 @@ func (l *lock) Acquire() error {
 		}
 	}
 
-	// Create a lock file so other processes won't also try to get the token at
-	// the same time
-	if err := os.WriteFile(l.lockFilePath, []byte{}, 0600); err != nil {
+	// Create a lock file with the process ID
+	lockInfo := lockFile{
+		Pid: os.Getpid(),
+	}
+
+	lockData, err := json.Marshal(lockInfo)
+	if err != nil {
 		return err
 	}
+
+	// Create a lock file so other processes won't also try to get the token at
+	// the same time
+	if err := os.WriteFile(l.lockFilePath, lockData, 0600); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// processExists checks if a process with a given PID is still running
+func processExists(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
 
 func (l *lock) deleteLockFile() error {
@@ -148,6 +174,29 @@ func (l *lock) Release() error {
 // isTokenLocked checks to see if there is another process attempting to get the token already
 func isTokenLocked(lockFilePath string) bool {
 	exists, err := config.FileExists(lockFilePath)
+	if exists && err == nil {
+		content, err := os.ReadFile(lockFilePath)
+		if err != nil {
+			return true
+		}
+
+		var payload lockFile
+		err = json.Unmarshal(content, &payload)
+		if err != nil {
+			// if the lockfile did not contain a payload that means it was issued by an older version of cloudflared and should be deleted
+			return false
+		}
+
+		// Check if the process that created the lock is still running
+		if processExists(payload.Pid) {
+			return true
+		}
+
+		// If the process is not running, delete the stale lock file
+		_ = os.Remove(lockFilePath)
+		return false
+	}
+
 	return exists && err == nil
 }
 
