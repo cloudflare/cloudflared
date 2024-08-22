@@ -3,7 +3,7 @@ VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
 
 # This controls the directory the built artifacts go into
-export ARTIFACT_DIR=built_artifacts/
+export ARTIFACT_DIR=artifacts/
 mkdir -p $ARTIFACT_DIR
 
 arch=("amd64")

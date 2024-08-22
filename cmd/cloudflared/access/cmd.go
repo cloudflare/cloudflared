@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	appURLFlag         = "app"
 	loginQuietFlag     = "quiet"
 	sshHostnameFlag    = "hostname"
 	sshDestinationFlag = "destination"
@@ -83,9 +84,10 @@ func Commands() []*cli.Command {
 			applications from the command line.`,
 			Subcommands: []*cli.Command{
 				{
-					Name:   "login",
-					Action: cliutil.Action(login),
-					Usage:  "login <url of access application>",
+					Name:      "login",
+					Action:    cliutil.Action(login),
+					Usage:     "login <url of access application>",
+					ArgsUsage: "url of Access application",
 					Description: `The login subcommand initiates an authentication flow with your identity provider.
 					The subcommand will launch a browser. For headless systems, a url is provided.
 					Once authenticated with your identity provider, the login command will generate a JSON Web Token (JWT)
@@ -96,6 +98,13 @@ func Commands() []*cli.Command {
 							Name:    loginQuietFlag,
 							Aliases: []string{"q"},
 							Usage:   "do not print the jwt to the command line",
+						},
+						&cli.BoolFlag{
+							Name:  "no-verbose",
+							Usage: "print only the jwt to stdout",
+						},
+						&cli.StringFlag{
+							Name: appURLFlag,
 						},
 					},
 				},
@@ -111,12 +120,12 @@ func Commands() []*cli.Command {
 				{
 					Name:        "token",
 					Action:      cliutil.Action(generateToken),
-					Usage:       "token -app=<url of access application>",
+					Usage:       "token <url of access application>",
 					ArgsUsage:   "url of Access application",
 					Description: `The token subcommand produces a JWT which can be used to authenticate requests.`,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
-							Name: "app",
+							Name: appURLFlag,
 						},
 					},
 				},
@@ -232,9 +241,8 @@ func login(c *cli.Context) error {
 
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
-	args := c.Args()
-	appURL, err := parseURL(args.First())
-	if args.Len() < 1 || err != nil {
+	appURL, err := getAppURLFromArgs(c)
+	if err != nil {
 		log.Error().Msg("Please provide the url of the Access application")
 		return err
 	}
@@ -261,7 +269,14 @@ func login(c *cli.Context) error {
 	if c.Bool(loginQuietFlag) {
 		return nil
 	}
-	fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
+
+	// Chatty by default for backward compat. The new --app flag
+	// is an implicit opt-out of the backwards-compatible chatty output.
+	if c.Bool("no-verbose") || c.IsSet(appURLFlag) {
+		fmt.Fprint(os.Stdout, cfdToken)
+	} else {
+		fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
+	}
 
 	return nil
 }
@@ -340,6 +355,17 @@ func run(cmd string, args ...string) error {
 	return c.Run()
 }
 
+func getAppURLFromArgs(c *cli.Context) (*url.URL, error) {
+	var appURLStr string
+	args := c.Args()
+	if args.Len() < 1 {
+		appURLStr = c.String(appURLFlag)
+	} else {
+		appURLStr = args.First()
+	}
+	return parseURL(appURLStr)
+}
+
 // token dumps provided token to stdout
 func generateToken(c *cli.Context) error {
 	err := sentry.Init(sentry.ClientOptions{
@@ -349,8 +375,8 @@ func generateToken(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	appURL, err := parseURL(c.String("app"))
-	if err != nil || c.NumFlags() < 1 {
+	appURL, err := getAppURLFromArgs(c)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "Please provide a url.")
 		return err
 	}

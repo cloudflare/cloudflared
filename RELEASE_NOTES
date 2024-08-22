@@ -1,3 +1,7 @@
+2024.8.2
+- 2024-08-05 TUN-8583: change final directory of artifacts
+- 2024-08-05 TUN-8585: Avoid creating GH client when dry-run is true
+
 2024.7.3
 - 2024-07-31 TUN-8546: Fix final artifacts paths
 

@@ -218,6 +218,10 @@ cloudflared-pkg: cloudflared cloudflared.1
 cloudflared-msi:
 	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) --output cloudflared-$(VERSION)-$(TARGET_ARCH).msi cloudflared.wxs
 
+.PHONY: github-release-dryrun
+github-release-dryrun:
+	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION) --dry-run
+
 .PHONY: github-release
 github-release:
 	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION)
