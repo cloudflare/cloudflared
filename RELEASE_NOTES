@@ -1,3 +1,8 @@
+2024.8.3
+- 2024-08-15 TUN-8591 login command without extra text
+- 2024-03-25 remove code that will not be executed
+- 2024-03-25 remove code that will not be executed
+
 2024.8.2
 - 2024-08-05 TUN-8583: change final directory of artifacts
 - 2024-08-05 TUN-8585: Avoid creating GH client when dry-run is true
