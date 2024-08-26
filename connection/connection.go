@@ -53,6 +53,7 @@ type Credentials struct {
 	AccountTag   string
 	TunnelSecret []byte
 	TunnelID     uuid.UUID
+	Hostname     string
 }
 
 func (c *Credentials) Auth() pogs.TunnelAuth {
