@@ -192,8 +192,9 @@ func (mc mockNamedTunnelRPCClient) RegisterConnection(
 	}, nil
 }
 
-func (mc mockNamedTunnelRPCClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
+func (mc mockNamedTunnelRPCClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) error {
 	close(mc.unregistered)
+	return nil
 }
 
 func (mockNamedTunnelRPCClient) Close() {}

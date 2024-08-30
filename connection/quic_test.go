@@ -736,6 +736,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QU
 		nil,
 		15*time.Second,
 		0*time.Second,
+		0*time.Second,
 	)
 	require.NoError(t, err)
 	return qc

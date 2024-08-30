@@ -69,6 +69,7 @@ type QUICConnection struct {
 
 	rpcTimeout         time.Duration
 	streamWriteTimeout time.Duration
+	gracePeriod        time.Duration
 }
 
 // NewQUICConnection returns a new instance of QUICConnection.
@@ -86,6 +87,7 @@ func NewQUICConnection(
 	packetRouterConfig *ingress.GlobalRouterConfig,
 	rpcTimeout time.Duration,
 	streamWriteTimeout time.Duration,
+	gracePeriod time.Duration,
 ) (*QUICConnection, error) {
 	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, logger)
 	if err != nil {
@@ -122,6 +124,7 @@ func NewQUICConnection(
 		connIndex:            connIndex,
 		rpcTimeout:           rpcTimeout,
 		streamWriteTimeout:   streamWriteTimeout,
+		gracePeriod:          gracePeriod,
 	}, nil
 }
 
@@ -144,8 +147,17 @@ func (q *QUICConnection) Serve(ctx context.Context) error {
 	// In the future, if cloudflared can autonomously push traffic to the edge, we have to make sure the control
 	// stream is already fully registered before the other goroutines can proceed.
 	errGroup.Go(func() error {
-		defer cancel()
-		return q.serveControlStream(ctx, controlStream)
+		// err is equal to nil if we exit due to unregistration. If that happens we want to wait the full
+		// amount of the grace period, allowing requests to finish before we cancel the context, which will
+		// make cloudflared exit.
+		if err := q.serveControlStream(ctx, controlStream); err == nil {
+			select {
+			case <-ctx.Done():
+			case <-time.Tick(q.gracePeriod):
+			}
+		}
+		cancel()
+		return err
 	})
 	errGroup.Go(func() error {
 		defer cancel()
