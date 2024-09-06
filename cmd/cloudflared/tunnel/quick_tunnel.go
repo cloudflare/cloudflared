@@ -15,10 +15,7 @@ import (
 
 const httpTimeout = 15 * time.Second
 
-const disclaimer = "Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to" +
-	" experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee. If you " +
-	"intend to use Tunnels in production you should use a pre-created named tunnel by following: " +
-	"https://developers.cloudflare.com/cloudflare-one/connections/connect-apps"
+const disclaimer = "Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps"
 
 // RunQuickTunnel requests a tunnel from the specified service.
 // We use this to power quick tunnels on trycloudflare.com, but the
