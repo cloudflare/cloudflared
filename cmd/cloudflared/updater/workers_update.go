@@ -30,9 +30,9 @@ const (
 	// start the service
 	// exit with code 0 if we've reached this point indicating success.
 	windowsUpdateCommandTemplate = `sc stop cloudflared >nul 2>&1
+del "{{.OldPath}}"
 rename "{{.TargetPath}}" {{.OldName}}
 rename "{{.NewPath}}" {{.BinaryName}}
-del "{{.OldPath}}"
 sc start cloudflared >nul 2>&1
 exit /b 0`
 	batchFileName = "cfd_update.bat"
