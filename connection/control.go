@@ -6,8 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -118,32 +116,27 @@ func (c *controlStream) ServeControlStream(
 		}
 	}
 
-	return c.waitForUnregister(ctx, registrationClient)
+	c.waitForUnregister(ctx, registrationClient)
+	return nil
 }
 
-func (c *controlStream) waitForUnregister(ctx context.Context, registrationClient tunnelrpc.RegistrationClient) error {
+func (c *controlStream) waitForUnregister(ctx context.Context, registrationClient tunnelrpc.RegistrationClient) {
 	// wait for connection termination or start of graceful shutdown
 	defer registrationClient.Close()
-	var shutdownError error
 	select {
 	case <-ctx.Done():
-		shutdownError = ctx.Err()
 		break
 	case <-c.gracefulShutdownC:
 		c.stoppedGracefully = true
 	}
 
 	c.observer.sendUnregisteringEvent(c.connIndex)
-	err := registrationClient.GracefulShutdown(ctx, c.gracePeriod)
-	if err != nil {
-		return errors.Wrap(err, "Error shutting down control stream")
-	}
+	registrationClient.GracefulShutdown(ctx, c.gracePeriod)
 	c.observer.log.Info().
 		Int(management.EventTypeKey, int(management.Cloudflared)).
 		Uint8(LogFieldConnIndex, c.connIndex).
 		IPAddr(LogFieldIPAddress, c.edgeAddress).
 		Msg("Unregistered tunnel connection")
-	return shutdownError
 }
 
 func (c *controlStream) IsStopped() bool {

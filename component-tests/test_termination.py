@@ -45,10 +45,9 @@ class TestTermination:
             with connected:
                 connected.wait(self.timeout)
             # Send signal after the SSE connection is established
-            with self.within_grace_period():
-                self.terminate_by_signal(cloudflared, signal)
-                self.wait_eyeball_thread(
-                    in_flight_req, self.grace_period + self.timeout)
+            self.terminate_by_signal(cloudflared, signal)
+            self.wait_eyeball_thread(
+                in_flight_req, self.grace_period + self.timeout)
 
     # test cloudflared terminates before grace period expires when all eyeball
     # connections are drained
@@ -67,7 +66,7 @@ class TestTermination:
 
             with connected:
                 connected.wait(self.timeout)
-            with self.within_grace_period(has_connection=False):
+            with self.within_grace_period():
                 # Send signal after the SSE connection is established
                 self.terminate_by_signal(cloudflared, signal)
                 self.wait_eyeball_thread(in_flight_req, self.grace_period)
@@ -79,7 +78,7 @@ class TestTermination:
         with start_cloudflared(
                 tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True, capture_output=False) as cloudflared:
             wait_tunnel_ready(tunnel_url=config.get_url())
-            with self.within_grace_period(has_connection=False):
+            with self.within_grace_period():
                 self.terminate_by_signal(cloudflared, signal)
 
     def terminate_by_signal(self, cloudflared, sig):
@@ -93,21 +92,13 @@ class TestTermination:
 
     # Using this context asserts logic within the context is executed within grace period
     @contextmanager
-    def within_grace_period(self, has_connection=True):
+    def within_grace_period(self):
         try:
             start = time.time()
             yield
         finally:
-
-            # If the request takes longer than the grace period then we need to wait at most the grace period.
-            # If the request fell within the grace period cloudflared can close earlier, but to ensure that it doesn't
-            # close immediately we add a minimum boundary. If cloudflared shutdown in less than 1s it's likely that
-            # it shutdown as soon as it received SIGINT. The only way cloudflared can close immediately is if it has no
-            # in-flight requests
-            minimum = 1 if has_connection else 0
             duration = time.time() - start
-            # Here we truncate to ensure that we don't fail on minute differences like 10.1 instead of 10
-            assert minimum <= int(duration) <= self.grace_period
+            assert duration < self.grace_period
 
     def stream_request(self, config, connected, early_terminate):
         expected_terminate_message = "502 Bad Gateway"
