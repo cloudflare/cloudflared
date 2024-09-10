@@ -1,3 +1,6 @@
+2024.9.1
+- 2024-09-10 Revert Release 2024.9.0
+
 2024.9.0
 - 2024-09-10 TUN-8621: Fix cloudflared version in change notes.
 - 2024-09-06 PPIP-2310: Update quick tunnel disclaimer
