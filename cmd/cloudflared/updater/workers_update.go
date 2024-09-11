@@ -3,7 +3,6 @@ package updater
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +15,10 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 )
 
 const (
@@ -86,8 +89,25 @@ func (v *WorkersVersion) Apply() error {
 		return err
 	}
 
-	// check that the file is what is expected
-	if err := isValidChecksum(v.checksum, newFilePath); err != nil {
+	downloadSum, err := cliutil.FileChecksum(newFilePath)
+	if err != nil {
+		return err
+	}
+
+	// Check that the file downloaded matches what is expected.
+	if v.checksum != downloadSum {
+		return errors.New("checksum validation failed")
+	}
+
+	// Check if the currently running version has the same checksum
+	if downloadSum == buildInfo.Checksum {
+		// Currently running binary matches the downloaded binary so we have no reason to update. This is
+		// typically unexpected, as such we emit a sentry event.
+		localHub := sentry.CurrentHub().Clone()
+		err := errors.New("checksum validation matches currently running process")
+		localHub.CaptureException(err)
+		// Make sure to cleanup the new downloaded file since we aren't upgrading versions.
+		os.Remove(newFilePath)
 		return err
 	}
 
@@ -187,27 +207,6 @@ func isCompressedFile(urlstring string) bool {
 		return false
 	}
 	return strings.HasSuffix(u.Path, ".tgz")
-}
-
-// checks if the checksum in the json response matches the checksum of the file download
-func isValidChecksum(checksum, filePath string) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return err
-	}
-
-	hash := fmt.Sprintf("%x", h.Sum(nil))
-
-	if checksum != hash {
-		return errors.New("checksum validation failed")
-	}
-	return nil
 }
 
 // writeBatchFile writes a batch file out to disk

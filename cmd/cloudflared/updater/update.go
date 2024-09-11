@@ -14,6 +14,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 )
@@ -31,7 +32,7 @@ const (
 )
 
 var (
-	version                string
+	buildInfo              *cliutil.BuildInfo
 	BuiltForPackageManager = ""
 )
 
@@ -81,8 +82,8 @@ func (uo *UpdateOutcome) noUpdate() bool {
 	return uo.Error == nil && uo.Updated == false
 }
 
-func Init(v string) {
-	version = v
+func Init(info *cliutil.BuildInfo) {
+	buildInfo = info
 }
 
 func CheckForUpdate(options updateOptions) (CheckResult, error) {
@@ -100,11 +101,12 @@ func CheckForUpdate(options updateOptions) (CheckResult, error) {
 		cfdPath = encodeWindowsPath(cfdPath)
 	}
 
-	s := NewWorkersService(version, url, cfdPath, Options{IsBeta: options.isBeta,
+	s := NewWorkersService(buildInfo.CloudflaredVersion, url, cfdPath, Options{IsBeta: options.isBeta,
 		IsForced: options.isForced, RequestedVersion: options.intendedVersion})
 
 	return s.Check()
 }
+
 func encodeWindowsPath(path string) string {
 	// We do this because Windows allows spaces in directories such as
 	// Program Files but does not allow these directories to be spaced in batch files.
@@ -237,7 +239,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 	for {
 		updateOutcome := loggedUpdate(a.log, updateOptions{updateDisabled: !a.configurable.enabled})
 		if updateOutcome.Updated {
-			Init(updateOutcome.Version)
+			buildInfo.CloudflaredVersion = updateOutcome.Version
 			if IsSysV() {
 				// SysV doesn't have a mechanism to keep service alive, we have to restart the process
 				a.log.Info().Msg("Restarting service managed by SysV...")
