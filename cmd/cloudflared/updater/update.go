@@ -198,10 +198,9 @@ func loggedUpdate(log *zerolog.Logger, options updateOptions) UpdateOutcome {
 
 // AutoUpdater periodically checks for new version of cloudflared.
 type AutoUpdater struct {
-	configurable     *configurable
-	listeners        *gracenet.Net
-	updateConfigChan chan *configurable
-	log              *zerolog.Logger
+	configurable *configurable
+	listeners    *gracenet.Net
+	log          *zerolog.Logger
 }
 
 // AutoUpdaterConfigurable is the attributes of AutoUpdater that can be reconfigured during runtime
@@ -212,10 +211,9 @@ type configurable struct {
 
 func NewAutoUpdater(updateDisabled bool, freq time.Duration, listeners *gracenet.Net, log *zerolog.Logger) *AutoUpdater {
 	return &AutoUpdater{
-		configurable:     createUpdateConfig(updateDisabled, freq, log),
-		listeners:        listeners,
-		updateConfigChan: make(chan *configurable),
-		log:              log,
+		configurable: createUpdateConfig(updateDisabled, freq, log),
+		listeners:    listeners,
+		log:          log,
 	}
 }
 
@@ -234,9 +232,17 @@ func createUpdateConfig(updateDisabled bool, freq time.Duration, log *zerolog.Lo
 	}
 }
 
+// Run will perodically check for cloudflared updates, download them, and then restart the current cloudflared process
+// to use the new version. It delays the first update check by the configured frequency as to not attempt a
+// download immediately and restart after starting (in the case that there is an upgrade available).
 func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
 		updateOutcome := loggedUpdate(a.log, updateOptions{updateDisabled: !a.configurable.enabled})
 		if updateOutcome.Updated {
 			buildInfo.CloudflaredVersion = updateOutcome.Version
@@ -256,23 +262,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 		} else if updateOutcome.UserMessage != "" {
 			a.log.Warn().Msg(updateOutcome.UserMessage)
 		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case newConfigurable := <-a.updateConfigChan:
-			ticker.Stop()
-			a.configurable = newConfigurable
-			ticker = time.NewTicker(a.configurable.freq)
-			// Check if there is new version of cloudflared after receiving new AutoUpdaterConfigurable
-		case <-ticker.C:
-		}
 	}
-}
-
-// Update is the method to pass new AutoUpdaterConfigurable to a running AutoUpdater. It is safe to be called concurrently
-func (a *AutoUpdater) Update(updateDisabled bool, newFreq time.Duration) {
-	a.updateConfigChan <- createUpdateConfig(updateDisabled, newFreq, a.log)
 }
 
 func isAutoupdateEnabled(log *zerolog.Logger, updateDisabled bool, updateFreq time.Duration) bool {
