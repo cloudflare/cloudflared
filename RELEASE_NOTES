@@ -1,3 +1,18 @@
+2024.9.1
+- 2024-09-10 Revert Release 2024.9.0
+
+2024.9.0
+- 2024-09-10 TUN-8621: Fix cloudflared version in change notes.
+- 2024-09-06 PPIP-2310: Update quick tunnel disclaimer
+- 2024-08-30 TUN-8621: Prevent QUIC connection from closing before grace period after unregistering
+- 2024-08-09 TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport
+- 2024-06-26 TUN-8484: Print response when QuickTunnel can't be unmarshalled
+
+2024.8.3
+- 2024-08-15 TUN-8591 login command without extra text
+- 2024-03-25 remove code that will not be executed
+- 2024-03-25 remove code that will not be executed
+
 2024.8.2
 - 2024-08-05 TUN-8583: change final directory of artifacts
 - 2024-08-05 TUN-8585: Avoid creating GH client when dry-run is true
