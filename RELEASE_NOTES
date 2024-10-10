@@ -1,3 +1,15 @@
+2024.10.0
+- 2024-10-01 TUN-8646: Add datagram v3 support feature flag
+- 2024-09-30 TUN-8621: Fix cloudflared version in change notes to account for release date
+- 2024-09-19 Adding semgrep yaml file
+- 2024-09-12 TUN-8632: Delay checking auto-update by the provided frequency
+- 2024-09-11 TUN-8630: Check checksum of downloaded binary to compare to current for auto-updating
+- 2024-09-09 TUN-8629: Cloudflared update on Windows requires running it twice to update
+- 2024-09-06 PPIP-2310: Update quick tunnel disclaimer
+- 2024-08-30 TUN-8621: Prevent QUIC connection from closing before grace period after unregistering
+- 2024-08-09 TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport
+- 2024-06-26 TUN-8484: Print response when QuickTunnel can't be unmarshalled
+
 2024.9.1
 - 2024-09-10 Revert Release 2024.9.0
 
