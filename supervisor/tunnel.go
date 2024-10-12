@@ -604,6 +604,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		e.config.PacketConfig,
 		e.config.RPCTimeout,
 		e.config.WriteStreamTimeout,
+		e.config.GracePeriod,
 	)
 	if err != nil {
 		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")

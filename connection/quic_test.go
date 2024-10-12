@@ -484,6 +484,125 @@ func TestBuildHTTPRequest(t *testing.T) {
 			},
 			body: io.NopCloser(&bytes.Buffer{}),
 		},
+		{
+			name: "if edge sends the body is empty hint, set body to empty",
+			connectRequest: &pogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []pogs.Metadata{
+					{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					{
+						Key: "HttpMethod",
+						Val: "put",
+					},
+					{
+						Key: HTTPRequestBodyHintKey,
+						Val: RequestBodyHintEmpty.String(),
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "put",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header": []string{"Misc"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+				Body:          http.NoBody,
+			},
+			body: io.NopCloser(&bytes.Buffer{}),
+		},
+		{
+			name: "if edge sends the body has data hint, don't set body to empty",
+			connectRequest: &pogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []pogs.Metadata{
+					{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					{
+						Key: "HttpMethod",
+						Val: "put",
+					},
+					{
+						Key: HTTPRequestBodyHintKey,
+						Val: RequestBodyHintHasData.String(),
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "put",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header": []string{"Misc"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+				Body:          io.NopCloser(&bytes.Buffer{}),
+			},
+			body: io.NopCloser(&bytes.Buffer{}),
+		},
+		{
+			name: "if the http method usually has body, don't set body to empty",
+			connectRequest: &pogs.ConnectRequest{
+				Dest: "http://test.com",
+				Metadata: []pogs.Metadata{
+					{
+						Key: "HttpHeader:Another-Header",
+						Val: "Misc",
+					},
+					{
+						Key: "HttpHost",
+						Val: "cf.host",
+					},
+					{
+						Key: "HttpMethod",
+						Val: "post",
+					},
+				},
+			},
+			req: &http.Request{
+				Method: "post",
+				URL: &url.URL{
+					Scheme: "http",
+					Host:   "test.com",
+				},
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header: http.Header{
+					"Another-Header": []string{"Misc"},
+				},
+				ContentLength: 0,
+				Host:          "cf.host",
+				Body:          io.NopCloser(&bytes.Buffer{}),
+			},
+			body: io.NopCloser(&bytes.Buffer{}),
+		},
 	}
 
 	log := zerolog.Nop()
@@ -735,6 +854,7 @@ func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QU
 		&log,
 		nil,
 		15*time.Second,
+		0*time.Second,
 		0*time.Second,
 	)
 	require.NoError(t, err)
