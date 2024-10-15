@@ -19,7 +19,6 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -199,7 +198,7 @@ func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolF
 	haConnections.Inc()
 	defer haConnections.Dec()
 
-	connectedFuse := h2mux.NewBooleanFuse()
+	connectedFuse := newBooleanFuse()
 	go func() {
 		if connectedFuse.Await() {
 			connectedSignal.Notify()
@@ -375,7 +374,7 @@ func (e *EdgeTunnelServer) serveTunnel(
 	connLog *ConnAwareLogger,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
-	fuse *h2mux.BooleanFuse,
+	fuse *booleanFuse,
 	backoff *protocolFallback,
 	protocol connection.Protocol,
 ) (err error, recoverable bool) {
@@ -441,7 +440,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	connLog *ConnAwareLogger,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
-	fuse *h2mux.BooleanFuse,
+	fuse *booleanFuse,
 	backoff *protocolFallback,
 	protocol connection.Protocol,
 ) (err error, recoverable bool) {
@@ -645,7 +644,7 @@ func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gr
 }
 
 type connectedFuse struct {
-	fuse    *h2mux.BooleanFuse
+	fuse    *booleanFuse
 	backoff *protocolFallback
 }
 
