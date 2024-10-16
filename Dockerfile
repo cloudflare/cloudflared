@@ -28,6 +28,9 @@ COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cl
 # run as non-privileged user
 USER nonroot
 
+# set health-check
+HEALTHCHECK &{["CMD-SHELL" "curl --fail http://127.0.0.1:80/ || exit 1"] "1m0s" "40s" "0s" '\n'}
+
 # command / entrypoint of container
 ENTRYPOINT ["cloudflared", "--no-autoupdate"]
 CMD ["version"]
