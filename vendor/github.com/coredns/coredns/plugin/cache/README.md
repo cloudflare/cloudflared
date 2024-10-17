@@ -10,8 +10,7 @@ With *cache* enabled, all records except zone transfers and metadata records wil
 3600s. Caching is mostly useful in a scenario when fetching data from the backend (upstream,
 database, etc.) is expensive.
 
-*Cache* will change the query to enable DNSSEC (DNSSEC OK; DO) if it passes through the plugin. If
-the client didn't request any DNSSEC (records), these are filtered out when replying.
+*Cache* will pass DNSSEC (DNSSEC OK; DO) options through the plugin for upstream queries.
 
 This plugin can only be used once per Server Block.
 
@@ -40,6 +39,7 @@ cache [TTL] [ZONES...] {
     serve_stale [DURATION] [REFRESH_MODE]
     servfail DURATION
     disable success|denial [ZONES...]
+    keepttl
 }
 ~~~
 
@@ -70,6 +70,11 @@ cache [TTL] [ZONES...] {
   greater than 5 minutes.
 * `disable`  disable the success or denial cache for the listed **ZONES**.  If no **ZONES** are given, the specified
   cache will be disabled for all zones.
+* `keepttl` do not age TTL when serving responses from cache. The entry will still be removed from cache
+  when the TTL expires as normal, but until it expires responses will include the original TTL instead
+  of the remaining TTL. This can be useful if CoreDNS is used as an authoritative server and you want
+  to serve a consistent TTL to downstream clients. This is **NOT** recommended when CoreDNS is caching
+  records it is not authoritative for because it could result in downstream clients using stale answers.
 
 ## Capacity and Eviction
 

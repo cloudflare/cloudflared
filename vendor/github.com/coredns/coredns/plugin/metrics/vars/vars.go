@@ -17,19 +17,21 @@ var (
 	}, []string{"server", "zone", "view", "proto", "family", "type"})
 
 	RequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: plugin.Namespace,
-		Subsystem: subsystem,
-		Name:      "request_duration_seconds",
-		Buckets:   plugin.TimeBuckets,
-		Help:      "Histogram of the time (in seconds) each request took per zone.",
+		Namespace:                   plugin.Namespace,
+		Subsystem:                   subsystem,
+		Name:                        "request_duration_seconds",
+		Buckets:                     plugin.TimeBuckets,
+		NativeHistogramBucketFactor: plugin.NativeHistogramBucketFactor,
+		Help:                        "Histogram of the time (in seconds) each request took per zone.",
 	}, []string{"server", "zone", "view"})
 
 	RequestSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: plugin.Namespace,
-		Subsystem: subsystem,
-		Name:      "request_size_bytes",
-		Help:      "Size of the EDNS0 UDP buffer in bytes (64K for TCP) per zone and protocol.",
-		Buckets:   []float64{0, 100, 200, 300, 400, 511, 1023, 2047, 4095, 8291, 16e3, 32e3, 48e3, 64e3},
+		Namespace:                   plugin.Namespace,
+		Subsystem:                   subsystem,
+		Name:                        "request_size_bytes",
+		Help:                        "Size of the EDNS0 UDP buffer in bytes (64K for TCP) per zone and protocol.",
+		Buckets:                     []float64{0, 100, 200, 300, 400, 511, 1023, 2047, 4095, 8291, 16e3, 32e3, 48e3, 64e3},
+		NativeHistogramBucketFactor: plugin.NativeHistogramBucketFactor,
 	}, []string{"server", "zone", "view", "proto"})
 
 	RequestDo = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -40,11 +42,12 @@ var (
 	}, []string{"server", "zone", "view"})
 
 	ResponseSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: plugin.Namespace,
-		Subsystem: subsystem,
-		Name:      "response_size_bytes",
-		Help:      "Size of the returned response in bytes.",
-		Buckets:   []float64{0, 100, 200, 300, 400, 511, 1023, 2047, 4095, 8291, 16e3, 32e3, 48e3, 64e3},
+		Namespace:                   plugin.Namespace,
+		Subsystem:                   subsystem,
+		Name:                        "response_size_bytes",
+		Help:                        "Size of the returned response in bytes.",
+		Buckets:                     []float64{0, 100, 200, 300, 400, 511, 1023, 2047, 4095, 8291, 16e3, 32e3, 48e3, 64e3},
+		NativeHistogramBucketFactor: plugin.NativeHistogramBucketFactor,
 	}, []string{"server", "zone", "view", "proto"})
 
 	ResponseRcode = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -71,6 +74,13 @@ var (
 		Subsystem: subsystem,
 		Name:      "https_responses_total",
 		Help:      "Counter of DoH responses per server and http status code.",
+	}, []string{"server", "status"})
+
+	QUICResponsesCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: plugin.Namespace,
+		Subsystem: subsystem,
+		Name:      "quic_responses_total",
+		Help:      "Counter of DoQ responses per server and QUIC application code.",
 	}, []string{"server", "status"})
 )
 

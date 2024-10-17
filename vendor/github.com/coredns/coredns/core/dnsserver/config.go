@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin"
@@ -52,6 +53,11 @@ type Config struct {
 
 	// TLSConfig when listening for encrypted connections (gRPC, DNS-over-TLS).
 	TLSConfig *tls.Config
+
+	// Timeouts for TCP, TLS and HTTPS servers.
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
 
 	// TSIG secrets, [name]key.
 	TsigSecret map[string]string

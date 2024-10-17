@@ -113,6 +113,7 @@ type rwConn struct {
 func (rwc rwConn) Read(p []byte) (int, error) {
 	return rwc.r.Read(p)
 }
+
 func (rwc rwConn) Write(p []byte) (int, error) {
 	return rwc.w.Write(p)
 }
