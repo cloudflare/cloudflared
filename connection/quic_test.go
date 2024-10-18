@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	cfdquic "github.com/cloudflare/cloudflared/quic"
@@ -162,7 +164,7 @@ func TestQUICServer(t *testing.T) {
 				close(serverDone)
 			}()
 
-			qc := testQUICConnection(udpListener.LocalAddr(), t, uint8(i))
+			qc := testQUICConnection(netip.MustParseAddrPort(udpListener.LocalAddr().String()), t, uint8(i))
 
 			connDone := make(chan struct{})
 			go func() {
@@ -632,7 +634,6 @@ func TestServeUDPSession(t *testing.T) {
 	defer udpListener.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	val := udpListener.LocalAddr()
 
 	// Establish QUIC connection with edge
 	edgeQUICSessionChan := make(chan quic.Connection)
@@ -646,7 +647,7 @@ func TestServeUDPSession(t *testing.T) {
 	}()
 
 	// Random index to avoid reusing port
-	qc := testQUICConnection(val, t, 28)
+	qc := testQUICConnection(netip.MustParseAddrPort(udpListener.LocalAddr().String()), t, 28)
 	go qc.Serve(ctx)
 
 	edgeQUICSession := <-edgeQUICSessionChan
@@ -695,8 +696,20 @@ func TestNopCloserReadWriterCloseAfterEOF(t *testing.T) {
 }
 
 func TestCreateUDPConnReuseSourcePort(t *testing.T) {
+	edgeIPv4 := netip.MustParseAddrPort("0.0.0.0:0")
+	edgeIPv6 := netip.MustParseAddrPort("[::]:0")
+
+	// We assume the test environment has access to an IPv4 interface
+	testCreateUDPConnReuseSourcePortForEdgeIP(t, edgeIPv4)
+
+	if nettest.SupportsIPv6() {
+		testCreateUDPConnReuseSourcePortForEdgeIP(t, edgeIPv6)
+	}
+}
+
+func testCreateUDPConnReuseSourcePortForEdgeIP(t *testing.T, edgeIP netip.AddrPort) {
 	logger := zerolog.Nop()
-	conn, err := createUDPConnForConnIndex(0, nil, &logger)
+	conn, err := createUDPConnForConnIndex(0, nil, edgeIP, &logger)
 	require.NoError(t, err)
 
 	getPortFunc := func(conn *net.UDPConn) int {
@@ -710,17 +723,17 @@ func TestCreateUDPConnReuseSourcePort(t *testing.T) {
 	conn.Close()
 
 	// should get the same port as before.
-	conn, err = createUDPConnForConnIndex(0, nil, &logger)
+	conn, err = createUDPConnForConnIndex(0, nil, edgeIP, &logger)
 	require.NoError(t, err)
 	require.Equal(t, initialPort, getPortFunc(conn))
 
 	// new index, should get a different port
-	conn1, err := createUDPConnForConnIndex(1, nil, &logger)
+	conn1, err := createUDPConnForConnIndex(1, nil, edgeIP, &logger)
 	require.NoError(t, err)
 	require.NotEqual(t, initialPort, getPortFunc(conn1))
 
 	// not closing the conn and trying to obtain a new conn for same index should give a different random port
-	conn, err = createUDPConnForConnIndex(0, nil, &logger)
+	conn, err = createUDPConnForConnIndex(0, nil, edgeIP, &logger)
 	require.NoError(t, err)
 	require.NotEqual(t, initialPort, getPortFunc(conn))
 }
@@ -832,7 +845,7 @@ func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionI
 	return nil
 }
 
-func testQUICConnection(udpListenerAddr net.Addr, t *testing.T, index uint8) *QUICConnection {
+func testQUICConnection(udpListenerAddr netip.AddrPort, t *testing.T, index uint8) *QUICConnection {
 	tlsClientConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"argotunnel"},

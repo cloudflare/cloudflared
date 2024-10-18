@@ -90,7 +90,7 @@ type QUICConnection struct {
 func NewQUICConnection(
 	ctx context.Context,
 	quicConfig *quic.Config,
-	edgeAddr net.Addr,
+	edgeAddr netip.AddrPort,
 	localAddr net.IP,
 	connIndex uint8,
 	tlsConfig *tls.Config,
@@ -103,12 +103,12 @@ func NewQUICConnection(
 	streamWriteTimeout time.Duration,
 	gracePeriod time.Duration,
 ) (*QUICConnection, error) {
-	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, logger)
+	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, edgeAddr, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	session, err := quic.Dial(ctx, udpConn, edgeAddr, tlsConfig, quicConfig)
+	session, err := quic.Dial(ctx, udpConn, net.UDPAddrFromAddrPort(edgeAddr), tlsConfig, quicConfig)
 	if err != nil {
 		// close the udp server socket in case of error connecting to the edge
 		udpConn.Close()
@@ -641,18 +641,15 @@ func (rp *muxerWrapper) Close() error {
 	return nil
 }
 
-func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, logger *zerolog.Logger) (*net.UDPConn, error) {
+func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, edgeIP netip.AddrPort, logger *zerolog.Logger) (*net.UDPConn, error) {
 	portMapMutex.Lock()
 	defer portMapMutex.Unlock()
 
-	if localIP == nil {
-		localIP = net.IPv4zero
-	}
-
 	listenNetwork := "udp"
-	// https://github.com/quic-go/quic-go/issues/3793 DF bit cannot be set for dual stack listener on OSX
+	// https://github.com/quic-go/quic-go/issues/3793 DF bit cannot be set for dual stack listener ("udp") on macOS,
+	// to set the DF bit properly, the network string needs to be specific to the IP family.
 	if runtime.GOOS == "darwin" {
-		if localIP.To4() != nil {
+		if edgeIP.Addr().Is4() {
 			listenNetwork = "udp4"
 		} else {
 			listenNetwork = "udp6"

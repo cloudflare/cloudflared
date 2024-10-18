@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/netip"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -465,7 +466,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	case connection.QUIC:
 		connOptions := e.config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return e.serveQUIC(ctx,
-			addr.UDP,
+			addr.UDP.AddrPort(),
 			connLog,
 			connOptions,
 			controlStream,
@@ -548,7 +549,7 @@ func (e *EdgeTunnelServer) serveHTTP2(
 
 func (e *EdgeTunnelServer) serveQUIC(
 	ctx context.Context,
-	edgeAddr *net.UDPAddr,
+	edgeAddr netip.AddrPort,
 	connLogger *ConnAwareLogger,
 	connOptions *pogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
@@ -571,7 +572,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	// quic-go 0.44 increases the initial packet size to 1280 by default. That breaks anyone running tunnel through WARP
 	// because WARP MTU is 1280.
 	var initialPacketSize uint16 = 1252
-	if edgeAddr.IP.To4() == nil {
+	if edgeAddr.Addr().Is4() {
 		initialPacketSize = 1232
 	}
 
