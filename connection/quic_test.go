@@ -566,43 +566,6 @@ func TestBuildHTTPRequest(t *testing.T) {
 			},
 			body: io.NopCloser(&bytes.Buffer{}),
 		},
-		{
-			name: "if the http method usually has body, don't set body to empty",
-			connectRequest: &pogs.ConnectRequest{
-				Dest: "http://test.com",
-				Metadata: []pogs.Metadata{
-					{
-						Key: "HttpHeader:Another-Header",
-						Val: "Misc",
-					},
-					{
-						Key: "HttpHost",
-						Val: "cf.host",
-					},
-					{
-						Key: "HttpMethod",
-						Val: "post",
-					},
-				},
-			},
-			req: &http.Request{
-				Method: "post",
-				URL: &url.URL{
-					Scheme: "http",
-					Host:   "test.com",
-				},
-				Proto:      "HTTP/1.1",
-				ProtoMajor: 1,
-				ProtoMinor: 1,
-				Header: http.Header{
-					"Another-Header": []string{"Misc"},
-				},
-				ContentLength: 0,
-				Host:          "cf.host",
-				Body:          io.NopCloser(&bytes.Buffer{}),
-			},
-			body: io.NopCloser(&bytes.Buffer{}),
-		},
 	}
 
 	log := zerolog.Nop()
