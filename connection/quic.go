@@ -550,15 +550,6 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
 }
 
-// Borrowed from https://github.com/golang/go/blob/go1.22.6/src/net/http/request.go#L1541
-func requestMethodUsuallyLacksBody(req *http.Request) bool {
-	switch strings.ToUpper(req.Method) {
-	case "GET", "HEAD", "DELETE", "OPTIONS", "PROPFIND", "SEARCH":
-		return true
-	}
-	return false
-}
-
 func shouldSetRequestBodyToEmpty(connectRequest *pogs.ConnectRequest, metadata map[string]string, req *http.Request) bool {
 	switch metadata[HTTPRequestBodyHintKey] {
 	case RequestBodyHintEmpty.String():
@@ -576,7 +567,7 @@ func shouldSetRequestBodyToEmpty(connectRequest *pogs.ConnectRequest, metadata m
 	//   * there is no transfer-encoding=chunked already set.
 	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
 	// Reference: https://github.com/golang/go/blob/go1.22.2/src/net/http/transfer.go#L192-L206
-	return !isWebsocket && requestMethodUsuallyLacksBody(req) && !isTransferEncodingChunked(req) && req.ContentLength == 0
+	return !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0
 }
 
 // A helper struct that guarantees a call to close only affects read side, but not write side.
