@@ -1,3 +1,11 @@
+2024.10.1
+- 2024-10-21 Revert "TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport"
+- 2024-10-18 TUN-8688: Correct UDP bind for IPv6 edge connectivity on macOS
+- 2024-10-17 TUN-8685: Bump coredns dependency
+- 2024-10-16 TUN-8638: Add datagram v3 serializers and deserializers
+- 2024-10-15 chore: Remove h2mux code
+- 2024-10-11 TUN-8631: Abort release on version mismatch
+
 2024.10.0
 - 2024-10-01 TUN-8646: Add datagram v3 support feature flag
 - 2024-09-30 TUN-8621: Fix cloudflared version in change notes to account for release date
