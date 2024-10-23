@@ -1,4 +1,5 @@
 2024.10.1
+- 2024-10-23 TUN-8694: Fix github release script
 - 2024-10-21 Revert "TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport"
 - 2024-10-18 TUN-8688: Correct UDP bind for IPv6 edge connectivity on macOS
 - 2024-10-17 TUN-8685: Bump coredns dependency
