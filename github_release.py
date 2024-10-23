@@ -254,7 +254,7 @@ def assert_asset_version(binary_path, release_version):
         binary_version = get_binary_version(binary_path)
     elif ext == '.tgz':
         tar = tarfile.open(binary_path, "r:gz")
-        tar.extractall("tmp", filter='data')
+        tar.extractall("tmp")
         tar.close()
         binary_path = os.path.join(os.getcwd(), 'tmp', 'cloudflared')
         binary_version = get_binary_version(binary_path)
