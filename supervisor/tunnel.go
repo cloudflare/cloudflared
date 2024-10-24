@@ -590,32 +590,55 @@ func (e *EdgeTunnelServer) serveQUIC(
 		InitialPacketSize:          initialPacketSize,
 	}
 
-	quicConn, err := connection.NewQUICConnection(
+	// Dial the QUIC connection to the edge
+	conn, err := connection.DialQuic(
 		ctx,
 		quicConfig,
+		tlsConfig,
 		edgeAddr,
 		e.edgeBindAddr,
 		connIndex,
-		tlsConfig,
-		e.orchestrator,
-		connOptions,
-		controlStreamHandler,
 		connLogger.Logger(),
-		e.config.PacketConfig,
-		e.config.RPCTimeout,
-		e.config.WriteStreamTimeout,
-		e.config.GracePeriod,
 	)
 	if err != nil {
-		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to dial a quic connection")
 		return err, true
 	}
 
+	datagramSessionManager := connection.NewDatagramV2Connection(
+		ctx,
+		conn,
+		e.config.PacketConfig,
+		e.config.RPCTimeout,
+		e.config.WriteStreamTimeout,
+		connLogger.Logger(),
+	)
+
+	// Wrap the [quic.Connection] as a TunnelConnection
+	tunnelConn, err := connection.NewTunnelConnection(
+		ctx,
+		conn,
+		connIndex,
+		e.orchestrator,
+		datagramSessionManager,
+		controlStreamHandler,
+		connOptions,
+		e.config.RPCTimeout,
+		e.config.WriteStreamTimeout,
+		e.config.GracePeriod,
+		connLogger.Logger(),
+	)
+	if err != nil {
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new tunnel connection")
+		return err, true
+	}
+
+	// Serve the TunnelConnection
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		err := quicConn.Serve(serveCtx)
+		err := tunnelConn.Serve(serveCtx)
 		if err != nil {
-			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
+			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve tunnel connection")
 		}
 		return err
 	})
@@ -624,8 +647,8 @@ func (e *EdgeTunnelServer) serveQUIC(
 		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
 		if err != nil {
 			// forcefully break the connection (this is only used for testing)
-			// errgroup will return context canceled for the quicConn.Serve
-			connLogger.Logger().Debug().Msg("Forcefully breaking quic connection")
+			// errgroup will return context canceled for the tunnelConn.Serve
+			connLogger.Logger().Debug().Msg("Forcefully breaking tunnel connection")
 		}
 		return err
 	})

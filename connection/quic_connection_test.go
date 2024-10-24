@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -30,10 +29,11 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
+	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/packet"
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	rpcquic "github.com/cloudflare/cloudflared/tunnelrpc/quic"
 )
 
@@ -164,11 +164,11 @@ func TestQUICServer(t *testing.T) {
 				close(serverDone)
 			}()
 
-			qc := testQUICConnection(netip.MustParseAddrPort(udpListener.LocalAddr().String()), t, uint8(i))
+			tunnelConn, _ := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), uint8(i))
 
 			connDone := make(chan struct{})
 			go func() {
-				qc.Serve(ctx)
+				tunnelConn.Serve(ctx)
 				close(connDone)
 			}()
 
@@ -528,13 +528,14 @@ func TestServeUDPSession(t *testing.T) {
 	}()
 
 	// Random index to avoid reusing port
-	qc := testQUICConnection(netip.MustParseAddrPort(udpListener.LocalAddr().String()), t, 28)
-	go qc.Serve(ctx)
+	tunnelConn, datagramConn := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), 28)
+	go tunnelConn.Serve(ctx)
 
 	edgeQUICSession := <-edgeQUICSessionChan
-	serveSession(ctx, qc, edgeQUICSession, closedByOrigin, io.EOF.Error(), t)
-	serveSession(ctx, qc, edgeQUICSession, closedByTimeout, datagramsession.SessionIdleErr(time.Millisecond*50).Error(), t)
-	serveSession(ctx, qc, edgeQUICSession, closedByRemote, "eyeball closed connection", t)
+
+	serveSession(ctx, datagramConn, edgeQUICSession, closedByOrigin, io.EOF.Error(), t)
+	serveSession(ctx, datagramConn, edgeQUICSession, closedByTimeout, datagramsession.SessionIdleErr(time.Millisecond*50).Error(), t)
+	serveSession(ctx, datagramConn, edgeQUICSession, closedByRemote, "eyeball closed connection", t)
 	cancel()
 }
 
@@ -619,19 +620,19 @@ func testCreateUDPConnReuseSourcePortForEdgeIP(t *testing.T, edgeIP netip.AddrPo
 	require.NotEqual(t, initialPort, getPortFunc(conn))
 }
 
-func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
+func serveSession(ctx context.Context, datagramConn *datagramV2Connection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
 	var (
 		payload = []byte(t.Name())
 	)
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	// Registers and run a new session
-	session, err := qc.sessionManager.RegisterSession(ctx, sessionID, cfdConn)
+	session, err := datagramConn.sessionManager.RegisterSession(ctx, sessionID, cfdConn)
 	require.NoError(t, err)
 
 	sessionDone := make(chan struct{})
 	go func() {
-		qc.serveUDPSession(session, time.Millisecond*50)
+		datagramConn.serveUDPSession(session, time.Millisecond*50)
 		close(sessionDone)
 	}()
 
@@ -655,7 +656,7 @@ func serveSession(ctx context.Context, qc *QUICConnection, edgeQUICSession quic.
 	case closedByOrigin:
 		originConn.Close()
 	case closedByRemote:
-		err = qc.UnregisterUdpSession(ctx, sessionID, expectedReason)
+		err = datagramConn.UnregisterUdpSession(ctx, sessionID, expectedReason)
 		require.NoError(t, err)
 	case closedByTimeout:
 	}
@@ -726,33 +727,58 @@ func (s mockSessionRPCServer) UnregisterUdpSession(ctx context.Context, sessionI
 	return nil
 }
 
-func testQUICConnection(udpListenerAddr netip.AddrPort, t *testing.T, index uint8) *QUICConnection {
+func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) (TunnelConnection, *datagramV2Connection) {
 	tlsClientConfig := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"argotunnel"},
 	}
 	// Start a mock httpProxy
-	log := zerolog.New(os.Stdout)
+	log := zerolog.New(io.Discard)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	qc, err := NewQUICConnection(
+
+	// Dial the QUIC connection to the edge
+	conn, err := DialQuic(
 		ctx,
 		testQUICConfig,
-		udpListenerAddr,
-		nil,
-		index,
 		tlsClientConfig,
-		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
-		&tunnelpogs.ConnectionOptions{},
-		fakeControlStream{},
+		serverAddr,
+		nil, // connect on a random port
+		index,
 		&log,
-		nil,
+	)
+
+	// Start a session manager for the connection
+	sessionDemuxChan := make(chan *packet.Session, 4)
+	datagramMuxer := cfdquic.NewDatagramMuxerV2(conn, &log, sessionDemuxChan)
+	sessionManager := datagramsession.NewManager(&log, datagramMuxer.SendToSession, sessionDemuxChan)
+	packetRouter := ingress.NewPacketRouter(nil, datagramMuxer, &log)
+
+	datagramConn := &datagramV2Connection{
+		conn,
+		sessionManager,
+		datagramMuxer,
+		packetRouter,
+		15 * time.Second,
+		0 * time.Second,
+		&log,
+	}
+
+	tunnelConn, err := NewTunnelConnection(
+		ctx,
+		conn,
+		index,
+		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
+		datagramConn,
+		fakeControlStream{},
+		&pogs.ConnectionOptions{},
 		15*time.Second,
 		0*time.Second,
 		0*time.Second,
+		&log,
 	)
 	require.NoError(t, err)
-	return qc
+	return tunnelConn, datagramConn
 }
 
 type mockReaderNoopWriter struct {

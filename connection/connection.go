@@ -36,6 +36,13 @@ var (
 	flushableContentTypes = []string{sseContentType, grpcContentType}
 )
 
+// TunnelConnection represents the connection to the edge.
+// The Serve method is provided to allow clients to handle any errors from the connection encountered during
+// processing of the connection. Cancelling of the context provided to Serve will close the connection.
+type TunnelConnection interface {
+	Serve(ctx context.Context) error
+}
+
 type Orchestrator interface {
 	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
 	GetConfigJSON() ([]byte, error)
