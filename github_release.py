@@ -286,21 +286,20 @@ def main():
         else:
             client = Github(args.api_key)
             repo = client.get_repo(CLOUDFLARED_REPO)
-            release = get_or_create_release(repo, args.release_version, args.dry_run)
 
             if os.path.isdir(args.path):
                 onlyfiles = [f for f in listdir(args.path) if isfile(join(args.path, f))]
                 for filename in onlyfiles:
                     binary_path = os.path.join(args.path, filename)
                     assert_asset_version(binary_path, args.release_version)
+                release = get_or_create_release(repo, args.release_version, args.dry_run)
                 for filename in onlyfiles:
                     binary_path = os.path.join(args.path, filename)
                     upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
                     args.kv_api_token)
                     move_asset(binary_path, filename)
             else:
-                upload_asset(release, args.path, args.name, args.release_version, args.kv_account_id, args.namespace_id,
-                    args.kv_api_token)
+                raise Exception("the argument path must be a directory")
 
     except Exception as e:
         logging.exception(e)
