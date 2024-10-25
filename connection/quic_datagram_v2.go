@@ -124,7 +124,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
 		originProxy.Close()
-		log.Err(err).Str("sessionID", sessionID.String()).Msgf("Failed to register udp session")
+		log.Err(err).Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 	go q.serveUDPSession(session, closeAfterIdleHint)
 
 	log.Debug().
-		Str("sessionID", sessionID.String()).
+		Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).
 		Str("src", originProxy.LocalAddr().String()).
 		Str("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)).
 		Msgf("Registered session")
@@ -163,7 +163,7 @@ func (q *datagramV2Connection) serveUDPSession(session *datagramsession.Session,
 	}
 	q.logger.Debug().Err(err).
 		Int(management.EventTypeKey, int(management.UDP)).
-		Str("sessionID", session.ID.String()).
+		Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(session.ID)).
 		Msg("Session terminated")
 }
 
@@ -176,7 +176,7 @@ func (q *datagramV2Connection) closeUDPSession(ctx context.Context, sessionID uu
 		// with edge
 		q.logger.Debug().Err(err).
 			Int(management.EventTypeKey, int(management.UDP)).
-			Str("sessionID", sessionID.String()).
+			Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).
 			Msgf("Failed to open quic stream to unregister udp session with edge")
 		return
 	}
@@ -187,14 +187,14 @@ func (q *datagramV2Connection) closeUDPSession(ctx context.Context, sessionID uu
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection
 		// with edge
-		q.logger.Err(err).Str("sessionID", sessionID.String()).
+		q.logger.Err(err).Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).
 			Msgf("Failed to open rpc stream to unregister udp session with edge")
 		return
 	}
 	defer rpcClientStream.Close()
 
 	if err := rpcClientStream.UnregisterUdpSession(ctx, sessionID, message); err != nil {
-		q.logger.Err(err).Str("sessionID", sessionID.String()).
+		q.logger.Err(err).Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).
 			Msgf("Failed to unregister udp session with edge")
 	}
 }
