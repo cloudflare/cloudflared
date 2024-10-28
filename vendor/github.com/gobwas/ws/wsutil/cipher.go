@@ -34,7 +34,7 @@ func (c *CipherReader) Read(p []byte) (n int, err error) {
 	n, err = c.r.Read(p)
 	ws.Cipher(p[:n], c.mask, c.pos)
 	c.pos += n
-	return
+	return n, err
 }
 
 // CipherWriter implements io.Writer that applies xor-cipher to the bytes
@@ -68,5 +68,5 @@ func (c *CipherWriter) Write(p []byte) (n int, err error) {
 	n, err = c.w.Write(cp)
 	c.pos += n
 
-	return
+	return n, err
 }

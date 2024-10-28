@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/netip"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -19,7 +20,6 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
-	"github.com/cloudflare/cloudflared/h2mux"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -199,7 +199,7 @@ func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolF
 	haConnections.Inc()
 	defer haConnections.Dec()
 
-	connectedFuse := h2mux.NewBooleanFuse()
+	connectedFuse := newBooleanFuse()
 	go func() {
 		if connectedFuse.Await() {
 			connectedSignal.Notify()
@@ -375,7 +375,7 @@ func (e *EdgeTunnelServer) serveTunnel(
 	connLog *ConnAwareLogger,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
-	fuse *h2mux.BooleanFuse,
+	fuse *booleanFuse,
 	backoff *protocolFallback,
 	protocol connection.Protocol,
 ) (err error, recoverable bool) {
@@ -441,7 +441,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	connLog *ConnAwareLogger,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
-	fuse *h2mux.BooleanFuse,
+	fuse *booleanFuse,
 	backoff *protocolFallback,
 	protocol connection.Protocol,
 ) (err error, recoverable bool) {
@@ -466,7 +466,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	case connection.QUIC:
 		connOptions := e.config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return e.serveQUIC(ctx,
-			addr.UDP,
+			addr.UDP.AddrPort(),
 			connLog,
 			connOptions,
 			controlStream,
@@ -549,7 +549,7 @@ func (e *EdgeTunnelServer) serveHTTP2(
 
 func (e *EdgeTunnelServer) serveQUIC(
 	ctx context.Context,
-	edgeAddr *net.UDPAddr,
+	edgeAddr netip.AddrPort,
 	connLogger *ConnAwareLogger,
 	connOptions *pogs.ConnectionOptions,
 	controlStreamHandler connection.ControlStreamHandler,
@@ -572,7 +572,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	// quic-go 0.44 increases the initial packet size to 1280 by default. That breaks anyone running tunnel through WARP
 	// because WARP MTU is 1280.
 	var initialPacketSize uint16 = 1252
-	if edgeAddr.IP.To4() == nil {
+	if edgeAddr.Addr().Is4() {
 		initialPacketSize = 1232
 	}
 
@@ -590,32 +590,55 @@ func (e *EdgeTunnelServer) serveQUIC(
 		InitialPacketSize:          initialPacketSize,
 	}
 
-	quicConn, err := connection.NewQUICConnection(
+	// Dial the QUIC connection to the edge
+	conn, err := connection.DialQuic(
 		ctx,
 		quicConfig,
+		tlsConfig,
 		edgeAddr,
 		e.edgeBindAddr,
 		connIndex,
-		tlsConfig,
-		e.orchestrator,
-		connOptions,
-		controlStreamHandler,
 		connLogger.Logger(),
-		e.config.PacketConfig,
-		e.config.RPCTimeout,
-		e.config.WriteStreamTimeout,
-		e.config.GracePeriod,
 	)
 	if err != nil {
-		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to dial a quic connection")
 		return err, true
 	}
 
+	datagramSessionManager := connection.NewDatagramV2Connection(
+		ctx,
+		conn,
+		e.config.PacketConfig,
+		e.config.RPCTimeout,
+		e.config.WriteStreamTimeout,
+		connLogger.Logger(),
+	)
+
+	// Wrap the [quic.Connection] as a TunnelConnection
+	tunnelConn, err := connection.NewTunnelConnection(
+		ctx,
+		conn,
+		connIndex,
+		e.orchestrator,
+		datagramSessionManager,
+		controlStreamHandler,
+		connOptions,
+		e.config.RPCTimeout,
+		e.config.WriteStreamTimeout,
+		e.config.GracePeriod,
+		connLogger.Logger(),
+	)
+	if err != nil {
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new tunnel connection")
+		return err, true
+	}
+
+	// Serve the TunnelConnection
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		err := quicConn.Serve(serveCtx)
+		err := tunnelConn.Serve(serveCtx)
 		if err != nil {
-			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
+			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve tunnel connection")
 		}
 		return err
 	})
@@ -624,8 +647,8 @@ func (e *EdgeTunnelServer) serveQUIC(
 		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
 		if err != nil {
 			// forcefully break the connection (this is only used for testing)
-			// errgroup will return context canceled for the quicConn.Serve
-			connLogger.Logger().Debug().Msg("Forcefully breaking quic connection")
+			// errgroup will return context canceled for the tunnelConn.Serve
+			connLogger.Logger().Debug().Msg("Forcefully breaking tunnel connection")
 		}
 		return err
 	})
@@ -645,7 +668,7 @@ func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gr
 }
 
 type connectedFuse struct {
-	fuse    *h2mux.BooleanFuse
+	fuse    *booleanFuse
 	backoff *protocolFallback
 }
 

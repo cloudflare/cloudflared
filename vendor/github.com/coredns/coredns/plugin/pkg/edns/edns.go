@@ -36,8 +36,7 @@ func SupportedOption(option uint16) bool {
 
 // Version checks the EDNS version in the request. If error
 // is nil everything is OK and we can invoke the plugin. If non-nil, the
-// returned Msg is valid to be returned to the client (and should). For some
-// reason this response should not contain a question RR in the question section.
+// returned Msg is valid to be returned to the client (and should).
 func Version(req *dns.Msg) (*dns.Msg, error) {
 	opt := req.IsEdns0()
 	if opt == nil {
@@ -48,8 +47,6 @@ func Version(req *dns.Msg) (*dns.Msg, error) {
 	}
 	m := new(dns.Msg)
 	m.SetReply(req)
-	// zero out question section, wtf.
-	m.Question = nil
 
 	o := new(dns.OPT)
 	o.Hdr.Name = "."

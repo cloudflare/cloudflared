@@ -7,17 +7,15 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-
-	"github.com/cloudflare/cloudflared/h2mux"
 )
 
 var (
-	// h2mux-style special headers
+	// internal special headers
 	RequestUserHeaders  = "cf-cloudflared-request-headers"
 	ResponseUserHeaders = "cf-cloudflared-response-headers"
 	ResponseMetaHeader  = "cf-cloudflared-response-meta"
 
-	// h2mux-style special headers
+	// internal special headers
 	CanonicalResponseUserHeaders = http.CanonicalHeaderKey(ResponseUserHeaders)
 	CanonicalResponseMetaHeader  = http.CanonicalHeaderKey(ResponseMetaHeader)
 )
@@ -27,6 +25,13 @@ var (
 	responseMetaHeaderCfd    = mustInitRespMetaHeader("cloudflared")
 	responseMetaHeaderOrigin = mustInitRespMetaHeader("origin")
 )
+
+// HTTPHeader is a custom header struct that expects only ever one value for the header.
+// This structure is used to serialize the headers and attach them to the HTTP2 request when proxying.
+type HTTPHeader struct {
+	Name  string
+	Value string
+}
 
 type responseMetaHeader struct {
 	Source string `json:"src"`
@@ -104,10 +109,10 @@ func SerializeHeaders(h1Headers http.Header) string {
 }
 
 // Deserialize headers serialized by `SerializeHeader`
-func DeserializeHeaders(serializedHeaders string) ([]h2mux.Header, error) {
+func DeserializeHeaders(serializedHeaders string) ([]HTTPHeader, error) {
 	const unableToDeserializeErr = "Unable to deserialize headers"
 
-	var deserialized []h2mux.Header
+	var deserialized []HTTPHeader
 	for _, serializedPair := range strings.Split(serializedHeaders, ";") {
 		if len(serializedPair) == 0 {
 			continue
@@ -130,7 +135,7 @@ func DeserializeHeaders(serializedHeaders string) ([]h2mux.Header, error) {
 			return nil, errors.Wrap(err, unableToDeserializeErr)
 		}
 
-		deserialized = append(deserialized, h2mux.Header{
+		deserialized = append(deserialized, HTTPHeader{
 			Name:  string(deserializedName),
 			Value: string(deserializedValue),
 		})

@@ -65,8 +65,6 @@ func initAcceptFromNonce(accept, nonce []byte) {
 
 	sum := sha1.Sum(p)
 	base64.StdEncoding.Encode(accept, sum[:])
-
-	return
 }
 
 func writeAccept(bw *bufio.Writer, nonce []byte) (int, error) {

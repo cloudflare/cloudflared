@@ -19,7 +19,6 @@
 //
 //	result := Scrape("http://localhost:9153/metrics")
 //	v := MetricValue("coredns_cache_capacity", result)
-//
 package test
 
 import (
@@ -217,7 +216,7 @@ func makeBuckets(m *dto.Metric) map[string]string {
 
 func fetchMetricFamilies(url string, ch chan<- *dto.MetricFamily) {
 	defer close(ch)
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return
 	}

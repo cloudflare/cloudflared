@@ -16,9 +16,12 @@ const (
 	logFieldLBProbe       = "lbProbe"
 	logFieldRule          = "ingressRule"
 	logFieldOriginService = "originService"
-	logFieldFlowID        = "flowID"
 	logFieldConnIndex     = "connIndex"
 	logFieldDestAddr      = "destAddr"
+)
+
+var (
+	LogFieldFlowID = "flowID"
 )
 
 // newHTTPLogger creates a child zerolog.Logger from the provided with added context from the HTTP request, ingress
@@ -47,7 +50,7 @@ func newTCPLogger(logger *zerolog.Logger, req *connection.TCPRequest) zerolog.Lo
 		Int(management.EventTypeKey, int(management.TCP)).
 		Uint8(logFieldConnIndex, req.ConnIndex).
 		Str(logFieldOriginService, ingress.ServiceWarpRouting).
-		Str(logFieldFlowID, req.FlowID).
+		Str(LogFieldFlowID, req.FlowID).
 		Str(logFieldDestAddr, req.Dest).
 		Uint8(logFieldConnIndex, req.ConnIndex).
 		Logger()
