@@ -346,7 +346,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--deb-based-releases", default=["bookworm", "bullseye", "buster", "noble", "jammy", "impish", "focal", 
+        "--deb-based-releases", default=["bookworm", "bullseye", "buster", "noble", "jammy", "impish", "focal",
                                          "bionic", "xenial", "trusty"],
         help="list of debian based releases that need to be packaged for"
     )
