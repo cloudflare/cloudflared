@@ -21,7 +21,7 @@ func makePayload(size int) []byte {
 }
 
 func TestSessionRegistration_MarshalUnmarshal(t *testing.T) {
-	payload := makePayload(1254)
+	payload := makePayload(1280)
 	tests := []*v3.UDPSessionRegistrationDatagram{
 		// Default (IPv4)
 		{
@@ -236,7 +236,7 @@ func TestSessionPayload(t *testing.T) {
 	})
 
 	t.Run("payload size too large", func(t *testing.T) {
-		datagram := makePayload(17 + 1264) // 1263 is the largest payload size allowed
+		datagram := makePayload(17 + 1281) // 1280 is the largest payload size allowed
 		err := v3.MarshalPayloadHeaderTo(testRequestID, datagram)
 		if err != nil {
 			t.Error(err)

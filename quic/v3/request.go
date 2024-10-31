@@ -3,6 +3,7 @@ package v3
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 const (
@@ -35,6 +36,10 @@ func RequestIDFromSlice(data []byte) (RequestID, error) {
 		hi: binary.BigEndian.Uint64(data[:8]),
 		lo: binary.BigEndian.Uint64(data[8:]),
 	}, nil
+}
+
+func (id RequestID) String() string {
+	return fmt.Sprintf("%016x%016x", id.hi, id.lo)
 }
 
 // Compare returns an integer comparing two IPs.

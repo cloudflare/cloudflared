@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 )
 
 type UDPProxy interface {
@@ -29,4 +30,17 @@ func DialUDP(dstIP net.IP, dstPort uint16) (UDPProxy, error) {
 	}
 
 	return &udpProxy{udpConn}, nil
+}
+
+func DialUDPAddrPort(dest netip.AddrPort) (*net.UDPConn, error) {
+	addr := net.UDPAddrFromAddrPort(dest)
+
+	// We use nil as local addr to force runtime to find the best suitable local address IP given the destination
+	// address as context.
+	udpConn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create UDP proxy to origin (%v:%v): %w", dest.Addr(), dest.Port(), err)
+	}
+
+	return udpConn, nil
 }

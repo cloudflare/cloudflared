@@ -24,7 +24,7 @@ const (
 	datagramTypeLen = 1
 
 	// 1280 is the default datagram packet length used before MTU discovery: https://github.com/quic-go/quic-go/blob/v0.45.0/internal/protocol/params.go#L12
-	maxDatagramLen = 1280
+	maxDatagramPayloadLen = 1280
 )
 
 func parseDatagramType(data []byte) (DatagramType, error) {
@@ -100,10 +100,10 @@ func (s *UDPSessionRegistrationDatagram) MarshalBinary() (data []byte, err error
 	}
 	var maxPayloadLen int
 	if ipv6 {
-		maxPayloadLen = maxDatagramLen - sessionRegistrationIPv6DatagramHeaderLen
+		maxPayloadLen = maxDatagramPayloadLen + sessionRegistrationIPv6DatagramHeaderLen
 		flags |= sessionRegistrationFlagsIPMask
 	} else {
-		maxPayloadLen = maxDatagramLen - sessionRegistrationIPv4DatagramHeaderLen
+		maxPayloadLen = maxDatagramPayloadLen + sessionRegistrationIPv4DatagramHeaderLen
 	}
 	// Make sure that the payload being bundled can actually fit in the payload destination
 	if len(s.Payload) > maxPayloadLen {
@@ -195,7 +195,7 @@ const (
 	datagramPayloadHeaderLen = datagramTypeLen + datagramRequestIdLen
 
 	// The maximum size that a proxied UDP payload can be in a [UDPSessionPayloadDatagram]
-	maxPayloadPlusHeaderLen = maxDatagramLen - datagramPayloadHeaderLen
+	maxPayloadPlusHeaderLen = maxDatagramPayloadLen + datagramPayloadHeaderLen
 )
 
 // The datagram structure for UDPSessionPayloadDatagram is:
@@ -270,7 +270,7 @@ const (
 	datagramSessionRegistrationResponseLen = datagramTypeLen + datagramRespTypeLen + datagramRequestIdLen + datagramRespErrMsgLen
 
 	// The maximum size that an error message can be in a [UDPSessionRegistrationResponseDatagram].
-	maxResponseErrorMessageLen = maxDatagramLen - datagramSessionRegistrationResponseLen
+	maxResponseErrorMessageLen = maxDatagramPayloadLen - datagramSessionRegistrationResponseLen
 )
 
 // SessionRegistrationResp represents all of the responses that a UDP session registration response
