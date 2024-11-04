@@ -122,7 +122,7 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 
 		// Each incoming datagram will be processed in a new go routine to handle the demuxing and action associated.
 		go func() {
-			typ, err := parseDatagramType(datagram)
+			typ, err := ParseDatagramType(datagram)
 			if err != nil {
 				c.logger.Err(err).Msgf("unable to parse datagram type: %d", typ)
 				return

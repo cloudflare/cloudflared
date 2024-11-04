@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
@@ -47,4 +49,16 @@ func TestRequestIDParsing(t *testing.T) {
 	if !slices.Equal(buf1, buf2) {
 		t.Fatalf("buf1 != buf2: %+v %+v", buf1, buf2)
 	}
+}
+
+func TestRequestID_MarshalBinary(t *testing.T) {
+	buf := make([]byte, 16)
+	err := testRequestID.MarshalBinaryTo(buf)
+	require.NoError(t, err)
+	require.Len(t, buf, 16)
+
+	parsed := v3.RequestID{}
+	err = parsed.UnmarshalBinary(buf)
+	require.NoError(t, err)
+	require.Equal(t, testRequestID, parsed)
 }

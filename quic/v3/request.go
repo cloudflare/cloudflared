@@ -75,3 +75,15 @@ func (id RequestID) MarshalBinaryTo(data []byte) error {
 	binary.BigEndian.PutUint64(data[8:], id.lo)
 	return nil
 }
+
+func (id *RequestID) UnmarshalBinary(data []byte) error {
+	if len(data) != 16 {
+		return fmt.Errorf("invalid length slice provided to unmarshal: %d (expected 16)", len(data))
+	}
+
+	*id = RequestID{
+		binary.BigEndian.Uint64(data[:8]),
+		binary.BigEndian.Uint64(data[8:]),
+	}
+	return nil
+}

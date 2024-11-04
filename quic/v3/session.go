@@ -84,14 +84,14 @@ func (s *session) Serve(ctx context.Context) error {
 	go func() {
 		// QUIC implementation copies data to another buffer before returning https://github.com/quic-go/quic-go/blob/v0.24.0/session.go#L1967-L1975
 		// This makes it safe to share readBuffer between iterations
-		readBuffer := [maxOriginUDPPacketSize + datagramPayloadHeaderLen]byte{}
+		readBuffer := [maxOriginUDPPacketSize + DatagramPayloadHeaderLen]byte{}
 		// To perform a zero copy write when passing the datagram to the connection, we prepare the buffer with
 		// the required datagram header information. We can reuse this buffer for this session since the header is the
 		// same for the each read.
-		MarshalPayloadHeaderTo(s.id, readBuffer[:datagramPayloadHeaderLen])
+		MarshalPayloadHeaderTo(s.id, readBuffer[:DatagramPayloadHeaderLen])
 		for {
 			// Read from the origin UDP socket
-			n, err := s.origin.Read(readBuffer[datagramPayloadHeaderLen:])
+			n, err := s.origin.Read(readBuffer[DatagramPayloadHeaderLen:])
 			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				s.log.Debug().Msg("Session (origin) connection closed")
 			}
@@ -109,7 +109,7 @@ func (s *session) Serve(ctx context.Context) error {
 			}
 			// Sending a packet to the session does block on the [quic.Connection], however, this is okay because it
 			// will cause back-pressure to the kernel buffer if the writes are not fast enough to the edge.
-			err = s.eyeball.SendUDPSessionDatagram(readBuffer[:datagramPayloadHeaderLen+n])
+			err = s.eyeball.SendUDPSessionDatagram(readBuffer[:DatagramPayloadHeaderLen+n])
 			if err != nil {
 				s.closeChan <- err
 				return

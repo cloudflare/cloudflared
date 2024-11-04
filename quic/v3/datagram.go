@@ -27,7 +27,7 @@ const (
 	maxDatagramPayloadLen = 1280
 )
 
-func parseDatagramType(data []byte) (DatagramType, error) {
+func ParseDatagramType(data []byte) (DatagramType, error) {
 	if len(data) < datagramTypeLen {
 		return 0, ErrDatagramHeaderTooSmall
 	}
@@ -140,7 +140,7 @@ func (s *UDPSessionRegistrationDatagram) MarshalBinary() (data []byte, err error
 }
 
 func (s *UDPSessionRegistrationDatagram) UnmarshalBinary(data []byte) error {
-	datagramType, err := parseDatagramType(data)
+	datagramType, err := ParseDatagramType(data)
 	if err != nil {
 		return err
 	}
@@ -192,10 +192,10 @@ type UDPSessionPayloadDatagram struct {
 }
 
 const (
-	datagramPayloadHeaderLen = datagramTypeLen + datagramRequestIdLen
+	DatagramPayloadHeaderLen = datagramTypeLen + datagramRequestIdLen
 
 	// The maximum size that a proxied UDP payload can be in a [UDPSessionPayloadDatagram]
-	maxPayloadPlusHeaderLen = maxDatagramPayloadLen + datagramPayloadHeaderLen
+	maxPayloadPlusHeaderLen = maxDatagramPayloadLen + DatagramPayloadHeaderLen
 )
 
 // The datagram structure for UDPSessionPayloadDatagram is:
@@ -230,7 +230,7 @@ func MarshalPayloadHeaderTo(requestID RequestID, payload []byte) error {
 }
 
 func (s *UDPSessionPayloadDatagram) UnmarshalBinary(data []byte) error {
-	datagramType, err := parseDatagramType(data)
+	datagramType, err := ParseDatagramType(data)
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (s *UDPSessionRegistrationResponseDatagram) MarshalBinary() (data []byte, e
 }
 
 func (s *UDPSessionRegistrationResponseDatagram) UnmarshalBinary(data []byte) error {
-	datagramType, err := parseDatagramType(data)
+	datagramType, err := ParseDatagramType(data)
 	if err != nil {
 		return wrapUnmarshalErr(err)
 	}
