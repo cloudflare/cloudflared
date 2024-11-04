@@ -7,7 +7,7 @@ import (
 
 var (
 	ErrInvalidDatagramType                 error = errors.New("invalid datagram type expected")
-	ErrDatagramHeaderTooSmall              error = fmt.Errorf("datagram should have at least %d bytes", datagramTypeLen)
+	ErrDatagramHeaderTooSmall              error = fmt.Errorf("datagram should have at least %d byte", datagramTypeLen)
 	ErrDatagramPayloadTooLarge             error = errors.New("payload length is too large to be bundled in datagram")
 	ErrDatagramPayloadHeaderTooSmall       error = errors.New("payload length is too small to fit the datagram header")
 	ErrDatagramPayloadInvalidSize          error = errors.New("datagram provided is an invalid size")
