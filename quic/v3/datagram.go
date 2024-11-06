@@ -284,8 +284,6 @@ const (
 	ResponseDestinationUnreachable SessionRegistrationResp = 0x01
 	// Session registration was unable to bind to a local UDP socket.
 	ResponseUnableToBindSocket SessionRegistrationResp = 0x02
-	// Session registration is already bound to another connection.
-	ResponseSessionAlreadyConnected SessionRegistrationResp = 0x03
 	// Session registration failed with an unexpected error but provided a message.
 	ResponseErrorWithMsg SessionRegistrationResp = 0xff
 )

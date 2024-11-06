@@ -17,17 +17,19 @@ import (
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
-type noopEyeball struct{}
-
-func (noopEyeball) SendUDPSessionDatagram(datagram []byte) error {
-	return nil
+type noopEyeball struct {
+	connID uint8
 }
 
+func (noopEyeball) Serve(ctx context.Context) error              { return nil }
+func (n noopEyeball) ID() uint8                                  { return n.connID }
+func (noopEyeball) SendUDPSessionDatagram(datagram []byte) error { return nil }
 func (noopEyeball) SendUDPSessionResponse(id v3.RequestID, resp v3.SessionRegistrationResp) error {
 	return nil
 }
 
 type mockEyeball struct {
+	connID uint8
 	// datagram sent via SendUDPSessionDatagram
 	recvData chan []byte
 	// responses sent via SendUDPSessionResponse
@@ -39,6 +41,7 @@ type mockEyeball struct {
 
 func newMockEyeball() mockEyeball {
 	return mockEyeball{
+		connID:   0,
 		recvData: make(chan []byte, 1),
 		recvResp: make(chan struct {
 			id   v3.RequestID
@@ -46,6 +49,9 @@ func newMockEyeball() mockEyeball {
 		}, 1),
 	}
 }
+
+func (mockEyeball) Serve(ctx context.Context) error { return nil }
+func (m *mockEyeball) ID() uint8                    { return m.connID }
 
 func (m *mockEyeball) SendUDPSessionDatagram(datagram []byte) error {
 	b := make([]byte, len(datagram))
@@ -66,7 +72,7 @@ func (m *mockEyeball) SendUDPSessionResponse(id v3.RequestID, resp v3.SessionReg
 
 func TestDatagramConn_New(t *testing.T) {
 	log := zerolog.Nop()
-	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&log, ingress.DialUDPAddrPort), &log)
+	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
 	if conn == nil {
 		t.Fatal("expected valid connection")
 	}
@@ -75,7 +81,7 @@ func TestDatagramConn_New(t *testing.T) {
 func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
 
 	payload := []byte{0xef, 0xef}
 	conn.SendUDPSessionDatagram(payload)
@@ -88,7 +94,7 @@ func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
 
 	conn.SendUDPSessionResponse(testRequestID, v3.ResponseDestinationUnreachable)
 	resp := <-quic.recv
@@ -109,7 +115,7 @@ func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -125,7 +131,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	quic.ctx = ctx
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -136,7 +142,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 	log := zerolog.Nop()
 	quic := &mockQuicConnReadError{err: net.ErrClosed}
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, net.ErrClosed) {
@@ -171,7 +177,7 @@ func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {
 			log := zerolog.New(logOutput)
 			quic := newMockQuicConn()
 			quic.send <- test.input
-			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, &log)
+			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, 0, &log)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
@@ -212,7 +218,7 @@ func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
 	quic := newMockQuicConn()
 	expectedErr := errors.New("unable to register session")
 	sessionManager := mockSessionManager{expectedRegErr: expectedErr}
-	conn := v3.NewDatagramConn(quic, &sessionManager, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -234,19 +240,12 @@ func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if resp.RequestID != testRequestID && resp.ResponseType != v3.ResponseUnableToBindSocket {
+	if resp.RequestID != testRequestID || resp.ResponseType != v3.ResponseUnableToBindSocket {
 		t.Fatalf("expected registration response failure")
 	}
 
 	// Cancel the muxer Serve context and make sure it closes with the expected error
-	cancel(expectedContextCanceled)
-	err = <-done
-	if !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
-	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
-		t.Fatal(err)
-	}
+	assertContextClosed(t, ctx, done, cancel)
 }
 
 func TestDatagramConnServe(t *testing.T) {
@@ -254,7 +253,7 @@ func TestDatagramConnServe(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -276,7 +275,7 @@ func TestDatagramConnServe(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if resp.RequestID != testRequestID && resp.ResponseType != v3.ResponseOk {
+	if resp.RequestID != testRequestID || resp.ResponseType != v3.ResponseOk {
 		t.Fatalf("expected registration response ok")
 	}
 
@@ -291,21 +290,160 @@ func TestDatagramConnServe(t *testing.T) {
 	}
 
 	// Cancel the muxer Serve context and make sure it closes with the expected error
-	cancel(expectedContextCanceled)
-	err = <-done
-	if !errors.Is(err, context.Canceled) {
+	assertContextClosed(t, ctx, done, cancel)
+}
+
+func TestDatagramConnServe_RegisterTwice(t *testing.T) {
+	log := zerolog.Nop()
+	quic := newMockQuicConn()
+	session := newMockSession()
+	sessionManager := mockSessionManager{session: &session}
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+
+	// Setup the muxer
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(errors.New("other error"))
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.Serve(ctx)
+	}()
+
+	// Send new session registration
+	datagram := newRegisterSessionDatagram(testRequestID)
+	quic.send <- datagram
+
+	// Wait for session registration response with success
+	datagram = <-quic.recv
+	var resp v3.UDPSessionRegistrationResponseDatagram
+	err := resp.UnmarshalBinary(datagram)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
+
+	if resp.RequestID != testRequestID || resp.ResponseType != v3.ResponseOk {
+		t.Fatalf("expected registration response ok")
+	}
+
+	// Set the session manager to return already registered
+	sessionManager.expectedRegErr = v3.ErrSessionAlreadyRegistered
+	// Send the registration again as if we didn't receive it at the edge
+	datagram = newRegisterSessionDatagram(testRequestID)
+	quic.send <- datagram
+
+	// Wait for session registration response with success
+	datagram = <-quic.recv
+	err = resp.UnmarshalBinary(datagram)
+	if err != nil {
 		t.Fatal(err)
 	}
+
+	if resp.RequestID != testRequestID || resp.ResponseType != v3.ResponseOk {
+		t.Fatalf("expected registration response ok")
+	}
+
+	// We expect the session to be served
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-session.served:
+		break
+	case <-timer.C:
+		t.Fatalf("expected session serve to be called")
+	}
+
+	// Cancel the muxer Serve context and make sure it closes with the expected error
+	assertContextClosed(t, ctx, done, cancel)
+}
+
+func TestDatagramConnServe_MigrateConnection(t *testing.T) {
+	log := zerolog.Nop()
+	quic := newMockQuicConn()
+	session := newMockSession()
+	sessionManager := mockSessionManager{session: &session}
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	quic2 := newMockQuicConn()
+	conn2 := v3.NewDatagramConn(quic2, &sessionManager, 1, &log)
+
+	// Setup the muxer
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(errors.New("other error"))
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.Serve(ctx)
+	}()
+
+	ctx2, cancel2 := context.WithCancelCause(context.Background())
+	defer cancel2(errors.New("other error"))
+	done2 := make(chan error, 1)
+	go func() {
+		done2 <- conn2.Serve(ctx2)
+	}()
+
+	// Send new session registration
+	datagram := newRegisterSessionDatagram(testRequestID)
+	quic.send <- datagram
+
+	// Wait for session registration response with success
+	datagram = <-quic.recv
+	var resp v3.UDPSessionRegistrationResponseDatagram
+	err := resp.UnmarshalBinary(datagram)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.RequestID != testRequestID || resp.ResponseType != v3.ResponseOk {
+		t.Fatalf("expected registration response ok")
+	}
+
+	// Set the session manager to return already registered to another connection
+	sessionManager.expectedRegErr = v3.ErrSessionBoundToOtherConn
+	// Send the registration again as if we didn't receive it at the edge for a new connection
+	datagram = newRegisterSessionDatagram(testRequestID)
+	quic2.send <- datagram
+
+	// Wait for session registration response with success
+	datagram = <-quic2.recv
+	err = resp.UnmarshalBinary(datagram)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.RequestID != testRequestID || resp.ResponseType != v3.ResponseOk {
+		t.Fatalf("expected registration response ok")
+	}
+
+	// We expect the session to be served
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-session.served:
+		break
+	case <-timer.C:
+		t.Fatalf("expected session serve to be called")
+	}
+
+	// Expect session to be migrated
+	select {
+	case id := <-session.migrated:
+		if id != conn2.ID() {
+			t.Fatalf("expected session to be migrated to connection 2")
+		}
+	case <-timer.C:
+		t.Fatalf("expected session migration to be called")
+	}
+
+	// Cancel the muxer Serve context and make sure it closes with the expected error
+	assertContextClosed(t, ctx, done, cancel)
+	// Cancel the second muxer Serve context and make sure it closes with the expected error
+	assertContextClosed(t, ctx2, done2, cancel2)
 }
 
 func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
+	// mockSessionManager will return the ErrSessionNotFound for any session attempting to be queried by the muxer
 	sessionManager := mockSessionManager{session: nil, expectedGetErr: v3.ErrSessionNotFound}
-	conn := v3.NewDatagramConn(quic, &sessionManager, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -319,15 +457,13 @@ func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
 	datagram := newSessionPayloadDatagram(testRequestID, []byte{0xef, 0xef})
 	quic.send <- datagram
 
+	// Since the muxer should eventually discard a failed registration request, there is no side-effect
+	// that the registration was failed beyond the muxer accepting the registration request. As such, the
+	// test can only ensure that the quic.send channel was consumed and that the muxer closes normally
+	// afterwards with the expected context cancelled trigger.
+
 	// Cancel the muxer Serve context and make sure it closes with the expected error
-	cancel(expectedContextCanceled)
-	err := <-done
-	if !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
-	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
-		t.Fatal(err)
-	}
+	assertContextClosed(t, ctx, done, cancel)
 }
 
 func TestDatagramConnServe_Payload(t *testing.T) {
@@ -335,7 +471,7 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -357,14 +493,7 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 	}
 
 	// Cancel the muxer Serve context and make sure it closes with the expected error
-	cancel(expectedContextCanceled)
-	err := <-done
-	if !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
-	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
-		t.Fatal(err)
-	}
+	assertContextClosed(t, ctx, done, cancel)
 }
 
 func newRegisterSessionDatagram(id v3.RequestID) []byte {
@@ -400,6 +529,18 @@ func newSessionPayloadDatagram(id v3.RequestID, payload []byte) []byte {
 	}
 	copy(datagram[17:], payload)
 	return datagram
+}
+
+// Cancel the provided context and make sure it closes with the expected cancellation error
+func assertContextClosed(t *testing.T, ctx context.Context, done <-chan error, cancel context.CancelCauseFunc) {
+	cancel(expectedContextCanceled)
+	err := <-done
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
+		t.Fatal(err)
+	}
 }
 
 type mockQuicConn struct {
@@ -454,7 +595,7 @@ type mockSessionManager struct {
 	expectedGetErr error
 }
 
-func (m *mockSessionManager) RegisterSession(request *v3.UDPSessionRegistrationDatagram, conn v3.DatagramWriter) (v3.Session, error) {
+func (m *mockSessionManager) RegisterSession(request *v3.UDPSessionRegistrationDatagram, conn v3.DatagramConn) (v3.Session, error) {
 	return m.session, m.expectedRegErr
 }
 
@@ -465,20 +606,29 @@ func (m *mockSessionManager) GetSession(requestID v3.RequestID) (v3.Session, err
 func (m *mockSessionManager) UnregisterSession(requestID v3.RequestID) {}
 
 type mockSession struct {
-	served chan struct{}
-	recv   chan []byte
+	served   chan struct{}
+	migrated chan uint8
+	recv     chan []byte
 }
 
 func newMockSession() mockSession {
 	return mockSession{
-		served: make(chan struct{}),
-		recv:   make(chan []byte, 1),
+		served:   make(chan struct{}),
+		migrated: make(chan uint8, 2),
+		recv:     make(chan []byte, 1),
 	}
 }
 
 func (m *mockSession) ID() v3.RequestID {
 	return testRequestID
 }
+
+func (m *mockSession) ConnectionID() uint8 {
+	return 0
+}
+
+func (m *mockSession) Migrate(conn v3.DatagramConn) { m.migrated <- conn.ID() }
+func (m *mockSession) ResetIdleTimer()              {}
 
 func (m *mockSession) Serve(ctx context.Context) error {
 	close(m.served)

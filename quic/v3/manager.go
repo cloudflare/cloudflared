@@ -12,15 +12,19 @@ import (
 )
 
 var (
-	ErrSessionNotFound         = errors.New("session not found")
+	// ErrSessionNotFound indicates that a session has not been registered yet for the request id.
+	ErrSessionNotFound = errors.New("session not found")
+	// ErrSessionBoundToOtherConn is returned when a registration already exists for a different connection.
 	ErrSessionBoundToOtherConn = errors.New("session is in use by another connection")
+	// ErrSessionAlreadyRegistered is returned when a registration already exists for this connection.
+	ErrSessionAlreadyRegistered = errors.New("session is already registered for this connection")
 )
 
 type SessionManager interface {
 	// RegisterSession will register a new session if it does not already exist for the request ID.
 	// During new session creation, the session will also bind the UDP socket for the origin.
 	// If the session exists for a different connection, it will return [ErrSessionBoundToOtherConn].
-	RegisterSession(request *UDPSessionRegistrationDatagram, conn DatagramWriter) (Session, error)
+	RegisterSession(request *UDPSessionRegistrationDatagram, conn DatagramConn) (Session, error)
 	// GetSession returns an active session if available for the provided connection.
 	// If the session does not exist, it will return [ErrSessionNotFound]. If the session exists for a different
 	// connection, it will return [ErrSessionBoundToOtherConn].
@@ -45,12 +49,14 @@ func NewSessionManager(log *zerolog.Logger, originDialer DialUDP) SessionManager
 	}
 }
 
-func (s *sessionManager) RegisterSession(request *UDPSessionRegistrationDatagram, conn DatagramWriter) (Session, error) {
+func (s *sessionManager) RegisterSession(request *UDPSessionRegistrationDatagram, conn DatagramConn) (Session, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	// Check to make sure session doesn't already exist for requestID
-	_, exists := s.sessions[request.RequestID]
-	if exists {
+	if session, exists := s.sessions[request.RequestID]; exists {
+		if conn.ID() == session.ConnectionID() {
+			return nil, ErrSessionAlreadyRegistered
+		}
 		return nil, ErrSessionBoundToOtherConn
 	}
 	// Attempt to bind the UDP socket for the new session

@@ -123,6 +123,45 @@ func TestSessionServe_OriginTooLarge(t *testing.T) {
 	}
 }
 
+func TestSessionServe_Migrate(t *testing.T) {
+	log := zerolog.Nop()
+	eyeball := newMockEyeball()
+	pipe1, pipe2 := net.Pipe()
+	session := v3.NewSession(testRequestID, 2*time.Second, pipe2, &eyeball, &log)
+	defer session.Close()
+
+	done := make(chan error)
+	go func() {
+		done <- session.Serve(context.Background())
+	}()
+
+	// Migrate the session to a new connection before origin sends data
+	eyeball2 := newMockEyeball()
+	eyeball2.connID = 1
+	session.Migrate(&eyeball2)
+
+	// Origin sends data
+	payload2 := []byte{0xde}
+	pipe1.Write(payload2)
+
+	// Expect write to eyeball2
+	data := <-eyeball2.recvData
+	if len(data) <= 17 || !slices.Equal(payload2, data[17:]) {
+		t.Fatalf("expected data to write to eyeball2 after migration: %+v", data)
+	}
+
+	select {
+	case data := <-eyeball.recvData:
+		t.Fatalf("expected no data to write to eyeball1 after migration: %+v", data)
+	default:
+	}
+
+	err := <-done
+	if !errors.Is(err, v3.SessionIdleErr{}) {
+		t.Error(err)
+	}
+}
+
 func TestSessionClose_Multiple(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestOrigin(makePayload(128))
@@ -249,7 +288,7 @@ func newTestIdleOrigin(d time.Duration) testIdleOrigin {
 
 func (o *testIdleOrigin) Read(p []byte) (n int, err error) {
 	time.Sleep(o.duration)
-	return 0, nil
+	return -1, nil
 }
 
 func (o *testIdleOrigin) Write(p []byte) (n int, err error) {

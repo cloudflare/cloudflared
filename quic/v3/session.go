@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -47,6 +48,9 @@ func newSessionIdleErr(timeout time.Duration) error {
 type Session interface {
 	io.WriteCloser
 	ID() RequestID
+	ConnectionID() uint8
+	ResetIdleTimer()
+	Migrate(eyeball DatagramConn)
 	// Serve starts the event loop for processing UDP packets
 	Serve(ctx context.Context) error
 }
@@ -55,29 +59,46 @@ type session struct {
 	id             RequestID
 	closeAfterIdle time.Duration
 	origin         io.ReadWriteCloser
-	eyeball        DatagramWriter
+	eyeball        atomic.Pointer[DatagramConn]
 	// activeAtChan is used to communicate the last read/write time
 	activeAtChan chan time.Time
 	closeChan    chan error
 	log          *zerolog.Logger
 }
 
-func NewSession(id RequestID, closeAfterIdle time.Duration, origin io.ReadWriteCloser, eyeball DatagramWriter, log *zerolog.Logger) Session {
-	return &session{
+func NewSession(id RequestID, closeAfterIdle time.Duration, origin io.ReadWriteCloser, eyeball DatagramConn, log *zerolog.Logger) Session {
+	session := &session{
 		id:             id,
 		closeAfterIdle: closeAfterIdle,
 		origin:         origin,
-		eyeball:        eyeball,
+		eyeball:        atomic.Pointer[DatagramConn]{},
 		// activeAtChan has low capacity. It can be full when there are many concurrent read/write. markActive() will
 		// drop instead of blocking because last active time only needs to be an approximation
 		activeAtChan: make(chan time.Time, 1),
 		closeChan:    make(chan error, 1),
 		log:          log,
 	}
+	session.eyeball.Store(&eyeball)
+	return session
 }
 
 func (s *session) ID() RequestID {
 	return s.id
+}
+
+func (s *session) ConnectionID() uint8 {
+	eyeball := *(s.eyeball.Load())
+	return eyeball.ID()
+}
+
+func (s *session) Migrate(eyeball DatagramConn) {
+	current := *(s.eyeball.Load())
+	// Only migrate if the connection ids are different.
+	if current.ID() != eyeball.ID() {
+		s.eyeball.Store(&eyeball)
+	}
+	// The session is already running so we want to restart the idle timeout since no proxied packets have come down yet.
+	s.markActive()
 }
 
 func (s *session) Serve(ctx context.Context) error {
@@ -107,9 +128,12 @@ func (s *session) Serve(ctx context.Context) error {
 				s.log.Error().Int("packetSize", n).Msg("Session (origin) packet read was too large and was dropped")
 				continue
 			}
+			// We need to synchronize on the eyeball in-case that the connection was migrated. This should be rarely a point
+			// of lock contention, as a migration can only happen during startup of a session before traffic flow.
+			eyeball := *(s.eyeball.Load())
 			// Sending a packet to the session does block on the [quic.Connection], however, this is okay because it
 			// will cause back-pressure to the kernel buffer if the writes are not fast enough to the edge.
-			err = s.eyeball.SendUDPSessionDatagram(readBuffer[:DatagramPayloadHeaderLen+n])
+			err = eyeball.SendUDPSessionDatagram(readBuffer[:DatagramPayloadHeaderLen+n])
 			if err != nil {
 				s.closeChan <- err
 				return
@@ -135,6 +159,14 @@ func (s *session) Write(payload []byte) (n int, err error) {
 	// Mark the session as active since we proxied a packet to the origin.
 	s.markActive()
 	return n, err
+}
+
+// ResetIdleTimer will restart the current idle timer.
+//
+// This public method is used to allow operators of sessions the ability to extend the session using information that is
+// known external to the session itself.
+func (s *session) ResetIdleTimer() {
+	s.markActive()
 }
 
 // Sends the last active time to the idle checker loop without blocking. activeAtChan will only be full when there

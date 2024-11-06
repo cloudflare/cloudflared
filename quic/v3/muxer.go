@@ -19,6 +19,8 @@ type DatagramConn interface {
 	DatagramWriter
 	// Serve provides a server interface to process and handle incoming QUIC datagrams and demux their datagram v3 payloads.
 	Serve(context.Context) error
+	// ID indicates connection index identifier
+	ID() uint8
 }
 
 // DatagramWriter provides the Muxer interface to create proper Datagrams when sending over a connection.
@@ -41,6 +43,7 @@ type QuicConnection interface {
 
 type datagramConn struct {
 	conn           QuicConnection
+	index          uint8
 	sessionManager SessionManager
 	logger         *zerolog.Logger
 
@@ -48,15 +51,20 @@ type datagramConn struct {
 	readErrors chan error
 }
 
-func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, logger *zerolog.Logger) DatagramConn {
+func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, index uint8, logger *zerolog.Logger) DatagramConn {
 	log := logger.With().Uint8("datagramVersion", 3).Logger()
 	return &datagramConn{
 		conn:           conn,
+		index:          index,
 		sessionManager: sessionManager,
 		logger:         &log,
 		datagrams:      make(chan []byte, demuxChanCapacity),
 		readErrors:     make(chan error, 2),
 	}
+}
+
+func (c datagramConn) ID() uint8 {
+	return c.index
 }
 
 func (c *datagramConn) SendUDPSessionDatagram(datagram []byte) error {
@@ -163,9 +171,20 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 // This method handles new registrations of a session and the serve loop for the session.
 func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, datagram *UDPSessionRegistrationDatagram) {
 	session, err := c.sessionManager.RegisterSession(datagram, c)
-	if err != nil {
+	switch err {
+	case nil:
+		// Continue as normal
+	case ErrSessionAlreadyRegistered:
+		// Session is already registered and likely the response got lost
+		c.handleSessionAlreadyRegistered(datagram.RequestID)
+		return
+	case ErrSessionBoundToOtherConn:
+		// Session is already registered but to a different connection
+		c.handleSessionMigration(datagram.RequestID)
+		return
+	default:
 		c.logger.Err(err).Msgf("session registration failure")
-		c.handleSessionRegistrationFailure(datagram.RequestID, err)
+		c.handleSessionRegistrationFailure(datagram.RequestID)
 		return
 	}
 	// Make sure to eventually remove the session from the session manager when the session is closed
@@ -197,17 +216,49 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 	c.logger.Err(err).Msgf("session was closed with an error")
 }
 
-func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID, regErr error) {
-	var errResp SessionRegistrationResp
-	switch regErr {
-	case ErrSessionBoundToOtherConn:
-		errResp = ResponseSessionAlreadyConnected
-	default:
-		errResp = ResponseUnableToBindSocket
-	}
-	err := c.SendUDPSessionResponse(requestID, errResp)
+func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID) {
+	// Send another registration response since the session is already active
+	err := c.SendUDPSessionResponse(requestID, ResponseOk)
 	if err != nil {
-		c.logger.Err(err).Msgf("unable to send session registration error response (%d)", errResp)
+		c.logger.Err(err).Msgf("session registration failure: unable to send an additional session registration response")
+		return
+	}
+
+	session, err := c.sessionManager.GetSession(requestID)
+	if err != nil {
+		// If for some reason we can not find the session after attempting to register it, we can just return
+		// instead of trying to reset the idle timer for it.
+		return
+	}
+	// The session is already running in another routine so we want to restart the idle timeout since no proxied
+	// packets have come down yet.
+	session.ResetIdleTimer()
+}
+
+func (c *datagramConn) handleSessionMigration(requestID RequestID) {
+	// We need to migrate the currently running session to this edge connection.
+	session, err := c.sessionManager.GetSession(requestID)
+	if err != nil {
+		// If for some reason we can not find the session after attempting to register it, we can just return
+		// instead of trying to reset the idle timer for it.
+		return
+	}
+
+	// Migrate the session to use this edge connection instead of the currently running one.
+	session.Migrate(c)
+
+	// Send another registration response since the session is already active
+	err = c.SendUDPSessionResponse(requestID, ResponseOk)
+	if err != nil {
+		c.logger.Err(err).Msgf("session registration failure: unable to send an additional session registration response")
+		return
+	}
+}
+
+func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID) {
+	err := c.SendUDPSessionResponse(requestID, ResponseUnableToBindSocket)
+	if err != nil {
+		c.logger.Err(err).Msgf("unable to send session registration error response (%d)", ResponseUnableToBindSocket)
 	}
 }
 

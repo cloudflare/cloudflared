@@ -34,8 +34,14 @@ func TestRegisterSession(t *testing.T) {
 
 	// We shouldn't be able to register another session with the same request id
 	_, err = manager.RegisterSession(&request, &noopEyeball{})
+	if !errors.Is(err, v3.ErrSessionAlreadyRegistered) {
+		t.Fatalf("session is already registered for this connection: %v", err)
+	}
+
+	// We shouldn't be able to register another session with the same request id for a different connection
+	_, err = manager.RegisterSession(&request, &noopEyeball{connID: 1})
 	if !errors.Is(err, v3.ErrSessionBoundToOtherConn) {
-		t.Fatalf("session should not be able to be registered again: %v", err)
+		t.Fatalf("session is already registered for a separate connection: %v", err)
 	}
 
 	// Get session

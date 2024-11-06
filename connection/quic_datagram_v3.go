@@ -24,9 +24,10 @@ type datagramV3Connection struct {
 func NewDatagramV3Connection(ctx context.Context,
 	conn quic.Connection,
 	sessionManager cfdquic.SessionManager,
+	index uint8,
 	logger *zerolog.Logger,
 ) DatagramSessionHandler {
-	datagramMuxer := cfdquic.NewDatagramConn(conn, sessionManager, logger)
+	datagramMuxer := cfdquic.NewDatagramConn(conn, sessionManager, index, logger)
 
 	return &datagramV3Connection{
 		conn,

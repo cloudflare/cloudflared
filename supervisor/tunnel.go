@@ -606,6 +606,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 			ctx,
 			conn,
 			e.sessionManager,
+			connIndex,
 			connLogger.Logger(),
 		)
 	} else {
