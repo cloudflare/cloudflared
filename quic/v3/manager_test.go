@@ -15,7 +15,7 @@ import (
 
 func TestRegisterSession(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&log, ingress.DialUDPAddrPort)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort)
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,
@@ -71,7 +71,7 @@ func TestRegisterSession(t *testing.T) {
 
 func TestGetSession_Empty(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&log, ingress.DialUDPAddrPort)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort)
 
 	_, err := manager.GetSession(testRequestID)
 	if !errors.Is(err, v3.ErrSessionNotFound) {

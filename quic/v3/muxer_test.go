@@ -72,7 +72,7 @@ func (m *mockEyeball) SendUDPSessionResponse(id v3.RequestID, resp v3.SessionReg
 
 func TestDatagramConn_New(t *testing.T) {
 	log := zerolog.Nop()
-	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
+	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
 	if conn == nil {
 		t.Fatal("expected valid connection")
 	}
@@ -81,7 +81,7 @@ func TestDatagramConn_New(t *testing.T) {
 func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
 
 	payload := []byte{0xef, 0xef}
 	conn.SendUDPSessionDatagram(payload)
@@ -94,7 +94,7 @@ func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
 
 	conn.SendUDPSessionResponse(testRequestID, v3.ResponseDestinationUnreachable)
 	resp := <-quic.recv
@@ -115,7 +115,7 @@ func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -131,7 +131,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	quic.ctx = ctx
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -142,7 +142,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 	log := zerolog.Nop()
 	quic := &mockQuicConnReadError{err: net.ErrClosed}
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&log, ingress.DialUDPAddrPort), 0, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, net.ErrClosed) {
@@ -177,7 +177,7 @@ func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {
 			log := zerolog.New(logOutput)
 			quic := newMockQuicConn()
 			quic.send <- test.input
-			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, 0, &log)
+			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, 0, &noopMetrics{}, &log)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
@@ -218,7 +218,7 @@ func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
 	quic := newMockQuicConn()
 	expectedErr := errors.New("unable to register session")
 	sessionManager := mockSessionManager{expectedRegErr: expectedErr}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -253,7 +253,7 @@ func TestDatagramConnServe(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -298,7 +298,7 @@ func TestDatagramConnServe_RegisterTwice(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -360,9 +360,9 @@ func TestDatagramConnServe_MigrateConnection(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
 	quic2 := newMockQuicConn()
-	conn2 := v3.NewDatagramConn(quic2, &sessionManager, 1, &log)
+	conn2 := v3.NewDatagramConn(quic2, &sessionManager, 1, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -443,7 +443,7 @@ func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
 	quic := newMockQuicConn()
 	// mockSessionManager will return the ErrSessionNotFound for any session attempting to be queried by the muxer
 	sessionManager := mockSessionManager{session: nil, expectedGetErr: v3.ErrSessionNotFound}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -471,7 +471,7 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())

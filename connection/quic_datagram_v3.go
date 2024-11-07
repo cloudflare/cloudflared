@@ -10,6 +10,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/management"
 	cfdquic "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -25,9 +26,15 @@ func NewDatagramV3Connection(ctx context.Context,
 	conn quic.Connection,
 	sessionManager cfdquic.SessionManager,
 	index uint8,
+	metrics cfdquic.Metrics,
 	logger *zerolog.Logger,
 ) DatagramSessionHandler {
-	datagramMuxer := cfdquic.NewDatagramConn(conn, sessionManager, index, logger)
+	log := logger.
+		With().
+		Int(management.EventTypeKey, int(management.UDP)).
+		Uint8(LogFieldConnIndex, index).
+		Logger()
+	datagramMuxer := cfdquic.NewDatagramConn(conn, sessionManager, index, metrics, &log)
 
 	return &datagramV3Connection{
 		conn,

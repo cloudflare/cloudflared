@@ -18,7 +18,7 @@ var expectedContextCanceled = errors.New("expected context canceled")
 
 func TestSessionNew(t *testing.T) {
 	log := zerolog.Nop()
-	session := v3.NewSession(testRequestID, 5*time.Second, nil, &noopEyeball{}, &log)
+	session := v3.NewSession(testRequestID, 5*time.Second, nil, &noopEyeball{}, &noopMetrics{}, &log)
 	if testRequestID != session.ID() {
 		t.Fatalf("session id doesn't match: %s != %s", testRequestID, session.ID())
 	}
@@ -27,7 +27,7 @@ func TestSessionNew(t *testing.T) {
 func testSessionWrite(t *testing.T, payload []byte) {
 	log := zerolog.Nop()
 	origin := newTestOrigin(makePayload(1280))
-	session := v3.NewSession(testRequestID, 5*time.Second, &origin, &noopEyeball{}, &log)
+	session := v3.NewSession(testRequestID, 5*time.Second, &origin, &noopEyeball{}, &noopMetrics{}, &log)
 	n, err := session.Write(payload)
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func testSessionServe_Origin(t *testing.T, payload []byte) {
 	log := zerolog.Nop()
 	eyeball := newMockEyeball()
 	origin := newTestOrigin(payload)
-	session := v3.NewSession(testRequestID, 3*time.Second, &origin, &eyeball, &log)
+	session := v3.NewSession(testRequestID, 3*time.Second, &origin, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -103,7 +103,7 @@ func TestSessionServe_OriginTooLarge(t *testing.T) {
 	eyeball := newMockEyeball()
 	payload := makePayload(1281)
 	origin := newTestOrigin(payload)
-	session := v3.NewSession(testRequestID, 2*time.Second, &origin, &eyeball, &log)
+	session := v3.NewSession(testRequestID, 2*time.Second, &origin, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
 	done := make(chan error)
@@ -127,7 +127,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 	log := zerolog.Nop()
 	eyeball := newMockEyeball()
 	pipe1, pipe2 := net.Pipe()
-	session := v3.NewSession(testRequestID, 2*time.Second, pipe2, &eyeball, &log)
+	session := v3.NewSession(testRequestID, 2*time.Second, pipe2, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
 	done := make(chan error)
@@ -165,7 +165,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 func TestSessionClose_Multiple(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestOrigin(makePayload(128))
-	session := v3.NewSession(testRequestID, 5*time.Second, &origin, &noopEyeball{}, &log)
+	session := v3.NewSession(testRequestID, 5*time.Second, &origin, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestSessionServe_IdleTimeout(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestIdleOrigin(10 * time.Second) // Make idle time longer than closeAfterIdle
 	closeAfterIdle := 2 * time.Second
-	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, &noopEyeball{}, &log)
+	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Serve(context.Background())
 	if !errors.Is(err, v3.SessionIdleErr{}) {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ func TestSessionServe_ParentContextCanceled(t *testing.T) {
 	origin := newTestIdleOrigin(10 * time.Second)
 	closeAfterIdle := 10 * time.Second
 
-	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, &noopEyeball{}, &log)
+	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, &noopEyeball{}, &noopMetrics{}, &log)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := session.Serve(ctx)
@@ -227,7 +227,7 @@ func TestSessionServe_ParentContextCanceled(t *testing.T) {
 func TestSessionServe_ReadErrors(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestErrOrigin(net.ErrClosed, nil)
-	session := v3.NewSession(testRequestID, 30*time.Second, &origin, &noopEyeball{}, &log)
+	session := v3.NewSession(testRequestID, 30*time.Second, &origin, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Serve(context.Background())
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatal(err)

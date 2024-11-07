@@ -45,18 +45,20 @@ type datagramConn struct {
 	conn           QuicConnection
 	index          uint8
 	sessionManager SessionManager
+	metrics        Metrics
 	logger         *zerolog.Logger
 
 	datagrams  chan []byte
 	readErrors chan error
 }
 
-func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, index uint8, logger *zerolog.Logger) DatagramConn {
+func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, index uint8, metrics Metrics, logger *zerolog.Logger) DatagramConn {
 	log := logger.With().Uint8("datagramVersion", 3).Logger()
 	return &datagramConn{
 		conn:           conn,
 		index:          index,
 		sessionManager: sessionManager,
+		metrics:        metrics,
 		logger:         &log,
 		datagrams:      make(chan []byte, demuxChanCapacity),
 		readErrors:     make(chan error, 2),
@@ -143,11 +145,12 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 					c.logger.Err(err).Msgf("unable to unmarshal session registration datagram")
 					return
 				}
+				logger := c.logger.With().Str(logFlowID, reg.RequestID.String()).Logger()
 				// We bind the new session to the quic connection context instead of cloudflared context to allow for the
 				// quic connection to close and close only the sessions bound to it. Closing of cloudflared will also
 				// initiate the close of the quic connection, so we don't have to worry about the application context
 				// in the scope of a session.
-				c.handleSessionRegistrationDatagram(connCtx, reg)
+				c.handleSessionRegistrationDatagram(connCtx, reg, &logger)
 			case UDPSessionPayloadType:
 				payload := &UDPSessionPayloadDatagram{}
 				err := payload.UnmarshalBinary(datagram)
@@ -155,7 +158,8 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 					c.logger.Err(err).Msgf("unable to unmarshal session payload datagram")
 					return
 				}
-				c.handleSessionPayloadDatagram(payload)
+				logger := c.logger.With().Str(logFlowID, payload.RequestID.String()).Logger()
+				c.handleSessionPayloadDatagram(payload, &logger)
 			case UDPSessionRegistrationResponseType:
 				// cloudflared should never expect to receive UDP session responses as it will not initiate new
 				// sessions towards the edge.
@@ -169,31 +173,33 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 }
 
 // This method handles new registrations of a session and the serve loop for the session.
-func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, datagram *UDPSessionRegistrationDatagram) {
+func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, datagram *UDPSessionRegistrationDatagram, logger *zerolog.Logger) {
 	session, err := c.sessionManager.RegisterSession(datagram, c)
 	switch err {
 	case nil:
 		// Continue as normal
 	case ErrSessionAlreadyRegistered:
 		// Session is already registered and likely the response got lost
-		c.handleSessionAlreadyRegistered(datagram.RequestID)
+		c.handleSessionAlreadyRegistered(datagram.RequestID, logger)
 		return
 	case ErrSessionBoundToOtherConn:
 		// Session is already registered but to a different connection
-		c.handleSessionMigration(datagram.RequestID)
+		c.handleSessionMigration(datagram.RequestID, logger)
 		return
 	default:
-		c.logger.Err(err).Msgf("session registration failure")
-		c.handleSessionRegistrationFailure(datagram.RequestID)
+		logger.Err(err).Msgf("flow registration failure")
+		c.handleSessionRegistrationFailure(datagram.RequestID, logger)
 		return
 	}
+	c.metrics.IncrementFlows()
 	// Make sure to eventually remove the session from the session manager when the session is closed
 	defer c.sessionManager.UnregisterSession(session.ID())
+	defer c.metrics.DecrementFlows()
 
 	// Respond that we are able to process the new session
 	err = c.SendUDPSessionResponse(datagram.RequestID, ResponseOk)
 	if err != nil {
-		c.logger.Err(err).Msgf("session registration failure: unable to send session registration response")
+		logger.Err(err).Msgf("flow registration failure: unable to send session registration response")
 		return
 	}
 
@@ -203,24 +209,24 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 	if err == nil {
 		// We typically don't expect a session to close without some error response. [SessionIdleErr] is the typical
 		// expected error response.
-		c.logger.Warn().Msg("session was closed without explicit close or timeout")
+		logger.Warn().Msg("flow was closed without explicit close or timeout")
 		return
 	}
 	// SessionIdleErr and SessionCloseErr are valid and successful error responses to end a session.
 	if errors.Is(err, SessionIdleErr{}) || errors.Is(err, SessionCloseErr) {
-		c.logger.Debug().Msg(err.Error())
+		logger.Debug().Msg(err.Error())
 		return
 	}
 
 	// All other errors should be reported as errors
-	c.logger.Err(err).Msgf("session was closed with an error")
+	logger.Err(err).Msgf("flow was closed with an error")
 }
 
-func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID) {
+func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID, logger *zerolog.Logger) {
 	// Send another registration response since the session is already active
 	err := c.SendUDPSessionResponse(requestID, ResponseOk)
 	if err != nil {
-		c.logger.Err(err).Msgf("session registration failure: unable to send an additional session registration response")
+		logger.Err(err).Msgf("flow registration failure: unable to send an additional flow registration response")
 		return
 	}
 
@@ -233,9 +239,10 @@ func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID) {
 	// The session is already running in another routine so we want to restart the idle timeout since no proxied
 	// packets have come down yet.
 	session.ResetIdleTimer()
+	c.metrics.RetryFlowResponse()
 }
 
-func (c *datagramConn) handleSessionMigration(requestID RequestID) {
+func (c *datagramConn) handleSessionMigration(requestID RequestID, logger *zerolog.Logger) {
 	// We need to migrate the currently running session to this edge connection.
 	session, err := c.sessionManager.GetSession(requestID)
 	if err != nil {
@@ -250,29 +257,29 @@ func (c *datagramConn) handleSessionMigration(requestID RequestID) {
 	// Send another registration response since the session is already active
 	err = c.SendUDPSessionResponse(requestID, ResponseOk)
 	if err != nil {
-		c.logger.Err(err).Msgf("session registration failure: unable to send an additional session registration response")
+		logger.Err(err).Msgf("flow registration failure: unable to send an additional flow registration response")
 		return
 	}
 }
 
-func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID) {
+func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID, logger *zerolog.Logger) {
 	err := c.SendUDPSessionResponse(requestID, ResponseUnableToBindSocket)
 	if err != nil {
-		c.logger.Err(err).Msgf("unable to send session registration error response (%d)", ResponseUnableToBindSocket)
+		logger.Err(err).Msgf("unable to send flow registration error response (%d)", ResponseUnableToBindSocket)
 	}
 }
 
 // Handles incoming datagrams that need to be sent to a registered session.
-func (c *datagramConn) handleSessionPayloadDatagram(datagram *UDPSessionPayloadDatagram) {
+func (c *datagramConn) handleSessionPayloadDatagram(datagram *UDPSessionPayloadDatagram, logger *zerolog.Logger) {
 	s, err := c.sessionManager.GetSession(datagram.RequestID)
 	if err != nil {
-		c.logger.Err(err).Msgf("unable to find session")
+		logger.Err(err).Msgf("unable to find flow")
 		return
 	}
 	// We ignore the bytes written to the socket because any partial write must return an error.
 	_, err = s.Write(datagram.Payload)
 	if err != nil {
-		c.logger.Err(err).Msgf("unable to write payload for unavailable session")
+		logger.Err(err).Msgf("unable to write payload for the flow")
 		return
 	}
 }

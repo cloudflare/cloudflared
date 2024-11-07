@@ -176,6 +176,7 @@ type EdgeTunnelServer struct {
 	config            *TunnelConfig
 	orchestrator      *orchestration.Orchestrator
 	sessionManager    v3.SessionManager
+	datagramMetrics   v3.Metrics
 	edgeAddrHandler   EdgeAddrHandler
 	edgeAddrs         *edgediscovery.Edge
 	edgeBindAddr      net.IP
@@ -607,6 +608,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 			conn,
 			e.sessionManager,
 			connIndex,
+			e.datagramMetrics,
 			connLogger.Logger(),
 		)
 	} else {

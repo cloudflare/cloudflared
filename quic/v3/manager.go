@@ -13,11 +13,11 @@ import (
 
 var (
 	// ErrSessionNotFound indicates that a session has not been registered yet for the request id.
-	ErrSessionNotFound = errors.New("session not found")
+	ErrSessionNotFound = errors.New("flow not found")
 	// ErrSessionBoundToOtherConn is returned when a registration already exists for a different connection.
-	ErrSessionBoundToOtherConn = errors.New("session is in use by another connection")
+	ErrSessionBoundToOtherConn = errors.New("flow is in use by another connection")
 	// ErrSessionAlreadyRegistered is returned when a registration already exists for this connection.
-	ErrSessionAlreadyRegistered = errors.New("session is already registered for this connection")
+	ErrSessionAlreadyRegistered = errors.New("flow is already registered for this connection")
 )
 
 type SessionManager interface {
@@ -39,12 +39,14 @@ type DialUDP func(dest netip.AddrPort) (*net.UDPConn, error)
 type sessionManager struct {
 	sessions map[RequestID]Session
 	mutex    sync.RWMutex
+	metrics  Metrics
 	log      *zerolog.Logger
 }
 
-func NewSessionManager(log *zerolog.Logger, originDialer DialUDP) SessionManager {
+func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP) SessionManager {
 	return &sessionManager{
 		sessions: make(map[RequestID]Session),
+		metrics:  metrics,
 		log:      log,
 	}
 }
@@ -65,7 +67,7 @@ func (s *sessionManager) RegisterSession(request *UDPSessionRegistrationDatagram
 		return nil, err
 	}
 	// Create and insert the new session in the map
-	session := NewSession(request.RequestID, request.IdleDurationHint, origin, conn, s.log)
+	session := NewSession(request.RequestID, request.IdleDurationHint, origin, conn, s.metrics, s.log)
 	s.sessions[request.RequestID] = session
 	return session, nil
 }

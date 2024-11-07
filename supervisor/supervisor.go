@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
@@ -82,12 +83,14 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	edgeAddrHandler := NewIPAddrFallback(config.MaxEdgeAddrRetries)
 	edgeBindAddr := config.EdgeBindAddr
 
-	sessionManager := v3.NewSessionManager(config.Log, ingress.DialUDPAddrPort)
+	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
+	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort)
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
 		orchestrator:      orchestrator,
 		sessionManager:    sessionManager,
+		datagramMetrics:   datagramMetrics,
 		edgeAddrs:         edgeIPs,
 		edgeAddrHandler:   edgeAddrHandler,
 		edgeBindAddr:      edgeBindAddr,
