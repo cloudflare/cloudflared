@@ -165,6 +165,18 @@ cover:
 	# Generate the HTML report that can be viewed from the browser in CI.
 	$Q go tool cover -html ".cover/c.out" -o .cover/all.html
 
+.PHONY: fuzz
+fuzz:
+	@go test -fuzz=FuzzIPDecoder -fuzztime=600s ./packet
+	@go test -fuzz=FuzzICMPDecoder -fuzztime=600s ./packet
+	@go test -fuzz=FuzzSessionWrite -fuzztime=600s ./quic/v3
+	@go test -fuzz=FuzzSessionServe -fuzztime=600s ./quic/v3
+	@go test -fuzz=FuzzRegistrationDatagram -fuzztime=600s ./quic/v3
+	@go test -fuzz=FuzzPayloadDatagram -fuzztime=600s ./quic/v3
+	@go test -fuzz=FuzzRegistrationResponseDatagram -fuzztime=600s ./quic/v3
+	@go test -fuzz=FuzzNewIdentity -fuzztime=600s ./tracing
+	@go test -fuzz=FuzzNewAccessValidator -fuzztime=600s ./validation
+
 .PHONY: install-go
 install-go:
 	rm -rf ${CF_GO_PATH}

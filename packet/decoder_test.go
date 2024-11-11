@@ -254,3 +254,18 @@ func (u *UDP) EncodeLayers() ([]gopacket.SerializableLayer, error) {
 	udpLayer.SetNetworkLayerForChecksum(ipLayers[0].(gopacket.NetworkLayer))
 	return append(ipLayers, &udpLayer), nil
 }
+
+func FuzzIPDecoder(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		ipDecoder := NewIPDecoder()
+		ipDecoder.Decode(RawPacket{Data: data})
+
+	})
+}
+
+func FuzzICMPDecoder(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		icmpDecoder := NewICMPDecoder()
+		icmpDecoder.Decode(RawPacket{Data: data})
+	})
+}
