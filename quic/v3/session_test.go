@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -14,11 +15,16 @@ import (
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
-var expectedContextCanceled = errors.New("expected context canceled")
+var (
+	expectedContextCanceled = errors.New("expected context canceled")
+
+	testOriginAddr = net.UDPAddrFromAddrPort(netip.MustParseAddrPort("127.0.0.1:0"))
+	testLocalAddr  = net.UDPAddrFromAddrPort(netip.MustParseAddrPort("127.0.0.1:0"))
+)
 
 func TestSessionNew(t *testing.T) {
 	log := zerolog.Nop()
-	session := v3.NewSession(testRequestID, 5*time.Second, nil, &noopEyeball{}, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 5*time.Second, nil, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	if testRequestID != session.ID() {
 		t.Fatalf("session id doesn't match: %s != %s", testRequestID, session.ID())
 	}
@@ -27,7 +33,7 @@ func TestSessionNew(t *testing.T) {
 func testSessionWrite(t *testing.T, payload []byte) {
 	log := zerolog.Nop()
 	origin := newTestOrigin(makePayload(1280))
-	session := v3.NewSession(testRequestID, 5*time.Second, &origin, &noopEyeball{}, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 5*time.Second, &origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	n, err := session.Write(payload)
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +70,7 @@ func testSessionServe_Origin(t *testing.T, payload []byte) {
 	log := zerolog.Nop()
 	eyeball := newMockEyeball()
 	origin := newTestOrigin(payload)
-	session := v3.NewSession(testRequestID, 3*time.Second, &origin, &eyeball, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 3*time.Second, &origin, testOriginAddr, testLocalAddr, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -103,7 +109,7 @@ func TestSessionServe_OriginTooLarge(t *testing.T) {
 	eyeball := newMockEyeball()
 	payload := makePayload(1281)
 	origin := newTestOrigin(payload)
-	session := v3.NewSession(testRequestID, 2*time.Second, &origin, &eyeball, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 2*time.Second, &origin, testOriginAddr, testLocalAddr, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
 	done := make(chan error)
@@ -127,7 +133,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 	log := zerolog.Nop()
 	eyeball := newMockEyeball()
 	pipe1, pipe2 := net.Pipe()
-	session := v3.NewSession(testRequestID, 2*time.Second, pipe2, &eyeball, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 2*time.Second, pipe2, testOriginAddr, testLocalAddr, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
 	done := make(chan error)
@@ -138,7 +144,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 	// Migrate the session to a new connection before origin sends data
 	eyeball2 := newMockEyeball()
 	eyeball2.connID = 1
-	session.Migrate(&eyeball2)
+	session.Migrate(&eyeball2, &log)
 
 	// Origin sends data
 	payload2 := []byte{0xde}
@@ -165,7 +171,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 func TestSessionClose_Multiple(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestOrigin(makePayload(128))
-	session := v3.NewSession(testRequestID, 5*time.Second, &origin, &noopEyeball{}, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 5*time.Second, &origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +190,7 @@ func TestSessionServe_IdleTimeout(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestIdleOrigin(10 * time.Second) // Make idle time longer than closeAfterIdle
 	closeAfterIdle := 2 * time.Second
-	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, &noopEyeball{}, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Serve(context.Background())
 	if !errors.Is(err, v3.SessionIdleErr{}) {
 		t.Fatal(err)
@@ -206,7 +212,7 @@ func TestSessionServe_ParentContextCanceled(t *testing.T) {
 	origin := newTestIdleOrigin(10 * time.Second)
 	closeAfterIdle := 10 * time.Second
 
-	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, &noopEyeball{}, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, closeAfterIdle, &origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := session.Serve(ctx)
@@ -227,7 +233,7 @@ func TestSessionServe_ParentContextCanceled(t *testing.T) {
 func TestSessionServe_ReadErrors(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestErrOrigin(net.ErrClosed, nil)
-	session := v3.NewSession(testRequestID, 30*time.Second, &origin, &noopEyeball{}, &noopMetrics{}, &log)
+	session := v3.NewSession(testRequestID, 30*time.Second, &origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Serve(context.Background())
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatal(err)

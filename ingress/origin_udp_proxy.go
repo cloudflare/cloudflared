@@ -39,7 +39,7 @@ func DialUDPAddrPort(dest netip.AddrPort) (*net.UDPConn, error) {
 	// address as context.
 	udpConn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create UDP proxy to origin (%v:%v): %w", dest.Addr(), dest.Port(), err)
+		return nil, fmt.Errorf("unable to dial udp to origin %s: %w", dest, err)
 	}
 
 	return udpConn, nil

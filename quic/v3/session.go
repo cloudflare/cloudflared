@@ -22,11 +22,12 @@ const (
 	// this value (maxDatagramPayloadLen).
 	maxOriginUDPPacketSize = 1500
 
-	logFlowID = "flowID"
+	logFlowID        = "flowID"
+	logPacketSizeKey = "packetSize"
 )
 
 // SessionCloseErr indicates that the session's Close method was called.
-var SessionCloseErr error = errors.New("flow was closed")
+var SessionCloseErr error = errors.New("flow was closed directly")
 
 // SessionIdleErr is returned when the session was closed because there was no communication
 // in either direction over the session for the timeout period.
@@ -35,7 +36,7 @@ type SessionIdleErr struct {
 }
 
 func (e SessionIdleErr) Error() string {
-	return fmt.Sprintf("flow idle for %v", e.timeout)
+	return fmt.Sprintf("flow was idle for %v", e.timeout)
 }
 
 func (e SessionIdleErr) Is(target error) bool {
@@ -51,8 +52,10 @@ type Session interface {
 	io.WriteCloser
 	ID() RequestID
 	ConnectionID() uint8
+	RemoteAddr() net.Addr
+	LocalAddr() net.Addr
 	ResetIdleTimer()
-	Migrate(eyeball DatagramConn)
+	Migrate(eyeball DatagramConn, logger *zerolog.Logger)
 	// Serve starts the event loop for processing UDP packets
 	Serve(ctx context.Context) error
 }
@@ -61,6 +64,8 @@ type session struct {
 	id             RequestID
 	closeAfterIdle time.Duration
 	origin         io.ReadWriteCloser
+	originAddr     net.Addr
+	localAddr      net.Addr
 	eyeball        atomic.Pointer[DatagramConn]
 	// activeAtChan is used to communicate the last read/write time
 	activeAtChan chan time.Time
@@ -69,12 +74,23 @@ type session struct {
 	log          *zerolog.Logger
 }
 
-func NewSession(id RequestID, closeAfterIdle time.Duration, origin io.ReadWriteCloser, eyeball DatagramConn, metrics Metrics, log *zerolog.Logger) Session {
+func NewSession(
+	id RequestID,
+	closeAfterIdle time.Duration,
+	origin io.ReadWriteCloser,
+	originAddr net.Addr,
+	localAddr net.Addr,
+	eyeball DatagramConn,
+	metrics Metrics,
+	log *zerolog.Logger,
+) Session {
 	logger := log.With().Str(logFlowID, id.String()).Logger()
 	session := &session{
 		id:             id,
 		closeAfterIdle: closeAfterIdle,
 		origin:         origin,
+		originAddr:     originAddr,
+		localAddr:      localAddr,
 		eyeball:        atomic.Pointer[DatagramConn]{},
 		// activeAtChan has low capacity. It can be full when there are many concurrent read/write. markActive() will
 		// drop instead of blocking because last active time only needs to be an approximation
@@ -91,16 +107,26 @@ func (s *session) ID() RequestID {
 	return s.id
 }
 
+func (s *session) RemoteAddr() net.Addr {
+	return s.originAddr
+}
+
+func (s *session) LocalAddr() net.Addr {
+	return s.localAddr
+}
+
 func (s *session) ConnectionID() uint8 {
 	eyeball := *(s.eyeball.Load())
 	return eyeball.ID()
 }
 
-func (s *session) Migrate(eyeball DatagramConn) {
+func (s *session) Migrate(eyeball DatagramConn, logger *zerolog.Logger) {
 	current := *(s.eyeball.Load())
 	// Only migrate if the connection ids are different.
 	if current.ID() != eyeball.ID() {
 		s.eyeball.Store(&eyeball)
+		log := logger.With().Str(logFlowID, s.id.String()).Logger()
+		s.log = &log
 	}
 	// The session is already running so we want to restart the idle timeout since no proxied packets have come down yet.
 	s.markActive()
@@ -119,20 +145,21 @@ func (s *session) Serve(ctx context.Context) error {
 		for {
 			// Read from the origin UDP socket
 			n, err := s.origin.Read(readBuffer[DatagramPayloadHeaderLen:])
-			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				s.log.Debug().Msg("Flow (origin) connection closed")
-			}
 			if err != nil {
+				if errors.Is(err, io.EOF) ||
+					errors.Is(err, io.ErrUnexpectedEOF) {
+					s.log.Debug().Msgf("flow (origin) connection closed: %v", err)
+				}
 				s.closeChan <- err
 				return
 			}
 			if n < 0 {
-				s.log.Warn().Int("packetSize", n).Msg("Flow (origin) packet read was negative and was dropped")
+				s.log.Warn().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was negative and was dropped")
 				continue
 			}
 			if n > maxDatagramPayloadLen {
 				s.metrics.PayloadTooLarge()
-				s.log.Error().Int("packetSize", n).Msg("Flow (origin) packet read was too large and was dropped")
+				s.log.Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
 				continue
 			}
 			// We need to synchronize on the eyeball in-case that the connection was migrated. This should be rarely a point
@@ -155,12 +182,12 @@ func (s *session) Serve(ctx context.Context) error {
 func (s *session) Write(payload []byte) (n int, err error) {
 	n, err = s.origin.Write(payload)
 	if err != nil {
-		s.log.Err(err).Msg("Failed to write payload to flow (remote)")
+		s.log.Err(err).Msg("failed to write payload to flow (remote)")
 		return n, err
 	}
 	// Write must return a non-nil error if it returns n < len(p). https://pkg.go.dev/io#Writer
 	if n < len(payload) {
-		s.log.Err(io.ErrShortWrite).Msg("Failed to write the full payload to flow (remote)")
+		s.log.Err(io.ErrShortWrite).Msg("failed to write the full payload to flow (remote)")
 		return n, io.ErrShortWrite
 	}
 	// Mark the session as active since we proxied a packet to the origin.

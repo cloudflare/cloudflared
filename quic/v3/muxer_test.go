@@ -619,16 +619,12 @@ func newMockSession() mockSession {
 	}
 }
 
-func (m *mockSession) ID() v3.RequestID {
-	return testRequestID
-}
-
-func (m *mockSession) ConnectionID() uint8 {
-	return 0
-}
-
-func (m *mockSession) Migrate(conn v3.DatagramConn) { m.migrated <- conn.ID() }
-func (m *mockSession) ResetIdleTimer()              {}
+func (m *mockSession) ID() v3.RequestID                                  { return testRequestID }
+func (m *mockSession) RemoteAddr() net.Addr                              { return testOriginAddr }
+func (m *mockSession) LocalAddr() net.Addr                               { return testLocalAddr }
+func (m *mockSession) ConnectionID() uint8                               { return 0 }
+func (m *mockSession) Migrate(conn v3.DatagramConn, log *zerolog.Logger) { m.migrated <- conn.ID() }
+func (m *mockSession) ResetIdleTimer()                                   {}
 
 func (m *mockSession) Serve(ctx context.Context) error {
 	close(m.served)

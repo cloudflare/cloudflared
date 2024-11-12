@@ -3,6 +3,7 @@ package v3
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -11,6 +12,10 @@ const (
 	// Allocating a 16 channel buffer here allows for the writer to be slightly faster than the reader.
 	// This has worked previously well for datagramv2, so we will start with this as well
 	demuxChanCapacity = 16
+
+	logSrcKey      = "src"
+	logDstKey      = "dst"
+	logDurationKey = "durationMS"
 )
 
 // DatagramConn is the bridge that multiplexes writes and reads of datagrams for UDP sessions and ICMP packets to
@@ -174,23 +179,28 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 
 // This method handles new registrations of a session and the serve loop for the session.
 func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, datagram *UDPSessionRegistrationDatagram, logger *zerolog.Logger) {
+	log := logger.With().
+		Str(logFlowID, datagram.RequestID.String()).
+		Str(logDstKey, datagram.Dest.String()).
+		Logger()
 	session, err := c.sessionManager.RegisterSession(datagram, c)
 	switch err {
 	case nil:
 		// Continue as normal
 	case ErrSessionAlreadyRegistered:
 		// Session is already registered and likely the response got lost
-		c.handleSessionAlreadyRegistered(datagram.RequestID, logger)
+		c.handleSessionAlreadyRegistered(datagram.RequestID, &log)
 		return
 	case ErrSessionBoundToOtherConn:
 		// Session is already registered but to a different connection
-		c.handleSessionMigration(datagram.RequestID, logger)
+		c.handleSessionMigration(datagram.RequestID, &log)
 		return
 	default:
-		logger.Err(err).Msgf("flow registration failure")
-		c.handleSessionRegistrationFailure(datagram.RequestID, logger)
+		log.Err(err).Msgf("flow registration failure")
+		c.handleSessionRegistrationFailure(datagram.RequestID, &log)
 		return
 	}
+	log = log.With().Str(logSrcKey, session.LocalAddr().String()).Logger()
 	c.metrics.IncrementFlows()
 	// Make sure to eventually remove the session from the session manager when the session is closed
 	defer c.sessionManager.UnregisterSession(session.ID())
@@ -199,27 +209,30 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 	// Respond that we are able to process the new session
 	err = c.SendUDPSessionResponse(datagram.RequestID, ResponseOk)
 	if err != nil {
-		logger.Err(err).Msgf("flow registration failure: unable to send session registration response")
+		log.Err(err).Msgf("flow registration failure: unable to send session registration response")
 		return
 	}
 
 	// We bind the context of the session to the [quic.Connection] that initiated the session.
 	// [Session.Serve] is blocking and will continue this go routine till the end of the session lifetime.
+	start := time.Now()
 	err = session.Serve(ctx)
+	elapsedMS := time.Now().Sub(start).Milliseconds()
+	log = log.With().Int64(logDurationKey, elapsedMS).Logger()
 	if err == nil {
 		// We typically don't expect a session to close without some error response. [SessionIdleErr] is the typical
 		// expected error response.
-		logger.Warn().Msg("flow was closed without explicit close or timeout")
+		log.Warn().Msg("flow closed: no explicit close or timeout elapsed")
 		return
 	}
 	// SessionIdleErr and SessionCloseErr are valid and successful error responses to end a session.
 	if errors.Is(err, SessionIdleErr{}) || errors.Is(err, SessionCloseErr) {
-		logger.Debug().Msg(err.Error())
+		log.Debug().Msgf("flow closed: %s", err.Error())
 		return
 	}
 
 	// All other errors should be reported as errors
-	logger.Err(err).Msgf("flow was closed with an error")
+	log.Err(err).Msgf("flow closed with an error")
 }
 
 func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID, logger *zerolog.Logger) {
@@ -240,6 +253,7 @@ func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID, logge
 	// packets have come down yet.
 	session.ResetIdleTimer()
 	c.metrics.RetryFlowResponse()
+	logger.Debug().Msgf("flow registration response retry")
 }
 
 func (c *datagramConn) handleSessionMigration(requestID RequestID, logger *zerolog.Logger) {
@@ -252,7 +266,8 @@ func (c *datagramConn) handleSessionMigration(requestID RequestID, logger *zerol
 	}
 
 	// Migrate the session to use this edge connection instead of the currently running one.
-	session.Migrate(c)
+	// We also pass in this connection's logger to override the existing logger for the session.
+	session.Migrate(c, c.logger)
 
 	// Send another registration response since the session is already active
 	err = c.SendUDPSessionResponse(requestID, ResponseOk)
@@ -260,6 +275,7 @@ func (c *datagramConn) handleSessionMigration(requestID RequestID, logger *zerol
 		logger.Err(err).Msgf("flow registration failure: unable to send an additional flow registration response")
 		return
 	}
+	logger.Debug().Msgf("flow registration migration")
 }
 
 func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID, logger *zerolog.Logger) {

@@ -7,8 +7,6 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
-
-	"github.com/cloudflare/cloudflared/ingress"
 )
 
 var (
@@ -37,17 +35,19 @@ type SessionManager interface {
 type DialUDP func(dest netip.AddrPort) (*net.UDPConn, error)
 
 type sessionManager struct {
-	sessions map[RequestID]Session
-	mutex    sync.RWMutex
-	metrics  Metrics
-	log      *zerolog.Logger
+	sessions     map[RequestID]Session
+	mutex        sync.RWMutex
+	originDialer DialUDP
+	metrics      Metrics
+	log          *zerolog.Logger
 }
 
 func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP) SessionManager {
 	return &sessionManager{
-		sessions: make(map[RequestID]Session),
-		metrics:  metrics,
-		log:      log,
+		sessions:     make(map[RequestID]Session),
+		originDialer: originDialer,
+		metrics:      metrics,
+		log:          log,
 	}
 }
 
@@ -62,12 +62,20 @@ func (s *sessionManager) RegisterSession(request *UDPSessionRegistrationDatagram
 		return nil, ErrSessionBoundToOtherConn
 	}
 	// Attempt to bind the UDP socket for the new session
-	origin, err := ingress.DialUDPAddrPort(request.Dest)
+	origin, err := s.originDialer(request.Dest)
 	if err != nil {
 		return nil, err
 	}
 	// Create and insert the new session in the map
-	session := NewSession(request.RequestID, request.IdleDurationHint, origin, conn, s.metrics, s.log)
+	session := NewSession(
+		request.RequestID,
+		request.IdleDurationHint,
+		origin,
+		origin.RemoteAddr(),
+		origin.LocalAddr(),
+		conn,
+		s.metrics,
+		s.log)
 	s.sessions[request.RequestID] = session
 	return session, nil
 }
