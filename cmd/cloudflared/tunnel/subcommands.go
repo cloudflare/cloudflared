@@ -413,6 +413,10 @@ func buildReadyCommand() *cli.Command {
 
 func readyCommand(c *cli.Context) error {
 	metricsOpts := c.String("metrics")
+	if !c.IsSet("metrics") {
+		return fmt.Errorf("--metrics has to be provided")
+	}
+
 	requestURL := fmt.Sprintf("http://%s/ready", metricsOpts)
 	res, err := http.Get(requestURL)
 	if err != nil {
