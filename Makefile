@@ -165,10 +165,6 @@ cover:
 	# Generate the HTML report that can be viewed from the browser in CI.
 	$Q go tool cover -html ".cover/c.out" -o .cover/all.html
 
-.PHONY: test-ssh-server
-test-ssh-server:
-	docker-compose -f ssh_server_tests/docker-compose.yml up
-
 .PHONY: install-go
 install-go:
 	rm -rf ${CF_GO_PATH}

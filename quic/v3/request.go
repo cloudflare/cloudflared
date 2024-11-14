@@ -3,6 +3,7 @@ package v3
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 const (
@@ -37,6 +38,10 @@ func RequestIDFromSlice(data []byte) (RequestID, error) {
 	}, nil
 }
 
+func (id RequestID) String() string {
+	return fmt.Sprintf("%016x%016x", id.hi, id.lo)
+}
+
 // Compare returns an integer comparing two IPs.
 // The result will be 0 if id == id2, -1 if id < id2, and +1 if id > id2.
 // The definition of "less than" is the same as the [RequestID.Less] method.
@@ -68,5 +73,17 @@ func (id RequestID) MarshalBinaryTo(data []byte) error {
 	}
 	binary.BigEndian.PutUint64(data[:8], id.hi)
 	binary.BigEndian.PutUint64(data[8:], id.lo)
+	return nil
+}
+
+func (id *RequestID) UnmarshalBinary(data []byte) error {
+	if len(data) != 16 {
+		return fmt.Errorf("invalid length slice provided to unmarshal: %d (expected 16)", len(data))
+	}
+
+	*id = RequestID{
+		binary.BigEndian.Uint64(data[:8]),
+		binary.BigEndian.Uint64(data[8:]),
+	}
 	return nil
 }

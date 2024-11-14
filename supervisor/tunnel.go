@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -85,14 +87,6 @@ func (c *TunnelConfig) connectionOptions(originLocalAddr string, numPreviousAtte
 		CompressionQuality:  0,
 		NumPreviousAttempts: numPreviousAttempts,
 	}
-}
-
-func (c *TunnelConfig) SupportedFeatures() []string {
-	supported := []string{features.FeatureSerializedHeaders}
-	if c.NamedTunnel == nil {
-		supported = append(supported, features.FeatureQuickReconnects)
-	}
-	return supported
 }
 
 func StartTunnelDaemon(
@@ -181,6 +175,8 @@ func (f *ipAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsN
 type EdgeTunnelServer struct {
 	config            *TunnelConfig
 	orchestrator      *orchestration.Orchestrator
+	sessionManager    v3.SessionManager
+	datagramMetrics   v3.Metrics
 	edgeAddrHandler   EdgeAddrHandler
 	edgeAddrs         *edgediscovery.Edge
 	edgeBindAddr      net.IP
@@ -605,14 +601,26 @@ func (e *EdgeTunnelServer) serveQUIC(
 		return err, true
 	}
 
-	datagramSessionManager := connection.NewDatagramV2Connection(
-		ctx,
-		conn,
-		e.config.PacketConfig,
-		e.config.RPCTimeout,
-		e.config.WriteStreamTimeout,
-		connLogger.Logger(),
-	)
+	var datagramSessionManager connection.DatagramSessionHandler
+	if slices.Contains(connOptions.Client.Features, features.FeatureDatagramV3) {
+		datagramSessionManager = connection.NewDatagramV3Connection(
+			ctx,
+			conn,
+			e.sessionManager,
+			connIndex,
+			e.datagramMetrics,
+			connLogger.Logger(),
+		)
+	} else {
+		datagramSessionManager = connection.NewDatagramV2Connection(
+			ctx,
+			conn,
+			e.config.PacketConfig,
+			e.config.RPCTimeout,
+			e.config.WriteStreamTimeout,
+			connLogger.Logger(),
+		)
+	}
 
 	// Wrap the [quic.Connection] as a TunnelConnection
 	tunnelConn, err := connection.NewTunnelConnection(

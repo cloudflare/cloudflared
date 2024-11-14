@@ -1,3 +1,15 @@
+2024.11.0
+- 2024-11-05 VULN-66059: remove ssh server tests
+- 2024-11-04 TUN-8700: Add datagram v3 muxer
+- 2024-11-04 TUN-8646: Allow experimental feature support for datagram v3
+- 2024-11-04 TUN-8641: Expose methods to simplify V3 Datagram parsing on the edge
+- 2024-10-31 TUN-8708: Bump python min version to 3.10
+- 2024-10-31 TUN-8667: Add datagram v3 session manager
+- 2024-10-25 TUN-8692: remove dashes from session id
+- 2024-10-24 TUN-8694: Rework release script
+- 2024-10-24 TUN-8661: Refactor connection methods to support future different datagram muxing methods
+- 2024-07-22 TUN-8553: Bump go to 1.22.5 and go-boring 1.22.5-1
+
 2024.10.1
 - 2024-10-23 TUN-8694: Fix github release script
 - 2024-10-21 Revert "TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport"
