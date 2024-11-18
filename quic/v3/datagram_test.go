@@ -350,3 +350,30 @@ func compareRegistrationDatagrams(t *testing.T, l *v3.UDPSessionRegistrationData
 		l.IdleDurationHint == r.IdleDurationHint &&
 		l.Traced == r.Traced
 }
+
+func FuzzRegistrationDatagram(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		unmarshaled := v3.UDPSessionRegistrationDatagram{}
+		err := unmarshaled.UnmarshalBinary(data)
+		if err == nil {
+			_, _ = unmarshaled.MarshalBinary()
+		}
+	})
+}
+
+func FuzzPayloadDatagram(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		unmarshaled := v3.UDPSessionPayloadDatagram{}
+		_ = unmarshaled.UnmarshalBinary(data)
+	})
+}
+
+func FuzzRegistrationResponseDatagram(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		unmarshaled := v3.UDPSessionRegistrationResponseDatagram{}
+		err := unmarshaled.UnmarshalBinary(data)
+		if err == nil {
+			_, _ = unmarshaled.MarshalBinary()
+		}
+	})
+}

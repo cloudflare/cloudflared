@@ -197,3 +197,10 @@ func createSecureMockServerAndClient(handler http.Handler) (*httptest.Server, *h
 
 	return server, client, nil
 }
+
+func FuzzNewAccessValidator(f *testing.F) {
+	f.Fuzz(func(t *testing.T, domain string, issuer string, applicationAUD string) {
+		ctx := context.Background()
+		_, _ = NewAccessValidator(ctx, domain, issuer, applicationAUD)
+	})
+}
