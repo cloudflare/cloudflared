@@ -1,3 +1,13 @@
+2024.11.1
+- 2024-11-18 Add cloudflared tunnel ready command
+- 2024-11-14 Make metrics a requirement for tunnel ready command
+- 2024-11-12 TUN-8701:  Simplify flow registration logs for datagram v3
+- 2024-11-11 add: new go-fuzz targets
+- 2024-11-07 TUN-8701: Add metrics and adjust logs for datagram v3
+- 2024-11-06 TUN-8709: Add session migration for datagram v3
+- 2024-11-04 Fixed 404 in README.md to TryCloudflare
+- 2024-09-24 Update semgrep.yml
+
 2024.11.0
 - 2024-11-05 VULN-66059: remove ssh server tests
 - 2024-11-04 TUN-8700: Add datagram v3 muxer
