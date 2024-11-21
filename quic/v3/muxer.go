@@ -267,7 +267,7 @@ func (c *datagramConn) handleSessionMigration(requestID RequestID, logger *zerol
 
 	// Migrate the session to use this edge connection instead of the currently running one.
 	// We also pass in this connection's logger to override the existing logger for the session.
-	session.Migrate(c, c.logger)
+	session.Migrate(c, c.conn.Context(), c.logger)
 
 	// Send another registration response since the session is already active
 	err = c.SendUDPSessionResponse(requestID, ResponseOk)

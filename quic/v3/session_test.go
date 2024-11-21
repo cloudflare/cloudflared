@@ -137,14 +137,28 @@ func TestSessionServe_Migrate(t *testing.T) {
 	defer session.Close()
 
 	done := make(chan error)
+	eyeball1Ctx, cancel := context.WithCancelCause(context.Background())
 	go func() {
-		done <- session.Serve(context.Background())
+		done <- session.Serve(eyeball1Ctx)
 	}()
 
 	// Migrate the session to a new connection before origin sends data
 	eyeball2 := newMockEyeball()
 	eyeball2.connID = 1
-	session.Migrate(&eyeball2, &log)
+	eyeball2Ctx := context.Background()
+	session.Migrate(&eyeball2, eyeball2Ctx, &log)
+
+	// Cancel the origin eyeball context; this should not cancel the session
+	contextCancelErr := errors.New("context canceled for first eyeball connection")
+	cancel(contextCancelErr)
+	select {
+	case <-done:
+		t.Fatalf("expected session to still be running")
+	default:
+	}
+	if context.Cause(eyeball1Ctx) != contextCancelErr {
+		t.Fatalf("first eyeball context should be cancelled manually: %+v", context.Cause(eyeball1Ctx))
+	}
 
 	// Origin sends data
 	payload2 := []byte{0xde}
@@ -165,6 +179,68 @@ func TestSessionServe_Migrate(t *testing.T) {
 	err := <-done
 	if !errors.Is(err, v3.SessionIdleErr{}) {
 		t.Error(err)
+	}
+	if eyeball2Ctx.Err() != nil {
+		t.Fatalf("second eyeball context should be not be cancelled")
+	}
+}
+
+func TestSessionServe_Migrate_CloseContext2(t *testing.T) {
+	log := zerolog.Nop()
+	eyeball := newMockEyeball()
+	pipe1, pipe2 := net.Pipe()
+	session := v3.NewSession(testRequestID, 2*time.Second, pipe2, testOriginAddr, testLocalAddr, &eyeball, &noopMetrics{}, &log)
+	defer session.Close()
+
+	done := make(chan error)
+	eyeball1Ctx, cancel := context.WithCancelCause(context.Background())
+	go func() {
+		done <- session.Serve(eyeball1Ctx)
+	}()
+
+	// Migrate the session to a new connection before origin sends data
+	eyeball2 := newMockEyeball()
+	eyeball2.connID = 1
+	eyeball2Ctx, cancel2 := context.WithCancelCause(context.Background())
+	session.Migrate(&eyeball2, eyeball2Ctx, &log)
+
+	// Cancel the origin eyeball context; this should not cancel the session
+	contextCancelErr := errors.New("context canceled for first eyeball connection")
+	cancel(contextCancelErr)
+	select {
+	case <-done:
+		t.Fatalf("expected session to still be running")
+	default:
+	}
+	if context.Cause(eyeball1Ctx) != contextCancelErr {
+		t.Fatalf("first eyeball context should be cancelled manually: %+v", context.Cause(eyeball1Ctx))
+	}
+
+	// Origin sends data
+	payload2 := []byte{0xde}
+	pipe1.Write(payload2)
+
+	// Expect write to eyeball2
+	data := <-eyeball2.recvData
+	if len(data) <= 17 || !slices.Equal(payload2, data[17:]) {
+		t.Fatalf("expected data to write to eyeball2 after migration: %+v", data)
+	}
+
+	select {
+	case data := <-eyeball.recvData:
+		t.Fatalf("expected no data to write to eyeball1 after migration: %+v", data)
+	default:
+	}
+
+	// Close the connection2 context manually
+	contextCancel2Err := errors.New("context canceled for second eyeball connection")
+	cancel2(contextCancel2Err)
+	err := <-done
+	if err != context.Canceled {
+		t.Fatalf("session Serve should be done: %+v", err)
+	}
+	if context.Cause(eyeball2Ctx) != contextCancel2Err {
+		t.Fatalf("second eyeball context should have been cancelled manually: %+v", context.Cause(eyeball2Ctx))
 	}
 }
 

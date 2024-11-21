@@ -55,7 +55,7 @@ type Session interface {
 	RemoteAddr() net.Addr
 	LocalAddr() net.Addr
 	ResetIdleTimer()
-	Migrate(eyeball DatagramConn, logger *zerolog.Logger)
+	Migrate(eyeball DatagramConn, ctx context.Context, logger *zerolog.Logger)
 	// Serve starts the event loop for processing UDP packets
 	Serve(ctx context.Context) error
 }
@@ -70,6 +70,7 @@ type session struct {
 	// activeAtChan is used to communicate the last read/write time
 	activeAtChan chan time.Time
 	closeChan    chan error
+	contextChan  chan context.Context
 	metrics      Metrics
 	log          *zerolog.Logger
 }
@@ -96,8 +97,10 @@ func NewSession(
 		// drop instead of blocking because last active time only needs to be an approximation
 		activeAtChan: make(chan time.Time, 1),
 		closeChan:    make(chan error, 1),
-		metrics:      metrics,
-		log:          &logger,
+		// contextChan is an unbounded channel to help enforce one active migration of a session at a time.
+		contextChan: make(chan context.Context),
+		metrics:     metrics,
+		log:         &logger,
 	}
 	session.eyeball.Store(&eyeball)
 	return session
@@ -120,11 +123,12 @@ func (s *session) ConnectionID() uint8 {
 	return eyeball.ID()
 }
 
-func (s *session) Migrate(eyeball DatagramConn, logger *zerolog.Logger) {
+func (s *session) Migrate(eyeball DatagramConn, ctx context.Context, logger *zerolog.Logger) {
 	current := *(s.eyeball.Load())
 	// Only migrate if the connection ids are different.
 	if current.ID() != eyeball.ID() {
 		s.eyeball.Store(&eyeball)
+		s.contextChan <- ctx
 		log := logger.With().Str(logFlowID, s.id.String()).Logger()
 		s.log = &log
 	}
@@ -225,6 +229,7 @@ func (s *session) Close() error {
 }
 
 func (s *session) waitForCloseCondition(ctx context.Context, closeAfterIdle time.Duration) error {
+	connCtx := ctx
 	// Closing the session at the end cancels read so Serve() can return
 	defer s.Close()
 	if closeAfterIdle == 0 {
@@ -237,8 +242,14 @@ func (s *session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-connCtx.Done():
+			return connCtx.Err()
+		case newContext := <-s.contextChan:
+			// During migration of a session, we need to make sure that the context of the new connection is used instead
+			// of the old connection context. This will ensure that when the old connection goes away, this session will
+			// still be active on the existing connection.
+			connCtx = newContext
+			continue
 		case reason := <-s.closeChan:
 			return reason
 		case <-checkIdleTimer.C:
