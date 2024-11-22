@@ -28,6 +28,7 @@ import (
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/credentials"
+	"github.com/cloudflare/cloudflared/diagnostic"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -463,8 +464,10 @@ func StartServer(
 		readinessServer := metrics.NewReadyServer(clientID,
 			tunnelstate.NewConnTracker(log))
 		observer.RegisterSink(readinessServer)
+		diagnosticHandler := diagnostic.NewDiagnosticHandler(log, 0, diagnostic.NewSystemCollectorImpl(buildInfo.CloudflaredVersion))
 		metricsConfig := metrics.Config{
 			ReadyServer:         readinessServer,
+			DiagnosticHandler:   diagnosticHandler,
 			QuickTunnelHostname: quickTunnelURL,
 			Orchestrator:        orchestrator,
 		}
