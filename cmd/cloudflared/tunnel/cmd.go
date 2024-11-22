@@ -39,6 +39,7 @@ import (
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 	"github.com/cloudflare/cloudflared/validation"
 )
 
@@ -448,16 +449,19 @@ func StartServer(
 		return err
 	}
 
-	metricsListener, err := listeners.Listen("tcp", c.String("metrics"))
+	metricsListener, err := metrics.CreateMetricsListener(&listeners, c.String("metrics"))
 	if err != nil {
 		log.Err(err).Msg("Error opening metrics server listener")
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
+
 	defer metricsListener.Close()
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
-		readinessServer := metrics.NewReadyServer(log, clientID)
+		readinessServer := metrics.NewReadyServer(clientID,
+			tunnelstate.NewConnTracker(log))
 		observer.RegisterSink(readinessServer)
 		metricsConfig := metrics.Config{
 			ReadyServer:         readinessServer,
@@ -857,9 +861,15 @@ func configureCloudflaredFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "metrics",
-			Value:   "localhost:",
-			Usage:   "Listen address for metrics reporting.",
+			Name:  "metrics",
+			Value: metrics.GetMetricsDefaultAddress(metrics.Runtime),
+			Usage: fmt.Sprintf(
+				`Listen address for metrics reporting. If no address is passed cloudflared will try to bind to %v.
+If all are unavailable, a random port will be used. Note that when running cloudflared from an virtual
+environment the default address binds to all interfaces, hence, it is important to isolate the host
+and virtualized host network stacks from each other`,
+				metrics.GetMetricsKnownAddresses(metrics.Runtime),
+			),
 			EnvVars: []string{"TUNNEL_METRICS"},
 			Hidden:  shouldHide,
 		}),

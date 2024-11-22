@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog"
 
 	conn "github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/tunnelstate"
@@ -19,10 +18,13 @@ type ReadyServer struct {
 }
 
 // NewReadyServer initializes a ReadyServer and starts listening for dis/connection events.
-func NewReadyServer(log *zerolog.Logger, clientID uuid.UUID) *ReadyServer {
+func NewReadyServer(
+	clientID uuid.UUID,
+	tracker *tunnelstate.ConnTracker,
+) *ReadyServer {
 	return &ReadyServer{
-		clientID: clientID,
-		tracker:  tunnelstate.NewConnTracker(log),
+		clientID,
+		tracker,
 	}
 }
 

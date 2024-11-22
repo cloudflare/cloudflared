@@ -5,7 +5,9 @@ FROM golang:1.22.5 as builder
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
     TARGET_GOOS=${TARGET_GOOS} \
-    TARGET_GOARCH=${TARGET_GOARCH}
+    TARGET_GOARCH=${TARGET_GOARCH} \
+    CONTAINER_BUILD=1
+
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 

@@ -30,6 +30,10 @@ ifdef PACKAGE_MANAGER
 	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=$(PACKAGE_MANAGER)"
 endif
 
+ifdef CONTAINER_BUILD 
+	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/metrics.Runtime=virtual"
+endif
+
 LINK_FLAGS :=
 ifeq ($(FIPS), true)
 	LINK_FLAGS := -linkmode=external -extldflags=-static $(LINK_FLAGS)
