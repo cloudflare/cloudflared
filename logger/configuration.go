@@ -76,10 +76,10 @@ func CreateConfig(
 
 	var file *FileConfig
 	var rolling *RollingConfig
-	if rollingLogPath != "" {
-		rolling = createRollingConfig(rollingLogPath)
-	} else if nonRollingLogFilePath != "" {
+	if nonRollingLogFilePath != "" {
 		file = createFileConfig(nonRollingLogFilePath)
+	} else if rollingLogPath != "" {
+		rolling = createRollingConfig(rollingLogPath)
 	}
 
 	if minLevel == "" {

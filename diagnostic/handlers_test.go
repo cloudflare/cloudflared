@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/diagnostic"
@@ -27,6 +29,21 @@ const (
 	rawInformationKey    = "rikey"
 	errorKey             = "errkey"
 )
+
+func buildCliContext(t *testing.T, flags map[string]string) *cli.Context {
+	t.Helper()
+
+	flagSet := flag.NewFlagSet("", flag.PanicOnError)
+	ctx := cli.NewContext(cli.NewApp(), flagSet, nil)
+
+	for k, v := range flags {
+		flagSet.String(k, v, "")
+		err := ctx.Set(k, v)
+		require.NoError(t, err)
+	}
+
+	return ctx
+}
 
 func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnectionInfo) *tunnelstate.ConnTracker {
 	t.Helper()
@@ -45,6 +62,7 @@ func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnecti
 
 	return tracker
 }
+
 func setCtxValuesForSystemCollector(
 	systemInfo *diagnostic.SystemInformation,
 	rawInfo string,
@@ -104,7 +122,8 @@ func TestSystemHandler(t *testing.T) {
 	for _, tCase := range tests {
 		t.Run(tCase.name, func(t *testing.T) {
 			t.Parallel()
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil)
+
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil, nil, nil)
 			recorder := httptest.NewRecorder()
 			ctx := setCtxValuesForSystemCollector(tCase.systemInfo, tCase.rawInfo, tCase.err)
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "/diag/syste,", nil)
@@ -162,7 +181,7 @@ func TestTunnelStateHandler(t *testing.T) {
 		t.Run(tCase.name, func(t *testing.T) {
 			t.Parallel()
 			tracker := newTrackerFromConns(t, tCase.connections)
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, tCase.tunnelID, tCase.clientID, tracker)
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, tCase.tunnelID, tCase.clientID, tracker, nil, nil)
 			recorder := httptest.NewRecorder()
 			handler.TunnelStateHandler(recorder, nil)
 			decoder := json.NewDecoder(recorder.Body)
@@ -179,6 +198,62 @@ func TestTunnelStateHandler(t *testing.T) {
 			assert.Equal(t, tCase.tunnelID, response.TunnelID)
 			assert.Equal(t, tCase.clientID, response.ConnectorID)
 			assert.Equal(t, tCase.connections, response.Connections)
+		})
+	}
+}
+
+func TestConfigurationHandler(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+
+	tests := []struct {
+		name     string
+		flags    map[string]string
+		expected map[string]string
+	}{
+		{
+			name:  "empty cli",
+			flags: make(map[string]string),
+			expected: map[string]string{
+				"uid": "0",
+			},
+		},
+		{
+			name: "cli with flags",
+			flags: map[string]string{
+				"a": "a",
+				"b": "a",
+				"c": "a",
+				"d": "a",
+			},
+			expected: map[string]string{
+				"b":   "a",
+				"c":   "a",
+				"d":   "a",
+				"uid": "0",
+			},
+		},
+	}
+
+	for _, tCase := range tests {
+		t.Run(tCase.name, func(t *testing.T) {
+			var response map[string]string
+
+			t.Parallel()
+			ctx := buildCliContext(t, tCase.flags)
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, uuid.New(), uuid.New(), nil, ctx, []string{"b", "c", "d"})
+			recorder := httptest.NewRecorder()
+			handler.ConfigurationHandler(recorder, nil)
+			decoder := json.NewDecoder(recorder.Body)
+			err := decoder.Decode(&response)
+			require.NoError(t, err)
+			_, ok := response["uid"]
+			assert.True(t, ok)
+			delete(tCase.expected, "uid")
+			delete(response, "uid")
+			assert.Equal(t, http.StatusOK, recorder.Code)
+			assert.Equal(t, tCase.expected, response)
 		})
 	}
 }
