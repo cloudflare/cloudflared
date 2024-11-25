@@ -461,10 +461,11 @@ func StartServer(
 
 	go func() {
 		defer wg.Done()
-		readinessServer := metrics.NewReadyServer(clientID,
-			tunnelstate.NewConnTracker(log))
-		observer.RegisterSink(readinessServer)
-		diagnosticHandler := diagnostic.NewDiagnosticHandler(log, 0, diagnostic.NewSystemCollectorImpl(buildInfo.CloudflaredVersion))
+		tracker := tunnelstate.NewConnTracker(log)
+		observer.RegisterSink(tracker)
+
+		readinessServer := metrics.NewReadyServer(clientID, tracker)
+		diagnosticHandler := diagnostic.NewDiagnosticHandler(log, 0, diagnostic.NewSystemCollectorImpl(buildInfo.CloudflaredVersion), tunnelConfig.NamedTunnel.Credentials.TunnelID, clientID, tracker)
 		metricsConfig := metrics.Config{
 			ReadyServer:         readinessServer,
 			DiagnosticHandler:   diagnosticHandler,

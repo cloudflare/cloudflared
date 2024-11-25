@@ -1,6 +1,7 @@
 package tunnelstate
 
 import (
+	"net"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -16,8 +17,15 @@ type ConnTracker struct {
 }
 
 type ConnectionInfo struct {
-	IsConnected bool
-	Protocol    connection.Protocol
+	IsConnected bool                `json:"isConnected,omitempty"`
+	Protocol    connection.Protocol `json:"protocol,omitempty"`
+	EdgeAddress net.IP              `json:"edgeAddress,omitempty"`
+}
+
+// Convinience struct to extend the connection with its index.
+type IndexedConnectionInfo struct {
+	ConnectionInfo
+	Index uint8 `json:"index,omitempty"`
 }
 
 func NewConnTracker(
@@ -36,6 +44,7 @@ func (ct *ConnTracker) OnTunnelEvent(c connection.Event) {
 		ci := ConnectionInfo{
 			IsConnected: true,
 			Protocol:    c.Protocol,
+			EdgeAddress: c.EdgeAddress,
 		}
 		ct.connectionInfo[c.Index] = ci
 		ct.mutex.Unlock()
@@ -73,4 +82,22 @@ func (ct *ConnTracker) HasConnectedWith(protocol connection.Protocol) bool {
 		}
 	}
 	return false
+}
+
+// Returns the connection information iff it is connected this
+// also leverages the [IndexedConnectionInfo] to also provide the connection index
+func (ct *ConnTracker) GetActiveConnections() []IndexedConnectionInfo {
+	ct.mutex.RLock()
+	defer ct.mutex.RUnlock()
+
+	connections := make([]IndexedConnectionInfo, 0)
+
+	for key, value := range ct.connectionInfo {
+		if value.IsConnected {
+			info := IndexedConnectionInfo{value, key}
+			connections = append(connections, info)
+		}
+	}
+
+	return connections
 }

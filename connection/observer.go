@@ -47,7 +47,6 @@ func (o *Observer) RegisterSink(sink EventSink) {
 }
 
 func (o *Observer) logConnected(connectionID uuid.UUID, connIndex uint8, location string, address net.IP, protocol Protocol) {
-	o.sendEvent(Event{Index: connIndex, EventType: Connected, Location: location})
 	o.log.Info().
 		Int(management.EventTypeKey, int(management.Cloudflared)).
 		Str(LogFieldConnectionID, connectionID.String()).
@@ -63,8 +62,8 @@ func (o *Observer) sendRegisteringEvent(connIndex uint8) {
 	o.sendEvent(Event{Index: connIndex, EventType: RegisteringTunnel})
 }
 
-func (o *Observer) sendConnectedEvent(connIndex uint8, protocol Protocol, location string) {
-	o.sendEvent(Event{Index: connIndex, EventType: Connected, Protocol: protocol, Location: location})
+func (o *Observer) sendConnectedEvent(connIndex uint8, protocol Protocol, location string, edgeAddress net.IP) {
+	o.sendEvent(Event{Index: connIndex, EventType: Connected, Protocol: protocol, Location: location, EdgeAddress: edgeAddress})
 }
 
 func (o *Observer) SendURL(url string) {

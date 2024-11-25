@@ -102,7 +102,7 @@ func (c *controlStream) ServeControlStream(
 	c.observer.metrics.regSuccess.WithLabelValues("registerConnection").Inc()
 
 	c.observer.logConnected(registrationDetails.UUID, c.connIndex, registrationDetails.Location, c.edgeAddress, c.protocol)
-	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location)
+	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location, c.edgeAddress)
 	c.connectedFuse.Connected()
 
 	// if conn index is 0 and tunnel is not remotely managed, then send local ingress rules configuration

@@ -44,7 +44,7 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.Zero(t, readyConnections)
 
 	// one connected => ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Connected,
 	})
@@ -53,7 +53,7 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.EqualValues(t, 1, readyConnections)
 
 	// another connected => still ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     2,
 		EventType: connection.Connected,
 	})
@@ -62,7 +62,7 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.EqualValues(t, 2, readyConnections)
 
 	// one reconnecting => still ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     2,
 		EventType: connection.Reconnecting,
 	})
@@ -71,7 +71,7 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.EqualValues(t, 1, readyConnections)
 
 	// Regression test for TUN-3777
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.RegisteringTunnel,
 	})
@@ -80,14 +80,14 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.Zero(t, readyConnections)
 
 	// other connected then unregistered  => not ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Connected,
 	})
 	code, readyConnections = mockRequest(t, rs)
 	assert.EqualValues(t, http.StatusOK, code)
 	assert.EqualValues(t, 1, readyConnections)
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Unregistering,
 	})
@@ -96,7 +96,7 @@ func TestReadinessEventHandling(t *testing.T) {
 	assert.Zero(t, readyConnections)
 
 	// other disconnected => not ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Disconnected,
 	})

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 
-	conn "github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
@@ -26,10 +25,6 @@ func NewReadyServer(
 		clientID,
 		tracker,
 	}
-}
-
-func (rs *ReadyServer) OnTunnelEvent(c conn.Event) {
-	rs.tracker.OnTunnelEvent(c)
 }
 
 type body struct {

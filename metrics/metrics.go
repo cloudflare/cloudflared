@@ -94,6 +94,7 @@ func newMetricsHandler(
 		})
 	}
 
+	router.HandleFunc("/diag/tunnel", config.DiagnosticHandler.TunnelStateHandler)
 	router.HandleFunc("/diag/system", config.DiagnosticHandler.SystemHandler)
 
 	return router
