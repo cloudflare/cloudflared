@@ -127,7 +127,9 @@ var (
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
 		"any existing DNS records for this hostname.", overwriteDNSFlag)
 	deprecatedClassicTunnelErr = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
-	nonSecretFlagsList         = []string{
+	// TODO: TUN-8756 the list below denotes the flags that do not possess any kind of sensitive information
+	// however this approach is not maintainble in the long-term.
+	nonSecretFlagsList = []string{
 		"config",
 		"autoupdate-freq",
 		"no-autoupdate",

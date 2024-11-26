@@ -166,7 +166,7 @@ func (handler *Handler) ConfigurationHandler(writer http.ResponseWriter, _ *http
 	// The UID is included to help the
 	// diagnostic tool to understand
 	// if this instance is managed or not.
-	flags[configurationKeyUid] = strconv.Itoa(os.Getuid())
+	flags[configurationKeyUID] = strconv.Itoa(os.Getuid())
 	encoder := json.NewEncoder(writer)
 
 	err := encoder.Encode(flags)
