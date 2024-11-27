@@ -752,7 +752,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 	sessionDemuxChan := make(chan *packet.Session, 4)
 	datagramMuxer := cfdquic.NewDatagramMuxerV2(conn, &log, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(&log, datagramMuxer.SendToSession, sessionDemuxChan)
-	packetRouter := ingress.NewPacketRouter(nil, datagramMuxer, &log)
+	packetRouter := ingress.NewPacketRouter(nil, datagramMuxer, 0, &log)
 
 	datagramConn := &datagramV2Connection{
 		conn,

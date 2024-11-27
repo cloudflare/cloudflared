@@ -54,7 +54,8 @@ type datagramV2Connection struct {
 
 func NewDatagramV2Connection(ctx context.Context,
 	conn quic.Connection,
-	packetConfig *ingress.GlobalRouterConfig,
+	icmpRouter ingress.ICMPRouter,
+	index uint8,
 	rpcTimeout time.Duration,
 	streamWriteTimeout time.Duration,
 	logger *zerolog.Logger,
@@ -62,7 +63,7 @@ func NewDatagramV2Connection(ctx context.Context,
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
 	datagramMuxer := cfdquic.NewDatagramMuxerV2(conn, logger, sessionDemuxChan)
 	sessionManager := datagramsession.NewManager(logger, datagramMuxer.SendToSession, sessionDemuxChan)
-	packetRouter := ingress.NewPacketRouter(packetConfig, datagramMuxer, logger)
+	packetRouter := ingress.NewPacketRouter(icmpRouter, datagramMuxer, index, logger)
 
 	return &datagramV2Connection{
 		conn,

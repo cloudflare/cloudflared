@@ -252,11 +252,11 @@ func prepareTunnelConfig(
 		QUICConnectionLevelFlowControlLimit: c.Uint64(quicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(quicStreamLevelFlowControlLimit),
 	}
-	packetConfig, err := newPacketConfig(c, log)
+	icmpRouter, err := newICMPRouter(c, log)
 	if err != nil {
 		log.Warn().Err(err).Msg("ICMP proxy feature is disabled")
 	} else {
-		tunnelConfig.PacketConfig = packetConfig
+		tunnelConfig.ICMPRouterServer = icmpRouter
 	}
 	orchestratorConfig := &orchestration.Config{
 		Ingress:            &ingressRules,
@@ -351,7 +351,7 @@ func adjustIPVersionByBindAddress(ipVersion allregions.ConfigIPVersion, ip net.I
 	}
 }
 
-func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRouterConfig, error) {
+func newICMPRouter(c *cli.Context, logger *zerolog.Logger) (ingress.ICMPRouterServer, error) {
 	ipv4Src, err := determineICMPv4Src(c.String("icmpv4-src"), logger)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to determine IPv4 source address for ICMP proxy")
@@ -368,16 +368,11 @@ func newPacketConfig(c *cli.Context, logger *zerolog.Logger) (*ingress.GlobalRou
 		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
 	}
 
-	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, zone, logger, icmpFunnelTimeout)
+	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, logger, icmpFunnelTimeout)
 	if err != nil {
 		return nil, err
 	}
-	return &ingress.GlobalRouterConfig{
-		ICMPRouter: icmpRouter,
-		IPv4Src:    ipv4Src,
-		IPv6Src:    ipv6Src,
-		Zone:       zone,
-	}, nil
+	return icmpRouter, nil
 }
 
 func determineICMPv4Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Addr, error) {
@@ -407,13 +402,12 @@ type interfaceIP struct {
 
 func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger, ipv4Src netip.Addr) (addr netip.Addr, zone string, err error) {
 	if userDefinedSrc != "" {
-		userDefinedIP, zone, _ := strings.Cut(userDefinedSrc, "%")
-		addr, err := netip.ParseAddr(userDefinedIP)
+		addr, err := netip.ParseAddr(userDefinedSrc)
 		if err != nil {
 			return netip.Addr{}, "", err
 		}
 		if addr.Is6() {
-			return addr, zone, nil
+			return addr, addr.Zone(), nil
 		}
 		return netip.Addr{}, "", fmt.Errorf("expect IPv6, but %s is IPv4", userDefinedSrc)
 	}

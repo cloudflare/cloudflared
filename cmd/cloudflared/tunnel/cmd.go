@@ -510,7 +510,7 @@ func StartServer(
 
 	// Disable ICMP packet routing for quick tunnels
 	if quickTunnelURL != "" {
-		tunnelConfig.PacketConfig = nil
+		tunnelConfig.ICMPRouterServer = nil
 	}
 
 	internalRules := []ingress.Rule{}

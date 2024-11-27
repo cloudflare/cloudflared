@@ -18,15 +18,11 @@ import (
 )
 
 // Opens a non-privileged ICMP socket on Linux and Darwin
-func newICMPConn(listenIP netip.Addr, zone string) (*icmp.PacketConn, error) {
+func newICMPConn(listenIP netip.Addr) (*icmp.PacketConn, error) {
 	if listenIP.Is4() {
 		return icmp.ListenPacket("udp4", listenIP.String())
 	}
-	listenAddr := listenIP.String()
-	if zone != "" {
-		listenAddr = listenAddr + "%" + zone
-	}
-	return icmp.ListenPacket("udp6", listenAddr)
+	return icmp.ListenPacket("udp6", listenIP.String())
 }
 
 func netipAddr(addr net.Addr) (netip.Addr, bool) {
@@ -34,7 +30,8 @@ func netipAddr(addr net.Addr) (netip.Addr, bool) {
 	if !ok {
 		return netip.Addr{}, false
 	}
-	return netip.AddrFromSlice(udpAddr.IP)
+
+	return udpAddr.AddrPort().Addr(), true
 }
 
 type flow3Tuple struct {
@@ -50,14 +47,12 @@ type icmpEchoFlow struct {
 	closed         *atomic.Bool
 	src            netip.Addr
 	originConn     *icmp.PacketConn
-	responder      *packetResponder
+	responder      ICMPResponder
 	assignedEchoID int
 	originalEchoID int
-	// it's up to the user to ensure respEncoder is not used concurrently
-	respEncoder *packet.Encoder
 }
 
-func newICMPEchoFlow(src netip.Addr, closeCallback func() error, originConn *icmp.PacketConn, responder *packetResponder, assignedEchoID, originalEchoID int, respEncoder *packet.Encoder) *icmpEchoFlow {
+func newICMPEchoFlow(src netip.Addr, closeCallback func() error, originConn *icmp.PacketConn, responder ICMPResponder, assignedEchoID, originalEchoID int) *icmpEchoFlow {
 	return &icmpEchoFlow{
 		ActivityTracker: packet.NewActivityTracker(),
 		closeCallback:   closeCallback,
@@ -67,7 +62,6 @@ func newICMPEchoFlow(src netip.Addr, closeCallback func() error, originConn *icm
 		responder:       responder,
 		assignedEchoID:  assignedEchoID,
 		originalEchoID:  originalEchoID,
-		respEncoder:     respEncoder,
 	}
 }
 
@@ -139,11 +133,7 @@ func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) error {
 		},
 		Message: reply.msg,
 	}
-	serializedPacket, err := ief.respEncoder.Encode(&pk)
-	if err != nil {
-		return err
-	}
-	return ief.responder.returnPacket(serializedPacket)
+	return ief.responder.ReturnPacket(&pk)
 }
 
 type echoReply struct {
@@ -184,7 +174,7 @@ func toICMPEchoFlow(funnel packet.Funnel) (*icmpEchoFlow, error) {
 	return icmpFlow, nil
 }
 
-func createShouldReplaceFunnelFunc(logger *zerolog.Logger, muxer muxer, pk *packet.ICMP, originalEchoID int) func(packet.Funnel) bool {
+func createShouldReplaceFunnelFunc(logger *zerolog.Logger, responder ICMPResponder, pk *packet.ICMP, originalEchoID int) func(packet.Funnel) bool {
 	return func(existing packet.Funnel) bool {
 		existingFlow, err := toICMPEchoFlow(existing)
 		if err != nil {
@@ -199,7 +189,7 @@ func createShouldReplaceFunnelFunc(logger *zerolog.Logger, muxer muxer, pk *pack
 		// If the existing flow has a different muxer, there's a new quic connection where return packets should be
 		// routed. Otherwise, return packets will be send to the first observed incoming connection, rather than the
 		// most recently observed connection.
-		if existingFlow.responder.datagramMuxer != muxer {
+		if existingFlow.responder.ConnectionIndex() != responder.ConnectionIndex() {
 			logger.Debug().
 				Str("src", pk.Src.String()).
 				Str("dst", pk.Dst.String()).

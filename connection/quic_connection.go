@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -18,7 +17,6 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/packet"
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -415,30 +413,5 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 func (np *nopCloserReadWriter) Close() error {
 	atomic.StoreUint32(&np.closed, 1)
 
-	return nil
-}
-
-// muxerWrapper wraps DatagramMuxerV2 to satisfy the packet.FunnelUniPipe interface
-type muxerWrapper struct {
-	muxer *cfdquic.DatagramMuxerV2
-}
-
-func (rp *muxerWrapper) SendPacket(dst netip.Addr, pk packet.RawPacket) error {
-	return rp.muxer.SendPacket(cfdquic.RawPacket(pk))
-}
-
-func (rp *muxerWrapper) ReceivePacket(ctx context.Context) (packet.RawPacket, error) {
-	pk, err := rp.muxer.ReceivePacket(ctx)
-	if err != nil {
-		return packet.RawPacket{}, err
-	}
-	rawPacket, ok := pk.(cfdquic.RawPacket)
-	if ok {
-		return packet.RawPacket(rawPacket), nil
-	}
-	return packet.RawPacket{}, fmt.Errorf("unexpected packet type %+v", pk)
-}
-
-func (rp *muxerWrapper) Close() error {
 	return nil
 }

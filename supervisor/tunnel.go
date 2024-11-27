@@ -63,7 +63,7 @@ type TunnelConfig struct {
 	NamedTunnel      *connection.TunnelProperties
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
-	PacketConfig     *ingress.GlobalRouterConfig
+	ICMPRouterServer ingress.ICMPRouterServer
 
 	RPCTimeout         time.Duration
 	WriteStreamTimeout time.Duration
@@ -615,7 +615,8 @@ func (e *EdgeTunnelServer) serveQUIC(
 		datagramSessionManager = connection.NewDatagramV2Connection(
 			ctx,
 			conn,
-			e.config.PacketConfig,
+			e.config.ICMPRouterServer,
+			connIndex,
 			e.config.RPCTimeout,
 			e.config.WriteStreamTimeout,
 			connLogger.Logger(),

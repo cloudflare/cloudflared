@@ -119,9 +119,9 @@ func (s *Supervisor) Run(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) error {
-	if s.config.PacketConfig != nil {
+	if s.config.ICMPRouterServer != nil {
 		go func() {
-			if err := s.config.PacketConfig.ICMPRouter.Serve(ctx); err != nil {
+			if err := s.config.ICMPRouterServer.Serve(ctx); err != nil {
 				if errors.Is(err, net.ErrClosed) {
 					s.log.Logger().Info().Err(err).Msg("icmp router terminated")
 				} else {
