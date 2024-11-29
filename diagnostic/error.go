@@ -16,6 +16,5 @@ var (
 	// Error used when given key is not found while parsing KV.
 	ErrKeyNotFound = errors.New("key not found")
 	// Error used when there is no disk volume information available.
-	ErrNoVolumeFound   = errors.New("no disk volume information found")
-	ErrNoPathAvailable = errors.New("no path available")
+	ErrNoVolumeFound = errors.New("no disk volume information found")
 )
