@@ -13,4 +13,12 @@ const (
 	logFilename                = "cloudflared_logs.txt" // name of the output log file
 	configurationKeyUID        = "uid"                  // Key used to set and get the UID value from the configuration map
 	tailMaxNumberOfLines       = "10000"                // maximum number of log lines from a virtual runtime (docker or kubernetes)
+
+	// Endpoints used by the diagnostic HTTP Client.
+	configurationEndpoint     = "diag/configuration"
+	tunnelStateEndpoint       = "diag/tunnel"
+	systemInformationEndpoint = "diag/system"
+	memoryDumpEndpoint        = "debug/pprof/heap"
+	goroutineDumpEndpoint     = "debug/pprof/goroutine"
+	metricsEndpoint           = "metrics"
 )

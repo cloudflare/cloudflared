@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -11,14 +12,12 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 )
 
-const configurationEndpoint = "diag/configuration"
-
 type httpClient struct {
 	http.Client
-	baseURL url.URL
+	baseURL *url.URL
 }
 
-func NewHTTPClient(baseURL url.URL) *httpClient {
+func NewHTTPClient() *httpClient {
 	httpTransport := http.Transport{
 		TLSHandshakeTimeout:   defaultTimeout,
 		ResponseHeaderTimeout: defaultTimeout,
@@ -29,12 +28,21 @@ func NewHTTPClient(baseURL url.URL) *httpClient {
 			Transport: &httpTransport,
 			Timeout:   defaultTimeout,
 		},
-		baseURL,
+		nil,
 	}
 }
 
-func (client *httpClient) GET(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (client *httpClient) SetBaseURL(baseURL *url.URL) {
+	client.baseURL = baseURL
+}
+
+func (client *httpClient) GET(ctx context.Context, endpoint string) (*http.Response, error) {
+	if client.baseURL == nil {
+		return nil, ErrNoBaseUrl
+	}
+	url := client.baseURL.JoinPath(endpoint)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating GET request: %w", err)
 	}
@@ -56,12 +64,7 @@ type LogConfiguration struct {
 }
 
 func (client *httpClient) GetLogConfiguration(ctx context.Context) (*LogConfiguration, error) {
-	endpoint, err := url.JoinPath(client.baseURL.String(), configurationEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL: %w", err)
-	}
-
-	response, err := client.GET(ctx, endpoint)
+	response, err := client.GET(ctx, configurationEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +96,79 @@ func (client *httpClient) GetLogConfiguration(ctx context.Context) (*LogConfigur
 		return &LogConfiguration{"", logDirectory, uid}, nil
 	}
 
-	return nil, ErrKeyNotFound
+	// No log configured may happen when cloudflared is executed as a managed service or
+	// when containerized
+	return &LogConfiguration{"", "", uid}, nil
+}
+
+func (client *httpClient) GetMemoryDump(ctx context.Context, writer io.Writer) error {
+	response, err := client.GET(ctx, memoryDumpEndpoint)
+	if err != nil {
+		return err
+	}
+
+	return copyToWriter(response, writer)
+}
+
+func (client *httpClient) GetGoroutineDump(ctx context.Context, writer io.Writer) error {
+	response, err := client.GET(ctx, goroutineDumpEndpoint)
+	if err != nil {
+		return err
+	}
+
+	return copyToWriter(response, writer)
+}
+
+func (client *httpClient) GetTunnelState(ctx context.Context) (*TunnelState, error) {
+	response, err := client.GET(ctx, tunnelStateEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	defer response.Body.Close()
+
+	var state TunnelState
+	if err := json.NewDecoder(response.Body).Decode(&state); err != nil {
+		return nil, fmt.Errorf("failed to decode body: %w", err)
+	}
+
+	return &state, nil
+}
+
+func (client *httpClient) GetSystemInformation(ctx context.Context, writer io.Writer) error {
+	response, err := client.GET(ctx, systemInformationEndpoint)
+	if err != nil {
+		return err
+	}
+
+	return copyToWriter(response, writer)
+}
+
+func (client *httpClient) GetMetrics(ctx context.Context, writer io.Writer) error {
+	response, err := client.GET(ctx, metricsEndpoint)
+	if err != nil {
+		return err
+	}
+
+	return copyToWriter(response, writer)
+}
+
+func copyToWriter(response *http.Response, writer io.Writer) error {
+	defer response.Body.Close()
+
+	_, err := io.Copy(writer, response.Body)
+	if err != nil {
+		return fmt.Errorf("error writing metrics: %w", err)
+	}
+
+	return nil
 }
 
 type HTTPClient interface {
-	GetLogConfiguration(ctx context.Context) (LogConfiguration, error)
+	GetLogConfiguration(ctx context.Context) (*LogConfiguration, error)
+	GetMemoryDump(ctx context.Context, writer io.Writer) error
+	GetGoroutineDump(ctx context.Context, writer io.Writer) error
+	GetTunnelState(ctx context.Context) (*TunnelState, error)
+	GetSystemInformation(ctx context.Context, writer io.Writer) error
+	GetMetrics(ctx context.Context, writer io.Writer) error
 }

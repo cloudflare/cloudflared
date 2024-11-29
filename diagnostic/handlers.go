@@ -55,6 +55,12 @@ func NewDiagnosticHandler(
 	}
 }
 
+func (handler *Handler) InstallEndpoints(router *http.ServeMux) {
+	router.HandleFunc(configurationEndpoint, handler.ConfigurationHandler)
+	router.HandleFunc(tunnelStateEndpoint, handler.TunnelStateHandler)
+	router.HandleFunc(systemInformationEndpoint, handler.SystemHandler)
+}
+
 func (handler *Handler) SystemHandler(writer http.ResponseWriter, request *http.Request) {
 	logger := handler.log.With().Str(collectorField, systemCollectorName).Logger()
 	logger.Info().Msg("Collection started")
@@ -95,7 +101,7 @@ func (handler *Handler) SystemHandler(writer http.ResponseWriter, request *http.
 	}
 }
 
-type tunnelStateResponse struct {
+type TunnelState struct {
 	TunnelID    uuid.UUID                           `json:"tunnelID,omitempty"`
 	ConnectorID uuid.UUID                           `json:"connectorID,omitempty"`
 	Connections []tunnelstate.IndexedConnectionInfo `json:"connections,omitempty"`
@@ -107,7 +113,7 @@ func (handler *Handler) TunnelStateHandler(writer http.ResponseWriter, _ *http.R
 
 	defer log.Info().Msg("Collection finished")
 
-	body := tunnelStateResponse{
+	body := TunnelState{
 		handler.tunnelID,
 		handler.connectorID,
 		handler.tracker.GetActiveConnections(),

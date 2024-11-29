@@ -17,4 +17,6 @@ var (
 	ErrKeyNotFound = errors.New("key not found")
 	// Error used when there is no disk volume information available.
 	ErrNoVolumeFound = errors.New("no disk volume information found")
+	// Error user when the base url of the diagnostic client is not provided.
+	ErrNoBaseUrl = errors.New("no base url")
 )

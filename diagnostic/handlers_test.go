@@ -186,12 +186,7 @@ func TestTunnelStateHandler(t *testing.T) {
 			handler.TunnelStateHandler(recorder, nil)
 			decoder := json.NewDecoder(recorder.Body)
 
-			var response struct {
-				TunnelID    uuid.UUID                           `json:"tunnelID,omitempty"`
-				ConnectorID uuid.UUID                           `json:"connectorID,omitempty"`
-				Connections []tunnelstate.IndexedConnectionInfo `json:"connections,omitempty"`
-			}
-
+			var response diagnostic.TunnelState
 			err := decoder.Decode(&response)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, recorder.Code)
