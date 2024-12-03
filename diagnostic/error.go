@@ -19,4 +19,8 @@ var (
 	ErrNoVolumeFound = errors.New("no disk volume information found")
 	// Error user when the base url of the diagnostic client is not provided.
 	ErrNoBaseUrl = errors.New("no base url")
+	// Error used when no metrics server is found listening to the known addresses list (check [metrics.GetMetricsKnownAddresses])
+	ErrMetricsServerNotFound = errors.New("metrics server not found")
+	// Error used when multiple metrics server are found listening to the known addresses list (check [metrics.GetMetricsKnownAddresses])
+	ErrMultipleMetricsServerFound = errors.New("multiple metrics server found")
 )

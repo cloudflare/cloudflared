@@ -2,12 +2,17 @@ package diagnostic
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 )
 
 // CreateDiagnosticZipFile create a zip file with the contents from the all
@@ -66,4 +71,70 @@ func CreateDiagnosticZipFile(base string, paths []string) (zipFileName string, e
 
 	zipFileName = archive.Name()
 	return zipFileName, nil
+}
+
+type AddressableTunnelState struct {
+	*TunnelState
+	URL *url.URL
+}
+
+func findMetricsServerPredicate(tunnelID, connectorID uuid.UUID) func(state *TunnelState) bool {
+	if tunnelID != uuid.Nil && connectorID != uuid.Nil {
+		return func(state *TunnelState) bool {
+			return state.ConnectorID == connectorID && state.TunnelID == tunnelID
+		}
+	} else if tunnelID == uuid.Nil && connectorID != uuid.Nil {
+		return func(state *TunnelState) bool {
+			return state.ConnectorID == connectorID
+		}
+	} else if tunnelID != uuid.Nil && connectorID == uuid.Nil {
+		return func(state *TunnelState) bool {
+			return state.TunnelID == tunnelID
+		}
+	}
+
+	return func(*TunnelState) bool {
+		return true
+	}
+}
+
+// The FindMetricsServer will try to find the metrics server url.
+// There are two possible error scenarios:
+// 1. No instance is found which will only return ErrMetricsServerNotFound
+// 2. Multiple instances are found which will return an array of state and ErrMultipleMetricsServerFound
+// In case of success, only the state for the instance is returned.
+func FindMetricsServer(
+	log *zerolog.Logger,
+	client *httpClient,
+	addresses []string,
+) (*AddressableTunnelState, []*AddressableTunnelState, error) {
+	instances := make([]*AddressableTunnelState, 0)
+
+	for _, address := range addresses {
+		url, err := url.Parse("http://" + address)
+		if err != nil {
+			log.Debug().Err(err).Msgf("error parsing address %s", address)
+
+			continue
+		}
+
+		client.SetBaseURL(url)
+
+		state, err := client.GetTunnelState(context.Background())
+		if err == nil {
+			instances = append(instances, &AddressableTunnelState{state, url})
+		} else {
+			log.Debug().Err(err).Msgf("error getting tunnel state from address %s", address)
+		}
+	}
+
+	if len(instances) == 0 {
+		return nil, nil, ErrMetricsServerNotFound
+	}
+
+	if len(instances) == 1 {
+		return instances[0], nil, nil
+	}
+
+	return nil, instances, ErrMultipleMetricsServerFound
 }
