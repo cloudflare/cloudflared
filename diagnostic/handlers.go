@@ -56,7 +56,7 @@ func NewDiagnosticHandler(
 }
 
 func (handler *Handler) InstallEndpoints(router *http.ServeMux) {
-	router.HandleFunc(configurationEndpoint, handler.ConfigurationHandler)
+	router.HandleFunc(cliConfigurationEndpoint, handler.ConfigurationHandler)
 	router.HandleFunc(tunnelStateEndpoint, handler.TunnelStateHandler)
 	router.HandleFunc(systemInformationEndpoint, handler.SystemHandler)
 }

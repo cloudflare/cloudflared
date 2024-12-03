@@ -64,7 +64,7 @@ type LogConfiguration struct {
 }
 
 func (client *httpClient) GetLogConfiguration(ctx context.Context) (*LogConfiguration, error) {
-	response, err := client.GET(ctx, configurationEndpoint)
+	response, err := client.GET(ctx, cliConfigurationEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +153,24 @@ func (client *httpClient) GetMetrics(ctx context.Context, writer io.Writer) erro
 	return copyToWriter(response, writer)
 }
 
+func (client *httpClient) GetTunnelConfiguration(ctx context.Context, writer io.Writer) error {
+	response, err := client.GET(ctx, tunnelConfigurationEndpoint)
+	if err != nil {
+		return err
+	}
+
+	return copyToWriter(response, writer)
+}
+
+func (client *httpClient) GetCliConfiguration(ctx context.Context, writer io.Writer) error {
+	response, err := client.GET(ctx, cliConfigurationEndpoint)
+	if err != nil {
+		return err
+	}
+
+	return copyToWriter(response, writer)
+}
+
 func copyToWriter(response *http.Response, writer io.Writer) error {
 	defer response.Body.Close()
 
@@ -171,4 +189,6 @@ type HTTPClient interface {
 	GetTunnelState(ctx context.Context) (*TunnelState, error)
 	GetSystemInformation(ctx context.Context, writer io.Writer) error
 	GetMetrics(ctx context.Context, writer io.Writer) error
+	GetCliConfiguration(ctx context.Context, writer io.Writer) error
+	GetTunnelConfiguration(ctx context.Context, writer io.Writer) error
 }

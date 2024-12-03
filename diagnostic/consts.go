@@ -15,10 +15,11 @@ const (
 	tailMaxNumberOfLines       = "10000"                // maximum number of log lines from a virtual runtime (docker or kubernetes)
 
 	// Endpoints used by the diagnostic HTTP Client.
-	configurationEndpoint     = "diag/configuration"
-	tunnelStateEndpoint       = "diag/tunnel"
-	systemInformationEndpoint = "diag/system"
-	memoryDumpEndpoint        = "debug/pprof/heap"
-	goroutineDumpEndpoint     = "debug/pprof/goroutine"
-	metricsEndpoint           = "metrics"
+	cliConfigurationEndpoint    = "/diag/configuration"
+	tunnelStateEndpoint         = "/diag/tunnel"
+	systemInformationEndpoint   = "/diag/system"
+	memoryDumpEndpoint          = "debug/pprof/heap"
+	goroutineDumpEndpoint       = "debug/pprof/goroutine"
+	metricsEndpoint             = "metrics"
+	tunnelConfigurationEndpoint = "/config"
 )
