@@ -39,9 +39,9 @@ func (collector *KubernetesLogCollector) Collect(ctx context.Context) (*LogInfor
 			"kubectl",
 			"logs",
 			collector.pod,
-			"--since-time=",
+			"--since-time",
 			since,
-			"--tail=",
+			"--tail",
 			tailMaxNumberOfLines,
 			"-c",
 			collector.containerID,
@@ -52,9 +52,9 @@ func (collector *KubernetesLogCollector) Collect(ctx context.Context) (*LogInfor
 			"kubectl",
 			"logs",
 			collector.pod,
-			"--since-time=",
+			"--since-time",
 			since,
-			"--tail=",
+			"--tail",
 			tailMaxNumberOfLines,
 		)
 	}
