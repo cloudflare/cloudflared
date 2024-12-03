@@ -68,7 +68,11 @@ func DecodeLine(text string) (*Hop, error) {
 			rtts = append(rtts, time.Duration(rtt*MicrosecondsFactor))
 		}
 	}
+
 	domain, _ = strings.CutSuffix(domain, " ")
+	if domain == "" {
+		return nil, ErrEmptyDomain
+	}
 
 	return NewHop(uint8(index), domain, rtts), nil
 }

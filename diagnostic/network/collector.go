@@ -2,10 +2,13 @@ package diagnostic
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
 const MicrosecondsFactor = 1000.0
+
+var ErrEmptyDomain = errors.New("domain must not be empty")
 
 // For now only support ICMP is provided.
 type IPVersion int

@@ -14,7 +14,13 @@ import (
 type NetworkCollectorImpl struct{}
 
 func (tracer *NetworkCollectorImpl) Collect(ctx context.Context, options TraceOptions) ([]*Hop, string, error) {
+	ipversion := "-4"
+	if !options.useV4 {
+		ipversion = "-6"
+	}
+
 	args := []string{
+		ipversion,
 		"-w",
 		strconv.FormatInt(int64(options.timeout.Seconds()), 10),
 		"-h",
@@ -23,17 +29,14 @@ func (tracer *NetworkCollectorImpl) Collect(ctx context.Context, options TraceOp
 		"-d",
 		options.address,
 	}
-	if options.useV4 {
-		args = append(args, "-4")
-	} else {
-		args = append(args, "-6")
-	}
 	command := exec.CommandContext(ctx, "tracert.exe", args...)
 
 	return decodeNetworkOutputToFile(command, DecodeLine)
 }
 
 func DecodeLine(text string) (*Hop, error) {
+	const requestTimedOut = "Request timed out."
+
 	fields := strings.Fields(text)
 	parts := []string{}
 	filter := func(s string) bool { return s != "*" && s != "ms" }
@@ -49,10 +52,6 @@ func DecodeLine(text string) (*Hop, error) {
 		return nil, fmt.Errorf("couldn't parse index from timeout hop: %w", err)
 	}
 
-	if len(parts) == 1 {
-		return NewTimeoutHop(uint8(index)), nil
-	}
-
 	domain := ""
 	rtts := []time.Duration{}
 
@@ -66,6 +65,17 @@ func DecodeLine(text string) (*Hop, error) {
 			rtts = append(rtts, time.Duration(rtt*MicrosecondsFactor))
 		}
 	}
+
 	domain, _ = strings.CutSuffix(domain, " ")
+	// If the domain is equal to "Request timed out." then we build a
+	// timeout hop.
+	if domain == requestTimedOut {
+		return NewTimeoutHop(uint8(index)), nil
+	}
+
+	if domain == "" {
+		return nil, ErrEmptyDomain
+	}
+
 	return NewHop(uint8(index), domain, rtts), nil
 }

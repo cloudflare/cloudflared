@@ -20,23 +20,68 @@ func TestDecode(t *testing.T) {
 		name         string
 		text         string
 		expectedHops []*diagnostic.Hop
-		expectErr    bool
 	}{
 		{
 			"repeated hop index parse failure",
 			`1  172.68.101.121 (172.68.101.121)  12.874 ms  15.517 ms  15.311 ms
 2  172.68.101.121 (172.68.101.121)  12.874 ms  15.517 ms  15.311 ms
-someletters * * *`,
-			nil,
-			true,
+someletters * * *
+4  172.68.101.121 (172.68.101.121)  12.874 ms  15.517 ms  15.311 ms `,
+			[]*diagnostic.Hop{
+				diagnostic.NewHop(
+					uint8(1),
+					"172.68.101.121 (172.68.101.121)",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+				diagnostic.NewHop(
+					uint8(2),
+					"172.68.101.121 (172.68.101.121)",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+				diagnostic.NewHop(
+					uint8(4),
+					"172.68.101.121 (172.68.101.121)",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+			},
 		},
 		{
 			"hop index parse failure",
 			`1  172.68.101.121 (172.68.101.121)  12.874 ms  15.517 ms  15.311 ms
 2  172.68.101.121 (172.68.101.121)  12.874 ms  15.517 ms  15.311 ms
 someletters 8.8.8.8 8.8.8.9 abc ms 0.456 ms 0.789 ms`,
-			nil,
-			true,
+			[]*diagnostic.Hop{
+				diagnostic.NewHop(
+					uint8(1),
+					"172.68.101.121 (172.68.101.121)",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+				diagnostic.NewHop(
+					uint8(2),
+					"172.68.101.121 (172.68.101.121)",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+			},
 		},
 		{
 			"missing rtt",
@@ -61,7 +106,6 @@ someletters 8.8.8.8 8.8.8.9 abc ms 0.456 ms 0.789 ms`,
 					},
 				),
 			},
-			false,
 		},
 		{
 			"simple example ipv4",
@@ -89,7 +133,6 @@ someletters 8.8.8.8 8.8.8.9 abc ms 0.456 ms 0.789 ms`,
 				),
 				diagnostic.NewTimeoutHop(uint8(3)),
 			},
-			false,
 		},
 		{
 			"simple example ipv6",
@@ -115,7 +158,6 @@ someletters 8.8.8.8 8.8.8.9 abc ms 0.456 ms 0.789 ms`,
 					},
 				),
 			},
-			false,
 		},
 	}
 
@@ -124,12 +166,8 @@ someletters 8.8.8.8 8.8.8.9 abc ms 0.456 ms 0.789 ms`,
 			t.Parallel()
 
 			hops, err := diagnostic.Decode(strings.NewReader(test.text), diagnostic.DecodeLine)
-			if test.expectErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, test.expectedHops, hops)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, test.expectedHops, hops)
 		})
 	}
 }
