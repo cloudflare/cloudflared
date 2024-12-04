@@ -69,5 +69,5 @@ func (collector *HostLogCollector) Collect(ctx context.Context) (*LogInformation
 		return NewLogInformation(logConfiguration.logDirectory, false, true), nil
 	}
 
-	return nil, ErrMustNotBeEmpty
+	return nil, ErrLogConfigurationIsInvalid
 }

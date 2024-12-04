@@ -43,12 +43,12 @@ func GetMetricsDefaultAddress(runtimeType string) string {
 // startup time to allow a semi-deterministic approach to know where the server is listening at.
 // The ports were selected because at the time we are in 2024 and they do not collide with any
 // know/registered port according https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers.
-func GetMetricsKnownAddresses(runtimeType string) [5]string {
-	switch Runtime {
+func GetMetricsKnownAddresses(runtimeType string) []string {
+	switch runtimeType {
 	case "virtual":
-		return [5]string{"0.0.0.0:20241", "0.0.0.0:20242", "0.0.0.0:20243", "0.0.0.0:20244", "0.0.0.0:20245"}
+		return []string{"0.0.0.0:20241", "0.0.0.0:20242", "0.0.0.0:20243", "0.0.0.0:20244", "0.0.0.0:20245"}
 	default:
-		return [5]string{"localhost:20241", "localhost:20242", "localhost:20243", "localhost:20244", "localhost:20245"}
+		return []string{"localhost:20241", "localhost:20242", "localhost:20243", "localhost:20244", "localhost:20245"}
 	}
 }
 

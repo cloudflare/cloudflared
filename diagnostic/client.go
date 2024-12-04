@@ -38,7 +38,7 @@ func (client *httpClient) SetBaseURL(baseURL *url.URL) {
 
 func (client *httpClient) GET(ctx context.Context, endpoint string) (*http.Response, error) {
 	if client.baseURL == nil {
-		return nil, ErrNoBaseUrl
+		return nil, ErrNoBaseURL
 	}
 	url := client.baseURL.JoinPath(endpoint)
 

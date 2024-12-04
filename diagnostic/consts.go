@@ -22,4 +22,12 @@ const (
 	goroutineDumpEndpoint       = "debug/pprof/goroutine"
 	metricsEndpoint             = "metrics"
 	tunnelConfigurationEndpoint = "/config"
+	// Base for filenames of the diagnostic procedure
+	systemInformationBaseName = "systeminformation.json"
+	metricsBaseName           = "metrics.txt"
+	zipName                   = "cloudflared-diag"
+	heapPprofBaseName         = "heap.pprof"
+	goroutinePprofBaseName    = "goroutine.pprof"
+	networkBaseName           = "network.json"
+	tunnelStateBaseName       = "tunnelstate.json"
 )

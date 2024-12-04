@@ -154,6 +154,7 @@ func (handler *Handler) ConfigurationHandler(writer http.ResponseWriter, _ *http
 
 		switch flag {
 		case logger.LogDirectoryFlag:
+			fallthrough
 		case logger.LogFileFlag:
 			{
 				// the log directory may be relative to the instance thus it must be resolved
