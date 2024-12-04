@@ -31,4 +31,6 @@ const (
 	networkBaseName           = "network.json"
 	rawNetworkBaseName        = "raw-network.txt"
 	tunnelStateBaseName       = "tunnelstate.json"
+	cliConfigurationBaseName  = "cli-configuration.json"
+	configurationBaseName     = "configuration.json"
 )

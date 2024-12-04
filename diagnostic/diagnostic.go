@@ -376,6 +376,16 @@ func createJobs(
 			fn:      jsonNetworkCollectorFunc,
 			bypass:  noDiagNetwork,
 		},
+		{
+			jobName: "cli configuration",
+			fn:      collectFromEndpointAdapter(client.GetCliConfiguration, cliConfigurationBaseName),
+			bypass:  false,
+		},
+		{
+			jobName: "configuration",
+			fn:      collectFromEndpointAdapter(client.GetTunnelConfiguration, configurationBaseName),
+			bypass:  false,
+		},
 	}
 
 	return jobs
