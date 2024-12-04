@@ -29,5 +29,6 @@ const (
 	heapPprofBaseName         = "heap.pprof"
 	goroutinePprofBaseName    = "goroutine.pprof"
 	networkBaseName           = "network.json"
+	rawNetworkBaseName        = "raw-network.txt"
 	tunnelStateBaseName       = "tunnelstate.json"
 )

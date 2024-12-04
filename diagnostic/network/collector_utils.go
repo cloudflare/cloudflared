@@ -39,7 +39,7 @@ func decodeNetworkOutputToFile(command *exec.Cmd, decodeLine DecodeLineFunc) ([]
 		return nil, buf.String(), err
 	}
 
-	return hops, "", nil
+	return hops, buf.String(), nil
 }
 
 func Decode(reader io.Reader, decodeLine DecodeLineFunc) ([]*Hop, error) {

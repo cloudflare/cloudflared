@@ -141,7 +141,7 @@ func collectNetworkResultRoutine(
 	}
 }
 
-func collectNetworkInformation(ctx context.Context) (string, error) {
+func gatherNetworkInformation(ctx context.Context) map[string]networkCollectionResult {
 	networkCollector := network.NetworkCollectorImpl{}
 
 	hostAndIPversionPairs := []struct {
@@ -171,11 +171,64 @@ func collectNetworkInformation(ctx context.Context) (string, error) {
 	// Wait for routines to end.
 	wgroup.Wait()
 
-	resultMap := make(map[string][]*network.Hop)
+	resultMap := make(map[string]networkCollectionResult)
 
 	for range len(hostAndIPversionPairs) {
 		result := <-results
-		resultMap[result.name] = result.info
+		if result.err != nil {
+			continue
+		}
+
+		resultMap[result.name] = result
+	}
+
+	return resultMap
+}
+
+func networkInformationCollectors() (rawNetworkCollector, jsonNetworkCollector collectFunc) {
+	// The network collector is an operation that takes most of the diagnostic time, thus,
+	// the sync.Once is used to memoize the result of the collector and then create different
+	// outputs.
+	var once sync.Once
+
+	var resultMap map[string]networkCollectionResult
+
+	rawNetworkCollector = func(ctx context.Context) (string, error) {
+		once.Do(func() { resultMap = gatherNetworkInformation(ctx) })
+
+		return rawNetworkInformationWriter(resultMap)
+	}
+	jsonNetworkCollector = func(ctx context.Context) (string, error) {
+		once.Do(func() { resultMap = gatherNetworkInformation(ctx) })
+
+		return jsonNetworkInformationWriter(resultMap)
+	}
+
+	return rawNetworkCollector, jsonNetworkCollector
+}
+
+func rawNetworkInformationWriter(resultMap map[string]networkCollectionResult) (string, error) {
+	networkDumpHandle, err := os.Create(filepath.Join(os.TempDir(), rawNetworkBaseName))
+	if err != nil {
+		return "", ErrCreatingTemporaryFile
+	}
+
+	defer networkDumpHandle.Close()
+
+	for k, v := range resultMap {
+		_, err := networkDumpHandle.WriteString(k + "\n" + v.raw + "\n")
+		if err != nil {
+			return "", fmt.Errorf("error writing raw network information: %w", err)
+		}
+	}
+
+	return networkDumpHandle.Name(), nil
+}
+
+func jsonNetworkInformationWriter(resultMap map[string]networkCollectionResult) (string, error) {
+	jsonMap := make(map[string][]*network.Hop, len(resultMap))
+	for k, v := range resultMap {
+		jsonMap[k] = v.info
 	}
 
 	networkDumpHandle, err := os.Create(filepath.Join(os.TempDir(), networkBaseName))
@@ -185,7 +238,7 @@ func collectNetworkInformation(ctx context.Context) (string, error) {
 
 	defer networkDumpHandle.Close()
 
-	err = json.NewEncoder(networkDumpHandle).Encode(resultMap)
+	err = json.NewEncoder(networkDumpHandle).Encode(jsonMap)
 	if err != nil {
 		return "", fmt.Errorf("error encoding network information results: %w", err)
 	}
@@ -279,6 +332,7 @@ func createJobs(
 	noDiagLogs bool,
 	noDiagNetwork bool,
 ) []collectJob {
+	rawNetworkCollectorFunc, jsonNetworkCollectorFunc := networkInformationCollectors()
 	jobs := []collectJob{
 		{
 			jobName: "tunnel state",
@@ -313,8 +367,13 @@ func createJobs(
 			bypass: noDiagLogs,
 		},
 		{
+			jobName: "raw network information",
+			fn:      rawNetworkCollectorFunc,
+			bypass:  noDiagNetwork,
+		},
+		{
 			jobName: "network information",
-			fn:      collectNetworkInformation,
+			fn:      jsonNetworkCollectorFunc,
 			bypass:  noDiagNetwork,
 		},
 	}
