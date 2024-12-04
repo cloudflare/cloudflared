@@ -17,6 +17,29 @@ import (
 	network "github.com/cloudflare/cloudflared/diagnostic/network"
 )
 
+const (
+	taskSuccess                  = "success"
+	taskFailure                  = "failure"
+	jobReportName                = "job report"
+	tunnelStateJobName           = "tunnel state"
+	systemInformationJobName     = "system information"
+	goroutineJobName             = "goroutine profile"
+	heapJobName                  = "heap profile"
+	metricsJobName               = "metrics"
+	logInformationJobName        = "log information"
+	rawNetworkInformationJobName = "raw network information"
+	networkInformationJobName    = "network information"
+	cliConfigurationJobName      = "cli configuration"
+	configurationJobName         = "configuration"
+)
+
+// Struct used to hold the results of different routines executing the network collection.
+type taskResult struct {
+	Result string `json:"result,omitempty"`
+	Err    error  `json:"error,omitempty"`
+	path   string
+}
+
 // Struct used to hold the results of different routines executing the network collection.
 type networkCollectionResult struct {
 	name string
@@ -335,60 +358,123 @@ func createJobs(
 	rawNetworkCollectorFunc, jsonNetworkCollectorFunc := networkInformationCollectors()
 	jobs := []collectJob{
 		{
-			jobName: "tunnel state",
+			jobName: tunnelStateJobName,
 			fn:      tunnelStateCollectEndpointAdapter(client, tunnel, tunnelStateBaseName),
 			bypass:  false,
 		},
 		{
-			jobName: "system information",
+			jobName: systemInformationJobName,
 			fn:      collectFromEndpointAdapter(client.GetSystemInformation, systemInformationBaseName),
 			bypass:  noDiagSystem,
 		},
 		{
-			jobName: "goroutine profile",
+			jobName: goroutineJobName,
 			fn:      collectFromEndpointAdapter(client.GetGoroutineDump, goroutinePprofBaseName),
 			bypass:  noDiagRuntime,
 		},
 		{
-			jobName: "heap profile",
+			jobName: heapJobName,
 			fn:      collectFromEndpointAdapter(client.GetMemoryDump, heapPprofBaseName),
 			bypass:  noDiagRuntime,
 		},
 		{
-			jobName: "metrics",
+			jobName: metricsJobName,
 			fn:      collectFromEndpointAdapter(client.GetMetrics, metricsBaseName),
 			bypass:  noDiagMetrics,
 		},
 		{
-			jobName: "log information",
+			jobName: logInformationJobName,
 			fn: func(ctx context.Context) (string, error) {
 				return collectLogs(ctx, client, diagContainer, diagPod)
 			},
 			bypass: noDiagLogs,
 		},
 		{
-			jobName: "raw network information",
+			jobName: rawNetworkInformationJobName,
 			fn:      rawNetworkCollectorFunc,
 			bypass:  noDiagNetwork,
 		},
 		{
-			jobName: "network information",
+			jobName: networkInformationJobName,
 			fn:      jsonNetworkCollectorFunc,
 			bypass:  noDiagNetwork,
 		},
 		{
-			jobName: "cli configuration",
+			jobName: cliConfigurationJobName,
 			fn:      collectFromEndpointAdapter(client.GetCliConfiguration, cliConfigurationBaseName),
 			bypass:  false,
 		},
 		{
-			jobName: "configuration",
+			jobName: configurationJobName,
 			fn:      collectFromEndpointAdapter(client.GetTunnelConfiguration, configurationBaseName),
 			bypass:  false,
 		},
 	}
 
 	return jobs
+}
+
+func createTaskReport(taskReport map[string]taskResult) (string, error) {
+	dumpHandle, err := os.Create(filepath.Join(os.TempDir(), taskResultBaseName))
+	if err != nil {
+		return "", ErrCreatingTemporaryFile
+	}
+	defer dumpHandle.Close()
+
+	err = json.NewEncoder(dumpHandle).Encode(taskReport)
+	if err != nil {
+		return "", fmt.Errorf("error encoding task results: %w", err)
+	}
+
+	return dumpHandle.Name(), nil
+}
+
+func runJobs(ctx context.Context, jobs []collectJob, log *zerolog.Logger) map[string]taskResult {
+	jobReport := make(map[string]taskResult, len(jobs))
+
+	for _, job := range jobs {
+		if job.bypass {
+			continue
+		}
+
+		log.Info().Msgf("Collecting %s...", job.jobName)
+		path, err := job.fn(ctx)
+
+		var result taskResult
+		if err != nil {
+			result = taskResult{Result: taskFailure, Err: err, path: path}
+
+			log.Error().Err(err).Msgf("Job: %s finished with error.", job.jobName)
+		} else {
+			result = taskResult{Result: taskSuccess, Err: nil, path: path}
+
+			log.Info().Msgf("Collected %s.", job.jobName)
+		}
+
+		jobReport[job.jobName] = result
+	}
+
+	taskReportName, err := createTaskReport(jobReport)
+
+	var result taskResult
+
+	if err != nil {
+		result = taskResult{
+			Result: taskFailure,
+			path:   taskReportName,
+			Err:    err,
+		}
+	} else {
+		result = taskResult{
+			Result: taskSuccess,
+			path:   taskReportName,
+			Err:    nil,
+		}
+	}
+
+	jobReport[jobReportName] = result
+
+	return jobReport
 }
 
 func RunDiagnostic(
@@ -410,7 +496,6 @@ func RunDiagnostic(
 
 	defer cancel()
 
-	paths := make([]string, 0)
 	jobs := createJobs(
 		client,
 		tunnel,
@@ -423,27 +508,17 @@ func RunDiagnostic(
 		options.Toggles.NoDiagNetwork,
 	)
 
-	for _, job := range jobs {
-		if job.bypass {
-			continue
-		}
+	jobsReport := runJobs(ctx, jobs, log)
+	paths := make([]string, 0)
 
-		log.Info().Msgf("Collecting %s...", job.jobName)
-		path, err := job.fn(ctx)
+	for _, v := range jobsReport {
+		paths = append(paths, v.path)
 
 		defer func() {
-			if !errors.Is(err, ErrCreatingTemporaryFile) {
-				os.Remove(path)
+			if !errors.Is(v.Err, ErrCreatingTemporaryFile) {
+				os.Remove(v.path)
 			}
 		}()
-
-		if err != nil {
-			return nil, err
-		}
-
-		log.Info().Msgf("Collected %s.", job.jobName)
-
-		paths = append(paths, path)
 	}
 
 	zipfile, err := CreateDiagnosticZipFile(zipName, paths)

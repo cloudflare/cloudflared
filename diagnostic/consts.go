@@ -33,4 +33,5 @@ const (
 	tunnelStateBaseName       = "tunnelstate.json"
 	cliConfigurationBaseName  = "cli-configuration.json"
 	configurationBaseName     = "configuration.json"
+	taskResultBaseName        = "task-result.json"
 )
