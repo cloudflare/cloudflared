@@ -255,10 +255,15 @@ func TestSessionClose_Multiple(t *testing.T) {
 	if !origin.closed.Load() {
 		t.Fatal("origin wasn't closed")
 	}
+	// Reset the closed status to make sure it isn't closed again
+	origin.closed.Store(false)
 	// subsequent closes shouldn't call close again or cause any errors
 	err = session.Close()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if origin.closed.Load() {
+		t.Fatal("origin was incorrectly closed twice")
 	}
 }
 
