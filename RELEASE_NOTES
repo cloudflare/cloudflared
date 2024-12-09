@@ -1,3 +1,29 @@
+2024.12.0
+- 2024-12-09 TUN-8640: Add ICMP support for datagram V3
+- 2024-12-09 TUN-8789: make python package installation consistent
+- 2024-12-06 TUN-8781: Add Trixie, drop Buster. Default to Bookworm
+- 2024-12-05 TUN-8775: Make sure the session Close can only be called once
+- 2024-12-04 TUN-8725: implement diagnostic procedure
+- 2024-12-04 TUN-8767: include raw output from network collector in diagnostic zipfile
+- 2024-12-04 TUN-8770: add cli configuration and tunnel configuration to diagnostic zipfile
+- 2024-12-04 TUN-8768: add job report to diagnostic zipfile
+- 2024-12-03 TUN-8726: implement compression routine to be used in diagnostic procedure
+- 2024-12-03 TUN-8732: implement port selection algorithm
+- 2024-12-03 TUN-8762: fix argument order when invoking tracert and modify network info output parsing.
+- 2024-12-03 TUN-8769: fix k8s log collector arguments
+- 2024-12-03 TUN-8727: extend client to include function to get cli configuration and tunnel configuration
+- 2024-11-29 TUN-8729: implement network collection for diagnostic procedure
+- 2024-11-29 TUN-8727: implement metrics, runtime, system, and tunnelstate in diagnostic http client
+- 2024-11-27 TUN-8733: add log collection for docker
+- 2024-11-27 TUN-8734: add log collection for kubernetes
+- 2024-11-27 TUN-8640: Refactor ICMPRouter to support new ICMPResponders
+- 2024-11-26 TUN-8735: add managed/local log collection
+- 2024-11-25 TUN-8728: implement diag/tunnel endpoint
+- 2024-11-25 TUN-8730: implement diag/configuration
+- 2024-11-22 TUN-8737: update metrics server port selection
+- 2024-11-22 TUN-8731: Implement diag/system endpoint
+- 2024-11-21 TUN-8748: Migrated datagram V3 flows to use migrated context
+
 2024.11.1
 - 2024-11-18 Add cloudflared tunnel ready command
 - 2024-11-14 Make metrics a requirement for tunnel ready command
