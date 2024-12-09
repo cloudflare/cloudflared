@@ -47,16 +47,17 @@ bullseye: &bullseye
       - python3-pip
       - python3-setuptools
       - wget
-    pre-cache: &build_release_pre_cache
-      - python3 -m pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
+      - python3-venv
     post-cache:
+      - python3 -m venv env
+      - . /cfsetup_build/env/bin/activate
+      - pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
       # build all packages (except macos and FIPS) and move them to /cfsetup/built_artifacts
       - ./build-packages.sh
   # handle FIPS separately so that we built with gofips compiler
   build-linux-fips-release:
     build_dir: *build_dir
     builddeps: *build_deps_release
-    pre-cache: *build_release_pre_cache
     post-cache:
       # same logic as above, but for FIPS packages only
       - ./build-packages-fips.sh
@@ -131,12 +132,14 @@ bullseye: &bullseye
       # libmsi and libgcab are libraries the wixl binary depends on.
       - libmsi-dev
       - libgcab-dev
+      - python3-venv
     pre-cache:
       - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
       - chmod a+x /usr/local/bin/wixl
-      - pip3 install pynacl==1.4.0
-      - pip3 install pygithub==1.55
     post-cache:
+      - python3 -m venv env
+      - . env/bin/activate
+      - pip install pynacl==1.4.0 pygithub==1.55
       - .teamcity/package-windows.sh
   test:
     build_dir: *build_dir
@@ -177,11 +180,13 @@ bullseye: &bullseye
       # because the init script uses ps pid to determine if the agent is
       # running
       - procps
+      - python3-venv
     pre-cache-copy-paths:
       - component-tests/requirements.txt
-    pre-cache: &component_test_pre_cache
-      - python3 -m pip install --break-system-packages --upgrade -r component-tests/requirements.txt
     post-cache: &component_test_post_cache
+      - python3 -m venv env
+      - . env/bin/activate
+      - pip install --upgrade -r component-tests/requirements.txt
       # Creates and routes a Named Tunnel for this build. Also constructs
       # config file from env vars.
       - python3 component-tests/setup.py --type create
@@ -193,7 +198,6 @@ bullseye: &bullseye
     builddeps: *build_deps_component_test
     pre-cache-copy-paths:
       - component-tests/requirements.txt
-    pre-cache: *component_test_pre_cache
     post-cache: *component_test_post_cache
   github-release-dryrun:
     build_dir: *build_dir
@@ -204,9 +208,11 @@ bullseye: &bullseye
       - libffi-dev
       - python3-setuptools
       - python3-pip
-    pre-cache:
-      - python3 -m pip install pynacl==1.4.0 pygithub==1.55
+      - python3-venv
     post-cache:
+      - python3 -m venv env
+      - . env/bin/activate
+      - pip install pynacl==1.4.0 pygithub==1.55
       - make github-release-dryrun
   github-release:
     build_dir: *build_dir
@@ -217,9 +223,11 @@ bullseye: &bullseye
       - libffi-dev
       - python3-setuptools
       - python3-pip
-    pre-cache:
-      - python3 -m pip install pynacl==1.4.0 pygithub==1.55
+      - python3-venv
     post-cache:
+      - python3 -m venv env
+      - . env/bin/activate
+      - pip install pynacl==1.4.0 pygithub==1.55
       - make github-release
   r2-linux-release:
     build_dir: *build_dir
@@ -236,9 +244,11 @@ bullseye: &bullseye
       - python3-pip
       - reprepro
       - createrepo
-    pre-cache:
-      - python3 -m pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
+      - python3-venv
     post-cache:
+      - python3 -m venv env
+      - . env/bin/activate
+      - pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
       - make r2-linux-release
 
 bookworm: *bullseye
