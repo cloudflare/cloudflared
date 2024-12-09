@@ -11,9 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/packet"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
@@ -27,6 +31,8 @@ func (noopEyeball) SendUDPSessionDatagram(datagram []byte) error { return nil }
 func (noopEyeball) SendUDPSessionResponse(id v3.RequestID, resp v3.SessionRegistrationResp) error {
 	return nil
 }
+func (noopEyeball) SendICMPPacket(icmp *packet.ICMP) error                                { return nil }
+func (noopEyeball) SendICMPTTLExceed(icmp *packet.ICMP, rawPacket packet.RawPacket) error { return nil }
 
 type mockEyeball struct {
 	connID uint8
@@ -70,9 +76,14 @@ func (m *mockEyeball) SendUDPSessionResponse(id v3.RequestID, resp v3.SessionReg
 	return nil
 }
 
+func (m *mockEyeball) SendICMPPacket(icmp *packet.ICMP) error { return nil }
+func (m *mockEyeball) SendICMPTTLExceed(icmp *packet.ICMP, rawPacket packet.RawPacket) error {
+	return nil
+}
+
 func TestDatagramConn_New(t *testing.T) {
 	log := zerolog.Nop()
-	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 	if conn == nil {
 		t.Fatal("expected valid connection")
 	}
@@ -81,7 +92,7 @@ func TestDatagramConn_New(t *testing.T) {
 func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	payload := []byte{0xef, 0xef}
 	conn.SendUDPSessionDatagram(payload)
@@ -94,7 +105,7 @@ func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	conn.SendUDPSessionResponse(testRequestID, v3.ResponseDestinationUnreachable)
 	resp := <-quic.recv
@@ -115,7 +126,7 @@ func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -131,7 +142,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	quic.ctx = ctx
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -142,7 +153,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 	log := zerolog.Nop()
 	quic := &mockQuicConnReadError{err: net.ErrClosed}
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, net.ErrClosed) {
@@ -177,7 +188,7 @@ func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {
 			log := zerolog.New(logOutput)
 			quic := newMockQuicConn()
 			quic.send <- test.input
-			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, 0, &noopMetrics{}, &log)
+			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
@@ -218,7 +229,7 @@ func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
 	quic := newMockQuicConn()
 	expectedErr := errors.New("unable to register session")
 	sessionManager := mockSessionManager{expectedRegErr: expectedErr}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -253,7 +264,7 @@ func TestDatagramConnServe(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -298,7 +309,7 @@ func TestDatagramConnServe_RegisterTwice(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -360,9 +371,9 @@ func TestDatagramConnServe_MigrateConnection(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 	quic2 := newMockQuicConn()
-	conn2 := v3.NewDatagramConn(quic2, &sessionManager, 1, &noopMetrics{}, &log)
+	conn2 := v3.NewDatagramConn(quic2, &sessionManager, &noopICMPRouter{}, 1, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -443,7 +454,7 @@ func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
 	quic := newMockQuicConn()
 	// mockSessionManager will return the ErrSessionNotFound for any session attempting to be queried by the muxer
 	sessionManager := mockSessionManager{session: nil, expectedGetErr: v3.ErrSessionNotFound}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -471,7 +482,7 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 	quic := newMockQuicConn()
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
-	conn := v3.NewDatagramConn(quic, &sessionManager, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
 	ctx, cancel := context.WithCancelCause(context.Background())
@@ -490,6 +501,116 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 	payload := <-session.recv
 	if !slices.Equal(expectedPayload, payload) {
 		t.Fatalf("expected session receieve the payload sent via the muxer")
+	}
+
+	// Cancel the muxer Serve context and make sure it closes with the expected error
+	assertContextClosed(t, ctx, done, cancel)
+}
+
+func TestDatagramConnServe_ICMPDatagram_TTLDecremented(t *testing.T) {
+	log := zerolog.Nop()
+	quic := newMockQuicConn()
+	router := newMockICMPRouter()
+	conn := v3.NewDatagramConn(quic, &mockSessionManager{}, router, 0, &noopMetrics{}, &log)
+
+	// Setup the muxer
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(errors.New("other error"))
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.Serve(ctx)
+	}()
+
+	// Send new ICMP Echo request
+	expectedICMP := &packet.ICMP{
+		IP: &packet.IP{
+			Src:      netip.MustParseAddr("192.168.1.1"),
+			Dst:      netip.MustParseAddr("10.0.0.1"),
+			Protocol: layers.IPProtocolICMPv4,
+			TTL:      20,
+		},
+		Message: &icmp.Message{
+			Type: ipv4.ICMPTypeEcho,
+			Code: 0,
+			Body: &icmp.Echo{
+				ID:   25821,
+				Seq:  58129,
+				Data: []byte("test ttl=0"),
+			},
+		},
+	}
+	datagram := newICMPDatagram(expectedICMP)
+	quic.send <- datagram
+
+	// Router should receive the packet
+	actualICMP := <-router.recv
+	assertICMPEqual(t, expectedICMP, actualICMP)
+	if expectedICMP.TTL-1 != actualICMP.TTL {
+		t.Fatalf("TTL should be decremented by one before sending to origin: %d, %d", expectedICMP.TTL, actualICMP.TTL)
+	}
+
+	// Cancel the muxer Serve context and make sure it closes with the expected error
+	assertContextClosed(t, ctx, done, cancel)
+}
+
+func TestDatagramConnServe_ICMPDatagram_TTLExceeded(t *testing.T) {
+	log := zerolog.Nop()
+	quic := newMockQuicConn()
+	router := newMockICMPRouter()
+	conn := v3.NewDatagramConn(quic, &mockSessionManager{}, router, 0, &noopMetrics{}, &log)
+
+	// Setup the muxer
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(errors.New("other error"))
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.Serve(ctx)
+	}()
+
+	// Send new ICMP Echo request
+	expectedICMP := &packet.ICMP{
+		IP: &packet.IP{
+			Src:      netip.MustParseAddr("192.168.1.1"),
+			Dst:      netip.MustParseAddr("10.0.0.1"),
+			Protocol: layers.IPProtocolICMPv4,
+			TTL:      0,
+		},
+		Message: &icmp.Message{
+			Type: ipv4.ICMPTypeEcho,
+			Code: 0,
+			Body: &icmp.Echo{
+				ID:   25821,
+				Seq:  58129,
+				Data: []byte("test ttl=0"),
+			},
+		},
+	}
+	datagram := newICMPDatagram(expectedICMP)
+	quic.send <- datagram
+
+	// Origin should not recieve a packet
+	select {
+	case <-router.recv:
+		t.Fatalf("TTL should be expired and no origin ICMP sent")
+	default:
+	}
+
+	// Eyeball should receive the packet
+	datagram = <-quic.recv
+	icmpDatagram := v3.ICMPDatagram{}
+	err := icmpDatagram.UnmarshalBinary(datagram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := packet.NewICMPDecoder()
+	ttlExpiredICMP, err := decoder.Decode(packet.RawPacket{Data: icmpDatagram.Payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Packet should be a TTL Exceeded ICMP
+	if ttlExpiredICMP.TTL != packet.DefaultTTL || ttlExpiredICMP.Message.Type != ipv4.ICMPTypeTimeExceeded {
+		t.Fatalf("ICMP packet should be a ICMP Exceeded: %+v", ttlExpiredICMP)
 	}
 
 	// Cancel the muxer Serve context and make sure it closes with the expected error
@@ -529,6 +650,22 @@ func newSessionPayloadDatagram(id v3.RequestID, payload []byte) []byte {
 	}
 	copy(datagram[17:], payload)
 	return datagram
+}
+
+func newICMPDatagram(pk *packet.ICMP) []byte {
+	encoder := packet.NewEncoder()
+	rawPacket, err := encoder.Encode(pk)
+	if err != nil {
+		panic(err)
+	}
+	datagram := v3.ICMPDatagram{
+		Payload: rawPacket.Data,
+	}
+	payload, err := datagram.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	return payload
 }
 
 // Cancel the provided context and make sure it closes with the expected cancellation error

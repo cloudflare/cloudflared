@@ -160,6 +160,12 @@ func TestTypeUnmarshalErrors(t *testing.T) {
 		if !errors.Is(err, v3.ErrDatagramHeaderTooSmall) {
 			t.Errorf("expected invalid length to throw error")
 		}
+
+		d4 := v3.ICMPDatagram{}
+		err = d4.UnmarshalBinary([]byte{})
+		if !errors.Is(err, v3.ErrDatagramHeaderTooSmall) {
+			t.Errorf("expected invalid length to throw error")
+		}
 	})
 
 	t.Run("invalid types", func(t *testing.T) {
@@ -177,6 +183,12 @@ func TestTypeUnmarshalErrors(t *testing.T) {
 
 		d3 := v3.UDPSessionRegistrationResponseDatagram{}
 		err = d3.UnmarshalBinary([]byte{byte(v3.UDPSessionPayloadType)})
+		if !errors.Is(err, v3.ErrInvalidDatagramType) {
+			t.Errorf("expected invalid type to throw error")
+		}
+
+		d4 := v3.ICMPDatagram{}
+		err = d4.UnmarshalBinary([]byte{byte(v3.UDPSessionPayloadType)})
 		if !errors.Is(err, v3.ErrInvalidDatagramType) {
 			t.Errorf("expected invalid type to throw error")
 		}
@@ -343,6 +355,54 @@ func TestSessionRegistrationResponse(t *testing.T) {
 	})
 }
 
+func TestICMPDatagram(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		payload := makePayload(128)
+		datagram := v3.ICMPDatagram{Payload: payload}
+		marshaled, err := datagram.MarshalBinary()
+		if err != nil {
+			t.Error(err)
+		}
+		unmarshaled := &v3.ICMPDatagram{}
+		err = unmarshaled.UnmarshalBinary(marshaled)
+		if err != nil {
+			t.Error(err)
+		}
+		require.Equal(t, payload, unmarshaled.Payload)
+	})
+
+	t.Run("payload size empty", func(t *testing.T) {
+		payload := []byte{}
+		datagram := v3.ICMPDatagram{Payload: payload}
+		_, err := datagram.MarshalBinary()
+		if !errors.Is(err, v3.ErrDatagramICMPPayloadMissing) {
+			t.Errorf("expected an error: %s", err)
+		}
+		payload = []byte{byte(v3.ICMPType)}
+		unmarshaled := &v3.ICMPDatagram{}
+		err = unmarshaled.UnmarshalBinary(payload)
+		if !errors.Is(err, v3.ErrDatagramICMPPayloadMissing) {
+			t.Errorf("expected an error: %s", err)
+		}
+	})
+
+	t.Run("payload size too large", func(t *testing.T) {
+		payload := makePayload(1280 + 1) // larger than the datagram size could be
+		datagram := v3.ICMPDatagram{Payload: payload}
+		_, err := datagram.MarshalBinary()
+		if !errors.Is(err, v3.ErrDatagramICMPPayloadTooLarge) {
+			t.Errorf("expected an error: %s", err)
+		}
+		payload = makePayload(1280 + 2) // larger than the datagram size could be + header
+		payload[0] = byte(v3.ICMPType)
+		unmarshaled := &v3.ICMPDatagram{}
+		err = unmarshaled.UnmarshalBinary(payload)
+		if !errors.Is(err, v3.ErrDatagramICMPPayloadTooLarge) {
+			t.Errorf("expected an error: %s", err)
+		}
+	})
+}
+
 func compareRegistrationDatagrams(t *testing.T, l *v3.UDPSessionRegistrationDatagram, r *v3.UDPSessionRegistrationDatagram) bool {
 	require.Equal(t, l.Payload, r.Payload)
 	return l.RequestID == r.RequestID &&
@@ -371,6 +431,16 @@ func FuzzPayloadDatagram(f *testing.F) {
 func FuzzRegistrationResponseDatagram(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		unmarshaled := v3.UDPSessionRegistrationResponseDatagram{}
+		err := unmarshaled.UnmarshalBinary(data)
+		if err == nil {
+			_, _ = unmarshaled.MarshalBinary()
+		}
+	})
+}
+
+func FuzzICMPDatagram(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		unmarshaled := v3.ICMPDatagram{}
 		err := unmarshaled.UnmarshalBinary(data)
 		if err == nil {
 			_, _ = unmarshaled.MarshalBinary()

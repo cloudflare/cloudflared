@@ -222,11 +222,11 @@ const (
 //
 // This method should be used in-place of MarshalBinary which will allocate in-place the required byte array to return.
 func MarshalPayloadHeaderTo(requestID RequestID, payload []byte) error {
-	if len(payload) < 17 {
+	if len(payload) < DatagramPayloadHeaderLen {
 		return wrapMarshalErr(ErrDatagramPayloadHeaderTooSmall)
 	}
 	payload[0] = byte(UDPSessionPayloadType)
-	return requestID.MarshalBinaryTo(payload[1:17])
+	return requestID.MarshalBinaryTo(payload[1:DatagramPayloadHeaderLen])
 }
 
 func (s *UDPSessionPayloadDatagram) UnmarshalBinary(data []byte) error {
@@ -239,18 +239,18 @@ func (s *UDPSessionPayloadDatagram) UnmarshalBinary(data []byte) error {
 	}
 
 	// Make sure that the slice provided is the right size to be parsed.
-	if len(data) < 17 || len(data) > maxPayloadPlusHeaderLen {
+	if len(data) < DatagramPayloadHeaderLen || len(data) > maxPayloadPlusHeaderLen {
 		return wrapUnmarshalErr(ErrDatagramPayloadInvalidSize)
 	}
 
-	requestID, err := RequestIDFromSlice(data[1:17])
+	requestID, err := RequestIDFromSlice(data[1:DatagramPayloadHeaderLen])
 	if err != nil {
 		return wrapUnmarshalErr(err)
 	}
 
 	*s = UDPSessionPayloadDatagram{
 		RequestID: requestID,
-		Payload:   data[17:],
+		Payload:   data[DatagramPayloadHeaderLen:],
 	}
 	return nil
 }
@@ -368,5 +368,63 @@ func (s *UDPSessionRegistrationResponseDatagram) UnmarshalBinary(data []byte) er
 		ResponseType: respType,
 		ErrorMsg:     errMsg,
 	}
+	return nil
+}
+
+// ICMPDatagram is used to propagate ICMPv4 and ICMPv6 payloads.
+type ICMPDatagram struct {
+	Payload []byte
+}
+
+// The maximum size that an ICMP packet can be.
+const maxICMPPayloadLen = maxDatagramPayloadLen
+
+// The datagram structure for ICMPDatagram is:
+//
+//   0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//  0|      Type     |                                               |
+//   +-+-+-+-+-+-+-+-+                                               +
+//   .                          Payload                              .
+//   .                                                               .
+//   .                                                               .
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+func (d *ICMPDatagram) MarshalBinary() (data []byte, err error) {
+	if len(d.Payload) > maxICMPPayloadLen {
+		return nil, wrapMarshalErr(ErrDatagramICMPPayloadTooLarge)
+	}
+	// We shouldn't attempt to marshal an ICMP datagram with no ICMP payload provided
+	if len(d.Payload) == 0 {
+		return nil, wrapMarshalErr(ErrDatagramICMPPayloadMissing)
+	}
+	// Make room for the 1 byte ICMPType header
+	datagram := make([]byte, len(d.Payload)+datagramTypeLen)
+	datagram[0] = byte(ICMPType)
+	copy(datagram[1:], d.Payload)
+	return datagram, nil
+}
+
+func (d *ICMPDatagram) UnmarshalBinary(data []byte) error {
+	datagramType, err := ParseDatagramType(data)
+	if err != nil {
+		return wrapUnmarshalErr(err)
+	}
+	if datagramType != ICMPType {
+		return wrapUnmarshalErr(ErrInvalidDatagramType)
+	}
+
+	if len(data[1:]) > maxDatagramPayloadLen {
+		return wrapUnmarshalErr(ErrDatagramICMPPayloadTooLarge)
+	}
+
+	// We shouldn't attempt to unmarshal an ICMP datagram with no ICMP payload provided
+	if len(data[1:]) == 0 {
+		return wrapUnmarshalErr(ErrDatagramICMPPayloadMissing)
+	}
+
+	payload := make([]byte, len(data[1:]))
+	copy(payload, data[1:])
+	d.Payload = payload
 	return nil
 }

@@ -607,6 +607,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 			ctx,
 			conn,
 			e.sessionManager,
+			e.config.ICMPRouterServer,
 			connIndex,
 			e.datagramMetrics,
 			connLogger.Logger(),

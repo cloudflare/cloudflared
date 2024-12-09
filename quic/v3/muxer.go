@@ -3,9 +3,14 @@ package v3
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 const (
@@ -15,24 +20,31 @@ const (
 
 	logSrcKey      = "src"
 	logDstKey      = "dst"
+	logICMPTypeKey = "type"
 	logDurationKey = "durationMS"
 )
 
 // DatagramConn is the bridge that multiplexes writes and reads of datagrams for UDP sessions and ICMP packets to
 // a connection.
 type DatagramConn interface {
-	DatagramWriter
+	DatagramUDPWriter
+	DatagramICMPWriter
 	// Serve provides a server interface to process and handle incoming QUIC datagrams and demux their datagram v3 payloads.
 	Serve(context.Context) error
 	// ID indicates connection index identifier
 	ID() uint8
 }
 
-// DatagramWriter provides the Muxer interface to create proper Datagrams when sending over a connection.
-type DatagramWriter interface {
+// DatagramUDPWriter provides the Muxer interface to create proper UDP Datagrams when sending over a connection.
+type DatagramUDPWriter interface {
 	SendUDPSessionDatagram(datagram []byte) error
 	SendUDPSessionResponse(id RequestID, resp SessionRegistrationResp) error
-	//SendICMPPacket(packet packet.IP) error
+}
+
+// DatagramICMPWriter provides the Muxer interface to create ICMP Datagrams when sending over a connection.
+type DatagramICMPWriter interface {
+	SendICMPPacket(icmp *packet.ICMP) error
+	SendICMPTTLExceed(icmp *packet.ICMP, rawPacket packet.RawPacket) error
 }
 
 // QuicConnection provides an interface that matches [quic.Connection] for only the datagram operations.
@@ -50,27 +62,38 @@ type datagramConn struct {
 	conn           QuicConnection
 	index          uint8
 	sessionManager SessionManager
+	icmpRouter     ingress.ICMPRouter
 	metrics        Metrics
 	logger         *zerolog.Logger
 
 	datagrams  chan []byte
 	readErrors chan error
+
+	icmpEncoderPool sync.Pool // a pool of *packet.Encoder
+	icmpDecoder     *packet.ICMPDecoder
 }
 
-func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, index uint8, metrics Metrics, logger *zerolog.Logger) DatagramConn {
+func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, icmpRouter ingress.ICMPRouter, index uint8, metrics Metrics, logger *zerolog.Logger) DatagramConn {
 	log := logger.With().Uint8("datagramVersion", 3).Logger()
 	return &datagramConn{
 		conn:           conn,
 		index:          index,
 		sessionManager: sessionManager,
+		icmpRouter:     icmpRouter,
 		metrics:        metrics,
 		logger:         &log,
 		datagrams:      make(chan []byte, demuxChanCapacity),
 		readErrors:     make(chan error, 2),
+		icmpEncoderPool: sync.Pool{
+			New: func() any {
+				return packet.NewEncoder()
+			},
+		},
+		icmpDecoder: packet.NewICMPDecoder(),
 	}
 }
 
-func (c datagramConn) ID() uint8 {
+func (c *datagramConn) ID() uint8 {
 	return c.index
 }
 
@@ -88,6 +111,33 @@ func (c *datagramConn) SendUDPSessionResponse(id RequestID, resp SessionRegistra
 		return err
 	}
 	return c.conn.SendDatagram(data)
+}
+
+func (c *datagramConn) SendICMPPacket(icmp *packet.ICMP) error {
+	cachedEncoder := c.icmpEncoderPool.Get()
+	// The encoded packet is a slice to a buffer owned by the encoder, so we shouldn't return the encoder back to the
+	// pool until the encoded packet is sent.
+	defer c.icmpEncoderPool.Put(cachedEncoder)
+	encoder, ok := cachedEncoder.(*packet.Encoder)
+	if !ok {
+		return fmt.Errorf("encoderPool returned %T, expect *packet.Encoder", cachedEncoder)
+	}
+	payload, err := encoder.Encode(icmp)
+	if err != nil {
+		return err
+	}
+	icmpDatagram := ICMPDatagram{
+		Payload: payload.Data,
+	}
+	datagram, err := icmpDatagram.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	return c.conn.SendDatagram(datagram)
+}
+
+func (c *datagramConn) SendICMPTTLExceed(icmp *packet.ICMP, rawPacket packet.RawPacket) error {
+	return c.SendICMPPacket(c.icmpRouter.ConvertToTTLExceeded(icmp, rawPacket))
 }
 
 var errReadTimeout error = errors.New("receive datagram timeout")
@@ -165,6 +215,14 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 				}
 				logger := c.logger.With().Str(logFlowID, payload.RequestID.String()).Logger()
 				c.handleSessionPayloadDatagram(payload, &logger)
+			case ICMPType:
+				packet := &ICMPDatagram{}
+				err := packet.UnmarshalBinary(datagram)
+				if err != nil {
+					c.logger.Err(err).Msgf("unable to unmarshal icmp datagram")
+					return
+				}
+				c.handleICMPPacket(packet)
 			case UDPSessionRegistrationResponseType:
 				// cloudflared should never expect to receive UDP session responses as it will not initiate new
 				// sessions towards the edge.
@@ -296,6 +354,44 @@ func (c *datagramConn) handleSessionPayloadDatagram(datagram *UDPSessionPayloadD
 	_, err = s.Write(datagram.Payload)
 	if err != nil {
 		logger.Err(err).Msgf("unable to write payload for the flow")
+		return
+	}
+}
+
+// Handles incoming ICMP datagrams.
+func (c *datagramConn) handleICMPPacket(datagram *ICMPDatagram) {
+	if c.icmpRouter == nil {
+		// ICMPRouter is disabled so we drop the current packet and ignore all incoming ICMP packets
+		return
+	}
+
+	// Decode the provided ICMPDatagram as an ICMP packet
+	rawPacket := packet.RawPacket{Data: datagram.Payload}
+	icmp, err := c.icmpDecoder.Decode(rawPacket)
+	if err != nil {
+		c.logger.Err(err).Msgf("unable to marshal icmp packet")
+		return
+	}
+
+	// If the ICMP packet's TTL is expired, we won't send it to the origin and immediately return a TTL Exceeded Message
+	if icmp.TTL <= 1 {
+		if err := c.SendICMPTTLExceed(icmp, rawPacket); err != nil {
+			c.logger.Err(err).Msg("failed to return ICMP TTL exceed error")
+		}
+		return
+	}
+	icmp.TTL--
+
+	// The context isn't really needed here since it's only really used throughout the ICMP router as a way to store
+	// the tracing context, however datagram V3 does not support tracing ICMP packets, so we just pass the current
+	// connection context which will have no tracing information available.
+	err = c.icmpRouter.Request(c.conn.Context(), icmp, newPacketResponder(c, c.index))
+	if err != nil {
+		c.logger.Err(err).
+			Str(logSrcKey, icmp.Src.String()).
+			Str(logDstKey, icmp.Dst.String()).
+			Interface(logICMPTypeKey, icmp.Type).
+			Msgf("unable to write icmp datagram to origin")
 		return
 	}
 }

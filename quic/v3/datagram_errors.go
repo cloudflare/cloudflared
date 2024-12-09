@@ -15,6 +15,8 @@ var (
 	ErrDatagramResponseInvalidSize         error = errors.New("datagram response is an invalid size")
 	ErrDatagramResponseMsgTooLargeMaximum  error = fmt.Errorf("datagram response error message length exceeds the length of the datagram maximum: %d", maxResponseErrorMessageLen)
 	ErrDatagramResponseMsgTooLargeDatagram error = fmt.Errorf("datagram response error message length exceeds the length of the provided datagram")
+	ErrDatagramICMPPayloadTooLarge         error = fmt.Errorf("datagram icmp payload exceeds %d bytes", maxICMPPayloadLen)
+	ErrDatagramICMPPayloadMissing          error = errors.New("datagram icmp payload is missing")
 )
 
 func wrapMarshalErr(err error) error {
