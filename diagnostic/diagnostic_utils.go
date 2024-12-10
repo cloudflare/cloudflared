@@ -3,6 +3,7 @@ package diagnostic
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -137,4 +138,11 @@ func FindMetricsServer(
 	}
 
 	return nil, instances, ErrMultipleMetricsServerFound
+}
+
+// newFormattedEncoder return a JSON encoder with identation
+func newFormattedEncoder(w io.Writer) *json.Encoder {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder
 }

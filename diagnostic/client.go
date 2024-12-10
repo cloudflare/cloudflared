@@ -159,7 +159,7 @@ func (client *httpClient) GetTunnelConfiguration(ctx context.Context, writer io.
 		return err
 	}
 
-	return copyToWriter(response, writer)
+	return copyJSONToWriter(response, writer)
 }
 
 func (client *httpClient) GetCliConfiguration(ctx context.Context, writer io.Writer) error {
@@ -168,7 +168,7 @@ func (client *httpClient) GetCliConfiguration(ctx context.Context, writer io.Wri
 		return err
 	}
 
-	return copyToWriter(response, writer)
+	return copyJSONToWriter(response, writer)
 }
 
 func copyToWriter(response *http.Response, writer io.Writer) error {
@@ -176,7 +176,29 @@ func copyToWriter(response *http.Response, writer io.Writer) error {
 
 	_, err := io.Copy(writer, response.Body)
 	if err != nil {
-		return fmt.Errorf("error writing metrics: %w", err)
+		return fmt.Errorf("error writing response: %w", err)
+	}
+
+	return nil
+}
+
+func copyJSONToWriter(response *http.Response, writer io.Writer) error {
+	defer response.Body.Close()
+
+	var data interface{}
+
+	decoder := json.NewDecoder(response.Body)
+
+	err := decoder.Decode(&data)
+	if err != nil {
+		return fmt.Errorf("diagnostic client error whilst reading response: %w", err)
+	}
+
+	encoder := newFormattedEncoder(writer)
+
+	err = encoder.Encode(data)
+	if err != nil {
+		return fmt.Errorf("diagnostic client error whilst writing json: %w", err)
 	}
 
 	return nil

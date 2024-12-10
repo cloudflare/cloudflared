@@ -40,6 +40,17 @@ type taskResult struct {
 	path   string
 }
 
+func (result taskResult) MarshalJSON() ([]byte, error) {
+	s := map[string]string{
+		"result": result.Result,
+	}
+	if result.Err != nil {
+		s["error"] = result.Err.Error()
+	}
+
+	return json.Marshal(s)
+}
+
 // Struct used to hold the results of different routines executing the network collection.
 type networkCollectionResult struct {
 	name string
@@ -261,7 +272,9 @@ func jsonNetworkInformationWriter(resultMap map[string]networkCollectionResult) 
 
 	defer networkDumpHandle.Close()
 
-	err = json.NewEncoder(networkDumpHandle).Encode(jsonMap)
+	encoder := newFormattedEncoder(networkDumpHandle)
+
+	err = encoder.Encode(jsonMap)
 	if err != nil {
 		return "", fmt.Errorf("error encoding network information results: %w", err)
 	}
@@ -279,7 +292,7 @@ func collectFromEndpointAdapter(collect collectToWriterFunc, fileName string) co
 
 		err = collect(ctx, dumpHandle)
 		if err != nil {
-			return "", ErrCreatingTemporaryFile
+			return "", fmt.Errorf("error running collector: %w", err)
 		}
 
 		return dumpHandle.Name(), nil
@@ -300,7 +313,7 @@ func tunnelStateCollectEndpointAdapter(client HTTPClient, tunnel *TunnelState, f
 			tunnel = tunnelResponse
 		}
 
-		encoder := json.NewEncoder(writer)
+		encoder := newFormattedEncoder(writer)
 
 		err := encoder.Encode(tunnel)
 
@@ -421,7 +434,9 @@ func createTaskReport(taskReport map[string]taskResult) (string, error) {
 	}
 	defer dumpHandle.Close()
 
-	err = json.NewEncoder(dumpHandle).Encode(taskReport)
+	encoder := newFormattedEncoder(dumpHandle)
+
+	err = encoder.Encode(taskReport)
 	if err != nil {
 		return "", fmt.Errorf("error encoding task results: %w", err)
 	}
