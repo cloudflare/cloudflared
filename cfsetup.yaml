@@ -243,7 +243,7 @@ bullseye: &bullseye
       - python3-setuptools
       - python3-pip
       - reprepro
-      - createrepo
+      - createrepo-c
       - python3-venv
     post-cache:
       - python3 -m venv env
