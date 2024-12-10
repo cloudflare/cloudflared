@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 )
 
 const (
-	linuxManagedLogsPath  = "/var/log/cloudflared.err"
-	darwinManagedLogsPath = "/Library/Logs/com.cloudflare.cloudflared.err.log"
+	linuxManagedLogsPath          = "/var/log/cloudflared.err"
+	darwinManagedLogsPath         = "/Library/Logs/com.cloudflare.cloudflared.err.log"
+	linuxServiceConfigurationPath = "/etc/systemd/system/cloudflared.service"
+	linuxSystemdPath              = "/run/systemd/system"
 )
 
 type HostLogCollector struct {
@@ -21,6 +24,28 @@ func NewHostLogCollector(client HTTPClient) *HostLogCollector {
 	return &HostLogCollector{
 		client,
 	}
+}
+
+func extractLogsFromJournalCtl(ctx context.Context) (*LogInformation, error) {
+	tmp := os.TempDir()
+
+	outputHandle, err := os.Create(filepath.Join(tmp, logFilename))
+	if err != nil {
+		return nil, fmt.Errorf("error opening output file: %w", err)
+	}
+
+	defer outputHandle.Close()
+
+	command := exec.CommandContext(
+		ctx,
+		"journalctl",
+		"--since",
+		"2 weeks ago",
+		"-u",
+		"cloudflared.service",
+	)
+
+	return PipeCommandOutputToFile(command, outputHandle)
 }
 
 func getServiceLogPath() (string, error) {
@@ -55,6 +80,13 @@ func (collector *HostLogCollector) Collect(ctx context.Context) (*LogInformation
 	}
 
 	if logConfiguration.uid == 0 {
+		_, statSystemdErr := os.Stat(linuxServiceConfigurationPath)
+
+		_, statServiceConfigurationErr := os.Stat(linuxServiceConfigurationPath)
+		if statSystemdErr == nil && statServiceConfigurationErr == nil && runtime.GOOS == "linux" {
+			return extractLogsFromJournalCtl(ctx)
+		}
+
 		path, err := getServiceLogPath()
 		if err != nil {
 			return nil, err

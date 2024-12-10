@@ -12,7 +12,16 @@ func PipeCommandOutputToFile(command *exec.Cmd, outputHandle *os.File) (*LogInfo
 	stdoutReader, err := command.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf(
-			"error retrieving output from command '%s': %w",
+			"error retrieving stdout from command '%s': %w",
+			command.String(),
+			err,
+		)
+	}
+
+	stderrReader, err := command.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error retrieving stderr from command '%s': %w",
 			command.String(),
 			err,
 		)
@@ -29,7 +38,17 @@ func PipeCommandOutputToFile(command *exec.Cmd, outputHandle *os.File) (*LogInfo
 	_, err = io.Copy(outputHandle, stdoutReader)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"error copying output from %s to file %s: %w",
+			"error copying stdout from %s to file %s: %w",
+			command.String(),
+			outputHandle.Name(),
+			err,
+		)
+	}
+
+	_, err = io.Copy(outputHandle, stderrReader)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error copying stderr from %s to file %s: %w",
 			command.String(),
 			outputHandle.Name(),
 			err,
