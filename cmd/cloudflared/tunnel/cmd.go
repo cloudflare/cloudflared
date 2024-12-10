@@ -215,6 +215,7 @@ var (
 		"overwrite-dns",
 		"help",
 	}
+	runQuickTunnel = RunQuickTunnel
 )
 
 func Flags() []cli.Flag {
@@ -313,9 +314,9 @@ func TunnelCommand(c *cli.Context) error {
 	// Run a quick tunnel
 	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
 	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
-	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
+	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("unix-socket") || c.IsSet(ingress.HelloWorldFlag)
 	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
-		return RunQuickTunnel(sc)
+		return runQuickTunnel(sc)
 	}
 
 	// If user provides a config, check to see if they meant to use `tunnel run` instead
