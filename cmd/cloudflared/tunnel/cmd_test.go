@@ -21,40 +21,34 @@ func TestHostnameFromURI(t *testing.T) {
 
 func TestShouldRunQuickTunnel(t *testing.T) {
 	tests := []struct {
-		name              string
-		flags             map[string]string
-		expectQuickTunnel bool
-		expectError       bool
+		name        string
+		flags       map[string]string
+		expectError bool
 	}{
 		{
-			name:              "Quick tunnel with URL set",
-			flags:             map[string]string{"url": "http://127.0.0.1:8080", "quick-service": "https://fakeapi.trycloudflare.com"},
-			expectQuickTunnel: true,
-			expectError:       false,
+			name:        "Quick tunnel with URL set",
+			flags:       map[string]string{"url": "http://127.0.0.1:8080", "quick-service": "https://fakeapi.trycloudflare.com"},
+			expectError: false,
 		},
 		{
-			name:              "Quick tunnel with unix-socket set",
-			flags:             map[string]string{"unix-socket": "/tmp/socket", "quick-service": "https://fakeapi.trycloudflare.com"},
-			expectQuickTunnel: true,
-			expectError:       false,
+			name:        "Quick tunnel with unix-socket set",
+			flags:       map[string]string{"unix-socket": "/tmp/socket", "quick-service": "https://fakeapi.trycloudflare.com"},
+			expectError: false,
 		},
 		{
-			name:              "Quick tunnel with hello-world flag",
-			flags:             map[string]string{"hello-world": "true", "quick-service": "https://fakeapi.trycloudflare.com"},
-			expectQuickTunnel: true,
-			expectError:       false,
+			name:        "Quick tunnel with hello-world flag",
+			flags:       map[string]string{"hello-world": "true", "quick-service": "https://fakeapi.trycloudflare.com"},
+			expectError: false,
 		},
 		{
-			name:              "Quick tunnel with proxy-dns (invalid combo)",
-			flags:             map[string]string{"url": "http://127.0.0.1:9090", "proxy-dns": "true", "quick-service": "https://fakeapi.trycloudflare.com"},
-			expectQuickTunnel: false,
-			expectError:       true,
+			name:        "Quick tunnel with proxy-dns (invalid combo)",
+			flags:       map[string]string{"url": "http://127.0.0.1:9090", "proxy-dns": "true", "quick-service": "https://fakeapi.trycloudflare.com"},
+			expectError: true,
 		},
 		{
-			name:              "No quick-service set",
-			flags:             map[string]string{"url": "http://127.0.0.1:9090"},
-			expectQuickTunnel: false,
-			expectError:       true,
+			name:        "No quick-service set",
+			flags:       map[string]string{"url": "http://127.0.0.1:9090"},
+			expectError: true,
 		},
 	}
 
@@ -79,11 +73,10 @@ func TestShouldRunQuickTunnel(t *testing.T) {
 
 			// Validate
 			if tt.expectError {
+				assert.False(t, mockCalled)
 				require.Error(t, err)
-			} else if tt.expectQuickTunnel {
-				assert.True(t, mockCalled)
-				require.NoError(t, err)
 			} else {
+				assert.True(t, mockCalled)
 				require.NoError(t, err)
 			}
 		})
