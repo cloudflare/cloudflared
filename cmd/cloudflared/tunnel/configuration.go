@@ -352,20 +352,9 @@ func adjustIPVersionByBindAddress(ipVersion allregions.ConfigIPVersion, ip net.I
 }
 
 func newICMPRouter(c *cli.Context, logger *zerolog.Logger) (ingress.ICMPRouterServer, error) {
-	ipv4Src, err := determineICMPv4Src(c.String("icmpv4-src"), logger)
+	ipv4Src, ipv6Src, err := determineICMPSources(c, logger)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to determine IPv4 source address for ICMP proxy")
-	}
-	logger.Info().Msgf("ICMP proxy will use %s as source for IPv4", ipv4Src)
-
-	ipv6Src, zone, err := determineICMPv6Src(c.String("icmpv6-src"), logger, ipv4Src)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to determine IPv6 source address for ICMP proxy")
-	}
-	if zone != "" {
-		logger.Info().Msgf("ICMP proxy will use %s in zone %s as source for IPv6", ipv6Src, zone)
-	} else {
-		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
+		return nil, err
 	}
 
 	icmpRouter, err := ingress.NewICMPRouter(ipv4Src, ipv6Src, logger, icmpFunnelTimeout)
@@ -373,6 +362,28 @@ func newICMPRouter(c *cli.Context, logger *zerolog.Logger) (ingress.ICMPRouterSe
 		return nil, err
 	}
 	return icmpRouter, nil
+}
+
+func determineICMPSources(c *cli.Context, logger *zerolog.Logger) (netip.Addr, netip.Addr, error) {
+	ipv4Src, err := determineICMPv4Src(c.String("icmpv4-src"), logger)
+	if err != nil {
+		return netip.Addr{}, netip.Addr{}, errors.Wrap(err, "failed to determine IPv4 source address for ICMP proxy")
+	}
+
+	logger.Info().Msgf("ICMP proxy will use %s as source for IPv4", ipv4Src)
+
+	ipv6Src, zone, err := determineICMPv6Src(c.String("icmpv6-src"), logger, ipv4Src)
+	if err != nil {
+		return netip.Addr{}, netip.Addr{}, errors.Wrap(err, "failed to determine IPv6 source address for ICMP proxy")
+	}
+
+	if zone != "" {
+		logger.Info().Msgf("ICMP proxy will use %s in zone %s as source for IPv6", ipv6Src, zone)
+	} else {
+		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
+	}
+
+	return ipv4Src, ipv6Src, nil
 }
 
 func determineICMPv4Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Addr, error) {

@@ -552,6 +552,13 @@ func StartServer(
 		tracker := tunnelstate.NewConnTracker(log)
 		observer.RegisterSink(tracker)
 
+		ipv4, ipv6, err := determineICMPSources(c, log)
+		sources := make([]string, 0)
+		if err == nil {
+			sources = append(sources, ipv4.String())
+			sources = append(sources, ipv6.String())
+		}
+
 		readinessServer := metrics.NewReadyServer(clientID, tracker)
 		diagnosticHandler := diagnostic.NewDiagnosticHandler(
 			log,
@@ -562,6 +569,7 @@ func StartServer(
 			tracker,
 			c,
 			nonSecretFlagsList,
+			sources,
 		)
 		metricsConfig := metrics.Config{
 			ReadyServer:         readinessServer,

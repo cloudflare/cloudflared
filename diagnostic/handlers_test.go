@@ -123,7 +123,7 @@ func TestSystemHandler(t *testing.T) {
 		t.Run(tCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil, nil, nil)
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil, nil, nil, nil)
 			recorder := httptest.NewRecorder()
 			ctx := setCtxValuesForSystemCollector(tCase.systemInfo, tCase.rawInfo, tCase.err)
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "/diag/syste,", nil)
@@ -156,6 +156,7 @@ func TestTunnelStateHandler(t *testing.T) {
 		tunnelID    uuid.UUID
 		clientID    uuid.UUID
 		connections []tunnelstate.IndexedConnectionInfo
+		icmpSources []string
 	}{
 		{
 			name:     "case1",
@@ -163,9 +164,10 @@ func TestTunnelStateHandler(t *testing.T) {
 			clientID: uuid.New(),
 		},
 		{
-			name:     "case2",
-			tunnelID: uuid.New(),
-			clientID: uuid.New(),
+			name:        "case2",
+			tunnelID:    uuid.New(),
+			clientID:    uuid.New(),
+			icmpSources: []string{"172.17.0.3", "::1"},
 			connections: []tunnelstate.IndexedConnectionInfo{{
 				ConnectionInfo: tunnelstate.ConnectionInfo{
 					IsConnected: true,
@@ -181,7 +183,17 @@ func TestTunnelStateHandler(t *testing.T) {
 		t.Run(tCase.name, func(t *testing.T) {
 			t.Parallel()
 			tracker := newTrackerFromConns(t, tCase.connections)
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, tCase.tunnelID, tCase.clientID, tracker, nil, nil)
+			handler := diagnostic.NewDiagnosticHandler(
+				&log,
+				0,
+				nil,
+				tCase.tunnelID,
+				tCase.clientID,
+				tracker,
+				nil,
+				nil,
+				tCase.icmpSources,
+			)
 			recorder := httptest.NewRecorder()
 			handler.TunnelStateHandler(recorder, nil)
 			decoder := json.NewDecoder(recorder.Body)
@@ -193,6 +205,7 @@ func TestTunnelStateHandler(t *testing.T) {
 			assert.Equal(t, tCase.tunnelID, response.TunnelID)
 			assert.Equal(t, tCase.clientID, response.ConnectorID)
 			assert.Equal(t, tCase.connections, response.Connections)
+			assert.Equal(t, tCase.icmpSources, response.ICMPSources)
 		})
 	}
 }
@@ -237,7 +250,7 @@ func TestConfigurationHandler(t *testing.T) {
 
 			t.Parallel()
 			ctx := buildCliContext(t, tCase.flags)
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, uuid.New(), uuid.New(), nil, ctx, []string{"b", "c", "d"})
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, uuid.New(), uuid.New(), nil, ctx, []string{"b", "c", "d"}, nil)
 			recorder := httptest.NewRecorder()
 			handler.ConfigurationHandler(recorder, nil)
 			decoder := json.NewDecoder(recorder.Body)

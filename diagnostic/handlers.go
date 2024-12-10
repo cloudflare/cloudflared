@@ -26,6 +26,7 @@ type Handler struct {
 	tracker           *tunnelstate.ConnTracker
 	cli               *cli.Context
 	flagInclusionList []string
+	icmpSources       []string
 }
 
 func NewDiagnosticHandler(
@@ -37,6 +38,7 @@ func NewDiagnosticHandler(
 	tracker *tunnelstate.ConnTracker,
 	cli *cli.Context,
 	flagInclusionList []string,
+	icmpSources []string,
 ) *Handler {
 	logger := log.With().Logger()
 	if timeout == 0 {
@@ -52,6 +54,7 @@ func NewDiagnosticHandler(
 		tracker:           tracker,
 		cli:               cli,
 		flagInclusionList: flagInclusionList,
+		icmpSources:       icmpSources,
 	}
 }
 
@@ -105,6 +108,7 @@ type TunnelState struct {
 	TunnelID    uuid.UUID                           `json:"tunnelID,omitempty"`
 	ConnectorID uuid.UUID                           `json:"connectorID,omitempty"`
 	Connections []tunnelstate.IndexedConnectionInfo `json:"connections,omitempty"`
+	ICMPSources []string                            `json:"icmp_sources,omitempty"`
 }
 
 func (handler *Handler) TunnelStateHandler(writer http.ResponseWriter, _ *http.Request) {
@@ -117,6 +121,7 @@ func (handler *Handler) TunnelStateHandler(writer http.ResponseWriter, _ *http.R
 		handler.tunnelID,
 		handler.connectorID,
 		handler.tracker.GetActiveConnections(),
+		handler.icmpSources,
 	}
 	encoder := json.NewEncoder(writer)
 
