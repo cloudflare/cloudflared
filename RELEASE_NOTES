@@ -1,3 +1,6 @@
+2024.12.1
+- 2024-12-10 TUN-8795: update createrepo to createrepo_c to fix the release_pkgs.py script
+
 2024.12.0
 - 2024-12-09 TUN-8640: Add ICMP support for datagram V3
 - 2024-12-09 TUN-8789: make python package installation consistent
