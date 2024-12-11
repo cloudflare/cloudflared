@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime/trace"
 	"strings"
 	"sync"
@@ -560,6 +561,7 @@ func StartServer(
 		}
 
 		readinessServer := metrics.NewReadyServer(clientID, tracker)
+		cliFlags := nonSecretCliFlags(log, c, nonSecretFlagsList)
 		diagnosticHandler := diagnostic.NewDiagnosticHandler(
 			log,
 			0,
@@ -567,8 +569,7 @@ func StartServer(
 			tunnelConfig.NamedTunnel.Credentials.TunnelID,
 			clientID,
 			tracker,
-			c,
-			nonSecretFlagsList,
+			cliFlags,
 			sources,
 		)
 		metricsConfig := metrics.Config{
@@ -1308,4 +1309,47 @@ reconnect [delay]
 			}
 		}
 	}
+}
+
+func nonSecretCliFlags(log *zerolog.Logger, cli *cli.Context, flagInclusionList []string) map[string]string {
+	flagsNames := cli.FlagNames()
+	flags := make(map[string]string, len(flagsNames))
+
+	for _, flag := range flagsNames {
+		value := cli.String(flag)
+
+		if value == "" {
+			continue
+		}
+
+		isIncluded := isFlagIncluded(flagInclusionList, flag)
+		if !isIncluded {
+			continue
+		}
+
+		switch flag {
+		case logger.LogDirectoryFlag, logger.LogFileFlag:
+			{
+				absolute, err := filepath.Abs(value)
+				if err != nil {
+					log.Error().Err(err).Msgf("could not convert %s path to absolute", flag)
+				} else {
+					flags[flag] = absolute
+				}
+			}
+		default:
+			flags[flag] = value
+		}
+	}
+	return flags
+}
+
+func isFlagIncluded(flagInclusionList []string, flag string) bool {
+	for _, include := range flagInclusionList {
+		if include == flag {
+			return true
+		}
+	}
+
+	return false
 }

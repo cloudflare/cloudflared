@@ -25,7 +25,7 @@ func helperCreateServer(t *testing.T, listeners *gracenet.Net, tunnelID uuid.UUI
 	require.NoError(t, err)
 	log := zerolog.Nop()
 	tracker := tunnelstate.NewConnTracker(&log)
-	handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, tunnelID, connectorID, tracker, nil, []string{}, []string{})
+	handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, tunnelID, connectorID, tracker, map[string]string{}, []string{})
 	router := http.NewServeMux()
 	router.HandleFunc("/diag/tunnel", handler.TunnelStateHandler)
 	server := &http.Server{

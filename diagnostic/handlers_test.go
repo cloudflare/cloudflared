@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"io"
 	"net"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/diagnostic"
@@ -29,21 +27,6 @@ const (
 	rawInformationKey    = "rikey"
 	errorKey             = "errkey"
 )
-
-func buildCliContext(t *testing.T, flags map[string]string) *cli.Context {
-	t.Helper()
-
-	flagSet := flag.NewFlagSet("", flag.PanicOnError)
-	ctx := cli.NewContext(cli.NewApp(), flagSet, nil)
-
-	for k, v := range flags {
-		flagSet.String(k, v, "")
-		err := ctx.Set(k, v)
-		require.NoError(t, err)
-	}
-
-	return ctx
-}
 
 func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnectionInfo) *tunnelstate.ConnTracker {
 	t.Helper()
@@ -80,7 +63,6 @@ func (*SystemCollectorMock) Collect(ctx context.Context) (*diagnostic.SystemInfo
 	si, _ := ctx.Value(systemInformationKey).(*diagnostic.SystemInformation)
 	ri, _ := ctx.Value(rawInformationKey).(string)
 	err, _ := ctx.Value(errorKey).(error)
-
 	return si, ri, err
 }
 
@@ -122,8 +104,7 @@ func TestSystemHandler(t *testing.T) {
 	for _, tCase := range tests {
 		t.Run(tCase.name, func(t *testing.T) {
 			t.Parallel()
-
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil, nil, nil, nil)
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil, map[string]string{}, nil)
 			recorder := httptest.NewRecorder()
 			ctx := setCtxValuesForSystemCollector(tCase.systemInfo, tCase.rawInfo, tCase.err)
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "/diag/syste,", nil)
@@ -190,8 +171,7 @@ func TestTunnelStateHandler(t *testing.T) {
 				tCase.tunnelID,
 				tCase.clientID,
 				tracker,
-				nil,
-				nil,
+				map[string]string{},
 				tCase.icmpSources,
 			)
 			recorder := httptest.NewRecorder()
@@ -230,10 +210,10 @@ func TestConfigurationHandler(t *testing.T) {
 		{
 			name: "cli with flags",
 			flags: map[string]string{
-				"a": "a",
-				"b": "a",
-				"c": "a",
-				"d": "a",
+				"b":   "a",
+				"c":   "a",
+				"d":   "a",
+				"uid": "0",
 			},
 			expected: map[string]string{
 				"b":   "a",
@@ -246,11 +226,11 @@ func TestConfigurationHandler(t *testing.T) {
 
 	for _, tCase := range tests {
 		t.Run(tCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			var response map[string]string
 
-			t.Parallel()
-			ctx := buildCliContext(t, tCase.flags)
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, uuid.New(), uuid.New(), nil, ctx, []string{"b", "c", "d"}, nil)
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, nil, uuid.New(), uuid.New(), nil, tCase.flags, nil)
 			recorder := httptest.NewRecorder()
 			handler.ConfigurationHandler(recorder, nil)
 			decoder := json.NewDecoder(recorder.Body)

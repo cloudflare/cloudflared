@@ -5,28 +5,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 type Handler struct {
-	log               *zerolog.Logger
-	timeout           time.Duration
-	systemCollector   SystemCollector
-	tunnelID          uuid.UUID
-	connectorID       uuid.UUID
-	tracker           *tunnelstate.ConnTracker
-	cli               *cli.Context
-	flagInclusionList []string
-	icmpSources       []string
+	log             *zerolog.Logger
+	timeout         time.Duration
+	systemCollector SystemCollector
+	tunnelID        uuid.UUID
+	connectorID     uuid.UUID
+	tracker         *tunnelstate.ConnTracker
+	cliFlags        map[string]string
+	icmpSources     []string
 }
 
 func NewDiagnosticHandler(
@@ -36,8 +32,7 @@ func NewDiagnosticHandler(
 	tunnelID uuid.UUID,
 	connectorID uuid.UUID,
 	tracker *tunnelstate.ConnTracker,
-	cli *cli.Context,
-	flagInclusionList []string,
+	cliFlags map[string]string,
 	icmpSources []string,
 ) *Handler {
 	logger := log.With().Logger()
@@ -45,16 +40,16 @@ func NewDiagnosticHandler(
 		timeout = defaultCollectorTimeout
 	}
 
+	cliFlags[configurationKeyUID] = strconv.Itoa(os.Getuid())
 	return &Handler{
-		log:               &logger,
-		timeout:           timeout,
-		systemCollector:   systemCollector,
-		tunnelID:          tunnelID,
-		connectorID:       connectorID,
-		tracker:           tracker,
-		cli:               cli,
-		flagInclusionList: flagInclusionList,
-		icmpSources:       icmpSources,
+		log:             &logger,
+		timeout:         timeout,
+		systemCollector: systemCollector,
+		tunnelID:        tunnelID,
+		connectorID:     connectorID,
+		tracker:         tracker,
+		cliFlags:        cliFlags,
+		icmpSources:     icmpSources,
 	}
 }
 
@@ -140,66 +135,13 @@ func (handler *Handler) ConfigurationHandler(writer http.ResponseWriter, _ *http
 		log.Info().Msg("Collection finished")
 	}()
 
-	flagsNames := handler.cli.FlagNames()
-	flags := make(map[string]string, len(flagsNames))
-
-	for _, flag := range flagsNames {
-		value := handler.cli.String(flag)
-
-		// empty values are not relevant
-		if value == "" {
-			continue
-		}
-
-		// exclude flags that are sensitive
-		isIncluded := handler.isFlagIncluded(flag)
-		if !isIncluded {
-			continue
-		}
-
-		switch flag {
-		case logger.LogDirectoryFlag:
-			fallthrough
-		case logger.LogFileFlag:
-			{
-				// the log directory may be relative to the instance thus it must be resolved
-				absolute, err := filepath.Abs(value)
-				if err != nil {
-					handler.log.Error().Err(err).Msgf("could not convert %s path to absolute", flag)
-				} else {
-					flags[flag] = absolute
-				}
-			}
-		default:
-			flags[flag] = value
-		}
-	}
-
-	// The UID is included to help the
-	// diagnostic tool to understand
-	// if this instance is managed or not.
-	flags[configurationKeyUID] = strconv.Itoa(os.Getuid())
 	encoder := json.NewEncoder(writer)
 
-	err := encoder.Encode(flags)
+	err := encoder.Encode(handler.cliFlags)
 	if err != nil {
 		handler.log.Error().Err(err).Msgf("error occurred whilst serializing response")
 		writer.WriteHeader(http.StatusInternalServerError)
 	}
-}
-
-func (handler *Handler) isFlagIncluded(flag string) bool {
-	isIncluded := false
-
-	for _, include := range handler.flagInclusionList {
-		if include == flag {
-			isIncluded = true
-
-			break
-		}
-	}
-
-	return isIncluded
 }
 
 func writeResponse(w http.ResponseWriter, bytes []byte, logger *zerolog.Logger) {
