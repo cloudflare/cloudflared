@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,11 +20,13 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
-type SystemCollectorMock struct{}
+type SystemCollectorMock struct {
+	systemInfo *diagnostic.SystemInformation
+	err        error
+}
 
 const (
 	systemInformationKey = "sikey"
-	rawInformationKey    = "rikey"
 	errorKey             = "errkey"
 )
 
@@ -46,24 +48,8 @@ func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnecti
 	return tracker
 }
 
-func setCtxValuesForSystemCollector(
-	systemInfo *diagnostic.SystemInformation,
-	rawInfo string,
-	err error,
-) context.Context {
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, systemInformationKey, systemInfo)
-	ctx = context.WithValue(ctx, rawInformationKey, rawInfo)
-	ctx = context.WithValue(ctx, errorKey, err)
-
-	return ctx
-}
-
-func (*SystemCollectorMock) Collect(ctx context.Context) (*diagnostic.SystemInformation, string, error) {
-	si, _ := ctx.Value(systemInformationKey).(*diagnostic.SystemInformation)
-	ri, _ := ctx.Value(rawInformationKey).(string)
-	err, _ := ctx.Value(errorKey).(error)
-	return si, ri, err
+func (collector *SystemCollectorMock) Collect(context.Context) (*diagnostic.SystemInformation, error) {
+	return collector.systemInfo, collector.err
 }
 
 func TestSystemHandler(t *testing.T) {
@@ -73,7 +59,6 @@ func TestSystemHandler(t *testing.T) {
 	tests := []struct {
 		name       string
 		systemInfo *diagnostic.SystemInformation
-		rawInfo    string
 		err        error
 		statusCode int
 	}{
@@ -82,47 +67,39 @@ func TestSystemHandler(t *testing.T) {
 			systemInfo: diagnostic.NewSystemInformation(
 				0, 0, 0, 0,
 				"string", "string", "string", "string",
-				"string", "string", nil,
+				"string", "string",
+				runtime.Version(), runtime.GOARCH, nil,
 			),
-			rawInfo:    "",
+
 			err:        nil,
 			statusCode: http.StatusOK,
 		},
 		{
-			name: "on error and raw info", systemInfo: nil,
-			rawInfo: "raw info", err: errors.New("an error"), statusCode: http.StatusOK,
-		},
-		{
 			name: "on error and no raw info", systemInfo: nil,
-			rawInfo: "", err: errors.New("an error"), statusCode: http.StatusInternalServerError,
-		},
-		{
-			name: "malformed response", systemInfo: nil, rawInfo: "", err: nil, statusCode: http.StatusInternalServerError,
+			err: errors.New("an error"), statusCode: http.StatusOK,
 		},
 	}
 
 	for _, tCase := range tests {
 		t.Run(tCase.name, func(t *testing.T) {
 			t.Parallel()
-			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{}, uuid.New(), uuid.New(), nil, map[string]string{}, nil)
+			handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{
+				systemInfo: tCase.systemInfo,
+				err:        tCase.err,
+			}, uuid.New(), uuid.New(), nil, map[string]string{}, nil)
 			recorder := httptest.NewRecorder()
-			ctx := setCtxValuesForSystemCollector(tCase.systemInfo, tCase.rawInfo, tCase.err)
-			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "/diag/syste,", nil)
+			ctx := context.Background()
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "/diag/system", nil)
 			require.NoError(t, err)
 			handler.SystemHandler(recorder, request)
 
 			assert.Equal(t, tCase.statusCode, recorder.Code)
 			if tCase.statusCode == http.StatusOK && tCase.systemInfo != nil {
-				var response diagnostic.SystemInformation
-
+				var response diagnostic.SystemInformationResponse
 				decoder := json.NewDecoder(recorder.Body)
-				err = decoder.Decode(&response)
+				err := decoder.Decode(&response)
 				require.NoError(t, err)
-				assert.Equal(t, tCase.systemInfo, &response)
-			} else if tCase.statusCode == http.StatusOK && tCase.rawInfo != "" {
-				rawBytes, err := io.ReadAll(recorder.Body)
-				require.NoError(t, err)
-				assert.Equal(t, tCase.rawInfo, string(rawBytes))
+				assert.Equal(t, tCase.systemInfo, response.Info)
 			}
 		})
 	}

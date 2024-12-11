@@ -59,6 +59,11 @@ func (handler *Handler) InstallEndpoints(router *http.ServeMux) {
 	router.HandleFunc(systemInformationEndpoint, handler.SystemHandler)
 }
 
+type SystemInformationResponse struct {
+	Info *SystemInformation `json:"info"`
+	Err  error              `json:"errors"`
+}
+
 func (handler *Handler) SystemHandler(writer http.ResponseWriter, request *http.Request) {
 	logger := handler.log.With().Str(collectorField, systemCollectorName).Logger()
 	logger.Info().Msg("Collection started")
@@ -69,30 +74,15 @@ func (handler *Handler) SystemHandler(writer http.ResponseWriter, request *http.
 
 	defer cancel()
 
-	info, rawInfo, err := handler.systemCollector.Collect(ctx)
-	if err != nil {
-		logger.Error().Err(err).Msg("error occurred whilst collecting system information")
+	info, err := handler.systemCollector.Collect(ctx)
 
-		if rawInfo != "" {
-			logger.Info().Msg("using raw information fallback")
-			bytes := []byte(rawInfo)
-			writeResponse(writer, bytes, &logger)
-		} else {
-			logger.Error().Msg("no raw information available")
-			writer.WriteHeader(http.StatusInternalServerError)
-		}
-
-		return
-	}
-
-	if info == nil {
-		logger.Error().Msgf("system information collection is nil")
-		writer.WriteHeader(http.StatusInternalServerError)
+	response := SystemInformationResponse{
+		Info: info,
+		Err:  err,
 	}
 
 	encoder := json.NewEncoder(writer)
-
-	err = encoder.Encode(info)
+	err = encoder.Encode(response)
 	if err != nil {
 		logger.Error().Err(err).Msgf("error occurred whilst serializing information")
 		writer.WriteHeader(http.StatusInternalServerError)

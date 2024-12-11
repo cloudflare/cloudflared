@@ -29,7 +29,7 @@ var Runtime = "host"
 
 func GetMetricsDefaultAddress(runtimeType string) string {
 	// When issuing the diagnostic command we may have to reach a server that is
-	// running in a virtual enviroment and in that case we must bind to 0.0.0.0
+	// running in a virtual environment and in that case we must bind to 0.0.0.0
 	// otherwise the server won't be reachable.
 	switch runtimeType {
 	case "virtual":

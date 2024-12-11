@@ -141,7 +141,7 @@ func (client *httpClient) GetSystemInformation(ctx context.Context, writer io.Wr
 		return err
 	}
 
-	return copyToWriter(response, writer)
+	return copyJSONToWriter(response, writer)
 }
 
 func (client *httpClient) GetMetrics(ctx context.Context, writer io.Writer) error {

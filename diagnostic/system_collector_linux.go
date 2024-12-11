@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -22,45 +23,74 @@ func NewSystemCollectorImpl(
 	}
 }
 
-func (collector *SystemCollectorImpl) Collect(ctx context.Context) (*SystemInformation, string, error) {
+func (collector *SystemCollectorImpl) Collect(ctx context.Context) (*SystemInformation, error) {
 	memoryInfo, memoryInfoRaw, memoryInfoErr := collectMemoryInformation(ctx)
 	fdInfo, fdInfoRaw, fdInfoErr := collectFileDescriptorInformation(ctx)
 	disks, disksRaw, diskErr := collectDiskVolumeInformationUnix(ctx)
 	osInfo, osInfoRaw, osInfoErr := collectOSInformationUnix(ctx)
 
+	var memoryMaximum, memoryCurrent, fileDescriptorMaximum, fileDescriptorCurrent uint64
+	var osSystem, name, osVersion, osRelease, architecture string
+	gerror := SystemInformationGeneralError{}
+
 	if memoryInfoErr != nil {
-		raw := RawSystemInformation(osInfoRaw, memoryInfoRaw, fdInfoRaw, disksRaw)
-		return nil, raw, memoryInfoErr
+		gerror.MemoryInformationError = SystemInformationError{
+			Err:     memoryInfoErr,
+			RawInfo: memoryInfoRaw,
+		}
+	} else {
+		memoryMaximum = memoryInfo.MemoryMaximum
+		memoryCurrent = memoryInfo.MemoryCurrent
 	}
 
 	if fdInfoErr != nil {
-		raw := RawSystemInformation(osInfoRaw, memoryInfoRaw, fdInfoRaw, disksRaw)
-		return nil, raw, fdInfoErr
+		gerror.FileDescriptorsInformationError = SystemInformationError{
+			Err:     fdInfoErr,
+			RawInfo: fdInfoRaw,
+		}
+	} else {
+		fileDescriptorMaximum = fdInfo.FileDescriptorMaximum
+		fileDescriptorCurrent = fdInfo.FileDescriptorCurrent
 	}
 
 	if diskErr != nil {
-		raw := RawSystemInformation(osInfoRaw, memoryInfoRaw, fdInfoRaw, disksRaw)
-		return nil, raw, diskErr
+		gerror.DiskVolumeInformationError = SystemInformationError{
+			Err:     diskErr,
+			RawInfo: disksRaw,
+		}
 	}
 
 	if osInfoErr != nil {
-		raw := RawSystemInformation(osInfoRaw, memoryInfoRaw, fdInfoRaw, disksRaw)
-		return nil, raw, osInfoErr
+		gerror.OperatingSystemInformationError = SystemInformationError{
+			Err:     osInfoErr,
+			RawInfo: osInfoRaw,
+		}
+	} else {
+		osSystem = osInfo.OsSystem
+		name = osInfo.Name
+		osVersion = osInfo.OsVersion
+		osRelease = osInfo.OsRelease
+		architecture = osInfo.Architecture
 	}
 
-	return NewSystemInformation(
-		memoryInfo.MemoryMaximum,
-		memoryInfo.MemoryCurrent,
-		fdInfo.FileDescriptorMaximum,
-		fdInfo.FileDescriptorCurrent,
-		osInfo.OsSystem,
-		osInfo.Name,
-		osInfo.OsVersion,
-		osInfo.OsRelease,
-		osInfo.Architecture,
-		collector.version,
+	cloudflaredVersion := collector.version
+	info := NewSystemInformation(
+		memoryMaximum,
+		memoryCurrent,
+		fileDescriptorMaximum,
+		fileDescriptorCurrent,
+		osSystem,
+		name,
+		osVersion,
+		osRelease,
+		architecture,
+		cloudflaredVersion,
+		runtime.Version(),
+		runtime.GOARCH,
 		disks,
-	), "", nil
+	)
+
+	return info, gerror
 }
 
 func collectMemoryInformation(ctx context.Context) (*MemoryInformation, string, error) {
