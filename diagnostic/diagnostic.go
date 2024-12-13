@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,17 +163,7 @@ func collectNetworkResultRoutine(
 	}
 
 	hops, raw, err := collector.Collect(ctx, network.NewTraceOptions(hopsNo, timeout, hostname, useIPv4))
-	if err != nil {
-		if raw == "" {
-			// An error happened and there is no raw output
-			results <- networkCollectionResult{name, nil, "", err}
-		} else {
-			// An error happened and there is raw output then write to file
-			results <- networkCollectionResult{name, nil, raw, nil}
-		}
-	} else {
-		results <- networkCollectionResult{name, hops, raw, nil}
-	}
+	results <- networkCollectionResult{name, hops, raw, err}
 }
 
 func gatherNetworkInformation(ctx context.Context) map[string]networkCollectionResult {
@@ -209,10 +200,6 @@ func gatherNetworkInformation(ctx context.Context) map[string]networkCollectionR
 
 	for range len(hostAndIPversionPairs) {
 		result := <-results
-		if result.err != nil {
-			continue
-		}
-
 		resultMap[result.name] = result
 	}
 
@@ -249,22 +236,30 @@ func rawNetworkInformationWriter(resultMap map[string]networkCollectionResult) (
 
 	defer networkDumpHandle.Close()
 
+	var exitErr error
+
 	for k, v := range resultMap {
-		_, err := networkDumpHandle.WriteString(k + "\n" + v.raw + "\n")
-		if err != nil {
-			return "", fmt.Errorf("error writing raw network information: %w", err)
+		if v.err != nil {
+			if exitErr == nil {
+				exitErr = v.err
+			}
+
+			_, err := networkDumpHandle.WriteString(k + "\nno content\n")
+			if err != nil {
+				return networkDumpHandle.Name(), fmt.Errorf("error writing 'no content' to raw network file: %w", err)
+			}
+		} else {
+			_, err := networkDumpHandle.WriteString(k + "\n" + v.raw + "\n")
+			if err != nil {
+				return networkDumpHandle.Name(), fmt.Errorf("error writing raw network information: %w", err)
+			}
 		}
 	}
 
-	return networkDumpHandle.Name(), nil
+	return networkDumpHandle.Name(), exitErr
 }
 
 func jsonNetworkInformationWriter(resultMap map[string]networkCollectionResult) (string, error) {
-	jsonMap := make(map[string][]*network.Hop, len(resultMap))
-	for k, v := range resultMap {
-		jsonMap[k] = v.info
-	}
-
 	networkDumpHandle, err := os.Create(filepath.Join(os.TempDir(), networkBaseName))
 	if err != nil {
 		return "", ErrCreatingTemporaryFile
@@ -274,12 +269,23 @@ func jsonNetworkInformationWriter(resultMap map[string]networkCollectionResult) 
 
 	encoder := newFormattedEncoder(networkDumpHandle)
 
-	err = encoder.Encode(jsonMap)
-	if err != nil {
-		return "", fmt.Errorf("error encoding network information results: %w", err)
+	var exitErr error
+
+	jsonMap := make(map[string][]*network.Hop, len(resultMap))
+	for k, v := range resultMap {
+		jsonMap[k] = v.info
+
+		if exitErr == nil && v.err != nil {
+			exitErr = v.err
+		}
 	}
 
-	return networkDumpHandle.Name(), nil
+	err = encoder.Encode(jsonMap)
+	if err != nil {
+		return networkDumpHandle.Name(), fmt.Errorf("error encoding network information results: %w", err)
+	}
+
+	return networkDumpHandle.Name(), exitErr
 }
 
 func collectFromEndpointAdapter(collect collectToWriterFunc, fileName string) collectFunc {
@@ -292,7 +298,7 @@ func collectFromEndpointAdapter(collect collectToWriterFunc, fileName string) co
 
 		err = collect(ctx, dumpHandle)
 		if err != nil {
-			return "", fmt.Errorf("error running collector: %w", err)
+			return dumpHandle.Name(), fmt.Errorf("error running collector: %w", err)
 		}
 
 		return dumpHandle.Name(), nil
@@ -316,8 +322,11 @@ func tunnelStateCollectEndpointAdapter(client HTTPClient, tunnel *TunnelState, f
 		encoder := newFormattedEncoder(writer)
 
 		err := encoder.Encode(tunnel)
+		if err != nil {
+			return fmt.Errorf("error encoding tunnel state: %w", err)
+		}
 
-		return fmt.Errorf("error encoding tunnel state: %w", err)
+		return nil
 	}
 
 	return collectFromEndpointAdapter(endpointFunc, fileName)
@@ -337,13 +346,12 @@ func resolveInstanceBaseURL(
 	addresses []string,
 ) (*url.URL, *TunnelState, []*AddressableTunnelState, error) {
 	if metricsServerAddress != "" {
+		if !strings.HasPrefix(metricsServerAddress, "http://") {
+			metricsServerAddress = "http://" + metricsServerAddress
+		}
 		url, err := url.Parse(metricsServerAddress)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("provided address is not valid: %w", err)
-		}
-
-		if url.Scheme == "" {
-			url.Scheme = "http://"
 		}
 
 		return url, nil, nil, nil
@@ -526,8 +534,14 @@ func RunDiagnostic(
 	jobsReport := runJobs(ctx, jobs, log)
 	paths := make([]string, 0)
 
+	var gerr error
+
 	for _, v := range jobsReport {
 		paths = append(paths, v.path)
+
+		if gerr == nil && v.Err != nil {
+			gerr = v.Err
+		}
 
 		defer func() {
 			if !errors.Is(v.Err, ErrCreatingTemporaryFile) {
@@ -538,14 +552,10 @@ func RunDiagnostic(
 
 	zipfile, err := CreateDiagnosticZipFile(zipName, paths)
 	if err != nil {
-		if zipfile != "" {
-			os.Remove(zipfile)
-		}
-
 		return nil, err
 	}
 
 	log.Info().Msgf("Diagnostic file written: %v", zipfile)
 
-	return nil, nil
+	return nil, gerr
 }

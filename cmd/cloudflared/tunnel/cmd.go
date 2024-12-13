@@ -236,6 +236,7 @@ func Commands() []*cli.Command {
 		buildDeleteCommand(),
 		buildCleanupCommand(),
 		buildTokenCommand(),
+		buildDiagCommand(),
 		// for compatibility, allow following as tunnel subcommands
 		proxydns.Command(true),
 		cliutil.RemovedCommand("db-connect"),
