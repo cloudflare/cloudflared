@@ -89,7 +89,10 @@ func NewSession(
 	log *zerolog.Logger,
 ) Session {
 	logger := log.With().Str(logFlowID, id.String()).Logger()
-	closeChan := make(chan error, 1)
+	// closeChan has two slots to allow for both writers (the closeFn and the Serve routine) to both be able to
+	// write to the channel without blocking since there is only ever one value read from the closeChan by the
+	// waitForCloseCondition.
+	closeChan := make(chan error, 2)
 	session := &session{
 		id:             id,
 		closeAfterIdle: closeAfterIdle,
