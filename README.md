@@ -10,7 +10,7 @@ You can also use `cloudflared` to access Tunnel origins (that are protected with
 at Layer 4 (i.e., not HTTP/websocket), which is relevant for use cases such as SSH, RDP, etc.
 Such usages are available under `cloudflared access help`.
 
-You can instead use [WARP client](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/private-networks)
+You can instead use [WARP client](https://developers.cloudflare.com/warp-client/)
 to access private origins behind Tunnels for Layer 4 traffic without requiring `cloudflared access` commands on the client side.
 
 
