@@ -45,6 +45,13 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 	defer resp.Body.Close()
 
+	// Report sensible errors rather than just failing to parse the non-JSON body
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return errors.New("rate limit exceeded; wait a while and try again")
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("HTTP error %d", resp.StatusCode))
+	}
+
 	// This will read the entire response into memory so we can print it in case of error
 	rsp_body, err := io.ReadAll(resp.Body)
 	if err != nil {
