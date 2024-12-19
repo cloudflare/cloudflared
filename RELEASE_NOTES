@@ -1,3 +1,15 @@
+2024.12.2
+- 2024-12-19 TUN-8822: Prevent concurrent usage of ICMPDecoder
+- 2024-12-18 TUN-8818: update changes document to reflect newly added diag subcommand
+- 2024-12-17 TUN-8817: Increase close session channel by one since there are two writers
+- 2024-12-13 TUN-8797: update CHANGES.md with note about semi-deterministic approach used to bind metrics server
+- 2024-12-13 TUN-8724: Add CLI command for diagnostic procedure
+- 2024-12-11 TUN-8786: calculate cli flags once for the diagnostic procedure
+- 2024-12-11 TUN-8792: Make diag/system endpoint always return a JSON
+- 2024-12-10 TUN-8783: fix log collectors for the diagnostic procedure
+- 2024-12-10 TUN-8785: include the icmp sources in the diag's tunnel state
+- 2024-12-10 TUN-8784: Set JSON encoder options to print formatted JSON when writing diag files
+
 2024.12.1
 - 2024-12-10 TUN-8795: update createrepo to createrepo_c to fix the release_pkgs.py script
 
