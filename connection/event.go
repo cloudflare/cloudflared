@@ -1,12 +1,15 @@
 package connection
 
+import "net"
+
 // Event is something that happened to a connection, e.g. disconnection or registration.
 type Event struct {
-	Index     uint8
-	EventType Status
-	Location  string
-	Protocol  Protocol
-	URL       string
+	Index       uint8
+	EventType   Status
+	Location    string
+	Protocol    Protocol
+	URL         string
+	EdgeAddress net.IP
 }
 
 // Status is the status of a connection.

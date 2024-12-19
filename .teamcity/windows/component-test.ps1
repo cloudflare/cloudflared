@@ -37,7 +37,7 @@ if ($LASTEXITCODE -ne 0) { throw "Failed unit tests" }
 
 Write-Output "Running component tests"
 
-python -m pip --disable-pip-version-check install --upgrade -r component-tests/requirements.txt
+python -m pip --disable-pip-version-check install --upgrade -r component-tests/requirements.txt --use-pep517
 python component-tests/setup.py --type create
 python -m pytest component-tests -o log_cli=true --log-cli-level=INFO
 if ($LASTEXITCODE -ne 0) {

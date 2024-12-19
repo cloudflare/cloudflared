@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$GoMsiVersion = "go1.22.2.windows-amd64.msi"
+$GoMsiVersion = "go1.22.5.windows-amd64.msi"
 
 Write-Output "Downloading go installer..."
 

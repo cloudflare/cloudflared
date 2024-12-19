@@ -1,7 +1,6 @@
 package dnsserver
 
 import (
-	"flag"
 	"fmt"
 	"net"
 	"time"
@@ -17,12 +16,7 @@ import (
 
 const serverType = "dns"
 
-// Any flags defined here, need to be namespaced to the serverType other
-// wise they potentially clash with other server types.
 func init() {
-	flag.StringVar(&Port, serverType+".port", DefaultPort, "Default port")
-	flag.StringVar(&Port, "p", DefaultPort, "Default port")
-
 	caddy.RegisterServerType(serverType, caddy.ServerType{
 		Directives: func() []string { return Directives },
 		DefaultInput: func() caddy.Input {
@@ -88,6 +82,8 @@ func (h *dnsContext) InspectServerBlocks(sourceFile string, serverBlocks []caddy
 					port = Port
 				case transport.TLS:
 					port = transport.TLSPort
+				case transport.QUIC:
+					port = transport.QUICPort
 				case transport.GRPC:
 					port = transport.GRPCPort
 				case transport.HTTPS:
@@ -147,7 +143,12 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 		c.ListenHosts = c.firstConfigInBlock.ListenHosts
 		c.Debug = c.firstConfigInBlock.Debug
 		c.Stacktrace = c.firstConfigInBlock.Stacktrace
-		c.TLSConfig = c.firstConfigInBlock.TLSConfig
+
+		// Fork TLSConfig for each encrypted connection
+		c.TLSConfig = c.firstConfigInBlock.TLSConfig.Clone()
+		c.ReadTimeout = c.firstConfigInBlock.ReadTimeout
+		c.WriteTimeout = c.firstConfigInBlock.WriteTimeout
+		c.IdleTimeout = c.firstConfigInBlock.IdleTimeout
 		c.TsigSecret = c.firstConfigInBlock.TsigSecret
 	}
 
@@ -170,6 +171,13 @@ func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
 
 		case transport.TLS:
 			s, err := NewServerTLS(addr, group)
+			if err != nil {
+				return nil, err
+			}
+			servers = append(servers, s)
+
+		case transport.QUIC:
+			s, err := NewServerQUIC(addr, group)
 			if err != nil {
 				return nil, err
 			}
@@ -221,7 +229,8 @@ func (c *Config) AddPlugin(m plugin.Plugin) {
 }
 
 // registerHandler adds a handler to a site's handler registration. Handlers
-//  use this to announce that they exist to other plugin.
+//
+//	use this to announce that they exist to other plugin.
 func (c *Config) registerHandler(h plugin.Handler) {
 	if c.registry == nil {
 		c.registry = make(map[string]plugin.Handler)
@@ -287,7 +296,7 @@ func (h *dnsContext) validateZonesAndListeningAddresses() error {
 	return nil
 }
 
-// groupSiteConfigsByListenAddr groups site configs by their listen
+// groupConfigsByListenAddr groups site configs by their listen
 // (bind) address, so sites that use the same listener can be served
 // on the same server instance. The return value maps the listen
 // address (what you pass into net.Listen) to the list of site configs.

@@ -8,33 +8,32 @@
 //
 // Implement the Provider interface for a plugin p:
 //
-//    func (p P) Metadata(ctx context.Context, state request.Request) context.Context {
-//       metadata.SetValueFunc(ctx, "test/something", func() string { return "myvalue" })
-//	 return ctx
-//    }
+//	   func (p P) Metadata(ctx context.Context, state request.Request) context.Context {
+//	      metadata.SetValueFunc(ctx, "test/something", func() string { return "myvalue" })
+//		 return ctx
+//	   }
 //
 // Basic example with caching:
 //
-//    func (p P) Metadata(ctx context.Context, state request.Request) context.Context {
-//       cached := ""
-//       f := func() string {
-//		if cached != "" {
-//                 return cached
-//             }
-//             cached = expensiveFunc()
-//             return cached
-//       }
-//       metadata.SetValueFunc(ctx, "test/something", f)
-//	 return ctx
-//    }
+//	   func (p P) Metadata(ctx context.Context, state request.Request) context.Context {
+//	      cached := ""
+//	      f := func() string {
+//			if cached != "" {
+//	                return cached
+//	            }
+//	            cached = expensiveFunc()
+//	            return cached
+//	      }
+//	      metadata.SetValueFunc(ctx, "test/something", f)
+//		 return ctx
+//	   }
 //
 // If you need access to this metadata from another plugin:
 //
-//    // ...
-//    valueFunc := metadata.ValueFunc(ctx, "test/something")
-//    value := valueFunc()
-//    // use 'value'
-//
+//	// ...
+//	valueFunc := metadata.ValueFunc(ctx, "test/something")
+//	value := valueFunc()
+//	// use 'value'
 package metadata
 
 import (

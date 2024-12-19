@@ -36,7 +36,7 @@ func Cipher(payload []byte, mask [4]byte, offset int) {
 	}
 
 	// NOTE: we use here binary.LittleEndian regardless of what is real
-	// endianess on machine is. To do so, we have to use binary.LittleEndian in
+	// endianness on machine is. To do so, we have to use binary.LittleEndian in
 	// the masking loop below as well.
 	var (
 		m  = binary.LittleEndian.Uint32(mask[:])

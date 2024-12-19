@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -100,7 +102,7 @@ func (c *controlStream) ServeControlStream(
 	c.observer.metrics.regSuccess.WithLabelValues("registerConnection").Inc()
 
 	c.observer.logConnected(registrationDetails.UUID, c.connIndex, registrationDetails.Location, c.edgeAddress, c.protocol)
-	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location)
+	c.observer.sendConnectedEvent(c.connIndex, c.protocol, registrationDetails.Location, c.edgeAddress)
 	c.connectedFuse.Connected()
 
 	// if conn index is 0 and tunnel is not remotely managed, then send local ingress rules configuration
@@ -116,27 +118,32 @@ func (c *controlStream) ServeControlStream(
 		}
 	}
 
-	c.waitForUnregister(ctx, registrationClient)
-	return nil
+	return c.waitForUnregister(ctx, registrationClient)
 }
 
-func (c *controlStream) waitForUnregister(ctx context.Context, registrationClient tunnelrpc.RegistrationClient) {
+func (c *controlStream) waitForUnregister(ctx context.Context, registrationClient tunnelrpc.RegistrationClient) error {
 	// wait for connection termination or start of graceful shutdown
 	defer registrationClient.Close()
+	var shutdownError error
 	select {
 	case <-ctx.Done():
+		shutdownError = ctx.Err()
 		break
 	case <-c.gracefulShutdownC:
 		c.stoppedGracefully = true
 	}
 
 	c.observer.sendUnregisteringEvent(c.connIndex)
-	registrationClient.GracefulShutdown(ctx, c.gracePeriod)
+	err := registrationClient.GracefulShutdown(ctx, c.gracePeriod)
+	if err != nil {
+		return errors.Wrap(err, "Error shutting down control stream")
+	}
 	c.observer.log.Info().
 		Int(management.EventTypeKey, int(management.Cloudflared)).
 		Uint8(LogFieldConnIndex, c.connIndex).
 		IPAddr(LogFieldIPAddress, c.edgeAddress).
 		Msg("Unregistered tunnel connection")
+	return shutdownError
 }
 
 func (c *controlStream) IsStopped() bool {

@@ -1,7 +1,7 @@
 # ws
 
 [![GoDoc][godoc-image]][godoc-url]
-[![Travis][travis-image]][travis-url]
+[![CI][ci-badge]][ci-url]
 
 > [RFC6455][rfc-url] WebSocket implementation in Go.
 
@@ -351,10 +351,191 @@ func main() {
 }
 ```
 
+# Compression
+
+There is a `ws/wsflate` package to support [Permessage-Deflate Compression
+Extension][rfc-pmce].
+
+It provides minimalistic I/O wrappers to be used in conjunction with any
+deflate implementation (for example, the standard library's
+[compress/flate][compress/flate]).
+
+It is also compatible with `wsutil`'s reader and writer by providing
+`wsflate.MessageState` type, which implements `wsutil.SendExtension` and
+`wsutil.RecvExtension` interfaces.
+
+```go
+package main
+
+import (
+	"bytes"
+	"log"
+	"net"
+
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsflate"
+)
+
+func main() {
+	ln, err := net.Listen("tcp", "localhost:8080")
+	if err != nil {
+		// handle error
+	}
+	e := wsflate.Extension{
+		// We are using default parameters here since we use
+		// wsflate.{Compress,Decompress}Frame helpers below in the code.
+		// This assumes that we use standard compress/flate package as flate
+		// implementation.
+		Parameters: wsflate.DefaultParameters,
+	}
+	u := ws.Upgrader{
+		Negotiate: e.Negotiate,
+	}
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Reset extension after previous upgrades.
+		e.Reset()
+
+		_, err = u.Upgrade(conn)
+		if err != nil {
+			log.Printf("upgrade error: %s", err)
+			continue
+		}
+		if _, ok := e.Accepted(); !ok {
+			log.Printf("didn't negotiate compression for %s", conn.RemoteAddr())
+			conn.Close()
+			continue
+		}
+
+		go func() {
+			defer conn.Close()
+			for {
+				frame, err := ws.ReadFrame(conn)
+				if err != nil {
+					// Handle error.
+					return
+				}
+
+				frame = ws.UnmaskFrameInPlace(frame)
+
+				if wsflate.IsCompressed(frame.Header) {
+					// Note that even after successful negotiation of
+					// compression extension, both sides are able to send
+					// non-compressed messages.
+					frame, err = wsflate.DecompressFrame(frame)
+					if err != nil {
+						// Handle error.
+						return
+					}
+				}
+
+				// Do something with frame...
+
+				ack := ws.NewTextFrame([]byte("this is an acknowledgement"))
+
+				// Compress response unconditionally.
+				ack, err = wsflate.CompressFrame(ack)
+				if err != nil {
+					// Handle error.
+					return
+				}
+				if err = ws.WriteFrame(conn, ack); err != nil {
+					// Handle error.
+					return
+				}
+			}
+		}()
+	}
+}
+```
+
+You can use compression with `wsutil` package this way:
+
+```go
+	// Upgrade somehow and negotiate compression to get the conn...
+
+	// Initialize flate reader. We are using nil as a source io.Reader because
+	// we will Reset() it in the message i/o loop below.
+	fr := wsflate.NewReader(nil, func(r io.Reader) wsflate.Decompressor {
+		return flate.NewReader(r)
+	})
+	// Initialize flate writer. We are using nil as a destination io.Writer
+	// because we will Reset() it in the message i/o loop below.
+	fw := wsflate.NewWriter(nil, func(w io.Writer) wsflate.Compressor {
+		f, _ := flate.NewWriter(w, 9)
+		return f
+	})
+
+	// Declare compression message state variable.
+	//
+	// It has two goals:
+	// - Allow users to check whether received message is compressed or not.
+	// - Help wsutil.Reader and wsutil.Writer to set/unset appropriate
+	//   WebSocket header bits while writing next frame to the wire (it
+	//   implements wsutil.RecvExtension and wsutil.SendExtension).
+	var msg wsflate.MessageState
+
+	// Initialize WebSocket reader as previously. 
+	// Please note the use of Reader.Extensions field as well as
+	// of ws.StateExtended flag.
+	rd := &wsutil.Reader{
+		Source:     conn,
+		State:      ws.StateServerSide | ws.StateExtended,
+		Extensions: []wsutil.RecvExtension{
+			&msg, 
+		},
+	}
+
+	// Initialize WebSocket writer with ws.StateExtended flag as well.
+	wr := wsutil.NewWriter(conn, ws.StateServerSide|ws.StateExtended, 0)
+	// Use the message state as wsutil.SendExtension.
+	wr.SetExtensions(&msg)
+
+	for {
+		h, err := rd.NextFrame()
+		if err != nil {
+			// handle error.
+		}
+		if h.OpCode.IsControl() {
+			// handle control frame.
+		}
+		if !msg.IsCompressed() {
+			// handle uncompressed frame (skipped for the sake of example
+			// simplicity).
+		}
+
+		// Reset the writer to echo same op code.
+		wr.Reset(h.OpCode)
+
+		// Reset both flate reader and writer to start the new round of i/o.
+		fr.Reset(rd)
+		fw.Reset(wr)
+
+		// Copy whole message from reader to writer decompressing it and
+		// compressing again.
+		if _, err := io.Copy(fw, fr); err != nil {
+			// handle error.
+		}
+		// Flush any remaining buffers from flate writer to WebSocket writer.
+		if err := fw.Close(); err != nil {
+			// handle error.
+		}
+		// Flush the whole WebSocket message to the wire.
+		if err := wr.Flush(); err != nil {
+			// handle error.
+		}
+	}
+```
 
 
 [rfc-url]: https://tools.ietf.org/html/rfc6455
+[rfc-pmce]: https://tools.ietf.org/html/rfc7692#section-7
 [godoc-image]: https://godoc.org/github.com/gobwas/ws?status.svg
 [godoc-url]: https://godoc.org/github.com/gobwas/ws
-[travis-image]: https://travis-ci.org/gobwas/ws.svg?branch=master
-[travis-url]: https://travis-ci.org/gobwas/ws
+[compress/flate]: https://golang.org/pkg/compress/flate/
+[ci-badge]:    https://github.com/gobwas/ws/workflows/CI/badge.svg
+[ci-url]:      https://github.com/gobwas/ws/actions?query=workflow%3ACI

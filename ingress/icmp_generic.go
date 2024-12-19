@@ -18,7 +18,7 @@ var errICMPProxyNotImplemented = fmt.Errorf("ICMP proxy is not implemented on %s
 
 type icmpProxy struct{}
 
-func (ip icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
+func (ip icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder ICMPResponder) error {
 	return errICMPProxyNotImplemented
 }
 
@@ -26,6 +26,6 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	return errICMPProxyNotImplemented
 }
 
-func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
 	return nil, errICMPProxyNotImplemented
 }

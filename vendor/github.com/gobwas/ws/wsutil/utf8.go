@@ -65,7 +65,7 @@ func (u *UTF8Reader) Read(p []byte) (n int, err error) {
 	u.state, u.codep = s, c
 	u.accepted = accepted
 
-	return
+	return n, err
 }
 
 // Valid checks current reader state. It returns true if all read bytes are

@@ -48,5 +48,6 @@ const (
 	// MinimalDefaultTTL is the absolute lowest TTL we use in CoreDNS.
 	MinimalDefaultTTL = 5 * time.Second
 	// MaximumDefaulTTL is the maximum TTL was use on RRsets in CoreDNS.
+	// TODO: rename as MaximumDefaultTTL
 	MaximumDefaulTTL = 1 * time.Hour
 )

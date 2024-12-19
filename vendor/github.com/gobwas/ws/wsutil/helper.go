@@ -64,14 +64,14 @@ func ReadMessage(r io.Reader, s ws.State, m []Message) ([]Message, error) {
 
 // ReadClientMessage reads next message from r, considering that caller
 // represents server side.
-// It is a shortcut for ReadMessage(r, ws.StateServerSide, m)
+// It is a shortcut for ReadMessage(r, ws.StateServerSide, m).
 func ReadClientMessage(r io.Reader, m []Message) ([]Message, error) {
 	return ReadMessage(r, ws.StateServerSide, m)
 }
 
 // ReadServerMessage reads next message from r, considering that caller
 // represents client side.
-// It is a shortcut for ReadMessage(r, ws.StateClientSide, m)
+// It is a shortcut for ReadMessage(r, ws.StateClientSide, m).
 func ReadServerMessage(r io.Reader, m []Message) ([]Message, error) {
 	return ReadMessage(r, ws.StateClientSide, m)
 }
@@ -113,7 +113,7 @@ func ReadClientText(rw io.ReadWriter) ([]byte, error) {
 // It discards received text messages.
 //
 // Note this may handle and write control frames into the writer part of a given
-//  io.ReadWriter.
+// io.ReadWriter.
 func ReadClientBinary(rw io.ReadWriter) ([]byte, error) {
 	p, _, err := readData(rw, ws.StateServerSide, ws.OpBinary)
 	return p, err
@@ -133,7 +133,7 @@ func ReadServerData(rw io.ReadWriter) ([]byte, ws.OpCode, error) {
 // It discards received binary messages.
 //
 // Note this may handle and write control frames into the writer part of a given
-//  io.ReadWriter.
+// io.ReadWriter.
 func ReadServerText(rw io.ReadWriter) ([]byte, error) {
 	p, _, err := readData(rw, ws.StateClientSide, ws.OpText)
 	return p, err

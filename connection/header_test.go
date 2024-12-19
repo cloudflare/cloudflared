@@ -46,16 +46,38 @@ func TestSerializeHeaders(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, 13, len(deserializedHeaders))
-	h2muxExpectedHeaders := stdlibHeaderToH2muxHeader(mockHeaders)
+	expectedHeaders := headerToReqHeader(mockHeaders)
 
 	sort.Sort(ByName(deserializedHeaders))
-	sort.Sort(ByName(h2muxExpectedHeaders))
+	sort.Sort(ByName(expectedHeaders))
 
 	assert.True(
 		t,
-		reflect.DeepEqual(h2muxExpectedHeaders, deserializedHeaders),
-		fmt.Sprintf("got = %#v, want = %#v\n", deserializedHeaders, h2muxExpectedHeaders),
+		reflect.DeepEqual(expectedHeaders, deserializedHeaders),
+		fmt.Sprintf("got = %#v, want = %#v\n", deserializedHeaders, expectedHeaders),
 	)
+}
+
+type ByName []HTTPHeader
+
+func (a ByName) Len() int      { return len(a) }
+func (a ByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a ByName) Less(i, j int) bool {
+	if a[i].Name == a[j].Name {
+		return a[i].Value < a[j].Value
+	}
+
+	return a[i].Name < a[j].Name
+}
+
+func headerToReqHeader(headers http.Header) (reqHeaders []HTTPHeader) {
+	for name, values := range headers {
+		for _, value := range values {
+			reqHeaders = append(reqHeaders, HTTPHeader{Name: name, Value: value})
+		}
+	}
+
+	return reqHeaders
 }
 
 func TestSerializeNoHeaders(t *testing.T) {

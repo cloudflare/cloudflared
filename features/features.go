@@ -8,6 +8,7 @@ const (
 	FeaturePostQuantum       = "postquantum"
 	FeatureQUICSupportEOF    = "support_quic_eof"
 	FeatureManagementLogs    = "management_logs"
+	FeatureDatagramV3        = "support_datagram_v3"
 )
 
 var (
