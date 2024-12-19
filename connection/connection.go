@@ -29,6 +29,8 @@ const (
 	contentTypeHeader = "content-type"
 	sseContentType    = "text/event-stream"
 	grpcContentType   = "application/grpc"
+
+	FlushResponseHeader  = "cf-cloudflared-flush-response"
 )
 
 var (
@@ -270,6 +272,10 @@ type ConnectedFuse interface {
 // Helper method to let the caller know what content-types should require a flush on every
 // write to a ResponseWriter.
 func shouldFlush(headers http.Header) bool {
+	if headers.Get(FlushResponseHeader) == "yes" {
+		return true
+	}
+
 	if contentType := headers.Get(contentTypeHeader); contentType != "" {
 		contentType = strings.ToLower(contentType)
 		for _, c := range flushableContentTypes {
