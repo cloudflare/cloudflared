@@ -65,12 +65,11 @@ type datagramConn struct {
 	icmpRouter     ingress.ICMPRouter
 	metrics        Metrics
 	logger         *zerolog.Logger
-
-	datagrams  chan []byte
-	readErrors chan error
+	datagrams      chan []byte
+	readErrors     chan error
 
 	icmpEncoderPool sync.Pool // a pool of *packet.Encoder
-	icmpDecoder     *packet.ICMPDecoder
+	icmpDecoderPool sync.Pool
 }
 
 func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, icmpRouter ingress.ICMPRouter, index uint8, metrics Metrics, logger *zerolog.Logger) DatagramConn {
@@ -89,7 +88,11 @@ func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, icmpRou
 				return packet.NewEncoder()
 			},
 		},
-		icmpDecoder: packet.NewICMPDecoder(),
+		icmpDecoderPool: sync.Pool{
+			New: func() any {
+				return packet.NewICMPDecoder()
+			},
+		},
 	}
 }
 
@@ -367,7 +370,16 @@ func (c *datagramConn) handleICMPPacket(datagram *ICMPDatagram) {
 
 	// Decode the provided ICMPDatagram as an ICMP packet
 	rawPacket := packet.RawPacket{Data: datagram.Payload}
-	icmp, err := c.icmpDecoder.Decode(rawPacket)
+	cachedDecoder := c.icmpDecoderPool.Get()
+	defer c.icmpDecoderPool.Put(cachedDecoder)
+	decoder, ok := cachedDecoder.(*packet.ICMPDecoder)
+	if !ok {
+		c.logger.Error().Msg("Could not get ICMPDecoder from the pool. Dropping packet")
+		return
+	}
+
+	icmp, err := decoder.Decode(rawPacket)
+
 	if err != nil {
 		c.logger.Err(err).Msgf("unable to marshal icmp packet")
 		return
