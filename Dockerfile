@@ -3,10 +3,12 @@ ARG TARGET_GOOS
 ARG TARGET_GOARCH
 FROM golang:1.22.5 as builder
 ENV GO111MODULE=on \
-    CGO_ENABLED=0 \
-    TARGET_GOOS=${TARGET_GOOS} \
-    TARGET_GOARCH=${TARGET_GOARCH} \
-    CONTAINER_BUILD=1
+  CGO_ENABLED=0 \
+  TARGET_GOOS=${TARGET_GOOS} \
+  TARGET_GOARCH=${TARGET_GOARCH} \
+  # the CONTAINER_BUILD envvar is used set github.com/cloudflare/cloudflared/metrics.Runtime=virtual
+  # which changes how cloudflared binds the metrics server
+  CONTAINER_BUILD=1
 
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
