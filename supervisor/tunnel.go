@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/netip"
 	"runtime/debug"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -554,10 +553,6 @@ func (e *EdgeTunnelServer) serveQUIC(
 	tlsConfig := e.config.EdgeTLSConfigs[connection.QUIC]
 
 	pqMode := e.config.FeatureSelector.PostQuantumMode()
-	if pqMode == features.PostQuantumStrict || pqMode == features.PostQuantumPrefer {
-		connOptions.Client.Features = features.Dedup(append(connOptions.Client.Features, features.FeaturePostQuantum))
-	}
-
 	curvePref, err := curvePreference(pqMode, tlsConfig.CurvePreferences)
 	if err != nil {
 		return err, true
@@ -602,7 +597,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	}
 
 	var datagramSessionManager connection.DatagramSessionHandler
-	if slices.Contains(connOptions.Client.Features, features.FeatureDatagramV3) {
+	if e.config.FeatureSelector.DatagramVersion() == features.DatagramV3 {
 		datagramSessionManager = connection.NewDatagramV3Connection(
 			ctx,
 			conn,

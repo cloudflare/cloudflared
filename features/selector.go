@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -18,59 +19,65 @@ const (
 	lookupTimeout           = time.Second * 10
 )
 
-type PostQuantumMode uint8
-
-const (
-	// Prefer post quantum, but fallback if connection cannot be established
-	PostQuantumPrefer PostQuantumMode = iota
-	// If the user passes the --post-quantum flag, we override
-	// CurvePreferences to only support hybrid post-quantum key agreements.
-	PostQuantumStrict
-)
-
 // If the TXT record adds other fields, the umarshal logic will ignore those keys
 // If the TXT record is missing a key, the field will unmarshal to the default Go value
-// pq was removed in TUN-7970
-type featuresRecord struct{}
 
-func NewFeatureSelector(ctx context.Context, accountTag string, staticFeatures StaticFeatures, logger *zerolog.Logger) (*FeatureSelector, error) {
-	return newFeatureSelector(ctx, accountTag, logger, newDNSResolver(), staticFeatures, defaultRefreshFreq)
+type featuresRecord struct {
+	// support_datagram_v3
+	DatagramV3Percentage int32 `json:"dv3"`
+
+	// PostQuantumPercentage int32 `json:"pq"` // Removed in TUN-7970
 }
 
-// FeatureSelector determines if this account will try new features. It preiodically queries a DNS TXT record
-// to see which features are turned on
+func NewFeatureSelector(ctx context.Context, accountTag string, cliFeatures []string, pq bool, logger *zerolog.Logger) (*FeatureSelector, error) {
+	return newFeatureSelector(ctx, accountTag, logger, newDNSResolver(), cliFeatures, pq, defaultRefreshFreq)
+}
+
+// FeatureSelector determines if this account will try new features. It periodically queries a DNS TXT record
+// to see which features are turned on.
 type FeatureSelector struct {
 	accountHash int32
 	logger      *zerolog.Logger
 	resolver    resolver
 
-	staticFeatures StaticFeatures
+	staticFeatures staticFeatures
+	cliFeatures    []string
 
 	// lock protects concurrent access to dynamic features
 	lock     sync.RWMutex
 	features featuresRecord
 }
 
-// Features set by user provided flags
-type StaticFeatures struct {
-	PostQuantumMode *PostQuantumMode
-}
-
-func newFeatureSelector(ctx context.Context, accountTag string, logger *zerolog.Logger, resolver resolver, staticFeatures StaticFeatures, refreshFreq time.Duration) (*FeatureSelector, error) {
+func newFeatureSelector(ctx context.Context, accountTag string, logger *zerolog.Logger, resolver resolver, cliFeatures []string, pq bool, refreshFreq time.Duration) (*FeatureSelector, error) {
+	// Combine default features and user-provided features
+	var pqMode *PostQuantumMode
+	if pq {
+		mode := PostQuantumStrict
+		pqMode = &mode
+		cliFeatures = append(cliFeatures, FeaturePostQuantum)
+	}
+	staticFeatures := staticFeatures{
+		PostQuantumMode: pqMode,
+	}
 	selector := &FeatureSelector{
 		accountHash:    switchThreshold(accountTag),
 		logger:         logger,
 		resolver:       resolver,
 		staticFeatures: staticFeatures,
+		cliFeatures:    Dedup(cliFeatures),
 	}
 
 	if err := selector.refresh(ctx); err != nil {
 		logger.Err(err).Msg("Failed to fetch features, default to disable")
 	}
 
-	// Run refreshLoop next time we have a new feature to rollout
+	go selector.refreshLoop(ctx, refreshFreq)
 
 	return selector, nil
+}
+
+func (fs *FeatureSelector) accountEnabled(percentage int32) bool {
+	return percentage > fs.accountHash
 }
 
 func (fs *FeatureSelector) PostQuantumMode() PostQuantumMode {
@@ -79,6 +86,33 @@ func (fs *FeatureSelector) PostQuantumMode() PostQuantumMode {
 	}
 
 	return PostQuantumPrefer
+}
+
+func (fs *FeatureSelector) DatagramVersion() DatagramVersion {
+	fs.lock.RLock()
+	defer fs.lock.RUnlock()
+
+	// If user provides the feature via the cli, we take it as priority over remote feature evaluation
+	if slices.Contains(fs.cliFeatures, FeatureDatagramV3) {
+		return DatagramV3
+	}
+	// If the user specifies DatagramV2, we also take that over remote
+	if slices.Contains(fs.cliFeatures, FeatureDatagramV2) {
+		return DatagramV2
+	}
+
+	if fs.accountEnabled(fs.features.DatagramV3Percentage) {
+		return DatagramV3
+	}
+	return DatagramV2
+}
+
+// ClientFeatures will return the list of currently available features that cloudflared should provide to the edge.
+//
+// This list is dynamic and can change in-between returns.
+func (fs *FeatureSelector) ClientFeatures() []string {
+	// Evaluate any remote features along with static feature list to construct the list of features
+	return Dedup(slices.Concat(defaultFeatures, fs.cliFeatures, []string{string(fs.DatagramVersion())}))
 }
 
 func (fs *FeatureSelector) refreshLoop(ctx context.Context, refreshFreq time.Duration) {

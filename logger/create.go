@@ -16,7 +16,6 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/management"
 )
 
@@ -46,11 +45,7 @@ func init() {
 	zerolog.TimeFieldFormat = time.RFC3339
 	zerolog.TimestampFunc = utcNow
 
-	if features.Contains(features.FeatureManagementLogs) {
-		// Management logger needs to be initialized before any of the other loggers as to not capture
-		// it's own logging events.
-		ManagementLogger = management.NewLogger()
-	}
+	ManagementLogger = management.NewLogger()
 }
 
 func utcNow() time.Time {
@@ -124,10 +119,7 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 		writers = append(writers, rollingLogger)
 	}
 
-	var managementWriter zerolog.LevelWriter
-	if features.Contains(features.FeatureManagementLogs) {
-		managementWriter = ManagementLogger
-	}
+	managementWriter := ManagementLogger
 
 	level, levelErr := zerolog.ParseLevel(loggerConfig.MinLevel)
 	if levelErr != nil {

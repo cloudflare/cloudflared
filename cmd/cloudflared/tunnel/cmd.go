@@ -31,7 +31,6 @@ import (
 	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/diagnostic"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
@@ -515,26 +514,23 @@ func StartServer(
 		tunnelConfig.ICMPRouterServer = nil
 	}
 
-	internalRules := []ingress.Rule{}
-	if features.Contains(features.FeatureManagementLogs) {
-		serviceIP := c.String("service-op-ip")
-		if edgeAddrs, err := edgediscovery.ResolveEdge(log, tunnelConfig.Region, tunnelConfig.EdgeIPVersion); err == nil {
-			if serviceAddr, err := edgeAddrs.GetAddrForRPC(); err == nil {
-				serviceIP = serviceAddr.TCP.String()
-			}
+	serviceIP := c.String("service-op-ip")
+	if edgeAddrs, err := edgediscovery.ResolveEdge(log, tunnelConfig.Region, tunnelConfig.EdgeIPVersion); err == nil {
+		if serviceAddr, err := edgeAddrs.GetAddrForRPC(); err == nil {
+			serviceIP = serviceAddr.TCP.String()
 		}
-
-		mgmt := management.New(
-			c.String("management-hostname"),
-			c.Bool("management-diagnostics"),
-			serviceIP,
-			clientID,
-			c.String(connectorLabelFlag),
-			logger.ManagementLogger.Log,
-			logger.ManagementLogger,
-		)
-		internalRules = []ingress.Rule{ingress.NewManagementRule(mgmt)}
 	}
+
+	mgmt := management.New(
+		c.String("management-hostname"),
+		c.Bool("management-diagnostics"),
+		serviceIP,
+		clientID,
+		c.String(connectorLabelFlag),
+		logger.ManagementLogger.Log,
+		logger.ManagementLogger,
+	)
+	internalRules := []ingress.Rule{ingress.NewManagementRule(mgmt)}
 	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, internalRules, tunnelConfig.Log)
 	if err != nil {
 		return err

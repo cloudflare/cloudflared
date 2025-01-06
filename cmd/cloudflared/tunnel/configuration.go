@@ -137,20 +137,15 @@ func prepareTunnelConfig(
 
 	transportProtocol := c.String("protocol")
 
-	clientFeatures := features.Dedup(append(c.StringSlice("features"), features.DefaultFeatures...))
-
-	staticFeatures := features.StaticFeatures{}
-	if c.Bool("post-quantum") {
-		if FipsEnabled {
-			return nil, nil, fmt.Errorf("post-quantum not supported in FIPS mode")
-		}
-		pqMode := features.PostQuantumStrict
-		staticFeatures.PostQuantumMode = &pqMode
+	if c.Bool("post-quantum") && FipsEnabled {
+		return nil, nil, fmt.Errorf("post-quantum not supported in FIPS mode")
 	}
-	featureSelector, err := features.NewFeatureSelector(ctx, namedTunnel.Credentials.AccountTag, staticFeatures, log)
+
+	featureSelector, err := features.NewFeatureSelector(ctx, namedTunnel.Credentials.AccountTag, c.StringSlice("features"), c.Bool("post-quantum"), log)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "Failed to create feature selector")
 	}
+	clientFeatures := featureSelector.ClientFeatures()
 	pqMode := featureSelector.PostQuantumMode()
 	if pqMode == features.PostQuantumStrict {
 		// Error if the user tries to force a non-quic transport protocol
@@ -158,7 +153,6 @@ func prepareTunnelConfig(
 			return nil, nil, fmt.Errorf("post-quantum is only supported with the quic transport")
 		}
 		transportProtocol = connection.QUIC.String()
-		clientFeatures = append(clientFeatures, features.FeaturePostQuantum)
 
 		log.Info().Msgf(
 			"Using hybrid post-quantum key agreement %s",
