@@ -247,10 +247,18 @@ ingress:
 			wantErr: true,
 		},
 		{
-			name: "Invalid HTTP status code",
+			name: "Invalid HTTP status code(8080)",
 			args: args{rawYAML: `
 ingress:
  - service: http_status:8080
+`},
+			wantErr: true,
+		},
+		{
+			name: "Invalid HTTP status code(666)",
+			args: args{rawYAML: `
+ingress:
+ - service: http_status:666
 `},
 			wantErr: true,
 		},
