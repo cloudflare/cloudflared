@@ -1,3 +1,8 @@
+2025.1.0
+- 2025-01-06 TUN-8842: Add Ubuntu Noble and 'any' debian distributions to release script
+- 2025-01-06 TUN-8807: Add support_datagram_v3 to remote feature rollout
+- 2024-12-20 TUN-8829: add CONTAINER_BUILD to dockerfiles
+
 2024.12.2
 - 2024-12-19 TUN-8822: Prevent concurrent usage of ICMPDecoder
 - 2024-12-18 TUN-8818: update changes document to reflect newly added diag subcommand
