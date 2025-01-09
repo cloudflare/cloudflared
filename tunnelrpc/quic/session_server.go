@@ -51,7 +51,7 @@ func (s *SessionManagerServer) Serve(ctx context.Context, stream io.ReadWriteClo
 
 	select {
 	case <-rpcConn.Done():
-		return rpcConn.Err()
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
