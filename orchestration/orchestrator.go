@@ -58,7 +58,7 @@ func NewOrchestrator(ctx context.Context,
 		internalRules:  internalRules,
 		config:         config,
 		tags:           tags,
-		sessionLimiter: cfdsession.NewLimiter(0),
+		sessionLimiter: cfdsession.NewLimiter(config.WarpRouting.MaxActiveFlows),
 		log:            log,
 		shutdownC:      ctx.Done(),
 	}
@@ -141,6 +141,10 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	if err := ingressRules.StartOrigins(o.log, proxyShutdownC); err != nil {
 		return errors.Wrap(err, "failed to start origin")
 	}
+
+	// Update the sessions limit since the configuration might have changed
+	o.sessionLimiter.SetLimit(warpRouting.MaxActiveFlows)
+
 	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.sessionLimiter, o.config.WriteTimeout, o.log)
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
