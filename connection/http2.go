@@ -16,6 +16,8 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
+	cfdsession "github.com/cloudflare/cloudflared/session"
+
 	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -156,7 +158,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.log.Error().Err(requestErr).Msg("failed to serve incoming request")
 
 		// WriteErrorResponse will return false if status was already written. we need to abort handler.
-		if !respWriter.WriteErrorResponse() {
+		if !respWriter.WriteErrorResponse(requestErr) {
 			c.log.Debug().Msg("Handler aborted due to failure to write error response after status already sent")
 			panic(http.ErrAbortHandler)
 		}
@@ -209,8 +211,9 @@ func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, l
 			w:   w,
 			log: log,
 		}
-		respWriter.WriteErrorResponse()
-		return nil, fmt.Errorf("%T doesn't implement http.Flusher", w)
+		err := fmt.Errorf("%T doesn't implement http.Flusher", w)
+		respWriter.WriteErrorResponse(err)
+		return nil, err
 	}
 
 	return &http2RespWriter{
@@ -295,7 +298,7 @@ func (rp *http2RespWriter) WriteHeader(status int) {
 		rp.log.Warn().Msg("WriteHeader after hijack")
 		return
 	}
-	rp.WriteRespHeaders(status, rp.respHeaders)
+	_ = rp.WriteRespHeaders(status, rp.respHeaders)
 }
 
 func (rp *http2RespWriter) hijacked() bool {
@@ -328,12 +331,16 @@ func (rp *http2RespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return conn, readWriter, nil
 }
 
-func (rp *http2RespWriter) WriteErrorResponse() bool {
+func (rp *http2RespWriter) WriteErrorResponse(err error) bool {
 	if rp.statusWritten {
 		return false
 	}
 
-	rp.setResponseMetaHeader(responseMetaHeaderCfd)
+	if errors.Is(err, cfdsession.ErrTooManyActiveSessions) {
+		rp.setResponseMetaHeader(responseMetaHeaderCfdFlowRateLimited)
+	} else {
+		rp.setResponseMetaHeader(responseMetaHeaderCfd)
+	}
 	rp.w.WriteHeader(http.StatusBadGateway)
 	rp.statusWritten = true
 

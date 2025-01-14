@@ -9,9 +9,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/cloudflare/cloudflared/management"
+	cfdsession "github.com/cloudflare/cloudflared/session"
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cfio"
@@ -30,11 +34,11 @@ const (
 
 // Proxy represents a means to Proxy between cloudflared and the origin services.
 type Proxy struct {
-	ingressRules ingress.Ingress
-	warpRouting  *ingress.WarpRoutingService
-	management   *ingress.ManagementService
-	tags         []pogs.Tag
-	log          *zerolog.Logger
+	ingressRules   ingress.Ingress
+	warpRouting    *ingress.WarpRoutingService
+	tags           []pogs.Tag
+	sessionLimiter cfdsession.Limiter
+	log            *zerolog.Logger
 }
 
 // NewOriginProxy returns a new instance of the Proxy struct.
@@ -42,13 +46,15 @@ func NewOriginProxy(
 	ingressRules ingress.Ingress,
 	warpRouting ingress.WarpRoutingConfig,
 	tags []pogs.Tag,
+	sessionLimiter cfdsession.Limiter,
 	writeTimeout time.Duration,
 	log *zerolog.Logger,
 ) *Proxy {
 	proxy := &Proxy{
-		ingressRules: ingressRules,
-		tags:         tags,
-		log:          log,
+		ingressRules:   ingressRules,
+		tags:           tags,
+		sessionLimiter: sessionLimiter,
+		log:            log,
 	}
 
 	proxy.warpRouting = ingress.NewWarpRoutingService(warpRouting, writeTimeout)
@@ -64,7 +70,7 @@ func (p *Proxy) applyIngressMiddleware(rule *ingress.Rule, r *http.Request, w co
 		}
 
 		if result.ShouldFilterRequest {
-			w.WriteRespHeaders(result.StatusCode, nil)
+			_ = w.WriteRespHeaders(result.StatusCode, nil)
 			return fmt.Errorf("request filtered by middleware handler (%s) due to: %s", handler.Name(), result.Reason), true
 		}
 	}
@@ -152,10 +158,18 @@ func (p *Proxy) ProxyTCP(
 		return err
 	}
 
+	logger := newTCPLogger(p.log, req)
+
+	// Try to start a new session
+	if err := p.sessionLimiter.Acquire(management.TCP.String()); err != nil {
+		logger.Warn().Msg("Too many concurrent sessions being handled, rejecting tcp proxy")
+		return pkgerrors.Wrap(err, "failed to start tcp session due to rate limiting")
+	}
+	defer p.sessionLimiter.Release()
+
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	logger := newTCPLogger(p.log, req)
 	tracedCtx := tracing.NewTracedContext(serveCtx, req.CfTraceID, &logger)
 	logger.Debug().Msg("tcp proxy stream started")
 

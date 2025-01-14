@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -21,7 +22,7 @@ import (
 
 	"github.com/gobwas/ws/wsutil"
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -506,6 +507,10 @@ func TestBuildHTTPRequest(t *testing.T) {
 }
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
+	if tcpRequest.Dest == "rate-limit-me" {
+		return pkgerrors.Wrap(cfdsession.ErrTooManyActiveSessions, "failed tcp stream")
+	}
+
 	_ = rwa.AckConnection("")
 	_, _ = io.Copy(rwa, rwa)
 	return nil
@@ -595,6 +600,59 @@ func TestCreateUDPConnReuseSourcePort(t *testing.T) {
 	if nettest.SupportsIPv6() {
 		testCreateUDPConnReuseSourcePortForEdgeIP(t, edgeIPv6)
 	}
+}
+
+// TestTCPProxy_FlowRateLimited tests if the pogs.ConnectResponse returns the expected error and metadata, when a
+// new flow is rate limited.
+func TestTCPProxy_FlowRateLimited(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start a UDP Listener for QUIC.
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
+	require.NoError(t, err)
+	defer udpListener.Close()
+
+	quicTransport := &quic.Transport{Conn: udpListener, ConnectionIDLength: 16}
+	quicListener, err := quicTransport.Listen(testTLSServerConfig, testQUICConfig)
+	require.NoError(t, err)
+
+	serverDone := make(chan struct{})
+	go func() {
+		defer close(serverDone)
+
+		session, err := quicListener.Accept(ctx)
+		assert.NoError(t, err)
+
+		quicStream, err := session.OpenStreamSync(context.Background())
+		assert.NoError(t, err)
+		stream := cfdquic.NewSafeStreamCloser(quicStream, defaultQUICTimeout, &log)
+
+		reqClientStream := rpcquic.RequestClientStream{ReadWriteCloser: stream}
+		err = reqClientStream.WriteConnectRequestData("rate-limit-me", pogs.ConnectionTypeTCP)
+		assert.NoError(t, err)
+
+		response, err := reqClientStream.ReadConnectResponseData()
+		assert.NoError(t, err)
+
+		// Got Rate Limited
+		assert.NotEmpty(t, response.Error)
+		assert.Contains(t, response.Metadata, pogs.ErrorFlowConnectRateLimitedKey)
+	}()
+
+	tunnelConn, _ := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), uint8(0))
+
+	connDone := make(chan struct{})
+	go func() {
+		defer close(connDone)
+		_ = tunnelConn.Serve(ctx)
+	}()
+
+	<-serverDone
+	cancel()
+	<-connDone
 }
 
 func testCreateUDPConnReuseSourcePortForEdgeIP(t *testing.T, edgeIP netip.AddrPort) {
