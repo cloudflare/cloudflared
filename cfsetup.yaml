@@ -13,10 +13,14 @@ bullseye: &bullseye
       - rubygem-fpm
       - rpm
       - libffi-dev
+      - golangci-lint
     pre-cache: &build_pre_cache
       - export GOCACHE=/cfsetup_build/.cache/go-build
       - go install golang.org/x/tools/cmd/goimports@latest
     post-cache:
+      # Linting
+      - make lint
+      - make fmt-check
       # Build binary for component test
       - GOOS=linux GOARCH=amd64 make cloudflared
   build-linux-fips:
@@ -156,7 +160,6 @@ bullseye: &bullseye
       - export GOOS=linux
       - export GOARCH=amd64
       - export PATH="$HOME/go/bin:$PATH"
-      - ./fmt-check.sh
       - make test | gotest-to-teamcity
   test-fips:
     build_dir: *build_dir
@@ -167,7 +170,6 @@ bullseye: &bullseye
       - export GOARCH=amd64
       - export FIPS=true
       - export PATH="$HOME/go/bin:$PATH"
-      - ./fmt-check.sh
       - make test | gotest-to-teamcity
   component-test:
     build_dir: *build_dir

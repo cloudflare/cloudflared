@@ -255,4 +255,13 @@ vet:
 
 .PHONY: fmt
 fmt:
-	goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
+	@goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
+	@go fmt $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
+
+.PHONY: fmt-check
+fmt-check:
+	@./fmt-check.sh
+
+.PHONY: lint
+lint:
+	@golangci-lint run

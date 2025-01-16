@@ -56,3 +56,23 @@ Want to test Cloudflare Tunnel before adding a website to Cloudflare? You can do
 Cloudflare currently supports versions of cloudflared that are **within one year** of the most recent release. Breaking changes unrelated to feature availability may be introduced that will impact versions released more than one year ago. You can read more about upgrading cloudflared in our [developer documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/#updating-cloudflared).
 
 For example, as of January 2023 Cloudflare will support cloudflared version 2023.1.1 to cloudflared 2022.1.1.
+
+## Development
+
+### Requirements
+- [GNU Make](https://www.gnu.org/software/make/)
+- [capnp](https://capnproto.org/install.html)
+- [cloudflare go toolchain](https://github.com/cloudflare/go)
+- Optional tools:
+  - [capnpc-go](https://pkg.go.dev/zombiezen.com/go/capnproto2/capnpc-go)
+  - [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports)
+  - [golangci-lint](https://github.com/golangci/golangci-lint)
+
+### Build
+To build cloudflared locally run `make cloudflared`
+
+### Test
+To locally run the tests run `make test`
+
+### Linting
+To format the code and keep a good code quality use `make fmt` and `make lint`
