@@ -22,6 +22,7 @@ TARGET_DIRECTORY=".build"
 BINARY_NAME="cloudflared"
 VERSION=$(git describe --tags --always --dirty="-dev")
 PRODUCT="cloudflared"
+APPLE_CA_CERT="apple_dev_ca.cert"
 CODE_SIGN_PRIV="code_sign.p12"
 CODE_SIGN_CERT="code_sign.cer"
 INSTALLER_PRIV="installer.p12"
@@ -35,91 +36,84 @@ mkdir -p ../src/github.com/cloudflare/
 cp -r . ../src/github.com/cloudflare/cloudflared
 cd ../src/github.com/cloudflare/cloudflared 
 
-# Add code signing private key to the key chain
-if [[ ! -z "$CFD_CODE_SIGN_KEY" ]]; then
-  if [[ ! -z "$CFD_CODE_SIGN_PASS" ]]; then
-    # write private key to disk and then import it keychain
-    echo -n -e ${CFD_CODE_SIGN_KEY} | base64 -D > ${CODE_SIGN_PRIV}
-    # we set || true  here and for every `security import invoke` because the  "duplicate SecKeychainItemImport" error 
-    # will cause set -e to exit 1. It is okay we do this because we deliberately handle this error in the lines below.
-    out=$(security import ${CODE_SIGN_PRIV} -A -P "${CFD_CODE_SIGN_PASS}" 2>&1) || true 
-    exitcode=$?
-    if [ -n "$out" ]; then
-      if [ $exitcode -eq 0 ]; then
-          echo "$out"
-      else
-          if [ "$out" != "${SEC_DUP_MSG}" ]; then
-              echo "$out" >&2
-              exit $exitcode
-          fi
+# Imports certificates to the Apple KeyChain
+import_certificate() {
+    local CERTIFICATE_NAME=$1
+    local CERTIFICATE_ENV_VAR=$2
+    local CERTIFICATE_FILE_NAME=$3
+
+    echo "Importing $CERTIFICATE_NAME"
+
+    if [[ ! -z "$CERTIFICATE_ENV_VAR" ]]; then
+      # write certificate to disk and then import it keychain
+      echo -n -e ${CERTIFICATE_ENV_VAR} | base64 -D > ${CERTIFICATE_FILE_NAME}
+      # we set || true  here and for every `security import invoke` because the  "duplicate SecKeychainItemImport" error
+      # will cause set -e to exit 1. It is okay we do this because we deliberately handle this error in the lines below.
+      local out=$(security import ${CERTIFICATE_FILE_NAME} -A 2>&1) || true
+      local exitcode=$?
+      # delete the certificate from disk
+      rm -rf ${CERTIFICATE_FILE_NAME}
+      if [ -n "$out" ]; then
+        if [ $exitcode -eq 0 ]; then
+            echo "$out"
+        else
+            if [ "$out" != "${SEC_DUP_MSG}" ]; then
+                echo "$out" >&2
+                exit $exitcode
+            else
+                echo "already imported code signing certificate"
+            fi
+        fi
       fi
     fi
-    rm ${CODE_SIGN_PRIV}
-  fi
-fi
+}
+
+# Imports private keys to the Apple KeyChain
+import_private_keys() {
+    local PRIVATE_KEY_NAME=$1
+    local PRIVATE_KEY_ENV_VAR=$2
+    local PRIVATE_KEY_FILE_NAME=$3
+    local PRIVATE_KEY_PASS=$4
+
+    echo "Importing $PRIVATE_KEY_NAME"
+
+    if [[ ! -z "$PRIVATE_KEY_ENV_VAR" ]]; then
+      if [[ ! -z "$PRIVATE_KEY_PASS" ]]; then
+        # write private key to disk and then import it keychain
+        echo -n -e ${PRIVATE_KEY_ENV_VAR} | base64 -D > ${PRIVATE_KEY_FILE_NAME}
+        # we set || true  here and for every `security import invoke` because the  "duplicate SecKeychainItemImport" error
+        # will cause set -e to exit 1. It is okay we do this because we deliberately handle this error in the lines below.
+        local out=$(security import ${PRIVATE_KEY_FILE_NAME} -A -P "${PRIVATE_KEY_PASS}" 2>&1) || true
+        local exitcode=$?
+        rm -rf ${PRIVATE_KEY_FILE_NAME}
+        if [ -n "$out" ]; then
+          if [ $exitcode -eq 0 ]; then
+              echo "$out"
+          else
+              if [ "$out" != "${SEC_DUP_MSG}" ]; then
+                  echo "$out" >&2
+                  exit $exitcode
+              fi
+          fi
+        fi
+      fi
+    fi
+}
+
+# Add Apple Root Developer certificate to the key chain
+import_certificate "Apple Developer CA" "${APPLE_DEV_CA_CERT}" "${APPLE_CA_CERT}"
+
+# Add code signing private key to the key chain
+import_private_keys "Developer ID Application" "${CFD_CODE_SIGN_KEY}" "${CODE_SIGN_PRIV}" "${CFD_CODE_SIGN_PASS}"
 
 # Add code signing certificate to the key chain
-if [[ ! -z "$CFD_CODE_SIGN_CERT" ]]; then
-  # write certificate to disk and then import it keychain
-  echo -n -e ${CFD_CODE_SIGN_CERT} | base64 -D > ${CODE_SIGN_CERT}
-  out1=$(security import ${CODE_SIGN_CERT} -A 2>&1) || true
-  exitcode1=$?
-  if [ -n "$out1" ]; then
-    if [ $exitcode1 -eq 0 ]; then
-        echo "$out1"
-    else
-        if [ "$out1" != "${SEC_DUP_MSG}" ]; then
-            echo "$out1" >&2
-            exit $exitcode1
-        else 
-            echo "already imported code signing certificate"
-        fi
-    fi
-  fi
-  rm ${CODE_SIGN_CERT}
-fi
+import_certificate "Developer ID Application" "${CFD_CODE_SIGN_CERT}" "${CODE_SIGN_CERT}"
 
 # Add package signing private key to the key chain
-if [[ ! -z "$CFD_INSTALLER_KEY" ]]; then
-  if [[ ! -z "$CFD_INSTALLER_PASS" ]]; then
-    # write private key to disk and then import it into the keychain
-    echo -n -e ${CFD_INSTALLER_KEY} | base64 -D > ${INSTALLER_PRIV}
-    out2=$(security import ${INSTALLER_PRIV} -A -P "${CFD_INSTALLER_PASS}" 2>&1) || true
-    exitcode2=$?
-    if [ -n "$out2" ]; then
-      if [ $exitcode2 -eq 0 ]; then
-          echo "$out2"
-      else
-          if [ "$out2" != "${SEC_DUP_MSG}" ]; then
-              echo "$out2" >&2
-              exit $exitcode2
-          fi
-      fi
-    fi
-    rm ${INSTALLER_PRIV}
-  fi
-fi
+import_private_keys "Developer ID Installer" "${CFD_INSTALLER_KEY}" "${INSTALLER_PRIV}" "${CFD_INSTALLER_PASS}"
 
 # Add package signing certificate to the key chain
-if [[ ! -z "$CFD_INSTALLER_CERT" ]]; then
-  # write certificate to disk and then import it keychain
-  echo -n -e ${CFD_INSTALLER_CERT} | base64 -D > ${INSTALLER_CERT}
-  out3=$(security import ${INSTALLER_CERT} -A 2>&1) || true
-  exitcode3=$?
-  if [ -n "$out3" ]; then
-    if [ $exitcode3 -eq 0 ]; then
-        echo "$out3"
-    else
-        if [ "$out3" != "${SEC_DUP_MSG}" ]; then
-            echo "$out3" >&2
-            exit $exitcode3
-        else 
-            echo "already imported installer certificate"
-        fi
-    fi
-  fi
-  rm ${INSTALLER_CERT}
-fi
+import_certificate "Developer ID Installer" "${CFD_INSTALLER_CERT}" "${INSTALLER_CERT}"
 
 # get the code signing certificate name
 if [[ ! -z "$CFD_CODE_SIGN_NAME" ]]; then
