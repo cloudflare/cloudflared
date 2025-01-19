@@ -7,7 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOEXPERIMENT: "noboringcrypto"
-      CGO_ENABLED: 0
+      # Looks like CGO is required for FreeBSD building
+      CGO_ENABLED: 1
     steps:
     - uses: actions/checkout@v4
     - name: Building from source
@@ -25,6 +26,4 @@ jobs:
           git config --global --add safe.directory /home/runner/work/cloudflared/cloudflared
           go install golang.org/x/tools/cmd/goimports@latest
         run: |
-          echo $GOEXPERIMENT
-          echo $CGO_ENABLED
           sudo gmake install-go cloudflared cleanup-go
