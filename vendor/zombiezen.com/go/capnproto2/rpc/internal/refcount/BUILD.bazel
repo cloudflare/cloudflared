@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["refcount.go"],
+    importpath = "zombiezen.com/go/capnproto2/rpc/internal/refcount",
+    visibility = ["//rpc:__subpackages__"],
+    deps = ["//:go_default_library"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["refcount_test.go"],
+    embed = [":go_default_library"],
+    deps = ["//:go_default_library"],
+)

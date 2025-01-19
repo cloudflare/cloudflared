@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "discard.go",
+        "discard_go14.go",
+        "packed.go",
+    ],
+    importpath = "zombiezen.com/go/capnproto2/internal/packed",
+    visibility = ["//:__subpackages__"],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["packed_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":go_default_library"],
+)

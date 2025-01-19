@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "doc.go",
+        "extract.go",
+        "fields.go",
+        "insert.go",
+    ],
+    importpath = "zombiezen.com/go/capnproto2/pogs",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//:go_default_library",
+        "//internal/nodemap:go_default_library",
+        "//internal/schema:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "bench_test.go",
+        "embed_test.go",
+        "example_test.go",
+        "interface_test.go",
+        "pogs_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//:go_default_library",
+        "//internal/aircraftlib:go_default_library",
+        "//internal/demo/books:go_default_library",
+        "@com_github_kylelemons_godebug//pretty:go_default_library",
+        "@org_golang_x_net//context:go_default_library",
+    ],
+)
