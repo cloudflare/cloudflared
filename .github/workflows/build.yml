@@ -1,0 +1,20 @@
+# Build from source on FreeBSD.
+name: build_freebsd
+on: [push]
+permissions: read-all
+jobs:
+  build_freebsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Building from source
+      id: build_freebsd
+      uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true
+        mem: 4096
+        # Note that the test scripts require bash
+        prepare: |
+          pkg install -y sudo gmake bash git go curl
+        run: |
+          sudo gmake install-go cloudflared cleanup-go
