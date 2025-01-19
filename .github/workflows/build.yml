@@ -27,6 +27,5 @@ jobs:
           go mod download
           go mod tidy
           go install golang.org/x/tools/cmd/goimports@latest
-          go install github.com/cloudflare/cloudflared/diagnostic/network@latest
         run: |
           sudo gmake install-go cloudflared cleanup-go
