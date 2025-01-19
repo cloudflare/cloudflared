@@ -16,5 +16,6 @@ jobs:
         # Note that the test scripts require bash
         prepare: |
           pkg install -y sudo gmake bash git go curl
+          git config --global --add safe.directory /home/runner/work/cloudflared/cloudflared
         run: |
           sudo gmake install-go cloudflared cleanup-go
