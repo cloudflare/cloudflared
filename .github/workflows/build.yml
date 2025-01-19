@@ -5,17 +5,22 @@ permissions: read-all
 jobs:
   build_freebsd:
     runs-on: ubuntu-latest
+    env:
+      GOEXPERIMENT: "noboringcrypto"
+      CGO_ENABLED: 0
     steps:
     - uses: actions/checkout@v4
     - name: Building from source
       id: build_freebsd
       uses: vmactions/freebsd-vm@v1
       with:
+        envs: 'GOEXPERIMENT CGO_ENABLED'
         usesh: true
         mem: 4096
         # Note that the test scripts require bash
         prepare: |
-          pkg install -y sudo gmake bash git go curl
+          pkg install -y sudo gmake bash git go golangci-lint curl wget fakeroot libffi rubygem-fpm 
           git config --global --add safe.directory /home/runner/work/cloudflared/cloudflared
+          go install golang.org/x/tools/cmd/goimports@latest
         run: |
           sudo gmake install-go cloudflared cleanup-go
