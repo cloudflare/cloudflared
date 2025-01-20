@@ -56,7 +56,7 @@ github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/facebookgo/ensure v0.0.0-20200202191622-63f1cf65ac4c
+# github.com/facebookgo/ensure v0.0.0-20160127193407-b4ab57deab51
 ## explicit
 # github.com/facebookgo/freeport v0.0.0-20150612182905-d4adf43b75b9
 ## explicit
@@ -65,7 +65,7 @@ github.com/davecgh/go-spew/spew
 github.com/facebookgo/grace/gracenet
 # github.com/facebookgo/stack v0.0.0-20160209184415-751773369052
 ## explicit
-# github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4
+# github.com/facebookgo/subset v0.0.0-20150612182917-8dac2c3c4870
 ## explicit
 # github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568
 ## explicit
@@ -148,6 +148,8 @@ github.com/json-iterator/go
 # github.com/klauspost/compress v1.15.11
 ## explicit; go 1.17
 github.com/klauspost/compress/flate
+# github.com/kr/text v0.2.0
+## explicit
 # github.com/kylelemons/godebug v1.1.0
 ## explicit; go 1.11
 # github.com/mattn/go-colorable v0.1.13
