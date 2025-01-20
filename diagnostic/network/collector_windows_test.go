@@ -1,6 +1,6 @@
 //go:build windows
 
-package network_test
+package diagnostic_test
 
 import (
 	"strings"

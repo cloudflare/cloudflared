@@ -1,6 +1,6 @@
 //go:build darwin || linux || freebsd || openbsd || netbsd
 
-package network
+package diagnostic
 
 import (
 	"context"

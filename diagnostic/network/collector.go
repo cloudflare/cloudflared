@@ -1,4 +1,4 @@
-package network
+package diagnostic
 
 import (
 	"context"

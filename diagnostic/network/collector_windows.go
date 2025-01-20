@@ -1,6 +1,6 @@
 //go:build windows
 
-package network
+package diagnostic
 
 import (
 	"context"
