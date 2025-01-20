@@ -8,14 +8,19 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/cloudflare/cloudflared/mocks"
 
 	"github.com/cloudflare/cloudflared/ingress"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
+	cfdsession "github.com/cloudflare/cloudflared/session"
 )
 
 func TestRegisterSession(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0))
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,
@@ -71,10 +76,32 @@ func TestRegisterSession(t *testing.T) {
 
 func TestGetSession_Empty(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0))
 
 	_, err := manager.GetSession(testRequestID)
 	if !errors.Is(err, v3.ErrSessionNotFound) {
 		t.Fatalf("get session find no session: %v", err)
 	}
+}
+
+func TestRegisterSessionRateLimit(t *testing.T) {
+	log := zerolog.Nop()
+	ctrl := gomock.NewController(t)
+
+	sessionLimiterMock := mocks.NewMockLimiter(ctrl)
+
+	sessionLimiterMock.EXPECT().Acquire("udp").Return(cfdsession.ErrTooManyActiveSessions)
+	sessionLimiterMock.EXPECT().Release().Times(0)
+
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, sessionLimiterMock)
+
+	request := v3.UDPSessionRegistrationDatagram{
+		RequestID:        testRequestID,
+		Dest:             netip.MustParseAddrPort("127.0.0.1:5000"),
+		Traced:           false,
+		IdleDurationHint: 5 * time.Second,
+		Payload:          nil,
+	}
+	_, err := manager.RegisterSession(&request, &noopEyeball{})
+	require.ErrorIs(t, err, v3.ErrSessionRegistrationRateLimited)
 }

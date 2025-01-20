@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	cfdsession "github.com/cloudflare/cloudflared/session"
+
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -33,7 +35,9 @@ type Orchestrator struct {
 	// cloudflared Configuration
 	config *Config
 	tags   []pogs.Tag
-	log    *zerolog.Logger
+	// sessionLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
+	sessionLimiter cfdsession.Limiter
+	log            *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -54,6 +58,7 @@ func NewOrchestrator(ctx context.Context,
 		internalRules:  internalRules,
 		config:         config,
 		tags:           tags,
+		sessionLimiter: cfdsession.NewLimiter(0),
 		log:            log,
 		shutdownC:      ctx.Done(),
 	}
@@ -206,6 +211,12 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 		return nil, err
 	}
 	return proxy, nil
+}
+
+// GetSessionLimiter returns the session limiter used across cloudflared, that can be hot reload when
+// the configuration changes.
+func (o *Orchestrator) GetSessionLimiter() cfdsession.Limiter {
+	return o.sessionLimiter
 }
 
 func (o *Orchestrator) waitToCloseLastProxy() {

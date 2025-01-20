@@ -459,6 +459,7 @@ func (e *EdgeTunnelServer) serveConnection(
 
 	switch protocol {
 	case connection.QUIC:
+		// nolint: gosec
 		connOptions := e.config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
 		return e.serveQUIC(ctx,
 			addr.UDP.AddrPort(),
@@ -474,6 +475,7 @@ func (e *EdgeTunnelServer) serveConnection(
 			return err, true
 		}
 
+		// nolint: gosec
 		connOptions := e.config.connectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
 		if err := e.serveHTTP2(
 			ctx,
@@ -615,6 +617,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 			connIndex,
 			e.config.RPCTimeout,
 			e.config.WriteStreamTimeout,
+			e.orchestrator.GetSessionLimiter(),
 			connLogger.Logger(),
 		)
 	}

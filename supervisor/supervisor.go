@@ -26,12 +26,6 @@ const (
 	tunnelRetryDuration = time.Second * 10
 	// Interval between registering new tunnels
 	registrationInterval = time.Second
-
-	subsystemRefreshAuth = "refresh_auth"
-	// Maximum exponent for 'Authenticate' exponential backoff
-	refreshAuthMaxBackoff = 10
-	// Waiting time before retrying a failed 'Authenticate' connection
-	refreshAuthRetryDuration = time.Second * 10
 )
 
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
@@ -84,7 +78,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	edgeBindAddr := config.EdgeBindAddr
 
 	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
-	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort)
+	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort, orchestrator.GetSessionLimiter())
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
@@ -313,6 +307,7 @@ func (s *Supervisor) startTunnel(
 		s.tunnelErrors <- tunnelError{index: index, err: err}
 	}()
 
+	// nolint: gosec
 	err = s.edgeTunnelServer.Serve(ctx, uint8(index), s.tunnelsProtocolFallback[index], connectedSignal)
 }
 
@@ -333,8 +328,4 @@ func (s *Supervisor) waitForNextTunnel(index int) bool {
 		return true
 	}
 	return false
-}
-
-func (s *Supervisor) unusedIPs() bool {
-	return s.edgeIPs.AvailableAddrs() > s.config.HAConnections
 }
