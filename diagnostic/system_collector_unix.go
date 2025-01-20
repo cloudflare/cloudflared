@@ -1,4 +1,4 @@
-//go:build !darwin || !linux || freebsd || openbsd || netbsd 
+//go:build !windows && !darwin && !linux
 
 package diagnostic
 
