@@ -15,7 +15,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	network "github.com/kjake/cloudflared/diagnostic/network"
+	"github.com/kjake/cloudflared/diagnostic/network"
 )
 
 const (
