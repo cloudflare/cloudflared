@@ -1,4 +1,4 @@
-package session
+package flow
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -6,17 +6,17 @@ import (
 )
 
 const (
-	namespace = "session"
+	namespace = "flow"
 )
 
 var (
-	labels = []string{"session_type"}
+	labels = []string{"flow_type"}
 
-	sessionRegistrationsDropped = promauto.NewCounterVec(prometheus.CounterOpts{
+	flowRegistrationsDropped = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: "client",
 		Name:      "registrations_rate_limited_total",
-		Help:      "Count registrations dropped due to high number of concurrent sessions being handled",
+		Help:      "Count registrations dropped due to high number of concurrent flows being handled",
 	},
 		labels,
 	)

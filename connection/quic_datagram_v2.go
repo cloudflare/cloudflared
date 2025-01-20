@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -46,8 +46,8 @@ type datagramV2Connection struct {
 
 	// sessionManager tracks active sessions. It receives datagrams from quic connection via datagramMuxer
 	sessionManager datagramsession.Manager
-	// sessionLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
-	sessionLimiter cfdsession.Limiter
+	// flowLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
+	flowLimiter cfdflow.Limiter
 
 	// datagramMuxer mux/demux datagrams from quic connection
 	datagramMuxer *cfdquic.DatagramMuxerV2
@@ -65,7 +65,7 @@ func NewDatagramV2Connection(ctx context.Context,
 	index uint8,
 	rpcTimeout time.Duration,
 	streamWriteTimeout time.Duration,
-	sessionLimiter cfdsession.Limiter,
+	flowLimiter cfdflow.Limiter,
 	logger *zerolog.Logger,
 ) DatagramSessionHandler {
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
@@ -77,7 +77,7 @@ func NewDatagramV2Connection(ctx context.Context,
 		conn:               conn,
 		index:              index,
 		sessionManager:     sessionManager,
-		sessionLimiter:     sessionLimiter,
+		flowLimiter:        flowLimiter,
 		datagramMuxer:      datagramMuxer,
 		packetRouter:       packetRouter,
 		rpcTimeout:         rpcTimeout,
@@ -121,7 +121,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 	log := q.logger.With().Int(management.EventTypeKey, int(management.UDP)).Logger()
 
 	// Try to start a new session
-	if err := q.sessionLimiter.Acquire(management.UDP.String()); err != nil {
+	if err := q.flowLimiter.Acquire(management.UDP.String()); err != nil {
 		log.Warn().Msgf("Too many concurrent sessions being handled, rejecting udp proxy to %s:%d", dstIP, dstPort)
 
 		err := pkgerrors.Wrap(err, "failed to start udp session due to rate limiting")
@@ -135,7 +135,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 	if err != nil {
 		log.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
 		tracing.EndWithErrorStatus(registerSpan, err)
-		q.sessionLimiter.Release()
+		q.flowLimiter.Release()
 		return nil, err
 	}
 	registerSpan.SetAttributes(
@@ -148,12 +148,12 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 		originProxy.Close()
 		log.Err(err).Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
-		q.sessionLimiter.Release()
+		q.flowLimiter.Release()
 		return nil, err
 	}
 
 	go func() {
-		defer q.sessionLimiter.Release() // we do the release here, instead of inside the `serveUDPSession` just to keep all acquire/release calls in the same method.
+		defer q.flowLimiter.Release() // we do the release here, instead of inside the `serveUDPSession` just to keep all acquire/release calls in the same method.
 		q.serveUDPSession(session, closeAfterIdleHint)
 	}()
 

@@ -617,7 +617,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 			connIndex,
 			e.config.RPCTimeout,
 			e.config.WriteStreamTimeout,
-			e.orchestrator.GetSessionLimiter(),
+			e.orchestrator.GetFlowLimiter(),
 			connLogger.Logger(),
 		)
 	}

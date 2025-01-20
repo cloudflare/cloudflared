@@ -351,7 +351,7 @@ func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID, log
 func (c *datagramConn) handleSessionRegistrationRateLimited(datagram *UDPSessionRegistrationDatagram, logger *zerolog.Logger) {
 	c.logger.Warn().Msg("Too many concurrent sessions being handled, rejecting udp proxy")
 
-	rateLimitResponse := ResponseTooManyActiveSessions
+	rateLimitResponse := ResponseTooManyActiveFlows
 	err := c.SendUDPSessionResponse(datagram.RequestID, rateLimitResponse)
 	if err != nil {
 		logger.Err(err).Msgf("unable to send flow registration error response (%d)", rateLimitResponse)

@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -508,7 +508,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
 	if tcpRequest.Dest == "rate-limit-me" {
-		return pkgerrors.Wrap(cfdsession.ErrTooManyActiveSessions, "failed tcp stream")
+		return pkgerrors.Wrap(cfdflow.ErrTooManyActiveFlows, "failed tcp stream")
 	}
 
 	_ = rwa.AckConnection("")
@@ -828,7 +828,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		conn,
 		index,
 		sessionManager,
-		cfdsession.NewLimiter(0),
+		cfdflow.NewLimiter(0),
 		datagramMuxer,
 		packetRouter,
 		15 * time.Second,

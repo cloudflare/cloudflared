@@ -20,10 +20,10 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/packet"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
-	cfdsession "github.com/cloudflare/cloudflared/session"
 )
 
 type noopEyeball struct {
@@ -88,7 +88,7 @@ func (m *mockEyeball) SendICMPTTLExceed(icmp *packet.ICMP, rawPacket packet.RawP
 
 func TestDatagramConn_New(t *testing.T) {
 	log := zerolog.Nop()
-	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 	if conn == nil {
 		t.Fatal("expected valid connection")
 	}
@@ -97,7 +97,7 @@ func TestDatagramConn_New(t *testing.T) {
 func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	payload := []byte{0xef, 0xef}
 	err := conn.SendUDPSessionDatagram(payload)
@@ -112,7 +112,7 @@ func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	err := conn.SendUDPSessionResponse(testRequestID, v3.ResponseDestinationUnreachable)
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -150,7 +150,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	quic.ctx = ctx
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -161,7 +161,7 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 	log := zerolog.Nop()
 	quic := &mockQuicConnReadError{err: net.ErrClosed}
-	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	err := conn.Serve(context.Background())
 	if !errors.Is(err, net.ErrClosed) {
@@ -198,7 +198,7 @@ func TestDatagramConnServe_SessionRegistrationRateLimit(t *testing.T) {
 	}
 
 	require.EqualValues(t, testRequestID, resp.RequestID)
-	require.EqualValues(t, v3.ResponseTooManyActiveSessions, resp.ResponseType)
+	require.EqualValues(t, v3.ResponseTooManyActiveFlows, resp.ResponseType)
 }
 
 func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {

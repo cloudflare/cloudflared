@@ -78,7 +78,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	edgeBindAddr := config.EdgeBindAddr
 
 	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
-	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort, orchestrator.GetSessionLimiter())
+	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort, orchestrator.GetFlowLimiter())
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,

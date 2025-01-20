@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -35,9 +35,9 @@ type Orchestrator struct {
 	// cloudflared Configuration
 	config *Config
 	tags   []pogs.Tag
-	// sessionLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
-	sessionLimiter cfdsession.Limiter
-	log            *zerolog.Logger
+	// flowLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
+	flowLimiter cfdflow.Limiter
+	log         *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -58,7 +58,7 @@ func NewOrchestrator(ctx context.Context,
 		internalRules:  internalRules,
 		config:         config,
 		tags:           tags,
-		sessionLimiter: cfdsession.NewLimiter(config.WarpRouting.MaxActiveFlows),
+		flowLimiter:    cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
 		log:            log,
 		shutdownC:      ctx.Done(),
 	}
@@ -142,10 +142,10 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 		return errors.Wrap(err, "failed to start origin")
 	}
 
-	// Update the sessions limit since the configuration might have changed
-	o.sessionLimiter.SetLimit(warpRouting.MaxActiveFlows)
+	// Update the flow limit since the configuration might have changed
+	o.flowLimiter.SetLimit(warpRouting.MaxActiveFlows)
 
-	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.sessionLimiter, o.config.WriteTimeout, o.log)
+	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.flowLimiter, o.config.WriteTimeout, o.log)
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting
@@ -217,10 +217,10 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 	return proxy, nil
 }
 
-// GetSessionLimiter returns the session limiter used across cloudflared, that can be hot reload when
+// GetFlowLimiter returns the flow limiter used across cloudflared, that can be hot reload when
 // the configuration changes.
-func (o *Orchestrator) GetSessionLimiter() cfdsession.Limiter {
-	return o.sessionLimiter
+func (o *Orchestrator) GetFlowLimiter() cfdflow.Limiter {
+	return o.flowLimiter
 }
 
 func (o *Orchestrator) waitToCloseLastProxy() {

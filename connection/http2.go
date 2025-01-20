@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/tracing"
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -336,7 +336,7 @@ func (rp *http2RespWriter) WriteErrorResponse(err error) bool {
 		return false
 	}
 
-	if errors.Is(err, cfdsession.ErrTooManyActiveSessions) {
+	if errors.Is(err, cfdflow.ErrTooManyActiveFlows) {
 		rp.setResponseMetaHeader(responseMetaHeaderCfdFlowRateLimited)
 	} else {
 		rp.setResponseMetaHeader(responseMetaHeaderCfd)

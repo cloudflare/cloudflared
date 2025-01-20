@@ -26,7 +26,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/mocks"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/config"
@@ -162,7 +162,7 @@ func TestProxySingleOrigin(t *testing.T) {
 
 	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingressRule, noWarpRouting, testTags, cfdsession.NewLimiter(0), time.Duration(0), &log)
+	proxy := NewOriginProxy(ingressRule, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
 	t.Run("testProxyHTTP", testProxyHTTP(proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
@@ -368,7 +368,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 	ctx, cancel := context.WithCancel(context.Background())
 	require.NoError(t, ingress.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingress, noWarpRouting, testTags, cfdsession.NewLimiter(0), time.Duration(0), &log)
+	proxy := NewOriginProxy(ingress, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
 
 	for _, test := range tests {
 		responseWriter := newMockHTTPRespWriter()
@@ -416,7 +416,7 @@ func TestProxyError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	proxy := NewOriginProxy(ing, noWarpRouting, testTags, cfdsession.NewLimiter(0), time.Duration(0), &log)
+	proxy := NewOriginProxy(ing, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
 
 	responseWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
@@ -484,8 +484,8 @@ func TestConnections(t *testing.T) {
 		// requestheaders to be sent in the call to proxy.Proxy
 		requestHeaders http.Header
 
-		// sessionLimiterResponse is the response of the cfdsession.Limiter#Acquire method call
-		sessionLimiterResponse error
+		// flowLimiterResponse is the response of the cfdflow.Limiter#Acquire method call
+		flowLimiterResponse error
 	}
 
 	type want struct {
@@ -675,7 +675,7 @@ func TestConnections(t *testing.T) {
 				requestHeaders: map[string][]string{
 					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
 				},
-				sessionLimiterResponse: cfdsession.ErrTooManyActiveSessions,
+				flowLimiterResponse: cfdflow.ErrTooManyActiveFlows,
 			},
 			want: want{
 				message: []byte{},
@@ -695,14 +695,14 @@ func TestConnections(t *testing.T) {
 			ingressRule := createSingleIngressConfig(t, test.args.ingressServiceScheme+ln.Addr().String())
 			_ = ingressRule.StartOrigins(logger, ctx.Done())
 
-			// Mock session limiter
+			// Mock flow limiter
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			sessionLimiter := mocks.NewMockLimiter(ctrl)
-			sessionLimiter.EXPECT().Acquire("tcp").AnyTimes().Return(test.args.sessionLimiterResponse)
-			sessionLimiter.EXPECT().Release().AnyTimes()
+			flowLimiter := mocks.NewMockLimiter(ctrl)
+			flowLimiter.EXPECT().Acquire("tcp").AnyTimes().Return(test.args.flowLimiterResponse)
+			flowLimiter.EXPECT().Release().AnyTimes()
 
-			proxy := NewOriginProxy(ingressRule, testWarpRouting, testTags, sessionLimiter, time.Duration(0), logger)
+			proxy := NewOriginProxy(ingressRule, testWarpRouting, testTags, flowLimiter, time.Duration(0), logger)
 			proxy.warpRouting = test.args.warpRoutingService
 
 			dest := ln.Addr().String()

@@ -284,8 +284,8 @@ const (
 	ResponseDestinationUnreachable SessionRegistrationResp = 0x01
 	// Session registration was unable to bind to a local UDP socket.
 	ResponseUnableToBindSocket SessionRegistrationResp = 0x02
-	// Session registration failed due to the number of session being higher than the limit.
-	ResponseTooManyActiveSessions SessionRegistrationResp = 0x03
+	// Session registration failed due to the number of flows being higher than the limit.
+	ResponseTooManyActiveFlows SessionRegistrationResp = 0x03
 	// Session registration failed with an unexpected error but provided a message.
 	ResponseErrorWithMsg SessionRegistrationResp = 0xff
 )

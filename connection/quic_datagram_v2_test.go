@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 	"github.com/cloudflare/cloudflared/mocks"
-	cfdsession "github.com/cloudflare/cloudflared/session"
 )
 
 type mockQuicConnection struct {
@@ -75,7 +75,7 @@ func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 	log := zerolog.Nop()
 	conn := &mockQuicConnection{}
 	ctrl := gomock.NewController(t)
-	sessionLimiterMock := mocks.NewMockLimiter(ctrl)
+	flowLimiterMock := mocks.NewMockLimiter(ctrl)
 
 	datagramConn := NewDatagramV2Connection(
 		context.Background(),
@@ -84,13 +84,13 @@ func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 		0,
 		0*time.Second,
 		0*time.Second,
-		sessionLimiterMock,
+		flowLimiterMock,
 		&log,
 	)
 
-	sessionLimiterMock.EXPECT().Acquire("udp").Return(cfdsession.ErrTooManyActiveSessions)
-	sessionLimiterMock.EXPECT().Release().Times(0)
+	flowLimiterMock.EXPECT().Acquire("udp").Return(cfdflow.ErrTooManyActiveFlows)
+	flowLimiterMock.EXPECT().Release().Times(0)
 
 	_, err := datagramConn.RegisterUdpSession(context.Background(), uuid.New(), net.IPv4(0, 0, 0, 0), 1000, 1*time.Second, "")
-	require.ErrorIs(t, err, cfdsession.ErrTooManyActiveSessions)
+	require.ErrorIs(t, err, cfdflow.ErrTooManyActiveFlows)
 }

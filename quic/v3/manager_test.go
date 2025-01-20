@@ -13,14 +13,14 @@ import (
 
 	"github.com/cloudflare/cloudflared/mocks"
 
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 	"github.com/cloudflare/cloudflared/ingress"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
-	cfdsession "github.com/cloudflare/cloudflared/session"
 )
 
 func TestRegisterSession(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0))
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0))
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,
@@ -76,7 +76,7 @@ func TestRegisterSession(t *testing.T) {
 
 func TestGetSession_Empty(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdsession.NewLimiter(0))
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0))
 
 	_, err := manager.GetSession(testRequestID)
 	if !errors.Is(err, v3.ErrSessionNotFound) {
@@ -88,12 +88,12 @@ func TestRegisterSessionRateLimit(t *testing.T) {
 	log := zerolog.Nop()
 	ctrl := gomock.NewController(t)
 
-	sessionLimiterMock := mocks.NewMockLimiter(ctrl)
+	flowLimiterMock := mocks.NewMockLimiter(ctrl)
 
-	sessionLimiterMock.EXPECT().Acquire("udp").Return(cfdsession.ErrTooManyActiveSessions)
-	sessionLimiterMock.EXPECT().Release().Times(0)
+	flowLimiterMock.EXPECT().Acquire("udp").Return(cfdflow.ErrTooManyActiveFlows)
+	flowLimiterMock.EXPECT().Release().Times(0)
 
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, sessionLimiterMock)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, flowLimiterMock)
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,

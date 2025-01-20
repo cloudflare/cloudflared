@@ -17,7 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -185,7 +185,7 @@ func (q *quicConnection) handleDataStream(ctx context.Context, stream *rpcquic.R
 
 		var metadata []pogs.Metadata
 		// Check the type of error that was throw and add metadata that will help identify it on OTD.
-		if errors.Is(err, cfdsession.ErrTooManyActiveSessions) {
+		if errors.Is(err, cfdflow.ErrTooManyActiveFlows) {
 			metadata = append(metadata, pogs.ErrorFlowConnectRateLimitedKey)
 		}
 

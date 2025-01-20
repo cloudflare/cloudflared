@@ -10,7 +10,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/management"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 	ErrSessionBoundToOtherConn = errors.New("flow is in use by another connection")
 	// ErrSessionAlreadyRegistered is returned when a registration already exists for this connection.
 	ErrSessionAlreadyRegistered = errors.New("flow is already registered for this connection")
-	// ErrSessionRegistrationRateLimited is returned when a registration fails due to rate limiting on the number of active sessions.
+	// ErrSessionRegistrationRateLimited is returned when a registration fails due to rate limiting on the number of active flows.
 	ErrSessionRegistrationRateLimited = errors.New("flow registration rate limited")
 )
 
@@ -44,12 +44,12 @@ type sessionManager struct {
 	sessions     map[RequestID]Session
 	mutex        sync.RWMutex
 	originDialer DialUDP
-	limiter      cfdsession.Limiter
+	limiter      cfdflow.Limiter
 	metrics      Metrics
 	log          *zerolog.Logger
 }
 
-func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP, limiter cfdsession.Limiter) SessionManager {
+func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP, limiter cfdflow.Limiter) SessionManager {
 	return &sessionManager{
 		sessions:     make(map[RequestID]Session),
 		originDialer: originDialer,

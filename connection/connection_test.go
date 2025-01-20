@@ -12,7 +12,7 @@ import (
 	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	cfdsession "github.com/cloudflare/cloudflared/session"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -107,7 +107,7 @@ func (moc *mockOriginProxy) ProxyTCP(
 	r *TCPRequest,
 ) error {
 	if r.CfTraceID == "flow-rate-limited" {
-		return pkgerrors.Wrap(cfdsession.ErrTooManyActiveSessions, "tcp flow rate limited")
+		return pkgerrors.Wrap(cfdflow.ErrTooManyActiveFlows, "tcp flow rate limited")
 	}
 
 	return nil
