@@ -6,7 +6,7 @@ import (
 
 	capnp "zombiezen.com/go/capnproto2"
 
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // RequestClientStream is a stream to provide requests to the server. This operation is typically driven by the edge service.

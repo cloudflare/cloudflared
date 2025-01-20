@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/tunnelstate"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 type Handler struct {

@@ -13,8 +13,8 @@ import (
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 
-	"github.com/kjake/cloudflared/packet"
-	"github.com/kjake/cloudflared/tracing"
+	"github.com/cloudflare/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 const (

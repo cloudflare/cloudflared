@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (

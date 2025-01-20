@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 
-	"github.com/kjake/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 func TestFunnelIdleTimeout(t *testing.T) {

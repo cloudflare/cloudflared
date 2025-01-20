@@ -10,10 +10,10 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/ingress"
-	"github.com/kjake/cloudflared/management"
-	cfdquic "github.com/kjake/cloudflared/quic/v3"
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/management"
+	cfdquic "github.com/cloudflare/cloudflared/quic/v3"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 type datagramV3Connection struct {

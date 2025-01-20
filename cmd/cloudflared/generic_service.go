@@ -8,7 +8,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 )
 
 func runApp(app *cli.App, graceShutdownC chan struct{}) {

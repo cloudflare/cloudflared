@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // Restrict key names to characters allowed in an HTTP header name.

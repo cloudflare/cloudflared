@@ -11,8 +11,8 @@ import (
 	"zombiezen.com/go/capnproto2/rpc"
 	"zombiezen.com/go/capnproto2/server"
 
-	"github.com/kjake/cloudflared/tunnelrpc/metrics"
-	"github.com/kjake/cloudflared/tunnelrpc/proto"
+	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
+	"github.com/cloudflare/cloudflared/tunnelrpc/proto"
 )
 
 type SessionManager interface {

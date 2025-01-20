@@ -8,9 +8,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/kjake/cloudflared/packet"
-	quicpogs "github.com/kjake/cloudflared/quic"
-	"github.com/kjake/cloudflared/tracing"
+	"github.com/cloudflare/cloudflared/packet"
+	quicpogs "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 // Upstream of raw packets

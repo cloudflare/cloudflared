@@ -11,11 +11,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
-	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/credentials"
-	"github.com/kjake/cloudflared/logger"
-	"github.com/kjake/cloudflared/token"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/credentials"
+	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/token"
 )
 
 const (

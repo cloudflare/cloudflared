@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	yaml "gopkg.in/yaml.v3"
 
-	"github.com/kjake/cloudflared/watcher"
+	"github.com/cloudflare/cloudflared/watcher"
 )
 
 // Notifier sends out config updates

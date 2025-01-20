@@ -21,8 +21,8 @@ import (
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/kjake/cloudflared/packet"
-	"github.com/kjake/cloudflared/tracing"
+	"github.com/cloudflare/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/tracing"
 )
 
 const (

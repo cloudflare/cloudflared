@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	v3 "github.com/kjake/cloudflared/quic/v3"
+	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
 func makePayload(size int) []byte {

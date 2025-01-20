@@ -10,10 +10,10 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/stream"
-	"github.com/kjake/cloudflared/tracing"
-	tunnelpogs "github.com/kjake/cloudflared/tunnelrpc/pogs"
-	"github.com/kjake/cloudflared/websocket"
+	"github.com/cloudflare/cloudflared/stream"
+	"github.com/cloudflare/cloudflared/tracing"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/websocket"
 )
 
 const (
@@ -120,7 +120,7 @@ func (ep *echoPipe) Write(p []byte) (int, error) {
 }
 
 // A mock origin that echos data by streaming like a tcpOverWSConnection
-// https://github.com/kjake/cloudflared/blob/master/ingress/origin_connection.go
+// https://github.com/cloudflare/cloudflared/blob/master/ingress/origin_connection.go
 func wsEchoEndpoint(w ResponseWriter, r *http.Request) error {
 	resp := &http.Response{
 		StatusCode: http.StatusSwitchingProtocols,

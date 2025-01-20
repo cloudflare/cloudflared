@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/credentials"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/credentials"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"

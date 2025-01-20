@@ -10,11 +10,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/connection"
-	"github.com/kjake/cloudflared/ingress"
-	"github.com/kjake/cloudflared/proxy"
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/proxy"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // Orchestrator manages configurations, so they can be updatable during runtime

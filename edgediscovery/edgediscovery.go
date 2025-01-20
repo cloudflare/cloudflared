@@ -5,8 +5,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/edgediscovery/allregions"
-	"github.com/kjake/cloudflared/management"
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/management"
 )
 
 const (

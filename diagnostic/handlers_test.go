@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kjake/cloudflared/connection"
-	"github.com/kjake/cloudflared/diagnostic"
-	"github.com/kjake/cloudflared/tunnelstate"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/diagnostic"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 type SystemCollectorMock struct {

@@ -3,7 +3,7 @@ package supervisor
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/kjake/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/connection"
 )
 
 // Metrics uses connection.MetricsNamespace(aka cloudflared) as namespace and connection.TunnelSubsystem

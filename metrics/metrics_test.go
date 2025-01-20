@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kjake/cloudflared/metrics"
+	"github.com/cloudflare/cloudflared/metrics"
 )
 
 func TestMetricsListenerCreation(t *testing.T) {

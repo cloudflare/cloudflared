@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/kjake/cloudflared/tunnelstate"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 // ReadyServer serves HTTP 200 if the tunnel can serve traffic. Intended for k8s readiness checks.

@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/cfio"
+	"github.com/cloudflare/cloudflared/cfio"
 )
 
 type Stream interface {

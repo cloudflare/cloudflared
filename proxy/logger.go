@@ -6,9 +6,9 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/connection"
-	"github.com/kjake/cloudflared/ingress"
-	"github.com/kjake/cloudflared/management"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/management"
 )
 
 const (

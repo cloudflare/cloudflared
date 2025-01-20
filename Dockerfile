@@ -6,12 +6,12 @@ ENV GO111MODULE=on \
   CGO_ENABLED=0 \
   TARGET_GOOS=${TARGET_GOOS} \
   TARGET_GOARCH=${TARGET_GOARCH} \
-  # the CONTAINER_BUILD envvar is used set github.com/kjake/cloudflared/metrics.Runtime=virtual
+  # the CONTAINER_BUILD envvar is used set github.com/cloudflare/cloudflared/metrics.Runtime=virtual
   # which changes how cloudflared binds the metrics server
   CONTAINER_BUILD=1
 
 
-WORKDIR /go/src/github.com/kjake/cloudflared/
+WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
 # copy our sources into the builder image
 COPY . .
@@ -24,10 +24,10 @@ RUN PATH="/tmp/go/bin:$PATH" make cloudflared
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian11:nonroot
 
-LABEL org.opencontainers.image.source="https://github.com/kjake/cloudflared"
+LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
 # copy our compiled binary
-COPY --from=builder --chown=nonroot /go/src/github.com/kjake/cloudflared/cloudflared /usr/local/bin/
+COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
 
 # run as non-privileged user
 USER nonroot

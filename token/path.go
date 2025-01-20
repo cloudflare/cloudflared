@@ -9,7 +9,7 @@ import (
 
 	homedir "github.com/mitchellh/go-homedir"
 
-	"github.com/kjake/cloudflared/config"
+	"github.com/cloudflare/cloudflared/config"
 )
 
 // GenerateSSHCertFilePathFromURL will return a file path for creating short lived certificates

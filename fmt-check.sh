@@ -2,7 +2,7 @@
 
 set -e -o pipefail
 
-OUTPUT=$(goimports -l -d -local github.com/kjake/cloudflared $(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc))
+OUTPUT=$(goimports -l -d -local github.com/cloudflare/cloudflared $(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc))
 
 if [ -n "$OUTPUT" ] ; then
   PAGER=$(which colordiff || echo cat)

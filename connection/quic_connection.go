@@ -17,11 +17,11 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
-	cfdquic "github.com/kjake/cloudflared/quic"
-	"github.com/kjake/cloudflared/tracing"
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
-	tunnelpogs "github.com/kjake/cloudflared/tunnelrpc/pogs"
-	rpcquic "github.com/kjake/cloudflared/tunnelrpc/quic"
+	cfdquic "github.com/cloudflare/cloudflared/quic"
+	"github.com/cloudflare/cloudflared/tracing"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	rpcquic "github.com/cloudflare/cloudflared/tunnelrpc/quic"
 )
 
 const (

@@ -4,7 +4,7 @@ package main
 
 import (
     _ "crypto/tls/fipsonly"
-    "github.com/kjake/cloudflared/cmd/cloudflared/tunnel"
+    "github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 )
 
 func init () {

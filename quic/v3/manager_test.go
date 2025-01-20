@@ -9,8 +9,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/ingress"
-	v3 "github.com/kjake/cloudflared/quic/v3"
+	"github.com/cloudflare/cloudflared/ingress"
+	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
 func TestRegisterSession(t *testing.T) {

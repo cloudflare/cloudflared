@@ -9,7 +9,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
-	"github.com/kjake/cloudflared/packet"
+	"github.com/cloudflare/cloudflared/packet"
 )
 
 const (

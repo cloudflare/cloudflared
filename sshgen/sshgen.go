@@ -21,8 +21,8 @@ import (
 	"github.com/pkg/errors"
 	gossh "golang.org/x/crypto/ssh"
 
-	"github.com/kjake/cloudflared/config"
-	cfpath "github.com/kjake/cloudflared/token"
+	"github.com/cloudflare/cloudflared/config"
+	cfpath "github.com/cloudflare/cloudflared/token"
 )
 
 const (

@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/trace"
 
-	"github.com/kjake/cloudflared/diagnostic"
+	"github.com/cloudflare/cloudflared/diagnostic"
 )
 
 const (

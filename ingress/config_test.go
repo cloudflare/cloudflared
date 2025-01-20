@@ -10,8 +10,8 @@ import (
 	"github.com/urfave/cli/v2"
 	yaml "gopkg.in/yaml.v3"
 
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/ipaccess"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ipaccess"
 )
 
 // Ensure that the nullable config from `config` package and the

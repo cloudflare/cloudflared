@@ -4,7 +4,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/kjake/cloudflared/cfapi"
+	"github.com/cloudflare/cloudflared/cfapi"
 )
 
 func (sc *subcommandContext) addVirtualNetwork(newVnet cfapi.NewVirtualNetwork) (cfapi.VirtualNetwork, error) {

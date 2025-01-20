@@ -3,7 +3,7 @@ package tunnel
 import (
 	"testing"
 
-	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 
 	"github.com/stretchr/testify/assert"
 )

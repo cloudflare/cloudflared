@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/ingress"
 )
 
 // TestNewLocalConfig_MarshalJSON tests that we are able to converte a compiled and validated config back

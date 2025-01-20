@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/kjake/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 type httpClient struct {

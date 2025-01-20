@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"nhooyr.io/websocket"
 
-	"github.com/kjake/cloudflared/internal/test"
+	"github.com/cloudflare/cloudflared/internal/test"
 )
 
 var (

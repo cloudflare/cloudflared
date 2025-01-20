@@ -11,11 +11,11 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 
-	"github.com/kjake/cloudflared/carrier"
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/logger"
-	"github.com/kjake/cloudflared/stream"
-	"github.com/kjake/cloudflared/validation"
+	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/stream"
+	"github.com/cloudflare/cloudflared/validation"
 )
 
 const (

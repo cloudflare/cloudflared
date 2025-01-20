@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kjake/cloudflared/connection"
-	"github.com/kjake/cloudflared/metrics"
-	"github.com/kjake/cloudflared/tunnelstate"
+	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/metrics"
+	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
 func mockRequest(t *testing.T, readyServer *metrics.ReadyServer) (int, uint) {

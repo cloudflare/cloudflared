@@ -14,9 +14,9 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 
-	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/kjake/cloudflared/config"
-	"github.com/kjake/cloudflared/logger"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/config"
+	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
