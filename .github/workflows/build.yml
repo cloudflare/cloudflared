@@ -34,6 +34,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: cloudflared-freebsd-amd64
-        path: cloudflared/cloudflared/cloudflared
+        path: cloudflared
         retention-days: 90
         overwrite: true
