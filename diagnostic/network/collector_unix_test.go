@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin || linux || unix
 
 package diagnostic_test
 
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	diagnostic "github.com/cloudflare/cloudflared/diagnostic/network"
+	diagnostic "github.com/kjake/cloudflared/diagnostic/network"
 )
 
 func TestDecode(t *testing.T) {
