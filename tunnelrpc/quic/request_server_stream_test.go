@@ -98,12 +98,7 @@ func TestConnectResponseMeta(t *testing.T) {
 			reqClientStream := RequestClientStream{noopCloser{b}}
 			respMeta, err := reqClientStream.ReadConnectResponseData()
 			require.NoError(t, err)
-
-			if respMeta.Error == "" {
-				assert.Equal(t, test.metadata, respMeta.Metadata)
-			} else {
-				assert.Equal(t, 0, len(respMeta.Metadata))
-			}
+			require.Equal(t, test.metadata, respMeta.Metadata)
 		})
 	}
 }
@@ -153,21 +148,21 @@ func TestRegisterUdpSession(t *testing.T) {
 			}()
 
 			rpcClientStream, err := NewCloudflaredClient(context.Background(), clientStream, 5*time.Second)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			reg, err := rpcClientStream.RegisterUdpSession(context.Background(), test.sessionRPCServer.sessionID, test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
-			assert.NoError(t, err)
-			assert.NoError(t, reg.Err)
+			require.NoError(t, err)
+			require.NoError(t, reg.Err)
 
-			// Different sessionID, the RPC server should reject the registraion
+			// Different sessionID, the RPC server should reject the registration
 			reg, err = rpcClientStream.RegisterUdpSession(context.Background(), uuid.New(), test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
-			assert.NoError(t, err)
-			assert.Error(t, reg.Err)
+			require.NoError(t, err)
+			require.Error(t, reg.Err)
 
-			assert.NoError(t, rpcClientStream.UnregisterUdpSession(context.Background(), test.sessionRPCServer.sessionID, unregisterMessage))
+			require.NoError(t, rpcClientStream.UnregisterUdpSession(context.Background(), test.sessionRPCServer.sessionID, unregisterMessage))
 
-			// Different sessionID, the RPC server should reject the unregistraion
-			assert.Error(t, rpcClientStream.UnregisterUdpSession(context.Background(), uuid.New(), unregisterMessage))
+			// Different sessionID, the RPC server should reject the unregistration
+			require.Error(t, rpcClientStream.UnregisterUdpSession(context.Background(), uuid.New(), unregisterMessage))
 
 			rpcClientStream.Close()
 			<-sessionRegisteredChan
@@ -200,10 +195,10 @@ func TestManageConfiguration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	rpcClientStream, err := NewCloudflaredClient(ctx, clientStream, 5*time.Second)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result, err := rpcClientStream.UpdateConfiguration(ctx, version, config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	require.Equal(t, version, result.LastAppliedVersion)
 	require.NoError(t, result.Err)

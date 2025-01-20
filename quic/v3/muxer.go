@@ -143,8 +143,6 @@ func (c *datagramConn) SendICMPTTLExceed(icmp *packet.ICMP, rawPacket packet.Raw
 	return c.SendICMPPacket(c.icmpRouter.ConvertToTTLExceeded(icmp, rawPacket))
 }
 
-var errReadTimeout error = errors.New("receive datagram timeout")
-
 // pollDatagrams will read datagrams from the underlying connection until the provided context is done.
 func (c *datagramConn) pollDatagrams(ctx context.Context) {
 	for ctx.Err() == nil {
@@ -256,8 +254,12 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 		// Session is already registered but to a different connection
 		c.handleSessionMigration(datagram.RequestID, &log)
 		return
+	case ErrSessionRegistrationRateLimited:
+		// There are too many concurrent sessions so we return an error to force a retry later
+		c.handleSessionRegistrationRateLimited(datagram, &log)
+		return
 	default:
-		log.Err(err).Msgf("flow registration failure")
+		log.Err(err).Msg("flow registration failure")
 		c.handleSessionRegistrationFailure(datagram.RequestID, &log)
 		return
 	}
@@ -278,7 +280,7 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 	// [Session.Serve] is blocking and will continue this go routine till the end of the session lifetime.
 	start := time.Now()
 	err = session.Serve(ctx)
-	elapsedMS := time.Now().Sub(start).Milliseconds()
+	elapsedMS := time.Since(start).Milliseconds()
 	log = log.With().Int64(logDurationKey, elapsedMS).Logger()
 	if err == nil {
 		// We typically don't expect a session to close without some error response. [SessionIdleErr] is the typical
@@ -343,6 +345,16 @@ func (c *datagramConn) handleSessionRegistrationFailure(requestID RequestID, log
 	err := c.SendUDPSessionResponse(requestID, ResponseUnableToBindSocket)
 	if err != nil {
 		logger.Err(err).Msgf("unable to send flow registration error response (%d)", ResponseUnableToBindSocket)
+	}
+}
+
+func (c *datagramConn) handleSessionRegistrationRateLimited(datagram *UDPSessionRegistrationDatagram, logger *zerolog.Logger) {
+	c.logger.Warn().Msg("Too many concurrent sessions being handled, rejecting udp proxy")
+
+	rateLimitResponse := ResponseTooManyActiveFlows
+	err := c.SendUDPSessionResponse(datagram.RequestID, rateLimitResponse)
+	if err != nil {
+		logger.Err(err).Msgf("unable to send flow registration error response (%d)", rateLimitResponse)
 	}
 }
 

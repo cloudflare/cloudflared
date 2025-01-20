@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/cloudflare/cloudflared/tracing"
+
 	"github.com/cloudflare/cloudflared/tunnelrpc"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -65,19 +67,18 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http2Conn.Serve(ctx)
+		_ = http2Conn.Serve(ctx)
 	}()
 
 	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
 	require.NoError(t, err)
 
-	endpoint := fmt.Sprintf("http://localhost:8080/ok")
 	reqBody := []byte(`{
 "version": 2, 
 "config": {"warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}}
 `)
 	reader := bytes.NewReader(reqBody)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, reader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://localhost:8080/ok", reader)
 	require.NoError(t, err)
 	req.Header.Set(InternalUpgradeHeader, ConfigurationUpdate)
 
@@ -85,11 +86,11 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	bdy, err := io.ReadAll(resp.Body)
+	defer resp.Body.Close()
 	require.NoError(t, err)
 	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
 	cancel()
 	wg.Wait()
-
 }
 
 func TestServeHTTP(t *testing.T) {
@@ -134,7 +135,7 @@ func TestServeHTTP(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http2Conn.Serve(ctx)
+		_ = http2Conn.Serve(ctx)
 	}()
 
 	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
@@ -153,6 +154,7 @@ func TestServeHTTP(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.expectedBody, respBody)
 		}
+		_ = resp.Body.Close()
 		if test.isProxyError {
 			require.Equal(t, responseMetaHeaderCfd, resp.Header.Get(ResponseMetaHeader))
 		} else {
@@ -281,10 +283,11 @@ func TestServeWS(t *testing.T) {
 
 	respBody, err := wsutil.ReadServerBinary(respWriter.RespBody())
 	require.NoError(t, err)
-	require.Equal(t, data, respBody, fmt.Sprintf("Expect %s, got %s", string(data), string(respBody)))
+	require.Equal(t, data, respBody, "expect %s, got %s", string(data), string(respBody))
 
 	cancel()
 	resp := respWriter.Result()
+	defer resp.Body.Close()
 	// http2RespWriter should rewrite status 101 to 200
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(ResponseMetaHeader))
@@ -304,7 +307,7 @@ func TestNoWriteAfterServeHTTPReturns(t *testing.T) {
 	serverDone := make(chan struct{})
 	go func() {
 		defer close(serverDone)
-		cfdHTTP2Conn.Serve(ctx)
+		_ = cfdHTTP2Conn.Serve(ctx)
 	}()
 
 	edgeTransport := http2.Transport{}
@@ -319,13 +322,16 @@ func TestNoWriteAfterServeHTTPReturns(t *testing.T) {
 			readPipe, writePipe := io.Pipe()
 			reqCtx, reqCancel := context.WithCancel(ctx)
 			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://localhost:8080/ws/flaky", readPipe)
-			require.NoError(t, err)
+			assert.NoError(t, err)
+
 			req.Header.Set(InternalUpgradeHeader, WebsocketUpgrade)
 
 			resp, err := edgeHTTP2Conn.RoundTrip(req)
-			require.NoError(t, err)
+			assert.NoError(t, err)
+			_ = resp.Body.Close()
+
 			// http2RespWriter should rewrite status 101 to 200
-			require.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 			wg.Add(1)
 			go func() {
@@ -378,7 +384,7 @@ func TestServeControlStream(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http2Conn.Serve(ctx)
+		_ = http2Conn.Serve(ctx)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/", nil)
@@ -391,7 +397,8 @@ func TestServeControlStream(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		edgeHTTP2Conn.RoundTrip(req)
+		// nolint: bodyclose
+		_, _ = edgeHTTP2Conn.RoundTrip(req)
 	}()
 
 	<-rpcClientFactory.registered
@@ -431,7 +438,7 @@ func TestFailRegistration(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http2Conn.Serve(ctx)
+		_ = http2Conn.Serve(ctx)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/", nil)
@@ -442,9 +449,10 @@ func TestFailRegistration(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := edgeHTTP2Conn.RoundTrip(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 
-	assert.NotNil(t, http2Conn.controlStreamErr)
+	require.Error(t, http2Conn.controlStreamErr)
 	cancel()
 	wg.Wait()
 }
@@ -481,7 +489,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http2Conn.Serve(ctx)
+		_ = http2Conn.Serve(ctx)
 	}()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080/", nil)
@@ -494,6 +502,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		// nolint: bodyclose
 		_, _ = edgeHTTP2Conn.RoundTrip(req)
 	}()
 
@@ -524,6 +533,36 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	})
 }
 
+func TestServeTCP_RateLimited(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	http2Conn, edgeConn := newTestHTTP2Connection()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = http2Conn.Serve(ctx)
+	}()
+
+	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080", nil)
+	require.NoError(t, err)
+	req.Header.Set(InternalTCPProxySrcHeader, "tcp")
+	req.Header.Set(tracing.TracerContextName, "flow-rate-limited")
+
+	resp, err := edgeHTTP2Conn.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	require.Equal(t, responseMetaHeaderCfdFlowRateLimited, resp.Header.Get(ResponseMetaHeader))
+
+	cancel()
+	wg.Wait()
+}
+
 func benchmarkServeHTTP(b *testing.B, test testRequest) {
 	http2Conn, edgeConn := newTestHTTP2Connection()
 
@@ -532,7 +571,7 @@ func benchmarkServeHTTP(b *testing.B, test testRequest) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		http2Conn.Serve(ctx)
+		_ = http2Conn.Serve(ctx)
 	}()
 
 	endpoint := fmt.Sprintf("http://localhost:8080/%s", test.endpoint)

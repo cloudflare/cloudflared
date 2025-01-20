@@ -17,6 +17,8 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
+	cfdflow "github.com/cloudflare/cloudflared/flow"
+
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -108,7 +110,6 @@ func (q *quicConnection) Serve(ctx context.Context) error {
 		}
 		cancel()
 		return err
-
 	})
 	errGroup.Go(func() error {
 		defer cancel()
@@ -129,7 +130,7 @@ func (q *quicConnection) serveControlStream(ctx context.Context, controlStream q
 
 // Close the connection with no errors specified.
 func (q *quicConnection) Close() {
-	q.conn.CloseWithError(0, "")
+	_ = q.conn.CloseWithError(0, "")
 }
 
 func (q *quicConnection) acceptStream(ctx context.Context) error {
@@ -182,7 +183,13 @@ func (q *quicConnection) handleDataStream(ctx context.Context, stream *rpcquic.R
 			return err
 		}
 
-		if writeRespErr := stream.WriteConnectResponseData(err); writeRespErr != nil {
+		var metadata []pogs.Metadata
+		// Check the type of error that was throw and add metadata that will help identify it on OTD.
+		if errors.Is(err, cfdflow.ErrTooManyActiveFlows) {
+			metadata = append(metadata, pogs.ErrorFlowConnectRateLimitedKey)
+		}
+
+		if writeRespErr := stream.WriteConnectResponseData(err, metadata...); writeRespErr != nil {
 			return writeRespErr
 		}
 	}
@@ -278,7 +285,7 @@ func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header)
 func (hrw *httpResponseAdapter) Write(p []byte) (int, error) {
 	// Make sure to send WriteHeader response if not called yet
 	if !hrw.connectResponseSent {
-		hrw.WriteRespHeaders(http.StatusOK, hrw.headers)
+		_ = hrw.WriteRespHeaders(http.StatusOK, hrw.headers)
 	}
 	return hrw.RequestServerStream.Write(p)
 }
@@ -291,7 +298,7 @@ func (hrw *httpResponseAdapter) Header() http.Header {
 func (hrw *httpResponseAdapter) Flush() {}
 
 func (hrw *httpResponseAdapter) WriteHeader(status int) {
-	hrw.WriteRespHeaders(status, hrw.headers)
+	_ = hrw.WriteRespHeaders(status, hrw.headers)
 }
 
 func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
@@ -304,7 +311,7 @@ func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {
-	hrw.WriteConnectResponseData(err, pogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
+	_ = hrw.WriteConnectResponseData(err, pogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
 func (hrw *httpResponseAdapter) WriteConnectResponseData(respErr error, metadata ...pogs.Metadata) error {

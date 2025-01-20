@@ -116,7 +116,7 @@ func (s *UDPSessionRegistrationDatagram) MarshalBinary() (data []byte, err error
 		data = make([]byte, sessionRegistrationIPv4DatagramHeaderLen+len(s.Payload))
 	}
 	data[0] = byte(UDPSessionRegistrationType)
-	data[1] = byte(flags)
+	data[1] = flags
 	binary.BigEndian.PutUint16(data[2:4], s.Dest.Port())
 	binary.BigEndian.PutUint16(data[4:6], uint16(s.IdleDurationHint.Seconds()))
 	err = s.RequestID.MarshalBinaryTo(data[6:22])
@@ -284,6 +284,8 @@ const (
 	ResponseDestinationUnreachable SessionRegistrationResp = 0x01
 	// Session registration was unable to bind to a local UDP socket.
 	ResponseUnableToBindSocket SessionRegistrationResp = 0x02
+	// Session registration failed due to the number of flows being higher than the limit.
+	ResponseTooManyActiveFlows SessionRegistrationResp = 0x03
 	// Session registration failed with an unexpected error but provided a message.
 	ResponseErrorWithMsg SessionRegistrationResp = 0xff
 )
@@ -311,6 +313,7 @@ func (s *UDPSessionRegistrationResponseDatagram) MarshalBinary() (data []byte, e
 	if len(s.ErrorMsg) > maxResponseErrorMessageLen {
 		return nil, wrapMarshalErr(ErrDatagramResponseMsgInvalidSize)
 	}
+	// nolint: gosec
 	errMsgLen := uint16(len(s.ErrorMsg))
 
 	data = make([]byte, datagramSessionRegistrationResponseLen+errMsgLen)

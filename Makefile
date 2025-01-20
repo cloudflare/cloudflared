@@ -265,3 +265,7 @@ fmt-check:
 .PHONY: lint
 lint:
 	@golangci-lint run
+
+.PHONY: mocks
+mocks:
+	go generate mocks/mockgen.go

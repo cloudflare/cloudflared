@@ -22,8 +22,9 @@ var (
 
 var (
 	// pre-generate possible values for res
-	responseMetaHeaderCfd    = mustInitRespMetaHeader("cloudflared")
-	responseMetaHeaderOrigin = mustInitRespMetaHeader("origin")
+	responseMetaHeaderCfd                = mustInitRespMetaHeader("cloudflared", false)
+	responseMetaHeaderCfdFlowRateLimited = mustInitRespMetaHeader("cloudflared", true)
+	responseMetaHeaderOrigin             = mustInitRespMetaHeader("origin", false)
 )
 
 // HTTPHeader is a custom header struct that expects only ever one value for the header.
@@ -34,11 +35,12 @@ type HTTPHeader struct {
 }
 
 type responseMetaHeader struct {
-	Source string `json:"src"`
+	Source          string `json:"src"`
+	FlowRateLimited bool   `json:"flow_rate_limited,omitempty"`
 }
 
-func mustInitRespMetaHeader(src string) string {
-	header, err := json.Marshal(responseMetaHeader{Source: src})
+func mustInitRespMetaHeader(src string, flowRateLimited bool) string {
+	header, err := json.Marshal(responseMetaHeader{Source: src, FlowRateLimited: flowRateLimited})
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize response meta header = %s, err: %v", src, err))
 	}
@@ -112,7 +114,7 @@ func SerializeHeaders(h1Headers http.Header) string {
 func DeserializeHeaders(serializedHeaders string) ([]HTTPHeader, error) {
 	const unableToDeserializeErr = "Unable to deserialize headers"
 
-	var deserialized []HTTPHeader
+	deserialized := make([]HTTPHeader, 0)
 	for _, serializedPair := range strings.Split(serializedHeaders, ";") {
 		if len(serializedPair) == 0 {
 			continue

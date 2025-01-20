@@ -7,11 +7,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
+
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -38,10 +41,14 @@ type DatagramSessionHandler interface {
 }
 
 type datagramV2Connection struct {
-	conn quic.Connection
+	conn  quic.Connection
+	index uint8
 
 	// sessionManager tracks active sessions. It receives datagrams from quic connection via datagramMuxer
 	sessionManager datagramsession.Manager
+	// flowLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
+	flowLimiter cfdflow.Limiter
+
 	// datagramMuxer mux/demux datagrams from quic connection
 	datagramMuxer *cfdquic.DatagramMuxerV2
 	packetRouter  *ingress.PacketRouter
@@ -58,6 +65,7 @@ func NewDatagramV2Connection(ctx context.Context,
 	index uint8,
 	rpcTimeout time.Duration,
 	streamWriteTimeout time.Duration,
+	flowLimiter cfdflow.Limiter,
 	logger *zerolog.Logger,
 ) DatagramSessionHandler {
 	sessionDemuxChan := make(chan *packet.Session, demuxChanCapacity)
@@ -66,13 +74,15 @@ func NewDatagramV2Connection(ctx context.Context,
 	packetRouter := ingress.NewPacketRouter(icmpRouter, datagramMuxer, index, logger)
 
 	return &datagramV2Connection{
-		conn,
-		sessionManager,
-		datagramMuxer,
-		packetRouter,
-		rpcTimeout,
-		streamWriteTimeout,
-		logger,
+		conn:               conn,
+		index:              index,
+		sessionManager:     sessionManager,
+		flowLimiter:        flowLimiter,
+		datagramMuxer:      datagramMuxer,
+		packetRouter:       packetRouter,
+		rpcTimeout:         rpcTimeout,
+		streamWriteTimeout: streamWriteTimeout,
+		logger:             logger,
 	}
 }
 
@@ -109,12 +119,23 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 		attribute.String("dst", fmt.Sprintf("%s:%d", dstIP, dstPort)),
 	))
 	log := q.logger.With().Int(management.EventTypeKey, int(management.UDP)).Logger()
+
+	// Try to start a new session
+	if err := q.flowLimiter.Acquire(management.UDP.String()); err != nil {
+		log.Warn().Msgf("Too many concurrent sessions being handled, rejecting udp proxy to %s:%d", dstIP, dstPort)
+
+		err := pkgerrors.Wrap(err, "failed to start udp session due to rate limiting")
+		tracing.EndWithErrorStatus(registerSpan, err)
+		return nil, err
+	}
+
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
 	originProxy, err := ingress.DialUDP(dstIP, dstPort)
 	if err != nil {
 		log.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
 		tracing.EndWithErrorStatus(registerSpan, err)
+		q.flowLimiter.Release()
 		return nil, err
 	}
 	registerSpan.SetAttributes(
@@ -127,10 +148,14 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 		originProxy.Close()
 		log.Err(err).Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
+		q.flowLimiter.Release()
 		return nil, err
 	}
 
-	go q.serveUDPSession(session, closeAfterIdleHint)
+	go func() {
+		defer q.flowLimiter.Release() // we do the release here, instead of inside the `serveUDPSession` just to keep all acquire/release calls in the same method.
+		q.serveUDPSession(session, closeAfterIdleHint)
+	}()
 
 	log.Debug().
 		Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).
@@ -170,7 +195,7 @@ func (q *datagramV2Connection) serveUDPSession(session *datagramsession.Session,
 
 // closeUDPSession first unregisters the session from session manager, then it tries to unregister from edge
 func (q *datagramV2Connection) closeUDPSession(ctx context.Context, sessionID uuid.UUID, message string) {
-	q.sessionManager.UnregisterSession(ctx, sessionID, message, false)
+	_ = q.sessionManager.UnregisterSession(ctx, sessionID, message, false)
 	quicStream, err := q.conn.OpenStream()
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection

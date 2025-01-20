@@ -7,6 +7,10 @@ import (
 	"sync"
 
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/management"
+
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 )
 
 var (
@@ -16,6 +20,8 @@ var (
 	ErrSessionBoundToOtherConn = errors.New("flow is in use by another connection")
 	// ErrSessionAlreadyRegistered is returned when a registration already exists for this connection.
 	ErrSessionAlreadyRegistered = errors.New("flow is already registered for this connection")
+	// ErrSessionRegistrationRateLimited is returned when a registration fails due to rate limiting on the number of active flows.
+	ErrSessionRegistrationRateLimited = errors.New("flow registration rate limited")
 )
 
 type SessionManager interface {
@@ -38,14 +44,16 @@ type sessionManager struct {
 	sessions     map[RequestID]Session
 	mutex        sync.RWMutex
 	originDialer DialUDP
+	limiter      cfdflow.Limiter
 	metrics      Metrics
 	log          *zerolog.Logger
 }
 
-func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP) SessionManager {
+func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP, limiter cfdflow.Limiter) SessionManager {
 	return &sessionManager{
 		sessions:     make(map[RequestID]Session),
 		originDialer: originDialer,
+		limiter:      limiter,
 		metrics:      metrics,
 		log:          log,
 	}
@@ -61,6 +69,12 @@ func (s *sessionManager) RegisterSession(request *UDPSessionRegistrationDatagram
 		}
 		return nil, ErrSessionBoundToOtherConn
 	}
+
+	// Try to start a new session
+	if err := s.limiter.Acquire(management.UDP.String()); err != nil {
+		return nil, ErrSessionRegistrationRateLimited
+	}
+
 	// Attempt to bind the UDP socket for the new session
 	origin, err := s.originDialer(request.Dest)
 	if err != nil {
@@ -100,4 +114,5 @@ func (s *sessionManager) UnregisterSession(requestID RequestID) {
 		_ = session.Close()
 	}
 	delete(s.sessions, requestID)
+	s.limiter.Release()
 }

@@ -67,6 +67,7 @@ For example, as of January 2023 Cloudflare will support cloudflared version 2023
   - [capnpc-go](https://pkg.go.dev/zombiezen.com/go/capnproto2/capnpc-go)
   - [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports)
   - [golangci-lint](https://github.com/golangci/golangci-lint)
+  - [gomocks](https://pkg.go.dev/go.uber.org/mock)
 
 ### Build
 To build cloudflared locally run `make cloudflared`
@@ -76,3 +77,6 @@ To locally run the tests run `make test`
 
 ### Linting
 To format the code and keep a good code quality use `make fmt` and `make lint`
+
+### Mocks
+After changes on interfaces you might need to regenerate the mocks, so run `make mock`
