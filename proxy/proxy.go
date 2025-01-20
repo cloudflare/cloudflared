@@ -13,13 +13,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/cloudflare/cloudflared/carrier"
-	"github.com/cloudflare/cloudflared/cfio"
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/stream"
-	"github.com/cloudflare/cloudflared/tracing"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/carrier"
+	"github.com/kjake/cloudflared/cfio"
+	"github.com/kjake/cloudflared/connection"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/stream"
+	"github.com/kjake/cloudflared/tracing"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 const (

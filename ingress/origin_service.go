@@ -15,11 +15,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/hello"
-	"github.com/cloudflare/cloudflared/ipaccess"
-	"github.com/cloudflare/cloudflared/management"
-	"github.com/cloudflare/cloudflared/socks"
-	"github.com/cloudflare/cloudflared/tlsconfig"
+	"github.com/kjake/cloudflared/hello"
+	"github.com/kjake/cloudflared/ipaccess"
+	"github.com/kjake/cloudflared/management"
+	"github.com/kjake/cloudflared/socks"
+	"github.com/kjake/cloudflared/tlsconfig"
 )
 
 const (

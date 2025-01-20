@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
 )
 
 func init() {

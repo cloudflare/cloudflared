@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/kjake/cloudflared/config"
+	"github.com/kjake/cloudflared/ingress"
 )
 
 type newRemoteConfig struct {

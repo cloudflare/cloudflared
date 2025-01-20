@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/packet"
+	"github.com/kjake/cloudflared/packet"
 )
 
 var (

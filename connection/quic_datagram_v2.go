@@ -13,15 +13,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/datagramsession"
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/management"
-	"github.com/cloudflare/cloudflared/packet"
-	cfdquic "github.com/cloudflare/cloudflared/quic"
-	"github.com/cloudflare/cloudflared/tracing"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	rpcquic "github.com/cloudflare/cloudflared/tunnelrpc/quic"
+	"github.com/kjake/cloudflared/datagramsession"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/management"
+	"github.com/kjake/cloudflared/packet"
+	cfdquic "github.com/kjake/cloudflared/quic"
+	"github.com/kjake/cloudflared/tracing"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
+	tunnelpogs "github.com/kjake/cloudflared/tunnelrpc/pogs"
+	rpcquic "github.com/kjake/cloudflared/tunnelrpc/quic"
 )
 
 const (

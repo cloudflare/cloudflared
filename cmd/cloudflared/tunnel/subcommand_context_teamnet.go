@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/cloudflare/cloudflared/cfapi"
+	"github.com/kjake/cloudflared/cfapi"
 )
 
 const noClientMsg = "error while creating backend client"

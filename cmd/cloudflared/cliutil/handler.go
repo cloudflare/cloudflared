@@ -4,8 +4,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/kjake/cloudflared/config"
+	"github.com/kjake/cloudflared/logger"
 )
 
 func Action(actionFunc cli.ActionFunc) cli.ActionFunc {

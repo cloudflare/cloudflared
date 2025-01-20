@@ -9,8 +9,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/packet"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/packet"
 )
 
 const (

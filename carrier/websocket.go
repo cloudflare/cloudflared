@@ -9,9 +9,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/stream"
-	"github.com/cloudflare/cloudflared/token"
-	cfwebsocket "github.com/cloudflare/cloudflared/websocket"
+	"github.com/kjake/cloudflared/stream"
+	"github.com/kjake/cloudflared/token"
+	cfwebsocket "github.com/kjake/cloudflared/websocket"
 )
 
 // Websocket is used to carry data via WS binary frames over the tunnel from client to the origin

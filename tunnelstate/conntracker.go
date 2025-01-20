@@ -6,7 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/connection"
+	"github.com/kjake/cloudflared/connection"
 )
 
 type ConnTracker struct {

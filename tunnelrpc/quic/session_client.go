@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"zombiezen.com/go/capnproto2/rpc"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
-	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/tunnelrpc"
+	"github.com/kjake/cloudflared/tunnelrpc/metrics"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 // SessionClient calls capnp rpc methods of SessionManager.

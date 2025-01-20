@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/tunnelrpc"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 var (

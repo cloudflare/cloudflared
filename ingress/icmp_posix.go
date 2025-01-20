@@ -1,5 +1,4 @@
-//go:build darwin || linux
-
+//go:build darwin || linux || freebsd
 package ingress
 
 // This file extracts logic shared by Linux and Darwin implementation if ICMPProxy.
@@ -14,7 +13,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/icmp"
 
-	"github.com/cloudflare/cloudflared/packet"
+	"github.com/kjake/cloudflared/packet"
 )
 
 // Opens a non-privileged ICMP socket on Linux and Darwin

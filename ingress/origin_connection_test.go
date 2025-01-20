@@ -19,9 +19,9 @@ import (
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/socks"
-	"github.com/cloudflare/cloudflared/stream"
-	"github.com/cloudflare/cloudflared/websocket"
+	"github.com/kjake/cloudflared/socks"
+	"github.com/kjake/cloudflared/stream"
+	"github.com/kjake/cloudflared/websocket"
 )
 
 const (

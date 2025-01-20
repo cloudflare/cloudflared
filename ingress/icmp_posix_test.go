@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin || linux || freebsd
 
 package ingress
 
@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 
-	"github.com/cloudflare/cloudflared/packet"
+	"github.com/kjake/cloudflared/packet"
 )
 
 func TestFunnelIdleTimeout(t *testing.T) {

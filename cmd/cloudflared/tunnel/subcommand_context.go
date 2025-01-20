@@ -13,10 +13,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/cfapi"
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/credentials"
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/kjake/cloudflared/cfapi"
+	"github.com/kjake/cloudflared/connection"
+	"github.com/kjake/cloudflared/credentials"
+	"github.com/kjake/cloudflared/logger"
 )
 
 type errInvalidJSONCredential struct {

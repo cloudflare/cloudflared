@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudflare/cloudflared/ipaccess"
+	"github.com/kjake/cloudflared/ipaccess"
 )
 
 func TestUnsupportedBind(t *testing.T) {

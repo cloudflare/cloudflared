@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/kjake/cloudflared/tunneldns"
 )
 
 // Forwarder represents a client side listener to forward traffic to the edge

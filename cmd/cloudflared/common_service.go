@@ -4,8 +4,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
+	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/kjake/cloudflared/cmd/cloudflared/tunnel"
 )
 
 func buildArgsForToken(c *cli.Context, log *zerolog.Logger) ([]string, error) {

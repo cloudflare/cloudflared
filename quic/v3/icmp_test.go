@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/packet"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/packet"
 )
 
 type noopICMPRouter struct{}

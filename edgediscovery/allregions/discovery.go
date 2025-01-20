@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/management"
+	"github.com/kjake/cloudflared/management"
 )
 
 const (

@@ -3,7 +3,7 @@ package proxy
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/cloudflare/cloudflared/connection"
+	"github.com/kjake/cloudflared/connection"
 )
 
 // Metrics uses connection.MetricsNamespace(aka cloudflared) as namespace and connection.TunnelSubsystem

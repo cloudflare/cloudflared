@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cloudflare/cloudflared/ingress/middleware"
+	"github.com/kjake/cloudflared/ingress/middleware"
 )
 
 // Rule routes traffic from a hostname/path on the public internet to the

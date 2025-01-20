@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudflare/cloudflared/carrier"
-	"github.com/cloudflare/cloudflared/websocket"
+	"github.com/kjake/cloudflared/carrier"
+	"github.com/kjake/cloudflared/websocket"
 )
 
 func TestRawTCPServiceEstablishConnection(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/cfapi"
+	"github.com/kjake/cloudflared/cfapi"
 )
 
 const (

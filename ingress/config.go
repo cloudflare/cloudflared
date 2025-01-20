@@ -6,9 +6,9 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/ipaccess"
-	"github.com/cloudflare/cloudflared/tlsconfig"
+	"github.com/kjake/cloudflared/config"
+	"github.com/kjake/cloudflared/ipaccess"
+	"github.com/kjake/cloudflared/tlsconfig"
 )
 
 var (

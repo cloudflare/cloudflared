@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/management"
+	"github.com/kjake/cloudflared/management"
 )
 
 const (

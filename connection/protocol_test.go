@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/kjake/cloudflared/edgediscovery"
 )
 
 const (

@@ -15,7 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/tlsconfig"
+	"github.com/kjake/cloudflared/tlsconfig"
 )
 
 const (

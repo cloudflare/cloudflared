@@ -1,8 +1,8 @@
 package connection
 
 import (
-	"github.com/cloudflare/cloudflared/edgediscovery"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/edgediscovery"
+	tunnelpogs "github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 const (

@@ -1,4 +1,4 @@
-//go:build darwin || linux || unix
+//go:build darwin || linux || freebsd
 
 package diagnostic_test
 

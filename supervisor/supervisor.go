@@ -11,14 +11,14 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/orchestration"
-	v3 "github.com/cloudflare/cloudflared/quic/v3"
-	"github.com/cloudflare/cloudflared/retry"
-	"github.com/cloudflare/cloudflared/signal"
-	"github.com/cloudflare/cloudflared/tunnelstate"
+	"github.com/kjake/cloudflared/connection"
+	"github.com/kjake/cloudflared/edgediscovery"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/orchestration"
+	v3 "github.com/kjake/cloudflared/quic/v3"
+	"github.com/kjake/cloudflared/retry"
+	"github.com/kjake/cloudflared/signal"
+	"github.com/kjake/cloudflared/tunnelstate"
 )
 
 const (

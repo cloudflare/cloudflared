@@ -9,10 +9,10 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/logger"
-	"github.com/cloudflare/cloudflared/metrics"
-	"github.com/cloudflare/cloudflared/tunneldns"
+	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/kjake/cloudflared/logger"
+	"github.com/kjake/cloudflared/metrics"
+	"github.com/kjake/cloudflared/tunneldns"
 )
 
 func Command(hidden bool) *cli.Command {

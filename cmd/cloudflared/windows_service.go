@@ -19,8 +19,8 @@ import (
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/kjake/cloudflared/logger"
 )
 
 const (

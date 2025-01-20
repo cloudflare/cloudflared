@@ -3,8 +3,8 @@ package main
 import (
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/overwatch"
+	"github.com/kjake/cloudflared/config"
+	"github.com/kjake/cloudflared/overwatch"
 )
 
 // AppService is the main service that runs when no command lines flags are passed to cloudflared

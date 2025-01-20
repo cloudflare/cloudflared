@@ -8,7 +8,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/kjake/cloudflared/edgediscovery"
 )
 
 const (

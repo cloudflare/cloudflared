@@ -24,8 +24,8 @@ import (
 	"golang.org/x/net/ipv4"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cloudflare/cloudflared/packet"
-	"github.com/cloudflare/cloudflared/tracing"
+	"github.com/kjake/cloudflared/packet"
+	"github.com/kjake/cloudflared/tracing"
 )
 
 var (

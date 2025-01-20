@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
 
-	"github.com/cloudflare/cloudflared/cfapi"
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/credentials"
+	"github.com/kjake/cloudflared/cfapi"
+	"github.com/kjake/cloudflared/connection"
+	"github.com/kjake/cloudflared/credentials"
 )
 
 type mockFileSystem struct {

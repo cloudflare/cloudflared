@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	"github.com/cloudflare/cloudflared/features"
+	"github.com/kjake/cloudflared/features"
 )
 
 // When experimental post-quantum tunnels are enabled, and we're hitting an

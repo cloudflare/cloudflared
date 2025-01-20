@@ -12,7 +12,7 @@ import (
 
 	homedir "github.com/mitchellh/go-homedir"
 
-	"github.com/cloudflare/cloudflared/config"
+	"github.com/kjake/cloudflared/config"
 )
 
 type ServiceTemplate struct {

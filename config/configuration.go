@@ -17,7 +17,7 @@ import (
 	"github.com/urfave/cli/v2"
 	yaml "gopkg.in/yaml.v3"
 
-	"github.com/cloudflare/cloudflared/validation"
+	"github.com/kjake/cloudflared/validation"
 )
 
 var (

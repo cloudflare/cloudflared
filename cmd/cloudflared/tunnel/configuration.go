@@ -17,17 +17,17 @@ import (
 	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/term"
 
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-	"github.com/cloudflare/cloudflared/features"
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/orchestration"
-	"github.com/cloudflare/cloudflared/supervisor"
-	"github.com/cloudflare/cloudflared/tlsconfig"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/kjake/cloudflared/config"
+	"github.com/kjake/cloudflared/connection"
+	"github.com/kjake/cloudflared/edgediscovery"
+	"github.com/kjake/cloudflared/edgediscovery/allregions"
+	"github.com/kjake/cloudflared/features"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/orchestration"
+	"github.com/kjake/cloudflared/supervisor"
+	"github.com/kjake/cloudflared/tlsconfig"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 const (

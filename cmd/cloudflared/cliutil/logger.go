@@ -4,7 +4,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 
-	"github.com/cloudflare/cloudflared/logger"
+	"github.com/kjake/cloudflared/logger"
 )
 
 var (

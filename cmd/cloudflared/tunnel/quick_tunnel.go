@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/cloudflare/cloudflared/connection"
+	"github.com/kjake/cloudflared/connection"
 )
 
 const httpTimeout = 15 * time.Second

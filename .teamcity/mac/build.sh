@@ -33,8 +33,8 @@ export PATH="$PATH:/usr/local/bin"
 FILENAME="$(pwd)/artifacts/cloudflared-darwin-$TARGET_ARCH.tgz"
 PKGNAME="$(pwd)/artifacts/cloudflared-$TARGET_ARCH.pkg"
 mkdir -p ../src/github.com/cloudflare/    
-cp -r . ../src/github.com/cloudflare/cloudflared
-cd ../src/github.com/cloudflare/cloudflared 
+cp -r . ../src/github.com/kjake/cloudflared
+cd ../src/github.com/kjake/cloudflared 
 
 # Imports certificates to the Apple KeyChain
 import_certificate() {

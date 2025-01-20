@@ -8,8 +8,8 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/packet"
-	"github.com/cloudflare/cloudflared/tracing"
+	"github.com/kjake/cloudflared/packet"
+	"github.com/kjake/cloudflared/tracing"
 )
 
 type DatagramV2Type byte

@@ -1,4 +1,4 @@
-module github.com/cloudflare/cloudflared
+module github.com/kjake/cloudflared
 
 go 1.22
 

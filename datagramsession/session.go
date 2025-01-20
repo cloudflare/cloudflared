@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/cloudflare/cloudflared/packet"
+	"github.com/kjake/cloudflared/packet"
 )
 
 const (

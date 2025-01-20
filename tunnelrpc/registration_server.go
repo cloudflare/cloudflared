@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 // RegistrationServer provides a handler interface for a client to provide methods to handle the different types of

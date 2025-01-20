@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/cloudflare/cloudflared/tunnelrpc"
-	"github.com/cloudflare/cloudflared/tunnelrpc/metrics"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/kjake/cloudflared/tunnelrpc"
+	"github.com/kjake/cloudflared/tunnelrpc/metrics"
+	"github.com/kjake/cloudflared/tunnelrpc/pogs"
 )
 
 // CloudflaredClient calls capnp rpc methods of SessionManager and ConfigurationManager.

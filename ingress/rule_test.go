@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudflare/cloudflared/config"
+	"github.com/kjake/cloudflared/config"
 )
 
 func Test_rule_matches(t *testing.T) {

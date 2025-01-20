@@ -20,9 +20,9 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/packet"
-	v3 "github.com/cloudflare/cloudflared/quic/v3"
+	"github.com/kjake/cloudflared/ingress"
+	"github.com/kjake/cloudflared/packet"
+	v3 "github.com/kjake/cloudflared/quic/v3"
 )
 
 type noopEyeball struct {
