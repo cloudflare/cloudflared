@@ -30,6 +30,7 @@ import (
 	"github.com/kjake/cloudflared/connection"
 	"github.com/kjake/cloudflared/credentials"
 	"github.com/kjake/cloudflared/diagnostic"
+	"github.com/kjake/cloudflared/diagnostic/network"
 	"github.com/kjake/cloudflared/edgediscovery"
 	"github.com/kjake/cloudflared/ingress"
 	"github.com/kjake/cloudflared/logger"
