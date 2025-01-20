@@ -30,3 +30,10 @@ jobs:
           go mod tidy
           go install golang.org/x/tools/cmd/goimports@latest
           gmake cloudflared cleanup-go
+    - name: Attach Build File to Job
+      uses: actions/upload-artifact@v4
+      with:
+        name: cloudflared-freebsd-amd64
+        path: cloudflared/cloudflared/cloudflared
+        retention-days: 90
+        overwrite: true
