@@ -1,6 +1,7 @@
 package token
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -11,7 +12,7 @@ func TestHandleRedirects_AttachOrgToken(t *testing.T) {
 	via := []*http.Request{}
 	orgToken := "orgTokenValue"
 
-	handleRedirects(req, via, orgToken)
+	_ = handleRedirects(req, via, orgToken)
 
 	// Check if the orgToken cookie is attached
 	cookies := req.Cookies()
@@ -78,5 +79,57 @@ func TestHandleRedirects_StopAtAuthorizedEndpoint(t *testing.T) {
 	// Check if ErrUseLastResponse is returned
 	if err != http.ErrUseLastResponse {
 		t.Errorf("Expected ErrUseLastResponse, got %v", err)
+	}
+}
+
+func TestJwtPayloadUnmarshal_AudAsString(t *testing.T) {
+	jwt := `{"aud":"7afbdaf987054f889b3bdd0d29ebfcd2"}`
+	var payload jwtPayload
+	if err := json.Unmarshal([]byte(jwt), &payload); err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if len(payload.Aud) != 1 || payload.Aud[0] != "7afbdaf987054f889b3bdd0d29ebfcd2" {
+		t.Errorf("Expected aud to be 7afbdaf987054f889b3bdd0d29ebfcd2, got %v", payload.Aud)
+	}
+}
+
+func TestJwtPayloadUnmarshal_AudAsSlice(t *testing.T) {
+	jwt := `{"aud":["7afbdaf987054f889b3bdd0d29ebfcd2", "f835c0016f894768976c01e076844efe"]}`
+	var payload jwtPayload
+	if err := json.Unmarshal([]byte(jwt), &payload); err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if len(payload.Aud) != 2 || payload.Aud[0] != "7afbdaf987054f889b3bdd0d29ebfcd2" || payload.Aud[1] != "f835c0016f894768976c01e076844efe" {
+		t.Errorf("Expected aud to be [7afbdaf987054f889b3bdd0d29ebfcd2, f835c0016f894768976c01e076844efe], got %v", payload.Aud)
+	}
+}
+
+func TestJwtPayloadUnmarshal_FailsWhenAudIsInt(t *testing.T) {
+	jwt := `{"aud":123}`
+	var payload jwtPayload
+	err := json.Unmarshal([]byte(jwt), &payload)
+	wantErr := "aud field is not a string or an array of strings"
+	if err.Error() != wantErr {
+		t.Errorf("Expected %v, got %v", wantErr, err)
+	}
+}
+
+func TestJwtPayloadUnmarshal_FailsWhenAudIsArrayOfInts(t *testing.T) {
+	jwt := `{"aud": [999, 123] }`
+	var payload jwtPayload
+	err := json.Unmarshal([]byte(jwt), &payload)
+	wantErr := "aud array contains non-string elements"
+	if err.Error() != wantErr {
+		t.Errorf("Expected %v, got %v", wantErr, err)
+	}
+}
+
+func TestJwtPayloadUnmarshal_FailsWhenAudIsOmitted(t *testing.T) {
+	jwt := `{}`
+	var payload jwtPayload
+	err := json.Unmarshal([]byte(jwt), &payload)
+	wantErr := "aud field is not a string or an array of strings"
+	if err.Error() != wantErr {
+		t.Errorf("Expected %v, got %v", wantErr, err)
 	}
 }
