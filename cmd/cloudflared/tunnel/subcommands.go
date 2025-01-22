@@ -669,7 +669,7 @@ func runCommand(c *cli.Context) error {
 			}
 			tokenStr = strings.TrimSpace(string(data))
 			if _, err := ParseToken(tokenStr); err != nil {
-				return cliutil.UsageError("Failed to parse token file: " + err.Error())
+				return cliutil.UsageError("Provided Tunnel token is not valid")
 			}
 		}
 	}
