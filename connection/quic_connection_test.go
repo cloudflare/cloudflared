@@ -639,7 +639,7 @@ func TestTCPProxy_FlowRateLimited(t *testing.T) {
 
 		// Got Rate Limited
 		assert.NotEmpty(t, response.Error)
-		assert.Contains(t, response.Metadata, pogs.ErrorFlowConnectRateLimitedKey)
+		assert.Contains(t, response.Metadata, pogs.ErrorFlowConnectRateLimitedMetadata)
 	}()
 
 	tunnelConn, _ := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), uint8(0))

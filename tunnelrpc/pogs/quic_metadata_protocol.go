@@ -19,8 +19,8 @@ const (
 )
 
 var (
-	// ErrorFlowConnectRateLimitedKey is the Metadata entry that allows to know if a request was rate limited on connect.
-	ErrorFlowConnectRateLimitedKey = Metadata{Key: "FlowConnectRateLimited", Val: "true"}
+	// ErrorFlowConnectRateLimitedMetadata is the Metadata entry that allows to know if a request was rate limited on connect.
+	ErrorFlowConnectRateLimitedMetadata = Metadata{Key: "FlowConnectRateLimited", Val: "true"}
 )
 
 func (c ConnectionType) String() string {

@@ -186,7 +186,7 @@ func (q *quicConnection) handleDataStream(ctx context.Context, stream *rpcquic.R
 		var metadata []pogs.Metadata
 		// Check the type of error that was throw and add metadata that will help identify it on OTD.
 		if errors.Is(err, cfdflow.ErrTooManyActiveFlows) {
-			metadata = append(metadata, pogs.ErrorFlowConnectRateLimitedKey)
+			metadata = append(metadata, pogs.ErrorFlowConnectRateLimitedMetadata)
 		}
 
 		if writeRespErr := stream.WriteConnectResponseData(err, metadata...); writeRespErr != nil {
