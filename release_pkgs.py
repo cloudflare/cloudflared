@@ -113,7 +113,7 @@ class PkgCreator:
 
     def create_rpm_pkgs(self, artifacts_path, gpg_key_name):
         self._setup_rpm_pkg_directories(artifacts_path, gpg_key_name)
-        p = Popen(["createrepo", "./rpm"], stdout=PIPE, stderr=PIPE)
+        p = Popen(["createrepo_c", "./rpm"], stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if p.returncode != 0:
             print(f"create rpm_pkgs result => {out}, {err}")

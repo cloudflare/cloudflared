@@ -24,7 +24,7 @@ func ReadHeader(r io.Reader) (h Header, err error) {
 	// Prepare to hold first 2 bytes to choose size of next read.
 	_, err = io.ReadFull(r, bts)
 	if err != nil {
-		return
+		return h, err
 	}
 
 	h.Fin = bts[0]&bit0 != 0
@@ -51,11 +51,11 @@ func ReadHeader(r io.Reader) (h Header, err error) {
 
 	default:
 		err = ErrHeaderLengthUnexpected
-		return
+		return h, err
 	}
 
 	if extra == 0 {
-		return
+		return h, err
 	}
 
 	// Increase len of bts to extra bytes need to read.
@@ -63,7 +63,7 @@ func ReadHeader(r io.Reader) (h Header, err error) {
 	bts = bts[:extra]
 	_, err = io.ReadFull(r, bts)
 	if err != nil {
-		return
+		return h, err
 	}
 
 	switch {
@@ -74,7 +74,7 @@ func ReadHeader(r io.Reader) (h Header, err error) {
 	case length == 127:
 		if bts[0]&0x80 != 0 {
 			err = ErrHeaderLengthMSB
-			return
+			return h, err
 		}
 		h.Length = int64(binary.BigEndian.Uint64(bts[:8]))
 		bts = bts[8:]
@@ -84,7 +84,7 @@ func ReadHeader(r io.Reader) (h Header, err error) {
 		copy(h.Mask[:], bts)
 	}
 
-	return
+	return h, nil
 }
 
 // ReadFrame reads a frame from r.
@@ -95,7 +95,7 @@ func ReadHeader(r io.Reader) (h Header, err error) {
 func ReadFrame(r io.Reader) (f Frame, err error) {
 	f.Header, err = ReadHeader(r)
 	if err != nil {
-		return
+		return f, err
 	}
 
 	if f.Header.Length > 0 {
@@ -105,7 +105,7 @@ func ReadFrame(r io.Reader) (f Frame, err error) {
 		_, err = io.ReadFull(r, f.Payload)
 	}
 
-	return
+	return f, err
 }
 
 // MustReadFrame is like ReadFrame but panics if frame can not be read.
@@ -128,20 +128,20 @@ func ParseCloseFrameData(payload []byte) (code StatusCode, reason string) {
 		// In other words, we ignoring this rule [RFC6455:7.1.5]:
 		//   If this Close control frame contains no status code, _The WebSocket
 		//   Connection Close Code_ is considered to be 1005.
-		return
+		return code, reason
 	}
 	code = StatusCode(binary.BigEndian.Uint16(payload))
 	reason = string(payload[2:])
-	return
+	return code, reason
 }
 
 // ParseCloseFrameDataUnsafe is like ParseCloseFrameData except the thing
 // that it does not copies payload bytes into reason, but prepares unsafe cast.
 func ParseCloseFrameDataUnsafe(payload []byte) (code StatusCode, reason string) {
 	if len(payload) < 2 {
-		return
+		return code, reason
 	}
 	code = StatusCode(binary.BigEndian.Uint16(payload))
 	reason = btsToString(payload[2:])
-	return
+	return code, reason
 }

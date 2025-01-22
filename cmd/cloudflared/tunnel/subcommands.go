@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,17 +28,27 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/diagnostic"
+	"github.com/cloudflare/cloudflared/metrics"
 )
 
 const (
-	allSortByOptions     = "name, id, createdAt, deletedAt, numConnections"
-	connsSortByOptions   = "id, startedAt, numConnections, version"
-	CredFileFlagAlias    = "cred-file"
-	CredFileFlag         = "credentials-file"
-	CredContentsFlag     = "credentials-contents"
-	TunnelTokenFlag      = "token"
-	TunnelTokenFileFlag  = "token-file"
-	overwriteDNSFlagName = "overwrite-dns"
+	allSortByOptions        = "name, id, createdAt, deletedAt, numConnections"
+	connsSortByOptions      = "id, startedAt, numConnections, version"
+	CredFileFlagAlias       = "cred-file"
+	CredFileFlag            = "credentials-file"
+	CredContentsFlag        = "credentials-contents"
+	TunnelTokenFlag         = "token"
+	TunnelTokenFileFlag     = "token-file"
+	overwriteDNSFlagName    = "overwrite-dns"
+	noDiagLogsFlagName      = "no-diag-logs"
+	noDiagMetricsFlagName   = "no-diag-metrics"
+	noDiagSystemFlagName    = "no-diag-system"
+	noDiagRuntimeFlagName   = "no-diag-runtime"
+	noDiagNetworkFlagName   = "no-diag-network"
+	diagContainerIDFlagName = "diag-container-id"
+	diagPodFlagName         = "diag-pod-id"
+	metricsFlagName         = "metrics"
 
 	LogFieldTunnelID = "tunnelID"
 )
@@ -182,6 +194,46 @@ var (
 		Name:    "icmpv6-src",
 		Usage:   "Source address and the interface name to send/receive ICMPv6 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to ::.",
 		EnvVars: []string{"TUNNEL_ICMPV6_SRC"},
+	}
+	metricsFlag = &cli.StringFlag{
+		Name:  metricsFlagName,
+		Usage: "The metrics server address i.e.: 127.0.0.1:12345. If your instance is running in a Docker/Kubernetes environment you need to setup port forwarding for your application.",
+		Value: "",
+	}
+	diagContainerFlag = &cli.StringFlag{
+		Name:  diagContainerIDFlagName,
+		Usage: "Container ID or Name to collect logs from",
+		Value: "",
+	}
+	diagPodFlag = &cli.StringFlag{
+		Name:  diagPodFlagName,
+		Usage: "Kubernetes POD to collect logs from",
+		Value: "",
+	}
+	noDiagLogsFlag = &cli.BoolFlag{
+		Name:  noDiagLogsFlagName,
+		Usage: "Log collection will not be performed",
+		Value: false,
+	}
+	noDiagMetricsFlag = &cli.BoolFlag{
+		Name:  noDiagMetricsFlagName,
+		Usage: "Metric collection will not be performed",
+		Value: false,
+	}
+	noDiagSystemFlag = &cli.BoolFlag{
+		Name:  noDiagSystemFlagName,
+		Usage: "System information collection will not be performed",
+		Value: false,
+	}
+	noDiagRuntimeFlag = &cli.BoolFlag{
+		Name:  noDiagRuntimeFlagName,
+		Usage: "Runtime information collection will not be performed",
+		Value: false,
+	}
+	noDiagNetworkFlag = &cli.BoolFlag{
+		Name:  noDiagNetworkFlagName,
+		Usage: "Network diagnostics won't be performed",
+		Value: false,
 	}
 )
 
@@ -379,7 +431,6 @@ func formatAndPrintTunnelList(tunnels []*cfapi.Tunnel, showRecentlyDisconnected 
 }
 
 func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected bool) string {
-
 	// Count connections per colo
 	numConnsPerColo := make(map[string]uint, len(connections))
 	for _, connection := range connections {
@@ -401,6 +452,39 @@ func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected boo
 		output = append(output, fmt.Sprintf("%dx%s", numConnsPerColo[coloName], coloName))
 	}
 	return strings.Join(output, ", ")
+}
+
+func buildReadyCommand() *cli.Command {
+	return &cli.Command{
+		Name:               "ready",
+		Action:             cliutil.ConfiguredAction(readyCommand),
+		Usage:              "Call /ready endpoint and return proper exit code",
+		UsageText:          "cloudflared tunnel [tunnel command options] ready [subcommand options]",
+		Description:        "cloudflared tunnel ready will return proper exit code based on the /ready endpoint",
+		Flags:              []cli.Flag{},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func readyCommand(c *cli.Context) error {
+	metricsOpts := c.String("metrics")
+	if !c.IsSet("metrics") {
+		return fmt.Errorf("--metrics has to be provided")
+	}
+
+	requestURL := fmt.Sprintf("http://%s/ready", metricsOpts)
+	res, err := http.Get(requestURL)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != 200 {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("http://%s/ready endpoint returned status code %d\n%s", metricsOpts, res.StatusCode, body)
+	}
+	return nil
 }
 
 func buildInfoCommand() *cli.Command {
@@ -668,9 +752,6 @@ func runCommand(c *cli.Context) error {
 				return cliutil.UsageError("Failed to read token file: " + err.Error())
 			}
 			tokenStr = strings.TrimSpace(string(data))
-			if _, err := ParseToken(tokenStr); err != nil {
-				return cliutil.UsageError("Provided Tunnel token is not valid")
-			}
 		}
 	}
 	// Check if token is provided and if not use default tunnelID flag method
@@ -882,8 +963,10 @@ func lbRouteFromArg(c *cli.Context) (cfapi.HostnameRoute, error) {
 	return cfapi.NewLBRoute(lbName, lbPool), nil
 }
 
-var nameRegex = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
-var hostNameRegex = regexp.MustCompile("^[*_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+var (
+	nameRegex     = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+	hostNameRegex = regexp.MustCompile("^[*_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+)
 
 func validateName(s string, allowWildcardSubdomain bool) bool {
 	if allowWildcardSubdomain {
@@ -970,4 +1053,79 @@ SUBCOMMAND OPTIONS:
 	{{end}}
 `
 	return fmt.Sprintf(template, parentFlagsHelp)
+}
+
+func buildDiagCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "diag",
+		Action:      cliutil.ConfiguredAction(diagCommand),
+		Usage:       "Creates a diagnostic report from a local cloudflared instance",
+		UsageText:   "cloudflared tunnel [tunnel command options] diag [subcommand options]",
+		Description: "cloudflared tunnel diag will create a diagnostic report of a local cloudflared instance. The diagnostic procedure collects: logs, metrics, system information, traceroute to Cloudflare Edge, and runtime information. Since there may be multiple instances of cloudflared running the --metrics option may be provided to target a specific instance.",
+		Flags: []cli.Flag{
+			metricsFlag,
+			diagContainerFlag,
+			diagPodFlag,
+			noDiagLogsFlag,
+			noDiagMetricsFlag,
+			noDiagSystemFlag,
+			noDiagRuntimeFlag,
+			noDiagNetworkFlag,
+		},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func diagCommand(ctx *cli.Context) error {
+	sctx, err := newSubcommandContext(ctx)
+	if err != nil {
+		return err
+	}
+	log := sctx.log
+	options := diagnostic.Options{
+		KnownAddresses: metrics.GetMetricsKnownAddresses(metrics.Runtime),
+		Address:        sctx.c.String(metricsFlagName),
+		ContainerID:    sctx.c.String(diagContainerIDFlagName),
+		PodID:          sctx.c.String(diagPodFlagName),
+		Toggles: diagnostic.Toggles{
+			NoDiagLogs:    sctx.c.Bool(noDiagLogsFlagName),
+			NoDiagMetrics: sctx.c.Bool(noDiagMetricsFlagName),
+			NoDiagSystem:  sctx.c.Bool(noDiagSystemFlagName),
+			NoDiagRuntime: sctx.c.Bool(noDiagRuntimeFlagName),
+			NoDiagNetwork: sctx.c.Bool(noDiagNetworkFlagName),
+		},
+	}
+
+	if options.Address == "" {
+		log.Info().Msg("If your instance is running in a Docker/Kubernetes environment you need to setup port forwarding for your application.")
+	}
+
+	states, err := diagnostic.RunDiagnostic(log, options)
+
+	if errors.Is(err, diagnostic.ErrMetricsServerNotFound) {
+		log.Warn().Msg("No instances found")
+		return nil
+	}
+	if errors.Is(err, diagnostic.ErrMultipleMetricsServerFound) {
+		if states != nil {
+			log.Info().Msgf("Found multiple instances running:")
+			for _, state := range states {
+				log.Info().Msgf("Instance: tunnel-id=%s connector-id=%s metrics-address=%s", state.TunnelID, state.ConnectorID, state.URL.String())
+			}
+			log.Info().Msgf("To select one instance use the option --metrics")
+		}
+		return nil
+	}
+
+	if errors.Is(err, diagnostic.ErrLogConfigurationIsInvalid) {
+		log.Info().Msg("Couldn't extract logs from the instance. If the instance is running in a containerized environment use the option --diag-container-id or --diag-pod-id. If there is no logging configuration use --no-diag-logs.")
+	}
+
+	if err != nil {
+		log.Warn().Msg("Diagnostic completed with one or more errors")
+	} else {
+		log.Info().Msg("Diagnostic completed")
+	}
+
+	return nil
 }

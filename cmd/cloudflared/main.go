@@ -91,7 +91,7 @@ func main() {
 
 	tunnel.Init(bInfo, graceShutdownC) // we need this to support the tunnel sub command...
 	access.Init(graceShutdownC, Version)
-	updater.Init(Version)
+	updater.Init(bInfo)
 	tracing.Init(Version)
 	token.Init(Version)
 	tail.Init(bInfo)

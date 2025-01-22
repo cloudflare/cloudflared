@@ -3,7 +3,6 @@ package ingress
 import (
 	"context"
 	"fmt"
-	"net/netip"
 
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,29 +22,23 @@ type muxer interface {
 
 // PacketRouter routes packets between Upstream and ICMPRouter. Currently it rejects all other type of ICMP packets
 type PacketRouter struct {
-	globalConfig *GlobalRouterConfig
-	muxer        muxer
-	logger       *zerolog.Logger
-	icmpDecoder  *packet.ICMPDecoder
-	encoder      *packet.Encoder
-}
-
-// GlobalRouterConfig is the configuration shared by all instance of Router.
-type GlobalRouterConfig struct {
-	ICMPRouter *icmpRouter
-	IPv4Src    netip.Addr
-	IPv6Src    netip.Addr
-	Zone       string
+	icmpRouter ICMPRouter
+	muxer      muxer
+	connIndex  uint8
+	logger     *zerolog.Logger
+	encoder    *packet.Encoder
+	decoder    *packet.ICMPDecoder
 }
 
 // NewPacketRouter creates a PacketRouter that handles ICMP packets. Packets are read from muxer but dropped if globalConfig is nil.
-func NewPacketRouter(globalConfig *GlobalRouterConfig, muxer muxer, logger *zerolog.Logger) *PacketRouter {
+func NewPacketRouter(icmpRouter ICMPRouter, muxer muxer, connIndex uint8, logger *zerolog.Logger) *PacketRouter {
 	return &PacketRouter{
-		globalConfig: globalConfig,
-		muxer:        muxer,
-		logger:       logger,
-		icmpDecoder:  packet.NewICMPDecoder(),
-		encoder:      packet.NewEncoder(),
+		icmpRouter: icmpRouter,
+		muxer:      muxer,
+		connIndex:  connIndex,
+		logger:     logger,
+		encoder:    packet.NewEncoder(),
+		decoder:    packet.NewICMPDecoder(),
 	}
 }
 
@@ -59,14 +52,13 @@ func (r *PacketRouter) Serve(ctx context.Context) error {
 	}
 }
 
-func (r *PacketRouter) nextPacket(ctx context.Context) (packet.RawPacket, *packetResponder, error) {
+func (r *PacketRouter) nextPacket(ctx context.Context) (packet.RawPacket, ICMPResponder, error) {
 	pk, err := r.muxer.ReceivePacket(ctx)
 	if err != nil {
 		return packet.RawPacket{}, nil, err
 	}
-	responder := &packetResponder{
-		datagramMuxer: r.muxer,
-	}
+	responder := newPacketResponder(r.muxer, r.connIndex, packet.NewEncoder())
+
 	switch pk.Type() {
 	case quicpogs.DatagramTypeIP:
 		return packet.RawPacket{Data: pk.Payload()}, responder, nil
@@ -75,8 +67,8 @@ func (r *PacketRouter) nextPacket(ctx context.Context) (packet.RawPacket, *packe
 		if err := identity.UnmarshalBinary(pk.Metadata()); err != nil {
 			r.logger.Err(err).Bytes("tracingIdentity", pk.Metadata()).Msg("Failed to unmarshal tracing identity")
 		} else {
-			responder.tracedCtx = tracing.NewTracedContext(ctx, identity.String(), r.logger)
-			responder.serializedIdentity = pk.Metadata()
+			tracedCtx := tracing.NewTracedContext(ctx, identity.String(), r.logger)
+			responder.AddTraceContext(tracedCtx, pk.Metadata())
 		}
 		return packet.RawPacket{Data: pk.Payload()}, responder, nil
 	default:
@@ -84,27 +76,27 @@ func (r *PacketRouter) nextPacket(ctx context.Context) (packet.RawPacket, *packe
 	}
 }
 
-func (r *PacketRouter) handlePacket(ctx context.Context, rawPacket packet.RawPacket, responder *packetResponder) {
+func (r *PacketRouter) handlePacket(ctx context.Context, rawPacket packet.RawPacket, responder ICMPResponder) {
 	// ICMP Proxy feature is disabled, drop packets
-	if r.globalConfig == nil {
+	if r.icmpRouter == nil {
 		return
 	}
 
-	icmpPacket, err := r.icmpDecoder.Decode(rawPacket)
+	icmpPacket, err := r.decoder.Decode(rawPacket)
 	if err != nil {
 		r.logger.Err(err).Msg("Failed to decode ICMP packet from quic datagram")
 		return
 	}
 
 	if icmpPacket.TTL <= 1 {
-		if err := r.sendTTLExceedMsg(ctx, icmpPacket, rawPacket, r.encoder); err != nil {
+		if err := r.sendTTLExceedMsg(icmpPacket, rawPacket); err != nil {
 			r.logger.Err(err).Msg("Failed to return ICMP TTL exceed error")
 		}
 		return
 	}
 	icmpPacket.TTL--
 
-	if err := r.globalConfig.ICMPRouter.Request(ctx, icmpPacket, responder); err != nil {
+	if err := r.icmpRouter.Request(ctx, icmpPacket, responder); err != nil {
 		r.logger.Err(err).
 			Str("src", icmpPacket.Src.String()).
 			Str("dst", icmpPacket.Dst.String()).
@@ -113,16 +105,9 @@ func (r *PacketRouter) handlePacket(ctx context.Context, rawPacket packet.RawPac
 	}
 }
 
-func (r *PacketRouter) sendTTLExceedMsg(ctx context.Context, pk *packet.ICMP, rawPacket packet.RawPacket, encoder *packet.Encoder) error {
-	var srcIP netip.Addr
-	if pk.Dst.Is4() {
-		srcIP = r.globalConfig.IPv4Src
-	} else {
-		srcIP = r.globalConfig.IPv6Src
-	}
-	ttlExceedPacket := packet.NewICMPTTLExceedPacket(pk.IP, rawPacket, srcIP)
-
-	encodedTTLExceed, err := encoder.Encode(ttlExceedPacket)
+func (r *PacketRouter) sendTTLExceedMsg(pk *packet.ICMP, rawPacket packet.RawPacket) error {
+	icmpTTLPacket := r.icmpRouter.ConvertToTTLExceeded(pk, rawPacket)
+	encodedTTLExceed, err := r.encoder.Encode(icmpTTLPacket)
 	if err != nil {
 		return err
 	}
@@ -132,22 +117,45 @@ func (r *PacketRouter) sendTTLExceedMsg(ctx context.Context, pk *packet.ICMP, ra
 // packetResponder should not be used concurrently. This assumption is upheld because reply packets are ready one-by-one
 type packetResponder struct {
 	datagramMuxer      muxer
+	connIndex          uint8
+	encoder            *packet.Encoder
 	tracedCtx          *tracing.TracedContext
 	serializedIdentity []byte
 	// hadReply tracks if there has been any reply for this flow
 	hadReply bool
 }
 
+func newPacketResponder(datagramMuxer muxer, connIndex uint8, encoder *packet.Encoder) ICMPResponder {
+	return &packetResponder{
+		datagramMuxer: datagramMuxer,
+		connIndex:     connIndex,
+		encoder:       encoder,
+	}
+}
+
 func (pr *packetResponder) tracingEnabled() bool {
 	return pr.tracedCtx != nil
 }
 
-func (pr *packetResponder) returnPacket(rawPacket packet.RawPacket) error {
+func (pr *packetResponder) ConnectionIndex() uint8 {
+	return pr.connIndex
+}
+
+func (pr *packetResponder) ReturnPacket(pk *packet.ICMP) error {
+	rawPacket, err := pr.encoder.Encode(pk)
+	if err != nil {
+		return err
+	}
 	pr.hadReply = true
 	return pr.datagramMuxer.SendPacket(quicpogs.RawPacket(rawPacket))
 }
 
-func (pr *packetResponder) requestSpan(ctx context.Context, pk *packet.ICMP) (context.Context, trace.Span) {
+func (pr *packetResponder) AddTraceContext(tracedCtx *tracing.TracedContext, serializedIdentity []byte) {
+	pr.tracedCtx = tracedCtx
+	pr.serializedIdentity = serializedIdentity
+}
+
+func (pr *packetResponder) RequestSpan(ctx context.Context, pk *packet.ICMP) (context.Context, trace.Span) {
 	if !pr.tracingEnabled() {
 		return ctx, tracing.NewNoopSpan()
 	}
@@ -157,14 +165,14 @@ func (pr *packetResponder) requestSpan(ctx context.Context, pk *packet.ICMP) (co
 	))
 }
 
-func (pr *packetResponder) replySpan(ctx context.Context, logger *zerolog.Logger) (context.Context, trace.Span) {
+func (pr *packetResponder) ReplySpan(ctx context.Context, logger *zerolog.Logger) (context.Context, trace.Span) {
 	if !pr.tracingEnabled() || pr.hadReply {
 		return ctx, tracing.NewNoopSpan()
 	}
 	return pr.tracedCtx.Tracer().Start(pr.tracedCtx, "icmp-echo-reply")
 }
 
-func (pr *packetResponder) exportSpan() {
+func (pr *packetResponder) ExportSpan() {
 	if !pr.tracingEnabled() {
 		return
 	}

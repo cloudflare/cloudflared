@@ -1,3 +1,85 @@
+2024.12.1
+- 2024-12-10 TUN-8795: update createrepo to createrepo_c to fix the release_pkgs.py script
+
+2024.12.0
+- 2024-12-09 TUN-8640: Add ICMP support for datagram V3
+- 2024-12-09 TUN-8789: make python package installation consistent
+- 2024-12-06 TUN-8781: Add Trixie, drop Buster. Default to Bookworm
+- 2024-12-05 TUN-8775: Make sure the session Close can only be called once
+- 2024-12-04 TUN-8725: implement diagnostic procedure
+- 2024-12-04 TUN-8767: include raw output from network collector in diagnostic zipfile
+- 2024-12-04 TUN-8770: add cli configuration and tunnel configuration to diagnostic zipfile
+- 2024-12-04 TUN-8768: add job report to diagnostic zipfile
+- 2024-12-03 TUN-8726: implement compression routine to be used in diagnostic procedure
+- 2024-12-03 TUN-8732: implement port selection algorithm
+- 2024-12-03 TUN-8762: fix argument order when invoking tracert and modify network info output parsing.
+- 2024-12-03 TUN-8769: fix k8s log collector arguments
+- 2024-12-03 TUN-8727: extend client to include function to get cli configuration and tunnel configuration
+- 2024-11-29 TUN-8729: implement network collection for diagnostic procedure
+- 2024-11-29 TUN-8727: implement metrics, runtime, system, and tunnelstate in diagnostic http client
+- 2024-11-27 TUN-8733: add log collection for docker
+- 2024-11-27 TUN-8734: add log collection for kubernetes
+- 2024-11-27 TUN-8640: Refactor ICMPRouter to support new ICMPResponders
+- 2024-11-26 TUN-8735: add managed/local log collection
+- 2024-11-25 TUN-8728: implement diag/tunnel endpoint
+- 2024-11-25 TUN-8730: implement diag/configuration
+- 2024-11-22 TUN-8737: update metrics server port selection
+- 2024-11-22 TUN-8731: Implement diag/system endpoint
+- 2024-11-21 TUN-8748: Migrated datagram V3 flows to use migrated context
+
+2024.11.1
+- 2024-11-18 Add cloudflared tunnel ready command
+- 2024-11-14 Make metrics a requirement for tunnel ready command
+- 2024-11-12 TUN-8701:  Simplify flow registration logs for datagram v3
+- 2024-11-11 add: new go-fuzz targets
+- 2024-11-07 TUN-8701: Add metrics and adjust logs for datagram v3
+- 2024-11-06 TUN-8709: Add session migration for datagram v3
+- 2024-11-04 Fixed 404 in README.md to TryCloudflare
+- 2024-09-24 Update semgrep.yml
+
+2024.11.0
+- 2024-11-05 VULN-66059: remove ssh server tests
+- 2024-11-04 TUN-8700: Add datagram v3 muxer
+- 2024-11-04 TUN-8646: Allow experimental feature support for datagram v3
+- 2024-11-04 TUN-8641: Expose methods to simplify V3 Datagram parsing on the edge
+- 2024-10-31 TUN-8708: Bump python min version to 3.10
+- 2024-10-31 TUN-8667: Add datagram v3 session manager
+- 2024-10-25 TUN-8692: remove dashes from session id
+- 2024-10-24 TUN-8694: Rework release script
+- 2024-10-24 TUN-8661: Refactor connection methods to support future different datagram muxing methods
+- 2024-07-22 TUN-8553: Bump go to 1.22.5 and go-boring 1.22.5-1
+
+2024.10.1
+- 2024-10-23 TUN-8694: Fix github release script
+- 2024-10-21 Revert "TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport"
+- 2024-10-18 TUN-8688: Correct UDP bind for IPv6 edge connectivity on macOS
+- 2024-10-17 TUN-8685: Bump coredns dependency
+- 2024-10-16 TUN-8638: Add datagram v3 serializers and deserializers
+- 2024-10-15 chore: Remove h2mux code
+- 2024-10-11 TUN-8631: Abort release on version mismatch
+
+2024.10.0
+- 2024-10-01 TUN-8646: Add datagram v3 support feature flag
+- 2024-09-30 TUN-8621: Fix cloudflared version in change notes to account for release date
+- 2024-09-19 Adding semgrep yaml file
+- 2024-09-12 TUN-8632: Delay checking auto-update by the provided frequency
+- 2024-09-11 TUN-8630: Check checksum of downloaded binary to compare to current for auto-updating
+- 2024-09-09 TUN-8629: Cloudflared update on Windows requires running it twice to update
+- 2024-09-06 PPIP-2310: Update quick tunnel disclaimer
+- 2024-08-30 TUN-8621: Prevent QUIC connection from closing before grace period after unregistering
+- 2024-08-09 TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport
+- 2024-06-26 TUN-8484: Print response when QuickTunnel can't be unmarshalled
+
+2024.9.1
+- 2024-09-10 Revert Release 2024.9.0
+
+2024.9.0
+- 2024-09-10 TUN-8621: Fix cloudflared version in change notes.
+- 2024-09-06 PPIP-2310: Update quick tunnel disclaimer
+- 2024-08-30 TUN-8621: Prevent QUIC connection from closing before grace period after unregistering
+- 2024-08-09 TUN-8592: Use metadata from the edge to determine if request body is empty for QUIC transport
+- 2024-06-26 TUN-8484: Print response when QuickTunnel can't be unmarshalled
+
 2024.8.3
 - 2024-08-15 TUN-8591 login command without extra text
 - 2024-03-25 remove code that will not be executed

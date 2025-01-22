@@ -7,12 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
+	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelstate"
@@ -80,9 +83,14 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	edgeAddrHandler := NewIPAddrFallback(config.MaxEdgeAddrRetries)
 	edgeBindAddr := config.EdgeBindAddr
 
+	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
+	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort)
+
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
 		orchestrator:      orchestrator,
+		sessionManager:    sessionManager,
+		datagramMetrics:   datagramMetrics,
 		edgeAddrs:         edgeIPs,
 		edgeAddrHandler:   edgeAddrHandler,
 		edgeBindAddr:      edgeBindAddr,
@@ -111,9 +119,9 @@ func (s *Supervisor) Run(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) error {
-	if s.config.PacketConfig != nil {
+	if s.config.ICMPRouterServer != nil {
 		go func() {
-			if err := s.config.PacketConfig.ICMPRouter.Serve(ctx); err != nil {
+			if err := s.config.ICMPRouterServer.Serve(ctx); err != nil {
 				if errors.Is(err, net.ErrClosed) {
 					s.log.Logger().Info().Err(err).Msg("icmp router terminated")
 				} else {

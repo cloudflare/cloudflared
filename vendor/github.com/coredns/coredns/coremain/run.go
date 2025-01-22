@@ -28,6 +28,9 @@ func init() {
 	caddy.RegisterCaddyfileLoader("flag", caddy.LoaderFunc(confLoader))
 	caddy.SetDefaultCaddyfileLoader("default", caddy.LoaderFunc(defaultLoader))
 
+	flag.StringVar(&dnsserver.Port, serverType+".port", dnsserver.DefaultPort, "Default port")
+	flag.StringVar(&dnsserver.Port, "p", dnsserver.DefaultPort, "Default port")
+
 	caddy.AppName = coreName
 	caddy.AppVersion = CoreVersion
 }
@@ -42,7 +45,7 @@ func Run() {
 	}
 
 	log.SetOutput(os.Stdout)
-	log.SetFlags(0) // Set to 0 because we're doing our own time, with timezone
+	log.SetFlags(LogFlags)
 
 	if version {
 		showVersion()
@@ -166,10 +169,14 @@ var (
 	conf    string
 	version bool
 	plugins bool
+
+	// LogFlags are initially set to 0 for no extra output
+	LogFlags int
 )
 
 // Build information obtained with the help of -ldflags
 var (
+	// nolint
 	appVersion = "(untracked dev build)" // inferred at startup
 	devBuild   = true                    // inferred at startup
 

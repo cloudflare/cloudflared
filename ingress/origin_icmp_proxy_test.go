@@ -50,7 +50,7 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 		endSeq = 20
 	)
 
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -61,9 +61,7 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 	}()
 
 	muxer := newMockMuxer(1)
-	responder := packetResponder{
-		datagramMuxer: muxer,
-	}
+	responder := newPacketResponder(muxer, 0, packet.NewEncoder())
 
 	protocol := layers.IPProtocolICMPv6
 	if sendIPv4 {
@@ -98,7 +96,7 @@ func testICMPRouterEcho(t *testing.T, sendIPv4 bool) {
 					},
 				},
 			}
-			require.NoError(t, router.Request(ctx, &pk, &responder))
+			require.NoError(t, router.Request(ctx, &pk, responder))
 			validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
 		}
 	}
@@ -114,7 +112,7 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 
 	tracingCtx := "ec31ad8a01fde11fdcabe2efdce36873:52726f6cabc144f5:0:1"
 
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -131,11 +129,8 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 	serializedIdentity, err := tracingIdentity.MarshalBinary()
 	require.NoError(t, err)
 
-	responder := packetResponder{
-		datagramMuxer:      muxer,
-		tracedCtx:          tracing.NewTracedContext(ctx, tracingIdentity.String(), &noopLogger),
-		serializedIdentity: serializedIdentity,
-	}
+	responder := newPacketResponder(muxer, 0, packet.NewEncoder())
+	responder.AddTraceContext(tracing.NewTracedContext(ctx, tracingIdentity.String(), &noopLogger), serializedIdentity)
 
 	echo := &icmp.Echo{
 		ID:   12910,
@@ -156,7 +151,7 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, router.Request(ctx, &pk, &responder))
+	require.NoError(t, router.Request(ctx, &pk, responder))
 	firstPK := <-muxer.cfdToEdge
 	var requestSpan *quicpogs.TracingSpanPacket
 	// The order of receiving reply or request span is not deterministic
@@ -194,10 +189,8 @@ func TestTraceICMPRouterEcho(t *testing.T) {
 	echo.Seq++
 	pk.Body = echo
 	// Only first request for a flow is traced. The edge will not send tracing context for the second request
-	newResponder := packetResponder{
-		datagramMuxer: muxer,
-	}
-	require.NoError(t, router.Request(ctx, &pk, &newResponder))
+	newResponder := newPacketResponder(muxer, 0, packet.NewEncoder())
+	require.NoError(t, router.Request(ctx, &pk, newResponder))
 	validateEchoFlow(t, <-muxer.cfdToEdge, &pk)
 
 	select {
@@ -221,7 +214,7 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 		endSeq          = 5
 	)
 
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	proxyDone := make(chan struct{})
@@ -240,9 +233,7 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 			defer wg.Done()
 
 			muxer := newMockMuxer(1)
-			responder := packetResponder{
-				datagramMuxer: muxer,
-			}
+			responder := newPacketResponder(muxer, 0, packet.NewEncoder())
 			for seq := 0; seq < endSeq; seq++ {
 				pk := &packet.ICMP{
 					IP: &packet.IP{
@@ -261,16 +252,14 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 						},
 					},
 				}
-				require.NoError(t, router.Request(ctx, pk, &responder))
+				require.NoError(t, router.Request(ctx, pk, responder))
 				validateEchoFlow(t, <-muxer.cfdToEdge, pk)
 			}
 		}()
 		go func() {
 			defer wg.Done()
 			muxer := newMockMuxer(1)
-			responder := packetResponder{
-				datagramMuxer: muxer,
-			}
+			responder := newPacketResponder(muxer, 0, packet.NewEncoder())
 			for seq := 0; seq < endSeq; seq++ {
 				pk := &packet.ICMP{
 					IP: &packet.IP{
@@ -289,7 +278,7 @@ func TestConcurrentRequestsToSameDst(t *testing.T) {
 						},
 					},
 				}
-				require.NoError(t, router.Request(ctx, pk, &responder))
+				require.NoError(t, router.Request(ctx, pk, responder))
 				validateEchoFlow(t, <-muxer.cfdToEdge, pk)
 			}
 		}()
@@ -358,13 +347,11 @@ func TestICMPRouterRejectNotEcho(t *testing.T) {
 }
 
 func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.Message) {
-	router, err := NewICMPRouter(localhostIP, localhostIPv6, "", &noopLogger, testFunnelIdleTimeout)
+	router, err := NewICMPRouter(localhostIP, localhostIPv6, &noopLogger, testFunnelIdleTimeout)
 	require.NoError(t, err)
 
 	muxer := newMockMuxer(1)
-	responder := packetResponder{
-		datagramMuxer: muxer,
-	}
+	responder := newPacketResponder(muxer, 0, packet.NewEncoder())
 	protocol := layers.IPProtocolICMPv4
 	if srcDstIP.Is6() {
 		protocol = layers.IPProtocolICMPv6
@@ -379,7 +366,7 @@ func testICMPRouterRejectNotEcho(t *testing.T, srcDstIP netip.Addr, msgs []icmp.
 			},
 			Message: &m,
 		}
-		require.Error(t, router.Request(context.Background(), &pk, &responder))
+		require.Error(t, router.Request(context.Background(), &pk, responder))
 	}
 }
 

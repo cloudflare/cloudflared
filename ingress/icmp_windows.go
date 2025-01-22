@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/netip"
 	"runtime/debug"
-	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -222,11 +221,9 @@ type icmpProxy struct {
 	// This is a ICMPv6 if srcSocketAddr is not nil
 	srcSocketAddr *sockAddrIn6
 	logger        *zerolog.Logger
-	// A pool of reusable *packet.Encoder
-	encoderPool sync.Pool
 }
 
-func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
 	var (
 		srcSocketAddr *sockAddrIn6
 		handle        uintptr
@@ -250,11 +247,6 @@ func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idle
 		handle:        handle,
 		srcSocketAddr: srcSocketAddr,
 		logger:        logger,
-		encoderPool: sync.Pool{
-			New: func() any {
-				return packet.NewEncoder()
-			},
-		},
 	}, nil
 }
 
@@ -267,15 +259,15 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 // Request sends an ICMP echo request and wait for a reply or timeout.
 // The async version of Win32 APIs take a callback whose memory is not garbage collected, so we use the synchronous version.
 // It's possible that a slow request will block other requests, so we set the timeout to only 1s.
-func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
+func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder ICMPResponder) error {
 	defer func() {
 		if r := recover(); r != nil {
 			ip.logger.Error().Interface("error", r).Msgf("Recover panic from sending icmp request/response, error %s", debug.Stack())
 		}
 	}()
 
-	_, requestSpan := responder.requestSpan(ctx, pk)
-	defer responder.exportSpan()
+	_, requestSpan := responder.RequestSpan(ctx, pk)
+	defer responder.ExportSpan()
 
 	echo, err := getICMPEcho(pk.Message)
 	if err != nil {
@@ -290,9 +282,9 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		return err
 	}
 	tracing.End(requestSpan)
-	responder.exportSpan()
+	responder.ExportSpan()
 
-	_, replySpan := responder.replySpan(ctx, ip.logger)
+	_, replySpan := responder.ReplySpan(ctx, ip.logger)
 	err = ip.handleEchoReply(pk, echo, resp, responder)
 	if err != nil {
 		ip.logger.Err(err).Msg("Failed to send ICMP reply")
@@ -308,7 +300,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	return nil
 }
 
-func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, resp echoResp, responder *packetResponder) error {
+func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, resp echoResp, responder ICMPResponder) error {
 	var replyType icmp.Type
 	if request.Dst.Is4() {
 		replyType = ipv4.ICMPTypeEchoReply
@@ -333,21 +325,7 @@ func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, r
 			},
 		},
 	}
-
-	cachedEncoder := ip.encoderPool.Get()
-	// The encoded packet is a slice to of the encoder, so we shouldn't return the encoder back to the pool until
-	// the encoded packet is sent.
-	defer ip.encoderPool.Put(cachedEncoder)
-	encoder, ok := cachedEncoder.(*packet.Encoder)
-	if !ok {
-		return fmt.Errorf("encoderPool returned %T, expect *packet.Encoder", cachedEncoder)
-	}
-
-	serializedPacket, err := encoder.Encode(&pk)
-	if err != nil {
-		return err
-	}
-	return responder.returnPacket(serializedPacket)
+	return responder.ReturnPacket(&pk)
 }
 
 func (ip *icmpProxy) icmpEchoRoundtrip(dst netip.Addr, echo *icmp.Echo) (echoResp, error) {

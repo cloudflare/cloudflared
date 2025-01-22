@@ -37,25 +37,23 @@ var (
 type icmpProxy struct {
 	srcFunnelTracker *packet.FunnelTracker
 	listenIP         netip.Addr
-	ipv6Zone         string
 	logger           *zerolog.Logger
 	idleTimeout      time.Duration
 }
 
-func newICMPProxy(listenIP netip.Addr, zone string, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
-	if err := testPermission(listenIP, zone, logger); err != nil {
+func newICMPProxy(listenIP netip.Addr, logger *zerolog.Logger, idleTimeout time.Duration) (*icmpProxy, error) {
+	if err := testPermission(listenIP, logger); err != nil {
 		return nil, err
 	}
 	return &icmpProxy{
 		srcFunnelTracker: packet.NewFunnelTracker(),
 		listenIP:         listenIP,
-		ipv6Zone:         zone,
 		logger:           logger,
 		idleTimeout:      idleTimeout,
 	}, nil
 }
 
-func testPermission(listenIP netip.Addr, zone string, logger *zerolog.Logger) error {
+func testPermission(listenIP netip.Addr, logger *zerolog.Logger) error {
 	// Opens a non-privileged ICMP socket. On Linux the group ID of the process needs to be in ping_group_range
 	// Only check ping_group_range once for IPv4
 	if listenIP.Is4() {
@@ -64,7 +62,7 @@ func testPermission(listenIP netip.Addr, zone string, logger *zerolog.Logger) er
 			return err
 		}
 	}
-	conn, err := newICMPConn(listenIP, zone)
+	conn, err := newICMPConn(listenIP)
 	if err != nil {
 		return err
 	}
@@ -98,9 +96,9 @@ func checkInPingGroup() error {
 	return fmt.Errorf("did not find group range in %s", pingGroupPath)
 }
 
-func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *packetResponder) error {
-	ctx, span := responder.requestSpan(ctx, pk)
-	defer responder.exportSpan()
+func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder ICMPResponder) error {
+	ctx, span := responder.RequestSpan(ctx, pk)
+	defer responder.ExportSpan()
 
 	originalEcho, err := getICMPEcho(pk.Message)
 	if err != nil {
@@ -109,9 +107,9 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 	}
 	observeICMPRequest(ip.logger, span, pk.Src.String(), pk.Dst.String(), originalEcho.ID, originalEcho.Seq)
 
-	shouldReplaceFunnelFunc := createShouldReplaceFunnelFunc(ip.logger, responder.datagramMuxer, pk, originalEcho.ID)
+	shouldReplaceFunnelFunc := createShouldReplaceFunnelFunc(ip.logger, responder, pk, originalEcho.ID)
 	newFunnelFunc := func() (packet.Funnel, error) {
-		conn, err := newICMPConn(ip.listenIP, ip.ipv6Zone)
+		conn, err := newICMPConn(ip.listenIP)
 		if err != nil {
 			tracing.EndWithErrorStatus(span, err)
 			return nil, errors.Wrap(err, "failed to open ICMP socket")
@@ -127,7 +125,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder *pa
 		span.SetAttributes(attribute.Int("port", localUDPAddr.Port))
 
 		echoID := localUDPAddr.Port
-		icmpFlow := newICMPEchoFlow(pk.Src, closeCallback, conn, responder, echoID, originalEcho.ID, packet.NewEncoder())
+		icmpFlow := newICMPEchoFlow(pk.Src, closeCallback, conn, responder, echoID, originalEcho.ID)
 		return icmpFlow, nil
 	}
 	funnelID := flow3Tuple{
@@ -181,8 +179,8 @@ func (ip *icmpProxy) listenResponse(ctx context.Context, flow *icmpEchoFlow) {
 
 // Listens for ICMP response and handles error logging
 func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf []byte) (done bool) {
-	_, span := flow.responder.replySpan(ctx, ip.logger)
-	defer flow.responder.exportSpan()
+	_, span := flow.responder.ReplySpan(ctx, ip.logger)
+	defer flow.responder.ExportSpan()
 
 	span.SetAttributes(
 		attribute.Int("originalEchoID", flow.originalEchoID),
