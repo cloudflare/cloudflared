@@ -55,10 +55,8 @@ func TestShouldRunQuickTunnel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Mock RunQuickTunnel Function
-			originalRunQuickTunnel := runQuickTunnel
-			defer func() { runQuickTunnel = originalRunQuickTunnel }()
 			mockCalled := false
-			runQuickTunnel = func(sc *subcommandContext) error {
+			mockQuickTunnelRunner := func(sc *subcommandContext) error {
 				mockCalled = true
 				return nil
 			}
@@ -69,7 +67,7 @@ func TestShouldRunQuickTunnel(t *testing.T) {
 			context := cli.NewContext(app, set, nil)
 
 			// Call TunnelCommand
-			err := TunnelCommand(context)
+			err := tunnelCommandImpl(context, mockQuickTunnelRunner)
 
 			// Validate
 			if tt.expectError {

@@ -215,7 +215,6 @@ var (
 		"overwrite-dns",
 		"help",
 	}
-	runQuickTunnel = RunQuickTunnel
 )
 
 func Flags() []cli.Flag {
@@ -287,7 +286,14 @@ See https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/in
 	}
 }
 
+// This is so that we can mock QuickTunnelRunner for TunnelCommand test cases
+type QuickTunnelRunner func(*subcommandContext) error
+
 func TunnelCommand(c *cli.Context) error {
+	return tunnelCommandImpl(c, RunQuickTunnel)
+}
+
+func tunnelCommandImpl(c *cli.Context, quickTunnelRunner QuickTunnelRunner) error {
 	sc, err := newSubcommandContext(c)
 	if err != nil {
 		return err
@@ -316,7 +322,7 @@ func TunnelCommand(c *cli.Context) error {
 	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
 	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("unix-socket") || c.IsSet(ingress.HelloWorldFlag)
 	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
-		return runQuickTunnel(sc)
+		return quickTunnelRunner(sc)
 	}
 
 	// If user provides a config, check to see if they meant to use `tunnel run` instead
