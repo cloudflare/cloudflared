@@ -1,3 +1,7 @@
+## 2025.1.1
+### New Features
+- This release introduces the use of new Post Quantum curves and the ability to use Post Quantum curves when running tunnels with the QUIC protocol this applies to non-FIPS and FIPS builds.
+
 ## 2024.12.2
 ### New Features
 - This release introduces the ability to collect troubleshooting information from one instance of cloudflared running on the local machine. The command can be executed as `cloudflared tunnel diag`.
