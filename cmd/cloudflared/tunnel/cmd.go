@@ -31,7 +31,6 @@ import (
 	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/diagnostic"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
@@ -926,7 +925,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:   "When given creates an experimental post-quantum secure tunnel",
 			Aliases: []string{"pq"},
 			EnvVars: []string{"TUNNEL_POST_QUANTUM"},
-			Hidden:  fips.IsFipsEnabled(),
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "management-diagnostics",

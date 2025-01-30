@@ -23,7 +23,6 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
-	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
@@ -124,10 +123,6 @@ func prepareTunnelConfig(
 	tags = append(tags, pogs.Tag{Name: "ID", Value: clientID.String()})
 
 	transportProtocol := c.String("protocol")
-
-	if c.Bool("post-quantum") && fips.IsFipsEnabled() {
-		return nil, nil, fmt.Errorf("post-quantum not supported in FIPS mode")
-	}
 
 	featureSelector, err := features.NewFeatureSelector(ctx, namedTunnel.Credentials.AccountTag, c.StringSlice("features"), c.Bool("post-quantum"), log)
 	if err != nil {
