@@ -3,6 +3,6 @@
 cd /tmp
 git clone -q https://github.com/cloudflare/go
 cd go/src
-# https://github.com/cloudflare/go/tree/f4334cdc0c3f22a3bfdd7e66f387e3ffc65a5c38 is version go1.22.5-devel-cf
-git checkout -q f4334cdc0c3f22a3bfdd7e66f387e3ffc65a5c38
+# https://github.com/cloudflare/go/tree/af19da5605ca11f85776ef7af3384a02a315a52b is version go1.22.5-devel-cf
+git checkout -q af19da5605ca11f85776ef7af3384a02a315a52b
 ./make.bash

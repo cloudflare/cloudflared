@@ -221,7 +221,7 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/quic-go/quic-go v0.45.0
+# github.com/quic-go/quic-go v0.45.0 => github.com/chungthuang/quic-go v0.45.1-0.20250128102735-2687bd175910
 ## explicit; go 1.21
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/internal/ackhandler
@@ -557,3 +557,4 @@ zombiezen.com/go/capnproto2/std/capnp/rpc
 # github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.20210324024421-b6ea8234fe3d
 # github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
 # gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
+# github.com/quic-go/quic-go => github.com/chungthuang/quic-go v0.45.1-0.20250128102735-2687bd175910

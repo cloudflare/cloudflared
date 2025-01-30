@@ -1,6 +1,6 @@
-FROM golang:1.22.5 as builder
+FROM golang:1.22.10 as builder
 ENV GO111MODULE=on \
-    CGO_ENABLED=0
+  CGO_ENABLED=0
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 RUN apt-get update
 COPY . .

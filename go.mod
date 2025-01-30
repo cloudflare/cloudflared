@@ -102,3 +102,6 @@ replace github.com/urfave/cli/v2 => github.com/ipostelnik/cli/v2 v2.3.1-0.202103
 replace github.com/prometheus/golang_client => github.com/prometheus/golang_client v1.12.1
 
 replace gopkg.in/yaml.v3 => gopkg.in/yaml.v3 v3.0.1
+
+// This fork is based on quic-go v0.45
+replace github.com/quic-go/quic-go => github.com/chungthuang/quic-go v0.45.1-0.20250128102735-2687bd175910
