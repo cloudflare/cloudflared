@@ -23,6 +23,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
+	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
@@ -124,7 +125,7 @@ func prepareTunnelConfig(
 
 	transportProtocol := c.String("protocol")
 
-	if c.Bool("post-quantum") && FipsEnabled {
+	if c.Bool("post-quantum") && fips.IsFipsEnabled() {
 		return nil, nil, fmt.Errorf("post-quantum not supported in FIPS mode")
 	}
 
@@ -140,11 +141,6 @@ func prepareTunnelConfig(
 			return nil, nil, fmt.Errorf("post-quantum is only supported with the quic transport")
 		}
 		transportProtocol = connection.QUIC.String()
-
-		log.Info().Msgf(
-			"Using hybrid post-quantum key agreement %s",
-			supervisor.PQKexName,
-		)
 	}
 
 	namedTunnel.Client = pogs.ClientInfo{

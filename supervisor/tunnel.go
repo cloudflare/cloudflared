@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
+	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -555,10 +556,12 @@ func (e *EdgeTunnelServer) serveQUIC(
 	tlsConfig := e.config.EdgeTLSConfigs[connection.QUIC]
 
 	pqMode := e.config.FeatureSelector.PostQuantumMode()
-	curvePref, err := curvePreference(pqMode, tlsConfig.CurvePreferences)
+	curvePref, err := curvePreference(pqMode, fips.IsFipsEnabled(), tlsConfig.CurvePreferences)
 	if err != nil {
 		return err, true
 	}
+
+	connLogger.Logger().Info().Msgf("Using %v as curve preferences", curvePref)
 
 	tlsConfig.CurvePreferences = curvePref
 
