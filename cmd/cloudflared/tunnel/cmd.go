@@ -126,7 +126,7 @@ var (
 	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
 		"any existing DNS records for this hostname.", overwriteDNSFlag)
-	deprecatedClassicTunnelErr = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
+	errDeprecatedClassicTunnel = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
 	// TODO: TUN-8756 the list below denotes the flags that do not possess any kind of sensitive information
 	// however this approach is not maintainble in the long-term.
 	nonSecretFlagsList = []string{
@@ -326,7 +326,7 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Classic tunnel usage is no longer supported
 	if c.String("hostname") != "" {
-		return deprecatedClassicTunnelErr
+		return errDeprecatedClassicTunnel
 	}
 
 	if c.IsSet("proxy-dns") {
@@ -615,8 +615,10 @@ func waitToShutdown(wg *sync.WaitGroup,
 		log.Debug().Msg("Graceful shutdown signalled")
 		if gracePeriod > 0 {
 			// wait for either grace period or service termination
+			ticker := time.NewTicker(gracePeriod)
+			defer ticker.Stop()
 			select {
-			case <-time.Tick(gracePeriod):
+			case <-ticker.C:
 			case <-errC:
 			}
 		}
@@ -644,7 +646,7 @@ func waitToShutdown(wg *sync.WaitGroup,
 
 func notifySystemd(waitForSignal *signal.Signal) {
 	<-waitForSignal.Wait()
-	daemon.SdNotify(false, "READY=1")
+	_, _ = daemon.SdNotify(false, "READY=1")
 }
 
 func writePidFile(waitForSignal *signal.Signal, pidPathname string, log *zerolog.Logger) {

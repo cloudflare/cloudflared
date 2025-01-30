@@ -441,7 +441,7 @@ func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected boo
 	sort.Strings(sortedColos)
 
 	// Map each colo to its frequency, combine into output string.
-	var output []string
+	output := make([]string, 0, len(sortedColos))
 	for _, coloName := range sortedColos {
 		output = append(output, fmt.Sprintf("%dx%s", numConnsPerColo[coloName], coloName))
 	}
@@ -467,10 +467,15 @@ func readyCommand(c *cli.Context) error {
 	}
 
 	requestURL := fmt.Sprintf("http://%s/ready", metricsOpts)
-	res, err := http.Get(requestURL)
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 	if err != nil {
 		return err
 	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {

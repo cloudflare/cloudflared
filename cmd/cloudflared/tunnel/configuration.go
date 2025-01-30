@@ -36,23 +36,10 @@ const (
 )
 
 var (
-	developerPortal = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup"
-	serviceUrl      = developerPortal + "/tunnel-guide/local/as-a-service/"
-	argumentsUrl    = developerPortal + "/tunnel-guide/local/local-management/arguments/"
-
 	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 
 	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address"}
 )
-
-func generateRandomClientID(log *zerolog.Logger) (string, error) {
-	u, err := uuid.NewRandom()
-	if err != nil {
-		log.Error().Msgf("couldn't create UUID for client ID %s", err)
-		return "", err
-	}
-	return u.String(), nil
-}
 
 func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 	flags := make(map[string]interface{})
@@ -233,13 +220,13 @@ func prepareTunnelConfig(
 		Observer:        observer,
 		ReportedVersion: info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
-		Retries:                             uint(c.Int("retries")),
+		Retries:                             uint(c.Int("retries")), // nolint: gosec
 		RunFromTerminal:                     isRunningFromTerminal(),
 		NamedTunnel:                         namedTunnel,
 		ProtocolSelector:                    protocolSelector,
 		EdgeTLSConfigs:                      edgeTLSConfigs,
 		FeatureSelector:                     featureSelector,
-		MaxEdgeAddrRetries:                  uint8(c.Int("max-edge-addr-retries")),
+		MaxEdgeAddrRetries:                  uint8(c.Int("max-edge-addr-retries")), // nolint: gosec
 		RPCTimeout:                          c.Duration(rpcTimeout),
 		WriteStreamTimeout:                  c.Duration(writeStreamTimeout),
 		DisableQUICPathMTUDiscovery:         c.Bool(quicDisablePathMTUDiscovery),

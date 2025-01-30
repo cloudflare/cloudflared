@@ -103,9 +103,15 @@ func (q *quicConnection) Serve(ctx context.Context) error {
 		// amount of the grace period, allowing requests to finish before we cancel the context, which will
 		// make cloudflared exit.
 		if err := q.serveControlStream(ctx, controlStream); err == nil {
-			select {
-			case <-ctx.Done():
-			case <-time.Tick(q.gracePeriod):
+			if q.gracePeriod > 0 {
+				// In Go1.23 this can be removed and replaced with time.Ticker
+				// see https://pkg.go.dev/time#Tick
+				ticker := time.NewTicker(q.gracePeriod)
+				defer ticker.Stop()
+				select {
+				case <-ctx.Done():
+				case <-ticker.C:
+				}
 			}
 		}
 		cancel()

@@ -11,15 +11,13 @@ const (
 	FeatureDatagramV3        = "support_datagram_v3"
 )
 
-var (
-	defaultFeatures = []string{
-		FeatureAllowRemoteConfig,
-		FeatureSerializedHeaders,
-		FeatureDatagramV2,
-		FeatureQUICSupportEOF,
-		FeatureManagementLogs,
-	}
-)
+var defaultFeatures = []string{
+	FeatureAllowRemoteConfig,
+	FeatureSerializedHeaders,
+	FeatureDatagramV2,
+	FeatureQUICSupportEOF,
+	FeatureManagementLogs,
+}
 
 // Features set by user provided flags
 type staticFeatures struct {
@@ -47,7 +45,6 @@ const (
 
 // Remove any duplicates from the slice
 func Dedup(slice []string) []string {
-
 	// Convert the slice into a set
 	set := make(map[string]bool, 0)
 	for _, str := range slice {
