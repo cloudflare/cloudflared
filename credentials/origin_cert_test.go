@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -95,7 +95,7 @@ func TestFindOriginCert_Valid(t *testing.T) {
 	file, err := os.ReadFile("test-cloudflare-tunnel-cert-json.pem")
 	require.NoError(t, err)
 	dir := t.TempDir()
-	certPath := path.Join(dir, originCertFile)
+	certPath := filepath.Join(dir, originCertFile)
 	os.WriteFile(certPath, file, fs.ModePerm)
 	path, err := FindOriginCert(certPath, &nopLog)
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestFindOriginCert_Valid(t *testing.T) {
 
 func TestFindOriginCert_Missing(t *testing.T) {
 	dir := t.TempDir()
-	certPath := path.Join(dir, originCertFile)
+	certPath := filepath.Join(dir, originCertFile)
 	_, err := FindOriginCert(certPath, &nopLog)
 	require.Error(t, err)
 }
