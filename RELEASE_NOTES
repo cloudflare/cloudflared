@@ -1,3 +1,7 @@
+2025.2.0
+- 2025-02-03 TUN-8914: Add a new configuration to locally override the max-active-flows
+- 2025-02-03 Bump x/crypto to 0.31.0
+
 2025.1.1
 - 2025-01-30 TUN-8858: update go to 1.22.10 and include quic-go FIPS changes
 - 2025-01-30 TUN-8855: fix lint issues
