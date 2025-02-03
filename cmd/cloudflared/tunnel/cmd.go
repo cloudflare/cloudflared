@@ -110,8 +110,8 @@ const (
 
 	tunnelCmdErrorMessage = `You did not specify any valid additional argument to the cloudflared tunnel command.
 
-If you are trying to run a Quick Tunnel then you need to explicitly pass the --url flag.
-Eg. cloudflared tunnel --url localhost:8080/.
+If you are trying to run a Quick Tunnel then you need to explicitly pass a --url or --unix-socket flag.
+Eg. 'cloudflared tunnel --url localhost:8080/' or 'cloudflared tunnel --unix-socket /tmp/socket'.
 
 Please note that Quick Tunnels are meant to be ephemeral and should only be used for testing purposes.
 For production usage, we recommend creating Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)
@@ -288,7 +288,14 @@ See https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/in
 	}
 }
 
+// This is so that we can mock QuickTunnelRunner for TunnelCommand test cases
+type QuickTunnelRunner func(*subcommandContext) error
+
 func TunnelCommand(c *cli.Context) error {
+	return tunnelCommandImpl(c, RunQuickTunnel)
+}
+
+func tunnelCommandImpl(c *cli.Context, quickTunnelRunner QuickTunnelRunner) error {
 	sc, err := newSubcommandContext(c)
 	if err != nil {
 		return err
@@ -315,9 +322,9 @@ func TunnelCommand(c *cli.Context) error {
 	// Run a quick tunnel
 	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
 	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
-	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
+	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet("unix-socket") || c.IsSet(ingress.HelloWorldFlag)
 	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
-		return RunQuickTunnel(sc)
+		return quickTunnelRunner(sc)
 	}
 
 	// If user provides a config, check to see if they meant to use `tunnel run` instead
