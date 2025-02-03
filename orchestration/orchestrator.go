@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
-
-	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/proxy"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -117,12 +117,41 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 	}
 }
 
+// overrideRemoteWarpRoutingWithLocalValues overrides the ingress.WarpRoutingConfig that comes from the remote with
+// the local values if there is any.
+func (o *Orchestrator) overrideRemoteWarpRoutingWithLocalValues(remoteWarpRouting *ingress.WarpRoutingConfig) error {
+	return o.overrideMaxActiveFlows(o.config.ConfigurationFlags["max-active-flows"], remoteWarpRouting)
+}
+
+// overrideMaxActiveFlows checks the local configuration flags, and if a value is found for the flags.MaxActiveFlows
+// overrides the value that comes on the remote ingress.WarpRoutingConfig with the local value.
+func (o *Orchestrator) overrideMaxActiveFlows(maxActiveFlowsLocalConfig string, remoteWarpRouting *ingress.WarpRoutingConfig) error {
+	// If max active flows isn't defined locally just use the remote value
+	if maxActiveFlowsLocalConfig == "" {
+		return nil
+	}
+
+	maxActiveFlowsLocalOverride, err := strconv.ParseUint(maxActiveFlowsLocalConfig, 10, 64)
+	if err != nil {
+		return pkgerrors.Wrapf(err, "failed to parse %s", "max-active-flows")
+	}
+
+	// Override the value that comes from the remote with the local value
+	remoteWarpRouting.MaxActiveFlows = maxActiveFlowsLocalOverride
+	return nil
+}
+
 // The caller is responsible to make sure there is no concurrent access
 func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting ingress.WarpRoutingConfig) error {
 	select {
 	case <-o.shutdownC:
 		return fmt.Errorf("cloudflared already shutdown")
 	default:
+	}
+
+	// Overrides the local values, onto the remote values of the warp routing configuration
+	if err := o.overrideRemoteWarpRoutingWithLocalValues(&warpRouting); err != nil {
+		return pkgerrors.Wrap(err, "failed to merge local overrides into warp routing configuration")
 	}
 
 	// Assign the internal ingress rules to the parsed ingress
@@ -139,7 +168,7 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	// The downside is minimized because none of the ingress.OriginService implementation have that requirement
 	proxyShutdownC := make(chan struct{})
 	if err := ingressRules.StartOrigins(o.log, proxyShutdownC); err != nil {
-		return errors.Wrap(err, "failed to start origin")
+		return pkgerrors.Wrap(err, "failed to start origin")
 	}
 
 	// Update the flow limit since the configuration might have changed

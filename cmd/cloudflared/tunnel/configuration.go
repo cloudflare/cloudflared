@@ -38,7 +38,7 @@ const (
 var (
 	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
 
-	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address"}
+	configFlags = []string{"autoupdate-freq", "no-autoupdate", "retries", "protocol", "loglevel", "transport-loglevel", "origincert", "metrics", "metrics-update-freq", "edge-ip-version", "edge-bind-address", "max-active-flows"}
 )
 
 func logClientOptions(c *cli.Context, log *zerolog.Logger) {

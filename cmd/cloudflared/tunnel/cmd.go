@@ -126,7 +126,7 @@ var (
 	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
 		"any existing DNS records for this hostname.", overwriteDNSFlag)
-	errDeprecatedClassicTunnel = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
+	errDeprecatedClassicTunnel = errors.New("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
 	// TODO: TUN-8756 the list below denotes the flags that do not possess any kind of sensitive information
 	// however this approach is not maintainble in the long-term.
 	nonSecretFlagsList = []string{
@@ -214,6 +214,7 @@ var (
 		"protocol",
 		"overwrite-dns",
 		"help",
+		"max-active-flows",
 	}
 )
 

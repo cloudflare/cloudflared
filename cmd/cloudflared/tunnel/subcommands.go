@@ -230,6 +230,11 @@ var (
 		Usage: "Network diagnostics won't be performed",
 		Value: false,
 	}
+	maxActiveFlowsFlag = &cli.Uint64Flag{
+		Name:    "max-active-flows",
+		Usage:   "Overrides the remote configuration for max active private network flows (TCP/UDP) that this cloudflared instance supports",
+		EnvVars: []string{"TUNNEL_MAX_ACTIVE_FLOWS"},
+	}
 )
 
 func buildCreateCommand() *cli.Command {
@@ -705,6 +710,7 @@ func buildRunCommand() *cli.Command {
 		tunnelTokenFlag,
 		icmpv4SrcFlag,
 		icmpv6SrcFlag,
+		maxActiveFlowsFlag,
 	}
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{
