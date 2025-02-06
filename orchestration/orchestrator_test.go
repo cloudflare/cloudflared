@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
+
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -421,7 +423,7 @@ func TestOverrideWarpRoutingConfigWithLocalValues(t *testing.T) {
 
 	// Add a local override for the maxActiveFlows
 	localValue := uint64(500)
-	remoteConfig.ConfigurationFlags["max-active-flows"] = fmt.Sprintf("%d", localValue)
+	remoteConfig.ConfigurationFlags[flags.MaxActiveFlows] = fmt.Sprintf("%d", localValue)
 	// Force a configuration refresh
 	err = orchestrator.updateIngress(remoteIngress, remoteWarpConfig)
 	require.NoError(t, err)
@@ -430,7 +432,7 @@ func TestOverrideWarpRoutingConfigWithLocalValues(t *testing.T) {
 	assertMaxActiveFlows(orchestrator, localValue)
 
 	// Remove local override for the maxActiveFlows
-	delete(remoteConfig.ConfigurationFlags, "max-active-flows")
+	delete(remoteConfig.ConfigurationFlags, flags.MaxActiveFlows)
 	// Force a configuration refresh
 	err = orchestrator.updateIngress(remoteIngress, remoteWarpConfig)
 	require.NoError(t, err)

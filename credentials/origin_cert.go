@@ -15,7 +15,6 @@ import (
 
 const (
 	DefaultCredentialFile = "cert.pem"
-	OriginCertFlag        = "origincert"
 )
 
 type namedTunnelToken struct {

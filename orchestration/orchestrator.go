@@ -11,6 +11,7 @@ import (
 	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	cfdflow "github.com/cloudflare/cloudflared/flow"
@@ -120,7 +121,7 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 // overrideRemoteWarpRoutingWithLocalValues overrides the ingress.WarpRoutingConfig that comes from the remote with
 // the local values if there is any.
 func (o *Orchestrator) overrideRemoteWarpRoutingWithLocalValues(remoteWarpRouting *ingress.WarpRoutingConfig) error {
-	return o.overrideMaxActiveFlows(o.config.ConfigurationFlags["max-active-flows"], remoteWarpRouting)
+	return o.overrideMaxActiveFlows(o.config.ConfigurationFlags[flags.MaxActiveFlows], remoteWarpRouting)
 }
 
 // overrideMaxActiveFlows checks the local configuration flags, and if a value is found for the flags.MaxActiveFlows
@@ -133,7 +134,7 @@ func (o *Orchestrator) overrideMaxActiveFlows(maxActiveFlowsLocalConfig string, 
 
 	maxActiveFlowsLocalOverride, err := strconv.ParseUint(maxActiveFlowsLocalConfig, 10, 64)
 	if err != nil {
-		return pkgerrors.Wrapf(err, "failed to parse %s", "max-active-flows")
+		return pkgerrors.Wrapf(err, "failed to parse %s", flags.MaxActiveFlows)
 	}
 
 	// Override the value that comes from the remote with the local value

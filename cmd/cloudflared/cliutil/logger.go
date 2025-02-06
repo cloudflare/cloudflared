@@ -4,7 +4,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 
-	"github.com/cloudflare/cloudflared/logger"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 )
 
 var (
@@ -15,14 +15,14 @@ var (
 func ConfigureLoggingFlags(shouldHide bool) []cli.Flag {
 	return []cli.Flag{
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogLevelFlag,
+			Name:    cfdflags.LogLevel,
 			Value:   "info",
 			Usage:   "Application logging level {debug, info, warn, error, fatal}. " + debugLevelWarning,
 			EnvVars: []string{"TUNNEL_LOGLEVEL"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogTransportLevelFlag,
+			Name:    cfdflags.TransportLogLevel,
 			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
 			Value:   "info",
 			Usage:   "Transport logging level(previously called protocol logging level) {debug, info, warn, error, fatal}",
@@ -30,19 +30,19 @@ func ConfigureLoggingFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogFileFlag,
+			Name:    cfdflags.LogFile,
 			Usage:   "Save application log to this file for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGFILE"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    logger.LogDirectoryFlag,
+			Name:    cfdflags.LogDirectory,
 			Usage:   "Save application log to this directory for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGDIRECTORY"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "trace-output",
+			Name:    cfdflags.TraceOutput,
 			Usage:   "Name of trace output file, generated when cloudflared stops.",
 			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
 			Hidden:  shouldHide,

@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/cloudflare/cloudflared/logger"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 )
 
 type httpClient struct {
@@ -86,12 +86,12 @@ func (client *httpClient) GetLogConfiguration(ctx context.Context) (*LogConfigur
 		return nil, fmt.Errorf("error convertin pid to int: %w", err)
 	}
 
-	logFile, exists := data[logger.LogFileFlag]
+	logFile, exists := data[cfdflags.LogFile]
 	if exists {
 		return &LogConfiguration{logFile, "", uid}, nil
 	}
 
-	logDirectory, exists := data[logger.LogDirectoryFlag]
+	logDirectory, exists := data[cfdflags.LogDirectory]
 	if exists {
 		return &LogConfiguration{"", logDirectory, uid}, nil
 	}

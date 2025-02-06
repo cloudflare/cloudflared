@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tail"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
@@ -105,7 +106,7 @@ func commands(version func(c *cli.Context)) []*cli.Command {
 					Usage: "specify if you wish to update to the latest beta version",
 				},
 				&cli.BoolFlag{
-					Name:   "force",
+					Name:   cfdflags.Force,
 					Usage:  "specify if you wish to force an upgrade to the latest version regardless of the current version",
 					Hidden: true,
 				},

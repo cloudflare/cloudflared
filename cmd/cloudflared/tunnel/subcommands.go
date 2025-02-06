@@ -16,15 +16,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/net/idna"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -48,7 +49,6 @@ const (
 	noDiagNetworkFlagName   = "no-diag-network"
 	diagContainerIDFlagName = "diag-container-id"
 	diagPodFlagName         = "diag-pod-id"
-	metricsFlagName         = "metrics"
 
 	LogFieldTunnelID = "tunnelID"
 )
@@ -60,7 +60,7 @@ var (
 		Usage:   "Include deleted tunnels in the list",
 	}
 	listNameFlag = &cli.StringFlag{
-		Name:    "name",
+		Name:    flags.Name,
 		Aliases: []string{"n"},
 		Usage:   "List tunnels with the given `NAME`",
 	}
@@ -108,7 +108,7 @@ var (
 		EnvVars: []string{"TUNNEL_LIST_INVERT_SORT"},
 	}
 	featuresFlag = altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-		Name:    "features",
+		Name:    flags.Features,
 		Aliases: []string{"F"},
 		Usage:   "Opt into various features that are still being developed or tested.",
 	})
@@ -130,14 +130,14 @@ var (
 		EnvVars: []string{"TUNNEL_TOKEN"},
 	})
 	forceDeleteFlag = &cli.BoolFlag{
-		Name:    "force",
+		Name:    flags.Force,
 		Aliases: []string{"f"},
 		Usage: "Deletes a tunnel even if tunnel is connected and it has dependencies associated to it. (eg. IP routes)." +
 			" It is not possible to delete tunnels that have connections or non-deleted dependencies, without this flag.",
 		EnvVars: []string{"TUNNEL_RUN_FORCE_OVERWRITE"},
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
-		Name:    "protocol",
+		Name:    flags.Protocol,
 		Value:   connection.AutoSelectFlag,
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", connection.AvailableProtocolFlagMessage),
@@ -145,7 +145,7 @@ var (
 		Hidden:  true,
 	})
 	postQuantumFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
-		Name:    "post-quantum",
+		Name:    flags.PostQuantum,
 		Usage:   "When given creates an experimental post-quantum secure tunnel",
 		Aliases: []string{"pq"},
 		EnvVars: []string{"TUNNEL_POST_QUANTUM"},
@@ -181,17 +181,17 @@ var (
 		EnvVars: []string{"TUNNEL_CREATE_SECRET"},
 	}
 	icmpv4SrcFlag = &cli.StringFlag{
-		Name:    "icmpv4-src",
+		Name:    flags.ICMPV4Src,
 		Usage:   "Source address to send/receive ICMPv4 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to 0.0.0.0.",
 		EnvVars: []string{"TUNNEL_ICMPV4_SRC"},
 	}
 	icmpv6SrcFlag = &cli.StringFlag{
-		Name:    "icmpv6-src",
+		Name:    flags.ICMPV6Src,
 		Usage:   "Source address and the interface name to send/receive ICMPv6 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to ::.",
 		EnvVars: []string{"TUNNEL_ICMPV6_SRC"},
 	}
 	metricsFlag = &cli.StringFlag{
-		Name:  metricsFlagName,
+		Name:  flags.Metrics,
 		Usage: "The metrics server address i.e.: 127.0.0.1:12345. If your instance is running in a Docker/Kubernetes environment you need to setup port forwarding for your application.",
 		Value: "",
 	}
@@ -231,7 +231,7 @@ var (
 		Value: false,
 	}
 	maxActiveFlowsFlag = &cli.Uint64Flag{
-		Name:    "max-active-flows",
+		Name:    flags.MaxActiveFlows,
 		Usage:   "Overrides the remote configuration for max active private network flows (TCP/UDP) that this cloudflared instance supports",
 		EnvVars: []string{"TUNNEL_MAX_ACTIVE_FLOWS"},
 	}
@@ -337,7 +337,7 @@ func listCommand(c *cli.Context) error {
 	if !c.Bool("show-deleted") {
 		filter.NoDeleted()
 	}
-	if name := c.String("name"); name != "" {
+	if name := c.String(flags.Name); name != "" {
 		filter.ByName(name)
 	}
 	if namePrefix := c.String("name-prefix"); namePrefix != "" {
@@ -467,9 +467,9 @@ func buildReadyCommand() *cli.Command {
 }
 
 func readyCommand(c *cli.Context) error {
-	metricsOpts := c.String("metrics")
-	if !c.IsSet("metrics") {
-		return fmt.Errorf("--metrics has to be provided")
+	metricsOpts := c.String(flags.Metrics)
+	if !c.IsSet(flags.Metrics) {
+		return errors.New("--metrics has to be provided")
 	}
 
 	requestURL := fmt.Sprintf("http://%s/ready", metricsOpts)
@@ -1079,7 +1079,7 @@ func diagCommand(ctx *cli.Context) error {
 	log := sctx.log
 	options := diagnostic.Options{
 		KnownAddresses: metrics.GetMetricsKnownAddresses(metrics.Runtime),
-		Address:        sctx.c.String(metricsFlagName),
+		Address:        sctx.c.String(flags.Metrics),
 		ContainerID:    sctx.c.String(diagContainerIDFlagName),
 		PodID:          sctx.c.String(diagPodFlagName),
 		Toggles: diagnostic.Toggles{

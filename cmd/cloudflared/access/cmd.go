@@ -19,6 +19,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/sshgen"
 	"github.com/cloudflare/cloudflared/token"
@@ -172,15 +173,15 @@ func Commands() []*cli.Command {
 							EnvVars: []string{"TUNNEL_SERVICE_TOKEN_SECRET"},
 						},
 						&cli.StringFlag{
-							Name:  logger.LogFileFlag,
+							Name:  cfdflags.LogFile,
 							Usage: "Save application log to this file for reporting issues.",
 						},
 						&cli.StringFlag{
-							Name:  logger.LogSSHDirectoryFlag,
+							Name:  cfdflags.LogDirectory,
 							Usage: "Save application log to this directory for reporting issues.",
 						},
 						&cli.StringFlag{
-							Name:    logger.LogSSHLevelFlag,
+							Name:    cfdflags.LogLevelSSH,
 							Aliases: []string{"loglevel"}, //added to match the tunnel side
 							Usage:   "Application logging level {debug, info, warn, error, fatal}. ",
 						},
@@ -342,7 +343,7 @@ func run(cmd string, args ...string) error {
 		return err
 	}
 	go func() {
-		io.Copy(os.Stderr, stderr)
+		_, _ = io.Copy(os.Stderr, stderr)
 	}()
 
 	stdout, err := c.StdoutPipe()
@@ -350,7 +351,7 @@ func run(cmd string, args ...string) error {
 		return err
 	}
 	go func() {
-		io.Copy(os.Stdout, stdout)
+		_, _ = io.Copy(os.Stdout, stdout)
 	}()
 	return c.Run()
 }
@@ -531,7 +532,7 @@ func isFileThere(candidate string) bool {
 }
 
 // verifyTokenAtEdge checks for a token on disk, or generates a new one.
-// Then makes a request to to the origin with the token to ensure it is valid.
+// Then makes a request to the origin with the token to ensure it is valid.
 // Returns nil if token is valid.
 func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, log *zerolog.Logger) error {
 	headers := parseRequestHeaders(c.StringSlice(sshHeaderFlag))
