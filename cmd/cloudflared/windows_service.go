@@ -26,7 +26,7 @@ import (
 const (
 	windowsServiceName        = "Cloudflared"
 	windowsServiceDescription = "Cloudflared agent"
-	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/as-a-service/windows/"
+	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configure-tunnels/local-management/as-a-service/windows/"
 
 	recoverActionDelay      = time.Second * 20
 	failureCountResetPeriod = time.Hour * 24
