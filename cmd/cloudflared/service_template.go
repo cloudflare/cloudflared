@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"text/template"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -57,7 +57,7 @@ func (st *ServiceTemplate) Generate(args *ServiceTemplateArgs) error {
 		fileMode = st.FileMode
 	}
 
-	plistFolder := path.Dir(resolvedPath)
+	plistFolder := filepath.Dir(resolvedPath)
 	err = os.MkdirAll(plistFolder, 0o755)
 	if err != nil {
 		return fmt.Errorf("error creating %s: %v", plistFolder, err)

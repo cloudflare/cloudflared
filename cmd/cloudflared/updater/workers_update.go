@@ -10,9 +10,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"text/template"
 	"time"
 
@@ -198,7 +198,7 @@ func download(url, filepath string, isCompressed bool) error {
 
 // isCompressedFile is a really simple file extension check to see if this is a macos tar and gzipped
 func isCompressedFile(urlstring string) bool {
-	if strings.HasSuffix(urlstring, ".tgz") {
+	if path.Ext(urlstring) == ".tgz" {
 		return true
 	}
 
@@ -206,7 +206,7 @@ func isCompressedFile(urlstring string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.HasSuffix(u.Path, ".tgz")
+	return path.Ext(u.Path) == ".tgz"
 }
 
 // writeBatchFile writes a batch file out to disk
