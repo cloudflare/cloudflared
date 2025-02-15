@@ -27,14 +27,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-mips-linux-gnu gcc-arm-linux-gnueabihf
-
+          
       - name: Build
         env:
-          # 使用 GitHub Actions 表达式语法分割字符串
-          GOARCH: ${{ fromJSON('["' + matrix.target_arch.split('-').join('","') + '"]')[0] }}
-          GOMIPS: ${{ contains(matrix.target_arch, 'mipsle') && 'softfloat' || '' }}
+          # 直接基于已知格式设置 GOARCH 和 GOMIPS
+          GOARCH: ${{ contains(matrix.target_arch, 'mipsle') && 'mipsle' || '' }}
+          GOMIPS: ${{ contains(matrix.target_arch, 'softfloat') && 'softfloat' || '' }}
           CGO_ENABLED: 0
         run: |
+          echo "Building for GOARCH=${GOARCH} GOMIPS=${GOMIPS}"
           GOOS=linux go build -v -ldflags '-s -w' -o cloudflared-${{ matrix.target_arch }} ./cmd/cloudflared
 
       - name: Upload Artifact
