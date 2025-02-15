@@ -1,0 +1,43 @@
+name: Cross Build
+
+on:
+  push:
+    branches: [ "main" ]  # 触发分支
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:       # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target_arch:      # 定义目标架构列表
+          - "mipsle-softfloat"   # MIPS 小端序软浮点
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'  # 指定 Go 版本
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mips-linux-gnu gcc-arm-linux-gnueabihf
+
+      - name: Build
+        env:
+          GOARCH: ${{ matrix.target_arch.split('-')[0] }}
+          GOMIPS: ${{ contains(matrix.target_arch, 'mipsle') && 'softfloat' || '' }}
+          CGO_ENABLED: 0
+        run: |
+          GOOS=linux go build -v -ldflags '-s -w' -o cloudflared-${{ matrix.target_arch }} ./cmd/cloudflared
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cloudflared-${{ matrix.target_arch }}
+          path: cloudflared-${{ matrix.target_arch }}
