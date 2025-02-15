@@ -31,7 +31,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         run: |
-          git push origin main
+          git push origin master
 
       - name: 触发编译工作流
         uses: benc-uk/workflow-dispatch@v1
