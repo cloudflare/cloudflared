@@ -39,7 +39,7 @@ jobs:
           GOOS=linux go build -v -ldflags '-s -w' -o cloudflared-${{ matrix.target_arch }} ./cmd/cloudflared
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cloudflared-${{ matrix.target_arch }}
           path: cloudflared-${{ matrix.target_arch }}
