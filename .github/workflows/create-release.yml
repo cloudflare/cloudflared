@@ -1,24 +1,20 @@
-name: Create Release
+name: Release
+
 on:
-  workflow_dispatch: # 手动发布
-  workflow_run: # 当 build 流程成功完成后自动触发
-    workflows: ["Build Artifacts"]
-    types: [completed]
+  workflow_run:
+    workflows: ["Build"]  # 监听名为“Build”的工作流
+    types:
+      - completed  # 当Build工作流完成时触发
+    branches:
+      - master  # 限定分支
 jobs:
   release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    steps:
-    - name: Download Artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: binaries
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
-      with:
-        tag_name: v$(date +%s)
-        files: |
-          *.tar.gz
+    # 仅在Build工作流成功时运行
+    if: github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
