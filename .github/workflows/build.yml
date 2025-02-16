@@ -43,3 +43,13 @@ jobs:
         with:
           name: cloudflared-${{ matrix.target_arch }}
           path: cloudflared-${{ matrix.target_arch }}
+          
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/cloudflared-${{ matrix.target_arch }}
+          asset_name: cloudflared-${{ matrix.target_arch }}
+          asset_content_type: application/octet-stream
