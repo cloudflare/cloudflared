@@ -1,12 +1,11 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["Build"]  # 监听名为“Build”的工作流
-    types:
-      - completed  # 当Build工作流完成时触发
-    branches:
-      - master  # 限定分支
+  workflow_dispatch: # 手动发布
+  workflow_run: # 当 build 流程成功完成后自动触发
+    workflows: ["Build Artifacts"]
+    types: [completed]
+    
 jobs:
   release:
     runs-on: ubuntu-latest
