@@ -9,31 +9,31 @@ jobs:
   sync-and-build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Fork 代码
+      - name: Checkout Fork Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # 获取完整 Git 历史
 
-      - name: 添加上游仓库 Remote
+      - name: Add Upstream Remote
         run: |
           git remote add upstream https://github.com/cloudflare/cloudflared.git
 
-      - name: 获取上游最新代码
+      - name: Fetch Upstream Latest Code
         run: |
           git fetch upstream
 
-      - name: 合并上游代码到本地分支
+      - name: Merge Upstream Code to Local Branch
         run: |
           git merge upstream/master --no-edit  # 假设上游主分支是 master
           # 如果有冲突，这里会失败（需手动处理）
 
-      - name: 推送更新到 Fork 仓库
+      - name: Push Updates to Fork Repository
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
         run: |
           git push origin master
 
-      - name: 触发编译工作流
+      - name: Trigger Build Workflow
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: build.yml  # 你的编译工作流文件名

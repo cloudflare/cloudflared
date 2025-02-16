@@ -53,3 +53,10 @@ jobs:
           asset_path: ./artifacts/cloudflared-${{ matrix.target_arch }}
           asset_name: cloudflared-${{ matrix.target_arch }}
           asset_content_type: application/octet-stream
+
+      - name: Trigger Release Workflow
+        if: success()
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: create-release.yml  # 你的发布工作流文件名
+          token: ${{ secrets.TOKEN }}
