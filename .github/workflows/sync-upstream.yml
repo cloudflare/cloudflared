@@ -36,5 +36,5 @@ jobs:
       - name: Trigger Build Workflow
         uses: benc-uk/workflow-dispatch@v1
         with:
-          workflow: build.yml  # 你的编译工作流文件名
+          workflow: build-release.yml  # 你的编译工作流文件名
           token: ${{ secrets.TOKEN }}
