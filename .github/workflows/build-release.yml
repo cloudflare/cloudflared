@@ -1,4 +1,4 @@
-name: Cross Build and Release 
+name: Cross Build and Release
 
 on:
   push:
@@ -23,44 +23,51 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-
+          
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-mips-linux-gnu gcc-arm-linux-gnueabihf
+
   build:
     runs-on: ubuntu-latest
+    needs: setup
     strategy:
       matrix:
         target_arch:
           - "mipsle-softfloat"
           - "mipsle-hardfloat"
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Build
         env:
-          # 直接基于已知格式设置 GOARCH 和 GOMIPS
           GOARCH: ${{ contains(matrix.target_arch, 'mipsle') && 'mipsle' || '' }}
           GOMIPS: ${{ contains(matrix.target_arch, 'softfloat') && 'softfloat' || 'hardfloat' }}
           CGO_ENABLED: 0
         run: |
           echo "Building for GOARCH=${GOARCH} GOMIPS=${GOMIPS}"
           GOOS=linux go build -v -ldflags '-s -w' -o cloudflared-${{ matrix.target_arch }} ./cmd/cloudflared
+
   release:
     runs-on: ubuntu-latest
+    needs: build
     strategy:
       matrix:
         target_arch:
           - "mipsle-softfloat"
           - "mipsle-hardfloat"
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
+
       - name: Generate SHA Sums
         run: |
-          # 创建一个文件来存储 SHA 哈希值
           echo "Generating SHA sums for release assets..."
           sha256sum cloudflared-${{ matrix.target_arch }} > SHA256_SUMS
-          cat SHA256_SUMS  # 打印生成的 SHA 哈希值
+          cat SHA256_SUMS
+
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
