@@ -10,7 +10,7 @@ export CGO_ENABLED=0
 export ARTIFACT_DIR=artifacts/
 mkdir -p $ARTIFACT_DIR
 
-linuxArchs=("386" "amd64" "arm" "armhf" "arm64" "mipsel")
+linuxArchs=("386" "amd64" "arm" "armhf" "arm64" "mipsle")
 export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do
     unset TARGET_ARM
@@ -29,7 +29,7 @@ for arch in ${linuxArchs[@]}; do
     fi
 
     ## Support for softmips builds 
-    if [[ $arch == mipsel ]] ; then
+    if [[ $arch == mipsle ]] ; then
         export GOMIPS=softfloat
     fi
     
