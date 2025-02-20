@@ -119,6 +119,11 @@ else
 	PACKAGE_ARCH := $(TARGET_ARCH)
 endif
 
+#basically for GOMIPS=softfloat
+ifneq ($(TARGET_MIPS), )
+	MIPS_COMMAND := GOMIPS=$(TARGET_MIPS)
+endif
+
 #for FIPS compliance, FPM defaults to MD5.
 RPM_DIGEST := --rpm-digest sha256
 
@@ -134,7 +139,7 @@ cloudflared:
 ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
 endif
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) $(MIPS_COMMAND) go build -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
 ifeq ($(FIPS), true)
 	./check-fips.sh cloudflared
 endif

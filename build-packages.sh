@@ -10,7 +10,7 @@ export CGO_ENABLED=0
 export ARTIFACT_DIR=artifacts/
 mkdir -p $ARTIFACT_DIR
 
-linuxArchs=("386" "amd64" "arm" "armhf" "arm64")
+linuxArchs=("386" "amd64" "arm" "armhf" "arm64" "mipsel")
 export TARGET_OS=linux
 for arch in ${linuxArchs[@]}; do
     unset TARGET_ARM
@@ -26,6 +26,11 @@ for arch in ${linuxArchs[@]}; do
     if [[ $arch == armhf ]] ; then
         export TARGET_ARCH=arm
         export TARGET_ARM=7 
+    fi
+
+    ## Support for softmips builds 
+    if [[ $arch == mipsel ]] ; then
+        export GOMIPS=softfloat
     fi
     
     make cloudflared-deb
