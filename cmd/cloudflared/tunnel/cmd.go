@@ -131,7 +131,7 @@ var (
 		"hostname",
 		"id",
 		cfdflags.LBPool,
-		"api-url",
+		cfdflags.ApiURL,
 		cfdflags.MetricsUpdateFreq,
 		cfdflags.Tag,
 		"heartbeat-interval",
@@ -716,7 +716,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "api-url",
+			Name:    cfdflags.ApiURL,
 			Usage:   "Base URL for Cloudflare API v4",
 			EnvVars: []string{"TUNNEL_API_URL"},
 			Value:   "https://api.cloudflare.com/client/v4",

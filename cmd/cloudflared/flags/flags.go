@@ -149,4 +149,7 @@ const (
 
 	// MetricsUpdateFreq is the command line flag to define how frequently tunnel metrics are updated
 	MetricsUpdateFreq = "metrics-update-freq"
+
+	// ApiURL is the command line flag used to define the base URL of the API
+	ApiURL = "api-url"
 )

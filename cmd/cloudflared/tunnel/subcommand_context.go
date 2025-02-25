@@ -20,6 +20,8 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 )
 
+const fedRampBaseApiURL = "https://api.fed.cloudflare.com/client/v4"
+
 type invalidJSONCredentialError struct {
 	err  error
 	path string
@@ -65,7 +67,16 @@ func (sc *subcommandContext) client() (cfapi.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	sc.tunnelstoreClient, err = cred.Client(sc.c.String("api-url"), buildInfo.UserAgent(), sc.log)
+
+	var apiURL string
+	if cred.IsFEDEndpoint() {
+		sc.log.Info().Str("api-url", fedRampBaseApiURL).Msg("using fedramp base api")
+		apiURL = fedRampBaseApiURL
+	} else {
+		apiURL = sc.c.String(cfdflags.ApiURL)
+	}
+
+	sc.tunnelstoreClient, err = cred.Client(apiURL, buildInfo.UserAgent(), sc.log)
 	if err != nil {
 		return nil, err
 	}
