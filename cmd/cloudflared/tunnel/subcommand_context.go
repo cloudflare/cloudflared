@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -54,7 +55,12 @@ func newSubcommandContext(c *cli.Context) (*subcommandContext, error) {
 // Returns something that can find the given tunnel's credentials file.
 func (sc *subcommandContext) credentialFinder(tunnelID uuid.UUID) CredFinder {
 	if path := sc.c.String(CredFileFlag); path != "" {
-		return newStaticPath(path, sc.fs)
+		// Expand path if CredFileFlag contains `~`
+		absPath, err := homedir.Expand(path)
+		if err != nil {
+			return newStaticPath(path, sc.fs)
+		}
+		return newStaticPath(absPath, sc.fs)
 	}
 	return newSearchByID(tunnelID, sc.c, sc.log, sc.fs)
 }
