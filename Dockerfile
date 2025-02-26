@@ -22,7 +22,7 @@ RUN .teamcity/install-cloudflare-go.sh
 RUN PATH="/tmp/go/bin:$PATH" make cloudflared
 
 # use a distroless base image with glibc
-FROM gcr.io/distroless/base-debian11:nonroot
+FROM gcr.io/distroless/base-debian12:nonroot
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
