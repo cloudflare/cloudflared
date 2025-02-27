@@ -41,6 +41,7 @@ const (
 	CredFileFlag            = "credentials-file"
 	CredContentsFlag        = "credentials-contents"
 	TunnelTokenFlag         = "token"
+	TunnelTokenFileFlag     = "token-file"
 	overwriteDNSFlagName    = "overwrite-dns"
 	noDiagLogsFlagName      = "no-diag-logs"
 	noDiagMetricsFlagName   = "no-diag-metrics"
@@ -126,8 +127,13 @@ var (
 	})
 	tunnelTokenFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    TunnelTokenFlag,
-		Usage:   "The Tunnel token. When provided along with credentials, this will take precedence.",
+		Usage:   "The Tunnel token. When provided along with credentials, this will take precedence. Also takes precedence over token-file",
 		EnvVars: []string{"TUNNEL_TOKEN"},
+	})
+	tunnelTokenFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    TunnelTokenFileFlag,
+		Usage:   "Filepath at which to read the tunnel token. When provided along with credentials, this will take precedence.",
+		EnvVars: []string{"TUNNEL_TOKEN_FILE"},
 	})
 	forceDeleteFlag = &cli.BoolFlag{
 		Name:    flags.Force,
@@ -708,6 +714,7 @@ func buildRunCommand() *cli.Command {
 		selectProtocolFlag,
 		featuresFlag,
 		tunnelTokenFlag,
+		tunnelTokenFileFlag,
 		icmpv4SrcFlag,
 		icmpv6SrcFlag,
 		maxActiveFlowsFlag,
@@ -748,12 +755,22 @@ func runCommand(c *cli.Context) error {
 			"your origin will not be reachable. You should remove the `hostname` property to avoid this warning.")
 	}
 
+	tokenStr := c.String(TunnelTokenFlag)
+	// Check if tokenStr is blank before checking for tokenFile
+	if tokenStr == "" {
+		if tokenFile := c.String(TunnelTokenFileFlag); tokenFile != "" {
+			data, err := os.ReadFile(tokenFile)
+			if err != nil {
+				return cliutil.UsageError("Failed to read token file: " + err.Error())
+			}
+			tokenStr = strings.TrimSpace(string(data))
+		}
+	}
 	// Check if token is provided and if not use default tunnelID flag method
-	if tokenStr := c.String(TunnelTokenFlag); tokenStr != "" {
+	if tokenStr != "" {
 		if token, err := ParseToken(tokenStr); err == nil {
 			return sc.runWithCredentials(token.Credentials())
 		}
-
 		return cliutil.UsageError("Provided Tunnel token is not valid.")
 	} else {
 		tunnelRef := c.Args().First()
