@@ -3,6 +3,7 @@ package ingress
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -260,7 +261,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 			if err != nil {
 				return Ingress{}, errors.Wrap(err, "invalid HTTP status code")
 			}
-			if statusCode < 100 || statusCode > 999 {
+			if http.StatusText(statusCode) == "" {
 				return Ingress{}, fmt.Errorf("invalid HTTP status code: %d", statusCode)
 			}
 			srv := newStatusCode(statusCode)
