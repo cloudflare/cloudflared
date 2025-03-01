@@ -1,5 +1,4 @@
-//go:build darwin || linux
-
+//go:build darwin || linux || freebsd || openbsd || netbsd
 package ingress
 
 // This file extracts logic shared by Linux and Darwin implementation if ICMPProxy.
