@@ -1,3 +1,10 @@
+2025.2.1
+- 2025-02-26 TUN-9016: update base-debian to v12
+- 2025-02-25 TUN-8960: Connect to FED API GW based on the OriginCert's endpoint
+- 2025-02-25 TUN-9007: modify logic to resolve region when the tunnel token has an endpoint field
+- 2025-02-13 SDLC-3762: Remove backstage.io/source-location from catalog-info.yaml
+- 2025-02-06 TUN-8914: Create a flags module to group all cloudflared cli flags
+
 2025.2.0
 - 2025-02-03 TUN-8914: Add a new configuration to locally override the max-active-flows
 - 2025-02-03 Bump x/crypto to 0.31.0

@@ -60,6 +60,7 @@ type Credentials struct {
 	AccountTag   string
 	TunnelSecret []byte
 	TunnelID     uuid.UUID
+	Endpoint     string
 }
 
 func (c *Credentials) Auth() pogs.TunnelAuth {
@@ -74,13 +75,16 @@ type TunnelToken struct {
 	AccountTag   string    `json:"a"`
 	TunnelSecret []byte    `json:"s"`
 	TunnelID     uuid.UUID `json:"t"`
+	Endpoint     string    `json:"e,omitempty"`
 }
 
 func (t TunnelToken) Credentials() Credentials {
+	// nolint: gosimple
 	return Credentials{
 		AccountTag:   t.AccountTag,
 		TunnelSecret: t.TunnelSecret,
 		TunnelID:     t.TunnelID,
+		Endpoint:     t.Endpoint,
 	}
 }
 

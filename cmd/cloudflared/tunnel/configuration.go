@@ -34,6 +34,7 @@ import (
 const (
 	secretValue       = "*****"
 	icmpFunnelTimeout = time.Second * 10
+	fedRampRegion     = "fed" // const string denoting the region used to connect to FEDRamp servers
 )
 
 var (
@@ -208,13 +209,27 @@ func prepareTunnelConfig(
 		log.Warn().Str("edgeIPVersion", edgeIPVersion.String()).Err(err).Msg("Overriding edge-ip-version")
 	}
 
+	region := c.String(flags.Region)
+	endpoint := namedTunnel.Credentials.Endpoint
+	var resolvedRegion string
+	// set resolvedRegion to either the region passed as argument
+	// or to the endpoint in the credentials.
+	// Region and endpoint are interchangeable
+	if region != "" && endpoint != "" {
+		return nil, nil, fmt.Errorf("region provided with a token that has an endpoint")
+	} else if region != "" {
+		resolvedRegion = region
+	} else if endpoint != "" {
+		resolvedRegion = endpoint
+	}
+
 	tunnelConfig := &supervisor.TunnelConfig{
 		GracePeriod:     gracePeriod,
 		ReplaceExisting: c.Bool(flags.Force),
 		OSArch:          info.OSArch(),
 		ClientID:        clientID.String(),
 		EdgeAddrs:       c.StringSlice(flags.Edge),
-		Region:          c.String(flags.Region),
+		Region:          resolvedRegion,
 		EdgeIPVersion:   edgeIPVersion,
 		EdgeBindAddr:    edgeBindAddr,
 		HAConnections:   c.Int(flags.HaConnections),

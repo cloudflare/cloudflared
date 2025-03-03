@@ -23,9 +23,7 @@ import (
 	"github.com/cloudflare/cloudflared/management"
 )
 
-var (
-	buildInfo *cliutil.BuildInfo
-)
+var buildInfo *cliutil.BuildInfo
 
 func Init(bi *cliutil.BuildInfo) {
 	buildInfo = bi
@@ -56,7 +54,7 @@ func managementTokenCommand(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	var tokenResponse = struct {
+	tokenResponse := struct {
 		Token string `json:"token"`
 	}{Token: token}
 
@@ -231,7 +229,7 @@ func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
 		return "", err
 	}
 
-	client, err := userCreds.Client(c.String("api-url"), buildInfo.UserAgent(), log)
+	client, err := userCreds.Client(c.String(cfdflags.ApiURL), buildInfo.UserAgent(), log)
 	if err != nil {
 		return "", err
 	}
