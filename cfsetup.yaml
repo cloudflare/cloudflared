@@ -16,7 +16,7 @@ bullseye: &bullseye
       - golangci-lint
     pre-cache: &build_pre_cache
       - export GOCACHE=/cfsetup_build/.cache/go-build
-      - go install golang.org/x/tools/cmd/goimports@latest
+      - go install golang.org/x/tools/cmd/goimports@v0.30.0
     post-cache:
       # Linting
       - make lint
