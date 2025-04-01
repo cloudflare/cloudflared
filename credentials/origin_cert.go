@@ -1,11 +1,13 @@
 package credentials
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mitchellh/go-homedir"
 	"github.com/rs/zerolog"
@@ -15,19 +17,30 @@ import (
 
 const (
 	DefaultCredentialFile = "cert.pem"
-	OriginCertFlag        = "origincert"
 )
 
-type namedTunnelToken struct {
+type OriginCert struct {
 	ZoneID    string `json:"zoneID"`
 	AccountID string `json:"accountID"`
 	APIToken  string `json:"apiToken"`
+	Endpoint  string `json:"endpoint,omitempty"`
 }
 
-type OriginCert struct {
-	ZoneID    string
-	APIToken  string
-	AccountID string
+func (oc *OriginCert) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		ZoneID    string `json:"zoneID"`
+		AccountID string `json:"accountID"`
+		APIToken  string `json:"apiToken"`
+		Endpoint  string `json:"endpoint,omitempty"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("error parsing OriginCert: %v", err)
+	}
+	oc.ZoneID = aux.ZoneID
+	oc.AccountID = aux.AccountID
+	oc.APIToken = aux.APIToken
+	oc.Endpoint = strings.ToLower(aux.Endpoint)
+	return nil
 }
 
 // FindDefaultOriginCertPath returns the first path that contains a cert.pem file. If none of the
@@ -42,40 +55,56 @@ func FindDefaultOriginCertPath() string {
 	return ""
 }
 
+func DecodeOriginCert(blocks []byte) (*OriginCert, error) {
+	return decodeOriginCert(blocks)
+}
+
+func (cert *OriginCert) EncodeOriginCert() ([]byte, error) {
+	if cert == nil {
+		return nil, fmt.Errorf("originCert cannot be nil")
+	}
+	buffer, err := json.Marshal(cert)
+	if err != nil {
+		return nil, fmt.Errorf("originCert marshal failed: %v", err)
+	}
+	block := pem.Block{
+		Type:    "ARGO TUNNEL TOKEN",
+		Headers: map[string]string{},
+		Bytes:   buffer,
+	}
+	var out bytes.Buffer
+	err = pem.Encode(&out, &block)
+	if err != nil {
+		return nil, fmt.Errorf("pem encoding failed: %v", err)
+	}
+	return out.Bytes(), nil
+}
+
 func decodeOriginCert(blocks []byte) (*OriginCert, error) {
 	if len(blocks) == 0 {
-		return nil, fmt.Errorf("Cannot decode empty certificate")
+		return nil, fmt.Errorf("cannot decode empty certificate")
 	}
 	originCert := OriginCert{}
 	block, rest := pem.Decode(blocks)
-	for {
-		if block == nil {
-			break
-		}
+	for block != nil {
 		switch block.Type {
 		case "PRIVATE KEY", "CERTIFICATE":
 			// this is for legacy purposes.
-			break
 		case "ARGO TUNNEL TOKEN":
 			if originCert.ZoneID != "" || originCert.APIToken != "" {
-				return nil, fmt.Errorf("Found multiple tokens in the certificate")
+				return nil, fmt.Errorf("found multiple tokens in the certificate")
 			}
 			// The token is a string,
 			// Try the newer JSON format
-			ntt := namedTunnelToken{}
-			if err := json.Unmarshal(block.Bytes, &ntt); err == nil {
-				originCert.ZoneID = ntt.ZoneID
-				originCert.APIToken = ntt.APIToken
-				originCert.AccountID = ntt.AccountID
-			}
+			_ = json.Unmarshal(block.Bytes, &originCert)
 		default:
-			return nil, fmt.Errorf("Unknown block %s in the certificate", block.Type)
+			return nil, fmt.Errorf("unknown block %s in the certificate", block.Type)
 		}
 		block, rest = pem.Decode(rest)
 	}
 
 	if originCert.ZoneID == "" || originCert.APIToken == "" {
-		return nil, fmt.Errorf("Missing token in the certificate")
+		return nil, fmt.Errorf("missing token in the certificate")
 	}
 
 	return &originCert, nil

@@ -104,7 +104,7 @@ func ssh(c *cli.Context) error {
 		case 3:
 			options.OriginURL = fmt.Sprintf("https://%s:%s", parts[2], parts[1])
 			options.TLSClientConfig = &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, // #nosec G402
 				ServerName:         parts[0],
 			}
 			log.Warn().Msgf("Using insecure SSL connection because SNI overridden to %s", parts[0])
@@ -141,6 +141,5 @@ func ssh(c *cli.Context) error {
 		logger := log.With().Str("host", url.Host).Logger()
 		s = stream.NewDebugStream(s, &logger, maxMessages)
 	}
-	carrier.StartClient(wsConn, s, options)
-	return nil
+	return carrier.StartClient(wsConn, s, options)
 }

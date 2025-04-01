@@ -70,7 +70,6 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 	}
 
 	return resourceData, nil
-
 }
 
 // BuildRequestURL creates a request suitable for a resource transfer.

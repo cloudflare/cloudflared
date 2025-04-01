@@ -15,20 +15,13 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/management"
 )
 
 const (
 	EnableTerminalLog  = false
 	DisableTerminalLog = true
-
-	LogLevelFlag          = "loglevel"
-	LogFileFlag           = "logfile"
-	LogDirectoryFlag      = "log-directory"
-	LogTransportLevelFlag = "transport-loglevel"
-
-	LogSSHDirectoryFlag = "log-directory"
-	LogSSHLevelFlag     = "log-level"
 
 	dirPermMode  = 0744 // rwxr--r--
 	filePermMode = 0644 // rw-r--r--
@@ -136,15 +129,15 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 }
 
 func CreateTransportLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
-	return createFromContext(c, LogTransportLevelFlag, LogDirectoryFlag, disableTerminal)
+	return createFromContext(c, cfdflags.TransportLogLevel, cfdflags.LogDirectory, disableTerminal)
 }
 
 func CreateLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
-	return createFromContext(c, LogLevelFlag, LogDirectoryFlag, disableTerminal)
+	return createFromContext(c, cfdflags.LogLevel, cfdflags.LogDirectory, disableTerminal)
 }
 
 func CreateSSHLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
-	return createFromContext(c, LogSSHLevelFlag, LogSSHDirectoryFlag, disableTerminal)
+	return createFromContext(c, cfdflags.LogLevelSSH, cfdflags.LogDirectory, disableTerminal)
 }
 
 func createFromContext(
@@ -154,7 +147,7 @@ func createFromContext(
 	disableTerminal bool,
 ) *zerolog.Logger {
 	logLevel := c.String(logLevelFlagName)
-	logFile := c.String(LogFileFlag)
+	logFile := c.String(cfdflags.LogFile)
 	logDirectory := c.String(logDirectoryFlagName)
 
 	loggerConfig := CreateConfig(
@@ -166,7 +159,7 @@ func createFromContext(
 
 	log := newZerolog(loggerConfig)
 	if incompatibleFlagsSet := logFile != "" && logDirectory != ""; incompatibleFlagsSet {
-		log.Error().Msgf("Your config includes values for both %s (%s) and %s (%s), but they are incompatible. %s takes precedence.", LogFileFlag, logFile, logDirectoryFlagName, logDirectory, LogFileFlag)
+		log.Error().Msgf("Your config includes values for both %s (%s) and %s (%s), but they are incompatible. %s takes precedence.", cfdflags.LogFile, logFile, logDirectoryFlagName, logDirectory, cfdflags.LogFile)
 	}
 	return log
 }
@@ -205,7 +198,6 @@ var (
 
 func createFileWriter(config FileConfig) (io.Writer, error) {
 	singleFileInit.once.Do(func() {
-
 		var logFile io.Writer
 		fullpath := config.Fullpath()
 

@@ -129,7 +129,7 @@ func (e *LogEventType) UnmarshalJSON(data []byte) error {
 
 // LogLevel corresponds to the zerolog logging levels
 // "panic", "fatal", and "trace" are exempt from this list as they are rarely used and, at least
-// the the first two are limited to failure conditions that lead to cloudflared shutting down.
+// the first two are limited to failure conditions that lead to cloudflared shutting down.
 type LogLevel int8
 
 const (
