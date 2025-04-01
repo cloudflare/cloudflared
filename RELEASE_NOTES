@@ -1,3 +1,17 @@
+2025.4.0
+- 2025-04-02 Fix broken links in `cmd/cloudflared/*.go` related to running tunnel as a service
+- 2025-04-02 chore: remove repetitive words
+- 2025-04-01 Fix messages to point to one.dash.cloudflare.com
+- 2025-04-01 feat: emit explicit errors for the `service` command on unsupported OSes
+- 2025-04-01 Use RELEASE_NOTES date instead of build date
+- 2025-04-01 chore: Update tunnel configuration link in the readme
+- 2025-04-01 fix: expand home directory for credentials file
+- 2025-04-01 fix: Use path and filepath operation appropriately
+- 2025-04-01 feat: Adds a new command line for tunnel run for token file
+- 2025-04-01 chore: fix linter rules
+- 2025-03-17 TUN-9101: Don't ignore errors on `cloudflared access ssh`
+- 2025-03-06 TUN-9089: Pin go import to v0.30.0, v0.31.0 requires go 1.23
+
 2025.2.1
 - 2025-02-26 TUN-9016: update base-debian to v12
 - 2025-02-25 TUN-8960: Connect to FED API GW based on the OriginCert's endpoint
