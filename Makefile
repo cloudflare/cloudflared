@@ -24,7 +24,7 @@ else
 	DEB_PACKAGE_NAME := $(BINARY_NAME)
 endif
 
-DATE          := $(shell date -u '+%Y-%m-%d-%H%M UTC')
+DATE          := $(shell date -u -r RELEASE_NOTES '+%Y-%m-%d-%H%M UTC')
 VERSION_FLAGS := -X "main.Version=$(VERSION)" -X "main.BuildTime=$(DATE)"
 ifdef PACKAGE_MANAGER
 	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=$(PACKAGE_MANAGER)"
