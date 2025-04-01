@@ -22,7 +22,7 @@ var (
 		Usage:   "The ID or name of the virtual network to which the route is associated to.",
 	}
 
-	routeAddError = errors.New("You must supply exactly one argument, the ID or CIDR of the route you want to delete")
+	errAddRoute = errors.New("You must supply exactly one argument, the ID or CIDR of the route you want to delete")
 )
 
 func buildRouteIPSubcommand() *cli.Command {
@@ -187,7 +187,7 @@ func deleteRouteCommand(c *cli.Context) error {
 	}
 
 	if c.NArg() != 1 {
-		return routeAddError
+		return errAddRoute
 	}
 
 	var routeId uuid.UUID
@@ -195,7 +195,7 @@ func deleteRouteCommand(c *cli.Context) error {
 	if err != nil {
 		_, network, err := net.ParseCIDR(c.Args().First())
 		if err != nil || network == nil {
-			return routeAddError
+			return errAddRoute
 		}
 
 		var vnetId *uuid.UUID

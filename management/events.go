@@ -74,7 +74,7 @@ type EventLog struct {
 type LogEventType int8
 
 const (
-	// Cloudflared events are signficant to cloudflared operations like connection state changes.
+	// Cloudflared events are significant to cloudflared operations like connection state changes.
 	// Cloudflared is also the default event type for any events that haven't been separated into a proper event type.
 	Cloudflared LogEventType = iota
 	HTTP

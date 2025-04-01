@@ -14,7 +14,7 @@ func TestCredentialsRead(t *testing.T) {
 	require.NoError(t, err)
 	dir := t.TempDir()
 	certPath := filepath.Join(dir, originCertFile)
-	os.WriteFile(certPath, file, fs.ModePerm)
+	_ = os.WriteFile(certPath, file, fs.ModePerm)
 	user, err := Read(certPath, &nopLog)
 	require.NoError(t, err)
 	require.Equal(t, certPath, user.CertPath())

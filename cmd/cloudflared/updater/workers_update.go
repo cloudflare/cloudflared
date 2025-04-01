@@ -134,7 +134,7 @@ func (v *WorkersVersion) Apply() error {
 
 	if err := os.Rename(newFilePath, v.targetPath); err != nil {
 		//attempt rollback
-		os.Rename(oldFilePath, v.targetPath)
+		_ = os.Rename(oldFilePath, v.targetPath)
 		return err
 	}
 	os.Remove(oldFilePath)
@@ -181,7 +181,7 @@ func download(url, filepath string, isCompressed bool) error {
 		tr := tar.NewReader(gr)
 
 		// advance the reader pass the header, which will be the single binary file
-		tr.Next()
+		_, _ = tr.Next()
 
 		r = tr
 	}
@@ -249,7 +249,6 @@ func runWindowsBatch(batchFile string) error {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			return fmt.Errorf("Error during update : %s;", string(exitError.Stderr))
 		}
-
 	}
 	return err
 }
