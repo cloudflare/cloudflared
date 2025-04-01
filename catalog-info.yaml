@@ -4,7 +4,6 @@ metadata:
   name: cloudflared
   description: Client for Cloudflare Tunnels
   annotations:
-    backstage.io/source-location: url:https://bitbucket.cfdata.org/projects/TUN/repos/cloudflared/browse
     cloudflare.com/software-excellence-opt-in: "true"
     cloudflare.com/jira-project-key: "TUN"
     cloudflare.com/jira-project-component: "Cloudflare Tunnel"

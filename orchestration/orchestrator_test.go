@@ -16,7 +16,10 @@ import (
 	"github.com/google/uuid"
 	gows "github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
@@ -106,25 +109,25 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.Len(t, configV2.Ingress.Rules, 3)
 	// originRequest of this ingress rule overrides global default
 	require.Equal(t, config.CustomDuration{Duration: time.Second * 10}, configV2.Ingress.Rules[0].Config.ConnectTimeout)
-	require.Equal(t, true, configV2.Ingress.Rules[0].Config.NoTLSVerify)
+	require.True(t, configV2.Ingress.Rules[0].Config.NoTLSVerify)
 	// Inherited from global default
-	require.Equal(t, true, configV2.Ingress.Rules[0].Config.NoHappyEyeballs)
+	require.True(t, configV2.Ingress.Rules[0].Config.NoHappyEyeballs)
 	// Validate ingress rule 1
 	require.Equal(t, "jira.tunnel.org", configV2.Ingress.Rules[1].Hostname)
 	require.True(t, configV2.Ingress.Rules[1].Matches("jira.tunnel.org", "/users"))
 	require.Equal(t, "http://172.32.20.6:80", configV2.Ingress.Rules[1].Service.String())
 	// originRequest of this ingress rule overrides global default
 	require.Equal(t, config.CustomDuration{Duration: time.Second * 30}, configV2.Ingress.Rules[1].Config.ConnectTimeout)
-	require.Equal(t, true, configV2.Ingress.Rules[1].Config.NoTLSVerify)
+	require.True(t, configV2.Ingress.Rules[1].Config.NoTLSVerify)
 	// Inherited from global default
-	require.Equal(t, true, configV2.Ingress.Rules[1].Config.NoHappyEyeballs)
+	require.True(t, configV2.Ingress.Rules[1].Config.NoHappyEyeballs)
 	// Validate ingress rule 2, it's the catch-all rule
 	require.True(t, configV2.Ingress.Rules[2].Matches("blogs.tunnel.io", "/2022/02/10"))
 	// Inherited from global default
 	require.Equal(t, config.CustomDuration{Duration: time.Second * 90}, configV2.Ingress.Rules[2].Config.ConnectTimeout)
-	require.Equal(t, false, configV2.Ingress.Rules[2].Config.NoTLSVerify)
-	require.Equal(t, true, configV2.Ingress.Rules[2].Config.NoHappyEyeballs)
-	require.Equal(t, configV2.WarpRouting.ConnectTimeout.Duration, 10*time.Second)
+	require.False(t, configV2.Ingress.Rules[2].Config.NoTLSVerify)
+	require.True(t, configV2.Ingress.Rules[2].Config.NoHappyEyeballs)
+	require.Equal(t, 10*time.Second, configV2.WarpRouting.ConnectTimeout.Duration)
 
 	originProxyV2, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
@@ -317,7 +320,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 		go func(i int, originProxy connection.OriginProxy) {
 			defer wg.Done()
 			resp, err := proxyHTTP(originProxy, hostname)
-			require.NoError(t, err, "proxyHTTP %d failed %v", i, err)
+			assert.NoError(t, err, "proxyHTTP %d failed %v", i, err)
 			defer resp.Body.Close()
 
 			var warpRoutingDisabled bool
@@ -326,16 +329,16 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 			// v1 proxy, warp enabled
 			case 200:
 				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.Equal(t, t.Name(), string(body))
+				assert.NoError(t, err)
+				assert.Equal(t, t.Name(), string(body))
 				warpRoutingDisabled = false
 			// v2 proxy, warp disabled
 			case 204:
-				require.Greater(t, i, concurrentRequests/4)
+				assert.Greater(t, i, concurrentRequests/4)
 				warpRoutingDisabled = true
 			// v3 proxy, warp enabled
 			case 418:
-				require.Greater(t, i, concurrentRequests/2)
+				assert.Greater(t, i, concurrentRequests/2)
 				warpRoutingDisabled = false
 			}
 
@@ -358,11 +361,10 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 
 			err = proxyTCP(ctx, originProxy, tcpOrigin.Addr().String(), w, pr)
 			if warpRoutingDisabled {
-				require.Error(t, err, "expect proxyTCP %d to return error", i)
+				assert.Error(t, err, "expect proxyTCP %d to return error", i)
 			} else {
-				require.NoError(t, err, "proxyTCP %d failed %v", i, err)
+				assert.NoError(t, err, "proxyTCP %d failed %v", i, err)
 			}
-
 		}(i, originProxy)
 
 		if i == concurrentRequests/4 {
@@ -388,6 +390,57 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 	wg.Wait()
 }
 
+// TestOverrideWarpRoutingConfigWithLocalValues tests that if a value is defined in the Config.ConfigurationFlags,
+// it will override the value that comes from the remote result.
+func TestOverrideWarpRoutingConfigWithLocalValues(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	assertMaxActiveFlows := func(orchestrator *Orchestrator, expectedValue uint64) {
+		configJson, err := orchestrator.GetConfigJSON()
+		require.NoError(t, err)
+		var result map[string]interface{}
+		err = json.Unmarshal(configJson, &result)
+		require.NoError(t, err)
+		warpRouting := result["warp-routing"].(map[string]interface{})
+		require.EqualValues(t, expectedValue, warpRouting["maxActiveFlows"])
+	}
+
+	remoteValue := uint64(100)
+	remoteIngress := ingress.Ingress{}
+	remoteWarpConfig := ingress.WarpRoutingConfig{
+		MaxActiveFlows: remoteValue,
+	}
+	remoteConfig := &Config{
+		Ingress:            &remoteIngress,
+		WarpRouting:        remoteWarpConfig,
+		ConfigurationFlags: map[string]string{},
+	}
+	orchestrator, err := NewOrchestrator(ctx, remoteConfig, testTags, []ingress.Rule{}, &testLogger)
+	require.NoError(t, err)
+
+	assertMaxActiveFlows(orchestrator, remoteValue)
+
+	// Add a local override for the maxActiveFlows
+	localValue := uint64(500)
+	remoteConfig.ConfigurationFlags[flags.MaxActiveFlows] = fmt.Sprintf("%d", localValue)
+	// Force a configuration refresh
+	err = orchestrator.updateIngress(remoteIngress, remoteWarpConfig)
+	require.NoError(t, err)
+
+	// Check the value being used is the local one
+	assertMaxActiveFlows(orchestrator, localValue)
+
+	// Remove local override for the maxActiveFlows
+	delete(remoteConfig.ConfigurationFlags, flags.MaxActiveFlows)
+	// Force a configuration refresh
+	err = orchestrator.updateIngress(remoteIngress, remoteWarpConfig)
+	require.NoError(t, err)
+
+	// Check the value being used is now the remote again
+	assertMaxActiveFlows(orchestrator, remoteValue)
+}
+
 func proxyHTTP(originProxy connection.OriginProxy, hostname string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s", hostname), nil)
 	if err != nil {
@@ -409,15 +462,16 @@ func proxyHTTP(originProxy connection.OriginProxy, hostname string) (*http.Respo
 	return w.Result(), nil
 }
 
+// nolint: testifylint // this is used inside go routines so it can't use `require.`
 func tcpEyeball(t *testing.T, reqWriter io.WriteCloser, body string, respReadWriter *respReadWriteFlusher) {
 	writeN, err := reqWriter.Write([]byte(body))
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	readBuffer := make([]byte, writeN)
 	n, err := respReadWriter.Read(readBuffer)
-	require.NoError(t, err)
-	require.Equal(t, body, string(readBuffer[:n]))
-	require.Equal(t, writeN, n)
+	assert.NoError(t, err)
+	assert.Equal(t, body, string(readBuffer[:n]))
+	assert.Equal(t, writeN, n)
 }
 
 func proxyTCP(ctx context.Context, originProxy connection.OriginProxy, originAddr string, w http.ResponseWriter, reqBody io.ReadCloser) error {
@@ -458,14 +512,15 @@ func serveTCPOrigin(t *testing.T, tcpOrigin net.Listener, wg *sync.WaitGroup) {
 	}
 }
 
+// nolint: testifylint // this is used inside go routines so it can't use `require.`
 func echoTCP(t *testing.T, conn net.Conn) {
 	readBuf := make([]byte, 1000)
 	readN, err := conn.Read(readBuf)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	writeN, err := conn.Write(readBuf[:readN])
-	require.NoError(t, err)
-	require.Equal(t, readN, writeN)
+	assert.NoError(t, err)
+	assert.Equal(t, readN, writeN)
 }
 
 type validateHostHandler struct {
@@ -479,16 +534,17 @@ func (vhh *validateHostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(vhh.body))
+	_, _ = w.Write([]byte(vhh.body))
 }
 
+// nolint: testifylint // this is used inside go routines so it can't use `require.`
 func updateWithValidation(t *testing.T, orchestrator *Orchestrator, version int32, config []byte) {
 	resp := orchestrator.UpdateConfig(version, config)
-	require.NoError(t, resp.Err)
-	require.Equal(t, version, resp.LastAppliedVersion)
+	assert.NoError(t, resp.Err)
+	assert.Equal(t, version, resp.LastAppliedVersion)
 }
 
-// TestClosePreviousProxies makes sure proxies started in the pervious configuration version are shutdown
+// TestClosePreviousProxies makes sure proxies started in the previous configuration version are shutdown
 func TestClosePreviousProxies(t *testing.T) {
 	var (
 		hostname             = "hello.tunnel1.org"
@@ -532,6 +588,7 @@ func TestClosePreviousProxies(t *testing.T) {
 
 	originProxyV1, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
+	// nolint: bodyclose
 	resp, err := proxyHTTP(originProxyV1, hostname)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -540,12 +597,14 @@ func TestClosePreviousProxies(t *testing.T) {
 
 	originProxyV2, err := orchestrator.GetOriginProxy()
 	require.NoError(t, err)
+	// nolint: bodyclose
 	resp, err = proxyHTTP(originProxyV2, hostname)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusTeapot, resp.StatusCode)
 
 	// The hello-world server in config v1 should have been stopped. We wait a bit since it's closed asynchronously.
 	time.Sleep(time.Millisecond * 10)
+	// nolint: bodyclose
 	resp, err = proxyHTTP(originProxyV1, hostname)
 	require.Error(t, err)
 	require.Nil(t, resp)
@@ -557,6 +616,7 @@ func TestClosePreviousProxies(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, originProxyV1, originProxyV3)
 
+	// nolint: bodyclose
 	resp, err = proxyHTTP(originProxyV3, hostname)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -566,6 +626,7 @@ func TestClosePreviousProxies(t *testing.T) {
 	// Wait for proxies to shutdown
 	time.Sleep(time.Millisecond * 10)
 
+	// nolint: bodyclose
 	resp, err = proxyHTTP(originProxyV3, hostname)
 	require.Error(t, err)
 	require.Nil(t, resp)
@@ -622,7 +683,7 @@ func TestPersistentConnection(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		conn, err := tcpOrigin.Accept()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		defer conn.Close()
 
 		// Expect 3 TCP messages
@@ -630,26 +691,26 @@ func TestPersistentConnection(t *testing.T) {
 			echoTCP(t, conn)
 		}
 	}()
-	// Simulate cloudflared recieving a TCP connection
+	// Simulate cloudflared receiving a TCP connection
 	go func() {
 		defer wg.Done()
-		require.NoError(t, proxyTCP(ctx, originProxy, tcpOrigin.Addr().String(), tcpRespReadWriter, tcpReqReader))
+		assert.NoError(t, proxyTCP(ctx, originProxy, tcpOrigin.Addr().String(), tcpRespReadWriter, tcpReqReader))
 	}()
-	// Simulate cloudflared recieving a WS connection
+	// Simulate cloudflared receiving a WS connection
 	go func() {
 		defer wg.Done()
 
 		req, err := http.NewRequest(http.MethodGet, hostname, wsReqReader)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		// ProxyHTTP will add Connection, Upgrade and Sec-Websocket-Version headers
 		req.Header.Add("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
 
 		log := zerolog.Nop()
 		respWriter, err := connection.NewHTTP2RespWriter(req, wsRespReadWriter, connection.TypeWebsocket, &log)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		err = originProxy.ProxyHTTP(respWriter, tracing.NewTracedHTTPRequest(req, 0, &log), true)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}()
 
 	// Simulate eyeball WS and TCP connections

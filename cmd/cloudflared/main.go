@@ -2,19 +2,17 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	homedir "github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tail"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
@@ -52,10 +50,8 @@ var (
 func main() {
 	// FIXME: TUN-8148: Disable QUIC_GO ECN due to bugs in proper detection if supported
 	os.Setenv("QUIC_GO_DISABLE_ECN", "1")
-
-	rand.Seed(time.Now().UnixNano())
 	metrics.RegisterBuildInfo(BuildType, BuildTime, Version)
-	maxprocs.Set()
+	_, _ = maxprocs.Set()
 	bInfo := cliutil.GetBuildInfo(BuildType, Version)
 
 	// Graceful shutdown channel used by the app. When closed, app must terminate gracefully.
@@ -110,7 +106,7 @@ func commands(version func(c *cli.Context)) []*cli.Command {
 					Usage: "specify if you wish to update to the latest beta version",
 				},
 				&cli.BoolFlag{
-					Name:   "force",
+					Name:   cfdflags.Force,
 					Usage:  "specify if you wish to force an upgrade to the latest version regardless of the current version",
 					Hidden: true,
 				},
@@ -182,18 +178,6 @@ func action(graceShutdownC chan struct{}) cli.ActionFunc {
 		}
 		return err
 	})
-}
-
-func userHomeDir() (string, error) {
-	// This returns the home dir of the executing user using OS-specific method
-	// for discovering the home dir. It's not recommended to call this function
-	// when the user has root permission as $HOME depends on what options the user
-	// use with sudo.
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return "", errors.Wrap(err, "Cannot determine home directory for the user")
-	}
-	return homeDir, nil
 }
 
 // In order to keep the amount of noise sent to Sentry low, typical network errors can be filtered out here by a substring match.

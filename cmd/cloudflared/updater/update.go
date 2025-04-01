@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 )
@@ -38,6 +39,7 @@ var (
 
 // BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
 // https://pkg.go.dev/github.com/urfave/cli/v2?tab=doc#ExitCoder
+// nolint: errname
 type statusSuccess struct {
 	newVersion string
 }
@@ -50,16 +52,16 @@ func (u *statusSuccess) ExitCode() int {
 	return 11
 }
 
-// UpdateErr implements ExitCoder interface, the app will exit with status code 10
-type statusErr struct {
+// statusError implements ExitCoder interface, the app will exit with status code 10
+type statusError struct {
 	err error
 }
 
-func (e *statusErr) Error() string {
+func (e *statusError) Error() string {
 	return fmt.Sprintf("failed to update cloudflared: %v", e.err)
 }
 
-func (e *statusErr) ExitCode() int {
+func (e *statusError) ExitCode() int {
 	return 10
 }
 
@@ -79,7 +81,7 @@ type UpdateOutcome struct {
 }
 
 func (uo *UpdateOutcome) noUpdate() bool {
-	return uo.Error == nil && uo.Updated == false
+	return uo.Error == nil && !uo.Updated
 }
 
 func Init(info *cliutil.BuildInfo) {
@@ -153,7 +155,7 @@ func Update(c *cli.Context) error {
 		log.Info().Msg("cloudflared is set to update from staging")
 	}
 
-	isForced := c.Bool("force")
+	isForced := c.Bool(cfdflags.Force)
 	if isForced {
 		log.Info().Msg("cloudflared is set to upgrade to the latest publish version regardless of the current version")
 	}
@@ -166,7 +168,7 @@ func Update(c *cli.Context) error {
 		intendedVersion: c.String("version"),
 	})
 	if updateOutcome.Error != nil {
-		return &statusErr{updateOutcome.Error}
+		return &statusError{updateOutcome.Error}
 	}
 
 	if updateOutcome.noUpdate() {
@@ -252,7 +254,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 				pid, err := a.listeners.StartProcess()
 				if err != nil {
 					a.log.Err(err).Msg("Unable to restart server automatically")
-					return &statusErr{err: err}
+					return &statusError{err: err}
 				}
 				// stop old process after autoupdate. Otherwise we create a new process
 				// after each update

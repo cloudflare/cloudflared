@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"reflect"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -288,6 +290,16 @@ var newConnection = func(
 		s.logger,
 	)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	// Allow server to define custom MaxUDPPayloadSize
+	maxUDPPayloadSize := protocol.MaxPacketBufferSize
+	if maxPacketSize := os.Getenv("TUNNEL_MAX_QUIC_PACKET_SIZE"); maxPacketSize != "" {
+		if customMaxPacketSize, err := strconv.ParseUint(maxPacketSize, 10, 64); err == nil {
+			maxUDPPayloadSize = int(customMaxPacketSize)
+		} else {
+			utils.DefaultLogger.Errorf("failed to parse TUNNEL_MAX_QUIC_PACKET_SIZE: %v", err)
+		}
+	}
+
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
 		InitialMaxStreamDataBidiRemote:  protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -298,7 +310,7 @@ var newConnection = func(
 		MaxUniStreamNum:                 protocol.StreamNum(s.config.MaxIncomingUniStreams),
 		MaxAckDelay:                     protocol.MaxAckDelayInclGranularity,
 		AckDelayExponent:                protocol.AckDelayExponent,
-		MaxUDPPayloadSize:               protocol.MaxPacketBufferSize,
+		MaxUDPPayloadSize:               protocol.ByteCount(maxUDPPayloadSize),
 		DisableActiveMigration:          true,
 		StatelessResetToken:             &statelessResetToken,
 		OriginalDestinationConnectionID: origDestConnID,

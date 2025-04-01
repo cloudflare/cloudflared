@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
@@ -20,6 +21,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
+	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -555,10 +557,12 @@ func (e *EdgeTunnelServer) serveQUIC(
 	tlsConfig := e.config.EdgeTLSConfigs[connection.QUIC]
 
 	pqMode := e.config.FeatureSelector.PostQuantumMode()
-	curvePref, err := curvePreference(pqMode, tlsConfig.CurvePreferences)
+	curvePref, err := curvePreference(pqMode, fips.IsFipsEnabled(), tlsConfig.CurvePreferences)
 	if err != nil {
 		return err, true
 	}
+
+	connLogger.Logger().Info().Msgf("Using %v as curve preferences", curvePref)
 
 	tlsConfig.CurvePreferences = curvePref
 
@@ -595,6 +599,8 @@ func (e *EdgeTunnelServer) serveQUIC(
 	)
 	if err != nil {
 		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to dial a quic connection")
+
+		e.reportErrorToSentry(err)
 		return err, true
 	}
 
@@ -662,6 +668,26 @@ func (e *EdgeTunnelServer) serveQUIC(
 	})
 
 	return errGroup.Wait(), false
+}
+
+// The reportErrorToSentry is an helper function that handles
+// verifies if an error should be reported to Sentry.
+func (e *EdgeTunnelServer) reportErrorToSentry(err error) {
+	dialErr, ok := err.(*connection.EdgeQuicDialError)
+	if ok {
+		// The TransportError provides an Unwrap function however
+		// the err MAY not always be set
+		transportErr, ok := dialErr.Cause.(*quic.TransportError)
+		if ok &&
+			transportErr.ErrorCode.IsCryptoError() &&
+			fips.IsFipsEnabled() &&
+			e.config.FeatureSelector.PostQuantumMode() == features.PostQuantumStrict {
+			// Only report to Sentry when using FIPS, PQ,
+			// and the error is a Crypto error reported by
+			// an EdgeQuicDialError
+			sentry.CaptureException(err)
+		}
+	}
 }
 
 func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh <-chan struct{}) error {

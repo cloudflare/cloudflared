@@ -247,9 +247,7 @@ func (s *Supervisor) startFirstTunnel(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
 ) {
-	var (
-		err error
-	)
+	var err error
 	const firstConnIndex = 0
 	isStaticEdge := len(s.config.EdgeAddrs) > 0
 	defer func() {
@@ -300,9 +298,7 @@ func (s *Supervisor) startTunnel(
 	index int,
 	connectedSignal *signal.Signal,
 ) {
-	var (
-		err error
-	)
+	var err error
 	defer func() {
 		s.tunnelErrors <- tunnelError{index: index, err: err}
 	}()

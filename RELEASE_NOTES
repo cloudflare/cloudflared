@@ -1,3 +1,31 @@
+2025.2.1
+- 2025-02-26 TUN-9016: update base-debian to v12
+- 2025-02-25 TUN-8960: Connect to FED API GW based on the OriginCert's endpoint
+- 2025-02-25 TUN-9007: modify logic to resolve region when the tunnel token has an endpoint field
+- 2025-02-13 SDLC-3762: Remove backstage.io/source-location from catalog-info.yaml
+- 2025-02-06 TUN-8914: Create a flags module to group all cloudflared cli flags
+
+2025.2.0
+- 2025-02-03 TUN-8914: Add a new configuration to locally override the max-active-flows
+- 2025-02-03 Bump x/crypto to 0.31.0
+
+2025.1.1
+- 2025-01-30 TUN-8858: update go to 1.22.10 and include quic-go FIPS changes
+- 2025-01-30 TUN-8855: fix lint issues
+- 2025-01-30 TUN-8855: Update PQ curve preferences
+- 2025-01-30 TUN-8857: remove restriction for using FIPS and PQ
+- 2025-01-30 TUN-8894: report FIPS+PQ error to Sentry when dialling to the edge
+- 2025-01-22 TUN-8904: Rename Connect Response Flow Rate Limited metadata
+- 2025-01-21 AUTH-6633 Fix cloudflared access login + warp as auth
+- 2025-01-20 TUN-8861: Add session limiter to UDP session manager
+- 2025-01-20 TUN-8861: Rename Session Limiter to Flow Limiter
+- 2025-01-17 TUN-8900: Add import of Apple Developer Certificate Authority to macOS Pipeline
+- 2025-01-17 TUN-8871: Accept login flag to authenticate with Fedramp environment
+- 2025-01-16 TUN-8866: Add linter to cloudflared repository
+- 2025-01-14 TUN-8861: Add session limiter to TCP session manager
+- 2025-01-13 TUN-8861: Add configuration for active sessions limiter
+- 2025-01-09 TUN-8848: Don't treat connection shutdown as an error condition when RPC server is done
+
 2025.1.0
 - 2025-01-06 TUN-8842: Add Ubuntu Noble and 'any' debian distributions to release script
 - 2025-01-06 TUN-8807: Add support_datagram_v3 to remote feature rollout

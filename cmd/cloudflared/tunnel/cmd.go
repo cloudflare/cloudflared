@@ -16,7 +16,7 @@ import (
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -24,6 +24,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
@@ -47,61 +48,6 @@ import (
 const (
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
 
-	// ha-Connections specifies how many connections to make to the edge
-	haConnectionsFlag = "ha-connections"
-
-	// sshPortFlag is the port on localhost the cloudflared ssh server will run on
-	sshPortFlag = "local-ssh-port"
-
-	// sshIdleTimeoutFlag defines the duration a SSH session can remain idle before being closed
-	sshIdleTimeoutFlag = "ssh-idle-timeout"
-
-	// sshMaxTimeoutFlag defines the max duration a SSH session can remain open for
-	sshMaxTimeoutFlag = "ssh-max-timeout"
-
-	// bucketNameFlag is the bucket name to use for the SSH log uploader
-	bucketNameFlag = "bucket-name"
-
-	// regionNameFlag is the AWS region name to use for the SSH log uploader
-	regionNameFlag = "region-name"
-
-	// secretIDFlag is the Secret id of SSH log uploader
-	secretIDFlag = "secret-id"
-
-	// accessKeyIDFlag is the Access key id of SSH log uploader
-	accessKeyIDFlag = "access-key-id"
-
-	// sessionTokenIDFlag is the Session token of SSH log uploader
-	sessionTokenIDFlag = "session-token"
-
-	// s3URLFlag is the S3 URL of SSH log uploader (e.g. don't use AWS s3 and use google storage bucket instead)
-	s3URLFlag = "s3-url-host"
-
-	// hostKeyPath is the path of the dir to save SSH host keys too
-	hostKeyPath = "host-key-path"
-
-	// rpcTimeout is how long to wait for a Capnp RPC request to the edge
-	rpcTimeout = "rpc-timeout"
-
-	// writeStreamTimeout sets if we should have a timeout when writing data to a stream towards the destination (edge/origin).
-	writeStreamTimeout = "write-stream-timeout"
-
-	// quicDisablePathMTUDiscovery sets if QUIC should not perform PTMU discovery and use a smaller (safe) packet size.
-	// Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.
-	// Note that this may result in packet drops for UDP proxying, since we expect being able to send at least 1280 bytes of inner packets.
-	quicDisablePathMTUDiscovery = "quic-disable-pmtu-discovery"
-
-	// quicConnLevelFlowControlLimit controls the max flow control limit allocated for a QUIC connection. This controls how much data is the
-	// receiver willing to buffer. Once the limit is reached, the sender will send a DATA_BLOCKED frame to indicate it has more data to write,
-	// but it's blocked by flow control
-	quicConnLevelFlowControlLimit = "quic-connection-level-flow-control-limit"
-	// quicStreamLevelFlowControlLimit is similar to quicConnLevelFlowControlLimit but for each QUIC stream. When the sender is blocked,
-	// it will send a STREAM_DATA_BLOCKED frame
-	quicStreamLevelFlowControlLimit = "quic-stream-level-flow-control-limit"
-
-	// uiFlag is to enable launching cloudflared in interactive UI mode
-	uiFlag = "ui"
-
 	LogFieldCommand             = "command"
 	LogFieldExpandedPath        = "expandedPath"
 	LogFieldPIDPathname         = "pidPathname"
@@ -116,7 +62,6 @@ Eg. cloudflared tunnel --url localhost:8080/.
 Please note that Quick Tunnels are meant to be ephemeral and should only be used for testing purposes.
 For production usage, we recommend creating Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)
 `
-	connectorLabelFlag = "label"
 )
 
 var (
@@ -126,14 +71,14 @@ var (
 	routeFailMsg = fmt.Sprintf("failed to provision routing, please create it manually via Cloudflare dashboard or UI; "+
 		"most likely you already have a conflicting record there. You can also rerun this command with --%s to overwrite "+
 		"any existing DNS records for this hostname.", overwriteDNSFlag)
-	deprecatedClassicTunnelErr = fmt.Errorf("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
+	errDeprecatedClassicTunnel = errors.New("Classic tunnels have been deprecated, please use Named Tunnels. (https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/)")
 	// TODO: TUN-8756 the list below denotes the flags that do not possess any kind of sensitive information
 	// however this approach is not maintainble in the long-term.
 	nonSecretFlagsList = []string{
 		"config",
-		"autoupdate-freq",
-		"no-autoupdate",
-		"metrics",
+		cfdflags.AutoUpdateFreq,
+		cfdflags.NoAutoUpdate,
+		cfdflags.Metrics,
 		"pidfile",
 		"url",
 		"hello-world",
@@ -166,54 +111,55 @@ var (
 		"bastion",
 		"proxy-address",
 		"proxy-port",
-		"loglevel",
-		"transport-loglevel",
-		"logfile",
-		"log-directory",
-		"trace-output",
-		"proxy-dns",
+		cfdflags.LogLevel,
+		cfdflags.TransportLogLevel,
+		cfdflags.LogFile,
+		cfdflags.LogDirectory,
+		cfdflags.TraceOutput,
+		cfdflags.ProxyDns,
 		"proxy-dns-port",
 		"proxy-dns-address",
 		"proxy-dns-upstream",
 		"proxy-dns-max-upstream-conns",
 		"proxy-dns-bootstrap",
-		"is-autoupdated",
-		"edge",
-		"region",
-		"edge-ip-version",
-		"edge-bind-address",
+		cfdflags.IsAutoUpdated,
+		cfdflags.Edge,
+		cfdflags.Region,
+		cfdflags.EdgeIpVersion,
+		cfdflags.EdgeBindAddress,
 		"cacert",
 		"hostname",
 		"id",
-		"lb-pool",
-		"api-url",
-		"metrics-update-freq",
-		"tag",
+		cfdflags.LBPool,
+		cfdflags.ApiURL,
+		cfdflags.MetricsUpdateFreq,
+		cfdflags.Tag,
 		"heartbeat-interval",
 		"heartbeat-count",
-		"max-edge-addr-retries",
-		"retries",
+		cfdflags.MaxEdgeAddrRetries,
+		cfdflags.Retries,
 		"ha-connections",
 		"rpc-timeout",
 		"write-stream-timeout",
 		"quic-disable-pmtu-discovery",
 		"quic-connection-level-flow-control-limit",
 		"quic-stream-level-flow-control-limit",
-		"label",
-		"grace-period",
+		cfdflags.ConnectorLabel,
+		cfdflags.GracePeriod,
 		"compression-quality",
 		"use-reconnect-token",
 		"dial-edge-timeout",
 		"stdin-control",
-		"name",
-		"ui",
+		cfdflags.Name,
+		cfdflags.Ui,
 		"quick-service",
 		"max-fetch-size",
-		"post-quantum",
+		cfdflags.PostQuantum,
 		"management-diagnostics",
-		"protocol",
+		cfdflags.Protocol,
 		"overwrite-dns",
 		"help",
+		cfdflags.MaxActiveFlows,
 	}
 )
 
@@ -298,7 +244,7 @@ func TunnelCommand(c *cli.Context) error {
 	// --name required
 	// --url or --hello-world required
 	// --hostname optional
-	if name := c.String("name"); name != "" {
+	if name := c.String(cfdflags.Name); name != "" {
 		hostname, err := validation.ValidateHostname(c.String("hostname"))
 		if err != nil {
 			return errors.Wrap(err, "Invalid hostname provided")
@@ -315,7 +261,7 @@ func TunnelCommand(c *cli.Context) error {
 	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
 	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
 	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
-	if !c.IsSet("proxy-dns") && c.String("quick-service") != "" && shouldRunQuickTunnel {
+	if !c.IsSet(cfdflags.ProxyDns) && c.String("quick-service") != "" && shouldRunQuickTunnel {
 		return RunQuickTunnel(sc)
 	}
 
@@ -326,10 +272,10 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Classic tunnel usage is no longer supported
 	if c.String("hostname") != "" {
-		return deprecatedClassicTunnelErr
+		return errDeprecatedClassicTunnel
 	}
 
-	if c.IsSet("proxy-dns") {
+	if c.IsSet(cfdflags.ProxyDns) {
 		if shouldRunQuickTunnel {
 			return fmt.Errorf("running a quick tunnel with `proxy-dns` is not supported")
 		}
@@ -376,7 +322,7 @@ func runAdhocNamedTunnel(sc *subcommandContext, name, credentialsOutputPath stri
 
 func routeFromFlag(c *cli.Context) (route cfapi.HostnameRoute, ok bool) {
 	if hostname := c.String("hostname"); hostname != "" {
-		if lbPool := c.String("lb-pool"); lbPool != "" {
+		if lbPool := c.String(cfdflags.LBPool); lbPool != "" {
 			return cfapi.NewLBRoute(hostname, lbPool), true
 		}
 		return cfapi.NewDNSRoute(hostname, c.Bool(overwriteDNSFlagName)), true
@@ -406,7 +352,7 @@ func StartServer(
 		log.Info().Msg(config.ErrNoConfigFile.Error())
 	}
 
-	if c.IsSet("trace-output") {
+	if c.IsSet(cfdflags.TraceOutput) {
 		tmpTraceFile, err := os.CreateTemp("", "trace")
 		if err != nil {
 			log.Err(err).Msg("Failed to create new temporary file to save trace output")
@@ -418,7 +364,7 @@ func StartServer(
 			if err := tmpTraceFile.Close(); err != nil {
 				traceLog.Err(err).Msg("Failed to close temporary trace output file")
 			}
-			traceOutputFilepath := c.String("trace-output")
+			traceOutputFilepath := c.String(cfdflags.TraceOutput)
 			if err := os.Rename(tmpTraceFile.Name(), traceOutputFilepath); err != nil {
 				traceLog.
 					Err(err).
@@ -448,7 +394,7 @@ func StartServer(
 
 	go waitForSignal(graceShutdownC, log)
 
-	if c.IsSet("proxy-dns") {
+	if c.IsSet(cfdflags.ProxyDns) {
 		dnsReadySignal := make(chan struct{})
 		wg.Add(1)
 		go func() {
@@ -470,7 +416,7 @@ func StartServer(
 	go func() {
 		defer wg.Done()
 		autoupdater := updater.NewAutoUpdater(
-			c.Bool("no-autoupdate"), c.Duration("autoupdate-freq"), &listeners, log,
+			c.Bool(cfdflags.NoAutoUpdate), c.Duration(cfdflags.AutoUpdateFreq), &listeners, log,
 		)
 		errC <- autoupdater.Run(ctx)
 	}()
@@ -526,7 +472,7 @@ func StartServer(
 		c.Bool("management-diagnostics"),
 		serviceIP,
 		clientID,
-		c.String(connectorLabelFlag),
+		c.String(cfdflags.ConnectorLabel),
 		logger.ManagementLogger.Log,
 		logger.ManagementLogger,
 	)
@@ -578,7 +524,7 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx, metricsConfig, log)
 	}()
 
-	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int(haConnectionsFlag))
+	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int(cfdflags.HaConnections))
 	if c.IsSet("stdin-control") {
 		log.Info().Msg("Enabling control through stdin")
 		go stdinControl(reconnectCh, log)
@@ -615,8 +561,10 @@ func waitToShutdown(wg *sync.WaitGroup,
 		log.Debug().Msg("Graceful shutdown signalled")
 		if gracePeriod > 0 {
 			// wait for either grace period or service termination
+			ticker := time.NewTicker(gracePeriod)
+			defer ticker.Stop()
 			select {
-			case <-time.Tick(gracePeriod):
+			case <-ticker.C:
 			case <-errC:
 			}
 		}
@@ -644,7 +592,7 @@ func waitToShutdown(wg *sync.WaitGroup,
 
 func notifySystemd(waitForSignal *signal.Signal) {
 	<-waitForSignal.Wait()
-	daemon.SdNotify(false, "READY=1")
+	_, _ = daemon.SdNotify(false, "READY=1")
 }
 
 func writePidFile(waitForSignal *signal.Signal, pidPathname string, log *zerolog.Logger) {
@@ -696,31 +644,31 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 	flags = append(flags, []cli.Flag{
 		credentialsFileFlag,
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   "is-autoupdated",
+			Name:   cfdflags.IsAutoUpdated,
 			Usage:  "Signal the new process that Cloudflare Tunnel connector has been autoupdated",
 			Value:  false,
 			Hidden: true,
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "edge",
+			Name:    cfdflags.Edge,
 			Usage:   "Address of the Cloudflare tunnel server. Only works in Cloudflare's internal testing environment.",
 			EnvVars: []string{"TUNNEL_EDGE"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "region",
+			Name:    cfdflags.Region,
 			Usage:   "Cloudflare Edge region to connect to. Omit or set to empty to connect to the global region.",
 			EnvVars: []string{"TUNNEL_REGION"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "edge-ip-version",
+			Name:    cfdflags.EdgeIpVersion,
 			Usage:   "Cloudflare Edge IP address version to connect with. {4, 6, auto}",
 			EnvVars: []string{"TUNNEL_EDGE_IP_VERSION"},
 			Value:   "4",
 			Hidden:  false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "edge-bind-address",
+			Name:    cfdflags.EdgeBindAddress,
 			Usage:   "Bind to IP address for outgoing connections to Cloudflare Edge.",
 			EnvVars: []string{"TUNNEL_EDGE_BIND_ADDRESS"},
 			Hidden:  false,
@@ -744,7 +692,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "lb-pool",
+			Name:    cfdflags.LBPool,
 			Usage:   "The name of a (new/existing) load balancing pool to add this origin to.",
 			EnvVars: []string{"TUNNEL_LB_POOL"},
 			Hidden:  shouldHide,
@@ -768,21 +716,21 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "api-url",
+			Name:    cfdflags.ApiURL,
 			Usage:   "Base URL for Cloudflare API v4",
 			EnvVars: []string{"TUNNEL_API_URL"},
 			Value:   "https://api.cloudflare.com/client/v4",
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    "metrics-update-freq",
+			Name:    cfdflags.MetricsUpdateFreq,
 			Usage:   "Frequency to update tunnel metrics",
 			Value:   time.Second * 5,
 			EnvVars: []string{"TUNNEL_METRICS_UPDATE_FREQ"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "tag",
+			Name:    cfdflags.Tag,
 			Usage:   "Custom tags used to identify this tunnel via added HTTP request headers to the origin, in format `KEY=VALUE`. Multiple tags may be specified.",
 			EnvVars: []string{"TUNNEL_TAG"},
 			Hidden:  true,
@@ -801,64 +749,64 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden: true,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:   "max-edge-addr-retries",
+			Name:   cfdflags.MaxEdgeAddrRetries,
 			Usage:  "Maximum number of times to retry on edge addrs before falling back to a lower protocol",
 			Value:  8,
 			Hidden: true,
 		}),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    "retries",
+			Name:    cfdflags.Retries,
 			Value:   5,
 			Usage:   "Maximum number of retries for connection/protocol errors.",
 			EnvVars: []string{"TUNNEL_RETRIES"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:   haConnectionsFlag,
+			Name:   cfdflags.HaConnections,
 			Value:  4,
 			Hidden: true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   rpcTimeout,
+			Name:   cfdflags.RpcTimeout,
 			Value:  5 * time.Second,
 			Hidden: true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    writeStreamTimeout,
+			Name:    cfdflags.WriteStreamTimeout,
 			EnvVars: []string{"TUNNEL_STREAM_WRITE_TIMEOUT"},
 			Usage:   "Use this option to add a stream write timeout for connections when writing towards the origin or edge. Default is 0 which disables the write timeout.",
 			Value:   0 * time.Second,
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    quicDisablePathMTUDiscovery,
+			Name:    cfdflags.QuicDisablePathMTUDiscovery,
 			EnvVars: []string{"TUNNEL_DISABLE_QUIC_PMTU"},
 			Usage:   "Use this option to disable PTMU discovery for QUIC connections. This will result in lower packet sizes. Not however, that this may cause instability for UDP proxying.",
 			Value:   false,
 			Hidden:  true,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    quicConnLevelFlowControlLimit,
+			Name:    cfdflags.QuicConnLevelFlowControlLimit,
 			EnvVars: []string{"TUNNEL_QUIC_CONN_LEVEL_FLOW_CONTROL_LIMIT"},
 			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
 			Value:   30 * (1 << 20), // 30 MB
 			Hidden:  true,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    quicStreamLevelFlowControlLimit,
+			Name:    cfdflags.QuicStreamLevelFlowControlLimit,
 			EnvVars: []string{"TUNNEL_QUIC_STREAM_LEVEL_FLOW_CONTROL_LIMIT"},
 			Usage:   "Use this option to change the connection-level flow control limit for QUIC transport.",
 			Value:   6 * (1 << 20), // 6 MB
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:  connectorLabelFlag,
+			Name:  cfdflags.ConnectorLabel,
 			Usage: "Use this option to give a meaningful label to a specific connector. When a tunnel starts up, a connector id unique to the tunnel is generated. This is a uuid. To make it easier to identify a connector, we will use the hostname of the machine the tunnel is running on along with the connector ID. This option exists if one wants to have more control over what their individual connectors are called.",
 			Value: "",
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    "grace-period",
+			Name:    cfdflags.GracePeriod,
 			Usage:   "When cloudflared receives SIGINT/SIGTERM it will stop accepting new requests, wait for in-progress requests to terminate, then shutdown. Waiting for in-progress requests will timeout after this grace period, or when a second SIGTERM/SIGINT is received.",
 			Value:   time.Second * 30,
 			EnvVars: []string{"TUNNEL_GRACE_PERIOD"},
@@ -894,14 +842,14 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:   false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "name",
+			Name:    cfdflags.Name,
 			Aliases: []string{"n"},
 			EnvVars: []string{"TUNNEL_NAME"},
 			Usage:   "Stable name to identify the tunnel. Using this flag will create, route and run a tunnel. For production usage, execute each command separately",
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:   uiFlag,
+			Name:   cfdflags.Ui,
 			Usage:  "(depreciated) Launch tunnel UI. Tunnel logs are scrollable via 'j', 'k', or arrow keys.",
 			Value:  false,
 			Hidden: true,
@@ -919,11 +867,10 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Hidden:  true,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "post-quantum",
+			Name:    cfdflags.PostQuantum,
 			Usage:   "When given creates an experimental post-quantum secure tunnel",
 			Aliases: []string{"pq"},
 			EnvVars: []string{"TUNNEL_POST_QUANTUM"},
-			Hidden:  FipsEnabled,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
 			Name:    "management-diagnostics",
@@ -948,27 +895,27 @@ func configureCloudflaredFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		},
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    credentials.OriginCertFlag,
+			Name:    cfdflags.OriginCert,
 			Usage:   "Path to the certificate generated for your origin when you run cloudflared login.",
 			EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
 			Value:   credentials.FindDefaultOriginCertPath(),
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:   "autoupdate-freq",
+			Name:   cfdflags.AutoUpdateFreq,
 			Usage:  fmt.Sprintf("Autoupdate frequency. Default is %v.", updater.DefaultCheckUpdateFreq),
 			Value:  updater.DefaultCheckUpdateFreq,
 			Hidden: shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "no-autoupdate",
+			Name:    cfdflags.NoAutoUpdate,
 			Usage:   "Disable periodic check for updates, restarting the server with the new version.",
 			EnvVars: []string{"NO_AUTOUPDATE"},
 			Value:   false,
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:  "metrics",
+			Name:  cfdflags.Metrics,
 			Value: metrics.GetMetricsDefaultAddress(metrics.Runtime),
 			Usage: fmt.Sprintf(
 				`Listen address for metrics reporting. If no address is passed cloudflared will try to bind to %v.
@@ -1132,62 +1079,62 @@ func legacyTunnelFlag(msg string) string {
 func sshFlags(shouldHide bool) []cli.Flag {
 	return []cli.Flag{
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    sshPortFlag,
+			Name:    cfdflags.SshPort,
 			Usage:   "Localhost port that cloudflared SSH server will run on",
 			Value:   "2222",
 			EnvVars: []string{"LOCAL_SSH_PORT"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    sshIdleTimeoutFlag,
+			Name:    cfdflags.SshIdleTimeout,
 			Usage:   "Connection timeout after no activity",
 			EnvVars: []string{"SSH_IDLE_TIMEOUT"},
 			Hidden:  true,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
-			Name:    sshMaxTimeoutFlag,
+			Name:    cfdflags.SshMaxTimeout,
 			Usage:   "Absolute connection timeout",
 			EnvVars: []string{"SSH_MAX_TIMEOUT"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    bucketNameFlag,
+			Name:    cfdflags.SshLogUploaderBucketName,
 			Usage:   "Bucket name of where to upload SSH logs",
 			EnvVars: []string{"BUCKET_ID"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    regionNameFlag,
+			Name:    cfdflags.SshLogUploaderRegionName,
 			Usage:   "Region name of where to upload SSH logs",
 			EnvVars: []string{"REGION_ID"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    secretIDFlag,
+			Name:    cfdflags.SshLogUploaderSecretID,
 			Usage:   "Secret ID of where to upload SSH logs",
 			EnvVars: []string{"SECRET_ID"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    accessKeyIDFlag,
+			Name:    cfdflags.SshLogUploaderAccessKeyID,
 			Usage:   "Access Key ID of where to upload SSH logs",
 			EnvVars: []string{"ACCESS_CLIENT_ID"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    sessionTokenIDFlag,
+			Name:    cfdflags.SshLogUploaderSessionTokenID,
 			Usage:   "Session Token to use in the configuration of SSH logs uploading",
 			EnvVars: []string{"SESSION_TOKEN_ID"},
 			Hidden:  true,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    s3URLFlag,
+			Name:    cfdflags.SshLogUploaderS3URL,
 			Usage:   "S3 url of where to upload SSH logs",
 			EnvVars: []string{"S3_URL"},
 			Hidden:  true,
 		}),
 		altsrc.NewPathFlag(&cli.PathFlag{
-			Name:    hostKeyPath,
+			Name:    cfdflags.HostKeyPath,
 			Usage:   "Absolute path of directory to save SSH host keys in",
 			EnvVars: []string{"HOST_KEY_PATH"},
 			Hidden:  true,
@@ -1227,7 +1174,7 @@ func sshFlags(shouldHide bool) []cli.Flag {
 func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
 	return []cli.Flag{
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "proxy-dns",
+			Name:    cfdflags.ProxyDns,
 			Usage:   "Run a DNS over HTTPS proxy server.",
 			EnvVars: []string{"TUNNEL_DNS"},
 			Hidden:  shouldHide,
@@ -1325,7 +1272,7 @@ func nonSecretCliFlags(log *zerolog.Logger, cli *cli.Context, flagInclusionList 
 		}
 
 		switch flag {
-		case logger.LogDirectoryFlag, logger.LogFileFlag:
+		case cfdflags.LogDirectory, cfdflags.LogFile:
 			{
 				absolute, err := filepath.Abs(value)
 				if err != nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/connection"
 )
 
@@ -82,13 +83,13 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		sc.log.Info().Msg(line)
 	}
 
-	if !sc.c.IsSet("protocol") {
-		sc.c.Set("protocol", "quic")
+	if !sc.c.IsSet(flags.Protocol) {
+		_ = sc.c.Set(flags.Protocol, "quic")
 	}
 
 	// Override the number of connections used. Quick tunnels shouldn't be used for production usage,
 	// so, use a single connection instead.
-	sc.c.Set(haConnectionsFlag, "1")
+	_ = sc.c.Set(flags.HaConnections, "1")
 	return StartServer(
 		sc.c,
 		buildInfo,

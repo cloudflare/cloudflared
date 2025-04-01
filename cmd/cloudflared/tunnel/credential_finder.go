@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/credentials"
 
@@ -57,7 +58,7 @@ func newSearchByID(id uuid.UUID, c *cli.Context, log *zerolog.Logger, fs fileSys
 }
 
 func (s searchByID) Path() (string, error) {
-	originCertPath := s.c.String(credentials.OriginCertFlag)
+	originCertPath := s.c.String(cfdflags.OriginCert)
 	originCertLog := s.log.With().
 		Str("originCertPath", originCertPath).
 		Logger()
