@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 	"time"
@@ -249,7 +248,7 @@ func createRollingLogger(config RollingConfig) (io.Writer, error) {
 		}
 
 		rotatingFileInit.writer = &lumberjack.Logger{
-			Filename:   path.Join(config.Dirname, config.Filename),
+			Filename:   filepath.Join(config.Dirname, config.Filename),
 			MaxBackups: config.maxBackups,
 			MaxSize:    config.maxSize,
 			MaxAge:     config.maxAge,
