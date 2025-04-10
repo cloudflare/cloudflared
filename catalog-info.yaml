@@ -13,3 +13,5 @@ spec:
   type: "service"
   lifecycle: "Active"
   owner: "teams/tunnel-teams-routing"
+  cf:
+    FIPS: "required"
