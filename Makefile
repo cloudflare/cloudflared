@@ -54,8 +54,11 @@ endif
 IMPORT_PATH    := github.com/cloudflare/cloudflared
 PACKAGE_DIR    := $(CURDIR)/packaging
 PREFIX         := /usr
-INSTALL_BINDIR := $(PREFIX)/bin/
-INSTALL_MANDIR := $(PREFIX)/share/man/man1/
+ifeq ($(LOCAL_OS),freebsd)
+    PREFIX     := /usr/local
+endif
+INSTALL_BINDIR := $(PREFIX)/bin
+INSTALL_MANDIR := $(PREFIX)/share/man/man1
 CF_GO_PATH     := /tmp/go
 PATH           := $(CF_GO_PATH)/bin:$(PATH)
 
