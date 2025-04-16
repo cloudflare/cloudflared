@@ -113,7 +113,7 @@ func ParseIngressFromConfigAndCLI(conf *config.Configuration, c *cli.Context, lo
 		// If no token is provided, the probability of NOT being a remotely managed tunnel is higher.
 		// So, we should warn the user that no ingress rules were found, because remote configuration will most likely not exist.
 		if !c.IsSet("token") {
-			log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+			log.Warn().Msg(ErrNoIngressRulesCLI.Error())
 		}
 		return newDefaultOrigin(c, log), nil
 	}

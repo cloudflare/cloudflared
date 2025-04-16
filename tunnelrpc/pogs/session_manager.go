@@ -2,6 +2,7 @@ package pogs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -127,7 +128,7 @@ func (p *RegisterUdpSessionResponse) Unmarshal(s proto.RegisterUdpSessionRespons
 		return err
 	}
 	if respErr != "" {
-		p.Err = fmt.Errorf(respErr)
+		p.Err = errors.New(respErr)
 	}
 	p.Spans, err = s.Spans()
 	if err != nil {
