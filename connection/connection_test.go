@@ -7,10 +7,12 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"testing"
 	"time"
 
 	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 
 	cfdflow "github.com/cloudflare/cloudflared/flow"
 
@@ -208,4 +210,49 @@ func (mcf mockConnectedFuse) Connected() {}
 
 func (mcf mockConnectedFuse) IsConnected() bool {
 	return true
+}
+
+func TestShouldFlushHeaders(t *testing.T) {
+	tests := []struct {
+		headers     map[string]string
+		shouldFlush bool
+	}{
+		{
+			headers:     map[string]string{contentTypeHeader: "application/json", contentLengthHeader: "1"},
+			shouldFlush: false,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "text/html", contentLengthHeader: "1"},
+			shouldFlush: false,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "text/event-stream", contentLengthHeader: "1"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/grpc", contentLengthHeader: "1"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/x-ndjson", contentLengthHeader: "1"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/json"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/json", contentLengthHeader: "-1", transferEncodingHeader: "chunked"},
+			shouldFlush: true,
+		},
+	}
+
+	for _, test := range tests {
+		headers := http.Header{}
+		for k, v := range test.headers {
+			headers.Add(k, v)
+		}
+
+		require.Equal(t, test.shouldFlush, shouldFlush(headers))
+	}
 }
