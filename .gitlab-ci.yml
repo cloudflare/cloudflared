@@ -20,15 +20,30 @@ default:
         exit 0
       fi
 
+## A set of predefined rules to use on the different jobs
+.default_rules:
+  # Rules to run the job only on the master branch
+  run_on_master:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - when: never
+  # Rules to run the job only on branches that are not master. This is needed because for now
+  # we need to keep a similar behavior due to the integration with teamcity, which requires us
+  # to not trigger pipelines on tags and/or merge requests.
+  run_on_branch:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      when: always
+    - when: never
+
 # -----------------------------------------------
 # Stage 1: Build on every PR
 # -----------------------------------------------
 build_cloudflared_macos: &build
   stage: build
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH != "master"
-      when: always
-    - when: never
+    - !reference [.default_rules, run_on_branch]
   tags:
     - "macstadium-${RUNNER_ARCH}"
   parallel:
@@ -55,14 +70,11 @@ build_cloudflared_macos: &build
 # -----------------------------------------------
 build_and_sign_cloudflared_macos:
   <<: *build
-  extends: .check_tag
   rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-      when: always
-    - when: never
+    - !reference [.default_rules, run_on_master]
   secrets:
     APPLE_DEV_CA_CERT:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert/data@kv
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert_v2/data@kv
       file: false
     CFD_CODE_SIGN_CERT:
       vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_cert_v2/data@kv
@@ -93,9 +105,7 @@ release_cloudflared_macos_to_github:
   dependencies:
     - build_and_sign_cloudflared_macos
   rules:
-    - if: $CI_COMMIT_BRANCH == "master"
-      when: always
-    - when: never
+    - !reference [.default_rules, run_on_master]
   cache:
     paths:
       - .cache/pip
