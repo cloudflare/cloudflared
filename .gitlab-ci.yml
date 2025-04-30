@@ -1,0 +1,121 @@
+stages: [build, release]
+
+default:
+  id_tokens:
+    VAULT_ID_TOKEN:
+      aud: https://vault.cfdata.org
+
+# This before_script is injected into every job that runs on master meaning that if there is no tag the step
+# will succeed but only write "No tag present - Skipping" to the console.
+.check_tag:
+  before_script:
+    - |
+      # Check if there is a Git tag pointing to HEAD
+      echo "Tag found: $(git tag --points-at HEAD | grep .)"
+      if git tag --points-at HEAD | grep .; then
+        echo "Tag found: $(git tag --points-at HEAD | grep .)"
+        export "VERSION=$(git tag --points-at HEAD | grep .)"
+      else
+        echo "No tag present — skipping."
+        exit 0
+      fi
+
+# -----------------------------------------------
+# Stage 1: Build on every PR
+# -----------------------------------------------
+build_cloudflared_macos: &build
+  stage: build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH != "master"
+      when: always
+    - when: never
+  tags:
+    - "macstadium-${RUNNER_ARCH}"
+  parallel:
+    matrix:
+      - RUNNER_ARCH: [arm, intel]
+  artifacts:
+    paths:
+      - artifacts/*
+  script:
+    - '[ "${RUNNER_ARCH}" = "arm" ] && export TARGET_ARCH=arm64'
+    - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
+    - ARCH=$(uname -m)
+    - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
+    - ./.teamcity/mac/install-cloudflare-go.sh
+    - export PATH="/tmp/go/bin:$PATH"
+    - BUILD_SCRIPT=.teamcity/mac/build.sh
+    - if [[ ! -x ${BUILD_SCRIPT} ]] ; then exit ; fi
+    - set -euo pipefail
+    - echo "Executing ${BUILD_SCRIPT}"
+    - exec ${BUILD_SCRIPT}
+
+# -----------------------------------------------
+# Stage 1: Build and sign only on releases
+# -----------------------------------------------
+build_and_sign_cloudflared_macos:
+  <<: *build
+  extends: .check_tag
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: always
+    - when: never
+  secrets:
+    APPLE_DEV_CA_CERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert/data@kv
+      file: false
+    CFD_CODE_SIGN_CERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_cert_v2/data@kv
+      file: false
+    CFD_CODE_SIGN_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_key_v2/data@kv
+      file: false
+    CFD_CODE_SIGN_PASS:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_pass_v2/data@kv
+      file: false
+    CFD_INSTALLER_CERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_cert_v2/data@kv
+      file: false
+    CFD_INSTALLER_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_key_v2/data@kv
+      file: false
+    CFD_INSTALLER_PASS:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_pass_v2/data@kv
+      file: false
+
+# -----------------------------------------------
+# Stage 2: Release to Github after building and signing
+# -----------------------------------------------
+release_cloudflared_macos_to_github:
+  stage: release
+  image: docker-registry.cfdata.org/stash/tun/docker-images/cloudflared-ci/main:6-8616fe631b76-amd64@sha256:96f4fd05e66cec03e0864c1bcf09324c130d4728eef45ee994716da499183614
+  extends: .check_tag
+  dependencies:
+    - build_and_sign_cloudflared_macos
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: always
+    - when: never
+  cache:
+    paths:
+      - .cache/pip
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+    KV_NAMESPACE: 380e19aa04314648949b6ad841417ebe
+    KV_ACCOUNT: 5ab4e9dfbd435d24068829fda0077963
+  secrets:
+    KV_API_TOKEN:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_kv_api_token/data@kv
+      file: false
+    API_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_github_api_key/data@kv
+      file: false
+  script:
+    - python3 --version ; pip --version  # For debugging
+    - python3 -m venv venv
+    - source venv/bin/activate
+    - pip install pynacl==1.4.0 pygithub==1.55
+    - echo $VERSION
+    - echo $TAG_EXISTS
+    - echo "Running release because tag exists."
+    - make macos-release

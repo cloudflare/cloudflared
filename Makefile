@@ -237,6 +237,10 @@ github-release:
 	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION)
 	python3 github_message.py --release-version $(VERSION)
 
+.PHONY: macos-release
+macos-release:
+	python3 github_release.py --path $(PWD)/artifacts/ --release-version $(VERSION)
+
 .PHONY: r2-linux-release
 r2-linux-release:
 	python3 ./release_pkgs.py

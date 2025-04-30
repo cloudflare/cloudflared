@@ -61,7 +61,7 @@ def assert_tag_exists(repo, version):
         raise Exception("Tag {} not found".format(version))
 
 
-def get_or_create_release(repo, version, dry_run=False):
+def get_or_create_release(repo, version, dry_run=False, is_draft=False):
     """
     Get a Github Release matching the version tag or create a new one.
     If a conflict occurs on creation, attempt to fetch the Release on last time
@@ -81,8 +81,11 @@ def get_or_create_release(repo, version, dry_run=False):
         return
 
     try:
-        logging.info("Creating release %s", version)
-        return repo.create_git_release(version, version, "")
+        if is_draft:
+            logging.info("Drafting release %s", version)
+        else:
+            logging.info("Creating release %s", version)
+        return repo.create_git_release(version, version, "", is_draft)
     except GithubException as e:
         errors = e.data.get("errors", [])
         if e.status == 422 and any(
@@ -127,6 +130,10 @@ def parse_args():
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="Do not create release or upload asset"
+    )
+
+    parser.add_argument(
+        "--draft", action="store_true", help="Create a draft release"
     )
 
     args = parser.parse_args()
@@ -292,7 +299,7 @@ def main():
                 for filename in onlyfiles:
                     binary_path = os.path.join(args.path, filename)
                     assert_asset_version(binary_path, args.release_version)
-                release = get_or_create_release(repo, args.release_version, args.dry_run)
+                release = get_or_create_release(repo, args.release_version, args.dry_run, args.draft)
                 for filename in onlyfiles:
                     binary_path = os.path.join(args.path, filename)
                     upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
