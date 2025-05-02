@@ -761,7 +761,7 @@ func runCommand(c *cli.Context) error {
 		if tokenFile := c.String(TunnelTokenFileFlag); tokenFile != "" {
 			data, err := os.ReadFile(tokenFile)
 			if err != nil {
-				return cliutil.UsageError("Failed to read token file: " + err.Error())
+				return cliutil.UsageError("Failed to read token file: %s", err.Error())
 			}
 			tokenStr = strings.TrimSpace(string(data))
 		}

@@ -1,6 +1,6 @@
 module github.com/cloudflare/cloudflared
 
-go 1.22
+go 1.24.2
 
 require (
 	github.com/coredns/coredns v1.11.3
