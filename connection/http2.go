@@ -19,7 +19,7 @@ import (
 	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/tracing"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // note: these constants are exported so we can reuse them in the edge-side code
@@ -39,7 +39,7 @@ type HTTP2Connection struct {
 	conn         net.Conn
 	server       *http2.Server
 	orchestrator Orchestrator
-	connOptions  *tunnelpogs.ConnectionOptions
+	connOptions  *pogs.ConnectionOptions
 	observer     *Observer
 	connIndex    uint8
 
@@ -54,7 +54,7 @@ type HTTP2Connection struct {
 func NewHTTP2Connection(
 	conn net.Conn,
 	orchestrator Orchestrator,
-	connOptions *tunnelpogs.ConnectionOptions,
+	connOptions *pogs.ConnectionOptions,
 	observer *Observer,
 	connIndex uint8,
 	controlStreamHandler ControlStreamHandler,

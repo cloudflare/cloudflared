@@ -1,5 +1,7 @@
 package features
 
+import "slices"
+
 const (
 	FeatureSerializedHeaders = "serialized_headers"
 	FeatureQuickReconnects   = "quick_reconnects"
@@ -8,7 +10,9 @@ const (
 	FeaturePostQuantum       = "postquantum"
 	FeatureQUICSupportEOF    = "support_quic_eof"
 	FeatureManagementLogs    = "management_logs"
-	FeatureDatagramV3        = "support_datagram_v3"
+	FeatureDatagramV3_1      = "support_datagram_v3_1"
+
+	DeprecatedFeatureDatagramV3 = "support_datagram_v3" // Deprecated: TUN-9291
 )
 
 var defaultFeatures = []string{
@@ -17,6 +21,11 @@ var defaultFeatures = []string{
 	FeatureDatagramV2,
 	FeatureQUICSupportEOF,
 	FeatureManagementLogs,
+}
+
+// List of features that are no longer in-use.
+var deprecatedFeatures = []string{
+	DeprecatedFeatureDatagramV3,
 }
 
 // Features set by user provided flags
@@ -40,15 +49,19 @@ const (
 	// DatagramV2 is the currently supported datagram protocol for UDP and ICMP packets
 	DatagramV2 DatagramVersion = FeatureDatagramV2
 	// DatagramV3 is a new datagram protocol for UDP and ICMP packets. It is not backwards compatible with datagram v2.
-	DatagramV3 DatagramVersion = FeatureDatagramV3
+	DatagramV3 DatagramVersion = FeatureDatagramV3_1
 )
 
-// Remove any duplicates from the slice
-func Dedup(slice []string) []string {
+// Remove any duplicate features from the list and remove deprecated features
+func dedupAndRemoveFeatures(features []string) []string {
 	// Convert the slice into a set
-	set := make(map[string]bool, 0)
-	for _, str := range slice {
-		set[str] = true
+	set := map[string]bool{}
+	for _, feature := range features {
+		// Remove deprecated features from the provided list
+		if slices.Contains(deprecatedFeatures, feature) {
+			continue
+		}
+		set[feature] = true
 	}
 
 	// Convert the set back into a slice

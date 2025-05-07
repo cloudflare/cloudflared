@@ -22,7 +22,6 @@ import (
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	rpcquic "github.com/cloudflare/cloudflared/tunnelrpc/quic"
 )
 
@@ -44,7 +43,7 @@ type quicConnection struct {
 	orchestrator         Orchestrator
 	datagramHandler      DatagramSessionHandler
 	controlStreamHandler ControlStreamHandler
-	connOptions          *tunnelpogs.ConnectionOptions
+	connOptions          *pogs.ConnectionOptions
 	connIndex            uint8
 
 	rpcTimeout         time.Duration
@@ -235,7 +234,7 @@ func (q *quicConnection) dispatchRequest(ctx context.Context, stream *rpcquic.Re
 }
 
 // UpdateConfiguration is the RPC method invoked by edge when there is a new configuration
-func (q *quicConnection) UpdateConfiguration(ctx context.Context, version int32, config []byte) *tunnelpogs.UpdateConfigurationResponse {
+func (q *quicConnection) UpdateConfiguration(ctx context.Context, version int32, config []byte) *pogs.UpdateConfigurationResponse {
 	return q.orchestrator.UpdateConfig(version, config)
 }
 

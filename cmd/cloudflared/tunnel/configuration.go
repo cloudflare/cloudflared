@@ -140,7 +140,7 @@ func prepareTunnelConfig(
 	transportProtocol := c.String(flags.Protocol)
 	isPostQuantumEnforced := c.Bool(flags.PostQuantum)
 
-	featureSelector, err := features.NewFeatureSelector(ctx, namedTunnel.Credentials.AccountTag, c.StringSlice("features"), c.Bool("post-quantum"), log)
+	featureSelector, err := features.NewFeatureSelector(ctx, namedTunnel.Credentials.AccountTag, c.StringSlice(flags.Features), c.Bool(flags.PostQuantum), log)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "Failed to create feature selector")
 	}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/tunnelrpc"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // registerClient derives a named tunnel rpc client that can then be used to register and unregister connections.
@@ -36,7 +36,7 @@ type controlStream struct {
 // ControlStreamHandler registers connections with origintunneld and initiates graceful shutdown.
 type ControlStreamHandler interface {
 	// ServeControlStream handles the control plane of the transport in the current goroutine calling this
-	ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *tunnelpogs.ConnectionOptions, tunnelConfigGetter TunnelConfigJSONGetter) error
+	ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *pogs.ConnectionOptions, tunnelConfigGetter TunnelConfigJSONGetter) error
 	// IsStopped tells whether the method above has finished
 	IsStopped() bool
 }
@@ -78,7 +78,7 @@ func NewControlStream(
 func (c *controlStream) ServeControlStream(
 	ctx context.Context,
 	rw io.ReadWriteCloser,
-	connOptions *tunnelpogs.ConnectionOptions,
+	connOptions *pogs.ConnectionOptions,
 	tunnelConfigGetter TunnelConfigJSONGetter,
 ) error {
 	registrationClient := c.registerClientFunc(ctx, rw, c.registerTimeout)
