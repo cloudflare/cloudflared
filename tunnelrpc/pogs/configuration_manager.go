@@ -2,7 +2,7 @@ package pogs
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
@@ -96,7 +96,7 @@ func (p *UpdateConfigurationResponse) Unmarshal(s proto.UpdateConfigurationRespo
 		return err
 	}
 	if respErr != "" {
-		p.Err = fmt.Errorf(respErr)
+		p.Err = errors.New(respErr)
 	}
 	return nil
 }

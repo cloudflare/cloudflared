@@ -74,7 +74,7 @@ func (o *httpService) SetOriginServerName(req *http.Request) {
 
 func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 	if o.defaultResp {
-		o.log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+		o.log.Warn().Msg(ErrNoIngressRulesCLI.Error())
 	}
 	resp := &http.Response{
 		StatusCode: o.code,
