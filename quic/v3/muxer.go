@@ -264,10 +264,10 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 		return
 	}
 	log = log.With().Str(logSrcKey, session.LocalAddr().String()).Logger()
-	c.metrics.IncrementFlows()
+	c.metrics.IncrementFlows(c.index)
 	// Make sure to eventually remove the session from the session manager when the session is closed
 	defer c.sessionManager.UnregisterSession(session.ID())
-	defer c.metrics.DecrementFlows()
+	defer c.metrics.DecrementFlows(c.index)
 
 	// Respond that we are able to process the new session
 	err = c.SendUDPSessionResponse(datagram.RequestID, ResponseOk)
@@ -315,7 +315,7 @@ func (c *datagramConn) handleSessionAlreadyRegistered(requestID RequestID, logge
 	// The session is already running in another routine so we want to restart the idle timeout since no proxied
 	// packets have come down yet.
 	session.ResetIdleTimer()
-	c.metrics.RetryFlowResponse()
+	c.metrics.RetryFlowResponse(c.index)
 	logger.Debug().Msgf("flow registration response retry")
 }
 

@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	expectedContextCanceled = errors.New("expected context canceled")
+	errExpectedContextCanceled = errors.New("expected context canceled")
 
 	testOriginAddr = net.UDPAddrFromAddrPort(netip.MustParseAddrPort("127.0.0.1:0"))
 	testLocalAddr  = net.UDPAddrFromAddrPort(netip.MustParseAddrPort("127.0.0.1:0"))
@@ -40,7 +40,7 @@ func testSessionWrite(t *testing.T, payload []byte) {
 	serverRead := make(chan []byte, 1)
 	go func() {
 		read := make([]byte, 1500)
-		server.Read(read[:])
+		_, _ = server.Read(read[:])
 		serverRead <- read
 	}()
 	// Create session and write to origin
@@ -110,12 +110,12 @@ func testSessionServe_Origin(t *testing.T, payload []byte) {
 	case data := <-eyeball.recvData:
 		// check received data matches provided from origin
 		expectedData := makePayload(1500)
-		v3.MarshalPayloadHeaderTo(testRequestID, expectedData[:])
+		_ = v3.MarshalPayloadHeaderTo(testRequestID, expectedData[:])
 		copy(expectedData[17:], payload)
 		if !slices.Equal(expectedData[:v3.DatagramPayloadHeaderLen+len(payload)], data) {
 			t.Fatal("expected datagram did not equal expected")
 		}
-		cancel(expectedContextCanceled)
+		cancel(errExpectedContextCanceled)
 	case err := <-ctx.Done():
 		// we expect the payload to return before the context to cancel on the session
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func testSessionServe_Origin(t *testing.T, payload []byte) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
+	if !errors.Is(context.Cause(ctx), errExpectedContextCanceled) {
 		t.Fatal(err)
 	}
 }
@@ -198,7 +198,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 
 	// Origin sends data
 	payload2 := []byte{0xde}
-	pipe1.Write(payload2)
+	_, _ = pipe1.Write(payload2)
 
 	// Expect write to eyeball2
 	data := <-eyeball2.recvData
@@ -249,13 +249,13 @@ func TestSessionServe_Migrate_CloseContext2(t *testing.T) {
 		t.Fatalf("expected session to still be running")
 	default:
 	}
-	if context.Cause(eyeball1Ctx) != contextCancelErr {
+	if !errors.Is(context.Cause(eyeball1Ctx), contextCancelErr) {
 		t.Fatalf("first eyeball context should be cancelled manually: %+v", context.Cause(eyeball1Ctx))
 	}
 
 	// Origin sends data
 	payload2 := []byte{0xde}
-	pipe1.Write(payload2)
+	_, _ = pipe1.Write(payload2)
 
 	// Expect write to eyeball2
 	data := <-eyeball2.recvData

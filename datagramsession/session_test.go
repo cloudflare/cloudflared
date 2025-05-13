@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
@@ -54,22 +55,22 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 		closedByRemote, err := session.Serve(ctx, closeAfterIdle)
 		switch closeBy {
 		case closeByContext:
-			require.Equal(t, context.Canceled, err)
-			require.False(t, closedByRemote)
+			assert.Equal(t, context.Canceled, err)
+			assert.False(t, closedByRemote)
 		case closeByCallingClose:
-			require.Equal(t, localCloseReason, err)
-			require.Equal(t, localCloseReason.byRemote, closedByRemote)
+			assert.Equal(t, localCloseReason, err)
+			assert.Equal(t, localCloseReason.byRemote, closedByRemote)
 		case closeByTimeout:
-			require.Equal(t, SessionIdleErr(closeAfterIdle), err)
-			require.False(t, closedByRemote)
+			assert.Equal(t, SessionIdleErr(closeAfterIdle), err)
+			assert.False(t, closedByRemote)
 		}
 		close(sessionDone)
 	}()
 
 	go func() {
 		n, err := session.transportToDst(payload)
-		require.NoError(t, err)
-		require.Equal(t, len(payload), n)
+		assert.NoError(t, err)
+		assert.Equal(t, len(payload), n)
 	}()
 
 	readBuffer := make([]byte, len(payload)+1)
@@ -84,6 +85,8 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 		cancel()
 	case closeByCallingClose:
 		session.close(localCloseReason)
+	default:
+		// ignore
 	}
 
 	<-sessionDone
@@ -128,7 +131,7 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 	ctx, cancel := context.WithCancel(context.Background())
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		session.Serve(ctx, closeAfterIdle)
+		_, _ = session.Serve(ctx, closeAfterIdle)
 		if time.Now().Before(startTime.Add(activeTime)) {
 			return fmt.Errorf("session closed while it's still active")
 		}

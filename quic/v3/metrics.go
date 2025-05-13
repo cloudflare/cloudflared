@@ -2,82 +2,98 @@ package v3
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/cloudflare/cloudflared/quic"
 )
 
 const (
 	namespace = "cloudflared"
 	subsystem = "udp"
+
+	commandMetricLabel = "command"
 )
 
 type Metrics interface {
-	IncrementFlows()
-	DecrementFlows()
-	PayloadTooLarge()
-	RetryFlowResponse()
-	MigrateFlow()
+	IncrementFlows(connIndex uint8)
+	DecrementFlows(connIndex uint8)
+	PayloadTooLarge(connIndex uint8)
+	RetryFlowResponse(connIndex uint8)
+	MigrateFlow(connIndex uint8)
+	UnsupportedRemoteCommand(connIndex uint8, command string)
 }
 
 type metrics struct {
-	activeUDPFlows     prometheus.Gauge
-	totalUDPFlows      prometheus.Counter
-	payloadTooLarge    prometheus.Counter
-	retryFlowResponses prometheus.Counter
-	migratedFlows      prometheus.Counter
+	activeUDPFlows            *prometheus.GaugeVec
+	totalUDPFlows             *prometheus.CounterVec
+	payloadTooLarge           *prometheus.CounterVec
+	retryFlowResponses        *prometheus.CounterVec
+	migratedFlows             *prometheus.CounterVec
+	unsupportedRemoteCommands *prometheus.CounterVec
 }
 
-func (m *metrics) IncrementFlows() {
-	m.totalUDPFlows.Inc()
-	m.activeUDPFlows.Inc()
+func (m *metrics) IncrementFlows(connIndex uint8) {
+	m.totalUDPFlows.WithLabelValues(string(connIndex)).Inc()
+	m.activeUDPFlows.WithLabelValues(string(connIndex)).Inc()
 }
 
-func (m *metrics) DecrementFlows() {
-	m.activeUDPFlows.Dec()
+func (m *metrics) DecrementFlows(connIndex uint8) {
+	m.activeUDPFlows.WithLabelValues(string(connIndex)).Dec()
 }
 
-func (m *metrics) PayloadTooLarge() {
-	m.payloadTooLarge.Inc()
+func (m *metrics) PayloadTooLarge(connIndex uint8) {
+	m.payloadTooLarge.WithLabelValues(string(connIndex)).Inc()
 }
 
-func (m *metrics) RetryFlowResponse() {
-	m.retryFlowResponses.Inc()
+func (m *metrics) RetryFlowResponse(connIndex uint8) {
+	m.retryFlowResponses.WithLabelValues(string(connIndex)).Inc()
 }
 
-func (m *metrics) MigrateFlow() {
-	m.migratedFlows.Inc()
+func (m *metrics) MigrateFlow(connIndex uint8) {
+	m.migratedFlows.WithLabelValues(string(connIndex)).Inc()
+}
+
+func (m *metrics) UnsupportedRemoteCommand(connIndex uint8, command string) {
+	m.unsupportedRemoteCommands.WithLabelValues(string(connIndex), command).Inc()
 }
 
 func NewMetrics(registerer prometheus.Registerer) Metrics {
 	m := &metrics{
-		activeUDPFlows: prometheus.NewGauge(prometheus.GaugeOpts{
+		activeUDPFlows: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "active_flows",
 			Help:      "Concurrent count of UDP flows that are being proxied to any origin",
-		}),
-		totalUDPFlows: prometheus.NewCounter(prometheus.CounterOpts{
+		}, []string{quic.ConnectionIndexMetricLabel}),
+		totalUDPFlows: prometheus.NewCounterVec(prometheus.CounterOpts{ //nolint:promlinter
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "total_flows",
 			Help:      "Total count of UDP flows that have been proxied to any origin",
-		}),
-		payloadTooLarge: prometheus.NewCounter(prometheus.CounterOpts{
+		}, []string{quic.ConnectionIndexMetricLabel}),
+		payloadTooLarge: prometheus.NewCounterVec(prometheus.CounterOpts{ //nolint:promlinter
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "payload_too_large",
 			Help:      "Total count of UDP flows that have had origin payloads that are too large to proxy",
-		}),
-		retryFlowResponses: prometheus.NewCounter(prometheus.CounterOpts{
+		}, []string{quic.ConnectionIndexMetricLabel}),
+		retryFlowResponses: prometheus.NewCounterVec(prometheus.CounterOpts{ //nolint:promlinter
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "retry_flow_responses",
 			Help:      "Total count of UDP flows that have had to send their registration response more than once",
-		}),
-		migratedFlows: prometheus.NewCounter(prometheus.CounterOpts{
+		}, []string{quic.ConnectionIndexMetricLabel}),
+		migratedFlows: prometheus.NewCounterVec(prometheus.CounterOpts{ //nolint:promlinter
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "migrated_flows",
 			Help:      "Total count of UDP flows have been migrated across local connections",
-		}),
+		}, []string{quic.ConnectionIndexMetricLabel}),
+		unsupportedRemoteCommands: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "unsupported_remote_command_total",
+			Help:      "Total count of unsupported remote RPC commands for the ",
+		}, []string{quic.ConnectionIndexMetricLabel, commandMetricLabel}),
 	}
 	registerer.MustRegister(
 		m.activeUDPFlows,
@@ -85,6 +101,7 @@ func NewMetrics(registerer prometheus.Registerer) Metrics {
 		m.payloadTooLarge,
 		m.retryFlowResponses,
 		m.migratedFlows,
+		m.unsupportedRemoteCommands,
 	)
 	return m
 }

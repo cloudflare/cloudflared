@@ -11,12 +11,15 @@ import (
 )
 
 const (
-	namespace = "quic"
+	namespace                  = "quic"
+	ConnectionIndexMetricLabel = "conn_index"
+	frameTypeMetricLabel       = "frame_type"
+	packetTypeMetricLabel      = "packet_type"
+	reasonMetricLabel          = "reason"
 )
 
 var (
-	clientConnLabels = []string{"conn_index"}
-	clientMetrics    = struct {
+	clientMetrics = struct {
 		totalConnections  prometheus.Counter
 		closedConnections prometheus.Counter
 		maxUDPPayloadSize *prometheus.GaugeVec
@@ -35,7 +38,7 @@ var (
 		congestionState   *prometheus.GaugeVec
 	}{
 		totalConnections: prometheus.NewCounter(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "total_connections",
@@ -43,7 +46,7 @@ var (
 			},
 		),
 		closedConnections: prometheus.NewCounter(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "closed_connections",
@@ -57,70 +60,70 @@ var (
 				Name:      "max_udp_payload",
 				Help:      "Maximum UDP payload size in bytes for a QUIC packet",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		sentFrames: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "sent_frames",
 				Help:      "Number of frames that have been sent through a connection",
 			},
-			append(clientConnLabels, "frame_type"),
+			[]string{ConnectionIndexMetricLabel, frameTypeMetricLabel},
 		),
 		sentBytes: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "sent_bytes",
 				Help:      "Number of bytes that have been sent through a connection",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		receivedFrames: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "received_frames",
 				Help:      "Number of frames that have been received through a connection",
 			},
-			append(clientConnLabels, "frame_type"),
+			[]string{ConnectionIndexMetricLabel, frameTypeMetricLabel},
 		),
 		receivedBytes: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "receive_bytes",
 				Help:      "Number of bytes that have been received through a connection",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		bufferedPackets: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "buffered_packets",
 				Help:      "Number of bytes that have been buffered on a connection",
 			},
-			append(clientConnLabels, "packet_type"),
+			[]string{ConnectionIndexMetricLabel, packetTypeMetricLabel},
 		),
 		droppedPackets: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "dropped_packets",
 				Help:      "Number of bytes that have been dropped on a connection",
 			},
-			append(clientConnLabels, "packet_type", "reason"),
+			[]string{ConnectionIndexMetricLabel, packetTypeMetricLabel, reasonMetricLabel},
 		),
 		lostPackets: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
+			prometheus.CounterOpts{ //nolint:promlinter
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "lost_packets",
 				Help:      "Number of packets that have been lost from a connection",
 			},
-			append(clientConnLabels, "reason"),
+			[]string{ConnectionIndexMetricLabel, reasonMetricLabel},
 		),
 		minRTT: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -129,7 +132,7 @@ var (
 				Name:      "min_rtt",
 				Help:      "Lowest RTT measured on a connection in millisec",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		latestRTT: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -138,7 +141,7 @@ var (
 				Name:      "latest_rtt",
 				Help:      "Latest RTT measured on a connection",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		smoothedRTT: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -147,7 +150,7 @@ var (
 				Name:      "smoothed_rtt",
 				Help:      "Calculated smoothed RTT measured on a connection in millisec",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		mtu: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -156,7 +159,7 @@ var (
 				Name:      "mtu",
 				Help:      "Current maximum transmission unit (MTU) of a connection",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		congestionWindow: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -165,7 +168,7 @@ var (
 				Name:      "congestion_window",
 				Help:      "Current congestion window size",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 		congestionState: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -174,13 +177,13 @@ var (
 				Name:      "congestion_state",
 				Help:      "Current congestion control state. See https://pkg.go.dev/github.com/quic-go/quic-go@v0.45.0/logging#CongestionState for what each value maps to",
 			},
-			clientConnLabels,
+			[]string{ConnectionIndexMetricLabel},
 		),
 	}
 
 	registerClient = sync.Once{}
 
-	packetTooBigDropped = prometheus.NewCounter(prometheus.CounterOpts{
+	packetTooBigDropped = prometheus.NewCounter(prometheus.CounterOpts{ //nolint:promlinter
 		Namespace: namespace,
 		Subsystem: "client",
 		Name:      "packet_too_big_dropped",

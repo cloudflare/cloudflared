@@ -781,12 +781,12 @@ func newICMPDatagram(pk *packet.ICMP) []byte {
 
 // Cancel the provided context and make sure it closes with the expected cancellation error
 func assertContextClosed(t *testing.T, ctx context.Context, done <-chan error, cancel context.CancelCauseFunc) {
-	cancel(expectedContextCanceled)
+	cancel(errExpectedContextCanceled)
 	err := <-done
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	if !errors.Is(context.Cause(ctx), expectedContextCanceled) {
+	if !errors.Is(context.Cause(ctx), errExpectedContextCanceled) {
 		t.Fatal(err)
 	}
 }

@@ -27,11 +27,11 @@ const (
 )
 
 // SessionCloseErr indicates that the session's Close method was called.
-var SessionCloseErr error = errors.New("flow was closed directly")
+var SessionCloseErr error = errors.New("flow was closed directly") //nolint:errname
 
 // SessionIdleErr is returned when the session was closed because there was no communication
 // in either direction over the session for the timeout period.
-type SessionIdleErr struct {
+type SessionIdleErr struct { //nolint:errname
 	timeout time.Duration
 }
 
@@ -149,7 +149,8 @@ func (s *session) Migrate(eyeball DatagramConn, ctx context.Context, logger *zer
 	}
 	// The session is already running so we want to restart the idle timeout since no proxied packets have come down yet.
 	s.markActive()
-	s.metrics.MigrateFlow()
+	connectionIndex := eyeball.ID()
+	s.metrics.MigrateFlow(connectionIndex)
 }
 
 func (s *session) Serve(ctx context.Context) error {
@@ -160,7 +161,7 @@ func (s *session) Serve(ctx context.Context) error {
 		// To perform a zero copy write when passing the datagram to the connection, we prepare the buffer with
 		// the required datagram header information. We can reuse this buffer for this session since the header is the
 		// same for the each read.
-		MarshalPayloadHeaderTo(s.id, readBuffer[:DatagramPayloadHeaderLen])
+		_ = MarshalPayloadHeaderTo(s.id, readBuffer[:DatagramPayloadHeaderLen])
 		for {
 			// Read from the origin UDP socket
 			n, err := s.origin.Read(readBuffer[DatagramPayloadHeaderLen:])
@@ -177,7 +178,8 @@ func (s *session) Serve(ctx context.Context) error {
 				continue
 			}
 			if n > maxDatagramPayloadLen {
-				s.metrics.PayloadTooLarge()
+				connectionIndex := s.ConnectionID()
+				s.metrics.PayloadTooLarge(connectionIndex)
 				s.log.Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
 				continue
 			}
@@ -241,7 +243,7 @@ func (s *session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 	// Closing the session at the end cancels read so Serve() can return
 	defer s.Close()
 	if closeAfterIdle == 0 {
-		// provide deafult is caller doesn't specify one
+		// Provided that the default caller doesn't specify one
 		closeAfterIdle = defaultCloseIdleAfter
 	}
 
