@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cloudflare/cloudflared/client"
 	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	cfdquic "github.com/cloudflare/cloudflared/quic"
@@ -43,7 +44,7 @@ type quicConnection struct {
 	orchestrator         Orchestrator
 	datagramHandler      DatagramSessionHandler
 	controlStreamHandler ControlStreamHandler
-	connOptions          *pogs.ConnectionOptions
+	connOptions          *client.ConnectionOptionsSnapshot
 	connIndex            uint8
 
 	rpcTimeout         time.Duration
@@ -59,7 +60,7 @@ func NewTunnelConnection(
 	orchestrator Orchestrator,
 	datagramSessionHandler DatagramSessionHandler,
 	controlStreamHandler ControlStreamHandler,
-	connOptions *pogs.ConnectionOptions,
+	connOptions *client.ConnectionOptionsSnapshot,
 	rpcTimeout time.Duration,
 	streamWriteTimeout time.Duration,
 	gracePeriod time.Duration,
@@ -130,7 +131,7 @@ func (q *quicConnection) Serve(ctx context.Context) error {
 
 // serveControlStream will serve the RPC; blocking until the control plane is done.
 func (q *quicConnection) serveControlStream(ctx context.Context, controlStream quic.Stream) error {
-	return q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions, q.orchestrator)
+	return q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions.ConnectionOptions(), q.orchestrator)
 }
 
 // Close the connection with no errors specified.

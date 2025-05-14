@@ -15,7 +15,6 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/sentry-go"
-	"github.com/google/uuid"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -446,14 +445,7 @@ func StartServer(
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
 	}
-	var clientID uuid.UUID
-	if tunnelConfig.NamedTunnel != nil {
-		clientID, err = uuid.FromBytes(tunnelConfig.NamedTunnel.Client.ClientID)
-		if err != nil {
-			// set to nil for classic tunnels
-			clientID = uuid.Nil
-		}
-	}
+	connectorID := tunnelConfig.ClientConfig.ConnectorID
 
 	// Disable ICMP packet routing for quick tunnels
 	if quickTunnelURL != "" {
@@ -471,7 +463,7 @@ func StartServer(
 		c.String("management-hostname"),
 		c.Bool("management-diagnostics"),
 		serviceIP,
-		clientID,
+		connectorID,
 		c.String(cfdflags.ConnectorLabel),
 		logger.ManagementLogger.Log,
 		logger.ManagementLogger,
@@ -503,14 +495,14 @@ func StartServer(
 			sources = append(sources, ipv6.String())
 		}
 
-		readinessServer := metrics.NewReadyServer(clientID, tracker)
+		readinessServer := metrics.NewReadyServer(connectorID, tracker)
 		cliFlags := nonSecretCliFlags(log, c, nonSecretFlagsList)
 		diagnosticHandler := diagnostic.NewDiagnosticHandler(
 			log,
 			0,
 			diagnostic.NewSystemCollectorImpl(buildInfo.CloudflaredVersion),
 			tunnelConfig.NamedTunnel.Credentials.TunnelID,
-			clientID,
+			connectorID,
 			tracker,
 			cliFlags,
 			sources,

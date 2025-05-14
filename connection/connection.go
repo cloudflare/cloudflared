@@ -57,7 +57,6 @@ type Orchestrator interface {
 
 type TunnelProperties struct {
 	Credentials    Credentials
-	Client         pogs.ClientInfo
 	QuickTunnelUrl string
 }
 

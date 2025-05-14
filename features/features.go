@@ -33,6 +33,15 @@ type staticFeatures struct {
 	PostQuantumMode *PostQuantumMode
 }
 
+type FeatureSnapshot struct {
+	PostQuantum     PostQuantumMode
+	DatagramVersion DatagramVersion
+
+	// We provide the list of features since we need it to send in the ConnectionOptions during connection
+	// registrations.
+	FeaturesList []string
+}
+
 type PostQuantumMode uint8
 
 const (

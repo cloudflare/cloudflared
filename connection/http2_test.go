@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
+	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/tracing"
 
 	"github.com/cloudflare/cloudflared/tunnelrpc"
@@ -51,7 +52,7 @@ func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 		cfdConn,
 		// OriginProxy is set in testConfigManager
 		testOrchestrator,
-		&pogs.ConnectionOptions{},
+		&client.ConnectionOptionsSnapshot{},
 		obs,
 		connIndex,
 		controlStream,
@@ -74,7 +75,7 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	require.NoError(t, err)
 
 	reqBody := []byte(`{
-"version": 2, 
+"version": 2,
 "config": {"warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}}
 `)
 	reader := bytes.NewReader(reqBody)

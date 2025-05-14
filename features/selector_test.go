@@ -3,10 +3,17 @@ package features
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	testAccountTag  = "123456"
+	testAccountHash = 74 // switchThreshold of `accountTag`
 )
 
 func TestUnmarshalFeaturesRecord(t *testing.T) {
@@ -14,6 +21,18 @@ func TestUnmarshalFeaturesRecord(t *testing.T) {
 		record             []byte
 		expectedPercentage uint32
 	}{
+		{
+			record:             []byte(`{"dv3_1":0}`),
+			expectedPercentage: 0,
+		},
+		{
+			record:             []byte(`{"dv3_1":39}`),
+			expectedPercentage: 39,
+		},
+		{
+			record:             []byte(`{"dv3_1":100}`),
+			expectedPercentage: 100,
+		},
 		{
 			record: []byte(`{}`), // Unmarshal to default struct if key is not present
 		},
@@ -29,6 +48,7 @@ func TestUnmarshalFeaturesRecord(t *testing.T) {
 		var features featuresRecord
 		err := json.Unmarshal(test.record, &features)
 		require.NoError(t, err)
+		require.Equal(t, test.expectedPercentage, features.DatagramV3Percentage, test)
 	}
 }
 
@@ -57,10 +77,11 @@ func TestFeaturePrecedenceEvaluationPostQuantum(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resolver := &staticResolver{record: featuresRecord{}}
-			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, []string{}, test.cli)
+			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, []string{}, test.cli, time.Second)
 			require.NoError(t, err)
-			require.ElementsMatch(t, test.expectedFeatures, selector.ClientFeatures())
-			require.Equal(t, test.expectedVersion, selector.PostQuantumMode())
+			snapshot := selector.Snapshot()
+			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
+			require.Equal(t, test.expectedVersion, snapshot.PostQuantum)
 		})
 	}
 }
@@ -100,10 +121,11 @@ func TestFeaturePrecedenceEvaluationDatagramVersion(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resolver := &staticResolver{record: test.remote}
-			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, test.cli, false)
+			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, test.cli, false, time.Second)
 			require.NoError(t, err)
-			require.ElementsMatch(t, test.expectedFeatures, selector.ClientFeatures())
-			require.Equal(t, test.expectedVersion, selector.DatagramVersion())
+			snapshot := selector.Snapshot()
+			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
+			require.Equal(t, test.expectedVersion, snapshot.DatagramVersion)
 		})
 	}
 }
@@ -133,32 +155,97 @@ func TestDeprecatedFeaturesRemoved(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resolver := &staticResolver{record: test.remote}
-			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, test.cli, false)
+			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, test.cli, false, time.Second)
 			require.NoError(t, err)
-			require.ElementsMatch(t, test.expectedFeatures, selector.ClientFeatures())
+			snapshot := selector.Snapshot()
+			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
 		})
 	}
+}
+
+func TestRefreshFeaturesRecord(t *testing.T) {
+	percentages := []uint32{0, 10, testAccountHash - 1, testAccountHash, testAccountHash + 1, 100, 101, 1000}
+	selector := newTestSelector(t, percentages, false, time.Minute)
+
+	// Starting out should default to DatagramV2
+	snapshot := selector.Snapshot()
+	require.Equal(t, DatagramV2, snapshot.DatagramVersion)
+
+	for _, percentage := range percentages {
+		snapshot = selector.Snapshot()
+		if percentage > testAccountHash {
+			require.Equal(t, DatagramV3, snapshot.DatagramVersion)
+		} else {
+			require.Equal(t, DatagramV2, snapshot.DatagramVersion)
+		}
+
+		// Manually progress the next refresh
+		_ = selector.refresh(context.Background())
+	}
+
+	// Make sure a resolver error doesn't override the last fetched features
+	snapshot = selector.Snapshot()
+	require.Equal(t, DatagramV3, snapshot.DatagramVersion)
+}
+
+func TestSnapshotIsolation(t *testing.T) {
+	percentages := []uint32{testAccountHash, testAccountHash + 1}
+	selector := newTestSelector(t, percentages, false, time.Minute)
+
+	// Starting out should default to DatagramV2
+	snapshot := selector.Snapshot()
+	require.Equal(t, DatagramV2, snapshot.DatagramVersion)
+
+	// Manually progress the next refresh
+	_ = selector.refresh(context.Background())
+
+	snapshot2 := selector.Snapshot()
+	require.Equal(t, DatagramV3, snapshot2.DatagramVersion)
+	require.NotEqual(t, snapshot.DatagramVersion, snapshot2.DatagramVersion)
 }
 
 func TestStaticFeatures(t *testing.T) {
 	percentages := []uint32{0}
 	// PostQuantum Enabled from user flag
-	selector := newTestSelector(t, percentages, true)
-	require.Equal(t, PostQuantumStrict, selector.PostQuantumMode())
+	selector := newTestSelector(t, percentages, true, time.Second)
+	snapshot := selector.Snapshot()
+	require.Equal(t, PostQuantumStrict, snapshot.PostQuantum)
 
 	// PostQuantum Disabled (or not set)
-	selector = newTestSelector(t, percentages, false)
-	require.Equal(t, PostQuantumPrefer, selector.PostQuantumMode())
+	selector = newTestSelector(t, percentages, false, time.Second)
+	snapshot = selector.Snapshot()
+	require.Equal(t, PostQuantumPrefer, snapshot.PostQuantum)
 }
 
-func newTestSelector(t *testing.T, percentages []uint32, pq bool) *FeatureSelector {
-	accountTag := t.Name()
+func newTestSelector(t *testing.T, percentages []uint32, pq bool, refreshFreq time.Duration) *featureSelector {
 	logger := zerolog.Nop()
 
-	selector, err := newFeatureSelector(context.Background(), accountTag, &logger, &staticResolver{}, []string{}, pq)
+	resolver := &mockResolver{
+		percentages: percentages,
+	}
+
+	selector, err := newFeatureSelector(context.Background(), testAccountTag, &logger, resolver, []string{}, pq, refreshFreq)
 	require.NoError(t, err)
 
 	return selector
+}
+
+type mockResolver struct {
+	nextIndex   int
+	percentages []uint32
+}
+
+func (mr *mockResolver) lookupRecord(ctx context.Context) ([]byte, error) {
+	if mr.nextIndex >= len(mr.percentages) {
+		return nil, fmt.Errorf("no more record to lookup")
+	}
+
+	record, err := json.Marshal(featuresRecord{
+		DatagramV3Percentage: mr.percentages[mr.nextIndex],
+	})
+	mr.nextIndex++
+
+	return record, err
 }
 
 type staticResolver struct {

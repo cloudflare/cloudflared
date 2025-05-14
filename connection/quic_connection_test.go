@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/cloudflare/cloudflared/client"
 	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
@@ -843,7 +844,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		&mockOrchestrator{originProxy: &mockOriginProxyWithRequest{}},
 		datagramConn,
 		fakeControlStream{},
-		&pogs.ConnectionOptions{},
+		&client.ConnectionOptionsSnapshot{},
 		15*time.Second,
 		0*time.Second,
 		0*time.Second,

@@ -1,6 +1,8 @@
 package v3
 
 import (
+	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/cloudflare/cloudflared/quic"
@@ -32,28 +34,28 @@ type metrics struct {
 }
 
 func (m *metrics) IncrementFlows(connIndex uint8) {
-	m.totalUDPFlows.WithLabelValues(string(connIndex)).Inc()
-	m.activeUDPFlows.WithLabelValues(string(connIndex)).Inc()
+	m.totalUDPFlows.WithLabelValues(fmt.Sprintf("%d", connIndex)).Inc()
+	m.activeUDPFlows.WithLabelValues(fmt.Sprintf("%d", connIndex)).Inc()
 }
 
 func (m *metrics) DecrementFlows(connIndex uint8) {
-	m.activeUDPFlows.WithLabelValues(string(connIndex)).Dec()
+	m.activeUDPFlows.WithLabelValues(fmt.Sprintf("%d", connIndex)).Dec()
 }
 
 func (m *metrics) PayloadTooLarge(connIndex uint8) {
-	m.payloadTooLarge.WithLabelValues(string(connIndex)).Inc()
+	m.payloadTooLarge.WithLabelValues(fmt.Sprintf("%d", connIndex)).Inc()
 }
 
 func (m *metrics) RetryFlowResponse(connIndex uint8) {
-	m.retryFlowResponses.WithLabelValues(string(connIndex)).Inc()
+	m.retryFlowResponses.WithLabelValues(fmt.Sprintf("%d", connIndex)).Inc()
 }
 
 func (m *metrics) MigrateFlow(connIndex uint8) {
-	m.migratedFlows.WithLabelValues(string(connIndex)).Inc()
+	m.migratedFlows.WithLabelValues(fmt.Sprintf("%d", connIndex)).Inc()
 }
 
 func (m *metrics) UnsupportedRemoteCommand(connIndex uint8, command string) {
-	m.unsupportedRemoteCommands.WithLabelValues(string(connIndex), command).Inc()
+	m.unsupportedRemoteCommands.WithLabelValues(fmt.Sprintf("%d", connIndex), command).Inc()
 }
 
 func NewMetrics(registerer prometheus.Registerer) Metrics {

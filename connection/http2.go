@@ -16,10 +16,10 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
+	"github.com/cloudflare/cloudflared/client"
 	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/tracing"
-	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // note: these constants are exported so we can reuse them in the edge-side code
@@ -39,7 +39,7 @@ type HTTP2Connection struct {
 	conn         net.Conn
 	server       *http2.Server
 	orchestrator Orchestrator
-	connOptions  *pogs.ConnectionOptions
+	connOptions  *client.ConnectionOptionsSnapshot
 	observer     *Observer
 	connIndex    uint8
 
@@ -54,7 +54,7 @@ type HTTP2Connection struct {
 func NewHTTP2Connection(
 	conn net.Conn,
 	orchestrator Orchestrator,
-	connOptions *pogs.ConnectionOptions,
+	connOptions *client.ConnectionOptionsSnapshot,
 	observer *Observer,
 	connIndex uint8,
 	controlStreamHandler ControlStreamHandler,
@@ -118,7 +118,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var requestErr error
 	switch connType {
 	case TypeControlStream:
-		requestErr = c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, c.orchestrator)
+		requestErr = c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions.ConnectionOptions(), c.orchestrator)
 		if requestErr != nil {
 			c.controlStreamErr = requestErr
 		}
