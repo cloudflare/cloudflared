@@ -1,3 +1,8 @@
+2025.5.0
+- 2025-05-14 TUN-9319: Add dynamic loading of features to connections via ConnectionOptionsSnapshot
+- 2025-05-13 TUN-9322: Add metric for unsupported RPC commands for datagram v3
+- 2025-05-07 TUN-9291: Remove dynamic reloading of features for datagram v3
+
 2025.4.2
 - 2025-04-30 chore: Do not use gitlab merge request pipelines
 - 2025-04-30 DEVTOOLS-16383: Create GitlabCI pipeline to release Mac builds
