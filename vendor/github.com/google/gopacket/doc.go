@@ -327,7 +327,7 @@ to decode. Though being versatile, in some cases this solution may be not so
 optimal. For example, if you have only few layers faster operations may be
 provided by sparse array indexing or linear array scan.
 
-To accomodate these scenarios, DecodingLayerContainer interface is introduced
+To accommodate these scenarios, DecodingLayerContainer interface is introduced
 along with its implementations: DecodingLayerSparse, DecodingLayerArray and
 DecodingLayerMap. You can specify a container implementation to
 DecodingLayerParser with SetDecodingLayerContainer method. Example:

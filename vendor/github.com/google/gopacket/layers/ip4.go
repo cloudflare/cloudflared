@@ -209,7 +209,7 @@ func (ip *IPv4) DecodeFromBytes(data []byte, df gopacket.DecodeFeedback) error {
 	// Set up an initial guess for contents/payload... we'll reset these soon.
 	ip.BaseLayer = BaseLayer{Contents: data}
 
-	// This code is added for the following enviroment:
+	// This code is added for the following environment:
 	// * Windows 10 with TSO option activated. ( tested on Hyper-V, RealTek ethernet driver )
 	if ip.Length == 0 {
 		// If using TSO(TCP Segmentation Offload), length is zero.

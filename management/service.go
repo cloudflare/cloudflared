@@ -296,7 +296,7 @@ func (m *ManagementService) logs(w http.ResponseWriter, r *http.Request) {
 				// Expect the first incoming request
 				startEvent, ok := IntoClientEvent[EventStartStreaming](event, StartStreaming)
 				if !ok {
-					m.log.Warn().Msgf("expected start_streaming as first recieved event")
+					m.log.Warn().Msgf("expected start_streaming as first received event")
 					m.log.Err(c.Close(StatusInvalidCommand, reasonInvalidCommand)).Send()
 					return
 				}
