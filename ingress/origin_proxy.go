@@ -66,7 +66,7 @@ func (o *httpService) SetOriginServerName(req *http.Request) {
 		}
 		return tls.Client(conn, &tls.Config{
 			RootCAs:            o.transport.TLSClientConfig.RootCAs,
-			InsecureSkipVerify: o.transport.TLSClientConfig.InsecureSkipVerify,
+			InsecureSkipVerify: o.transport.TLSClientConfig.InsecureSkipVerify, // nolint: gosec
 			ServerName:         req.Host,
 		}), nil
 	}
@@ -74,7 +74,7 @@ func (o *httpService) SetOriginServerName(req *http.Request) {
 
 func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 	if o.defaultResp {
-		o.log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+		o.log.Warn().Msg(ErrNoIngressRulesCLI.Error())
 	}
 	resp := &http.Response{
 		StatusCode: o.code,
@@ -114,7 +114,6 @@ func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string,
 		streamHandler: o.streamHandler,
 	}
 	return originConn, nil
-
 }
 
 func (o *socksProxyOverWSService) EstablishConnection(_ context.Context, _ string, _ *zerolog.Logger) (OriginConnection, error) {

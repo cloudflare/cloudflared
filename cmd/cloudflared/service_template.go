@@ -11,8 +11,6 @@ import (
 	"text/template"
 
 	homedir "github.com/mitchellh/go-homedir"
-
-	"github.com/cloudflare/cloudflared/config"
 )
 
 type ServiceTemplate struct {
@@ -107,40 +105,5 @@ func runCommand(command string, args ...string) error {
 	if err != nil {
 		return fmt.Errorf("%s %v returned with error code %v due to: %v", command, args, err, string(output))
 	}
-	return nil
-}
-
-func ensureConfigDirExists(configDir string) error {
-	ok, err := config.FileExists(configDir)
-	if !ok && err == nil {
-		err = os.Mkdir(configDir, 0755)
-	}
-	return err
-}
-
-func copyFile(src, dest string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	destFile, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	ok := false
-	defer func() {
-		destFile.Close()
-		if !ok {
-			_ = os.Remove(dest)
-		}
-	}()
-
-	if _, err := io.Copy(destFile, srcFile); err != nil {
-		return err
-	}
-
-	ok = true
 	return nil
 }

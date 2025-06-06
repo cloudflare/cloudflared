@@ -35,12 +35,10 @@ func TestCloseIdle(t *testing.T) {
 }
 
 func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.Duration) {
-	var (
-		localCloseReason = &errClosedSession{
-			message:  "connection closed by origin",
-			byRemote: false,
-		}
-	)
+	localCloseReason := &errClosedSession{
+		message:  "connection closed by origin",
+		byRemote: false,
+	}
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
@@ -49,7 +47,7 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 	mg := NewManager(&log, nil, nil)
 	session := mg.newSession(sessionID, cfdConn)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	sessionDone := make(chan struct{})
 	go func() {
 		closedByRemote, err := session.Serve(ctx, closeAfterIdle)
@@ -128,7 +126,7 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 
 	startTime := time.Now()
 	activeUntil := startTime.Add(activeTime)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		_, _ = session.Serve(ctx, closeAfterIdle)
@@ -211,7 +209,7 @@ func TestZeroBytePayload(t *testing.T) {
 	mg := NewManager(&nopLogger, sender.muxSession, nil)
 	session := mg.newSession(sessionID, cfdConn)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		// Read from underlying conn and send to transport

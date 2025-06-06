@@ -60,7 +60,7 @@ func TestQUICServer(t *testing.T) {
 	err := wsutil.WriteClientBinary(wsBuf, []byte("Hello"))
 	require.NoError(t, err)
 
-	var tests = []struct {
+	tests := []struct {
 		desc             string
 		dest             string
 		connectionType   pogs.ConnectionType
@@ -150,7 +150,7 @@ func TestQUICServer(t *testing.T) {
 	for i, test := range tests {
 		test := test // capture range variable
 		t.Run(test.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			// Start a UDP Listener for QUIC.
 			udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 			require.NoError(t, err)
@@ -194,6 +194,7 @@ func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWrite
 	<-ctx.Done()
 	return nil
 }
+
 func (fakeControlStream) IsStopped() bool {
 	return true
 }
@@ -211,7 +212,7 @@ func quicServer(
 	session, err := listener.Accept(ctx)
 	require.NoError(t, err)
 
-	quicStream, err := session.OpenStreamSync(context.Background())
+	quicStream, err := session.OpenStreamSync(t.Context())
 	require.NoError(t, err)
 	stream := cfdquic.NewSafeStreamCloser(quicStream, defaultQUICTimeout, &log)
 
@@ -278,7 +279,7 @@ func (moc *mockOriginProxyWithRequest) ProxyHTTP(w ResponseWriter, tr *tracing.T
 }
 
 func TestBuildHTTPRequest(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name           string
 		connectRequest *pogs.ConnectRequest
 		body           io.ReadCloser
@@ -499,7 +500,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 	for _, test := range tests {
 		test := test // capture range variable
 		t.Run(test.name, func(t *testing.T) {
-			req, err := buildHTTPRequest(context.Background(), test.connectRequest, test.body, 0, &log)
+			req, err := buildHTTPRequest(t.Context(), test.connectRequest, test.body, 0, &log)
 			require.NoError(t, err)
 			test.req = test.req.WithContext(req.Context())
 			require.Equal(t, test.req, req.Request)
@@ -525,7 +526,7 @@ func TestServeUDPSession(t *testing.T) {
 	require.NoError(t, err)
 	defer udpListener.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	// Establish QUIC connection with edge
 	edgeQUICSessionChan := make(chan quic.Connection)
@@ -606,7 +607,7 @@ func TestCreateUDPConnReuseSourcePort(t *testing.T) {
 // TestTCPProxy_FlowRateLimited tests if the pogs.ConnectResponse returns the expected error and metadata, when a
 // new flow is rate limited.
 func TestTCPProxy_FlowRateLimited(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	// Start a UDP Listener for QUIC.
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
@@ -627,7 +628,7 @@ func TestTCPProxy_FlowRateLimited(t *testing.T) {
 		session, err := quicListener.Accept(ctx)
 		assert.NoError(t, err)
 
-		quicStream, err := session.OpenStreamSync(context.Background())
+		quicStream, err := session.OpenStreamSync(t.Context())
 		assert.NoError(t, err)
 		stream := cfdquic.NewSafeStreamCloser(quicStream, defaultQUICTimeout, &log)
 
@@ -688,9 +689,7 @@ func testCreateUDPConnReuseSourcePortForEdgeIP(t *testing.T, edgeIP netip.AddrPo
 }
 
 func serveSession(ctx context.Context, datagramConn *datagramV2Connection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
-	var (
-		payload = []byte(t.Name())
-	)
+	payload := []byte(t.Name())
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	// Registers and run a new session
@@ -803,7 +802,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 	}
 	// Start a mock httpProxy
 	log := zerolog.New(io.Discard)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Dial the QUIC connection to the edge

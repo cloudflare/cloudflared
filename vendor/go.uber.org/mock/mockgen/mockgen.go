@@ -393,8 +393,8 @@ func (g *generator) Generate(pkg *model.Package, outputPkgName string, outputPac
 		// try base0, base1, ...
 		pkgName := base
 
-		if _, ok := definedImports[base]; ok {
-			pkgName = definedImports[base]
+		if _, ok := definedImports[pth]; ok {
+			pkgName = definedImports[pth]
 		}
 
 		i := 0
@@ -758,6 +758,17 @@ func (g *generator) GenerateMockReturnCallMethod(intf *model.Interface, m *model
 	return nil
 }
 
+// nameExistsAsPackage returns true if the name exists as a package name.
+// This is used to avoid name collisions when generating mock method arguments.
+func (g *generator) nameExistsAsPackage(name string) bool {
+	for _, symbolName := range g.packageMap {
+		if symbolName == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *generator) getArgNames(m *model.Method, in bool) []string {
 	var params []*model.Parameter
 	if in {
@@ -766,16 +777,19 @@ func (g *generator) getArgNames(m *model.Method, in bool) []string {
 		params = m.Out
 	}
 	argNames := make([]string, len(params))
+
 	for i, p := range params {
 		name := p.Name
-		if name == "" || name == "_" {
+
+		if name == "" || name == "_" || g.nameExistsAsPackage(name) {
 			name = fmt.Sprintf("arg%d", i)
 		}
 		argNames[i] = name
 	}
 	if m.Variadic != nil && in {
 		name := m.Variadic.Name
-		if name == "" {
+
+		if name == "" || g.nameExistsAsPackage(name) {
 			name = fmt.Sprintf("arg%d", len(params))
 		}
 		argNames = append(argNames, name)

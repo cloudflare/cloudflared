@@ -96,7 +96,7 @@ func (p *UpdateConfigurationResponse) Unmarshal(s proto.UpdateConfigurationRespo
 		return err
 	}
 	if respErr != "" {
-		p.Err = fmt.Errorf(respErr)
+		p.Err = fmt.Errorf("%s", respErr)
 	}
 	return nil
 }

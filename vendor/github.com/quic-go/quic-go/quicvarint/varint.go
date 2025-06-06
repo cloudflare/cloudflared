@@ -125,17 +125,18 @@ func AppendWithLen(b []byte, i uint64, length int) []byte {
 	if l > length {
 		panic(fmt.Sprintf("cannot encode %d in %d bytes", i, length))
 	}
-	if length == 2 {
+	switch length {
+	case 2:
 		b = append(b, 0b01000000)
-	} else if length == 4 {
+	case 4:
 		b = append(b, 0b10000000)
-	} else if length == 8 {
+	case 8:
 		b = append(b, 0b11000000)
 	}
-	for j := 1; j < length-l; j++ {
+	for range length - l - 1 {
 		b = append(b, 0)
 	}
-	for j := 0; j < l; j++ {
+	for j := range l {
 		b = append(b, uint8(i>>(8*(l-1-j))))
 	}
 	return b

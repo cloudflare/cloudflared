@@ -12,9 +12,7 @@ import (
 
 // These cipher suite implementations are copied from the standard library crypto/tls package.
 
-const (
-	aeadNonceLength = 12
-)
+const aeadNonceLength = 12
 
 type cipherSuite struct {
 	ID     uint16

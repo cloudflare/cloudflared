@@ -46,7 +46,7 @@ type TokenGenerator struct {
 
 // NewTokenGenerator initializes a new TokenGenerator
 func NewTokenGenerator(key TokenProtectorKey) *TokenGenerator {
-	return &TokenGenerator{tokenProtector: newTokenProtector(key)}
+	return &TokenGenerator{tokenProtector: *newTokenProtector(key)}
 }
 
 // NewRetryToken generates a new token for a Retry for a given source address

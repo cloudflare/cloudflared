@@ -2,11 +2,11 @@ package wire
 
 import (
 	"errors"
+	"math"
 	"sort"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/quicvarint"
 )
 
@@ -40,7 +40,7 @@ func parseAckFrame(frame *AckFrame, b []byte, typ uint64, ackDelayExponent uint8
 	delayTime := time.Duration(delay*1<<ackDelayExponent) * time.Microsecond
 	if delayTime < 0 {
 		// If the delay time overflows, set it to the maximum encode-able value.
-		delayTime = utils.InfDuration
+		delayTime = time.Duration(math.MaxInt64)
 	}
 	frame.DelayTime = delayTime
 

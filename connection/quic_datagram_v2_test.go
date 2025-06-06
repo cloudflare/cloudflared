@@ -16,8 +16,7 @@ import (
 	"github.com/cloudflare/cloudflared/mocks"
 )
 
-type mockQuicConnection struct {
-}
+type mockQuicConnection struct{}
 
 func (m *mockQuicConnection) AcceptStream(_ context.Context) (quic.Stream, error) {
 	return nil, nil
@@ -71,6 +70,10 @@ func (m *mockQuicConnection) ReceiveDatagram(_ context.Context) ([]byte, error) 
 	return nil, nil
 }
 
+func (m *mockQuicConnection) AddPath(*quic.Transport) (*quic.Path, error) {
+	return nil, nil
+}
+
 func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 	log := zerolog.Nop()
 	conn := &mockQuicConnection{}
@@ -78,7 +81,7 @@ func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 	flowLimiterMock := mocks.NewMockLimiter(ctrl)
 
 	datagramConn := NewDatagramV2Connection(
-		context.Background(),
+		t.Context(),
 		conn,
 		nil,
 		0,
@@ -91,6 +94,6 @@ func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 	flowLimiterMock.EXPECT().Acquire("udp").Return(cfdflow.ErrTooManyActiveFlows)
 	flowLimiterMock.EXPECT().Release().Times(0)
 
-	_, err := datagramConn.RegisterUdpSession(context.Background(), uuid.New(), net.IPv4(0, 0, 0, 0), 1000, 1*time.Second, "")
+	_, err := datagramConn.RegisterUdpSession(t.Context(), uuid.New(), net.IPv4(0, 0, 0, 0), 1000, 1*time.Second, "")
 	require.ErrorIs(t, err, cfdflow.ErrTooManyActiveFlows)
 }

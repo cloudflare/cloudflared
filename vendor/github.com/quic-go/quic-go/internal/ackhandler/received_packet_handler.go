@@ -38,7 +38,7 @@ func (h *receivedPacketHandler) ReceivedPacket(
 	rcvTime time.Time,
 	ackEliciting bool,
 ) error {
-	h.sentPackets.ReceivedPacket(encLevel)
+	h.sentPackets.ReceivedPacket(encLevel, rcvTime)
 	switch encLevel {
 	case protocol.EncryptionInitial:
 		return h.initialPackets.ReceivedPacket(pn, ecn, rcvTime, ackEliciting)
@@ -87,7 +87,7 @@ func (h *receivedPacketHandler) GetAlarmTimeout() time.Time {
 	return h.appDataPackets.GetAlarmTimeout()
 }
 
-func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, onlyIfQueued bool) *wire.AckFrame {
+func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, now time.Time, onlyIfQueued bool) *wire.AckFrame {
 	//nolint:exhaustive // 0-RTT packets can't contain ACK frames.
 	switch encLevel {
 	case protocol.EncryptionInitial:
@@ -101,7 +101,7 @@ func (h *receivedPacketHandler) GetAckFrame(encLevel protocol.EncryptionLevel, o
 		}
 		return nil
 	case protocol.Encryption1RTT:
-		return h.appDataPackets.GetAckFrame(onlyIfQueued)
+		return h.appDataPackets.GetAckFrame(now, onlyIfQueued)
 	default:
 		// 0-RTT packets can't contain ACK frames
 		return nil

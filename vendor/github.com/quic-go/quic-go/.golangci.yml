@@ -1,45 +1,85 @@
-linters-settings:
-  misspell:
-    ignore-words:
-      - ect
-  depguard:
-    rules:
-      quicvarint:
-        list-mode: strict
-        files:
-          - "**/github.com/quic-go/quic-go/quicvarint/*"
-          - "!$test"
-        allow:
-          - $gostd
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - asciicheck
+    - copyloopvar
     - depguard
     - exhaustive
-    - exportloopref
-    - goimports
-    - gofmt # redundant, since gofmt *should* be a no-op after gofumpt
-    - gofumpt
-    - gosimple
     - govet
     - ineffassign
     - misspell
     - prealloc
     - staticcheck
-    - stylecheck
     - unconvert
     - unparam
     - unused
-
-issues:
-  exclude-files:
-    - internal/handshake/cipher_suite.go
-  exclude-rules:
-    - path: internal/qtls
-      linters:
-        - depguard
-    - path: _test\.go
-      linters:
-        - exhaustive
+  settings:
+    depguard:
+      rules:
+        random:
+          deny:
+            - pkg: "math/rand$"
+              desc: use math/rand/v2
+            - pkg: "golang.org/x/exp/rand"
+              desc: use math/rand/v2
+        quicvarint:
+          list-mode: strict
+          files:
+            - '**/github.com/quic-go/quic-go/quicvarint/*'
+            - '!$test'
+          allow:
+            - $gostd
+        rsa:
+          list-mode: original
+          deny:
+            - pkg: crypto/rsa
+              desc: "use crypto/ed25519 instead"
+    misspell:
+      ignore-rules:
+        - ect
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - depguard
+        path: internal/qtls
+      - linters:
+          - exhaustive
+          - prealloc
+          - unparam
+        path: _test\.go
+      - linters:
+          - staticcheck
+        path: _test\.go
+        text: 'SA1029:' # inappropriate key in call to context.WithValue
+      # WebTransport still relies on the ConnectionTracingID and ConnectionTracingKey.
+      # See https://github.com/quic-go/quic-go/issues/4405 for more details.
+      - linters:
+          - staticcheck
+        paths:
+          - http3/
+          - integrationtests/self/http_test.go
+        text: 'SA1019:.+quic\.ConnectionTracing(ID|Key)'
+    paths:
+      - internal/handshake/cipher_suite.go
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - internal/handshake/cipher_suite.go
+      - third_party$
+      - builtin$
+      - examples$

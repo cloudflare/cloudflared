@@ -1,4 +1,4 @@
-pinned_go: &pinned_go go-boring=1.22.10-1
+pinned_go: &pinned_go go-boring=1.24.2-1
 
 build_dir: &build_dir /cfsetup_build
 default-flavor: bookworm
@@ -13,7 +13,7 @@ bullseye: &bullseye
       - rubygem-fpm
       - rpm
       - libffi-dev
-      - golangci-lint
+      - golangci-lint=1.64.8-2
     pre-cache: &build_pre_cache
       - export GOCACHE=/cfsetup_build/.cache/go-build
       - go install golang.org/x/tools/cmd/goimports@v0.30.0

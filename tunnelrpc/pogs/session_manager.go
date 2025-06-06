@@ -127,7 +127,7 @@ func (p *RegisterUdpSessionResponse) Unmarshal(s proto.RegisterUdpSessionRespons
 		return err
 	}
 	if respErr != "" {
-		p.Err = fmt.Errorf(respErr)
+		p.Err = fmt.Errorf("%s", respErr)
 	}
 	p.Spans, err = s.Spans()
 	if err != nil {
@@ -164,7 +164,7 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 		}
 		p.SetDstPort(dstPort)
 		p.SetCloseAfterIdleHint(int64(closeAfterIdleHint))
-		p.SetTraceContext(traceContext)
+		_ = p.SetTraceContext(traceContext)
 		return nil
 	})
 	result, err := promise.Result().Struct()

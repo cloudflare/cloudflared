@@ -19,7 +19,7 @@ func NewBufferedWriteCloser(writer *bufio.Writer, closer io.Closer) io.WriteClos
 }
 
 func (h bufferedWriteCloser) Close() error {
-	if err := h.Writer.Flush(); err != nil {
+	if err := h.Flush(); err != nil {
 		return err
 	}
 	return h.Closer.Close()

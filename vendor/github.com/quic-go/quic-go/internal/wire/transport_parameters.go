@@ -245,11 +245,15 @@ func (p *TransportParameters) readPreferredAddress(b []byte, expectedLen int) er
 	copy(ipv4[:], b[:4])
 	port4 := binary.BigEndian.Uint16(b[4:])
 	b = b[4+2:]
-	pa.IPv4 = netip.AddrPortFrom(netip.AddrFrom4(ipv4), port4)
+	if port4 != 0 && ipv4 != [4]byte{} {
+		pa.IPv4 = netip.AddrPortFrom(netip.AddrFrom4(ipv4), port4)
+	}
 	var ipv6 [16]byte
 	copy(ipv6[:], b[:16])
 	port6 := binary.BigEndian.Uint16(b[16:])
-	pa.IPv6 = netip.AddrPortFrom(netip.AddrFrom16(ipv6), port6)
+	if port6 != 0 && ipv6 != [16]byte{} {
+		pa.IPv6 = netip.AddrPortFrom(netip.AddrFrom16(ipv6), port6)
+	}
 	b = b[16+2:]
 	connIDLen := int(b[0])
 	b = b[1:]
@@ -391,12 +395,20 @@ func (p *TransportParameters) Marshal(pers protocol.Perspective) []byte {
 		if p.PreferredAddress != nil {
 			b = quicvarint.Append(b, uint64(preferredAddressParameterID))
 			b = quicvarint.Append(b, 4+2+16+2+1+uint64(p.PreferredAddress.ConnectionID.Len())+16)
-			ip4 := p.PreferredAddress.IPv4.Addr().As4()
-			b = append(b, ip4[:]...)
-			b = binary.BigEndian.AppendUint16(b, p.PreferredAddress.IPv4.Port())
-			ip6 := p.PreferredAddress.IPv6.Addr().As16()
-			b = append(b, ip6[:]...)
-			b = binary.BigEndian.AppendUint16(b, p.PreferredAddress.IPv6.Port())
+			if p.PreferredAddress.IPv4.IsValid() {
+				ipv4 := p.PreferredAddress.IPv4.Addr().As4()
+				b = append(b, ipv4[:]...)
+				b = binary.BigEndian.AppendUint16(b, p.PreferredAddress.IPv4.Port())
+			} else {
+				b = append(b, make([]byte, 6)...)
+			}
+			if p.PreferredAddress.IPv6.IsValid() {
+				ipv6 := p.PreferredAddress.IPv6.Addr().As16()
+				b = append(b, ipv6[:]...)
+				b = binary.BigEndian.AppendUint16(b, p.PreferredAddress.IPv6.Port())
+			} else {
+				b = append(b, make([]byte, 18)...)
+			}
 			b = append(b, uint8(p.PreferredAddress.ConnectionID.Len()))
 			b = append(b, p.PreferredAddress.ConnectionID.Bytes()...)
 			b = append(b, p.PreferredAddress.StatelessResetToken[:]...)

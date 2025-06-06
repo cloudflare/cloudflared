@@ -32,7 +32,7 @@ Write-Output "Running unit tests"
 
 # Not testing with race detector because of https://github.com/golang/go/issues/61058
 # We already test it on other platforms
-& go test -failfast -mod=vendor ./...
+go test -failfast -v -mod=vendor ./...
 if ($LASTEXITCODE -ne 0) { throw "Failed unit tests" }
 
 Write-Output "Running component tests"

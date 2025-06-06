@@ -77,7 +77,7 @@ func TestFeaturePrecedenceEvaluationPostQuantum(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resolver := &staticResolver{record: featuresRecord{}}
-			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, []string{}, test.cli, time.Second)
+			selector, err := newFeatureSelector(t.Context(), test.name, &logger, resolver, []string{}, test.cli, time.Second)
 			require.NoError(t, err)
 			snapshot := selector.Snapshot()
 			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
@@ -121,7 +121,7 @@ func TestFeaturePrecedenceEvaluationDatagramVersion(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resolver := &staticResolver{record: test.remote}
-			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, test.cli, false, time.Second)
+			selector, err := newFeatureSelector(t.Context(), test.name, &logger, resolver, test.cli, false, time.Second)
 			require.NoError(t, err)
 			snapshot := selector.Snapshot()
 			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
@@ -155,7 +155,7 @@ func TestDeprecatedFeaturesRemoved(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			resolver := &staticResolver{record: test.remote}
-			selector, err := newFeatureSelector(context.Background(), test.name, &logger, resolver, test.cli, false, time.Second)
+			selector, err := newFeatureSelector(t.Context(), test.name, &logger, resolver, test.cli, false, time.Second)
 			require.NoError(t, err)
 			snapshot := selector.Snapshot()
 			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
@@ -180,7 +180,7 @@ func TestRefreshFeaturesRecord(t *testing.T) {
 		}
 
 		// Manually progress the next refresh
-		_ = selector.refresh(context.Background())
+		_ = selector.refresh(t.Context())
 	}
 
 	// Make sure a resolver error doesn't override the last fetched features
@@ -197,7 +197,7 @@ func TestSnapshotIsolation(t *testing.T) {
 	require.Equal(t, DatagramV2, snapshot.DatagramVersion)
 
 	// Manually progress the next refresh
-	_ = selector.refresh(context.Background())
+	_ = selector.refresh(t.Context())
 
 	snapshot2 := selector.Snapshot()
 	require.Equal(t, DatagramV3, snapshot2.DatagramVersion)
@@ -224,7 +224,7 @@ func newTestSelector(t *testing.T, percentages []uint32, pq bool, refreshFreq ti
 		percentages: percentages,
 	}
 
-	selector, err := newFeatureSelector(context.Background(), testAccountTag, &logger, resolver, []string{}, pq, refreshFreq)
+	selector, err := newFeatureSelector(t.Context(), testAccountTag, &logger, resolver, []string{}, pq, refreshFreq)
 	require.NoError(t, err)
 
 	return selector

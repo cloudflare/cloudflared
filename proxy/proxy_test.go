@@ -148,7 +148,7 @@ func (w *mockSSERespWriter) ReadBytes() []byte {
 func TestProxySingleOrigin(t *testing.T) {
 	log := zerolog.Nop()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	flagSet := flag.NewFlagSet(t.Name(), flag.PanicOnError)
 	flagSet.Bool("hello-world", true, "")
@@ -190,7 +190,7 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 	return func(t *testing.T) {
 		// WSRoute is a websocket echo handler
 		const testTimeout = 5 * time.Second * 1000
-		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 		defer cancel()
 		readPipe, writePipe := io.Pipe()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:8080%s", hello.WSRoute), readPipe)
@@ -257,7 +257,7 @@ func testProxySSE(proxy connection.OriginProxy) func(t *testing.T) {
 			pushFreq  = time.Millisecond * 10
 		)
 		responseWriter := newMockSSERespWriter()
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:8080%s?freq=%s", hello.SSERoute, pushFreq), nil)
 		require.NoError(t, err)
 
@@ -365,7 +365,7 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 
 	log := zerolog.Nop()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	require.NoError(t, ingress.StartOrigins(&log, ctx.Done()))
 
 	proxy := NewOriginProxy(ingress, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
@@ -494,7 +494,7 @@ func TestConnections(t *testing.T) {
 		err     bool
 	}
 
-	var tests = []struct {
+	tests := []struct {
 		name string
 		args args
 		want want
@@ -686,7 +686,7 @@ func TestConnections(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			ln, err := net.Listen("tcp", "127.0.0.1:0")
 			require.NoError(t, err)
 			// Starts origin service
@@ -755,6 +755,7 @@ func newWSRequestBody(data []byte) *requestBody {
 		pw: pw,
 	}
 }
+
 func newTCPRequestBody(data []byte) *requestBody {
 	pr, pw := io.Pipe()
 	go func() {
@@ -973,12 +974,12 @@ func runEchoTCPService(t *testing.T, l net.Listener) {
 }
 
 func runEchoWSService(t *testing.T, l net.Listener) {
-	var upgrader = gorillaWS.Upgrader{
+	upgrader := gorillaWS.Upgrader{
 		ReadBufferSize:  10,
 		WriteBufferSize: 10,
 	}
 
-	var ws = func(w http.ResponseWriter, r *http.Request) {
+	ws := func(w http.ResponseWriter, r *http.Request) {
 		header := make(http.Header)
 		for k, vs := range r.Header {
 			if k == "Test-Cloudflared-Echo" {

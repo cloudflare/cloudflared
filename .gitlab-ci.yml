@@ -57,8 +57,7 @@ build_cloudflared_macos: &build
     - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
     - ARCH=$(uname -m)
     - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
-    - ./.teamcity/mac/install-cloudflare-go.sh
-    - export PATH="/tmp/go/bin:$PATH"
+    - ./.teamcity/mac/install-go.sh
     - BUILD_SCRIPT=.teamcity/mac/build.sh
     - if [[ ! -x ${BUILD_SCRIPT} ]] ; then exit ; fi
     - set -euo pipefail

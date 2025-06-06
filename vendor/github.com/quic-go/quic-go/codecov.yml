@@ -6,6 +6,8 @@ coverage:
     - internal/handshake/cipher_suite.go
     - internal/utils/linkedlist/linkedlist.go
     - internal/testdata
+    - logging/connection_tracer_multiplexer.go
+    - logging/tracer_multiplexer.go
     - testutils/
     - fuzzing/
     - metrics/

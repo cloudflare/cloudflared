@@ -136,7 +136,7 @@ func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 	quic := newMockQuicConn()
 	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 	err := conn.Serve(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -147,12 +147,12 @@ func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 	log := zerolog.Nop()
 	quic := newMockQuicConn()
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 	quic.ctx = ctx
 	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
-	err := conn.Serve(context.Background())
+	err := conn.Serve(t.Context())
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 	quic := &mockQuicConnReadError{err: net.ErrClosed}
 	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
-	err := conn.Serve(context.Background())
+	err := conn.Serve(t.Context())
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestDatagramConnServe_SessionRegistrationRateLimit(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
@@ -230,7 +230,7 @@ func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {
 			quic.send <- test.input
 			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 			defer cancel()
 			err := conn.Serve(ctx)
 			// we cancel the Serve method to check to see if the log output was written since the unsupported datagram
@@ -272,7 +272,7 @@ func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -307,7 +307,7 @@ func TestDatagramConnServe(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -356,7 +356,7 @@ func TestDatagramConnServeDecodeMultipleICMPInParallel(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &sessionManager, router, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -435,7 +435,7 @@ func TestDatagramConnServe_RegisterTwice(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -499,14 +499,14 @@ func TestDatagramConnServe_MigrateConnection(t *testing.T) {
 	conn2 := v3.NewDatagramConn(quic2, &sessionManager, &noopICMPRouter{}, 1, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
 		done <- conn.Serve(ctx)
 	}()
 
-	ctx2, cancel2 := context.WithCancelCause(context.Background())
+	ctx2, cancel2 := context.WithCancelCause(t.Context())
 	defer cancel2(errors.New("other error"))
 	done2 := make(chan error, 1)
 	go func() {
@@ -580,7 +580,7 @@ func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -608,7 +608,7 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -637,7 +637,7 @@ func TestDatagramConnServe_ICMPDatagram_TTLDecremented(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &mockSessionManager{}, router, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {
@@ -683,7 +683,7 @@ func TestDatagramConnServe_ICMPDatagram_TTLExceeded(t *testing.T) {
 	conn := v3.NewDatagramConn(quic, &mockSessionManager{}, router, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.New("other error"))
 	done := make(chan error, 1)
 	go func() {

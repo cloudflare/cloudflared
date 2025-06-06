@@ -27,7 +27,7 @@ linters:
     - sloglint         # Ensure consistent code style when using log/slog.
     - sqlclosecheck    # Checks that sql.Rows, sql.Stmt, sqlx.NamedStmt, pgx.Query are closed.
     - staticcheck      # It's a set of rules from staticcheck. It's not the same thing as the staticcheck binary.
-    - tenv             # Tenv is analyzer that detects using os.Setenv instead of t.Setenv since Go1.17.
+    - usetesting       # Reports uses of functions with replacement inside the testing package.
     - testableexamples # Linter checks if examples are testable (have an expected output).
     - testifylint      # Checks usage of github.com/stretchr/testify.
     - tparallel        # Tparallel detects inappropriate usage of t.Parallel() method in your Go test codes.

@@ -102,10 +102,6 @@ const DefaultIdleTimeout = 30 * time.Second
 // DefaultHandshakeIdleTimeout is the default idle timeout used before handshake completion.
 const DefaultHandshakeIdleTimeout = 5 * time.Second
 
-// MaxKeepAliveInterval is the maximum time until we send a packet to keep a connection alive.
-// It should be shorter than the time that NATs clear their mapping.
-const MaxKeepAliveInterval = 20 * time.Second
-
 // RetiredConnectionIDDeleteTimeout is the time we keep closed connections around in order to retransmit the CONNECTION_CLOSE.
 // after this time all information about the old connection will be deleted
 const RetiredConnectionIDDeleteTimeout = 5 * time.Second

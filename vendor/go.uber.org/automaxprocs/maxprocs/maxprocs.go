@@ -37,9 +37,10 @@ func currentMaxProcs() int {
 }
 
 type config struct {
-	printf        func(string, ...interface{})
-	procs         func(int) (int, iruntime.CPUQuotaStatus, error)
-	minGOMAXPROCS int
+	printf         func(string, ...interface{})
+	procs          func(int, func(v float64) int) (int, iruntime.CPUQuotaStatus, error)
+	minGOMAXPROCS  int
+	roundQuotaFunc func(v float64) int
 }
 
 func (c *config) log(fmt string, args ...interface{}) {
@@ -71,6 +72,13 @@ func Min(n int) Option {
 	})
 }
 
+// RoundQuotaFunc sets the function that will be used to covert the CPU quota from float to int.
+func RoundQuotaFunc(rf func(v float64) int) Option {
+	return optionFunc(func(cfg *config) {
+		cfg.roundQuotaFunc = rf
+	})
+}
+
 type optionFunc func(*config)
 
 func (of optionFunc) apply(cfg *config) { of(cfg) }
@@ -82,8 +90,9 @@ func (of optionFunc) apply(cfg *config) { of(cfg) }
 // configured CPU quota.
 func Set(opts ...Option) (func(), error) {
 	cfg := &config{
-		procs:         iruntime.CPUQuotaToGOMAXPROCS,
-		minGOMAXPROCS: 1,
+		procs:          iruntime.CPUQuotaToGOMAXPROCS,
+		roundQuotaFunc: iruntime.DefaultRoundFunc,
+		minGOMAXPROCS:  1,
 	}
 	for _, o := range opts {
 		o.apply(cfg)
@@ -96,13 +105,13 @@ func Set(opts ...Option) (func(), error) {
 	// Honor the GOMAXPROCS environment variable if present. Otherwise, amend
 	// `runtime.GOMAXPROCS()` with the current process' CPU quota if the OS is
 	// Linux, and guarantee a minimum value of 1. The minimum guaranteed value
-	// can be overriden using `maxprocs.Min()`.
+	// can be overridden using `maxprocs.Min()`.
 	if max, exists := os.LookupEnv(_maxProcsKey); exists {
 		cfg.log("maxprocs: Honoring GOMAXPROCS=%q as set in environment", max)
 		return undoNoop, nil
 	}
 
-	maxProcs, status, err := cfg.procs(cfg.minGOMAXPROCS)
+	maxProcs, status, err := cfg.procs(cfg.minGOMAXPROCS, cfg.roundQuotaFunc)
 	if err != nil {
 		return undoNoop, err
 	}

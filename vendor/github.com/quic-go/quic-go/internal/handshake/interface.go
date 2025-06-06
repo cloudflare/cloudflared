@@ -83,6 +83,29 @@ const (
 	EventHandshakeComplete
 )
 
+func (k EventKind) String() string {
+	switch k {
+	case EventNoEvent:
+		return "EventNoEvent"
+	case EventWriteInitialData:
+		return "EventWriteInitialData"
+	case EventWriteHandshakeData:
+		return "EventWriteHandshakeData"
+	case EventReceivedReadKeys:
+		return "EventReceivedReadKeys"
+	case EventDiscard0RTTKeys:
+		return "EventDiscard0RTTKeys"
+	case EventReceivedTransportParameters:
+		return "EventReceivedTransportParameters"
+	case EventRestoredTransportParameters:
+		return "EventRestoredTransportParameters"
+	case EventHandshakeComplete:
+		return "EventHandshakeComplete"
+	default:
+		return "Unknown EventKind"
+	}
+}
+
 // Event is a handshake event.
 type Event struct {
 	Kind                EventKind

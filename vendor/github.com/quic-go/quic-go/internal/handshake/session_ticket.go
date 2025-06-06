@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
@@ -50,5 +51,22 @@ func (t *sessionTicket) Unmarshal(b []byte, using0RTT bool) error {
 		return fmt.Errorf("the session ticket has more bytes than expected")
 	}
 	t.RTT = time.Duration(rtt) * time.Microsecond
+	return nil
+}
+
+const extraPrefix = "quic-go1"
+
+func addSessionStateExtraPrefix(b []byte) []byte {
+	return append([]byte(extraPrefix), b...)
+}
+
+func findSessionStateExtraData(extras [][]byte) []byte {
+	prefix := []byte(extraPrefix)
+	for _, extra := range extras {
+		if len(extra) < len(prefix) || !bytes.Equal(prefix, extra[:len(prefix)]) {
+			continue
+		}
+		return extra[len(prefix):]
+	}
 	return nil
 }

@@ -2,9 +2,7 @@ package quic
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net"
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/flowcontrol"
@@ -34,15 +32,12 @@ func convertStreamError(err error, stype protocol.StreamType, pers protocol.Pers
 	return fmt.Errorf(strError.Error(), ids...)
 }
 
-type streamOpenErr struct{ error }
+// StreamLimitReachedError is returned from Connection.OpenStream and Connection.OpenUniStream
+// when it is not possible to open a new stream because the number of opens streams reached
+// the peer's stream limit.
+type StreamLimitReachedError struct{}
 
-var _ net.Error = &streamOpenErr{}
-
-func (e streamOpenErr) Temporary() bool { return e.error == errTooManyOpenStreams }
-func (streamOpenErr) Timeout() bool     { return false }
-
-// errTooManyOpenStreams is used internally by the outgoing streams maps.
-var errTooManyOpenStreams = errors.New("too many open streams")
+func (e StreamLimitReachedError) Error() string { return "too many open streams" }
 
 type streamsMap struct {
 	ctx         context.Context // not used for cancellations, but carries the values associated with the connection
@@ -52,6 +47,7 @@ type streamsMap struct {
 	maxIncomingUniStreams  uint64
 
 	sender            streamSender
+	queueControlFrame func(wire.Frame)
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController
 
 	mutex               sync.Mutex
@@ -67,14 +63,16 @@ var _ streamManager = &streamsMap{}
 func newStreamsMap(
 	ctx context.Context,
 	sender streamSender,
+	queueControlFrame func(wire.Frame),
 	newFlowController func(protocol.StreamID) flowcontrol.StreamFlowController,
 	maxIncomingBidiStreams uint64,
 	maxIncomingUniStreams uint64,
 	perspective protocol.Perspective,
-) streamManager {
+) *streamsMap {
 	m := &streamsMap{
 		ctx:                    ctx,
 		perspective:            perspective,
+		queueControlFrame:      queueControlFrame,
 		newFlowController:      newFlowController,
 		maxIncomingBidiStreams: maxIncomingBidiStreams,
 		maxIncomingUniStreams:  maxIncomingUniStreams,
@@ -91,7 +89,7 @@ func (m *streamsMap) initMaps() {
 			id := num.StreamID(protocol.StreamTypeBidi, m.perspective)
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 	m.incomingBidiStreams = newIncomingStreamsMap(
 		protocol.StreamTypeBidi,
@@ -100,7 +98,7 @@ func (m *streamsMap) initMaps() {
 			return newStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingBidiStreams,
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 	m.outgoingUniStreams = newOutgoingStreamsMap(
 		protocol.StreamTypeUni,
@@ -108,7 +106,7 @@ func (m *streamsMap) initMaps() {
 			id := num.StreamID(protocol.StreamTypeUni, m.perspective)
 			return newSendStream(m.ctx, id, m.sender, m.newFlowController(id))
 		},
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 	m.incomingUniStreams = newIncomingStreamsMap(
 		protocol.StreamTypeUni,
@@ -117,7 +115,7 @@ func (m *streamsMap) initMaps() {
 			return newReceiveStream(id, m.sender, m.newFlowController(id))
 		},
 		m.maxIncomingUniStreams,
-		m.sender.queueControlFrame,
+		m.queueControlFrame,
 	)
 }
 

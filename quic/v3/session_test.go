@@ -93,7 +93,7 @@ func testSessionServe_Origin(t *testing.T, payload []byte) {
 	session := v3.NewSession(testRequestID, 3*time.Second, origin, testOriginAddr, testLocalAddr, &eyeball, &noopMetrics{}, &log)
 	defer session.Close()
 
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(context.Canceled)
 	done := make(chan error)
 	go func() {
@@ -143,7 +143,7 @@ func TestSessionServe_OriginTooLarge(t *testing.T) {
 
 	done := make(chan error)
 	go func() {
-		done <- session.Serve(context.Background())
+		done <- session.Serve(t.Context())
 	}()
 
 	// Attempt to write a payload too large from the origin
@@ -173,7 +173,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 	defer session.Close()
 
 	done := make(chan error)
-	eyeball1Ctx, cancel := context.WithCancelCause(context.Background())
+	eyeball1Ctx, cancel := context.WithCancelCause(t.Context())
 	go func() {
 		done <- session.Serve(eyeball1Ctx)
 	}()
@@ -181,7 +181,7 @@ func TestSessionServe_Migrate(t *testing.T) {
 	// Migrate the session to a new connection before origin sends data
 	eyeball2 := newMockEyeball()
 	eyeball2.connID = 1
-	eyeball2Ctx := context.Background()
+	eyeball2Ctx := t.Context()
 	session.Migrate(&eyeball2, eyeball2Ctx, &log)
 
 	// Cancel the origin eyeball context; this should not cancel the session
@@ -230,7 +230,7 @@ func TestSessionServe_Migrate_CloseContext2(t *testing.T) {
 	defer session.Close()
 
 	done := make(chan error)
-	eyeball1Ctx, cancel := context.WithCancelCause(context.Background())
+	eyeball1Ctx, cancel := context.WithCancelCause(t.Context())
 	go func() {
 		done <- session.Serve(eyeball1Ctx)
 	}()
@@ -238,7 +238,7 @@ func TestSessionServe_Migrate_CloseContext2(t *testing.T) {
 	// Migrate the session to a new connection before origin sends data
 	eyeball2 := newMockEyeball()
 	eyeball2.connID = 1
-	eyeball2Ctx, cancel2 := context.WithCancelCause(context.Background())
+	eyeball2Ctx, cancel2 := context.WithCancelCause(t.Context())
 	session.Migrate(&eyeball2, eyeball2Ctx, &log)
 
 	// Cancel the origin eyeball context; this should not cancel the session
@@ -316,7 +316,7 @@ func TestSessionServe_IdleTimeout(t *testing.T) {
 	defer server.Close()
 	closeAfterIdle := 2 * time.Second
 	session := v3.NewSession(testRequestID, closeAfterIdle, origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
-	err := session.Serve(context.Background())
+	err := session.Serve(t.Context())
 	if !errors.Is(err, v3.SessionIdleErr{}) {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func TestSessionServe_ParentContextCanceled(t *testing.T) {
 	closeAfterIdle := 10 * time.Second
 
 	session := v3.NewSession(testRequestID, closeAfterIdle, origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	err := session.Serve(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -366,7 +366,7 @@ func TestSessionServe_ReadErrors(t *testing.T) {
 	log := zerolog.Nop()
 	origin := newTestErrOrigin(net.ErrClosed, nil)
 	session := v3.NewSession(testRequestID, 30*time.Second, &origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
-	err := session.Serve(context.Background())
+	err := session.Serve(t.Context())
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatal(err)
 	}
