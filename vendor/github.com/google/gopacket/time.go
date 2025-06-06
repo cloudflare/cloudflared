@@ -64,7 +64,7 @@ var TimestampResolutionCaptureInfo = TimestampResolutionNanosecond
 // PacketSourceResolution is an interface for packet data sources that
 // support reporting the timestamp resolution of the aqcuired timestamps.
 // Returned timestamps will always have NanosecondTimestampResolution due
-// to the use of time.Time, but scaling might have occured if acquired
+// to the use of time.Time, but scaling might have occurred if acquired
 // timestamps have a different resolution.
 type PacketSourceResolution interface {
 	// Resolution returns the timestamp resolution of acquired timestamps before scaling to NanosecondTimestampResolution.
