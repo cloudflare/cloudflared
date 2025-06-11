@@ -1,3 +1,7 @@
+2025.6.0
+- 2025-06-06 TUN-9016: update go to 1.24
+- 2025-06-05 TUN-9171: Use `is_default_network` instead of `is_default` to create vnet's
+
 2025.5.0
 - 2025-05-14 TUN-9319: Add dynamic loading of features to connections via ConnectionOptionsSnapshot
 - 2025-05-13 TUN-9322: Add metric for unsupported RPC commands for datagram v3
