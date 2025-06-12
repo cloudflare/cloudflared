@@ -23,7 +23,7 @@ function Usage {
 USAGE:  $0 [--benchmark regexp] [--root] [--gen] <git commit flags...>
 
 --benchmark:  Run benchmark comparisons against last benchmark'd commit
---root:  Run tests that require root priviledges
+--root:  Run tests that require root privileges
 --gen:  Generate code for MACs/ports by pulling down external data
 
 Note, some 'git commit' flags are necessary, if all else fails, pass in -a
@@ -96,7 +96,7 @@ set -e
 set -x
 
 if [ ! -z "$ROOT" ]; then
-  echo "Running SUDO to get root priviledges for root tests"
+  echo "Running SUDO to get root privileges for root tests"
   sudo echo "have root"
 fi
 
