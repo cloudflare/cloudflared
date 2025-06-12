@@ -150,9 +150,9 @@ func newMetricFamily(dtoMF *dto.MetricFamily) *MetricFamily {
 		Name:    dtoMF.GetName(),
 		Help:    dtoMF.GetHelp(),
 		Type:    dtoMF.GetType().String(),
-		Metrics: make([]interface{}, len(dtoMF.Metric)),
+		Metrics: make([]interface{}, len(dtoMF.GetMetric())),
 	}
-	for i, m := range dtoMF.Metric {
+	for i, m := range dtoMF.GetMetric() {
 		if dtoMF.GetType() == dto.MetricType_SUMMARY {
 			mf.Metrics[i] = summary{
 				Labels:    makeLabels(m),
@@ -178,13 +178,13 @@ func newMetricFamily(dtoMF *dto.MetricFamily) *MetricFamily {
 }
 
 func value(m *dto.Metric) float64 {
-	if m.Gauge != nil {
+	if m.GetGauge() != nil {
 		return m.GetGauge().GetValue()
 	}
-	if m.Counter != nil {
+	if m.GetCounter() != nil {
 		return m.GetCounter().GetValue()
 	}
-	if m.Untyped != nil {
+	if m.GetUntyped() != nil {
 		return m.GetUntyped().GetValue()
 	}
 	return 0.
@@ -192,7 +192,7 @@ func value(m *dto.Metric) float64 {
 
 func makeLabels(m *dto.Metric) map[string]string {
 	result := map[string]string{}
-	for _, lp := range m.Label {
+	for _, lp := range m.GetLabel() {
 		result[lp.GetName()] = lp.GetValue()
 	}
 	return result
@@ -200,7 +200,7 @@ func makeLabels(m *dto.Metric) map[string]string {
 
 func makeQuantiles(m *dto.Metric) map[string]string {
 	result := map[string]string{}
-	for _, q := range m.GetSummary().Quantile {
+	for _, q := range m.GetSummary().GetQuantile() {
 		result[fmt.Sprint(q.GetQuantile())] = fmt.Sprint(q.GetValue())
 	}
 	return result
@@ -208,7 +208,7 @@ func makeQuantiles(m *dto.Metric) map[string]string {
 
 func makeBuckets(m *dto.Metric) map[string]string {
 	result := map[string]string{}
-	for _, b := range m.GetHistogram().Bucket {
+	for _, b := range m.GetHistogram().GetBucket() {
 		result[fmt.Sprint(b.GetUpperBound())] = fmt.Sprint(b.GetCumulativeCount())
 	}
 	return result

@@ -56,33 +56,13 @@ var (
 func DescribePlugins() string {
 	pl := ListPlugins()
 
-	str := "Server types:\n"
-	for _, name := range pl["server_types"] {
-		str += "  " + name + "\n"
-	}
-
-	str += "\nCaddyfile loaders:\n"
-	for _, name := range pl["caddyfile_loaders"] {
-		str += "  " + name + "\n"
-	}
-
-	if len(pl["event_hooks"]) > 0 {
-		str += "\nEvent hook plugins:\n"
-		for _, name := range pl["event_hooks"] {
-			str += "  hook." + name + "\n"
-		}
-	}
-
-	if len(pl["clustering"]) > 0 {
-		str += "\nClustering plugins:\n"
-		for _, name := range pl["clustering"] {
-			str += "  " + name + "\n"
-		}
-	}
-
-	str += "\nOther plugins:\n"
+	str := ""
 	for _, name := range pl["others"] {
-		str += "  " + name + "\n"
+		if len(name) > 3 {
+			str += name[4:] + "\n" // drop dns. prefix caddy adds
+		} else {
+			str += name + "\n"
+		}
 	}
 
 	return str

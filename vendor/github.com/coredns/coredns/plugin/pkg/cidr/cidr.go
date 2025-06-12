@@ -71,7 +71,7 @@ func Reverse(nets []string) []string {
 		nearest := (bits - ones) + mod
 		offset := 0
 		var end bool
-		for i := 0; i < nearest/sizeDigit; i++ {
+		for range nearest / sizeDigit {
 			offset, end = dns.NextLabel(r, offset)
 			if end {
 				break

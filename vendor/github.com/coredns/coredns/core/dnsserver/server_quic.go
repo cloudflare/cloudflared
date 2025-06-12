@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 
 	"github.com/coredns/coredns/plugin/metrics/vars"
@@ -32,15 +31,26 @@ const (
 	// DoQCodeProtocolError signals that the DoQ implementation encountered
 	// a protocol error and is forcibly aborting the connection.
 	DoQCodeProtocolError quic.ApplicationErrorCode = 2
+
+	// DefaultMaxQUICStreams is the default maximum number of concurrent QUIC streams
+	// on a per-connection basis. RFC 9250 (DNS-over-QUIC) does not require a high
+	// concurrent-stream limit; normal stub or recursive resolvers open only a handful
+	// of streams in parallel. This default (256) is a safe upper bound.
+	DefaultMaxQUICStreams = 256
+
+	// DefaultQUICStreamWorkers is the default number of workers for processing QUIC streams.
+	DefaultQUICStreamWorkers = 1024
 )
 
 // ServerQUIC represents an instance of a DNS-over-QUIC server.
 type ServerQUIC struct {
 	*Server
-	listenAddr   net.Addr
-	tlsConfig    *tls.Config
-	quicConfig   *quic.Config
-	quicListener *quic.Listener
+	listenAddr        net.Addr
+	tlsConfig         *tls.Config
+	quicConfig        *quic.Config
+	quicListener      *quic.Listener
+	maxStreams        int
+	streamProcessPool chan struct{}
 }
 
 // NewServerQUIC returns a new CoreDNS QUIC server and compiles all plugin in to it.
@@ -63,16 +73,31 @@ func NewServerQUIC(addr string, group []*Config) (*ServerQUIC, error) {
 		tlsConfig.NextProtos = []string{"doq"}
 	}
 
-	var quicConfig *quic.Config
-	quicConfig = &quic.Config{
+	maxStreams := DefaultMaxQUICStreams
+	if len(group) > 0 && group[0] != nil && group[0].MaxQUICStreams != nil {
+		maxStreams = *group[0].MaxQUICStreams
+	}
+
+	streamProcessPoolSize := DefaultQUICStreamWorkers
+	if len(group) > 0 && group[0] != nil && group[0].MaxQUICWorkerPoolSize != nil {
+		streamProcessPoolSize = *group[0].MaxQUICWorkerPoolSize
+	}
+
+	var quicConfig = &quic.Config{
 		MaxIdleTimeout:        s.idleTimeout,
-		MaxIncomingStreams:    math.MaxUint16,
-		MaxIncomingUniStreams: math.MaxUint16,
+		MaxIncomingStreams:    int64(maxStreams),
+		MaxIncomingUniStreams: int64(maxStreams),
 		// Enable 0-RTT by default for all connections on the server-side.
 		Allow0RTT: true,
 	}
 
-	return &ServerQUIC{Server: s, tlsConfig: tlsConfig, quicConfig: quicConfig}, nil
+	return &ServerQUIC{
+		Server:            s,
+		tlsConfig:         tlsConfig,
+		quicConfig:        quicConfig,
+		maxStreams:        maxStreams,
+		streamProcessPool: make(chan struct{}, streamProcessPoolSize),
+	}, nil
 }
 
 // ServePacket implements caddy.UDPServer interface.
@@ -120,7 +145,12 @@ func (s *ServerQUIC) serveQUICConnection(conn quic.Connection) {
 			return
 		}
 
-		go s.serveQUICStream(stream, conn)
+		// Use a bounded worker pool
+		s.streamProcessPool <- struct{}{} // Acquire a worker slot, may block
+		go func(st quic.Stream, cn quic.Connection) {
+			defer func() { <-s.streamProcessPool }() // Release worker slot
+			s.serveQUICStream(st, cn)
+		}(stream, conn)
 	}
 }
 

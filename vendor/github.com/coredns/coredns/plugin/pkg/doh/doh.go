@@ -45,22 +45,22 @@ func NewRequest(method, url string, m *dns.Msg) (*http.Request, error) {
 			return req, err
 		}
 
-		req.Header.Set("content-type", MimeType)
-		req.Header.Set("accept", MimeType)
+		req.Header.Set("Content-Type", MimeType)
+		req.Header.Set("Accept", MimeType)
 		return req, nil
 
 	case http.MethodPost:
 		req, err := http.NewRequest(
 			http.MethodPost,
-			fmt.Sprintf("%s%s?bla=foo:443", url, Path),
+			fmt.Sprintf("%s%s", url, Path),
 			bytes.NewReader(buf),
 		)
 		if err != nil {
 			return req, err
 		}
 
-		req.Header.Set("content-type", MimeType)
-		req.Header.Set("accept", MimeType)
+		req.Header.Set("Content-Type", MimeType)
+		req.Header.Set("Accept", MimeType)
 		return req, nil
 
 	default:

@@ -4,6 +4,8 @@ import (
 	"io"
 	"math"
 	"sync"
+
+	"github.com/klauspost/compress/internal/le"
 )
 
 const (
@@ -86,11 +88,19 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 		dict = dict[len(dict)-maxStatelessDict:]
 	}
 
+	// For subsequent loops, keep shallow dict reference to avoid alloc+copy.
+	var inDict []byte
+
 	for len(in) > 0 {
 		todo := in
-		if len(todo) > maxStatelessBlock-len(dict) {
+		if len(inDict) > 0 {
+			if len(todo) > maxStatelessBlock-maxStatelessDict {
+				todo = todo[:maxStatelessBlock-maxStatelessDict]
+			}
+		} else if len(todo) > maxStatelessBlock-len(dict) {
 			todo = todo[:maxStatelessBlock-len(dict)]
 		}
+		inOrg := in
 		in = in[len(todo):]
 		uncompressed := todo
 		if len(dict) > 0 {
@@ -102,7 +112,11 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 			todo = combined
 		}
 		// Compress
-		statelessEnc(&dst, todo, int16(len(dict)))
+		if len(inDict) == 0 {
+			statelessEnc(&dst, todo, int16(len(dict)))
+		} else {
+			statelessEnc(&dst, inDict[:maxStatelessDict+len(todo)], maxStatelessDict)
+		}
 		isEof := eof && len(in) == 0
 
 		if dst.n == 0 {
@@ -119,7 +133,8 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 		}
 		if len(in) > 0 {
 			// Retain a dict if we have more
-			dict = todo[len(todo)-maxStatelessDict:]
+			inDict = inOrg[len(uncompressed)-maxStatelessDict:]
+			dict = nil
 			dst.Reset()
 		}
 		if bw.err != nil {
@@ -139,18 +154,11 @@ func hashSL(u uint32) uint32 {
 }
 
 func load3216(b []byte, i int16) uint32 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:4]
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
+	return le.Load32(b, i)
 }
 
 func load6416(b []byte, i int16) uint64 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:8]
-	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
-		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
+	return le.Load64(b, i)
 }
 
 func statelessEnc(dst *tokens, src []byte, startAt int16) {

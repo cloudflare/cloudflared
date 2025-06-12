@@ -70,7 +70,7 @@ func (f HandlerFunc) Name() string { return "handlerfunc" }
 func Error(name string, err error) error { return fmt.Errorf("%s/%s: %s", "plugin", name, err) }
 
 // NextOrFailure calls next.ServeDNS when next is not nil, otherwise it will return, a ServerFailure and a `no next plugin found` error.
-func NextOrFailure(name string, next Handler, ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) { // nolint: golint
+func NextOrFailure(name string, next Handler, ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	if next != nil {
 		if span := ot.SpanFromContext(ctx); span != nil {
 			child := span.Tracer().StartSpan(next.Name(), ot.ChildOf(span.Context()))

@@ -1,5 +1,9 @@
 THIS IS A FORK OF CADDY v1 - EVERYTHING IS STRIPPED EXCEPT THE PIECES NEEDED IN COREDNS.
 
+Issues are not enabled in this repository. Please raise any issues in coredns/coredns.
+
+---
+
 
 Caddy is a **production-ready** open-source web server that is fast, easy to use, and makes you more productive.
 

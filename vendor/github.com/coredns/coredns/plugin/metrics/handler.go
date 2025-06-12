@@ -16,6 +16,9 @@ import (
 func (m *Metrics) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	state := request.Request{W: w, Req: r}
 
+	// Capture the original request size before any plugins modify it
+	originalSize := r.Len()
+
 	qname := state.QName()
 	zone := plugin.Zones(m.ZoneNames()).Matches(qname)
 	if zone == "" {
@@ -34,7 +37,9 @@ func (m *Metrics) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 		rc = status
 	}
 	plugin := m.authoritativePlugin(rw.Caller)
-	vars.Report(WithServer(ctx), state, zone, WithView(ctx), rcode.ToString(rc), plugin, rw.Len, rw.Start)
+	// Pass the original request size to vars.Report
+	vars.Report(WithServer(ctx), state, zone, WithView(ctx), rcode.ToString(rc), plugin,
+		rw.Len, rw.Start, vars.WithOriginalReqSize(originalSize))
 
 	return status, err
 }

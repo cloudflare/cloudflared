@@ -28,7 +28,7 @@ func NewServer(f dns.HandlerFunc) *Server {
 	s1 := &dns.Server{} // udp
 	s2 := &dns.Server{} // tcp
 
-	for i := 0; i < 5; i++ { // 5 attempts
+	for range 5 { // 5 attempts
 		s2.Listener, _ = reuseport.Listen("tcp", ":0")
 		if s2.Listener == nil {
 			continue

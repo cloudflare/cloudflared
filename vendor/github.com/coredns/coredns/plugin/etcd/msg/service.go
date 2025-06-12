@@ -149,12 +149,11 @@ func split255(s string) []string {
 	sx := []string{}
 	p, i := 0, 255
 	for {
-		if i <= len(s) {
-			sx = append(sx, s[p:i])
-		} else {
+		if i > len(s) {
 			sx = append(sx, s[p:])
 			break
 		}
+		sx = append(sx, s[p:i])
 		p, i = p+255, i+255
 	}
 
@@ -164,7 +163,7 @@ func split255(s string) []string {
 // targetStrip strips "targetstrip" labels from the left side of the fully qualified name.
 func targetStrip(name string, targetStrip int) string {
 	offset, end := 0, false
-	for i := 0; i < targetStrip; i++ {
+	for range targetStrip {
 		offset, end = dns.NextLabel(name, offset)
 	}
 	if end {

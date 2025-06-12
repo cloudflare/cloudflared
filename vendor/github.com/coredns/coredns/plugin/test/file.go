@@ -21,6 +21,7 @@ func TempFile(dir, content string) (string, func(), error) {
 
 // WritePEMFiles creates a tmp dir with ca.pem, cert.pem, and key.pem
 func WritePEMFiles(t *testing.T) (string, error) {
+	t.Helper()
 	tempDir := t.TempDir()
 
 	data := `-----BEGIN CERTIFICATE-----

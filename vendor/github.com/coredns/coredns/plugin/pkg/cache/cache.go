@@ -38,7 +38,7 @@ func New(size int) *Cache {
 	c := &Cache{}
 
 	// Initialize all the shards
-	for i := 0; i < shardSize; i++ {
+	for i := range shardSize {
 		c.shards[i] = newShard(ssize)
 	}
 	return c

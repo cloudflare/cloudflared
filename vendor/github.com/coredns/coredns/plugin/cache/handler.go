@@ -34,14 +34,13 @@ func (c *Cache) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg) 
 	// in which upstream doesn't support DNSSEC, the two cache items will effectively be the same. Regardless, any
 	// DNSSEC RRs in the response are written to cache with the response.
 
-	ttl := 0
 	i := c.getIgnoreTTL(now, state, server)
 	if i == nil {
 		crr := &ResponseWriter{ResponseWriter: w, Cache: c, state: state, server: server, do: do, ad: ad, cd: cd,
 			nexcept: c.nexcept, pexcept: c.pexcept, wildcardFunc: wildcardFunc(ctx)}
 		return c.doRefresh(ctx, state, crr)
 	}
-	ttl = i.ttl(now)
+	ttl := i.ttl(now)
 	if ttl < 0 {
 		// serve stale behavior
 		if c.verifyStale {
@@ -100,7 +99,7 @@ func (c *Cache) doPrefetch(ctx context.Context, state request.Request, cw *Respo
 	// that we've gathered sofar. See we copy the frequencies info back
 	// into the new item that was stored in the cache.
 	if i1 := c.exists(state); i1 != nil {
-		i1.Freq.Reset(now, i.Freq.Hits())
+		i1.Reset(now, i.Hits())
 	}
 }
 
@@ -112,9 +111,9 @@ func (c *Cache) shouldPrefetch(i *item, now time.Time) bool {
 	if c.prefetch <= 0 {
 		return false
 	}
-	i.Freq.Update(c.duration, now)
+	i.Update(c.duration, now)
 	threshold := int(math.Ceil(float64(c.percentage) / 100 * float64(i.origTTL)))
-	return i.Freq.Hits() >= c.prefetch && i.ttl(now) <= threshold
+	return i.Hits() >= c.prefetch && i.ttl(now) <= threshold
 }
 
 // Name implements the Handler interface.

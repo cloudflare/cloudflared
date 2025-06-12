@@ -123,7 +123,7 @@ func (s *ServergRPC) Stop() (err error) {
 // back to the client as a protobuf.
 func (s *ServergRPC) Query(ctx context.Context, in *pb.DnsPacket) (*pb.DnsPacket, error) {
 	msg := new(dns.Msg)
-	err := msg.Unpack(in.Msg)
+	err := msg.Unpack(in.GetMsg())
 	if err != nil {
 		return nil, err
 	}
