@@ -149,10 +149,21 @@ func createFromContext(
 	logLevel := c.String(logLevelFlagName)
 	logFile := c.String(cfdflags.LogFile)
 	logDirectory := c.String(logDirectoryFlagName)
+	var logFormatJSON bool
+	switch c.String(cfdflags.LogFormatOutput) {
+	case cfdflags.LogFormatOutputValueJSON:
+		logFormatJSON = true
+	case cfdflags.LogFormatOutputValueDefault:
+		// "default" and unset use the same logger output format
+		fallthrough
+	default:
+		logFormatJSON = false
+	}
 
 	loggerConfig := CreateConfig(
 		logLevel,
 		disableTerminal,
+		logFormatJSON,
 		logDirectory,
 		logFile,
 	)
@@ -177,6 +188,9 @@ func Create(loggerConfig *Config) *zerolog.Logger {
 }
 
 func createConsoleLogger(config ConsoleConfig) io.Writer {
+	if config.asJSON {
+		return &consoleWriter{out: os.Stderr}
+	}
 	consoleOut := os.Stderr
 	return zerolog.ConsoleWriter{
 		Out:        colorable.NewColorable(consoleOut),

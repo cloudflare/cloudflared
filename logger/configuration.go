@@ -17,6 +17,7 @@ type Config struct {
 
 type ConsoleConfig struct {
 	noColor bool
+	asJSON  bool
 }
 
 type FileConfig struct {
@@ -48,6 +49,7 @@ func createDefaultConfig() Config {
 	return Config{
 		ConsoleConfig: &ConsoleConfig{
 			noColor: false,
+			asJSON:  false,
 		},
 		FileConfig: &FileConfig{
 			Dirname:  "",
@@ -67,11 +69,12 @@ func createDefaultConfig() Config {
 func CreateConfig(
 	minLevel string,
 	disableTerminal bool,
+	formatJSON bool,
 	rollingLogPath, nonRollingLogFilePath string,
 ) *Config {
 	var console *ConsoleConfig
 	if !disableTerminal {
-		console = createConsoleConfig()
+		console = createConsoleConfig(formatJSON)
 	}
 
 	var file *FileConfig
@@ -95,9 +98,10 @@ func CreateConfig(
 	}
 }
 
-func createConsoleConfig() *ConsoleConfig {
+func createConsoleConfig(formatJSON bool) *ConsoleConfig {
 	return &ConsoleConfig{
 		noColor: false,
+		asJSON:  formatJSON,
 	}
 }
 

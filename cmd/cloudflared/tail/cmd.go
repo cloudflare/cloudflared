@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -98,12 +99,6 @@ func buildTailCommand(subcommands []*cli.Command) *cli.Command {
 				EnvVars: []string{"TUNNEL_MANAGEMENT_TOKEN"},
 			},
 			&cli.StringFlag{
-				Name:    "output",
-				Usage:   "Output format for the logs (default, json)",
-				Value:   "default",
-				EnvVars: []string{"TUNNEL_MANAGEMENT_OUTPUT"},
-			},
-			&cli.StringFlag{
 				Name:    "management-hostname",
 				Usage:   "Management hostname to signify incoming management requests",
 				EnvVars: []string{"TUNNEL_MANAGEMENT_HOSTNAME"},
@@ -128,6 +123,7 @@ func buildTailCommand(subcommands []*cli.Command) *cli.Command {
 				EnvVars: []string{"TUNNEL_ORIGIN_CERT"},
 				Value:   credentials.FindDefaultOriginCertPath(),
 			},
+			cliutil.FlagLogOutput,
 		},
 		Subcommands: subcommands,
 	}
@@ -171,10 +167,21 @@ func createLogger(c *cli.Context) *zerolog.Logger {
 	if levelErr != nil {
 		level = zerolog.InfoLevel
 	}
-	log := zerolog.New(zerolog.ConsoleWriter{
-		Out:        colorable.NewColorable(os.Stderr),
-		TimeFormat: time.RFC3339,
-	}).With().Timestamp().Logger().Level(level)
+	var writer io.Writer
+	switch c.String(cfdflags.LogFormatOutput) {
+	case cfdflags.LogFormatOutputValueJSON:
+		// zerolog by default outputs as JSON
+		writer = os.Stderr
+	case cfdflags.LogFormatOutputValueDefault:
+		// "default" and unset use the same logger output format
+		fallthrough
+	default:
+		writer = zerolog.ConsoleWriter{
+			Out:        colorable.NewColorable(os.Stderr),
+			TimeFormat: time.RFC3339,
+		}
+	}
+	log := zerolog.New(writer).With().Timestamp().Logger().Level(level)
 	return &log
 }
 

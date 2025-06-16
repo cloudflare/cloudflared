@@ -138,6 +138,11 @@ const (
 	// LogDirectory is the command line flag to define the directory where application logs will be stored.
 	LogDirectory = "log-directory"
 
+	// LogFormatOutput allows the command line logs to be output as JSON.
+	LogFormatOutput             = "output"
+	LogFormatOutputValueDefault = "default"
+	LogFormatOutputValueJSON    = "json"
+
 	// TraceOutput is the command line flag to set the name of trace output file
 	TraceOutput = "trace-output"
 
