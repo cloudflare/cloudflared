@@ -129,6 +129,10 @@ all: cloudflared test
 clean:
 	go clean
 
+.PHONY: vulncheck
+vulncheck:
+	@govulncheck ./...
+
 .PHONY: cloudflared
 cloudflared:
 ifeq ($(FIPS), true)

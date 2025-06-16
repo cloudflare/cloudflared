@@ -1,3 +1,20 @@
+variables:
+  # Define GOPATH within the project directory to allow GitLab CI to cache it.
+  # By default, Go places modules in GOMODCACHE, often outside the project.
+  # Explicitly setting GOMODCACHE ensures it's within the cached path.
+  GOPATH: "$CI_PROJECT_DIR/.go"
+  GOMODCACHE: "$GOPATH/pkg/mod"
+  GO_BIN_DIR: "$GOPATH/bin"
+
+cache:
+  # Cache Go modules and the binaries.
+  # The 'key' ensures a unique cache per branch, or you can use a fixed key
+  # for a shared cache across all branches if that fits your workflow.
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - ${GOPATH}/pkg/mod/ # For Go modules
+    - ${GO_BIN_DIR}/
+
 stages: [build, release]
 
 default:
@@ -37,6 +54,23 @@ default:
       when: always
     - when: never
 
+
+# Template for Go setup, including caching and installation
+.go_setup:
+  image: docker-registry.cfdata.org/stash/devtools/ci-builders/golang-1.24/master:3090-3e32590@sha256:fc81df4f8322f022d93712ee40bb1e5752fdbe9868d1e5a23fd851ad6fbecb91
+  before_script:
+    - mkdir -p ${GOPATH} ${GOMODCACHE} ${GO_BIN_DIR}
+    - export PATH=$PATH:${GO_BIN_DIR}
+    - go env -w GOMODCACHE=${GOMODCACHE} # Ensure go uses the cached module path
+
+    # Check if govulncheck is already installed and install it if not
+    - if [ ! -f ${GO_BIN_DIR}/govulncheck ]; then
+      echo "govulncheck not found in cache, installing...";
+      go install golang.org/x/vuln/cmd/govulncheck@latest;
+      else
+      echo "govulncheck found in cache, skipping installation.";
+      fi
+
 # -----------------------------------------------
 # Stage 1: Build on every PR
 # -----------------------------------------------
@@ -63,6 +97,14 @@ build_cloudflared_macos: &build
     - set -euo pipefail
     - echo "Executing ${BUILD_SCRIPT}"
     - exec ${BUILD_SCRIPT}
+
+vulncheck:
+  stage: build
+  extends: .go_setup
+  rules:
+    - !reference [.default_rules, run_on_branch]
+  script:
+    - make vulncheck
 
 # -----------------------------------------------
 # Stage 1: Build and sign only on releases
