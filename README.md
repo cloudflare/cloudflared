@@ -31,7 +31,7 @@ Downloads are available as standalone binaries, a Docker image, and Debian, RPM,
 * Binaries, Debian, and RPM packages for Linux [can be found here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#linux)
 * A Docker image of `cloudflared` is [available on DockerHub](https://hub.docker.com/r/cloudflare/cloudflared)
 * You can install on Windows machines with the [steps here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#windows)
-* To build from source, first you need to download the go toolchain by running `./.teamcity/install-cloudflare-go.sh` and follow the output. Then you can run `make cloudflared`
+* To build from source, install the required version of go, mentioned in the [Development](#development) section below. Then you can run `make cloudflared`.
 
 User documentation for Cloudflare Tunnel can be found at https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
 
@@ -62,7 +62,7 @@ For example, as of January 2023 Cloudflare will support cloudflared version 2023
 ### Requirements
 - [GNU Make](https://www.gnu.org/software/make/)
 - [capnp](https://capnproto.org/install.html)
-- [cloudflare go toolchain](https://github.com/cloudflare/go)
+- [go >= 1.24](https://go.dev/doc/install)
 - Optional tools:
   - [capnpc-go](https://pkg.go.dev/zombiezen.com/go/capnproto2/capnpc-go)
   - [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports)

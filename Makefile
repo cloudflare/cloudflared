@@ -56,8 +56,6 @@ PACKAGE_DIR    := $(CURDIR)/packaging
 PREFIX         := /usr
 INSTALL_BINDIR := $(PREFIX)/bin/
 INSTALL_MANDIR := $(PREFIX)/share/man/man1/
-CF_GO_PATH     := /tmp/go
-PATH           := $(CF_GO_PATH)/bin:$(PATH)
 
 LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
@@ -183,19 +181,10 @@ fuzz:
 	@go test -fuzz=FuzzNewIdentity -fuzztime=600s ./tracing
 	@go test -fuzz=FuzzNewAccessValidator -fuzztime=600s ./validation
 
-.PHONY: install-go
-install-go:
-	rm -rf ${CF_GO_PATH}
-	./.teamcity/install-cloudflare-go.sh
-
-.PHONY: cleanup-go
-cleanup-go:
-	rm -rf ${CF_GO_PATH}
-
 cloudflared.1: cloudflared_man_template
 	sed -e 's/\$${VERSION}/$(VERSION)/; s/\$${DATE}/$(DATE)/' cloudflared_man_template > cloudflared.1
 
-install: install-go cloudflared cloudflared.1 cleanup-go
+install: cloudflared cloudflared.1
 	mkdir -p $(DESTDIR)$(INSTALL_BINDIR) $(DESTDIR)$(INSTALL_MANDIR)
 	install -m755 cloudflared $(DESTDIR)$(INSTALL_BINDIR)/cloudflared
 	install -m644 cloudflared.1 $(DESTDIR)$(INSTALL_MANDIR)/cloudflared.1
