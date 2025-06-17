@@ -1,3 +1,9 @@
+2025.6.1
+- 2025-06-16 TUN-9467: add vulncheck to cloudflared
+- 2025-06-16 TUN-9495: Remove references to cloudflare-go
+- 2025-06-16 TUN-9371: Add logging format as JSON
+- 2025-06-12 TUN-9467: bump coredns to solve CVE
+
 2025.6.0
 - 2025-06-06 TUN-9016: update go to 1.24
 - 2025-06-05 TUN-9171: Use `is_default_network` instead of `is_default` to create vnet's
