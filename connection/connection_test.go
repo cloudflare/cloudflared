@@ -2,13 +2,19 @@ package connection
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"net/http"
+	"testing"
 	"time"
 
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
+
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -77,7 +83,7 @@ func (moc *mockOriginProxy) ProxyHTTP(
 			return wsFlakyEndpoint(w, req)
 		default:
 			originRespEndpoint(w, http.StatusNotFound, []byte("ws endpoint not found"))
-			return fmt.Errorf("Unknwon websocket endpoint %s", req.URL.Path)
+			return fmt.Errorf("unknown websocket endpoint %s", req.URL.Path)
 		}
 	}
 	switch req.URL.Path {
@@ -95,7 +101,6 @@ func (moc *mockOriginProxy) ProxyHTTP(
 		originRespEndpoint(w, http.StatusNotFound, []byte("page not found"))
 	}
 	return nil
-
 }
 
 func (moc *mockOriginProxy) ProxyTCP(
@@ -103,6 +108,10 @@ func (moc *mockOriginProxy) ProxyTCP(
 	rwa ReadWriteAcker,
 	r *TCPRequest,
 ) error {
+	if r.CfTraceID == "flow-rate-limited" {
+		return pkgerrors.Wrap(cfdflow.ErrTooManyActiveFlows, "tcp flow rate limited")
+	}
+
 	return nil
 }
 
@@ -178,7 +187,8 @@ func wsFlakyEndpoint(w ResponseWriter, r *http.Request) error {
 
 	wsConn := websocket.NewConn(wsCtx, NewHTTPResponseReadWriterAcker(w, w.(http.Flusher), r), &log)
 
-	closedAfter := time.Millisecond * time.Duration(rand.Intn(50))
+	rInt, _ := rand.Int(rand.Reader, big.NewInt(50))
+	closedAfter := time.Millisecond * time.Duration(rInt.Int64())
 	originConn := &flakyConn{closeAt: time.Now().Add(closedAfter)}
 	stream.Pipe(wsConn, originConn, &log)
 	cancel()
@@ -200,4 +210,49 @@ func (mcf mockConnectedFuse) Connected() {}
 
 func (mcf mockConnectedFuse) IsConnected() bool {
 	return true
+}
+
+func TestShouldFlushHeaders(t *testing.T) {
+	tests := []struct {
+		headers     map[string]string
+		shouldFlush bool
+	}{
+		{
+			headers:     map[string]string{contentTypeHeader: "application/json", contentLengthHeader: "1"},
+			shouldFlush: false,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "text/html", contentLengthHeader: "1"},
+			shouldFlush: false,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "text/event-stream", contentLengthHeader: "1"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/grpc", contentLengthHeader: "1"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/x-ndjson", contentLengthHeader: "1"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/json"},
+			shouldFlush: true,
+		},
+		{
+			headers:     map[string]string{contentTypeHeader: "application/json", contentLengthHeader: "-1", transferEncodingHeader: "chunked"},
+			shouldFlush: true,
+		},
+	}
+
+	for _, test := range tests {
+		headers := http.Header{}
+		for k, v := range test.headers {
+			headers.Add(k, v)
+		}
+
+		require.Equal(t, test.shouldFlush, shouldFlush(headers))
+	}
 }

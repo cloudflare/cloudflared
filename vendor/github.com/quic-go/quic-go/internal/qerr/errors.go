@@ -48,20 +48,15 @@ func (e *TransportError) Error() string {
 	return str + ": " + msg
 }
 
-func (e *TransportError) Is(target error) bool {
-	return target == net.ErrClosed
-}
+func (e *TransportError) Unwrap() []error { return []error{net.ErrClosed, e.error} }
 
-func (e *TransportError) Unwrap() error {
-	return e.error
+func (e *TransportError) Is(target error) bool {
+	t, ok := target.(*TransportError)
+	return ok && e.ErrorCode == t.ErrorCode && e.FrameType == t.FrameType && e.Remote == t.Remote
 }
 
 // An ApplicationErrorCode is an application-defined error code.
 type ApplicationErrorCode uint64
-
-func (e *ApplicationError) Is(target error) bool {
-	return target == net.ErrClosed
-}
 
 // A StreamErrorCode is an error code used to cancel streams.
 type StreamErrorCode uint64
@@ -81,23 +76,30 @@ func (e *ApplicationError) Error() string {
 	return fmt.Sprintf("Application error %#x (%s): %s", e.ErrorCode, getRole(e.Remote), e.ErrorMessage)
 }
 
+func (e *ApplicationError) Unwrap() error { return net.ErrClosed }
+
+func (e *ApplicationError) Is(target error) bool {
+	t, ok := target.(*ApplicationError)
+	return ok && e.ErrorCode == t.ErrorCode && e.Remote == t.Remote
+}
+
 type IdleTimeoutError struct{}
 
 var _ error = &IdleTimeoutError{}
 
-func (e *IdleTimeoutError) Timeout() bool        { return true }
-func (e *IdleTimeoutError) Temporary() bool      { return false }
-func (e *IdleTimeoutError) Error() string        { return "timeout: no recent network activity" }
-func (e *IdleTimeoutError) Is(target error) bool { return target == net.ErrClosed }
+func (e *IdleTimeoutError) Timeout() bool   { return true }
+func (e *IdleTimeoutError) Temporary() bool { return false }
+func (e *IdleTimeoutError) Error() string   { return "timeout: no recent network activity" }
+func (e *IdleTimeoutError) Unwrap() error   { return net.ErrClosed }
 
 type HandshakeTimeoutError struct{}
 
 var _ error = &HandshakeTimeoutError{}
 
-func (e *HandshakeTimeoutError) Timeout() bool        { return true }
-func (e *HandshakeTimeoutError) Temporary() bool      { return false }
-func (e *HandshakeTimeoutError) Error() string        { return "timeout: handshake did not complete in time" }
-func (e *HandshakeTimeoutError) Is(target error) bool { return target == net.ErrClosed }
+func (e *HandshakeTimeoutError) Timeout() bool   { return true }
+func (e *HandshakeTimeoutError) Temporary() bool { return false }
+func (e *HandshakeTimeoutError) Error() string   { return "timeout: handshake did not complete in time" }
+func (e *HandshakeTimeoutError) Unwrap() error   { return net.ErrClosed }
 
 // A VersionNegotiationError occurs when the client and the server can't agree on a QUIC version.
 type VersionNegotiationError struct {
@@ -109,25 +111,18 @@ func (e *VersionNegotiationError) Error() string {
 	return fmt.Sprintf("no compatible QUIC version found (we support %s, server offered %s)", e.Ours, e.Theirs)
 }
 
-func (e *VersionNegotiationError) Is(target error) bool {
-	return target == net.ErrClosed
-}
+func (e *VersionNegotiationError) Unwrap() error { return net.ErrClosed }
 
 // A StatelessResetError occurs when we receive a stateless reset.
-type StatelessResetError struct {
-	Token protocol.StatelessResetToken
-}
+type StatelessResetError struct{}
 
 var _ net.Error = &StatelessResetError{}
 
 func (e *StatelessResetError) Error() string {
-	return fmt.Sprintf("received a stateless reset with token %x", e.Token)
+	return "received a stateless reset"
 }
 
-func (e *StatelessResetError) Is(target error) bool {
-	return target == net.ErrClosed
-}
-
+func (e *StatelessResetError) Unwrap() error   { return net.ErrClosed }
 func (e *StatelessResetError) Timeout() bool   { return false }
 func (e *StatelessResetError) Temporary() bool { return true }
 

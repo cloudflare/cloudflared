@@ -3,6 +3,7 @@ package quic
 import (
 	"math/bits"
 	"net"
+	"sync/atomic"
 
 	"github.com/quic-go/quic-go/internal/utils"
 )
@@ -11,7 +12,7 @@ import (
 // When receiving packets for such a connection, we need to retransmit the packet containing the CONNECTION_CLOSE frame,
 // with an exponential backoff.
 type closedLocalConn struct {
-	counter uint32
+	counter atomic.Uint32
 	logger  utils.Logger
 
 	sendPacket func(net.Addr, packetInfo)
@@ -28,13 +29,13 @@ func newClosedLocalConn(sendPacket func(net.Addr, packetInfo), logger utils.Logg
 }
 
 func (c *closedLocalConn) handlePacket(p receivedPacket) {
-	c.counter++
+	n := c.counter.Add(1)
 	// exponential backoff
 	// only send a CONNECTION_CLOSE for the 1st, 2nd, 4th, 8th, 16th, ... packet arriving
-	if bits.OnesCount32(c.counter) != 1 {
+	if bits.OnesCount32(n) != 1 {
 		return
 	}
-	c.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", c.counter)
+	c.logger.Debugf("Received %d packets after sending CONNECTION_CLOSE. Retransmitting.", n)
 	c.sendPacket(p.remoteAddr, p.info)
 }
 

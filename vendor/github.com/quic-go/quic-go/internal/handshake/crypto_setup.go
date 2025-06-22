@@ -1,7 +1,6 @@
 package handshake
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
-	"github.com/quic-go/quic-go/internal/qtls"
 	"github.com/quic-go/quic-go/internal/utils"
 	"github.com/quic-go/quic-go/internal/wire"
 	"github.com/quic-go/quic-go/logging"
@@ -90,12 +88,13 @@ func NewCryptoSetupClient(
 
 	tlsConf = tlsConf.Clone()
 	tlsConf.MinVersion = tls.VersionTLS13
-	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForClient(quicConf, cs.marshalDataForSessionState, cs.handleDataFromSessionState)
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
-	cs.conn = tls.QUICClient(quicConf)
+	cs.conn = tls.QUICClient(&tls.QUICConfig{
+		TLSConfig:           tlsConf,
+		EnableSessionEvents: true,
+	})
 	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
 
 	return cs
@@ -124,42 +123,14 @@ func NewCryptoSetupServer(
 	)
 	cs.allow0RTT = allow0RTT
 
-	quicConf := &tls.QUICConfig{TLSConfig: tlsConf}
-	qtls.SetupConfigForServer(quicConf, cs.allow0RTT, cs.getDataForSessionTicket, cs.handleSessionTicket)
-	addConnToClientHelloInfo(quicConf.TLSConfig, localAddr, remoteAddr)
+	tlsConf = setupConfigForServer(tlsConf, localAddr, remoteAddr)
 
-	cs.tlsConf = quicConf.TLSConfig
-	cs.conn = tls.QUICServer(quicConf)
-
+	cs.tlsConf = tlsConf
+	cs.conn = tls.QUICServer(&tls.QUICConfig{
+		TLSConfig:           tlsConf,
+		EnableSessionEvents: true,
+	})
 	return cs
-}
-
-// The tls.Config contains two callbacks that pass in a tls.ClientHelloInfo.
-// Since crypto/tls doesn't do it, we need to make sure to set the Conn field with a fake net.Conn
-// that allows the caller to get the local and the remote address.
-func addConnToClientHelloInfo(conf *tls.Config, localAddr, remoteAddr net.Addr) {
-	if conf.GetConfigForClient != nil {
-		gcfc := conf.GetConfigForClient
-		conf.GetConfigForClient = func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			c, err := gcfc(info)
-			if c != nil {
-				c = c.Clone()
-				// This won't be necessary anymore once https://github.com/golang/go/issues/63722 is accepted.
-				c.MinVersion = tls.VersionTLS13
-				// We're returning a tls.Config here, so we need to apply this recursively.
-				addConnToClientHelloInfo(c, localAddr, remoteAddr)
-			}
-			return c, err
-		}
-	}
-	if conf.GetCertificate != nil {
-		gc := conf.GetCertificate
-		conf.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			info.Conn = &conn{localAddr: localAddr, remoteAddr: remoteAddr}
-			return gc(info)
-		}
-	}
 }
 
 func newCryptoSetup(
@@ -204,18 +175,17 @@ func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
 	return h.aead.SetLargestAcked(pn)
 }
 
-func (h *cryptoSetup) StartHandshake() error {
-	err := h.conn.Start(context.WithValue(context.Background(), QUICVersionContextKey, h.version))
+func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
+	err := h.conn.Start(context.WithValue(ctx, QUICVersionContextKey, h.version))
 	if err != nil {
 		return wrapError(err)
 	}
 	for {
 		ev := h.conn.NextEvent()
-		done, err := h.handleEvent(ev)
-		if err != nil {
+		if err := h.handleEvent(ev); err != nil {
 			return wrapError(err)
 		}
-		if done {
+		if ev.Kind == tls.QUICNoEvent {
 			break
 		}
 	}
@@ -246,47 +216,78 @@ func (h *cryptoSetup) HandleMessage(data []byte, encLevel protocol.EncryptionLev
 }
 
 func (h *cryptoSetup) handleMessage(data []byte, encLevel protocol.EncryptionLevel) error {
-	if err := h.conn.HandleData(qtls.ToTLSEncryptionLevel(encLevel), data); err != nil {
+	if err := h.conn.HandleData(encLevel.ToTLSEncryptionLevel(), data); err != nil {
 		return err
 	}
 	for {
 		ev := h.conn.NextEvent()
-		done, err := h.handleEvent(ev)
-		if err != nil {
+		if err := h.handleEvent(ev); err != nil {
 			return err
 		}
-		if done {
+		if ev.Kind == tls.QUICNoEvent {
 			return nil
 		}
 	}
 }
 
-func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (done bool, err error) {
+func (h *cryptoSetup) handleEvent(ev tls.QUICEvent) (err error) {
 	switch ev.Kind {
 	case tls.QUICNoEvent:
-		return true, nil
+		return nil
 	case tls.QUICSetReadSecret:
 		h.setReadKey(ev.Level, ev.Suite, ev.Data)
-		return false, nil
+		return nil
 	case tls.QUICSetWriteSecret:
 		h.setWriteKey(ev.Level, ev.Suite, ev.Data)
-		return false, nil
+		return nil
 	case tls.QUICTransportParameters:
-		return false, h.handleTransportParameters(ev.Data)
+		return h.handleTransportParameters(ev.Data)
 	case tls.QUICTransportParametersRequired:
 		h.conn.SetTransportParameters(h.ourParams.Marshal(h.perspective))
-		return false, nil
+		return nil
 	case tls.QUICRejectedEarlyData:
 		h.rejected0RTT()
-		return false, nil
+		return nil
 	case tls.QUICWriteData:
 		h.writeRecord(ev.Level, ev.Data)
-		return false, nil
+		return nil
 	case tls.QUICHandshakeDone:
 		h.handshakeComplete()
-		return false, nil
+		return nil
+	case tls.QUICStoreSession:
+		if h.perspective == protocol.PerspectiveServer {
+			panic("cryptoSetup BUG: unexpected QUICStoreSession event for the server")
+		}
+		ev.SessionState.Extra = append(
+			ev.SessionState.Extra,
+			addSessionStateExtraPrefix(h.marshalDataForSessionState(ev.SessionState.EarlyData)),
+		)
+		return h.conn.StoreSession(ev.SessionState)
+	case tls.QUICResumeSession:
+		var allowEarlyData bool
+		switch h.perspective {
+		case protocol.PerspectiveClient:
+			// for clients, this event occurs when a session ticket is selected
+			allowEarlyData = h.handleDataFromSessionState(
+				findSessionStateExtraData(ev.SessionState.Extra),
+				ev.SessionState.EarlyData,
+			)
+		case protocol.PerspectiveServer:
+			// for servers, this event occurs when receiving the client's session ticket
+			allowEarlyData = h.handleSessionTicket(
+				findSessionStateExtraData(ev.SessionState.Extra),
+				ev.SessionState.EarlyData,
+			)
+		}
+		if ev.SessionState.EarlyData {
+			ev.SessionState.EarlyData = allowEarlyData
+		}
+		return nil
 	default:
-		return false, fmt.Errorf("unexpected event: %d", ev.Kind)
+		// Unknown events should be ignored.
+		// crypto/tls will ensure that this is safe to do.
+		// See the discussion following https://github.com/golang/go/issues/68124#issuecomment-2187042510 for details.
+		return nil
 	}
 }
 
@@ -338,25 +339,26 @@ func (h *cryptoSetup) handleDataFromSessionState(data []byte, earlyData bool) (a
 	return false
 }
 
-func decodeDataFromSessionState(data []byte, earlyData bool) (time.Duration, *wire.TransportParameters, error) {
-	r := bytes.NewReader(data)
-	ver, err := quicvarint.Read(r)
+func decodeDataFromSessionState(b []byte, earlyData bool) (time.Duration, *wire.TransportParameters, error) {
+	ver, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return 0, nil, err
 	}
+	b = b[l:]
 	if ver != clientSessionStateRevision {
 		return 0, nil, fmt.Errorf("mismatching version. Got %d, expected %d", ver, clientSessionStateRevision)
 	}
-	rttEncoded, err := quicvarint.Read(r)
+	rttEncoded, l, err := quicvarint.Parse(b)
 	if err != nil {
 		return 0, nil, err
 	}
+	b = b[l:]
 	rtt := time.Duration(rttEncoded) * time.Microsecond
 	if !earlyData {
 		return rtt, nil, nil
 	}
 	var tp wire.TransportParameters
-	if err := tp.UnmarshalFromSessionTicket(r); err != nil {
+	if err := tp.UnmarshalFromSessionTicket(b); err != nil {
 		return 0, nil, err
 	}
 	return rtt, &tp, nil
@@ -378,6 +380,7 @@ func (h *cryptoSetup) getDataForSessionTicket() []byte {
 func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 	if err := h.conn.SendSessionTicket(tls.QUICSessionTicketOptions{
 		EarlyData: h.allow0RTT,
+		Extra:     [][]byte{addSessionStateExtraPrefix(h.getDataForSessionTicket())},
 	}); err != nil {
 		// Session tickets might be disabled by tls.Config.SessionTicketsDisabled.
 		// We can't check h.tlsConfig here, since the actual config might have been obtained from
@@ -404,9 +407,9 @@ func (h *cryptoSetup) GetSessionTicket() ([]byte, error) {
 // It reads parameters from the session ticket and checks whether to accept 0-RTT if the session ticket enabled 0-RTT.
 // Note that the fact that the session ticket allows 0-RTT doesn't mean that the actual TLS handshake enables 0-RTT:
 // A client may use a 0-RTT enabled session to resume a TLS session without using 0-RTT.
-func (h *cryptoSetup) handleSessionTicket(sessionTicketData []byte, using0RTT bool) bool {
+func (h *cryptoSetup) handleSessionTicket(data []byte, using0RTT bool) (allowEarlyData bool) {
 	var t sessionTicket
-	if err := t.Unmarshal(sessionTicketData, using0RTT); err != nil {
+	if err := t.Unmarshal(data, using0RTT); err != nil {
 		h.logger.Debugf("Unmarshalling session ticket failed: %s", err.Error())
 		return false
 	}
@@ -474,7 +477,7 @@ func (h *cryptoSetup) setReadKey(el tls.QUICEncryptionLevel, suiteID uint16, tra
 	}
 	h.events = append(h.events, Event{Kind: EventReceivedReadKeys})
 	if h.tracer != nil && h.tracer.UpdatedKeyFromTLS != nil {
-		h.tracer.UpdatedKeyFromTLS(qtls.FromTLSEncryptionLevel(el), h.perspective.Opposite())
+		h.tracer.UpdatedKeyFromTLS(protocol.FromTLSEncryptionLevel(el), h.perspective.Opposite())
 	}
 }
 
@@ -525,7 +528,7 @@ func (h *cryptoSetup) setWriteKey(el tls.QUICEncryptionLevel, suiteID uint16, tr
 		panic("unexpected write encryption level")
 	}
 	if h.tracer != nil && h.tracer.UpdatedKeyFromTLS != nil {
-		h.tracer.UpdatedKeyFromTLS(qtls.FromTLSEncryptionLevel(el), h.perspective)
+		h.tracer.UpdatedKeyFromTLS(protocol.FromTLSEncryptionLevel(el), h.perspective)
 	}
 }
 
@@ -655,8 +658,7 @@ func (h *cryptoSetup) ConnectionState() ConnectionState {
 }
 
 func wrapError(err error) error {
-	// alert 80 is an internal error
-	if alertErr := tls.AlertError(0); errors.As(err, &alertErr) && alertErr != 80 {
+	if alertErr := tls.AlertError(0); errors.As(err, &alertErr) {
 		return qerr.NewLocalCryptoError(uint8(alertErr), err)
 	}
 	return &qerr.TransportError{ErrorCode: qerr.InternalError, ErrorMessage: err.Error()}

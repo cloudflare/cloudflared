@@ -1,7 +1,6 @@
 package quic
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
@@ -53,7 +52,7 @@ func newPacketUnpacker(cs handshake.CryptoSetup, shortHdrConnIDLen int) *packetU
 // If the reserved bits are invalid, the error is wire.ErrInvalidReservedBits.
 // If any other error occurred when parsing the header, the error is of type headerParseError.
 // If decrypting the payload fails for any reason, the error is the error returned by the AEAD.
-func (u *packetUnpacker) UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, data []byte, v protocol.Version) (*unpackedPacket, error) {
+func (u *packetUnpacker) UnpackLongHeader(hdr *wire.Header, data []byte) (*unpackedPacket, error) {
 	var encLevel protocol.EncryptionLevel
 	var extHdr *wire.ExtendedHeader
 	var decrypted []byte
@@ -65,7 +64,7 @@ func (u *packetUnpacker) UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, d
 		if err != nil {
 			return nil, err
 		}
-		extHdr, decrypted, err = u.unpackLongHeaderPacket(opener, hdr, data, v)
+		extHdr, decrypted, err = u.unpackLongHeaderPacket(opener, hdr, data)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +74,7 @@ func (u *packetUnpacker) UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, d
 		if err != nil {
 			return nil, err
 		}
-		extHdr, decrypted, err = u.unpackLongHeaderPacket(opener, hdr, data, v)
+		extHdr, decrypted, err = u.unpackLongHeaderPacket(opener, hdr, data)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +84,7 @@ func (u *packetUnpacker) UnpackLongHeader(hdr *wire.Header, rcvTime time.Time, d
 		if err != nil {
 			return nil, err
 		}
-		extHdr, decrypted, err = u.unpackLongHeaderPacket(opener, hdr, data, v)
+		extHdr, decrypted, err = u.unpackLongHeaderPacket(opener, hdr, data)
 		if err != nil {
 			return nil, err
 		}
@@ -125,8 +124,8 @@ func (u *packetUnpacker) UnpackShortHeader(rcvTime time.Time, data []byte) (prot
 	return pn, pnLen, kp, decrypted, nil
 }
 
-func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpener, hdr *wire.Header, data []byte, v protocol.Version) (*wire.ExtendedHeader, []byte, error) {
-	extHdr, parseErr := u.unpackLongHeader(opener, hdr, data, v)
+func (u *packetUnpacker) unpackLongHeaderPacket(opener handshake.LongHeaderOpener, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, []byte, error) {
+	extHdr, parseErr := u.unpackLongHeader(opener, hdr, data)
 	// If the reserved bits are set incorrectly, we still need to continue unpacking.
 	// This avoids a timing side-channel, which otherwise might allow an attacker
 	// to gain information about the header encryption.
@@ -187,21 +186,18 @@ func (u *packetUnpacker) unpackShortHeader(hd headerDecryptor, data []byte) (int
 }
 
 // The error is either nil, a wire.ErrInvalidReservedBits or of type headerParseError.
-func (u *packetUnpacker) unpackLongHeader(hd headerDecryptor, hdr *wire.Header, data []byte, v protocol.Version) (*wire.ExtendedHeader, error) {
-	extHdr, err := unpackLongHeader(hd, hdr, data, v)
+func (u *packetUnpacker) unpackLongHeader(hd headerDecryptor, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, error) {
+	extHdr, err := unpackLongHeader(hd, hdr, data)
 	if err != nil && err != wire.ErrInvalidReservedBits {
 		return nil, &headerParseError{err: err}
 	}
 	return extHdr, err
 }
 
-func unpackLongHeader(hd headerDecryptor, hdr *wire.Header, data []byte, v protocol.Version) (*wire.ExtendedHeader, error) {
-	r := bytes.NewReader(data)
-
+func unpackLongHeader(hd headerDecryptor, hdr *wire.Header, data []byte) (*wire.ExtendedHeader, error) {
 	hdrLen := hdr.ParsedLen()
 	if protocol.ByteCount(len(data)) < hdrLen+4+16 {
-		//nolint:stylecheck
-		return nil, fmt.Errorf("Packet too small. Expected at least 20 bytes after the header, got %d", protocol.ByteCount(len(data))-hdrLen)
+		return nil, fmt.Errorf("packet too small, expected at least 20 bytes after the header, got %d", protocol.ByteCount(len(data))-hdrLen)
 	}
 	// The packet number can be up to 4 bytes long, but we won't know the length until we decrypt it.
 	// 1. save a copy of the 4 bytes
@@ -214,7 +210,7 @@ func unpackLongHeader(hd headerDecryptor, hdr *wire.Header, data []byte, v proto
 		data[hdrLen:hdrLen+4],
 	)
 	// 3. parse the header (and learn the actual length of the packet number)
-	extHdr, parseErr := hdr.ParseExtended(r, v)
+	extHdr, parseErr := hdr.ParseExtended(data)
 	if parseErr != nil && parseErr != wire.ErrInvalidReservedBits {
 		return nil, parseErr
 	}

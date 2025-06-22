@@ -32,6 +32,22 @@ func (rr *AFSDB) pack(msg []byte, off int, compression compressionMap, compress 
 	return off, nil
 }
 
+func (rr *AMTRELAY) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
+	off, err = packUint8(rr.Precedence, msg, off)
+	if err != nil {
+		return off, err
+	}
+	off, err = packUint8(rr.GatewayType, msg, off)
+	if err != nil {
+		return off, err
+	}
+	off, err = packIPSECGateway(rr.GatewayAddr, rr.GatewayHost, msg, off, rr.GatewayType, compression, false)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
 func (rr *ANY) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
 	return off, nil
 }
@@ -326,6 +342,42 @@ func (rr *HTTPS) pack(msg []byte, off int, compression compressionMap, compress 
 		return off, err
 	}
 	off, err = packDataSVCB(rr.Value, msg, off)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
+func (rr *IPSECKEY) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
+	off, err = packUint8(rr.Precedence, msg, off)
+	if err != nil {
+		return off, err
+	}
+	off, err = packUint8(rr.GatewayType, msg, off)
+	if err != nil {
+		return off, err
+	}
+	off, err = packUint8(rr.Algorithm, msg, off)
+	if err != nil {
+		return off, err
+	}
+	off, err = packIPSECGateway(rr.GatewayAddr, rr.GatewayHost, msg, off, rr.GatewayType, compression, false)
+	if err != nil {
+		return off, err
+	}
+	off, err = packStringBase64(rr.PublicKey, msg, off)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
+func (rr *ISDN) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
+	off, err = packString(rr.Address, msg, off)
+	if err != nil {
+		return off, err
+	}
+	off, err = packString(rr.SubAddress, msg, off)
 	if err != nil {
 		return off, err
 	}
@@ -654,6 +706,22 @@ func (rr *NULL) pack(msg []byte, off int, compression compressionMap, compress b
 	return off, nil
 }
 
+func (rr *NXNAME) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
+	return off, nil
+}
+
+func (rr *NXT) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
+	off, err = packDomainName(rr.NextDomain, msg, off, compression, false)
+	if err != nil {
+		return off, err
+	}
+	off, err = packDataNsec(rr.TypeBitMap, msg, off)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
 func (rr *OPENPGPKEY) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
 	off, err = packStringBase64(rr.PublicKey, msg, off)
 	if err != nil {
@@ -688,6 +756,14 @@ func (rr *PX) pack(msg []byte, off int, compression compressionMap, compress boo
 		return off, err
 	}
 	off, err = packDomainName(rr.Mapx400, msg, off, compression, false)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
+func (rr *RESINFO) pack(msg []byte, off int, compression compressionMap, compress bool) (off1 int, err error) {
+	off, err = packStringTxt(rr.Txt, msg, off)
 	if err != nil {
 		return off, err
 	}
@@ -1180,6 +1256,34 @@ func (rr *AFSDB) unpack(msg []byte, off int) (off1 int, err error) {
 	return off, nil
 }
 
+func (rr *AMTRELAY) unpack(msg []byte, off int) (off1 int, err error) {
+	rdStart := off
+	_ = rdStart
+
+	rr.Precedence, off, err = unpackUint8(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.GatewayType, off, err = unpackUint8(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.GatewayAddr, rr.GatewayHost, off, err = unpackIPSECGateway(msg, off, rr.GatewayType)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
 func (rr *ANY) unpack(msg []byte, off int) (off1 int, err error) {
 	rdStart := off
 	_ = rdStart
@@ -1630,6 +1734,66 @@ func (rr *HTTPS) unpack(msg []byte, off int) (off1 int, err error) {
 		return off, nil
 	}
 	rr.Value, off, err = unpackDataSVCB(msg, off)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
+func (rr *IPSECKEY) unpack(msg []byte, off int) (off1 int, err error) {
+	rdStart := off
+	_ = rdStart
+
+	rr.Precedence, off, err = unpackUint8(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.GatewayType, off, err = unpackUint8(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.Algorithm, off, err = unpackUint8(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.GatewayAddr, rr.GatewayHost, off, err = unpackIPSECGateway(msg, off, rr.GatewayType)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.PublicKey, off, err = unpackStringBase64(msg, off, rdStart+int(rr.Hdr.Rdlength))
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
+func (rr *ISDN) unpack(msg []byte, off int) (off1 int, err error) {
+	rdStart := off
+	_ = rdStart
+
+	rr.Address, off, err = unpackString(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.SubAddress, off, err = unpackString(msg, off)
 	if err != nil {
 		return off, err
 	}
@@ -2114,6 +2278,31 @@ func (rr *NULL) unpack(msg []byte, off int) (off1 int, err error) {
 	return off, nil
 }
 
+func (rr *NXNAME) unpack(msg []byte, off int) (off1 int, err error) {
+	rdStart := off
+	_ = rdStart
+
+	return off, nil
+}
+
+func (rr *NXT) unpack(msg []byte, off int) (off1 int, err error) {
+	rdStart := off
+	_ = rdStart
+
+	rr.NextDomain, off, err = UnpackDomainName(msg, off)
+	if err != nil {
+		return off, err
+	}
+	if off == len(msg) {
+		return off, nil
+	}
+	rr.TypeBitMap, off, err = unpackDataNsec(msg, off)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
 func (rr *OPENPGPKEY) unpack(msg []byte, off int) (off1 int, err error) {
 	rdStart := off
 	_ = rdStart
@@ -2166,6 +2355,17 @@ func (rr *PX) unpack(msg []byte, off int) (off1 int, err error) {
 		return off, nil
 	}
 	rr.Mapx400, off, err = UnpackDomainName(msg, off)
+	if err != nil {
+		return off, err
+	}
+	return off, nil
+}
+
+func (rr *RESINFO) unpack(msg []byte, off int) (off1 int, err error) {
+	rdStart := off
+	_ = rdStart
+
+	rr.Txt, off, err = unpackStringTxt(msg, off)
 	if err != nil {
 		return off, err
 	}

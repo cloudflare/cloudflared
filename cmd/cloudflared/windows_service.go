@@ -26,7 +26,7 @@ import (
 const (
 	windowsServiceName        = "Cloudflared"
 	windowsServiceDescription = "Cloudflared agent"
-	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/as-a-service/windows/"
+	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configure-tunnels/local-management/as-a-service/windows/"
 
 	recoverActionDelay      = time.Second * 20
 	failureCountResetPeriod = time.Hour * 24
@@ -190,7 +190,7 @@ func installWindowsService(c *cli.Context) error {
 	log := zeroLogger.With().Str(LogFieldWindowsServiceName, windowsServiceName).Logger()
 	if err == nil {
 		s.Close()
-		return fmt.Errorf(serviceAlreadyExistsWarn(windowsServiceName))
+		return errors.New(serviceAlreadyExistsWarn(windowsServiceName))
 	}
 	extraArgs, err := getServiceExtraArgsFromCliArgs(c, &log)
 	if err != nil {
@@ -238,7 +238,7 @@ func uninstallWindowsService(c *cli.Context) error {
 	defer m.Disconnect()
 	s, err := m.OpenService(windowsServiceName)
 	if err != nil {
-		return fmt.Errorf("Agent service %s is not installed, so it could not be uninstalled", windowsServiceName)
+		return fmt.Errorf("agent service %s is not installed, so it could not be uninstalled", windowsServiceName)
 	}
 	defer s.Close()
 

@@ -1,0 +1,89 @@
+linters:
+  enable:
+    # Some of the linters below are commented out. We should uncomment and start running them, but they return
+    # too many problems to fix in one commit. Something for later.
+    - asasalint        # Check for pass []any as any in variadic func(...any).
+    - asciicheck       # Checks that all code identifiers does not have non-ASCII symbols in the name.
+    - bidichk          # Checks for dangerous unicode character sequences.
+    - bodyclose        # Checks whether HTTP response body is closed successfully.
+    - decorder         # Check declaration order and count of types, constants, variables and functions.
+    - dogsled          # Checks assignments with too many blank identifiers (e.g. x, , , _, := f()).
+    - dupl             # Tool for code clone detection.
+    - dupword          # Checks for duplicate words in the source code.
+    - durationcheck    # Check for two durations multiplied together.
+    - errcheck         # Errcheck is a program for checking for unchecked errors in Go code. These unchecked errors can be critical bugs in some cases.
+    - errname          # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
+    - exhaustive       # Check exhaustiveness of enum switch statements.
+    - gofmt            # Gofmt checks whether code was gofmt-ed. By default this tool runs with -s option to check for code simplification.
+    - goimports        # Check import statements are formatted according to the 'goimport' command. Reformat imports in autofix mode.
+    - gosec            # Inspects source code for security problems.
+    - gosimple         # Linter for Go source code that specializes in simplifying code.
+    - govet            # Vet examines Go source code and reports suspicious constructs. It is roughly the same as 'go vet' and uses its passes.
+    - ineffassign      # Detects when assignments to existing variables are not used.
+    - importas         # Enforces consistent import aliases.
+    - misspell         # Finds commonly misspelled English words.
+    - prealloc         # Finds slice declarations that could potentially be pre-allocated.
+    - promlinter       # Check Prometheus metrics naming via promlint.
+    - sloglint         # Ensure consistent code style when using log/slog.
+    - sqlclosecheck    # Checks that sql.Rows, sql.Stmt, sqlx.NamedStmt, pgx.Query are closed.
+    - staticcheck      # It's a set of rules from staticcheck. It's not the same thing as the staticcheck binary.
+    - usetesting       # Reports uses of functions with replacement inside the testing package.
+    - testableexamples # Linter checks if examples are testable (have an expected output).
+    - testifylint      # Checks usage of github.com/stretchr/testify.
+    - tparallel        # Tparallel detects inappropriate usage of t.Parallel() method in your Go test codes.
+    - unconvert        # Remove unnecessary type conversions.
+    - unused           # Checks Go code for unused constants, variables, functions and types.
+    - wastedassign     # Finds wasted assignment statements.
+    - whitespace       # Whitespace is a linter that checks for unnecessary newlines at the start and end of functions, if, for, etc.
+    - zerologlint      # Detects the wrong usage of zerolog that a user forgets to dispatch with Send or Msg.
+  # Other linters are disabled, list of all is here: https://golangci-lint.run/usage/linters/
+run:
+  timeout: 5m
+  modules-download-mode: vendor
+
+# output configuration options
+output:
+  formats:
+    - format: 'colored-line-number'
+  print-issued-lines: true
+  print-linter-name: true
+
+issues:
+  # Maximum issues count per one linter.
+  # Set to 0 to disable.
+  # Default: 50
+  max-issues-per-linter: 50
+  # Maximum count of issues with the same text.
+  # Set to 0 to disable.
+  # Default: 3
+  max-same-issues: 15
+  # Show only new issues: if there are unstaged changes or untracked files,
+  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
+  # It's a super-useful option for integration of golangci-lint into existing large codebase.
+  # It's not practical to fix all existing issues at the moment of integration:
+  # much better don't allow issues in new code.
+  #
+  # Default: false
+  new: true
+  # Show only new issues created after git revision `REV`.
+  # Default: ""
+  new-from-rev: ac34f94d423273c8fa8fdbb5f2ac60e55f2c77d5
+  # Show issues in any part of update files (requires new-from-rev or new-from-patch).
+  # Default: false
+  whole-files: true
+  # Which dirs to exclude: issues from them won't be reported.
+  # Can use regexp here: `generated.*`, regexp is applied on full path,
+  # including the path prefix if one is set.
+  # Default dirs are skipped independently of this option's value (see exclude-dirs-use-default).
+  # "/" will be replaced by current OS file path separator to properly work on Windows.
+  # Default: []
+  exclude-dirs:
+    - vendor
+
+linters-settings:
+  # Check exhaustiveness of enum switch statements.
+  exhaustive:
+    # Presence of "default" case in switch statements satisfies exhaustiveness,
+    # even if all enum members are not listed.
+    # Default: false
+    default-signifies-exhaustive: true

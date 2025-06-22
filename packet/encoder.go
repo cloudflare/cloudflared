@@ -1,6 +1,8 @@
 package packet
 
-import "github.com/google/gopacket"
+import (
+	"github.com/google/gopacket"
+)
 
 var (
 	serializeOpts = gopacket.SerializeOptions{
@@ -25,7 +27,7 @@ func NewEncoder() *Encoder {
 	}
 }
 
-func (e Encoder) Encode(packet Packet) (RawPacket, error) {
+func (e *Encoder) Encode(packet Packet) (RawPacket, error) {
 	encodedLayers, err := packet.EncodeLayers()
 	if err != nil {
 		return RawPacket{}, err

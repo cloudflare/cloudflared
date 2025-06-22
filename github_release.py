@@ -11,13 +11,14 @@ import hashlib
 import requests
 import tarfile
 from os import listdir
-from os.path import isfile, join
+from os.path import isfile, join, splitext
 import re
+import subprocess
 
 from github import Github, GithubException, UnknownObjectException
 
 FORMAT = "%(levelname)s - %(asctime)s: %(message)s"
-logging.basicConfig(format=FORMAT)
+logging.basicConfig(format=FORMAT, level=logging.INFO)
 
 CLOUDFLARED_REPO = os.environ.get("GITHUB_REPO", "cloudflare/cloudflared")
 GITHUB_CONFLICT_CODE = "already_exists"
@@ -60,7 +61,7 @@ def assert_tag_exists(repo, version):
         raise Exception("Tag {} not found".format(version))
 
 
-def get_or_create_release(repo, version, dry_run=False):
+def get_or_create_release(repo, version, dry_run=False, is_draft=False):
     """
     Get a Github Release matching the version tag or create a new one.
     If a conflict occurs on creation, attempt to fetch the Release on last time
@@ -80,8 +81,11 @@ def get_or_create_release(repo, version, dry_run=False):
         return
 
     try:
-        logging.info("Creating release %s", version)
-        return repo.create_git_release(version, version, "")
+        if is_draft:
+            logging.info("Drafting release %s", version)
+        else:
+            logging.info("Creating release %s", version)
+        return repo.create_git_release(version, version, "", is_draft)
     except GithubException as e:
         errors = e.data.get("errors", [])
         if e.status == 422 and any(
@@ -126,6 +130,10 @@ def parse_args():
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="Do not create release or upload asset"
+    )
+
+    parser.add_argument(
+        "--draft", action="store_true", help="Create a draft release"
     )
 
     args = parser.parse_args()
@@ -210,28 +218,95 @@ def move_asset(filepath, filename):
     except shutil.SameFileError:
         pass # the macOS release copy fails with being the same file (already in the artifacts directory)
 
+def get_binary_version(binary_path):
+    """
+    Sample output from go version -m <binary>:
+    ...
+    build	-compiler=gc
+	build	-ldflags="-X \"main.Version=2024.8.3-6-gec072691\" -X \"main.BuildTime=2024-09-10-1027 UTC\" "
+	build	CGO_ENABLED=1
+    ...
+
+    This function parses the above output to retrieve the following substring 2024.8.3-6-gec072691.
+    To do this a start and end indexes are computed and the a slice is extracted from the output using them.
+    """
+    needle = "main.Version="
+    cmd = ['go','version', '-m', binary_path]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, _ = process.communicate()
+    version_info = output.decode()
+
+    # Find start of needle
+    needle_index = version_info.find(needle)
+    # Find backward slash relative to the beggining of the needle
+    relative_end_index = version_info[needle_index:].find("\\")
+    # Calculate needle position plus needle length to find version beggining
+    start_index = needle_index + len(needle)
+    # Calculate needle position plus relative position of the backward slash
+    end_index = needle_index + relative_end_index
+    return version_info[start_index:end_index]
+
+def assert_asset_version(binary_path, release_version):
+    """
+    Asserts that the artifacts have the correct release_version.
+    The artifacts that are checked must not have an extension expecting .exe and .tgz.
+    In the occurrence of any other extension the function exits early.
+    """
+    try:
+        shutil.rmtree('tmp')
+    except OSError:
+        pass
+    _, ext = os.path.splitext(binary_path)
+    if ext == '.exe' or ext == '':
+        binary_version = get_binary_version(binary_path)
+    elif ext == '.tgz':
+        tar = tarfile.open(binary_path, "r:gz")
+        tar.extractall("tmp")
+        tar.close()
+        binary_path = os.path.join(os.getcwd(), 'tmp', 'cloudflared')
+        binary_version = get_binary_version(binary_path)
+    else:
+        return
+
+    if binary_version != release_version:
+        logging.error(f"Version mismatch {binary_path}, binary_version {binary_version} release_version {release_version}")
+        exit(1)
+
+
 def main():
     """ Attempts to upload Asset to Github Release. Creates Release if it doesn't exist """
     try:
         args = parse_args()
-        client = Github(args.api_key)
-        repo = client.get_repo(CLOUDFLARED_REPO)
-        release = get_or_create_release(repo, args.release_version, args.dry_run)
 
         if args.dry_run:
-            logging.info("Skipping asset upload because of dry-run")
+            if os.path.isdir(args.path):
+                onlyfiles = [f for f in listdir(args.path) if isfile(join(args.path, f))]
+                for filename in onlyfiles:
+                    binary_path = os.path.join(args.path, filename)
+                    logging.info("binary: " + binary_path)
+                    assert_asset_version(binary_path, args.release_version)
+            elif os.path.isfile(args.path):
+                logging.info("binary: " + binary_path)
+            else:
+                logging.error("dryrun failed")
             return
-
-        if os.path.isdir(args.path):
-            onlyfiles = [f for f in listdir(args.path) if isfile(join(args.path, f))]
-            for filename in onlyfiles:
-                binary_path = os.path.join(args.path, filename)
-                upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
-                args.kv_api_token)
-                move_asset(binary_path, filename)
         else:
-            upload_asset(release, args.path, args.name, args.release_version, args.kv_account_id, args.namespace_id,
-                args.kv_api_token)
+            client = Github(args.api_key)
+            repo = client.get_repo(CLOUDFLARED_REPO)
+
+            if os.path.isdir(args.path):
+                onlyfiles = [f for f in listdir(args.path) if isfile(join(args.path, f))]
+                for filename in onlyfiles:
+                    binary_path = os.path.join(args.path, filename)
+                    assert_asset_version(binary_path, args.release_version)
+                release = get_or_create_release(repo, args.release_version, args.dry_run, args.draft)
+                for filename in onlyfiles:
+                    binary_path = os.path.join(args.path, filename)
+                    upload_asset(release, binary_path, filename, args.release_version, args.kv_account_id, args.namespace_id,
+                    args.kv_api_token)
+                    move_asset(binary_path, filename)
+            else:
+                raise Exception("the argument path must be a directory")
 
     except Exception as e:
         logging.exception(e)

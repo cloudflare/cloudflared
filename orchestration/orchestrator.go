@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/proxy"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -33,7 +36,9 @@ type Orchestrator struct {
 	// cloudflared Configuration
 	config *Config
 	tags   []pogs.Tag
-	log    *zerolog.Logger
+	// flowLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
+	flowLimiter cfdflow.Limiter
+	log         *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -54,6 +59,7 @@ func NewOrchestrator(ctx context.Context,
 		internalRules:  internalRules,
 		config:         config,
 		tags:           tags,
+		flowLimiter:    cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
 		log:            log,
 		shutdownC:      ctx.Done(),
 	}
@@ -112,12 +118,41 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 	}
 }
 
+// overrideRemoteWarpRoutingWithLocalValues overrides the ingress.WarpRoutingConfig that comes from the remote with
+// the local values if there is any.
+func (o *Orchestrator) overrideRemoteWarpRoutingWithLocalValues(remoteWarpRouting *ingress.WarpRoutingConfig) error {
+	return o.overrideMaxActiveFlows(o.config.ConfigurationFlags[flags.MaxActiveFlows], remoteWarpRouting)
+}
+
+// overrideMaxActiveFlows checks the local configuration flags, and if a value is found for the flags.MaxActiveFlows
+// overrides the value that comes on the remote ingress.WarpRoutingConfig with the local value.
+func (o *Orchestrator) overrideMaxActiveFlows(maxActiveFlowsLocalConfig string, remoteWarpRouting *ingress.WarpRoutingConfig) error {
+	// If max active flows isn't defined locally just use the remote value
+	if maxActiveFlowsLocalConfig == "" {
+		return nil
+	}
+
+	maxActiveFlowsLocalOverride, err := strconv.ParseUint(maxActiveFlowsLocalConfig, 10, 64)
+	if err != nil {
+		return pkgerrors.Wrapf(err, "failed to parse %s", flags.MaxActiveFlows)
+	}
+
+	// Override the value that comes from the remote with the local value
+	remoteWarpRouting.MaxActiveFlows = maxActiveFlowsLocalOverride
+	return nil
+}
+
 // The caller is responsible to make sure there is no concurrent access
 func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting ingress.WarpRoutingConfig) error {
 	select {
 	case <-o.shutdownC:
 		return fmt.Errorf("cloudflared already shutdown")
 	default:
+	}
+
+	// Overrides the local values, onto the remote values of the warp routing configuration
+	if err := o.overrideRemoteWarpRoutingWithLocalValues(&warpRouting); err != nil {
+		return pkgerrors.Wrap(err, "failed to merge local overrides into warp routing configuration")
 	}
 
 	// Assign the internal ingress rules to the parsed ingress
@@ -134,9 +169,13 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	// The downside is minimized because none of the ingress.OriginService implementation have that requirement
 	proxyShutdownC := make(chan struct{})
 	if err := ingressRules.StartOrigins(o.log, proxyShutdownC); err != nil {
-		return errors.Wrap(err, "failed to start origin")
+		return pkgerrors.Wrap(err, "failed to start origin")
 	}
-	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.config.WriteTimeout, o.log)
+
+	// Update the flow limit since the configuration might have changed
+	o.flowLimiter.SetLimit(warpRouting.MaxActiveFlows)
+
+	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.flowLimiter, o.config.WriteTimeout, o.log)
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting
@@ -206,6 +245,12 @@ func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
 		return nil, err
 	}
 	return proxy, nil
+}
+
+// GetFlowLimiter returns the flow limiter used across cloudflared, that can be hot reload when
+// the configuration changes.
+func (o *Orchestrator) GetFlowLimiter() cfdflow.Limiter {
+	return o.flowLimiter
 }
 
 func (o *Orchestrator) waitToCloseLastProxy() {

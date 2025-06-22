@@ -1,7 +1,6 @@
 package dnsserver
 
 import (
-	"flag"
 	"fmt"
 	"net"
 	"time"
@@ -17,12 +16,7 @@ import (
 
 const serverType = "dns"
 
-// Any flags defined here, need to be namespaced to the serverType other
-// wise they potentially clash with other server types.
 func init() {
-	flag.StringVar(&Port, serverType+".port", DefaultPort, "Default port")
-	flag.StringVar(&Port, "p", DefaultPort, "Default port")
-
 	caddy.RegisterServerType(serverType, caddy.ServerType{
 		Directives: func() []string { return Directives },
 		DefaultInput: func() caddy.Input {
@@ -88,6 +82,8 @@ func (h *dnsContext) InspectServerBlocks(sourceFile string, serverBlocks []caddy
 					port = Port
 				case transport.TLS:
 					port = transport.TLSPort
+				case transport.QUIC:
+					port = transport.QUICPort
 				case transport.GRPC:
 					port = transport.GRPCPort
 				case transport.HTTPS:
@@ -138,57 +134,23 @@ func (h *dnsContext) InspectServerBlocks(sourceFile string, serverBlocks []caddy
 
 // MakeServers uses the newly-created siteConfigs to create and return a list of server instances.
 func (h *dnsContext) MakeServers() ([]caddy.Server, error) {
-	// Copy the Plugin, ListenHosts and Debug from first config in the block
-	// to all other config in the same block . Doing this results in zones
-	// sharing the same plugin instances and settings as other zones in
-	// the same block.
-	for _, c := range h.configs {
-		c.Plugin = c.firstConfigInBlock.Plugin
-		c.ListenHosts = c.firstConfigInBlock.ListenHosts
-		c.Debug = c.firstConfigInBlock.Debug
-		c.Stacktrace = c.firstConfigInBlock.Stacktrace
-		c.TLSConfig = c.firstConfigInBlock.TLSConfig
-		c.TsigSecret = c.firstConfigInBlock.TsigSecret
-	}
+	// Copy parameters from first config in the block to all other config in the same block
+	propagateConfigParams(h.configs)
 
 	// we must map (group) each config to a bind address
 	groups, err := groupConfigsByListenAddr(h.configs)
 	if err != nil {
 		return nil, err
 	}
+
 	// then we create a server for each group
 	var servers []caddy.Server
 	for addr, group := range groups {
-		// switch on addr
-		switch tr, _ := parse.Transport(addr); tr {
-		case transport.DNS:
-			s, err := NewServer(addr, group)
-			if err != nil {
-				return nil, err
-			}
-			servers = append(servers, s)
-
-		case transport.TLS:
-			s, err := NewServerTLS(addr, group)
-			if err != nil {
-				return nil, err
-			}
-			servers = append(servers, s)
-
-		case transport.GRPC:
-			s, err := NewServergRPC(addr, group)
-			if err != nil {
-				return nil, err
-			}
-			servers = append(servers, s)
-
-		case transport.HTTPS:
-			s, err := NewServerHTTPS(addr, group)
-			if err != nil {
-				return nil, err
-			}
-			servers = append(servers, s)
+		serversForGroup, err := makeServersForGroup(addr, group)
+		if err != nil {
+			return nil, err
 		}
+		servers = append(servers, serversForGroup...)
 	}
 
 	// For each server config, check for View Filter plugins
@@ -221,7 +183,8 @@ func (c *Config) AddPlugin(m plugin.Plugin) {
 }
 
 // registerHandler adds a handler to a site's handler registration. Handlers
-//  use this to announce that they exist to other plugin.
+//
+//	use this to announce that they exist to other plugin.
 func (c *Config) registerHandler(h plugin.Handler) {
 	if c.registry == nil {
 		c.registry = make(map[string]plugin.Handler)
@@ -254,8 +217,11 @@ func (c *Config) Handlers() []plugin.Handler {
 		return nil
 	}
 	hs := make([]plugin.Handler, 0, len(c.registry))
-	for k := range c.registry {
-		hs = append(hs, c.registry[k])
+	for _, k := range Directives {
+		registry := c.Handler(k)
+		if registry != nil {
+			hs = append(hs, registry)
+		}
 	}
 	return hs
 }
@@ -287,7 +253,28 @@ func (h *dnsContext) validateZonesAndListeningAddresses() error {
 	return nil
 }
 
-// groupSiteConfigsByListenAddr groups site configs by their listen
+// propagateConfigParams copies the necessary parameters from first config in the block
+// to all other config in the same block. Doing this results in zones
+// sharing the same plugin instances and settings as other zones in
+// the same block.
+func propagateConfigParams(configs []*Config) {
+	for _, c := range configs {
+		c.Plugin = c.firstConfigInBlock.Plugin
+		c.ListenHosts = c.firstConfigInBlock.ListenHosts
+		c.Debug = c.firstConfigInBlock.Debug
+		c.Stacktrace = c.firstConfigInBlock.Stacktrace
+		c.NumSockets = c.firstConfigInBlock.NumSockets
+
+		// Fork TLSConfig for each encrypted connection
+		c.TLSConfig = c.firstConfigInBlock.TLSConfig.Clone()
+		c.ReadTimeout = c.firstConfigInBlock.ReadTimeout
+		c.WriteTimeout = c.firstConfigInBlock.WriteTimeout
+		c.IdleTimeout = c.firstConfigInBlock.IdleTimeout
+		c.TsigSecret = c.firstConfigInBlock.TsigSecret
+	}
+}
+
+// groupConfigsByListenAddr groups site configs by their listen
 // (bind) address, so sites that use the same listener can be served
 // on the same server instance. The return value maps the listen
 // address (what you pass into net.Listen) to the list of site configs.
@@ -306,6 +293,63 @@ func groupConfigsByListenAddr(configs []*Config) (map[string][]*Config, error) {
 	}
 
 	return groups, nil
+}
+
+// makeServersForGroup creates servers for a specific transport and group.
+// It creates as many servers as specified in the NumSockets configuration.
+// If the NumSockets param is not specified, one server is created by default.
+func makeServersForGroup(addr string, group []*Config) ([]caddy.Server, error) {
+	// that is impossible, but better to check
+	if len(group) == 0 {
+		return nil, fmt.Errorf("no configs for group defined")
+	}
+	// create one server by default if no NumSockets specified
+	numSockets := 1
+	if group[0].NumSockets > 0 {
+		numSockets = group[0].NumSockets
+	}
+
+	var servers []caddy.Server
+	for range numSockets {
+		// switch on addr
+		switch tr, _ := parse.Transport(addr); tr {
+		case transport.DNS:
+			s, err := NewServer(addr, group)
+			if err != nil {
+				return nil, err
+			}
+			servers = append(servers, s)
+
+		case transport.TLS:
+			s, err := NewServerTLS(addr, group)
+			if err != nil {
+				return nil, err
+			}
+			servers = append(servers, s)
+
+		case transport.QUIC:
+			s, err := NewServerQUIC(addr, group)
+			if err != nil {
+				return nil, err
+			}
+			servers = append(servers, s)
+
+		case transport.GRPC:
+			s, err := NewServergRPC(addr, group)
+			if err != nil {
+				return nil, err
+			}
+			servers = append(servers, s)
+
+		case transport.HTTPS:
+			s, err := NewServerHTTPS(addr, group)
+			if err != nil {
+				return nil, err
+			}
+			servers = append(servers, s)
+		}
+	}
+	return servers, nil
 }
 
 // DefaultPort is the default port.

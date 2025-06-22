@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
@@ -34,12 +35,10 @@ func TestCloseIdle(t *testing.T) {
 }
 
 func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.Duration) {
-	var (
-		localCloseReason = &errClosedSession{
-			message:  "connection closed by origin",
-			byRemote: false,
-		}
-	)
+	localCloseReason := &errClosedSession{
+		message:  "connection closed by origin",
+		byRemote: false,
+	}
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
 	payload := testPayload(sessionID)
@@ -48,28 +47,28 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 	mg := NewManager(&log, nil, nil)
 	session := mg.newSession(sessionID, cfdConn)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	sessionDone := make(chan struct{})
 	go func() {
 		closedByRemote, err := session.Serve(ctx, closeAfterIdle)
 		switch closeBy {
 		case closeByContext:
-			require.Equal(t, context.Canceled, err)
-			require.False(t, closedByRemote)
+			assert.Equal(t, context.Canceled, err)
+			assert.False(t, closedByRemote)
 		case closeByCallingClose:
-			require.Equal(t, localCloseReason, err)
-			require.Equal(t, localCloseReason.byRemote, closedByRemote)
+			assert.Equal(t, localCloseReason, err)
+			assert.Equal(t, localCloseReason.byRemote, closedByRemote)
 		case closeByTimeout:
-			require.Equal(t, SessionIdleErr(closeAfterIdle), err)
-			require.False(t, closedByRemote)
+			assert.Equal(t, SessionIdleErr(closeAfterIdle), err)
+			assert.False(t, closedByRemote)
 		}
 		close(sessionDone)
 	}()
 
 	go func() {
 		n, err := session.transportToDst(payload)
-		require.NoError(t, err)
-		require.Equal(t, len(payload), n)
+		assert.NoError(t, err)
+		assert.Equal(t, len(payload), n)
 	}()
 
 	readBuffer := make([]byte, len(payload)+1)
@@ -84,6 +83,8 @@ func testSessionReturns(t *testing.T, closeBy closeMethod, closeAfterIdle time.D
 		cancel()
 	case closeByCallingClose:
 		session.close(localCloseReason)
+	default:
+		// ignore
 	}
 
 	<-sessionDone
@@ -125,10 +126,10 @@ func testActiveSessionNotClosed(t *testing.T, readFromDst bool, writeToDst bool)
 
 	startTime := time.Now()
 	activeUntil := startTime.Add(activeTime)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		session.Serve(ctx, closeAfterIdle)
+		_, _ = session.Serve(ctx, closeAfterIdle)
 		if time.Now().Before(startTime.Add(activeTime)) {
 			return fmt.Errorf("session closed while it's still active")
 		}
@@ -208,7 +209,7 @@ func TestZeroBytePayload(t *testing.T) {
 	mg := NewManager(&nopLogger, sender.muxSession, nil)
 	session := mg.newSession(sessionID, cfdConn)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	errGroup, ctx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		// Read from underlying conn and send to transport

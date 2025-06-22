@@ -22,7 +22,7 @@ const (
 )
 
 func TestConnectRequestData(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name           string
 		hostname       string
 		connectionType pogs.ConnectionType
@@ -62,7 +62,7 @@ func TestConnectRequestData(t *testing.T) {
 }
 
 func TestConnectResponseMeta(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name     string
 		err      error
 		metadata []pogs.Metadata
@@ -98,12 +98,7 @@ func TestConnectResponseMeta(t *testing.T) {
 			reqClientStream := RequestClientStream{noopCloser{b}}
 			respMeta, err := reqClientStream.ReadConnectResponseData()
 			require.NoError(t, err)
-
-			if respMeta.Error == "" {
-				assert.Equal(t, test.metadata, respMeta.Metadata)
-			} else {
-				assert.Equal(t, 0, len(respMeta.Metadata))
-			}
+			require.Equal(t, test.metadata, respMeta.Metadata)
 		})
 	}
 }
@@ -111,7 +106,7 @@ func TestConnectResponseMeta(t *testing.T) {
 func TestRegisterUdpSession(t *testing.T) {
 	unregisterMessage := "closed by eyeball"
 
-	var tests = []struct {
+	tests := []struct {
 		name             string
 		sessionRPCServer mockSessionRPCServer
 	}{
@@ -145,29 +140,29 @@ func TestRegisterUdpSession(t *testing.T) {
 			sessionRegisteredChan := make(chan struct{})
 			go func() {
 				ss := NewCloudflaredServer(nil, test.sessionRPCServer, nil, 10*time.Second)
-				err := ss.Serve(context.Background(), serverStream)
+				err := ss.Serve(t.Context(), serverStream)
 				assert.NoError(t, err)
 
 				serverStream.Close()
 				close(sessionRegisteredChan)
 			}()
 
-			rpcClientStream, err := NewCloudflaredClient(context.Background(), clientStream, 5*time.Second)
-			assert.NoError(t, err)
+			rpcClientStream, err := NewCloudflaredClient(t.Context(), clientStream, 5*time.Second)
+			require.NoError(t, err)
 
-			reg, err := rpcClientStream.RegisterUdpSession(context.Background(), test.sessionRPCServer.sessionID, test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
-			assert.NoError(t, err)
-			assert.NoError(t, reg.Err)
+			reg, err := rpcClientStream.RegisterUdpSession(t.Context(), test.sessionRPCServer.sessionID, test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
+			require.NoError(t, err)
+			require.NoError(t, reg.Err)
 
-			// Different sessionID, the RPC server should reject the registraion
-			reg, err = rpcClientStream.RegisterUdpSession(context.Background(), uuid.New(), test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
-			assert.NoError(t, err)
-			assert.Error(t, reg.Err)
+			// Different sessionID, the RPC server should reject the registration
+			reg, err = rpcClientStream.RegisterUdpSession(t.Context(), uuid.New(), test.sessionRPCServer.dstIP, test.sessionRPCServer.dstPort, testCloseIdleAfterHint, test.sessionRPCServer.traceContext)
+			require.NoError(t, err)
+			require.Error(t, reg.Err)
 
-			assert.NoError(t, rpcClientStream.UnregisterUdpSession(context.Background(), test.sessionRPCServer.sessionID, unregisterMessage))
+			require.NoError(t, rpcClientStream.UnregisterUdpSession(t.Context(), test.sessionRPCServer.sessionID, unregisterMessage))
 
-			// Different sessionID, the RPC server should reject the unregistraion
-			assert.Error(t, rpcClientStream.UnregisterUdpSession(context.Background(), uuid.New(), unregisterMessage))
+			// Different sessionID, the RPC server should reject the unregistration
+			require.Error(t, rpcClientStream.UnregisterUdpSession(t.Context(), uuid.New(), unregisterMessage))
 
 			rpcClientStream.Close()
 			<-sessionRegisteredChan
@@ -190,20 +185,20 @@ func TestManageConfiguration(t *testing.T) {
 	updatedChan := make(chan struct{})
 	go func() {
 		server := NewCloudflaredServer(nil, nil, configRPCServer, 10*time.Second)
-		err := server.Serve(context.Background(), serverStream)
+		err := server.Serve(t.Context(), serverStream)
 		assert.NoError(t, err)
 
 		serverStream.Close()
 		close(updatedChan)
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	rpcClientStream, err := NewCloudflaredClient(ctx, clientStream, 5*time.Second)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	result, err := rpcClientStream.UpdateConfiguration(ctx, version, config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	require.Equal(t, version, result.LastAppliedVersion)
 	require.NoError(t, result.Err)

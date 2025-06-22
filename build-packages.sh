@@ -7,7 +7,7 @@ export GOEXPERIMENT=noboringcrypto
 export CGO_ENABLED=0
 
 # This controls the directory the built artifacts go into
-export ARTIFACT_DIR=built_artifacts/
+export ARTIFACT_DIR=artifacts/
 mkdir -p $ARTIFACT_DIR
 
 linuxArchs=("386" "amd64" "arm" "armhf" "arm64")

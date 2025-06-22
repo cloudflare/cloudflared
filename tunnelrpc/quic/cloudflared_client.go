@@ -32,7 +32,7 @@ func NewCloudflaredClient(ctx context.Context, stream io.ReadWriteCloser, reques
 		return nil, fmt.Errorf("expect to write %d bytes for RPC stream protocol signature, wrote %d", len(rpcStreamProtocolSignature), n)
 	}
 	transport := tunnelrpc.SafeTransport(stream)
-	conn := rpc.NewConn(transport)
+	conn := tunnelrpc.NewClientConn(transport)
 	client := pogs.NewCloudflaredServer_PogsClient(conn.Bootstrap(ctx), conn)
 	return &CloudflaredClient{
 		client:         client,

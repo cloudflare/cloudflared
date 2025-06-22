@@ -22,10 +22,11 @@ type packet struct {
 	includedInBytesInFlight bool
 	declaredLost            bool
 	skippedPacket           bool
+	isPathProbePacket       bool
 }
 
 func (p *packet) outstanding() bool {
-	return !p.declaredLost && !p.skippedPacket && !p.IsPathMTUProbePacket
+	return !p.declaredLost && !p.skippedPacket && !p.IsPathMTUProbePacket && !p.isPathProbePacket
 }
 
 var packetPool = sync.Pool{New: func() any { return &packet{} }}

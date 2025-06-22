@@ -57,7 +57,7 @@ func (s *Session) Serve(ctx context.Context, closeAfterIdle time.Duration) (clos
 		readBuffer := make([]byte, maxPacketSize)
 		for {
 			if closeSession, err := s.dstToTransport(readBuffer); err != nil {
-				if errors.Is(err, net.ErrClosed) {
+				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 					s.log.Debug().Msg("Destination connection closed")
 				} else {
 					level := zerolog.ErrorLevel
@@ -84,7 +84,7 @@ func (s *Session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 	// Closing dstConn cancels read so dstToTransport routine in Serve() can return
 	defer s.dstConn.Close()
 	if closeAfterIdle == 0 {
-		// provide deafult is caller doesn't specify one
+		// provide default is caller doesn't specify one
 		closeAfterIdle = defaultCloseIdleAfter
 	}
 

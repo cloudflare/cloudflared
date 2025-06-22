@@ -1,10 +1,6 @@
 package quic
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"hash"
 	"io"
 	"net"
 	"sync"
@@ -56,15 +52,12 @@ type packetHandlerMap struct {
 
 	deleteRetiredConnsAfter time.Duration
 
-	statelessResetMutex  sync.Mutex
-	statelessResetHasher hash.Hash
-
 	logger utils.Logger
 }
 
 var _ packetHandlerManager = &packetHandlerMap{}
 
-func newPacketHandlerMap(key *StatelessResetKey, enqueueClosePacket func(closePacket), logger utils.Logger) *packetHandlerMap {
+func newPacketHandlerMap(enqueueClosePacket func(closePacket), logger utils.Logger) *packetHandlerMap {
 	h := &packetHandlerMap{
 		closeChan:               make(chan struct{}),
 		handlers:                make(map[protocol.ConnectionID]packetHandler),
@@ -72,9 +65,6 @@ func newPacketHandlerMap(key *StatelessResetKey, enqueueClosePacket func(closePa
 		deleteRetiredConnsAfter: protocol.RetiredConnectionIDDeleteTimeout,
 		enqueueClosePacket:      enqueueClosePacket,
 		logger:                  logger,
-	}
-	if key != nil {
-		h.statelessResetHasher = hmac.New(sha256.New, key[:])
 	}
 	if h.logger.Debug() {
 		go h.logUsage()
@@ -235,21 +225,4 @@ func (h *packetHandlerMap) Close(e error) {
 	h.closed = true
 	h.mutex.Unlock()
 	wg.Wait()
-}
-
-func (h *packetHandlerMap) GetStatelessResetToken(connID protocol.ConnectionID) protocol.StatelessResetToken {
-	var token protocol.StatelessResetToken
-	if h.statelessResetHasher == nil {
-		// Return a random stateless reset token.
-		// This token will be sent in the server's transport parameters.
-		// By using a random token, an off-path attacker won't be able to disrupt the connection.
-		rand.Read(token[:])
-		return token
-	}
-	h.statelessResetMutex.Lock()
-	h.statelessResetHasher.Write(connID.Bytes())
-	copy(token[:], h.statelessResetHasher.Sum(nil))
-	h.statelessResetHasher.Reset()
-	h.statelessResetMutex.Unlock()
-	return token
 }

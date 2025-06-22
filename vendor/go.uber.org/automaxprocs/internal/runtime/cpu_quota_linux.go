@@ -18,20 +18,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build linux
 // +build linux
 
 package runtime
 
 import (
-	"math"
+	"errors"
 
 	cg "go.uber.org/automaxprocs/internal/cgroups"
 )
 
 // CPUQuotaToGOMAXPROCS converts the CPU quota applied to the calling process
-// to a valid GOMAXPROCS value.
-func CPUQuotaToGOMAXPROCS(minValue int) (int, CPUQuotaStatus, error) {
-	cgroups, err := cg.NewCGroupsForCurrentProcess()
+// to a valid GOMAXPROCS value. The quota is converted from float to int using round.
+// If round == nil, DefaultRoundFunc is used.
+func CPUQuotaToGOMAXPROCS(minValue int, round func(v float64) int) (int, CPUQuotaStatus, error) {
+	if round == nil {
+		round = DefaultRoundFunc
+	}
+	cgroups, err := _newQueryer()
 	if err != nil {
 		return -1, CPUQuotaUndefined, err
 	}
@@ -41,9 +46,30 @@ func CPUQuotaToGOMAXPROCS(minValue int) (int, CPUQuotaStatus, error) {
 		return -1, CPUQuotaUndefined, err
 	}
 
-	maxProcs := int(math.Floor(quota))
+	maxProcs := round(quota)
 	if minValue > 0 && maxProcs < minValue {
 		return minValue, CPUQuotaMinUsed, nil
 	}
 	return maxProcs, CPUQuotaUsed, nil
+}
+
+type queryer interface {
+	CPUQuota() (float64, bool, error)
+}
+
+var (
+	_newCgroups2 = cg.NewCGroups2ForCurrentProcess
+	_newCgroups  = cg.NewCGroupsForCurrentProcess
+	_newQueryer  = newQueryer
+)
+
+func newQueryer() (queryer, error) {
+	cgroups, err := _newCgroups2()
+	if err == nil {
+		return cgroups, nil
+	}
+	if errors.Is(err, cg.ErrNotV2) {
+		return _newCgroups()
+	}
+	return nil, err
 }

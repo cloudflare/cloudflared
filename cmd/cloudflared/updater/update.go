@@ -14,13 +14,15 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/term"
 
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 )
 
 const (
 	DefaultCheckUpdateFreq        = time.Hour * 24
-	noUpdateInShellMessage        = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/as-a-service/"
+	noUpdateInShellMessage        = "cloudflared will not automatically update when run from the shell. To enable auto-updates, run cloudflared as a service: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configure-tunnels/local-management/as-a-service/"
 	noUpdateOnWindowsMessage      = "cloudflared will not automatically update on Windows systems."
 	noUpdateManagedPackageMessage = "cloudflared will not automatically update if installed by a package manager."
 	isManagedInstallFile          = ".installedFromPackageManager"
@@ -31,12 +33,13 @@ const (
 )
 
 var (
-	version                string
+	buildInfo              *cliutil.BuildInfo
 	BuiltForPackageManager = ""
 )
 
 // BinaryUpdated implements ExitCoder interface, the app will exit with status code 11
 // https://pkg.go.dev/github.com/urfave/cli/v2?tab=doc#ExitCoder
+// nolint: errname
 type statusSuccess struct {
 	newVersion string
 }
@@ -49,16 +52,16 @@ func (u *statusSuccess) ExitCode() int {
 	return 11
 }
 
-// UpdateErr implements ExitCoder interface, the app will exit with status code 10
-type statusErr struct {
+// statusError implements ExitCoder interface, the app will exit with status code 10
+type statusError struct {
 	err error
 }
 
-func (e *statusErr) Error() string {
+func (e *statusError) Error() string {
 	return fmt.Sprintf("failed to update cloudflared: %v", e.err)
 }
 
-func (e *statusErr) ExitCode() int {
+func (e *statusError) ExitCode() int {
 	return 10
 }
 
@@ -78,11 +81,11 @@ type UpdateOutcome struct {
 }
 
 func (uo *UpdateOutcome) noUpdate() bool {
-	return uo.Error == nil && uo.Updated == false
+	return uo.Error == nil && !uo.Updated
 }
 
-func Init(v string) {
-	version = v
+func Init(info *cliutil.BuildInfo) {
+	buildInfo = info
 }
 
 func CheckForUpdate(options updateOptions) (CheckResult, error) {
@@ -100,11 +103,12 @@ func CheckForUpdate(options updateOptions) (CheckResult, error) {
 		cfdPath = encodeWindowsPath(cfdPath)
 	}
 
-	s := NewWorkersService(version, url, cfdPath, Options{IsBeta: options.isBeta,
+	s := NewWorkersService(buildInfo.CloudflaredVersion, url, cfdPath, Options{IsBeta: options.isBeta,
 		IsForced: options.isForced, RequestedVersion: options.intendedVersion})
 
 	return s.Check()
 }
+
 func encodeWindowsPath(path string) string {
 	// We do this because Windows allows spaces in directories such as
 	// Program Files but does not allow these directories to be spaced in batch files.
@@ -151,7 +155,7 @@ func Update(c *cli.Context) error {
 		log.Info().Msg("cloudflared is set to update from staging")
 	}
 
-	isForced := c.Bool("force")
+	isForced := c.Bool(cfdflags.Force)
 	if isForced {
 		log.Info().Msg("cloudflared is set to upgrade to the latest publish version regardless of the current version")
 	}
@@ -164,7 +168,7 @@ func Update(c *cli.Context) error {
 		intendedVersion: c.String("version"),
 	})
 	if updateOutcome.Error != nil {
-		return &statusErr{updateOutcome.Error}
+		return &statusError{updateOutcome.Error}
 	}
 
 	if updateOutcome.noUpdate() {
@@ -196,10 +200,9 @@ func loggedUpdate(log *zerolog.Logger, options updateOptions) UpdateOutcome {
 
 // AutoUpdater periodically checks for new version of cloudflared.
 type AutoUpdater struct {
-	configurable     *configurable
-	listeners        *gracenet.Net
-	updateConfigChan chan *configurable
-	log              *zerolog.Logger
+	configurable *configurable
+	listeners    *gracenet.Net
+	log          *zerolog.Logger
 }
 
 // AutoUpdaterConfigurable is the attributes of AutoUpdater that can be reconfigured during runtime
@@ -210,10 +213,9 @@ type configurable struct {
 
 func NewAutoUpdater(updateDisabled bool, freq time.Duration, listeners *gracenet.Net, log *zerolog.Logger) *AutoUpdater {
 	return &AutoUpdater{
-		configurable:     createUpdateConfig(updateDisabled, freq, log),
-		listeners:        listeners,
-		updateConfigChan: make(chan *configurable),
-		log:              log,
+		configurable: createUpdateConfig(updateDisabled, freq, log),
+		listeners:    listeners,
+		log:          log,
 	}
 }
 
@@ -232,19 +234,27 @@ func createUpdateConfig(updateDisabled bool, freq time.Duration, log *zerolog.Lo
 	}
 }
 
+// Run will perodically check for cloudflared updates, download them, and then restart the current cloudflared process
+// to use the new version. It delays the first update check by the configured frequency as to not attempt a
+// download immediately and restart after starting (in the case that there is an upgrade available).
 func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
 		updateOutcome := loggedUpdate(a.log, updateOptions{updateDisabled: !a.configurable.enabled})
 		if updateOutcome.Updated {
-			Init(updateOutcome.Version)
+			buildInfo.CloudflaredVersion = updateOutcome.Version
 			if IsSysV() {
 				// SysV doesn't have a mechanism to keep service alive, we have to restart the process
 				a.log.Info().Msg("Restarting service managed by SysV...")
 				pid, err := a.listeners.StartProcess()
 				if err != nil {
 					a.log.Err(err).Msg("Unable to restart server automatically")
-					return &statusErr{err: err}
+					return &statusError{err: err}
 				}
 				// stop old process after autoupdate. Otherwise we create a new process
 				// after each update
@@ -254,23 +264,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 		} else if updateOutcome.UserMessage != "" {
 			a.log.Warn().Msg(updateOutcome.UserMessage)
 		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case newConfigurable := <-a.updateConfigChan:
-			ticker.Stop()
-			a.configurable = newConfigurable
-			ticker = time.NewTicker(a.configurable.freq)
-			// Check if there is new version of cloudflared after receiving new AutoUpdaterConfigurable
-		case <-ticker.C:
-		}
 	}
-}
-
-// Update is the method to pass new AutoUpdaterConfigurable to a running AutoUpdater. It is safe to be called concurrently
-func (a *AutoUpdater) Update(updateDisabled bool, newFreq time.Duration) {
-	a.updateConfigChan <- createUpdateConfig(updateDisabled, newFreq, a.log)
 }
 
 func isAutoupdateEnabled(log *zerolog.Logger, updateDisabled bool, updateFreq time.Duration) bool {

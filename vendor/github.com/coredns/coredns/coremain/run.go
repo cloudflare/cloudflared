@@ -12,6 +12,8 @@ import (
 
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
+
+	"go.uber.org/automaxprocs/maxprocs"
 )
 
 func init() {
@@ -28,7 +30,10 @@ func init() {
 	caddy.RegisterCaddyfileLoader("flag", caddy.LoaderFunc(confLoader))
 	caddy.SetDefaultCaddyfileLoader("default", caddy.LoaderFunc(defaultLoader))
 
-	caddy.AppName = coreName
+	flag.StringVar(&dnsserver.Port, serverType+".port", dnsserver.DefaultPort, "Default port")
+	flag.StringVar(&dnsserver.Port, "p", dnsserver.DefaultPort, "Default port")
+
+	caddy.AppName = CoreName
 	caddy.AppVersion = CoreVersion
 }
 
@@ -42,7 +47,7 @@ func Run() {
 	}
 
 	log.SetOutput(os.Stdout)
-	log.SetFlags(0) // Set to 0 because we're doing our own time, with timezone
+	log.SetFlags(LogFlags)
 
 	if version {
 		showVersion()
@@ -51,6 +56,11 @@ func Run() {
 	if plugins {
 		fmt.Println(caddy.DescribePlugins())
 		os.Exit(0)
+	}
+
+	_, err := maxprocs.Set(maxprocs.Logger(log.Printf))
+	if err != nil {
+		log.Println("[WARNING] Failed to set GOMAXPROCS:", err)
 	}
 
 	// Get Corefile input
@@ -166,6 +176,9 @@ var (
 	conf    string
 	version bool
 	plugins bool
+
+	// LogFlags are initially set to 0 for no extra output
+	LogFlags int
 )
 
 // Build information obtained with the help of -ldflags

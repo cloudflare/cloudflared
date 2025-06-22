@@ -50,8 +50,8 @@ type StreamError struct {
 }
 
 func (e *StreamError) Is(target error) bool {
-	_, ok := target.(*StreamError)
-	return ok
+	t, ok := target.(*StreamError)
+	return ok && e.StreamID == t.StreamID && e.ErrorCode == t.ErrorCode && e.Remote == t.Remote
 }
 
 func (e *StreamError) Error() string {
@@ -64,12 +64,12 @@ func (e *StreamError) Error() string {
 
 // DatagramTooLargeError is returned from Connection.SendDatagram if the payload is too large to be sent.
 type DatagramTooLargeError struct {
-	PeerMaxDatagramFrameSize int64
+	MaxDatagramPayloadSize int64
 }
 
 func (e *DatagramTooLargeError) Is(target error) bool {
-	_, ok := target.(*DatagramTooLargeError)
-	return ok
+	t, ok := target.(*DatagramTooLargeError)
+	return ok && e.MaxDatagramPayloadSize == t.MaxDatagramPayloadSize
 }
 
 func (e *DatagramTooLargeError) Error() string { return "DATAGRAM frame too large" }

@@ -47,6 +47,8 @@ func newConnTracer(metricsCollector *clientCollector) *logging.ConnectionTracer 
 		DroppedPacket:               tracer.DroppedPacket,
 		UpdatedMetrics:              tracer.UpdatedMetrics,
 		LostPacket:                  tracer.LostPacket,
+		UpdatedMTU:                  tracer.UpdatedMTU,
+		UpdatedCongestionState:      tracer.UpdatedCongestionState,
 	}
 }
 
@@ -76,6 +78,7 @@ func (ct *connTracer) LostPacket(level logging.EncryptionLevel, number logging.P
 
 func (ct *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
 	ct.metricsCollector.updatedRTT(rttStats)
+	ct.metricsCollector.updateCongestionWindow(cwnd)
 }
 
 func (ct *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
@@ -92,4 +95,12 @@ func (ct *connTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size
 
 func (ct *connTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
 	ct.metricsCollector.receivedPackets(size, frames)
+}
+
+func (ct *connTracer) UpdatedMTU(mtu logging.ByteCount, done bool) {
+	ct.metricsCollector.updateMTU(mtu)
+}
+
+func (ct *connTracer) UpdatedCongestionState(state logging.CongestionState) {
+	ct.metricsCollector.updatedCongestionState(state)
 }

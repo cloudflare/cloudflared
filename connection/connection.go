@@ -26,15 +26,28 @@ const (
 	MaxGracePeriod         = time.Minute * 3
 	MaxConcurrentStreams   = math.MaxUint32
 
-	contentTypeHeader = "content-type"
-	sseContentType    = "text/event-stream"
-	grpcContentType   = "application/grpc"
+	contentTypeHeader      = "content-type"
+	contentLengthHeader    = "content-length"
+	transferEncodingHeader = "transfer-encoding"
+
+	sseContentType     = "text/event-stream"
+	grpcContentType    = "application/grpc"
+	sseJsonContentType = "application/x-ndjson"
+
+	chunkTransferEncoding = "chunked"
 )
 
 var (
 	switchingProtocolText = fmt.Sprintf("%d %s", http.StatusSwitchingProtocols, http.StatusText(http.StatusSwitchingProtocols))
-	flushableContentTypes = []string{sseContentType, grpcContentType}
+	flushableContentTypes = []string{sseContentType, grpcContentType, sseJsonContentType}
 )
+
+// TunnelConnection represents the connection to the edge.
+// The Serve method is provided to allow clients to handle any errors from the connection encountered during
+// processing of the connection. Cancelling of the context provided to Serve will close the connection.
+type TunnelConnection interface {
+	Serve(ctx context.Context) error
+}
 
 type Orchestrator interface {
 	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
@@ -44,7 +57,6 @@ type Orchestrator interface {
 
 type TunnelProperties struct {
 	Credentials    Credentials
-	Client         pogs.ClientInfo
 	QuickTunnelUrl string
 }
 
@@ -53,6 +65,7 @@ type Credentials struct {
 	AccountTag   string
 	TunnelSecret []byte
 	TunnelID     uuid.UUID
+	Endpoint     string
 }
 
 func (c *Credentials) Auth() pogs.TunnelAuth {
@@ -67,13 +80,16 @@ type TunnelToken struct {
 	AccountTag   string    `json:"a"`
 	TunnelSecret []byte    `json:"s"`
 	TunnelID     uuid.UUID `json:"t"`
+	Endpoint     string    `json:"e,omitempty"`
 }
 
 func (t TunnelToken) Credentials() Credentials {
+	// nolint: gosimple
 	return Credentials{
 		AccountTag:   t.AccountTag,
 		TunnelSecret: t.TunnelSecret,
 		TunnelID:     t.TunnelID,
+		Endpoint:     t.Endpoint,
 	}
 }
 
@@ -263,6 +279,22 @@ type ConnectedFuse interface {
 // Helper method to let the caller know what content-types should require a flush on every
 // write to a ResponseWriter.
 func shouldFlush(headers http.Header) bool {
+	// When doing Server Side Events (SSE), some frameworks don't respect the `Content-Type` header.
+	// Therefore, we need to rely on other ways to know whether we should flush on write or not. A good
+	// approach is to assume that responses without `Content-Length` or with `Transfer-Encoding: chunked`
+	// are streams, and therefore, should be flushed right away to the eyeball.
+	// References:
+	// - https://datatracker.ietf.org/doc/html/rfc7230#section-4.1
+	// - https://datatracker.ietf.org/doc/html/rfc9112#section-6.1
+	if contentLength := headers.Get(contentLengthHeader); contentLength == "" {
+		return true
+	}
+	if transferEncoding := headers.Get(transferEncodingHeader); transferEncoding != "" {
+		transferEncoding = strings.ToLower(transferEncoding)
+		if strings.Contains(transferEncoding, chunkTransferEncoding) {
+			return true
+		}
+	}
 	if contentType := headers.Get(contentTypeHeader); contentType != "" {
 		contentType = strings.ToLower(contentType)
 		for _, c := range flushableContentTypes {
@@ -271,7 +303,6 @@ func shouldFlush(headers http.Header) bool {
 			}
 		}
 	}
-
 	return false
 }
 

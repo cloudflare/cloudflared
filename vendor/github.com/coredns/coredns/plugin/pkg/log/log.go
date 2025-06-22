@@ -13,7 +13,7 @@ import (
 	"io"
 	golog "log"
 	"os"
-	"sync"
+	"sync/atomic"
 )
 
 // D controls whether we should output debug logs. If true, we do, once set
@@ -21,30 +21,22 @@ import (
 var D = &d{}
 
 type d struct {
-	on bool
-	sync.RWMutex
+	on atomic.Bool
 }
 
 // Set enables debug logging.
 func (d *d) Set() {
-	d.Lock()
-	d.on = true
-	d.Unlock()
+	d.on.Store(true)
 }
 
 // Clear disables debug logging.
 func (d *d) Clear() {
-	d.Lock()
-	d.on = false
-	d.Unlock()
+	d.on.Store(false)
 }
 
 // Value returns if debug logging is enabled.
 func (d *d) Value() bool {
-	d.RLock()
-	b := d.on
-	d.RUnlock()
-	return b
+	return d.on.Load()
 }
 
 // logf calls log.Printf prefixed with level.

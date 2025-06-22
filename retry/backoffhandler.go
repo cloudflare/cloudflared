@@ -79,8 +79,8 @@ func (b *BackoffHandler) BackoffTimer() <-chan time.Time {
 	} else {
 		b.retries++
 	}
-	maxTimeToWait := time.Duration(b.GetBaseTime() * 1 << (b.retries))
-	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
+	maxTimeToWait := b.GetBaseTime() * (1 << b.retries)
+	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds())) // #nosec G404
 	return b.Clock.After(timeToWait)
 }
 
@@ -99,11 +99,11 @@ func (b *BackoffHandler) Backoff(ctx context.Context) bool {
 	}
 }
 
-// Sets a grace period within which the the backoff timer is maintained. After the grace
+// Sets a grace period within which the backoff timer is maintained. After the grace
 // period expires, the number of retries & backoff duration is reset.
 func (b *BackoffHandler) SetGracePeriod() time.Duration {
 	maxTimeToWait := b.GetBaseTime() * 2 << (b.retries + 1)
-	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds()))
+	timeToWait := time.Duration(rand.Int63n(maxTimeToWait.Nanoseconds())) // #nosec G404
 	b.resetDeadline = b.Clock.Now().Add(timeToWait)
 
 	return timeToWait
@@ -118,7 +118,7 @@ func (b BackoffHandler) GetBaseTime() time.Duration {
 
 // Retries returns the number of retries consumed so far.
 func (b *BackoffHandler) Retries() int {
-	return int(b.retries)
+	return int(b.retries) // #nosec G115
 }
 
 func (b *BackoffHandler) ReachedMaxRetries() bool {

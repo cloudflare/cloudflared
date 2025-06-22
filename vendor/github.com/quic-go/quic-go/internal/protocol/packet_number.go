@@ -21,58 +21,36 @@ const (
 	PacketNumberLen4 PacketNumberLen = 4
 )
 
-// DecodePacketNumber calculates the packet number based on the received packet number, its length and the last seen packet number
-func DecodePacketNumber(
-	packetNumberLength PacketNumberLen,
-	lastPacketNumber PacketNumber,
-	wirePacketNumber PacketNumber,
-) PacketNumber {
-	var epochDelta PacketNumber
-	switch packetNumberLength {
-	case PacketNumberLen1:
-		epochDelta = PacketNumber(1) << 8
-	case PacketNumberLen2:
-		epochDelta = PacketNumber(1) << 16
-	case PacketNumberLen3:
-		epochDelta = PacketNumber(1) << 24
-	case PacketNumberLen4:
-		epochDelta = PacketNumber(1) << 32
+// DecodePacketNumber calculates the packet number based its length and the last seen packet number
+// This function is taken from https://www.rfc-editor.org/rfc/rfc9000.html#section-a.3.
+func DecodePacketNumber(length PacketNumberLen, largest PacketNumber, truncated PacketNumber) PacketNumber {
+	expected := largest + 1
+	win := PacketNumber(1 << (length * 8))
+	hwin := win / 2
+	mask := win - 1
+	candidate := (expected & ^mask) | truncated
+	if candidate <= expected-hwin && candidate < 1<<62-win {
+		return candidate + win
 	}
-	epoch := lastPacketNumber & ^(epochDelta - 1)
-	var prevEpochBegin PacketNumber
-	if epoch > epochDelta {
-		prevEpochBegin = epoch - epochDelta
+	if candidate > expected+hwin && candidate >= win {
+		return candidate - win
 	}
-	nextEpochBegin := epoch + epochDelta
-	return closestTo(
-		lastPacketNumber+1,
-		epoch+wirePacketNumber,
-		closestTo(lastPacketNumber+1, prevEpochBegin+wirePacketNumber, nextEpochBegin+wirePacketNumber),
-	)
+	return candidate
 }
 
-func closestTo(target, a, b PacketNumber) PacketNumber {
-	if delta(target, a) < delta(target, b) {
-		return a
-	}
-	return b
-}
-
-func delta(a, b PacketNumber) PacketNumber {
-	if a < b {
-		return b - a
-	}
-	return a - b
-}
-
-// GetPacketNumberLengthForHeader gets the length of the packet number for the public header
+// PacketNumberLengthForHeader gets the length of the packet number for the public header
 // it never chooses a PacketNumberLen of 1 byte, since this is too short under certain circumstances
-func GetPacketNumberLengthForHeader(packetNumber, leastUnacked PacketNumber) PacketNumberLen {
-	diff := uint64(packetNumber - leastUnacked)
-	if diff < (1 << (16 - 1)) {
+func PacketNumberLengthForHeader(pn, largestAcked PacketNumber) PacketNumberLen {
+	var numUnacked PacketNumber
+	if largestAcked == InvalidPacketNumber {
+		numUnacked = pn + 1
+	} else {
+		numUnacked = pn - largestAcked
+	}
+	if numUnacked < 1<<(16-1) {
 		return PacketNumberLen2
 	}
-	if diff < (1 << (24 - 1)) {
+	if numUnacked < 1<<(24-1) {
 		return PacketNumberLen3
 	}
 	return PacketNumberLen4

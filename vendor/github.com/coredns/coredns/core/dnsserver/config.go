@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/plugin"
@@ -22,6 +23,10 @@ type Config struct {
 
 	// The port to listen on.
 	Port string
+
+	// The number of servers that will listen on one port.
+	// By default, one server will be running.
+	NumSockets int
 
 	// Root points to a base directory we find user defined "things".
 	// First consumer is the file plugin to looks for zone files in this place.
@@ -52,6 +57,19 @@ type Config struct {
 
 	// TLSConfig when listening for encrypted connections (gRPC, DNS-over-TLS).
 	TLSConfig *tls.Config
+
+	// MaxQUICStreams defines the maximum number of concurrent QUIC streams for a QUIC server.
+	// This is nil if not specified, allowing for a default to be used.
+	MaxQUICStreams *int
+
+	// MaxQUICWorkerPoolSize defines the size of the worker pool for processing QUIC streams.
+	// This is nil if not specified, allowing for a default to be used.
+	MaxQUICWorkerPoolSize *int
+
+	// Timeouts for TCP, TLS and HTTPS servers.
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
 
 	// TSIG secrets, [name]key.
 	TsigSecret map[string]string

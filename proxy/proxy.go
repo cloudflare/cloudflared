@@ -9,9 +9,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	cfdflow "github.com/cloudflare/cloudflared/flow"
+	"github.com/cloudflare/cloudflared/management"
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cfio"
@@ -32,8 +36,8 @@ const (
 type Proxy struct {
 	ingressRules ingress.Ingress
 	warpRouting  *ingress.WarpRoutingService
-	management   *ingress.ManagementService
 	tags         []pogs.Tag
+	flowLimiter  cfdflow.Limiter
 	log          *zerolog.Logger
 }
 
@@ -42,12 +46,14 @@ func NewOriginProxy(
 	ingressRules ingress.Ingress,
 	warpRouting ingress.WarpRoutingConfig,
 	tags []pogs.Tag,
+	flowLimiter cfdflow.Limiter,
 	writeTimeout time.Duration,
 	log *zerolog.Logger,
 ) *Proxy {
 	proxy := &Proxy{
 		ingressRules: ingressRules,
 		tags:         tags,
+		flowLimiter:  flowLimiter,
 		log:          log,
 	}
 
@@ -64,7 +70,7 @@ func (p *Proxy) applyIngressMiddleware(rule *ingress.Rule, r *http.Request, w co
 		}
 
 		if result.ShouldFilterRequest {
-			w.WriteRespHeaders(result.StatusCode, nil)
+			_ = w.WriteRespHeaders(result.StatusCode, nil)
 			return fmt.Errorf("request filtered by middleware handler (%s) due to: %s", handler.Name(), result.Reason), true
 		}
 	}
@@ -152,10 +158,18 @@ func (p *Proxy) ProxyTCP(
 		return err
 	}
 
+	logger := newTCPLogger(p.log, req)
+
+	// Try to start a new flow
+	if err := p.flowLimiter.Acquire(management.TCP.String()); err != nil {
+		logger.Warn().Msg("Too many concurrent flows being handled, rejecting tcp proxy")
+		return pkgerrors.Wrap(err, "failed to start tcp flow due to rate limiting")
+	}
+	defer p.flowLimiter.Release()
+
 	serveCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	logger := newTCPLogger(p.log, req)
 	tracedCtx := tracing.NewTracedContext(serveCtx, req.CfTraceID, &logger)
 	logger.Debug().Msg("tcp proxy stream started")
 

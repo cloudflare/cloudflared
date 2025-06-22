@@ -4,6 +4,7 @@ main
 mockgen_tmp.go
 *.qtr
 *.qlog
+*.sqlog
 *.txt
 race.[0-9]*
 

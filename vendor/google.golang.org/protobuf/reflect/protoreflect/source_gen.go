@@ -398,6 +398,8 @@ func (p *SourcePath) appendFeatureSet(b []byte) []byte {
 		b = p.appendSingularField(b, "message_encoding", nil)
 	case 6:
 		b = p.appendSingularField(b, "json_format", nil)
+	case 7:
+		b = p.appendSingularField(b, "enforce_naming_style", nil)
 	}
 	return b
 }
@@ -485,6 +487,8 @@ func (p *SourcePath) appendEnumValueOptions(b []byte) []byte {
 		b = p.appendSingularField(b, "features", (*SourcePath).appendFeatureSet)
 	case 3:
 		b = p.appendSingularField(b, "debug_redact", nil)
+	case 4:
+		b = p.appendSingularField(b, "feature_support", (*SourcePath).appendFieldOptions_FeatureSupport)
 	case 999:
 		b = p.appendRepeatedField(b, "uninterpreted_option", (*SourcePath).appendUninterpretedOption)
 	}

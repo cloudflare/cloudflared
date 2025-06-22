@@ -9,6 +9,7 @@ import (
 
 const (
 	logFieldOriginCertPath = "originCertPath"
+	FedEndpoint            = "fed"
 )
 
 type User struct {
@@ -32,6 +33,10 @@ func (c User) CertPath() string {
 	return c.certPath
 }
 
+func (c User) IsFEDEndpoint() bool {
+	return c.cert.Endpoint == FedEndpoint
+}
+
 // Client uses the user credentials to create a Cloudflare API client
 func (c *User) Client(apiURL string, userAgent string, log *zerolog.Logger) (cfapi.Client, error) {
 	if apiURL == "" {
@@ -45,7 +50,6 @@ func (c *User) Client(apiURL string, userAgent string, log *zerolog.Logger) (cfa
 		userAgent,
 		log,
 	)
-
 	if err != nil {
 		return nil, err
 	}

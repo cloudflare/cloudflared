@@ -72,3 +72,9 @@ func TestAddingSpansWithNilMap(t *testing.T) {
 	// a panic shouldn't occur
 	tr.AddSpans(nil)
 }
+
+func FuzzNewIdentity(f *testing.F) {
+	f.Fuzz(func(t *testing.T, trace string) {
+		_, _ = NewIdentity(trace)
+	})
+}

@@ -113,7 +113,7 @@ func ParseIngressFromConfigAndCLI(conf *config.Configuration, c *cli.Context, lo
 		// If no token is provided, the probability of NOT being a remotely managed tunnel is higher.
 		// So, we should warn the user that no ingress rules were found, because remote configuration will most likely not exist.
 		if !c.IsSet("token") {
-			log.Warn().Msgf(ErrNoIngressRulesCLI.Error())
+			log.Warn().Msg(ErrNoIngressRulesCLI.Error())
 		}
 		return newDefaultOrigin(c, log), nil
 	}
@@ -378,17 +378,17 @@ func validateHostname(r config.UnvalidatedIngressRule, ruleIndex, totalRules int
 	}
 	// ONLY the last rule should catch all hostnames.
 	if !isLastRule && isCatchAllRule {
-		return errRuleShouldNotBeCatchAll{index: ruleIndex, hostname: r.Hostname}
+		return ruleShouldNotBeCatchAllError{index: ruleIndex, hostname: r.Hostname}
 	}
 	return nil
 }
 
-type errRuleShouldNotBeCatchAll struct {
+type ruleShouldNotBeCatchAllError struct {
 	index    int
 	hostname string
 }
 
-func (e errRuleShouldNotBeCatchAll) Error() string {
+func (e ruleShouldNotBeCatchAllError) Error() string {
 	return fmt.Sprintf("Rule #%d is matching the hostname '%s', but "+
 		"this will match every hostname, meaning the rules which follow it "+
 		"will never be triggered.", e.index+1, e.hostname)

@@ -5,25 +5,29 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/netip"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
-	"github.com/cloudflare/cloudflared/h2mux"
+	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
+	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -35,10 +39,8 @@ const (
 )
 
 type TunnelConfig struct {
+	ClientConfig       *client.Config
 	GracePeriod        time.Duration
-	ReplaceExisting    bool
-	OSArch             string
-	ClientID           string
 	CloseConnOnce      *sync.Once // Used to close connectedSignal no more than once
 	EdgeAddrs          []string
 	Region             string
@@ -61,7 +63,7 @@ type TunnelConfig struct {
 	NamedTunnel      *connection.TunnelProperties
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
-	PacketConfig     *ingress.GlobalRouterConfig
+	ICMPRouterServer ingress.ICMPRouterServer
 
 	RPCTimeout         time.Duration
 	WriteStreamTimeout time.Duration
@@ -69,30 +71,13 @@ type TunnelConfig struct {
 	DisableQUICPathMTUDiscovery         bool
 	QUICConnectionLevelFlowControlLimit uint64
 	QUICStreamLevelFlowControlLimit     uint64
-
-	FeatureSelector *features.FeatureSelector
 }
 
-func (c *TunnelConfig) connectionOptions(originLocalAddr string, numPreviousAttempts uint8) *pogs.ConnectionOptions {
+func (c *TunnelConfig) connectionOptions(originLocalAddr string, previousAttempts uint8) *client.ConnectionOptionsSnapshot {
 	// attempt to parse out origin IP, but don't fail since it's informational field
 	host, _, _ := net.SplitHostPort(originLocalAddr)
 	originIP := net.ParseIP(host)
-
-	return &pogs.ConnectionOptions{
-		Client:              c.NamedTunnel.Client,
-		OriginLocalIP:       originIP,
-		ReplaceExisting:     c.ReplaceExisting,
-		CompressionQuality:  0,
-		NumPreviousAttempts: numPreviousAttempts,
-	}
-}
-
-func (c *TunnelConfig) SupportedFeatures() []string {
-	supported := []string{features.FeatureSerializedHeaders}
-	if c.NamedTunnel == nil {
-		supported = append(supported, features.FeatureQuickReconnects)
-	}
-	return supported
+	return c.ClientConfig.ConnectionOptionsSnapshot(originIP, previousAttempts)
 }
 
 func StartTunnelDaemon(
@@ -181,6 +166,8 @@ func (f *ipAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsN
 type EdgeTunnelServer struct {
 	config            *TunnelConfig
 	orchestrator      *orchestration.Orchestrator
+	sessionManager    v3.SessionManager
+	datagramMetrics   v3.Metrics
 	edgeAddrHandler   EdgeAddrHandler
 	edgeAddrs         *edgediscovery.Edge
 	edgeBindAddr      net.IP
@@ -199,7 +186,7 @@ func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolF
 	haConnections.Inc()
 	defer haConnections.Dec()
 
-	connectedFuse := h2mux.NewBooleanFuse()
+	connectedFuse := newBooleanFuse()
 	go func() {
 		if connectedFuse.Await() {
 			connectedSignal.Notify()
@@ -375,7 +362,7 @@ func (e *EdgeTunnelServer) serveTunnel(
 	connLog *ConnAwareLogger,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
-	fuse *h2mux.BooleanFuse,
+	fuse *booleanFuse,
 	backoff *protocolFallback,
 	protocol connection.Protocol,
 ) (err error, recoverable bool) {
@@ -441,7 +428,7 @@ func (e *EdgeTunnelServer) serveConnection(
 	connLog *ConnAwareLogger,
 	addr *allregions.EdgeAddr,
 	connIndex uint8,
-	fuse *h2mux.BooleanFuse,
+	fuse *booleanFuse,
 	backoff *protocolFallback,
 	protocol connection.Protocol,
 ) (err error, recoverable bool) {
@@ -464,9 +451,12 @@ func (e *EdgeTunnelServer) serveConnection(
 
 	switch protocol {
 	case connection.QUIC:
+		// nolint: gosec
 		connOptions := e.config.connectionOptions(addr.UDP.String(), uint8(backoff.Retries()))
+		// nolint: zerologlint
+		connOptions.LogFields(connLog.Logger().Debug().Uint8(connection.LogFieldConnIndex, connIndex)).Msgf("Tunnel connection options")
 		return e.serveQUIC(ctx,
-			addr.UDP,
+			addr.UDP.AddrPort(),
 			connLog,
 			connOptions,
 			controlStream,
@@ -479,7 +469,10 @@ func (e *EdgeTunnelServer) serveConnection(
 			return err, true
 		}
 
+		// nolint: gosec
 		connOptions := e.config.connectionOptions(edgeConn.LocalAddr().String(), uint8(backoff.Retries()))
+		// nolint: zerologlint
+		connOptions.LogFields(connLog.Logger().Debug().Uint8(connection.LogFieldConnIndex, connIndex)).Msgf("Tunnel connection options")
 		if err := e.serveHTTP2(
 			ctx,
 			connLog,
@@ -509,11 +502,11 @@ func (e *EdgeTunnelServer) serveHTTP2(
 	ctx context.Context,
 	connLog *ConnAwareLogger,
 	tlsServerConn net.Conn,
-	connOptions *pogs.ConnectionOptions,
+	connOptions *client.ConnectionOptionsSnapshot,
 	controlStreamHandler connection.ControlStreamHandler,
 	connIndex uint8,
 ) error {
-	pqMode := e.config.FeatureSelector.PostQuantumMode()
+	pqMode := connOptions.FeatureSnapshot.PostQuantum
 	if pqMode == features.PostQuantumStrict {
 		return unrecoverableError{errors.New("HTTP/2 transport does not support post-quantum")}
 	}
@@ -549,25 +542,30 @@ func (e *EdgeTunnelServer) serveHTTP2(
 
 func (e *EdgeTunnelServer) serveQUIC(
 	ctx context.Context,
-	edgeAddr *net.UDPAddr,
+	edgeAddr netip.AddrPort,
 	connLogger *ConnAwareLogger,
-	connOptions *pogs.ConnectionOptions,
+	connOptions *client.ConnectionOptionsSnapshot,
 	controlStreamHandler connection.ControlStreamHandler,
 	connIndex uint8,
 ) (err error, recoverable bool) {
 	tlsConfig := e.config.EdgeTLSConfigs[connection.QUIC]
 
-	pqMode := e.config.FeatureSelector.PostQuantumMode()
-	if pqMode == features.PostQuantumStrict || pqMode == features.PostQuantumPrefer {
-		connOptions.Client.Features = features.Dedup(append(connOptions.Client.Features, features.FeaturePostQuantum))
-	}
-
-	curvePref, err := curvePreference(pqMode, tlsConfig.CurvePreferences)
+	pqMode := connOptions.FeatureSnapshot.PostQuantum
+	curvePref, err := curvePreference(pqMode, fips.IsFipsEnabled(), tlsConfig.CurvePreferences)
 	if err != nil {
 		return err, true
 	}
 
+	connLogger.Logger().Info().Msgf("Tunnel connection curve preferences: %v", curvePref)
+
 	tlsConfig.CurvePreferences = curvePref
+
+	// quic-go 0.44 increases the initial packet size to 1280 by default. That breaks anyone running tunnel through WARP
+	// because WARP MTU is 1280.
+	var initialPacketSize uint16 = 1252
+	if edgeAddr.Addr().Is4() {
+		initialPacketSize = 1232
+	}
 
 	quicConfig := &quic.Config{
 		HandshakeIdleTimeout:       quicpogs.HandshakeIdleTimeout,
@@ -580,33 +578,75 @@ func (e *EdgeTunnelServer) serveQUIC(
 		DisablePathMTUDiscovery:    e.config.DisableQUICPathMTUDiscovery,
 		MaxConnectionReceiveWindow: e.config.QUICConnectionLevelFlowControlLimit,
 		MaxStreamReceiveWindow:     e.config.QUICStreamLevelFlowControlLimit,
+		InitialPacketSize:          initialPacketSize,
 	}
 
-	quicConn, err := connection.NewQUICConnection(
+	// Dial the QUIC connection to the edge
+	conn, err := connection.DialQuic(
 		ctx,
 		quicConfig,
+		tlsConfig,
 		edgeAddr,
 		e.edgeBindAddr,
 		connIndex,
-		tlsConfig,
-		e.orchestrator,
-		connOptions,
-		controlStreamHandler,
 		connLogger.Logger(),
-		e.config.PacketConfig,
-		e.config.RPCTimeout,
-		e.config.WriteStreamTimeout,
 	)
 	if err != nil {
-		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new quic connection")
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to dial a quic connection")
+
+		e.reportErrorToSentry(err, connOptions.FeatureSnapshot.PostQuantum)
 		return err, true
 	}
 
+	var datagramSessionManager connection.DatagramSessionHandler
+	if connOptions.FeatureSnapshot.DatagramVersion == features.DatagramV3 {
+		datagramSessionManager = connection.NewDatagramV3Connection(
+			ctx,
+			conn,
+			e.sessionManager,
+			e.config.ICMPRouterServer,
+			connIndex,
+			e.datagramMetrics,
+			connLogger.Logger(),
+		)
+	} else {
+		datagramSessionManager = connection.NewDatagramV2Connection(
+			ctx,
+			conn,
+			e.config.ICMPRouterServer,
+			connIndex,
+			e.config.RPCTimeout,
+			e.config.WriteStreamTimeout,
+			e.orchestrator.GetFlowLimiter(),
+			connLogger.Logger(),
+		)
+	}
+
+	// Wrap the [quic.Connection] as a TunnelConnection
+	tunnelConn, err := connection.NewTunnelConnection(
+		ctx,
+		conn,
+		connIndex,
+		e.orchestrator,
+		datagramSessionManager,
+		controlStreamHandler,
+		connOptions,
+		e.config.RPCTimeout,
+		e.config.WriteStreamTimeout,
+		e.config.GracePeriod,
+		connLogger.Logger(),
+	)
+	if err != nil {
+		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new tunnel connection")
+		return err, true
+	}
+
+	// Serve the TunnelConnection
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
-		err := quicConn.Serve(serveCtx)
+		err := tunnelConn.Serve(serveCtx)
 		if err != nil {
-			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve quic connection")
+			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve tunnel connection")
 		}
 		return err
 	})
@@ -615,13 +655,33 @@ func (e *EdgeTunnelServer) serveQUIC(
 		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
 		if err != nil {
 			// forcefully break the connection (this is only used for testing)
-			// errgroup will return context canceled for the quicConn.Serve
-			connLogger.Logger().Debug().Msg("Forcefully breaking quic connection")
+			// errgroup will return context canceled for the tunnelConn.Serve
+			connLogger.Logger().Debug().Msg("Forcefully breaking tunnel connection")
 		}
 		return err
 	})
 
 	return errGroup.Wait(), false
+}
+
+// The reportErrorToSentry is an helper function that handles
+// verifies if an error should be reported to Sentry.
+func (e *EdgeTunnelServer) reportErrorToSentry(err error, pqMode features.PostQuantumMode) {
+	dialErr, ok := err.(*connection.EdgeQuicDialError)
+	if ok {
+		// The TransportError provides an Unwrap function however
+		// the err MAY not always be set
+		transportErr, ok := dialErr.Cause.(*quic.TransportError)
+		if ok &&
+			transportErr.ErrorCode.IsCryptoError() &&
+			fips.IsFipsEnabled() &&
+			pqMode == features.PostQuantumStrict {
+			// Only report to Sentry when using FIPS, PQ,
+			// and the error is a Crypto error reported by
+			// an EdgeQuicDialError
+			sentry.CaptureException(err)
+		}
+	}
 }
 
 func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh <-chan struct{}) error {
@@ -636,7 +696,7 @@ func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gr
 }
 
 type connectedFuse struct {
-	fuse    *h2mux.BooleanFuse
+	fuse    *booleanFuse
 	backoff *protocolFallback
 }
 

@@ -16,11 +16,12 @@ the following metrics are exported:
 * `coredns_panics_total{}` - total number of panics.
 * `coredns_dns_requests_total{server, zone, view, proto, family, type}` - total query count.
 * `coredns_dns_request_duration_seconds{server, zone, view, type}` - duration to process each query.
-* `coredns_dns_request_size_bytes{server, zone, view, proto}` - size of the request in bytes.
+* `coredns_dns_request_size_bytes{server, zone, view, proto}` - size of the request in bytes. Uses the original size before any plugin rewrites.
 * `coredns_dns_do_requests_total{server, view, zone}` -  queries that have the DO bit set
 * `coredns_dns_response_size_bytes{server, zone, view, proto}` - response size in bytes.
 * `coredns_dns_responses_total{server, zone, view, rcode, plugin}` - response per zone, rcode and plugin.
 * `coredns_dns_https_responses_total{server, status}` - responses per server and http status code.
+* `coredns_dns_quic_responses_total{server, status}` - responses per server and QUIC application code.
 * `coredns_plugin_enabled{server, zone, view, name}` - indicates whether a plugin is enabled on per server, zone and view basis.
 
 Almost each counter has a label `zone` which is the zonename used for the request/response.

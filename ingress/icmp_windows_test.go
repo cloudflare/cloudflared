@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && cgo
 
 package ingress
 
@@ -132,7 +132,7 @@ func TestSendEchoErrors(t *testing.T) {
 }
 
 func testSendEchoErrors(t *testing.T, listenIP netip.Addr) {
-	proxy, err := newICMPProxy(listenIP, "", &noopLogger, time.Second)
+	proxy, err := newICMPProxy(listenIP, &noopLogger, time.Second)
 	require.NoError(t, err)
 
 	echo := icmp.Echo{

@@ -70,7 +70,7 @@ func (f HandlerFunc) Name() string { return "handlerfunc" }
 func Error(name string, err error) error { return fmt.Errorf("%s/%s: %s", "plugin", name, err) }
 
 // NextOrFailure calls next.ServeDNS when next is not nil, otherwise it will return, a ServerFailure and a `no next plugin found` error.
-func NextOrFailure(name string, next Handler, ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) { // nolint: golint
+func NextOrFailure(name string, next Handler, ctx context.Context, w dns.ResponseWriter, r *dns.Msg) (int, error) {
 	if next != nil {
 		if span := ot.SpanFromContext(ctx); span != nil {
 			child := span.Tracer().StartSpan(next.Name(), ot.ChildOf(span.Context()))
@@ -107,6 +107,10 @@ var TimeBuckets = prometheus.ExponentialBuckets(0.00025, 2, 16) // from 0.25ms t
 
 // SlimTimeBuckets is low cardinality set of duration buckets.
 var SlimTimeBuckets = prometheus.ExponentialBuckets(0.00025, 10, 5) // from 0.25ms to 2.5 seconds
+
+// NativeHistogramBucketFactor controls the resolution of Prometheus native histogram buckets.
+// See: https://pkg.go.dev/github.com/prometheus/client_golang@v1.19.0/prometheus#section-readme
+var NativeHistogramBucketFactor = 1.05
 
 // ErrOnce is returned when a plugin doesn't support multiple setups per server.
 var ErrOnce = errors.New("this plugin can only be used once per Server Block")

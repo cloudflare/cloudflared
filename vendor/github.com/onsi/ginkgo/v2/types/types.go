@@ -3,13 +3,21 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
 )
 
 const GINKGO_FOCUS_EXIT_CODE = 197
-const GINKGO_TIME_FORMAT = "01/02/06 15:04:05.999"
+
+var GINKGO_TIME_FORMAT = "01/02/06 15:04:05.999"
+
+func init() {
+	if os.Getenv("GINKGO_TIME_FORMAT") != "" {
+		GINKGO_TIME_FORMAT = os.Getenv("GINKGO_TIME_FORMAT")
+	}
+}
 
 // Report captures information about a Ginkgo test run
 type Report struct {
@@ -97,9 +105,7 @@ func (report Report) Add(other Report) Report {
 	report.RunTime = report.EndTime.Sub(report.StartTime)
 
 	reports := make(SpecReports, len(report.SpecReports)+len(other.SpecReports))
-	for i := range report.SpecReports {
-		reports[i] = report.SpecReports[i]
-	}
+	copy(reports, report.SpecReports)
 	offset := len(report.SpecReports)
 	for i := range other.SpecReports {
 		reports[i+offset] = other.SpecReports[i]

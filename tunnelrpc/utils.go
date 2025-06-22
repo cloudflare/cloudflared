@@ -1,10 +1,12 @@
 package tunnelrpc
 
 import (
+	"context"
 	"io"
 	"time"
 
 	"github.com/pkg/errors"
+	capnp "zombiezen.com/go/capnproto2"
 	"zombiezen.com/go/capnproto2/rpc"
 )
 
@@ -66,4 +68,22 @@ func isTemporaryError(e error) bool {
 	}
 	t, ok := e.(temp)
 	return ok && t.Temporary()
+}
+
+// NoopCapnpLogger provides a logger to discard all capnp rpc internal logging messages as
+// they are by default provided to stdout if no logger interface is provided. These logging
+// messages in cloudflared have typically not provided a high amount of pratical value
+// as the messages are extremely verbose and don't provide a good insight into the message
+// contents or rpc method names.
+type noopCapnpLogger struct{}
+
+func (noopCapnpLogger) Infof(ctx context.Context, format string, args ...interface{})  {}
+func (noopCapnpLogger) Errorf(ctx context.Context, format string, args ...interface{}) {}
+
+func NewClientConn(transport rpc.Transport) *rpc.Conn {
+	return rpc.NewConn(transport, rpc.ConnLog(noopCapnpLogger{}))
+}
+
+func NewServerConn(transport rpc.Transport, client capnp.Client) *rpc.Conn {
+	return rpc.NewConn(transport, rpc.MainInterface(client), rpc.ConnLog(noopCapnpLogger{}))
 }

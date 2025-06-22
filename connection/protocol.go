@@ -13,8 +13,8 @@ import (
 
 const (
 	AvailableProtocolFlagMessage = "Available protocols: 'auto' - automatically chooses the best protocol over time (the default; and also the recommended one); 'quic' - based on QUIC, relying on UDP egress to Cloudflare edge; 'http2' - using Go's HTTP2 library, relying on TCP egress to Cloudflare edge"
-	// edgeH2muxTLSServerName is the server name to establish h2mux connection with edge
-	edgeH2muxTLSServerName = "cftunnel.com"
+	// edgeH2muxTLSServerName is the server name to establish h2mux connection with edge (unused, but kept for legacy reference).
+	_ = "cftunnel.com"
 	// edgeH2TLSServerName is the server name to establish http2 connection with edge
 	edgeH2TLSServerName = "h2.cftunnel.com"
 	// edgeQUICServerName is the server name to establish quic connection with edge.
@@ -24,11 +24,9 @@ const (
 	ResolveTTL = time.Hour
 )
 
-var (
-	// ProtocolList represents a list of supported protocols for communication with the edge
-	// in order of precedence for remote percentage fetcher.
-	ProtocolList = []Protocol{QUIC, HTTP2}
-)
+// ProtocolList represents a list of supported protocols for communication with the edge
+// in order of precedence for remote percentage fetcher.
+var ProtocolList = []Protocol{QUIC, HTTP2}
 
 type Protocol int64
 
@@ -58,7 +56,7 @@ func (p Protocol) String() string {
 	case QUIC:
 		return "quic"
 	default:
-		return fmt.Sprintf("unknown protocol")
+		return "unknown protocol"
 	}
 }
 
@@ -246,11 +244,11 @@ func NewProtocolSelector(
 		return newRemoteProtocolSelector(fetchedProtocol, ProtocolList, threshold, protocolFetcher, resolveTTL, log), nil
 	}
 
-	return nil, fmt.Errorf("Unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
+	return nil, fmt.Errorf("unknown protocol %s, %s", protocolFlag, AvailableProtocolFlagMessage)
 }
 
 func switchThreshold(accountTag string) int32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(accountTag))
-	return int32(h.Sum32() % 100)
+	return int32(h.Sum32() % 100) // nolint: gosec
 }

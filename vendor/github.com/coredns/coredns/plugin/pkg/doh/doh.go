@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/miekg/dns"
 )
@@ -16,34 +17,50 @@ const MimeType = "application/dns-message"
 // Path is the URL path that should be used.
 const Path = "/dns-query"
 
-// NewRequest returns a new DoH request given a method, URL (without any paths, so exclude /dns-query) and dns.Msg.
+// NewRequest returns a new DoH request given a HTTP method, URL and dns.Msg.
+//
+// The URL should not have a path, so please exclude /dns-query. The URL will
+// be prefixed with https:// by default, unless it's already prefixed with
+// either http:// or https://.
 func NewRequest(method, url string, m *dns.Msg) (*http.Request, error) {
 	buf, err := m.Pack()
 	if err != nil {
 		return nil, err
 	}
 
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = fmt.Sprintf("https://%s", url)
+	}
+
 	switch method {
 	case http.MethodGet:
 		b64 := base64.RawURLEncoding.EncodeToString(buf)
 
-		req, err := http.NewRequest(http.MethodGet, "https://"+url+Path+"?dns="+b64, nil)
+		req, err := http.NewRequest(
+			http.MethodGet,
+			fmt.Sprintf("%s%s?dns=%s", url, Path, b64),
+			nil,
+		)
 		if err != nil {
 			return req, err
 		}
 
-		req.Header.Set("content-type", MimeType)
-		req.Header.Set("accept", MimeType)
+		req.Header.Set("Content-Type", MimeType)
+		req.Header.Set("Accept", MimeType)
 		return req, nil
 
 	case http.MethodPost:
-		req, err := http.NewRequest(http.MethodPost, "https://"+url+Path+"?bla=foo:443", bytes.NewReader(buf))
+		req, err := http.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("%s%s", url, Path),
+			bytes.NewReader(buf),
+		)
 		if err != nil {
 			return req, err
 		}
 
-		req.Header.Set("content-type", MimeType)
-		req.Header.Set("accept", MimeType)
+		req.Header.Set("Content-Type", MimeType)
+		req.Header.Set("Accept", MimeType)
 		return req, nil
 
 	default:

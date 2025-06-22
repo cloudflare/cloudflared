@@ -18,6 +18,11 @@ const (
 	ConnectionTypeTCP
 )
 
+var (
+	// ErrorFlowConnectRateLimitedMetadata is the Metadata entry that allows to know if a request was rate limited on connect.
+	ErrorFlowConnectRateLimitedMetadata = Metadata{Key: "FlowConnectRateLimited", Val: "true"}
+)
+
 func (c ConnectionType) String() string {
 	switch c {
 	case ConnectionTypeHTTP:

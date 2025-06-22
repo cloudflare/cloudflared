@@ -19,16 +19,17 @@ import (
 )
 
 var (
-	packetConfig = &GlobalRouterConfig{
-		ICMPRouter: nil,
-		IPv4Src:    netip.MustParseAddr("172.16.0.1"),
-		IPv6Src:    netip.MustParseAddr("fd51:2391:523:f4ee::1"),
+	defaultRouter = &icmpRouter{
+		ipv4Proxy: nil,
+		ipv4Src:   netip.MustParseAddr("172.16.0.1"),
+		ipv6Proxy: nil,
+		ipv6Src:   netip.MustParseAddr("fd51:2391:523:f4ee::1"),
 	}
 )
 
 func TestRouterReturnTTLExceed(t *testing.T) {
 	muxer := newMockMuxer(0)
-	router := NewPacketRouter(packetConfig, muxer, &noopLogger)
+	router := NewPacketRouter(defaultRouter, muxer, 0, &noopLogger)
 	ctx, cancel := context.WithCancel(context.Background())
 	routerStopped := make(chan struct{})
 	go func() {
@@ -53,7 +54,7 @@ func TestRouterReturnTTLExceed(t *testing.T) {
 			},
 		},
 	}
-	assertTTLExceed(t, &pk, router.globalConfig.IPv4Src, muxer)
+	assertTTLExceed(t, &pk, defaultRouter.ipv4Src, muxer)
 	pk = packet.ICMP{
 		IP: &packet.IP{
 			Src:      netip.MustParseAddr("fd51:2391:523:f4ee::1"),
@@ -71,7 +72,7 @@ func TestRouterReturnTTLExceed(t *testing.T) {
 			},
 		},
 	}
-	assertTTLExceed(t, &pk, router.globalConfig.IPv6Src, muxer)
+	assertTTLExceed(t, &pk, defaultRouter.ipv6Src, muxer)
 
 	cancel()
 	<-routerStopped

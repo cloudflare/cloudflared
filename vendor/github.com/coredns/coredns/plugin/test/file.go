@@ -3,6 +3,7 @@ package test
 import (
 	"os"
 	"path/filepath"
+	"testing"
 )
 
 // TempFile will create a temporary file on disk and returns the name and a cleanup function to remove it later.
@@ -18,12 +19,10 @@ func TempFile(dir, content string) (string, func(), error) {
 	return f.Name(), rmFunc, nil
 }
 
-// WritePEMFiles creates a tmp dir with ca.pem, cert.pem, and key.pem and the func to remove it
-func WritePEMFiles(dir string) (string, func(), error) {
-	tempDir, err := os.MkdirTemp(dir, "go-test-pemfiles")
-	if err != nil {
-		return "", nil, err
-	}
+// WritePEMFiles creates a tmp dir with ca.pem, cert.pem, and key.pem
+func WritePEMFiles(t *testing.T) (string, error) {
+	t.Helper()
+	tempDir := t.TempDir()
 
 	data := `-----BEGIN CERTIFICATE-----
 MIIC9zCCAd+gAwIBAgIJALGtqdMzpDemMA0GCSqGSIb3DQEBCwUAMBIxEDAOBgNV
@@ -45,7 +44,7 @@ I1rs/VUGKzcJGVIWbHrgjP68CTStGAvKgbsTqw7aLXTSqtPw88N9XVSyRg==
 -----END CERTIFICATE-----`
 	path := filepath.Join(tempDir, "ca.pem")
 	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
-		return "", nil, err
+		return "", err
 	}
 	data = `-----BEGIN CERTIFICATE-----
 MIICozCCAYsCCQCRlf5BrvPuqjANBgkqhkiG9w0BAQsFADASMRAwDgYDVQQDDAdr
@@ -65,8 +64,8 @@ zhDEPP4FhY+Sz+y1yWirphl7A1aZwhXVPcfWIGqpQ3jzNwUeocbH27kuLh+U4hQo
 qeg10RdFnw==
 -----END CERTIFICATE-----`
 	path = filepath.Join(tempDir, "cert.pem")
-	if err = os.WriteFile(path, []byte(data), 0644); err != nil {
-		return "", nil, err
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		return "", err
 	}
 
 	data = `-----BEGIN RSA PRIVATE KEY-----
@@ -97,10 +96,9 @@ E/WObVJXDnBdViu0L9abE9iaTToBVri4cmlDlZagLuKVR+TFTCN/DSlVZTDkqkLI
 8chzqtkH6b2b2R73hyRysWjsomys34ma3mEEPTX/aXeAF2MSZ/EWT9yL
 -----END RSA PRIVATE KEY-----`
 	path = filepath.Join(tempDir, "key.pem")
-	if err = os.WriteFile(path, []byte(data), 0644); err != nil {
-		return "", nil, err
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		return "", err
 	}
 
-	rmFunc := func() { os.RemoveAll(tempDir) }
-	return tempDir, rmFunc, nil
+	return tempDir, nil
 }

@@ -75,9 +75,9 @@ func NewServerHTTPS(addr string, group []*Config) (*ServerHTTPS, error) {
 	}
 
 	srv := &http.Server{
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  s.readTimeout,
+		WriteTimeout: s.writeTimeout,
+		IdleTimeout:  s.idleTimeout,
 		ErrorLog:     stdlog.New(&loggerAdapter{}, "", 0),
 	}
 	sh := &ServerHTTPS{
@@ -188,7 +188,7 @@ func (s *ServerHTTPS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	age := dnsutil.MinimalTTL(dw.Msg, mt)
 
 	w.Header().Set("Content-Type", doh.MimeType)
-	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%f", age.Seconds()))
+	w.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", uint32(age.Seconds())))
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	w.WriteHeader(http.StatusOK)
 	s.countResponse(http.StatusOK)

@@ -16,11 +16,11 @@ func ParseVersionNegotiationPacket(b []byte) (dest, src protocol.ArbitraryLenCon
 	}
 	b = b[n:]
 	if len(b) == 0 {
-		//nolint:stylecheck
+		//nolint:staticcheck // SA1021: the packet is called Version Negotiation packet
 		return nil, nil, nil, errors.New("Version Negotiation packet has empty version list")
 	}
 	if len(b)%4 != 0 {
-		//nolint:stylecheck
+		//nolint:staticcheck // SA1021: the packet is called Version Negotiation packet
 		return nil, nil, nil, errors.New("Version Negotiation packet has a version list with an invalid length")
 	}
 	versions := make([]protocol.Version, len(b)/4)

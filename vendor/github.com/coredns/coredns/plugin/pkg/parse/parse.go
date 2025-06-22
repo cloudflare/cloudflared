@@ -23,15 +23,14 @@ func TransferIn(c *caddy.Controller) (froms []string, err error) {
 			return nil, c.ArgErr()
 		}
 		for i := range froms {
-			if froms[i] != "*" {
-				normalized, err := HostPort(froms[i], transport.Port)
-				if err != nil {
-					return nil, err
-				}
-				froms[i] = normalized
-			} else {
+			if froms[i] == "*" {
 				return nil, fmt.Errorf("can't use '*' in transfer from")
 			}
+			normalized, err := HostPort(froms[i], transport.Port)
+			if err != nil {
+				return nil, err
+			}
+			froms[i] = normalized
 		}
 	}
 	return froms, nil

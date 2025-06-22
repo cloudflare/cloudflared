@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"io"
@@ -82,6 +83,29 @@ const (
 	EventHandshakeComplete
 )
 
+func (k EventKind) String() string {
+	switch k {
+	case EventNoEvent:
+		return "EventNoEvent"
+	case EventWriteInitialData:
+		return "EventWriteInitialData"
+	case EventWriteHandshakeData:
+		return "EventWriteHandshakeData"
+	case EventReceivedReadKeys:
+		return "EventReceivedReadKeys"
+	case EventDiscard0RTTKeys:
+		return "EventDiscard0RTTKeys"
+	case EventReceivedTransportParameters:
+		return "EventReceivedTransportParameters"
+	case EventRestoredTransportParameters:
+		return "EventRestoredTransportParameters"
+	case EventHandshakeComplete:
+		return "EventHandshakeComplete"
+	default:
+		return "Unknown EventKind"
+	}
+}
+
 // Event is a handshake event.
 type Event struct {
 	Kind                EventKind
@@ -91,7 +115,7 @@ type Event struct {
 
 // CryptoSetup handles the handshake and protecting / unprotecting packets
 type CryptoSetup interface {
-	StartHandshake() error
+	StartHandshake(context.Context) error
 	io.Closer
 	ChangeConnectionID(protocol.ConnectionID)
 	GetSessionTicket() ([]byte, error)

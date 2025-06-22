@@ -13,6 +13,8 @@ import (
 	"github.com/miekg/dns"
 )
 
+const maxCnameChainLength = 10
+
 // A returns A records from Backend or an error.
 func A(ctx context.Context, b ServiceBackend, zone string, state request.Request, previousRecords []dns.RR, opt Options) (records []dns.RR, truncated bool, err error) {
 	services, err := checkForApex(ctx, b, zone, state, opt)
@@ -34,7 +36,7 @@ func A(ctx context.Context, b ServiceBackend, zone string, state request.Request
 			}
 
 			newRecord := serv.NewCNAME(state.QName(), serv.Host)
-			if len(previousRecords) > 7 {
+			if len(previousRecords) > maxCnameChainLength {
 				// don't add it, and just continue
 				continue
 			}
@@ -108,7 +110,7 @@ func AAAA(ctx context.Context, b ServiceBackend, zone string, state request.Requ
 			}
 
 			newRecord := serv.NewCNAME(state.QName(), serv.Host)
-			if len(previousRecords) > 7 {
+			if len(previousRecords) > maxCnameChainLength {
 				// don't add it, and just continue
 				continue
 			}
@@ -361,7 +363,7 @@ func TXT(ctx context.Context, b ServiceBackend, zone string, state request.Reque
 			}
 
 			newRecord := serv.NewCNAME(state.QName(), serv.Host)
-			if len(previousRecords) > 7 {
+			if len(previousRecords) > maxCnameChainLength {
 				// don't add it, and just continue
 				continue
 			}
@@ -427,20 +429,20 @@ func PTR(ctx context.Context, b ServiceBackend, zone string, state request.Reque
 	return records, nil
 }
 
-// NS returns NS records from  the backend
+// NS returns NS records from the backend
 func NS(ctx context.Context, b ServiceBackend, zone string, state request.Request, opt Options) (records, extra []dns.RR, err error) {
-	// NS record for this zone live in a special place, ns.dns.<zone>. Fake our lookup.
-	// only a tad bit fishy...
+	// NS record for this zone lives in a special place, ns.dns.<zone>. Fake our lookup.
+	// Only a tad bit fishy...
 	old := state.QName()
 
 	state.Clear()
 	state.Req.Question[0].Name = dnsutil.Join("ns.dns.", zone)
 	services, err := b.Services(ctx, state, false, opt)
+	// reset the query name to the original
+	state.Req.Question[0].Name = old
 	if err != nil {
 		return nil, nil, err
 	}
-	// ... and reset
-	state.Req.Question[0].Name = old
 
 	seen := map[string]bool{}
 

@@ -2,6 +2,7 @@ package flowcontrol
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
@@ -12,8 +13,6 @@ type streamFlowController struct {
 	baseFlowController
 
 	streamID protocol.StreamID
-
-	queueWindowUpdate func()
 
 	connection connectionFlowControllerI
 
@@ -29,14 +28,12 @@ func NewStreamFlowController(
 	receiveWindow protocol.ByteCount,
 	maxReceiveWindow protocol.ByteCount,
 	initialSendWindow protocol.ByteCount,
-	queueWindowUpdate func(protocol.StreamID),
 	rttStats *utils.RTTStats,
 	logger utils.Logger,
 ) StreamFlowController {
 	return &streamFlowController{
-		streamID:          streamID,
-		connection:        cfc.(connectionFlowControllerI),
-		queueWindowUpdate: func() { queueWindowUpdate(streamID) },
+		streamID:   streamID,
+		connection: cfc.(connectionFlowControllerI),
 		baseFlowController: baseFlowController{
 			rttStats:             rttStats,
 			receiveWindow:        receiveWindow,
@@ -49,7 +46,7 @@ func NewStreamFlowController(
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the offset is higher.
-func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool) error {
+func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now time.Time) error {
 	// If the final offset for this stream is already known, check for consistency.
 	if c.receivedFinalOffset {
 		// If we receive another final offset, check that it's the same.
@@ -74,9 +71,8 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 	if offset == c.highestReceived {
 		return nil
 	}
-	// A higher offset was received before.
-	// This can happen due to reordering.
-	if offset <= c.highestReceived {
+	// A higher offset was received before. This can happen due to reordering.
+	if offset < c.highestReceived {
 		if final {
 			return &qerr.TransportError{
 				ErrorCode:    qerr.FinalSizeError,
@@ -86,31 +82,35 @@ func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, 
 		return nil
 	}
 
+	// If this is the first frame received for this stream, start flow-control auto-tuning.
+	if c.highestReceived == 0 {
+		c.startNewAutoTuningEpoch(now)
+	}
 	increment := offset - c.highestReceived
 	c.highestReceived = offset
+
 	if c.checkFlowControlViolation() {
 		return &qerr.TransportError{
 			ErrorCode:    qerr.FlowControlError,
 			ErrorMessage: fmt.Sprintf("received %d bytes on stream %d, allowed %d bytes", offset, c.streamID, c.receiveWindow),
 		}
 	}
-	return c.connection.IncrementHighestReceived(increment)
+	return c.connection.IncrementHighestReceived(increment, now)
 }
 
-func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) {
+func (c *streamFlowController) AddBytesRead(n protocol.ByteCount) (hasStreamWindowUpdate, hasConnWindowUpdate bool) {
 	c.mutex.Lock()
-	c.baseFlowController.addBytesRead(n)
-	shouldQueueWindowUpdate := c.shouldQueueWindowUpdate()
+	c.addBytesRead(n)
+	hasStreamWindowUpdate = c.shouldQueueWindowUpdate()
 	c.mutex.Unlock()
-	if shouldQueueWindowUpdate {
-		c.queueWindowUpdate()
-	}
-	c.connection.AddBytesRead(n)
+	hasConnWindowUpdate = c.connection.AddBytesRead(n)
+	return
 }
 
 func (c *streamFlowController) Abandon() {
 	c.mutex.Lock()
 	unread := c.highestReceived - c.bytesRead
+	c.bytesRead = c.highestReceived
 	c.mutex.Unlock()
 	if unread > 0 {
 		c.connection.AddBytesRead(unread)
@@ -123,27 +123,32 @@ func (c *streamFlowController) AddBytesSent(n protocol.ByteCount) {
 }
 
 func (c *streamFlowController) SendWindowSize() protocol.ByteCount {
-	return min(c.baseFlowController.sendWindowSize(), c.connection.SendWindowSize())
+	return min(c.baseFlowController.SendWindowSize(), c.connection.SendWindowSize())
+}
+
+func (c *streamFlowController) IsNewlyBlocked() bool {
+	blocked, _ := c.baseFlowController.IsNewlyBlocked()
+	return blocked
 }
 
 func (c *streamFlowController) shouldQueueWindowUpdate() bool {
 	return !c.receivedFinalOffset && c.hasWindowUpdate()
 }
 
-func (c *streamFlowController) GetWindowUpdate() protocol.ByteCount {
+func (c *streamFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount {
 	// If we already received the final offset for this stream, the peer won't need any additional flow control credit.
 	if c.receivedFinalOffset {
 		return 0
 	}
 
-	// Don't use defer for unlocking the mutex here, GetWindowUpdate() is called frequently and defer shows up in the profiler
 	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
 	oldWindowSize := c.receiveWindowSize
-	offset := c.baseFlowController.getWindowUpdate()
+	offset := c.getWindowUpdate(now)
 	if c.receiveWindowSize > oldWindowSize { // auto-tuning enlarged the window size
-		c.logger.Debugf("Increasing receive flow control window for stream %d to %d kB", c.streamID, c.receiveWindowSize/(1<<10))
-		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize) * protocol.ConnectionFlowControlMultiplier))
+		c.logger.Debugf("Increasing receive flow control window for stream %d to %d", c.streamID, c.receiveWindowSize)
+		c.connection.EnsureMinimumWindowSize(protocol.ByteCount(float64(c.receiveWindowSize)*protocol.ConnectionFlowControlMultiplier), now)
 	}
-	c.mutex.Unlock()
 	return offset
 }

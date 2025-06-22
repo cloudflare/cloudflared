@@ -37,7 +37,8 @@ func (rss *RequestServerStream) WriteConnectResponseData(respErr error, metadata
 	var connectResponse *pogs.ConnectResponse
 	if respErr != nil {
 		connectResponse = &pogs.ConnectResponse{
-			Error: respErr.Error(),
+			Error:    respErr.Error(),
+			Metadata: metadata,
 		}
 	} else {
 		connectResponse = &pogs.ConnectResponse{

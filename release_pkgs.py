@@ -113,7 +113,7 @@ class PkgCreator:
 
     def create_rpm_pkgs(self, artifacts_path, gpg_key_name):
         self._setup_rpm_pkg_directories(artifacts_path, gpg_key_name)
-        p = Popen(["createrepo", "./rpm"], stdout=PIPE, stderr=PIPE)
+        p = Popen(["createrepo_c", "./rpm"], stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if p.returncode != 0:
             print(f"create rpm_pkgs result => {out}, {err}")
@@ -346,7 +346,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--deb-based-releases", default=["bookworm", "bullseye", "buster", "jammy", "impish", "focal", "bionic",
+        "--deb-based-releases", default=["any", "bookworm", "bullseye", "buster", "noble", "jammy", "impish", "focal", "bionic",
                                          "xenial", "trusty"],
         help="list of debian based releases that need to be packaged for"
     )

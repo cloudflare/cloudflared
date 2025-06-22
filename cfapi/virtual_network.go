@@ -16,7 +16,7 @@ import (
 type NewVirtualNetwork struct {
 	Name      string `json:"name"`
 	Comment   string `json:"comment"`
-	IsDefault bool   `json:"is_default"`
+	IsDefault bool   `json:"is_default_network"`
 }
 
 type VirtualNetwork struct {

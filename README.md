@@ -31,7 +31,7 @@ Downloads are available as standalone binaries, a Docker image, and Debian, RPM,
 * Binaries, Debian, and RPM packages for Linux [can be found here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#linux)
 * A Docker image of `cloudflared` is [available on DockerHub](https://hub.docker.com/r/cloudflare/cloudflared)
 * You can install on Windows machines with the [steps here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation#windows)
-* To build from source, first you need to download the go toolchain by running `./.teamcity/install-cloudflare-go.sh` and follow the output. Then you can run `make cloudflared`
+* To build from source, install the required version of go, mentioned in the [Development](#development) section below. Then you can run `make cloudflared`.
 
 User documentation for Cloudflare Tunnel can be found at https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
 
@@ -40,7 +40,7 @@ User documentation for Cloudflare Tunnel can be found at https://developers.clou
 
 Once installed, you can authenticate `cloudflared` into your Cloudflare account and begin creating Tunnels to serve traffic to your origins.
 
-* Create a Tunnel with [these instructions](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/create-tunnel)
+* Create a Tunnel with [these instructions](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/)
 * Route traffic to that Tunnel:
   * Via public [DNS records in Cloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/routing-to-tunnel/dns)
   * Or via a public hostname guided by a [Cloudflare Load Balancer](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/routing-to-tunnel/lb)
@@ -49,10 +49,34 @@ Once installed, you can authenticate `cloudflared` into your Cloudflare account 
 
 ## TryCloudflare
 
-Want to test Cloudflare Tunnel before adding a website to Cloudflare? You can do so with TryCloudflare using the documentation [available here](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/trycloudflare).
+Want to test Cloudflare Tunnel before adding a website to Cloudflare? You can do so with TryCloudflare using the documentation [available here](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/).
 
 ## Deprecated versions
 
 Cloudflare currently supports versions of cloudflared that are **within one year** of the most recent release. Breaking changes unrelated to feature availability may be introduced that will impact versions released more than one year ago. You can read more about upgrading cloudflared in our [developer documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/#updating-cloudflared).
 
 For example, as of January 2023 Cloudflare will support cloudflared version 2023.1.1 to cloudflared 2022.1.1.
+
+## Development
+
+### Requirements
+- [GNU Make](https://www.gnu.org/software/make/)
+- [capnp](https://capnproto.org/install.html)
+- [go >= 1.24](https://go.dev/doc/install)
+- Optional tools:
+  - [capnpc-go](https://pkg.go.dev/zombiezen.com/go/capnproto2/capnpc-go)
+  - [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports)
+  - [golangci-lint](https://github.com/golangci/golangci-lint)
+  - [gomocks](https://pkg.go.dev/go.uber.org/mock)
+
+### Build
+To build cloudflared locally run `make cloudflared`
+
+### Test
+To locally run the tests run `make test`
+
+### Linting
+To format the code and keep a good code quality use `make fmt` and `make lint`
+
+### Mocks
+After changes on interfaces you might need to regenerate the mocks, so run `make mock`

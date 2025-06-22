@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
@@ -17,7 +18,7 @@ const (
 	launchdIdentifier = "com.cloudflare.cloudflared"
 )
 
-func runApp(app *cli.App, graceShutdownC chan struct{}) {
+func runApp(app *cli.App, _ chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
 		Name:  "service",
 		Usage: "Manages the cloudflared launch agent",
@@ -119,7 +120,7 @@ func installLaunchd(c *cli.Context) error {
 		log.Info().Msg("Installing cloudflared client as an user launch agent. " +
 			"Note that cloudflared client will only run when the user is logged in. " +
 			"If you want to run cloudflared client at boot, install with root permission. " +
-			"For more information, visit https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/run-tunnel/run-as-service")
+			"For more information, visit https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/configure-tunnels/local-management/as-a-service/macos/")
 	}
 	etPath, err := os.Executable()
 	if err != nil {
@@ -206,4 +207,16 @@ func uninstallLaunchd(c *cli.Context) error {
 		log.Info().Msg("Launchd for cloudflared was uninstalled successfully")
 	}
 	return err
+}
+
+func userHomeDir() (string, error) {
+	// This returns the home dir of the executing user using OS-specific method
+	// for discovering the home dir. It's not recommended to call this function
+	// when the user has root permission as $HOME depends on what options the user
+	// use with sudo.
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return "", errors.Wrap(err, "Cannot determine home directory for the user")
+	}
+	return homeDir, nil
 }

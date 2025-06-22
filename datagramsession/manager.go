@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,7 +21,14 @@ const (
 
 var (
 	errSessionManagerClosed = fmt.Errorf("session manager closed")
+	LogFieldSessionID       = "sessionID"
 )
+
+func FormatSessionID(sessionID uuid.UUID) string {
+	sessionIDStr := sessionID.String()
+	sessionIDStr = strings.ReplaceAll(sessionIDStr, "-", "")
+	return sessionIDStr
+}
 
 // Manager defines the APIs to manage sessions from the same transport.
 type Manager interface {
@@ -127,7 +135,7 @@ func (m *manager) registerSession(ctx context.Context, registration *registerSes
 func (m *manager) newSession(id uuid.UUID, dstConn io.ReadWriteCloser) *Session {
 	logger := m.log.With().
 		Int(management.EventTypeKey, int(management.UDP)).
-		Str("sessionID", id.String()).Logger()
+		Str(LogFieldSessionID, FormatSessionID(id)).Logger()
 	return &Session{
 		ID:       id,
 		sendFunc: m.sendFunc,
@@ -174,7 +182,7 @@ func (m *manager) unregisterSession(unregistration *unregisterSessionEvent) {
 func (m *manager) sendToSession(datagram *packet.Session) {
 	session, ok := m.sessions[datagram.ID]
 	if !ok {
-		m.log.Error().Str("sessionID", datagram.ID.String()).Msg("session not found")
+		m.log.Error().Str(LogFieldSessionID, FormatSessionID(datagram.ID)).Msg("session not found")
 		return
 	}
 	// session writes to destination over a connected UDP socket, which should not be blocking, so this call doesn't

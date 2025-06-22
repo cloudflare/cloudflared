@@ -23,7 +23,7 @@ type RegistrationClient interface {
 		edgeAddress net.IP,
 	) (*pogs.ConnectionDetails, error)
 	SendLocalConfiguration(ctx context.Context, config []byte) error
-	GracefulShutdown(ctx context.Context, gracePeriod time.Duration)
+	GracefulShutdown(ctx context.Context, gracePeriod time.Duration) error
 	Close()
 }
 
@@ -35,7 +35,7 @@ type registrationClient struct {
 
 func NewRegistrationClient(ctx context.Context, stream io.ReadWriteCloser, requestTimeout time.Duration) RegistrationClient {
 	transport := SafeTransport(stream)
-	conn := rpc.NewConn(transport)
+	conn := NewClientConn(transport)
 	client := pogs.NewRegistrationServer_PogsClient(conn.Bootstrap(ctx), conn)
 	return &registrationClient{
 		client:         client,
@@ -79,7 +79,7 @@ func (r *registrationClient) SendLocalConfiguration(ctx context.Context, config 
 	return err
 }
 
-func (r *registrationClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) {
+func (r *registrationClient) GracefulShutdown(ctx context.Context, gracePeriod time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, gracePeriod)
 	defer cancel()
 	defer metrics.CapnpMetrics.ClientOperations.WithLabelValues(metrics.Registration, metrics.OperationUnregisterConnection).Inc()
@@ -88,7 +88,9 @@ func (r *registrationClient) GracefulShutdown(ctx context.Context, gracePeriod t
 	err := r.client.UnregisterConnection(ctx)
 	if err != nil {
 		metrics.CapnpMetrics.ClientFailures.WithLabelValues(metrics.Registration, metrics.OperationUnregisterConnection).Inc()
+		return err
 	}
+	return nil
 }
 
 func (r *registrationClient) Close() {

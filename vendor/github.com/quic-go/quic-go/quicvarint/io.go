@@ -31,7 +31,7 @@ func NewReader(r io.Reader) Reader {
 
 func (r *byteReader) ReadByte() (byte, error) {
 	var b [1]byte
-	n, err := r.Reader.Read(b[:])
+	n, err := r.Read(b[:])
 	if n == 1 && err == io.EOF {
 		err = nil
 	}
@@ -63,6 +63,6 @@ func NewWriter(w io.Writer) Writer {
 }
 
 func (w *byteWriter) WriteByte(c byte) error {
-	_, err := w.Writer.Write([]byte{c})
+	_, err := w.Write([]byte{c})
 	return err
 }

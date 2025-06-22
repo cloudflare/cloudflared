@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -14,66 +15,87 @@ import (
 
 const (
 	featureSelectorHostname = "cfd-features.argotunnel.com"
-	defaultRefreshFreq      = time.Hour * 6
 	lookupTimeout           = time.Second * 10
-)
-
-type PostQuantumMode uint8
-
-const (
-	// Prefer post quantum, but fallback if connection cannot be established
-	PostQuantumPrefer PostQuantumMode = iota
-	// If the user passes the --post-quantum flag, we override
-	// CurvePreferences to only support hybrid post-quantum key agreements.
-	PostQuantumStrict
+	defaultLookupFreq       = time.Hour
 )
 
 // If the TXT record adds other fields, the umarshal logic will ignore those keys
 // If the TXT record is missing a key, the field will unmarshal to the default Go value
-// pq was removed in TUN-7970
-type featuresRecord struct{}
 
-func NewFeatureSelector(ctx context.Context, accountTag string, staticFeatures StaticFeatures, logger *zerolog.Logger) (*FeatureSelector, error) {
-	return newFeatureSelector(ctx, accountTag, logger, newDNSResolver(), staticFeatures, defaultRefreshFreq)
+type featuresRecord struct {
+	DatagramV3Percentage uint32 `json:"dv3_1"`
+
+	// DatagramV3Percentage int32 `json:"dv3"` // Removed in TUN-9291
+	// PostQuantumPercentage int32 `json:"pq"` // Removed in TUN-7970
 }
 
-// FeatureSelector determines if this account will try new features. It preiodically queries a DNS TXT record
-// to see which features are turned on
-type FeatureSelector struct {
-	accountHash int32
+func NewFeatureSelector(ctx context.Context, accountTag string, cliFeatures []string, pq bool, logger *zerolog.Logger) (FeatureSelector, error) {
+	return newFeatureSelector(ctx, accountTag, logger, newDNSResolver(), cliFeatures, pq, defaultLookupFreq)
+}
+
+type FeatureSelector interface {
+	Snapshot() FeatureSnapshot
+}
+
+// FeatureSelector determines if this account will try new features; loaded once during startup.
+type featureSelector struct {
+	accountHash uint32
 	logger      *zerolog.Logger
 	resolver    resolver
 
-	staticFeatures StaticFeatures
+	staticFeatures staticFeatures
+	cliFeatures    []string
 
 	// lock protects concurrent access to dynamic features
-	lock     sync.RWMutex
-	features featuresRecord
+	lock           sync.RWMutex
+	remoteFeatures featuresRecord
 }
 
-// Features set by user provided flags
-type StaticFeatures struct {
-	PostQuantumMode *PostQuantumMode
-}
-
-func newFeatureSelector(ctx context.Context, accountTag string, logger *zerolog.Logger, resolver resolver, staticFeatures StaticFeatures, refreshFreq time.Duration) (*FeatureSelector, error) {
-	selector := &FeatureSelector{
+func newFeatureSelector(ctx context.Context, accountTag string, logger *zerolog.Logger, resolver resolver, cliFeatures []string, pq bool, refreshFreq time.Duration) (*featureSelector, error) {
+	// Combine default features and user-provided features
+	var pqMode *PostQuantumMode
+	if pq {
+		mode := PostQuantumStrict
+		pqMode = &mode
+		cliFeatures = append(cliFeatures, FeaturePostQuantum)
+	}
+	staticFeatures := staticFeatures{
+		PostQuantumMode: pqMode,
+	}
+	selector := &featureSelector{
 		accountHash:    switchThreshold(accountTag),
 		logger:         logger,
 		resolver:       resolver,
 		staticFeatures: staticFeatures,
+		cliFeatures:    dedupAndRemoveFeatures(cliFeatures),
 	}
 
+	// Load the remote features
 	if err := selector.refresh(ctx); err != nil {
 		logger.Err(err).Msg("Failed to fetch features, default to disable")
 	}
 
-	// Run refreshLoop next time we have a new feature to rollout
+	// Spin off reloading routine
+	go selector.refreshLoop(ctx, refreshFreq)
 
 	return selector, nil
 }
 
-func (fs *FeatureSelector) PostQuantumMode() PostQuantumMode {
+func (fs *featureSelector) Snapshot() FeatureSnapshot {
+	fs.lock.RLock()
+	defer fs.lock.RUnlock()
+	return FeatureSnapshot{
+		PostQuantum:     fs.postQuantumMode(),
+		DatagramVersion: fs.datagramVersion(),
+		FeaturesList:    fs.clientFeatures(),
+	}
+}
+
+func (fs *featureSelector) accountEnabled(percentage uint32) bool {
+	return percentage > fs.accountHash
+}
+
+func (fs *featureSelector) postQuantumMode() PostQuantumMode {
 	if fs.staticFeatures.PostQuantumMode != nil {
 		return *fs.staticFeatures.PostQuantumMode
 	}
@@ -81,22 +103,30 @@ func (fs *FeatureSelector) PostQuantumMode() PostQuantumMode {
 	return PostQuantumPrefer
 }
 
-func (fs *FeatureSelector) refreshLoop(ctx context.Context, refreshFreq time.Duration) {
-	ticker := time.NewTicker(refreshFreq)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			err := fs.refresh(ctx)
-			if err != nil {
-				fs.logger.Err(err).Msg("Failed to refresh feature selector")
-			}
-		}
+func (fs *featureSelector) datagramVersion() DatagramVersion {
+	// If user provides the feature via the cli, we take it as priority over remote feature evaluation
+	if slices.Contains(fs.cliFeatures, FeatureDatagramV3_1) {
+		return DatagramV3
 	}
+	// If the user specifies DatagramV2, we also take that over remote
+	if slices.Contains(fs.cliFeatures, FeatureDatagramV2) {
+		return DatagramV2
+	}
+
+	if fs.accountEnabled(fs.remoteFeatures.DatagramV3Percentage) {
+		return DatagramV3
+	}
+
+	return DatagramV2
 }
 
-func (fs *FeatureSelector) refresh(ctx context.Context) error {
+// clientFeatures will return the list of currently available features that cloudflared should provide to the edge.
+func (fs *featureSelector) clientFeatures() []string {
+	// Evaluate any remote features along with static feature list to construct the list of features
+	return dedupAndRemoveFeatures(slices.Concat(defaultFeatures, fs.cliFeatures, []string{string(fs.datagramVersion())}))
+}
+
+func (fs *featureSelector) refresh(ctx context.Context) error {
 	record, err := fs.resolver.lookupRecord(ctx)
 	if err != nil {
 		return err
@@ -110,9 +140,24 @@ func (fs *FeatureSelector) refresh(ctx context.Context) error {
 	fs.lock.Lock()
 	defer fs.lock.Unlock()
 
-	fs.features = features
+	fs.remoteFeatures = features
 
 	return nil
+}
+
+func (fs *featureSelector) refreshLoop(ctx context.Context, refreshFreq time.Duration) {
+	ticker := time.NewTicker(refreshFreq)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			err := fs.refresh(ctx)
+			if err != nil {
+				fs.logger.Err(err).Msg("Failed to refresh feature selector")
+			}
+		}
+	}
 }
 
 // resolver represents an object that can look up featuresRecord
@@ -146,8 +191,8 @@ func (dr *dnsResolver) lookupRecord(ctx context.Context) ([]byte, error) {
 	return []byte(records[0]), nil
 }
 
-func switchThreshold(accountTag string) int32 {
+func switchThreshold(accountTag string) uint32 {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(accountTag))
-	return int32(h.Sum32() % 100)
+	return h.Sum32() % 100
 }

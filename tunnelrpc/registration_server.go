@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 
-	"zombiezen.com/go/capnproto2/rpc"
-
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -28,8 +26,7 @@ func (s *RegistrationServer) Serve(ctx context.Context, stream io.ReadWriteClose
 	defer transport.Close()
 
 	main := pogs.RegistrationServer_ServerToClient(s.registrationServer)
-	rpcConn := rpc.NewConn(transport, rpc.MainInterface(main.Client))
-	defer rpcConn.Close()
+	rpcConn := NewServerConn(transport, main.Client)
 
 	select {
 	case <-rpcConn.Done():

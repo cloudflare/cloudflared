@@ -22,6 +22,7 @@ var (
 const (
 	defaultProxyAddress           = "127.0.0.1"
 	defaultKeepAliveConnections   = 100
+	defaultMaxActiveFlows         = 0 // unlimited
 	SSHServerFlag                 = "ssh-server"
 	Socks5Flag                    = "socks5"
 	ProxyConnectTimeoutFlag       = "proxy-connect-timeout"
@@ -46,16 +47,21 @@ const (
 
 type WarpRoutingConfig struct {
 	ConnectTimeout config.CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
+	MaxActiveFlows uint64                `yaml:"maxActiveFlows" json:"MaxActiveFlows,omitempty"`
 	TCPKeepAlive   config.CustomDuration `yaml:"tcpKeepAlive" json:"tcpKeepAlive,omitempty"`
 }
 
 func NewWarpRoutingConfig(raw *config.WarpRoutingConfig) WarpRoutingConfig {
 	cfg := WarpRoutingConfig{
 		ConnectTimeout: defaultWarpRoutingConnectTimeout,
+		MaxActiveFlows: defaultMaxActiveFlows,
 		TCPKeepAlive:   defaultTCPKeepAlive,
 	}
 	if raw.ConnectTimeout != nil {
 		cfg.ConnectTimeout = *raw.ConnectTimeout
+	}
+	if raw.MaxActiveFlows != nil {
+		cfg.MaxActiveFlows = *raw.MaxActiveFlows
 	}
 	if raw.TCPKeepAlive != nil {
 		cfg.TCPKeepAlive = *raw.TCPKeepAlive
@@ -67,6 +73,9 @@ func (c *WarpRoutingConfig) RawConfig() config.WarpRoutingConfig {
 	raw := config.WarpRoutingConfig{}
 	if c.ConnectTimeout.Duration != defaultWarpRoutingConnectTimeout.Duration {
 		raw.ConnectTimeout = &c.ConnectTimeout
+	}
+	if c.MaxActiveFlows != defaultMaxActiveFlows {
+		raw.MaxActiveFlows = &c.MaxActiveFlows
 	}
 	if c.TCPKeepAlive.Duration != defaultTCPKeepAlive.Duration {
 		raw.TCPKeepAlive = &c.TCPKeepAlive
@@ -172,6 +181,7 @@ func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 	}
 	if flag := ProxyPortFlag; c.IsSet(flag) {
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
+		// nolint: gosec
 		proxyPort = uint(c.Int(flag))
 	}
 	if flag := Http2OriginFlag; c.IsSet(flag) {
@@ -551,7 +561,7 @@ func convertToRawIPRules(ipRules []ipaccess.Rule) []config.IngressIPRule {
 }
 
 func defaultBoolToNil(b bool) *bool {
-	if b == false {
+	if !b {
 		return nil
 	}
 

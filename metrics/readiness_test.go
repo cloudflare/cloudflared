@@ -1,136 +1,106 @@
-package metrics
+package metrics_test
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/metrics"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
-func TestReadyServer_makeResponse(t *testing.T) {
-	type fields struct {
-		isConnected map[uint8]tunnelstate.ConnectionInfo
+func mockRequest(t *testing.T, readyServer *metrics.ReadyServer) (int, uint) {
+	t.Helper()
+
+	var readyreadyConnections struct {
+		Status           int       `json:"status"`
+		ReadyConnections uint      `json:"readyConnections"`
+		ConnectorID      uuid.UUID `json:"connectorId"`
 	}
-	tests := []struct {
-		name                 string
-		fields               fields
-		wantOK               bool
-		wantReadyConnections uint
-	}{
-		{
-			name: "One connection online => HTTP 200",
-			fields: fields{
-				isConnected: map[uint8]tunnelstate.ConnectionInfo{
-					0: {IsConnected: false},
-					1: {IsConnected: false},
-					2: {IsConnected: true},
-					3: {IsConnected: false},
-				},
-			},
-			wantOK:               true,
-			wantReadyConnections: 1,
-		},
-		{
-			name: "No connections online => no HTTP 200",
-			fields: fields{
-				isConnected: map[uint8]tunnelstate.ConnectionInfo{
-					0: {IsConnected: false},
-					1: {IsConnected: false},
-					2: {IsConnected: false},
-					3: {IsConnected: false},
-				},
-			},
-			wantReadyConnections: 0,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rs := &ReadyServer{
-				tracker: tunnelstate.MockedConnTracker(tt.fields.isConnected),
-			}
-			gotStatusCode, gotReadyConnections := rs.makeResponse()
-			if tt.wantOK && gotStatusCode != http.StatusOK {
-				t.Errorf("ReadyServer.makeResponse() gotStatusCode = %v, want ok = %v", gotStatusCode, tt.wantOK)
-			}
-			if gotReadyConnections != tt.wantReadyConnections {
-				t.Errorf("ReadyServer.makeResponse() gotReadyConnections = %v, want %v", gotReadyConnections, tt.wantReadyConnections)
-			}
-		})
-	}
+	rec := httptest.NewRecorder()
+	readyServer.ServeHTTP(rec, nil)
+
+	decoder := json.NewDecoder(rec.Body)
+	err := decoder.Decode(&readyreadyConnections)
+	require.NoError(t, err)
+	return rec.Code, readyreadyConnections.ReadyConnections
 }
 
 func TestReadinessEventHandling(t *testing.T) {
 	nopLogger := zerolog.Nop()
-	rs := NewReadyServer(&nopLogger, uuid.Nil)
+	tracker := tunnelstate.NewConnTracker(&nopLogger)
+	rs := metrics.NewReadyServer(uuid.Nil, tracker)
 
 	// start not ok
-	code, ready := rs.makeResponse()
+	code, readyConnections := mockRequest(t, rs)
 	assert.NotEqualValues(t, http.StatusOK, code)
-	assert.Zero(t, ready)
+	assert.Zero(t, readyConnections)
 
 	// one connected => ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Connected,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.EqualValues(t, http.StatusOK, code)
-	assert.EqualValues(t, 1, ready)
+	assert.EqualValues(t, 1, readyConnections)
 
 	// another connected => still ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     2,
 		EventType: connection.Connected,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.EqualValues(t, http.StatusOK, code)
-	assert.EqualValues(t, 2, ready)
+	assert.EqualValues(t, 2, readyConnections)
 
 	// one reconnecting => still ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     2,
 		EventType: connection.Reconnecting,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.EqualValues(t, http.StatusOK, code)
-	assert.EqualValues(t, 1, ready)
+	assert.EqualValues(t, 1, readyConnections)
 
 	// Regression test for TUN-3777
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.RegisteringTunnel,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.NotEqualValues(t, http.StatusOK, code)
-	assert.Zero(t, ready)
+	assert.Zero(t, readyConnections)
 
 	// other connected then unregistered  => not ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Connected,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.EqualValues(t, http.StatusOK, code)
-	assert.EqualValues(t, 1, ready)
-	rs.OnTunnelEvent(connection.Event{
+	assert.EqualValues(t, 1, readyConnections)
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Unregistering,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.NotEqualValues(t, http.StatusOK, code)
-	assert.Zero(t, ready)
+	assert.Zero(t, readyConnections)
 
 	// other disconnected => not ok
-	rs.OnTunnelEvent(connection.Event{
+	tracker.OnTunnelEvent(connection.Event{
 		Index:     1,
 		EventType: connection.Disconnected,
 	})
-	code, ready = rs.makeResponse()
+	code, readyConnections = mockRequest(t, rs)
 	assert.NotEqualValues(t, http.StatusOK, code)
-	assert.Zero(t, ready)
+	assert.Zero(t, readyConnections)
 }

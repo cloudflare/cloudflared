@@ -3,7 +3,6 @@ package updater
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -11,11 +10,15 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"text/template"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 )
 
 const (
@@ -27,9 +30,9 @@ const (
 	// start the service
 	// exit with code 0 if we've reached this point indicating success.
 	windowsUpdateCommandTemplate = `sc stop cloudflared >nul 2>&1
+del "{{.OldPath}}"
 rename "{{.TargetPath}}" {{.OldName}}
 rename "{{.NewPath}}" {{.BinaryName}}
-del "{{.OldPath}}"
 sc start cloudflared >nul 2>&1
 exit /b 0`
 	batchFileName = "cfd_update.bat"
@@ -86,8 +89,25 @@ func (v *WorkersVersion) Apply() error {
 		return err
 	}
 
-	// check that the file is what is expected
-	if err := isValidChecksum(v.checksum, newFilePath); err != nil {
+	downloadSum, err := cliutil.FileChecksum(newFilePath)
+	if err != nil {
+		return err
+	}
+
+	// Check that the file downloaded matches what is expected.
+	if v.checksum != downloadSum {
+		return errors.New("checksum validation failed")
+	}
+
+	// Check if the currently running version has the same checksum
+	if downloadSum == buildInfo.Checksum {
+		// Currently running binary matches the downloaded binary so we have no reason to update. This is
+		// typically unexpected, as such we emit a sentry event.
+		localHub := sentry.CurrentHub().Clone()
+		err := errors.New("checksum validation matches currently running process")
+		localHub.CaptureException(err)
+		// Make sure to cleanup the new downloaded file since we aren't upgrading versions.
+		os.Remove(newFilePath)
 		return err
 	}
 
@@ -114,7 +134,7 @@ func (v *WorkersVersion) Apply() error {
 
 	if err := os.Rename(newFilePath, v.targetPath); err != nil {
 		//attempt rollback
-		os.Rename(oldFilePath, v.targetPath)
+		_ = os.Rename(oldFilePath, v.targetPath)
 		return err
 	}
 	os.Remove(oldFilePath)
@@ -161,7 +181,7 @@ func download(url, filepath string, isCompressed bool) error {
 		tr := tar.NewReader(gr)
 
 		// advance the reader pass the header, which will be the single binary file
-		tr.Next()
+		_, _ = tr.Next()
 
 		r = tr
 	}
@@ -178,7 +198,7 @@ func download(url, filepath string, isCompressed bool) error {
 
 // isCompressedFile is a really simple file extension check to see if this is a macos tar and gzipped
 func isCompressedFile(urlstring string) bool {
-	if strings.HasSuffix(urlstring, ".tgz") {
+	if path.Ext(urlstring) == ".tgz" {
 		return true
 	}
 
@@ -186,28 +206,7 @@ func isCompressedFile(urlstring string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.HasSuffix(u.Path, ".tgz")
-}
-
-// checks if the checksum in the json response matches the checksum of the file download
-func isValidChecksum(checksum, filePath string) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return err
-	}
-
-	hash := fmt.Sprintf("%x", h.Sum(nil))
-
-	if checksum != hash {
-		return errors.New("checksum validation failed")
-	}
-	return nil
+	return path.Ext(u.Path) == ".tgz"
 }
 
 // writeBatchFile writes a batch file out to disk
@@ -250,7 +249,6 @@ func runWindowsBatch(batchFile string) error {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			return fmt.Errorf("Error during update : %s;", string(exitError.Stderr))
 		}
-
 	}
 	return err
 }

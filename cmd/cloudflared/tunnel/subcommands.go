@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,28 +16,40 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	homedir "github.com/mitchellh/go-homedir"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"golang.org/x/net/idna"
-	yaml "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cloudflare/cloudflared/cfapi"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/diagnostic"
+	"github.com/cloudflare/cloudflared/fips"
+	"github.com/cloudflare/cloudflared/metrics"
 )
 
 const (
-	allSortByOptions     = "name, id, createdAt, deletedAt, numConnections"
-	connsSortByOptions   = "id, startedAt, numConnections, version"
-	CredFileFlagAlias    = "cred-file"
-	CredFileFlag         = "credentials-file"
-	CredContentsFlag     = "credentials-contents"
-	TunnelTokenFlag      = "token"
-	overwriteDNSFlagName = "overwrite-dns"
+	allSortByOptions        = "name, id, createdAt, deletedAt, numConnections"
+	connsSortByOptions      = "id, startedAt, numConnections, version"
+	CredFileFlagAlias       = "cred-file"
+	CredFileFlag            = "credentials-file"
+	CredContentsFlag        = "credentials-contents"
+	TunnelTokenFlag         = "token"
+	TunnelTokenFileFlag     = "token-file"
+	overwriteDNSFlagName    = "overwrite-dns"
+	noDiagLogsFlagName      = "no-diag-logs"
+	noDiagMetricsFlagName   = "no-diag-metrics"
+	noDiagSystemFlagName    = "no-diag-system"
+	noDiagRuntimeFlagName   = "no-diag-runtime"
+	noDiagNetworkFlagName   = "no-diag-network"
+	diagContainerIDFlagName = "diag-container-id"
+	diagPodFlagName         = "diag-pod-id"
 
 	LogFieldTunnelID = "tunnelID"
 )
@@ -47,7 +61,7 @@ var (
 		Usage:   "Include deleted tunnels in the list",
 	}
 	listNameFlag = &cli.StringFlag{
-		Name:    "name",
+		Name:    flags.Name,
 		Aliases: []string{"n"},
 		Usage:   "List tunnels with the given `NAME`",
 	}
@@ -95,7 +109,7 @@ var (
 		EnvVars: []string{"TUNNEL_LIST_INVERT_SORT"},
 	}
 	featuresFlag = altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-		Name:    "features",
+		Name:    flags.Features,
 		Aliases: []string{"F"},
 		Usage:   "Opt into various features that are still being developed or tested.",
 	})
@@ -113,18 +127,23 @@ var (
 	})
 	tunnelTokenFlag = altsrc.NewStringFlag(&cli.StringFlag{
 		Name:    TunnelTokenFlag,
-		Usage:   "The Tunnel token. When provided along with credentials, this will take precedence.",
+		Usage:   "The Tunnel token. When provided along with credentials, this will take precedence. Also takes precedence over token-file",
 		EnvVars: []string{"TUNNEL_TOKEN"},
 	})
+	tunnelTokenFileFlag = altsrc.NewStringFlag(&cli.StringFlag{
+		Name:    TunnelTokenFileFlag,
+		Usage:   "Filepath at which to read the tunnel token. When provided along with credentials, this will take precedence.",
+		EnvVars: []string{"TUNNEL_TOKEN_FILE"},
+	})
 	forceDeleteFlag = &cli.BoolFlag{
-		Name:    "force",
+		Name:    flags.Force,
 		Aliases: []string{"f"},
 		Usage: "Deletes a tunnel even if tunnel is connected and it has dependencies associated to it. (eg. IP routes)." +
 			" It is not possible to delete tunnels that have connections or non-deleted dependencies, without this flag.",
 		EnvVars: []string{"TUNNEL_RUN_FORCE_OVERWRITE"},
 	}
 	selectProtocolFlag = altsrc.NewStringFlag(&cli.StringFlag{
-		Name:    "protocol",
+		Name:    flags.Protocol,
 		Value:   connection.AutoSelectFlag,
 		Aliases: []string{"p"},
 		Usage:   fmt.Sprintf("Protocol implementation to connect with Cloudflare's edge network. %s", connection.AvailableProtocolFlagMessage),
@@ -132,11 +151,11 @@ var (
 		Hidden:  true,
 	})
 	postQuantumFlag = altsrc.NewBoolFlag(&cli.BoolFlag{
-		Name:    "post-quantum",
+		Name:    flags.PostQuantum,
 		Usage:   "When given creates an experimental post-quantum secure tunnel",
 		Aliases: []string{"pq"},
 		EnvVars: []string{"TUNNEL_POST_QUANTUM"},
-		Hidden:  FipsEnabled,
+		Hidden:  fips.IsFipsEnabled(),
 	})
 	sortInfoByFlag = &cli.StringFlag{
 		Name:    "sort-by",
@@ -168,14 +187,59 @@ var (
 		EnvVars: []string{"TUNNEL_CREATE_SECRET"},
 	}
 	icmpv4SrcFlag = &cli.StringFlag{
-		Name:    "icmpv4-src",
+		Name:    flags.ICMPV4Src,
 		Usage:   "Source address to send/receive ICMPv4 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to 0.0.0.0.",
 		EnvVars: []string{"TUNNEL_ICMPV4_SRC"},
 	}
 	icmpv6SrcFlag = &cli.StringFlag{
-		Name:    "icmpv6-src",
+		Name:    flags.ICMPV6Src,
 		Usage:   "Source address and the interface name to send/receive ICMPv6 messages. If not provided cloudflared will dial a local address to determine the source IP or fallback to ::.",
 		EnvVars: []string{"TUNNEL_ICMPV6_SRC"},
+	}
+	metricsFlag = &cli.StringFlag{
+		Name:  flags.Metrics,
+		Usage: "The metrics server address i.e.: 127.0.0.1:12345. If your instance is running in a Docker/Kubernetes environment you need to setup port forwarding for your application.",
+		Value: "",
+	}
+	diagContainerFlag = &cli.StringFlag{
+		Name:  diagContainerIDFlagName,
+		Usage: "Container ID or Name to collect logs from",
+		Value: "",
+	}
+	diagPodFlag = &cli.StringFlag{
+		Name:  diagPodFlagName,
+		Usage: "Kubernetes POD to collect logs from",
+		Value: "",
+	}
+	noDiagLogsFlag = &cli.BoolFlag{
+		Name:  noDiagLogsFlagName,
+		Usage: "Log collection will not be performed",
+		Value: false,
+	}
+	noDiagMetricsFlag = &cli.BoolFlag{
+		Name:  noDiagMetricsFlagName,
+		Usage: "Metric collection will not be performed",
+		Value: false,
+	}
+	noDiagSystemFlag = &cli.BoolFlag{
+		Name:  noDiagSystemFlagName,
+		Usage: "System information collection will not be performed",
+		Value: false,
+	}
+	noDiagRuntimeFlag = &cli.BoolFlag{
+		Name:  noDiagRuntimeFlagName,
+		Usage: "Runtime information collection will not be performed",
+		Value: false,
+	}
+	noDiagNetworkFlag = &cli.BoolFlag{
+		Name:  noDiagNetworkFlagName,
+		Usage: "Network diagnostics won't be performed",
+		Value: false,
+	}
+	maxActiveFlowsFlag = &cli.Uint64Flag{
+		Name:    flags.MaxActiveFlows,
+		Usage:   "Overrides the remote configuration for max active private network flows (TCP/UDP) that this cloudflared instance supports",
+		EnvVars: []string{"TUNNEL_MAX_ACTIVE_FLOWS"},
 	}
 )
 
@@ -279,7 +343,7 @@ func listCommand(c *cli.Context) error {
 	if !c.Bool("show-deleted") {
 		filter.NoDeleted()
 	}
-	if name := c.String("name"); name != "" {
+	if name := c.String(flags.Name); name != "" {
 		filter.ByName(name)
 	}
 	if namePrefix := c.String("name-prefix"); namePrefix != "" {
@@ -373,7 +437,6 @@ func formatAndPrintTunnelList(tunnels []*cfapi.Tunnel, showRecentlyDisconnected 
 }
 
 func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected bool) string {
-
 	// Count connections per colo
 	numConnsPerColo := make(map[string]uint, len(connections))
 	for _, connection := range connections {
@@ -390,11 +453,49 @@ func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected boo
 	sort.Strings(sortedColos)
 
 	// Map each colo to its frequency, combine into output string.
-	var output []string
+	output := make([]string, 0, len(sortedColos))
 	for _, coloName := range sortedColos {
 		output = append(output, fmt.Sprintf("%dx%s", numConnsPerColo[coloName], coloName))
 	}
 	return strings.Join(output, ", ")
+}
+
+func buildReadyCommand() *cli.Command {
+	return &cli.Command{
+		Name:               "ready",
+		Action:             cliutil.ConfiguredAction(readyCommand),
+		Usage:              "Call /ready endpoint and return proper exit code",
+		UsageText:          "cloudflared tunnel [tunnel command options] ready [subcommand options]",
+		Description:        "cloudflared tunnel ready will return proper exit code based on the /ready endpoint",
+		Flags:              []cli.Flag{},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func readyCommand(c *cli.Context) error {
+	metricsOpts := c.String(flags.Metrics)
+	if !c.IsSet(flags.Metrics) {
+		return errors.New("--metrics has to be provided")
+	}
+
+	requestURL := fmt.Sprintf("http://%s/ready", metricsOpts)
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("http://%s/ready endpoint returned status code %d\n%s", metricsOpts, res.StatusCode, body)
+	}
+	return nil
 }
 
 func buildInfoCommand() *cli.Command {
@@ -613,8 +714,10 @@ func buildRunCommand() *cli.Command {
 		selectProtocolFlag,
 		featuresFlag,
 		tunnelTokenFlag,
+		tunnelTokenFileFlag,
 		icmpv4SrcFlag,
 		icmpv6SrcFlag,
+		maxActiveFlowsFlag,
 	}
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{
@@ -652,12 +755,22 @@ func runCommand(c *cli.Context) error {
 			"your origin will not be reachable. You should remove the `hostname` property to avoid this warning.")
 	}
 
+	tokenStr := c.String(TunnelTokenFlag)
+	// Check if tokenStr is blank before checking for tokenFile
+	if tokenStr == "" {
+		if tokenFile := c.String(TunnelTokenFileFlag); tokenFile != "" {
+			data, err := os.ReadFile(tokenFile)
+			if err != nil {
+				return cliutil.UsageError("Failed to read token file: %s", err.Error())
+			}
+			tokenStr = strings.TrimSpace(string(data))
+		}
+	}
 	// Check if token is provided and if not use default tunnelID flag method
-	if tokenStr := c.String(TunnelTokenFlag); tokenStr != "" {
+	if tokenStr != "" {
 		if token, err := ParseToken(tokenStr); err == nil {
 			return sc.runWithCredentials(token.Credentials())
 		}
-
 		return cliutil.UsageError("Provided Tunnel token is not valid.")
 	} else {
 		tunnelRef := c.Args().First()
@@ -862,8 +975,10 @@ func lbRouteFromArg(c *cli.Context) (cfapi.HostnameRoute, error) {
 	return cfapi.NewLBRoute(lbName, lbPool), nil
 }
 
-var nameRegex = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
-var hostNameRegex = regexp.MustCompile("^[*_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+var (
+	nameRegex     = regexp.MustCompile("^[_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+	hostNameRegex = regexp.MustCompile("^[*_a-zA-Z0-9][-_.a-zA-Z0-9]*$")
+)
 
 func validateName(s string, allowWildcardSubdomain bool) bool {
 	if allowWildcardSubdomain {
@@ -950,4 +1065,79 @@ SUBCOMMAND OPTIONS:
 	{{end}}
 `
 	return fmt.Sprintf(template, parentFlagsHelp)
+}
+
+func buildDiagCommand() *cli.Command {
+	return &cli.Command{
+		Name:        "diag",
+		Action:      cliutil.ConfiguredAction(diagCommand),
+		Usage:       "Creates a diagnostic report from a local cloudflared instance",
+		UsageText:   "cloudflared tunnel [tunnel command options] diag [subcommand options]",
+		Description: "cloudflared tunnel diag will create a diagnostic report of a local cloudflared instance. The diagnostic procedure collects: logs, metrics, system information, traceroute to Cloudflare Edge, and runtime information. Since there may be multiple instances of cloudflared running the --metrics option may be provided to target a specific instance.",
+		Flags: []cli.Flag{
+			metricsFlag,
+			diagContainerFlag,
+			diagPodFlag,
+			noDiagLogsFlag,
+			noDiagMetricsFlag,
+			noDiagSystemFlag,
+			noDiagRuntimeFlag,
+			noDiagNetworkFlag,
+		},
+		CustomHelpTemplate: commandHelpTemplate(),
+	}
+}
+
+func diagCommand(ctx *cli.Context) error {
+	sctx, err := newSubcommandContext(ctx)
+	if err != nil {
+		return err
+	}
+	log := sctx.log
+	options := diagnostic.Options{
+		KnownAddresses: metrics.GetMetricsKnownAddresses(metrics.Runtime),
+		Address:        sctx.c.String(flags.Metrics),
+		ContainerID:    sctx.c.String(diagContainerIDFlagName),
+		PodID:          sctx.c.String(diagPodFlagName),
+		Toggles: diagnostic.Toggles{
+			NoDiagLogs:    sctx.c.Bool(noDiagLogsFlagName),
+			NoDiagMetrics: sctx.c.Bool(noDiagMetricsFlagName),
+			NoDiagSystem:  sctx.c.Bool(noDiagSystemFlagName),
+			NoDiagRuntime: sctx.c.Bool(noDiagRuntimeFlagName),
+			NoDiagNetwork: sctx.c.Bool(noDiagNetworkFlagName),
+		},
+	}
+
+	if options.Address == "" {
+		log.Info().Msg("If your instance is running in a Docker/Kubernetes environment you need to setup port forwarding for your application.")
+	}
+
+	states, err := diagnostic.RunDiagnostic(log, options)
+
+	if errors.Is(err, diagnostic.ErrMetricsServerNotFound) {
+		log.Warn().Msg("No instances found")
+		return nil
+	}
+	if errors.Is(err, diagnostic.ErrMultipleMetricsServerFound) {
+		if states != nil {
+			log.Info().Msgf("Found multiple instances running:")
+			for _, state := range states {
+				log.Info().Msgf("Instance: tunnel-id=%s connector-id=%s metrics-address=%s", state.TunnelID, state.ConnectorID, state.URL.String())
+			}
+			log.Info().Msgf("To select one instance use the option --metrics")
+		}
+		return nil
+	}
+
+	if errors.Is(err, diagnostic.ErrLogConfigurationIsInvalid) {
+		log.Info().Msg("Couldn't extract logs from the instance. If the instance is running in a containerized environment use the option --diag-container-id or --diag-pod-id. If there is no logging configuration use --no-diag-logs.")
+	}
+
+	if err != nil {
+		log.Warn().Msg("Diagnostic completed with one or more errors")
+	} else {
+		log.Info().Msg("Diagnostic completed")
+	}
+
+	return nil
 }

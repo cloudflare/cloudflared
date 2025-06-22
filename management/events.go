@@ -74,7 +74,7 @@ type EventLog struct {
 type LogEventType int8
 
 const (
-	// Cloudflared events are signficant to cloudflared operations like connection state changes.
+	// Cloudflared events are significant to cloudflared operations like connection state changes.
 	// Cloudflared is also the default event type for any events that haven't been separated into a proper event type.
 	Cloudflared LogEventType = iota
 	HTTP
@@ -129,7 +129,7 @@ func (e *LogEventType) UnmarshalJSON(data []byte) error {
 
 // LogLevel corresponds to the zerolog logging levels
 // "panic", "fatal", and "trace" are exempt from this list as they are rarely used and, at least
-// the the first two are limited to failure conditions that lead to cloudflared shutting down.
+// the first two are limited to failure conditions that lead to cloudflared shutting down.
 type LogLevel int8
 
 const (

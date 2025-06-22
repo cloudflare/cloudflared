@@ -3,7 +3,7 @@ package credentials
 import (
 	"io/fs"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,8 +13,8 @@ func TestCredentialsRead(t *testing.T) {
 	file, err := os.ReadFile("test-cloudflare-tunnel-cert-json.pem")
 	require.NoError(t, err)
 	dir := t.TempDir()
-	certPath := path.Join(dir, originCertFile)
-	os.WriteFile(certPath, file, fs.ModePerm)
+	certPath := filepath.Join(dir, originCertFile)
+	_ = os.WriteFile(certPath, file, fs.ModePerm)
 	user, err := Read(certPath, &nopLog)
 	require.NoError(t, err)
 	require.Equal(t, certPath, user.CertPath())

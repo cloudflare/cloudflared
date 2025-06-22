@@ -1,5 +1,0 @@
-Host *
-    AddressFamily inet
-
-Host {{hostname}}
-  ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h

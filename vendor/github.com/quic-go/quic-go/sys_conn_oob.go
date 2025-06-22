@@ -59,7 +59,7 @@ func inspectWriteBuffer(c syscall.RawConn) (int, error) {
 	return size, serr
 }
 
-func isECNDisabled() bool {
+func isECNDisabledUsingEnv() bool {
 	disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_ECN"))
 	return err == nil && disabled
 }
@@ -83,7 +83,7 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	needsPacketInfo := false
+	var needsPacketInfo bool
 	if udpAddr, ok := c.LocalAddr().(*net.UDPAddr); ok && udpAddr.IP.IsUnspecified() {
 		needsPacketInfo = true
 	}
@@ -147,8 +147,8 @@ func newConn(c OOBCapablePacketConn, supportsDF bool) (*oobConn, error) {
 		readPos:              batchSize,
 		cap: connCapabilities{
 			DF:  supportsDF,
-			GSO: isGSOSupported(rawConn),
-			ECN: !isECNDisabled(),
+			GSO: isGSOEnabled(rawConn),
+			ECN: isECNEnabled(),
 		},
 	}
 	for i := 0; i < batchSize; i++ {
@@ -247,7 +247,7 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 	}
 	if ecn != protocol.ECNUnsupported {
 		if !c.capabilities().ECN {
-			panic("tried to send a ECN-marked packet although ECN is disabled")
+			panic("tried to send an ECN-marked packet although ECN is disabled")
 		}
 		if remoteUDPAddr, ok := addr.(*net.UDPAddr); ok {
 			if remoteUDPAddr.IP.To4() != nil {
@@ -257,7 +257,7 @@ func (c *oobConn) WritePacket(b []byte, addr net.Addr, packetInfoOOB []byte, gso
 			}
 		}
 	}
-	n, _, err := c.OOBCapablePacketConn.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
+	n, _, err := c.WriteMsgUDP(b, oob, addr.(*net.UDPAddr))
 	return n, err
 }
 

@@ -16,8 +16,10 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/net/http2"
 
+	"github.com/cloudflare/cloudflared/client"
+	cfdflow "github.com/cloudflare/cloudflared/flow"
+
 	"github.com/cloudflare/cloudflared/tracing"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 // note: these constants are exported so we can reuse them in the edge-side code
@@ -37,7 +39,7 @@ type HTTP2Connection struct {
 	conn         net.Conn
 	server       *http2.Server
 	orchestrator Orchestrator
-	connOptions  *tunnelpogs.ConnectionOptions
+	connOptions  *client.ConnectionOptionsSnapshot
 	observer     *Observer
 	connIndex    uint8
 
@@ -52,7 +54,7 @@ type HTTP2Connection struct {
 func NewHTTP2Connection(
 	conn net.Conn,
 	orchestrator Orchestrator,
-	connOptions *tunnelpogs.ConnectionOptions,
+	connOptions *client.ConnectionOptionsSnapshot,
 	observer *Observer,
 	connIndex uint8,
 	controlStreamHandler ControlStreamHandler,
@@ -116,7 +118,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var requestErr error
 	switch connType {
 	case TypeControlStream:
-		requestErr = c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions, c.orchestrator)
+		requestErr = c.controlStreamHandler.ServeControlStream(r.Context(), respWriter, c.connOptions.ConnectionOptions(), c.orchestrator)
 		if requestErr != nil {
 			c.controlStreamErr = requestErr
 		}
@@ -156,7 +158,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.log.Error().Err(requestErr).Msg("failed to serve incoming request")
 
 		// WriteErrorResponse will return false if status was already written. we need to abort handler.
-		if !respWriter.WriteErrorResponse() {
+		if !respWriter.WriteErrorResponse(requestErr) {
 			c.log.Debug().Msg("Handler aborted due to failure to write error response after status already sent")
 			panic(http.ErrAbortHandler)
 		}
@@ -209,8 +211,9 @@ func NewHTTP2RespWriter(r *http.Request, w http.ResponseWriter, connType Type, l
 			w:   w,
 			log: log,
 		}
-		respWriter.WriteErrorResponse()
-		return nil, fmt.Errorf("%T doesn't implement http.Flusher", w)
+		err := fmt.Errorf("%T doesn't implement http.Flusher", w)
+		respWriter.WriteErrorResponse(err)
+		return nil, err
 	}
 
 	return &http2RespWriter{
@@ -295,7 +298,7 @@ func (rp *http2RespWriter) WriteHeader(status int) {
 		rp.log.Warn().Msg("WriteHeader after hijack")
 		return
 	}
-	rp.WriteRespHeaders(status, rp.respHeaders)
+	_ = rp.WriteRespHeaders(status, rp.respHeaders)
 }
 
 func (rp *http2RespWriter) hijacked() bool {
@@ -328,12 +331,16 @@ func (rp *http2RespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return conn, readWriter, nil
 }
 
-func (rp *http2RespWriter) WriteErrorResponse() bool {
+func (rp *http2RespWriter) WriteErrorResponse(err error) bool {
 	if rp.statusWritten {
 		return false
 	}
 
-	rp.setResponseMetaHeader(responseMetaHeaderCfd)
+	if errors.Is(err, cfdflow.ErrTooManyActiveFlows) {
+		rp.setResponseMetaHeader(responseMetaHeaderCfdFlowRateLimited)
+	} else {
+		rp.setResponseMetaHeader(responseMetaHeaderCfd)
+	}
 	rp.w.WriteHeader(http.StatusBadGateway)
 	rp.statusWritten = true
 
@@ -385,8 +392,7 @@ func determineHTTP2Type(r *http.Request) Type {
 func handleMissingRequestParts(connType Type, r *http.Request) {
 	if connType == TypeHTTP {
 		// http library has no guarantees that we receive a filled URL. If not, then we fill it, as we reuse the request
-		// for proxying. We use the same values as we used to in h2mux. For proxying they should not matter since we
-		// control the dialer on every egress proxied.
+		// for proxying. For proxying they should not matter since we control the dialer on every egress proxied.
 		if len(r.URL.Scheme) == 0 {
 			r.URL.Scheme = "http"
 		}

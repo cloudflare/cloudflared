@@ -9,7 +9,13 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli/v2"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 )
+
+func init() {
+	Init(cliutil.GetBuildInfo("TEST", "TEST"))
+}
 
 func TestDisabledAutoUpdater(t *testing.T) {
 	listeners := &gracenet.Net{}
