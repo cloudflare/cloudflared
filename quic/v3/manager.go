@@ -2,12 +2,11 @@ package v3
 
 import (
 	"errors"
-	"net"
-	"net/netip"
 	"sync"
 
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
 
 	cfdflow "github.com/cloudflare/cloudflared/flow"
@@ -38,18 +37,16 @@ type SessionManager interface {
 	UnregisterSession(requestID RequestID)
 }
 
-type DialUDP func(dest netip.AddrPort) (*net.UDPConn, error)
-
 type sessionManager struct {
 	sessions     map[RequestID]Session
 	mutex        sync.RWMutex
-	originDialer DialUDP
+	originDialer ingress.UDPOriginProxy
 	limiter      cfdflow.Limiter
 	metrics      Metrics
 	log          *zerolog.Logger
 }
 
-func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer DialUDP, limiter cfdflow.Limiter) SessionManager {
+func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer ingress.UDPOriginProxy, limiter cfdflow.Limiter) SessionManager {
 	return &sessionManager{
 		sessions:     make(map[RequestID]Session),
 		originDialer: originDialer,
@@ -76,7 +73,7 @@ func (s *sessionManager) RegisterSession(request *UDPSessionRegistrationDatagram
 	}
 
 	// Attempt to bind the UDP socket for the new session
-	origin, err := s.originDialer(request.Dest)
+	origin, err := s.originDialer.DialUDP(request.Dest)
 	if err != nil {
 		return nil, err
 	}

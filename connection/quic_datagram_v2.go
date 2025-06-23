@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
@@ -32,6 +34,10 @@ const (
 	demuxChanCapacity = 16
 )
 
+var (
+	errInvalidDestinationIP = errors.New("unable to parse destination IP")
+)
+
 // DatagramSessionHandler is a service that can serve datagrams for a connection and handle sessions from incoming
 // connection streams.
 type DatagramSessionHandler interface {
@@ -51,7 +57,10 @@ type datagramV2Connection struct {
 
 	// datagramMuxer mux/demux datagrams from quic connection
 	datagramMuxer *cfdquic.DatagramMuxerV2
-	packetRouter  *ingress.PacketRouter
+	// ingressUDPProxy acts as the origin dialer for UDP requests
+	ingressUDPProxy ingress.UDPOriginProxy
+	// packetRouter acts as the origin router for ICMP requests
+	packetRouter *ingress.PacketRouter
 
 	rpcTimeout         time.Duration
 	streamWriteTimeout time.Duration
@@ -61,6 +70,7 @@ type datagramV2Connection struct {
 
 func NewDatagramV2Connection(ctx context.Context,
 	conn quic.Connection,
+	ingressUDPProxy ingress.UDPOriginProxy,
 	icmpRouter ingress.ICMPRouter,
 	index uint8,
 	rpcTimeout time.Duration,
@@ -79,6 +89,7 @@ func NewDatagramV2Connection(ctx context.Context,
 		sessionManager:     sessionManager,
 		flowLimiter:        flowLimiter,
 		datagramMuxer:      datagramMuxer,
+		ingressUDPProxy:    ingressUDPProxy,
 		packetRouter:       packetRouter,
 		rpcTimeout:         rpcTimeout,
 		streamWriteTimeout: streamWriteTimeout,
@@ -128,12 +139,29 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
+	// We need to force the net.IP to IPv4 (if it's an IPv4 address) otherwise the net.IP conversion from capnp
+	// will be a IPv4-mapped-IPv6 address.
+	// In the case that the address is IPv6 we leave it untouched and parse it as normal.
+	ip := dstIP.To4()
+	if ip == nil {
+		ip = dstIP
+	}
+	// Parse the dstIP and dstPort into a netip.AddrPort
+	// This should never fail because the IP was already parsed as a valid net.IP
+	destAddr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		log.Err(errInvalidDestinationIP).Msgf("Failed to parse destination proxy IP: %s", ip)
+		tracing.EndWithErrorStatus(registerSpan, errInvalidDestinationIP)
+		q.flowLimiter.Release()
+		return nil, errInvalidDestinationIP
+	}
+	dstAddrPort := netip.AddrPortFrom(destAddr, dstPort)
 
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
-	originProxy, err := ingress.DialUDP(dstIP, dstPort)
+	originProxy, err := q.ingressUDPProxy.DialUDP(dstAddrPort)
 	if err != nil {
-		log.Err(err).Msgf("Failed to create udp proxy to %s:%d", dstIP, dstPort)
+		log.Err(err).Msgf("Failed to create udp proxy to %s", dstAddrPort)
 		tracing.EndWithErrorStatus(registerSpan, err)
 		q.flowLimiter.Release()
 		return nil, err

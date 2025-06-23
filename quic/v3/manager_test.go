@@ -20,7 +20,7 @@ import (
 
 func TestRegisterSession(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0))
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DefaultUDPDialer, cfdflow.NewLimiter(0))
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,
@@ -76,7 +76,7 @@ func TestRegisterSession(t *testing.T) {
 
 func TestGetSession_Empty(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0))
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DefaultUDPDialer, cfdflow.NewLimiter(0))
 
 	_, err := manager.GetSession(testRequestID)
 	if !errors.Is(err, v3.ErrSessionNotFound) {
@@ -93,7 +93,7 @@ func TestRegisterSessionRateLimit(t *testing.T) {
 	flowLimiterMock.EXPECT().Acquire("udp").Return(cfdflow.ErrTooManyActiveFlows)
 	flowLimiterMock.EXPECT().Release().Times(0)
 
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, flowLimiterMock)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DefaultUDPDialer, flowLimiterMock)
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,

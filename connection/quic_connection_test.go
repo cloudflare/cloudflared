@@ -830,6 +830,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		sessionManager,
 		cfdflow.NewLimiter(0),
 		datagramMuxer,
+		ingress.DefaultUDPDialer,
 		packetRouter,
 		15 * time.Second,
 		0 * time.Second,
