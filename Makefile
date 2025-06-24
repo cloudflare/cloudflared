@@ -76,6 +76,8 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
     TARGET_ARCH ?= arm
 else ifeq ($(LOCAL_ARCH),s390x)
     TARGET_ARCH ?= s390x
+else ifeq ($(LOCAL_ARCH),loongarch64)
+    TARGET_ARCH ?= loong64 
 else
     $(error This system's architecture $(LOCAL_ARCH) isn't supported)
 endif
