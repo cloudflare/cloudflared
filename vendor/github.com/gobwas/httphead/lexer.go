@@ -63,7 +63,7 @@ func (l *Scanner) Next() bool {
 }
 
 // FetchUntil fetches ItemOctet from current scanner position to first
-// occurence of the c or to the end of the underlying data.
+// occurrence of the c or to the end of the underlying data.
 func (l *Scanner) FetchUntil(c byte) bool {
 	l.resetItem()
 	if l.pos == len(l.data) {
@@ -109,7 +109,7 @@ func (l *Scanner) Advance(n int) bool {
 	return true
 }
 
-// Skip skips all bytes until first occurence of c.
+// Skip skips all bytes until first occurrence of c.
 func (l *Scanner) Skip(c byte) {
 	if l.err {
 		return
@@ -125,7 +125,7 @@ func (l *Scanner) Skip(c byte) {
 	}
 }
 
-// SkipEscaped skips all bytes until first occurence of non-escaped c.
+// SkipEscaped skips all bytes until first occurrence of non-escaped c.
 func (l *Scanner) SkipEscaped(c byte) {
 	if l.err {
 		return
