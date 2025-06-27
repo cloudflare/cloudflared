@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/orchestration"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
@@ -78,8 +80,11 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	edgeBindAddr := config.EdgeBindAddr
 
 	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
-	// No reserved ingress services for now, hence the nil
-	ingressUDPService := ingress.NewUDPOriginService(nil, config.Log)
+
+	// Setup the reserved virtual origins
+	reservedServices := map[netip.AddrPort]ingress.UDPOriginProxy{}
+	reservedServices[origins.VirtualDNSServiceAddr] = config.OriginDNSService
+	ingressUDPService := ingress.NewUDPOriginService(reservedServices, config.Log)
 	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingressUDPService, orchestrator.GetFlowLimiter())
 
 	edgeTunnelServer := EdgeTunnelServer{
@@ -127,6 +132,9 @@ func (s *Supervisor) Run(
 			}
 		}()
 	}
+
+	// Setup DNS Resolver refresh
+	go s.config.OriginDNSService.StartRefreshLoop(ctx)
 
 	if err := s.initialize(ctx, connectedSignal); err != nil {
 		if err == errEarlyShutdown {

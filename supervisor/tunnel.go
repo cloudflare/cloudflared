@@ -24,6 +24,7 @@ import (
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
@@ -64,6 +65,7 @@ type TunnelConfig struct {
 	ProtocolSelector connection.ProtocolSelector
 	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
 	ICMPRouterServer ingress.ICMPRouterServer
+	OriginDNSService *origins.DNSResolverService
 
 	RPCTimeout         time.Duration
 	WriteStreamTimeout time.Duration

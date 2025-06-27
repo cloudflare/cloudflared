@@ -22,7 +22,7 @@ type UDPOriginService struct {
 
 // UDPOriginProxy provides a UDP dial operation to a requested addr.
 type UDPOriginProxy interface {
-	DialUDP(addr netip.AddrPort) (*net.UDPConn, error)
+	DialUDP(addr netip.AddrPort) (net.Conn, error)
 }
 
 func NewUDPOriginService(reserved map[netip.AddrPort]UDPOriginProxy, logger *zerolog.Logger) *UDPOriginService {
@@ -40,7 +40,7 @@ func (s *UDPOriginService) SetDefaultDialer(dialer UDPOriginProxy) {
 }
 
 // DialUDP will perform a dial UDP to the requested addr.
-func (s *UDPOriginService) DialUDP(addr netip.AddrPort) (*net.UDPConn, error) {
+func (s *UDPOriginService) DialUDP(addr netip.AddrPort) (net.Conn, error) {
 	// Check to see if any reserved services are available for this addr and call their dialer instead.
 	if dialer, ok := s.reservedServices[addr]; ok {
 		return dialer.DialUDP(addr)
@@ -52,7 +52,7 @@ type defaultUDPDialer struct{}
 
 var DefaultUDPDialer UDPOriginProxy = &defaultUDPDialer{}
 
-func (d *defaultUDPDialer) DialUDP(dest netip.AddrPort) (*net.UDPConn, error) {
+func (d *defaultUDPDialer) DialUDP(dest netip.AddrPort) (net.Conn, error) {
 	addr := net.UDPAddrFromAddrPort(dest)
 
 	// We use nil as local addr to force runtime to find the best suitable local address IP given the destination

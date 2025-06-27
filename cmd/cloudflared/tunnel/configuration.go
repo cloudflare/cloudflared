@@ -25,6 +25,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -219,6 +220,8 @@ func prepareTunnelConfig(
 		resolvedRegion = endpoint
 	}
 
+	dnsService := origins.NewDNSResolver(log)
+
 	tunnelConfig := &supervisor.TunnelConfig{
 		ClientConfig:    clientConfig,
 		GracePeriod:     gracePeriod,
@@ -246,6 +249,7 @@ func prepareTunnelConfig(
 		DisableQUICPathMTUDiscovery:         c.Bool(flags.QuicDisablePathMTUDiscovery),
 		QUICConnectionLevelFlowControlLimit: c.Uint64(flags.QuicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(flags.QuicStreamLevelFlowControlLimit),
+		OriginDNSService:                    dnsService,
 	}
 	icmpRouter, err := newICMPRouter(c, log)
 	if err != nil {
