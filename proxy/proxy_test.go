@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -1017,4 +1018,62 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			panic(err)
 		}
 	}()
+}
+
+func TestHandleGOAWAYRetry(t *testing.T) {
+	// Simulate a request body
+	bodyContent := "test body content"
+	body := io.NopCloser(strings.NewReader(bodyContent))
+
+	// Create a mock request with a body
+	roundTripReq := &http.Request{
+		Body: body,
+	}
+
+	// Simulate the GOAWAY error
+	goawayError := errors.New("http2: Transport received Server's graceful shutdown GOAWAY")
+
+	// Assign the GetBody function
+	roundTripReq.GetBody = func() (io.ReadCloser, error) {
+		if goawayError.Error() == "http2: Transport received Server's graceful shutdown GOAWAY" {
+			return roundTripReq.Body, nil
+		}
+		return nil, goawayError
+	}
+
+	// Test the GetBody function
+	retriedBody, err := roundTripReq.GetBody()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify the retried body content
+	retriedContent, _ := io.ReadAll(retriedBody)
+	if string(retriedContent) != bodyContent {
+		t.Fatalf("Expected body content '%s', got '%s'", bodyContent, string(retriedContent))
+	}
+}
+func TestHandleGOAWAYRetryError(t *testing.T) {
+	// Simulate a request body
+	bodyContent := "test body content"
+	body := io.NopCloser(strings.NewReader(bodyContent))
+
+	// Create a mock request with a body
+	roundTripReq := &http.Request{
+		Body: body,
+	}
+
+	// Simulate the GOAWAY error
+	goawayError := errors.New("http2: Transport received Server's graceful shutdown GOAWAY")
+
+	// Assign the GetBody function to return an error
+	roundTripReq.GetBody = func() (io.ReadCloser, error) {
+		return nil, goawayError
+	}
+
+	// Test the GetBody function
+	retriedBody, err := roundTripReq.GetBody()
+	if retriedBody != nil || err == nil {
+		t.Fatalf("Expected error, got body: %v, error: %v", retriedBody, err)
+	}
 }
