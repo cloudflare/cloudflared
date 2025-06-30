@@ -220,7 +220,15 @@ func prepareTunnelConfig(
 		resolvedRegion = endpoint
 	}
 
-	dnsService := origins.NewDNSResolver(log)
+	warpRoutingConfig := ingress.NewWarpRoutingConfig(&cfg.WarpRouting)
+
+	// Setup origin dialer service and virtual services
+	originDialerService := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   ingress.NewDialer(warpRoutingConfig),
+		TCPWriteTimeout: c.Duration(flags.WriteStreamTimeout),
+	}, log)
+	dnsService := origins.NewDNSResolverService(origins.NewDNSDialer(), log)
+	originDialerService.AddReservedService(dnsService, []netip.AddrPort{origins.VirtualDNSServiceAddr})
 
 	tunnelConfig := &supervisor.TunnelConfig{
 		ClientConfig:    clientConfig,
@@ -250,6 +258,7 @@ func prepareTunnelConfig(
 		QUICConnectionLevelFlowControlLimit: c.Uint64(flags.QuicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(flags.QuicStreamLevelFlowControlLimit),
 		OriginDNSService:                    dnsService,
+		OriginDialerService:                 originDialerService,
 	}
 	icmpRouter, err := newICMPRouter(c, log)
 	if err != nil {
@@ -258,10 +267,10 @@ func prepareTunnelConfig(
 		tunnelConfig.ICMPRouterServer = icmpRouter
 	}
 	orchestratorConfig := &orchestration.Config{
-		Ingress:            &ingressRules,
-		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
-		ConfigurationFlags: parseConfigFlags(c),
-		WriteTimeout:       tunnelConfig.WriteStreamTimeout,
+		Ingress:             &ingressRules,
+		WarpRouting:         warpRoutingConfig,
+		OriginDialerService: originDialerService,
+		ConfigurationFlags:  parseConfigFlags(c),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }

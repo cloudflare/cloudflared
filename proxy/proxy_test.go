@@ -33,17 +33,17 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 var (
-	testTags        = []pogs.Tag{{Name: "Name", Value: "value"}}
-	noWarpRouting   = ingress.WarpRoutingConfig{}
-	testWarpRouting = ingress.WarpRoutingConfig{
-		ConnectTimeout: config.CustomDuration{Duration: time.Second},
-	}
+	testTags          = []pogs.Tag{{Name: "Name", Value: "value"}}
+	testDefaultDialer = ingress.NewDialer(ingress.WarpRoutingConfig{
+		ConnectTimeout: config.CustomDuration{Duration: 1 * time.Second},
+		TCPKeepAlive:   config.CustomDuration{Duration: 15 * time.Second},
+		MaxActiveFlows: 0,
+	})
 )
 
 type mockHTTPRespWriter struct {
@@ -162,7 +162,12 @@ func TestProxySingleOrigin(t *testing.T) {
 
 	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingressRule, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &log)
+
+	proxy := NewOriginProxy(ingressRule, originDialer, testTags, cfdflow.NewLimiter(0), &log)
 	t.Run("testProxyHTTP", testProxyHTTP(proxy))
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
@@ -357,7 +362,7 @@ type MultipleIngressTest struct {
 }
 
 func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.UnvalidatedIngressRule, tests []MultipleIngressTest) {
-	ingress, err := ingress.ParseIngress(&config.Configuration{
+	ingressRule, err := ingress.ParseIngress(&config.Configuration{
 		TunnelID: t.Name(),
 		Ingress:  unvalidatedIngress,
 	})
@@ -366,9 +371,14 @@ func runIngressTestScenarios(t *testing.T, unvalidatedIngress []config.Unvalidat
 	log := zerolog.Nop()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	require.NoError(t, ingress.StartOrigins(&log, ctx.Done()))
+	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
 
-	proxy := NewOriginProxy(ingress, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &log)
+
+	proxy := NewOriginProxy(ingressRule, originDialer, testTags, cfdflow.NewLimiter(0), &log)
 
 	for _, test := range tests {
 		responseWriter := newMockHTTPRespWriter()
@@ -416,7 +426,12 @@ func TestProxyError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	proxy := NewOriginProxy(ing, noWarpRouting, testTags, cfdflow.NewLimiter(0), time.Duration(0), &log)
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &log)
+
+	proxy := NewOriginProxy(ing, originDialer, testTags, cfdflow.NewLimiter(0), &log)
 
 	responseWriter := newMockHTTPRespWriter()
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1", nil)
@@ -467,16 +482,13 @@ func (r *replayer) Bytes() []byte {
 // WS - TCP: When a tcp based ingress is configured on the origin and the
 // eyeball sends tcp packets wrapped in websockets. (E.g: cloudflared access).
 func TestConnections(t *testing.T) {
-	logger := logger.Create(nil)
+	log := zerolog.Nop()
 	replayer := &replayer{rw: bytes.NewBuffer([]byte{})}
 	type args struct {
 		ingressServiceScheme  string
 		originService         func(*testing.T, net.Listener)
 		eyeballResponseWriter connection.ResponseWriter
 		eyeballRequestBody    io.ReadCloser
-
-		// Can be set to nil to show warp routing is not enabled.
-		warpRoutingService *ingress.WarpRoutingService
 
 		// eyeball connection type.
 		connectionType connection.Type
@@ -487,6 +499,11 @@ func TestConnections(t *testing.T) {
 		// flowLimiterResponse is the response of the cfdflow.Limiter#Acquire method call
 		flowLimiterResponse error
 	}
+
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 0,
+	}, &log)
 
 	type want struct {
 		message []byte
@@ -530,7 +547,6 @@ func TestConnections(t *testing.T) {
 				originService:         runEchoTCPService,
 				eyeballResponseWriter: newTCPRespWriter(replayer),
 				eyeballRequestBody:    newTCPRequestBody([]byte("test2")),
-				warpRoutingService:    ingress.NewWarpRoutingService(testWarpRouting, time.Duration(0)),
 				connectionType:        connection.TypeTCP,
 				requestHeaders: map[string][]string{
 					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
@@ -548,7 +564,6 @@ func TestConnections(t *testing.T) {
 				originService:        runEchoWSService,
 				// eyeballResponseWriter gets set after roundtrip dial.
 				eyeballRequestBody: newPipedWSRequestBody([]byte("test3")),
-				warpRoutingService: ingress.NewWarpRoutingService(testWarpRouting, time.Duration(0)),
 				requestHeaders: map[string][]string{
 					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
 				},
@@ -599,23 +614,6 @@ func TestConnections(t *testing.T) {
 			want: want{
 				message: []byte{},
 				headers: map[string][]string{},
-			},
-		},
-		{
-			name: "tcp-tcp proxy without warpRoutingService enabled",
-			args: args{
-				ingressServiceScheme:  "tcp://",
-				originService:         runEchoTCPService,
-				eyeballResponseWriter: newTCPRespWriter(replayer),
-				eyeballRequestBody:    newTCPRequestBody([]byte("test2")),
-				connectionType:        connection.TypeTCP,
-				requestHeaders: map[string][]string{
-					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
-				},
-			},
-			want: want{
-				message: []byte{},
-				err:     true,
 			},
 		},
 		{
@@ -670,7 +668,6 @@ func TestConnections(t *testing.T) {
 				originService:         runEchoTCPService,
 				eyeballResponseWriter: newTCPRespWriter(replayer),
 				eyeballRequestBody:    newTCPRequestBody([]byte("rate-limited")),
-				warpRoutingService:    ingress.NewWarpRoutingService(testWarpRouting, time.Duration(0)),
 				connectionType:        connection.TypeTCP,
 				requestHeaders: map[string][]string{
 					"Cf-Cloudflared-Proxy-Src": {"non-blank-value"},
@@ -693,7 +690,7 @@ func TestConnections(t *testing.T) {
 			test.args.originService(t, ln)
 
 			ingressRule := createSingleIngressConfig(t, test.args.ingressServiceScheme+ln.Addr().String())
-			_ = ingressRule.StartOrigins(logger, ctx.Done())
+			_ = ingressRule.StartOrigins(&log, ctx.Done())
 
 			// Mock flow limiter
 			ctrl := gomock.NewController(t)
@@ -702,8 +699,7 @@ func TestConnections(t *testing.T) {
 			flowLimiter.EXPECT().Acquire("tcp").AnyTimes().Return(test.args.flowLimiterResponse)
 			flowLimiter.EXPECT().Release().AnyTimes()
 
-			proxy := NewOriginProxy(ingressRule, testWarpRouting, testTags, flowLimiter, time.Duration(0), logger)
-			proxy.warpRouting = test.args.warpRoutingService
+			proxy := NewOriginProxy(ingressRule, originDialer, testTags, flowLimiter, &log)
 
 			dest := ln.Addr().String()
 			req, err := http.NewRequest(

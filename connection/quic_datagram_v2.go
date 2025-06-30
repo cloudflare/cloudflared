@@ -57,8 +57,8 @@ type datagramV2Connection struct {
 
 	// datagramMuxer mux/demux datagrams from quic connection
 	datagramMuxer *cfdquic.DatagramMuxerV2
-	// ingressUDPProxy acts as the origin dialer for UDP requests
-	ingressUDPProxy ingress.UDPOriginProxy
+	// originDialer is the origin dialer for UDP requests
+	originDialer ingress.OriginUDPDialer
 	// packetRouter acts as the origin router for ICMP requests
 	packetRouter *ingress.PacketRouter
 
@@ -70,7 +70,7 @@ type datagramV2Connection struct {
 
 func NewDatagramV2Connection(ctx context.Context,
 	conn quic.Connection,
-	ingressUDPProxy ingress.UDPOriginProxy,
+	originDialer ingress.OriginUDPDialer,
 	icmpRouter ingress.ICMPRouter,
 	index uint8,
 	rpcTimeout time.Duration,
@@ -89,7 +89,7 @@ func NewDatagramV2Connection(ctx context.Context,
 		sessionManager:     sessionManager,
 		flowLimiter:        flowLimiter,
 		datagramMuxer:      datagramMuxer,
-		ingressUDPProxy:    ingressUDPProxy,
+		originDialer:       originDialer,
 		packetRouter:       packetRouter,
 		rpcTimeout:         rpcTimeout,
 		streamWriteTimeout: streamWriteTimeout,
@@ -159,7 +159,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 
 	// Each session is a series of datagram from an eyeball to a dstIP:dstPort.
 	// (src port, dst IP, dst port) uniquely identifies a session, so it needs a dedicated connected socket.
-	originProxy, err := q.ingressUDPProxy.DialUDP(dstAddrPort)
+	originProxy, err := q.originDialer.DialUDP(dstAddrPort)
 	if err != nil {
 		log.Err(err).Msgf("Failed to create udp proxy to %s", dstAddrPort)
 		tracing.EndWithErrorStatus(registerSpan, err)

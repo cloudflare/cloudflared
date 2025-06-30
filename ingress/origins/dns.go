@@ -45,18 +45,26 @@ type DNSResolverService struct {
 	address  netip.AddrPort
 	addressM sync.RWMutex
 
-	dialer   ingress.UDPOriginProxy
+	dialer   ingress.OriginDialer
 	resolver peekResolver
 	logger   *zerolog.Logger
 }
 
-func NewDNSResolver(logger *zerolog.Logger) *DNSResolverService {
+func NewDNSResolverService(dialer ingress.OriginDialer, logger *zerolog.Logger) *DNSResolverService {
 	return &DNSResolverService{
 		address:  defaultResolverAddr,
-		dialer:   ingress.DefaultUDPDialer,
+		dialer:   dialer,
 		resolver: &resolver{dialFunc: net.Dial},
 		logger:   logger,
 	}
+}
+
+func (s *DNSResolverService) DialTCP(ctx context.Context, _ netip.AddrPort) (net.Conn, error) {
+	s.addressM.RLock()
+	dest := s.address
+	s.addressM.RUnlock()
+	// The dialer ignores the provided address because the request will instead go to the local DNS resolver.
+	return s.dialer.DialTCP(ctx, dest)
 }
 
 func (s *DNSResolverService) DialUDP(_ netip.AddrPort) (net.Conn, error) {
@@ -154,4 +162,19 @@ func (r *resolver) peekDial(ctx context.Context, network, address string) (net.C
 	r.network = network
 	r.address = address
 	return r.dialFunc(network, address)
+}
+
+// NewDNSDialer creates a custom dialer for the DNS resolver service to utilize.
+func NewDNSDialer() *ingress.Dialer {
+	return &ingress.Dialer{
+		Dialer: net.Dialer{
+			// We want short timeouts for the DNS requests
+			Timeout: 5 * time.Second,
+			// We do not want keep alive since the edge will not reuse TCP connections per request
+			KeepAlive: -1,
+			KeepAliveConfig: net.KeepAliveConfig{
+				Enable: false,
+			},
+		},
+	}
 }

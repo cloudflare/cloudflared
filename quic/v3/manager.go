@@ -40,13 +40,13 @@ type SessionManager interface {
 type sessionManager struct {
 	sessions     map[RequestID]Session
 	mutex        sync.RWMutex
-	originDialer ingress.UDPOriginProxy
+	originDialer ingress.OriginUDPDialer
 	limiter      cfdflow.Limiter
 	metrics      Metrics
 	log          *zerolog.Logger
 }
 
-func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer ingress.UDPOriginProxy, limiter cfdflow.Limiter) SessionManager {
+func NewSessionManager(metrics Metrics, log *zerolog.Logger, originDialer ingress.OriginUDPDialer, limiter cfdflow.Limiter) SessionManager {
 	return &sessionManager{
 		sessions:     make(map[RequestID]Session),
 		originDialer: originDialer,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/netip"
 	"strings"
 	"time"
 
@@ -14,8 +13,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/ingress"
-	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/orchestration"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
@@ -81,16 +78,11 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 
 	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
 
-	// Setup the reserved virtual origins
-	reservedServices := map[netip.AddrPort]ingress.UDPOriginProxy{}
-	reservedServices[origins.VirtualDNSServiceAddr] = config.OriginDNSService
-	ingressUDPService := ingress.NewUDPOriginService(reservedServices, config.Log)
-	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingressUDPService, orchestrator.GetFlowLimiter())
+	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, config.OriginDialerService, orchestrator.GetFlowLimiter())
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
 		orchestrator:      orchestrator,
-		ingressUDPProxy:   ingressUDPService,
 		sessionManager:    sessionManager,
 		datagramMetrics:   datagramMetrics,
 		edgeAddrs:         edgeIPs,

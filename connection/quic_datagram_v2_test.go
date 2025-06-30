@@ -13,7 +13,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	cfdflow "github.com/cloudflare/cloudflared/flow"
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/mocks"
 )
 
@@ -84,7 +83,7 @@ func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 	datagramConn := NewDatagramV2Connection(
 		t.Context(),
 		conn,
-		ingress.DefaultUDPDialer,
+		nil,
 		nil,
 		0,
 		0*time.Second,

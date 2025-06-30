@@ -61,11 +61,12 @@ type TunnelConfig struct {
 
 	NeedPQ bool
 
-	NamedTunnel      *connection.TunnelProperties
-	ProtocolSelector connection.ProtocolSelector
-	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
-	ICMPRouterServer ingress.ICMPRouterServer
-	OriginDNSService *origins.DNSResolverService
+	NamedTunnel         *connection.TunnelProperties
+	ProtocolSelector    connection.ProtocolSelector
+	EdgeTLSConfigs      map[connection.Protocol]*tls.Config
+	ICMPRouterServer    ingress.ICMPRouterServer
+	OriginDNSService    *origins.DNSResolverService
+	OriginDialerService *ingress.OriginDialerService
 
 	RPCTimeout         time.Duration
 	WriteStreamTimeout time.Duration
@@ -168,7 +169,6 @@ func (f *ipAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsN
 type EdgeTunnelServer struct {
 	config            *TunnelConfig
 	orchestrator      *orchestration.Orchestrator
-	ingressUDPProxy   ingress.UDPOriginProxy
 	sessionManager    v3.SessionManager
 	datagramMetrics   v3.Metrics
 	edgeAddrHandler   EdgeAddrHandler
@@ -616,7 +616,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		datagramSessionManager = connection.NewDatagramV2Connection(
 			ctx,
 			conn,
-			e.ingressUDPProxy,
+			e.config.OriginDialerService,
 			e.config.ICMPRouterServer,
 			connIndex,
 			e.config.RPCTimeout,

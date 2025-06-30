@@ -38,7 +38,9 @@ type Orchestrator struct {
 	tags   []pogs.Tag
 	// flowLimiter tracks active sessions across the tunnel and limits new sessions if they are above the limit.
 	flowLimiter cfdflow.Limiter
-	log         *zerolog.Logger
+	// Origin dialer service to manage egress socket dialing.
+	originDialerService *ingress.OriginDialerService
+	log                 *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -50,18 +52,20 @@ func NewOrchestrator(ctx context.Context,
 	config *Config,
 	tags []pogs.Tag,
 	internalRules []ingress.Rule,
-	log *zerolog.Logger) (*Orchestrator, error) {
+	log *zerolog.Logger,
+) (*Orchestrator, error) {
 	o := &Orchestrator{
 		// Lowest possible version, any remote configuration will have version higher than this
 		// Starting at -1 allows a configuration migration (local to remote) to override the current configuration as it
 		// will start at version 0.
-		currentVersion: -1,
-		internalRules:  internalRules,
-		config:         config,
-		tags:           tags,
-		flowLimiter:    cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
-		log:            log,
-		shutdownC:      ctx.Done(),
+		currentVersion:      -1,
+		internalRules:       internalRules,
+		config:              config,
+		tags:                tags,
+		flowLimiter:         cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
+		originDialerService: config.OriginDialerService,
+		log:                 log,
+		shutdownC:           ctx.Done(),
 	}
 	if err := o.updateIngress(*config.Ingress, config.WarpRouting); err != nil {
 		return nil, err
@@ -175,7 +179,15 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	// Update the flow limit since the configuration might have changed
 	o.flowLimiter.SetLimit(warpRouting.MaxActiveFlows)
 
-	proxy := proxy.NewOriginProxy(ingressRules, warpRouting, o.tags, o.flowLimiter, o.config.WriteTimeout, o.log)
+	// Update the origin dialer service with the new dialer settings
+	// We need to update the dialer here instead of creating a new instance of OriginDialerService because it has
+	// its own references and go routines. Specifically, the UDP dialer is a reference to this same service all the
+	// way into the datagram manager. Reconstructing the datagram manager is not something we currently provide during
+	// runtime in response to a configuration push except when starting a tunnel connection.
+	o.originDialerService.UpdateDefaultDialer(ingress.NewDialer(warpRouting))
+
+	// Create and replace the origin proxy with a new instance
+	proxy := proxy.NewOriginProxy(ingressRules, o.originDialerService, o.tags, o.flowLimiter, o.log)
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting

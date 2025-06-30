@@ -12,7 +12,7 @@ import (
 
 func TestDNSResolver_DefaultResolver(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolver(&log)
+	service := NewDNSResolverService(NewDNSDialer(), &log)
 	mockResolver := &mockPeekResolver{
 		address: "127.0.0.2:53",
 	}
@@ -24,7 +24,7 @@ func TestDNSResolver_DefaultResolver(t *testing.T) {
 
 func TestDNSResolver_UpdateResolverAddress(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolver(&log)
+	service := NewDNSResolverService(NewDNSDialer(), &log)
 
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
@@ -51,7 +51,7 @@ func TestDNSResolver_UpdateResolverAddress(t *testing.T) {
 
 func TestDNSResolver_UpdateResolverAddressInvalid(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolver(&log)
+	service := NewDNSResolverService(NewDNSDialer(), &log)
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
 
@@ -77,7 +77,7 @@ func TestDNSResolver_UpdateResolverAddressInvalid(t *testing.T) {
 
 func TestDNSResolver_UpdateResolverErrorIgnored(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolver(&log)
+	service := NewDNSResolverService(NewDNSDialer(), &log)
 	resolverErr := errors.New("test resolver error")
 	mockResolver := &mockPeekResolver{err: resolverErr}
 	service.resolver = mockResolver
@@ -93,16 +93,29 @@ func TestDNSResolver_UpdateResolverErrorIgnored(t *testing.T) {
 	}
 }
 
-func TestDNSResolver_DialUsesResolvedAddress(t *testing.T) {
+func TestDNSResolver_DialUDPUsesResolvedAddress(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolver(&log)
+	mockDialer := &mockDialer{expected: defaultResolverAddr}
+	service := NewDNSResolverService(mockDialer, &log)
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
-	mockDialer := &mockDialer{expected: defaultResolverAddr}
-	service.dialer = mockDialer
 
 	// Attempt a dial to 127.0.0.2:53 which should be ignored and instead resolve to 127.0.0.1:53
 	_, err := service.DialUDP(netip.MustParseAddrPort("127.0.0.2:53"))
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDNSResolver_DialTCPUsesResolvedAddress(t *testing.T) {
+	log := zerolog.Nop()
+	mockDialer := &mockDialer{expected: defaultResolverAddr}
+	service := NewDNSResolverService(mockDialer, &log)
+	mockResolver := &mockPeekResolver{}
+	service.resolver = mockResolver
+
+	// Attempt a dial to 127.0.0.2:53 which should be ignored and instead resolve to 127.0.0.1:53
+	_, err := service.DialTCP(t.Context(), netip.MustParseAddrPort("127.0.0.2:53"))
 	if err != nil {
 		t.Error(err)
 	}
@@ -124,6 +137,13 @@ func (r *mockPeekResolver) lookupNetIP(ctx context.Context, host string) ([]neti
 
 type mockDialer struct {
 	expected netip.AddrPort
+}
+
+func (d *mockDialer) DialTCP(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
+	if d.expected != addr {
+		return nil, errors.New("unexpected address dialed")
+	}
+	return nil, nil
 }
 
 func (d *mockDialer) DialUDP(addr netip.AddrPort) (net.Conn, error) {

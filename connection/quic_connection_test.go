@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/cloudflare/cloudflared/client"
+	"github.com/cloudflare/cloudflared/config"
 	cfdflow "github.com/cloudflare/cloudflared/flow"
 
 	"github.com/cloudflare/cloudflared/datagramsession"
@@ -823,6 +824,15 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 	sessionManager := datagramsession.NewManager(&log, datagramMuxer.SendToSession, sessionDemuxChan)
 	var connIndex uint8 = 0
 	packetRouter := ingress.NewPacketRouter(nil, datagramMuxer, connIndex, &log)
+	testDefaultDialer := ingress.NewDialer(ingress.WarpRoutingConfig{
+		ConnectTimeout: config.CustomDuration{Duration: 1 * time.Second},
+		TCPKeepAlive:   config.CustomDuration{Duration: 15 * time.Second},
+		MaxActiveFlows: 0,
+	})
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &log)
 
 	datagramConn := &datagramV2Connection{
 		conn,
@@ -830,7 +840,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		sessionManager,
 		cfdflow.NewLimiter(0),
 		datagramMuxer,
-		ingress.DefaultUDPDialer,
+		originDialer,
 		packetRouter,
 		15 * time.Second,
 		0 * time.Second,

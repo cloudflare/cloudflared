@@ -19,7 +19,7 @@ import (
 type OriginConnection interface {
 	// Stream should generally be implemented as a bidirectional io.Copy.
 	Stream(ctx context.Context, tunnelConn io.ReadWriter, log *zerolog.Logger)
-	Close()
+	Close() error
 }
 
 type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
@@ -48,16 +48,7 @@ func (tc *tcpConnection) Write(b []byte) (int, error) {
 		}
 	}
 
-	nBytes, err := tc.Conn.Write(b)
-	if err != nil {
-		tc.logger.Err(err).Msg("Error writing to the TCP connection")
-	}
-
-	return nBytes, err
-}
-
-func (tc *tcpConnection) Close() {
-	tc.Conn.Close()
+	return tc.Conn.Write(b)
 }
 
 // tcpOverWSConnection is an OriginConnection that streams to TCP over WS.
@@ -75,8 +66,8 @@ func (wc *tcpOverWSConnection) Stream(ctx context.Context, tunnelConn io.ReadWri
 	wsConn.Close()
 }
 
-func (wc *tcpOverWSConnection) Close() {
-	wc.conn.Close()
+func (wc *tcpOverWSConnection) Close() error {
+	return wc.conn.Close()
 }
 
 // socksProxyOverWSConnection is an OriginConnection that streams SOCKS connections over WS.
@@ -95,5 +86,6 @@ func (sp *socksProxyOverWSConnection) Stream(ctx context.Context, tunnelConn io.
 	wsConn.Close()
 }
 
-func (sp *socksProxyOverWSConnection) Close() {
+func (sp *socksProxyOverWSConnection) Close() error {
+	return nil
 }
