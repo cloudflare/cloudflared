@@ -2,8 +2,11 @@ package origins
 
 import (
 	"context"
+	"crypto/rand"
+	"math/big"
 	"net"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -42,42 +45,50 @@ type netDial func(network string, address string) (net.Conn, error)
 
 // DNSResolverService will make DNS requests to the local DNS resolver via the Dial method.
 type DNSResolverService struct {
-	address  netip.AddrPort
-	addressM sync.RWMutex
-
-	dialer   ingress.OriginDialer
-	resolver peekResolver
-	logger   *zerolog.Logger
+	addresses  []netip.AddrPort
+	addressesM sync.RWMutex
+	static     bool
+	dialer     ingress.OriginDialer
+	resolver   peekResolver
+	logger     *zerolog.Logger
 }
 
 func NewDNSResolverService(dialer ingress.OriginDialer, logger *zerolog.Logger) *DNSResolverService {
 	return &DNSResolverService{
-		address:  defaultResolverAddr,
-		dialer:   dialer,
-		resolver: &resolver{dialFunc: net.Dial},
-		logger:   logger,
+		addresses: []netip.AddrPort{defaultResolverAddr},
+		dialer:    dialer,
+		resolver:  &resolver{dialFunc: net.Dial},
+		logger:    logger,
 	}
 }
 
+func NewStaticDNSResolverService(resolverAddrs []netip.AddrPort, dialer ingress.OriginDialer, logger *zerolog.Logger) *DNSResolverService {
+	s := NewDNSResolverService(dialer, logger)
+	s.addresses = resolverAddrs
+	s.static = true
+	return s
+}
+
 func (s *DNSResolverService) DialTCP(ctx context.Context, _ netip.AddrPort) (net.Conn, error) {
-	s.addressM.RLock()
-	dest := s.address
-	s.addressM.RUnlock()
+	dest := s.getAddress()
 	// The dialer ignores the provided address because the request will instead go to the local DNS resolver.
 	return s.dialer.DialTCP(ctx, dest)
 }
 
 func (s *DNSResolverService) DialUDP(_ netip.AddrPort) (net.Conn, error) {
-	s.addressM.RLock()
-	dest := s.address
-	s.addressM.RUnlock()
+	dest := s.getAddress()
 	// The dialer ignores the provided address because the request will instead go to the local DNS resolver.
 	return s.dialer.DialUDP(dest)
 }
 
 // StartRefreshLoop is a routine that is expected to run in the background to update the DNS local resolver if
 // adjusted while the cloudflared process is running.
+// Does not run when the resolver was provided with external resolver addresses via CLI.
 func (s *DNSResolverService) StartRefreshLoop(ctx context.Context) {
+	if s.static {
+		s.logger.Debug().Msgf("Canceled DNS local resolver refresh loop because static resolver addresses were provided: %s", s.addresses)
+		return
+	}
 	// Call update first to load an address before handling traffic
 	err := s.update(ctx)
 	if err != nil {
@@ -122,14 +133,38 @@ func (s *DNSResolverService) update(ctx context.Context) error {
 	return nil
 }
 
+// returns the address from the peekResolver or from the static addresses if provided.
+// If multiple addresses are provided in the static addresses pick one randomly.
+func (s *DNSResolverService) getAddress() netip.AddrPort {
+	s.addressesM.RLock()
+	defer s.addressesM.RUnlock()
+	l := len(s.addresses)
+	if l <= 0 {
+		return defaultResolverAddr
+	}
+	if l == 1 {
+		return s.addresses[0]
+	}
+	// Only initialize the random selection if there is more than one element in the list.
+	var i int64 = 0
+	r, err := rand.Int(rand.Reader, big.NewInt(int64(l)))
+	// We ignore errors from crypto rand and use index 0; this should be extremely unlikely and the
+	// list index doesn't need to be cryptographically secure, but linters insist.
+	if err == nil {
+		i = r.Int64()
+	}
+	return s.addresses[i]
+}
+
 // lock and update the address used for the local DNS resolver
 func (s *DNSResolverService) setAddress(addr netip.AddrPort) {
-	s.addressM.Lock()
-	defer s.addressM.Unlock()
-	if s.address != addr {
+	s.addressesM.Lock()
+	defer s.addressesM.Unlock()
+	if !slices.Contains(s.addresses, addr) {
 		s.logger.Debug().Msgf("Updating DNS local resolver: %s", addr)
 	}
-	s.address = addr
+	// We only store one address when reading the peekResolver, so we just replace the whole list.
+	s.addresses = []netip.AddrPort{addr}
 }
 
 type peekResolver interface {

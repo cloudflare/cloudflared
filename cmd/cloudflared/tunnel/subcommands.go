@@ -241,6 +241,11 @@ var (
 		Usage:   "Overrides the remote configuration for max active private network flows (TCP/UDP) that this cloudflared instance supports",
 		EnvVars: []string{"TUNNEL_MAX_ACTIVE_FLOWS"},
 	}
+	dnsResolverAddrsFlag = &cli.StringSliceFlag{
+		Name:    flags.VirtualDNSServiceResolverAddresses,
+		Usage:   "Overrides the dynamic DNS resolver resolution to use these address:port's instead.",
+		EnvVars: []string{"TUNNEL_DNS_RESOLVER_ADDRS"},
+	}
 )
 
 func buildCreateCommand() *cli.Command {
@@ -718,6 +723,7 @@ func buildRunCommand() *cli.Command {
 		icmpv4SrcFlag,
 		icmpv6SrcFlag,
 		maxActiveFlowsFlag,
+		dnsResolverAddrsFlag,
 	}
 	flags = append(flags, configureProxyFlags(false)...)
 	return &cli.Command{

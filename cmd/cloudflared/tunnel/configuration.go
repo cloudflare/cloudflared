@@ -227,7 +227,17 @@ func prepareTunnelConfig(
 		DefaultDialer:   ingress.NewDialer(warpRoutingConfig),
 		TCPWriteTimeout: c.Duration(flags.WriteStreamTimeout),
 	}, log)
+
+	// Setup DNS Resolver Service
+	dnsResolverAddrs := c.StringSlice(flags.VirtualDNSServiceResolverAddresses)
 	dnsService := origins.NewDNSResolverService(origins.NewDNSDialer(), log)
+	if len(dnsResolverAddrs) > 0 {
+		addrs, err := parseResolverAddrPorts(dnsResolverAddrs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid %s provided: %w", flags.VirtualDNSServiceResolverAddresses, err)
+		}
+		dnsService = origins.NewStaticDNSResolverService(addrs, origins.NewDNSDialer(), log)
+	}
 	originDialerService.AddReservedService(dnsService, []netip.AddrPort{origins.VirtualDNSServiceAddr})
 
 	tunnelConfig := &supervisor.TunnelConfig{
@@ -506,4 +516,20 @@ func findLocalAddr(dst net.IP, port int) (netip.Addr, error) {
 	}
 	localAddr := localAddrPort.Addr()
 	return localAddr, nil
+}
+
+func parseResolverAddrPorts(input []string) ([]netip.AddrPort, error) {
+	// We don't allow more than 10 resolvers to be provided statically for the resolver service.
+	if len(input) > 10 {
+		return nil, errors.New("too many addresses provided, max: 10")
+	}
+	addrs := make([]netip.AddrPort, 0, len(input))
+	for _, val := range input {
+		addr, err := netip.ParseAddrPort(val)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, nil
 }

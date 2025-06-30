@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -17,9 +19,18 @@ func TestDNSResolver_DefaultResolver(t *testing.T) {
 		address: "127.0.0.2:53",
 	}
 	service.resolver = mockResolver
-	if service.address != defaultResolverAddr {
-		t.Errorf("resolver address should be the default: %s, was: %s", defaultResolverAddr, service.address)
+	validateAddrs(t, []netip.AddrPort{defaultResolverAddr}, service.addresses)
+}
+
+func TestStaticDNSResolver_DefaultResolver(t *testing.T) {
+	log := zerolog.Nop()
+	addresses := []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:53"), netip.MustParseAddrPort("1.0.0.1:53")}
+	service := NewStaticDNSResolverService(addresses, NewDNSDialer(), &log)
+	mockResolver := &mockPeekResolver{
+		address: "127.0.0.2:53",
 	}
+	service.resolver = mockResolver
+	validateAddrs(t, addresses, service.addresses)
 }
 
 func TestDNSResolver_UpdateResolverAddress(t *testing.T) {
@@ -29,24 +40,47 @@ func TestDNSResolver_UpdateResolverAddress(t *testing.T) {
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
 
-	expectedAddr := netip.MustParseAddrPort("127.0.0.2:53")
-	addresses := []string{
-		"127.0.0.2:53",
-		"127.0.0.2", // missing port should be added (even though this is unlikely to happen)
+	tests := []struct {
+		addr     string
+		expected netip.AddrPort
+	}{
+		{"127.0.0.2:53", netip.MustParseAddrPort("127.0.0.2:53")},
+		// missing port should be added (even though this is unlikely to happen)
+		{"127.0.0.3", netip.MustParseAddrPort("127.0.0.3:53")},
 	}
 
-	for _, addr := range addresses {
-		mockResolver.address = addr
+	for _, test := range tests {
+		mockResolver.address = test.addr
 		// Update the resolver address
 		err := service.update(t.Context())
 		if err != nil {
 			t.Error(err)
 		}
 		// Validate expected
-		if service.address != expectedAddr {
-			t.Errorf("resolver address should be: %s, was: %s", expectedAddr, service.address)
-		}
+		validateAddrs(t, []netip.AddrPort{test.expected}, service.addresses)
 	}
+}
+
+func TestStaticDNSResolver_RefreshLoopExits(t *testing.T) {
+	log := zerolog.Nop()
+	addresses := []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:53"), netip.MustParseAddrPort("1.0.0.1:53")}
+	service := NewStaticDNSResolverService(addresses, NewDNSDialer(), &log)
+
+	mockResolver := &mockPeekResolver{
+		address: "127.0.0.2:53",
+	}
+	service.resolver = mockResolver
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	go service.StartRefreshLoop(ctx)
+
+	// Wait for the refresh loop to end _and_ not update the addresses
+	time.Sleep(10 * time.Millisecond)
+
+	// Validate expected
+	validateAddrs(t, addresses, service.addresses)
 }
 
 func TestDNSResolver_UpdateResolverAddressInvalid(t *testing.T) {
@@ -69,9 +103,7 @@ func TestDNSResolver_UpdateResolverAddressInvalid(t *testing.T) {
 			t.Error("service update should throw an error")
 		}
 		// Validate expected
-		if service.address != defaultResolverAddr {
-			t.Errorf("resolver address should not be updated from default: %s, was: %s", defaultResolverAddr, service.address)
-		}
+		validateAddrs(t, []netip.AddrPort{defaultResolverAddr}, service.addresses)
 	}
 }
 
@@ -88,9 +120,7 @@ func TestDNSResolver_UpdateResolverErrorIgnored(t *testing.T) {
 		t.Error("service update should throw an error")
 	}
 	// Validate expected
-	if service.address != defaultResolverAddr {
-		t.Errorf("resolver address should not be updated from default: %s, was: %s", defaultResolverAddr, service.address)
-	}
+	validateAddrs(t, []netip.AddrPort{defaultResolverAddr}, service.addresses)
 }
 
 func TestDNSResolver_DialUDPUsesResolvedAddress(t *testing.T) {
@@ -151,4 +181,15 @@ func (d *mockDialer) DialUDP(addr netip.AddrPort) (net.Conn, error) {
 		return nil, errors.New("unexpected address dialed")
 	}
 	return nil, nil
+}
+
+func validateAddrs(t *testing.T, expected []netip.AddrPort, actual []netip.AddrPort) {
+	if len(actual) != len(expected) {
+		t.Errorf("addresses should only contain one element: %s", actual)
+	}
+	for _, e := range expected {
+		if !slices.Contains(actual, e) {
+			t.Errorf("missing address: %s in %s", e, actual)
+		}
+	}
 }
