@@ -51,31 +51,35 @@ type DNSResolverService struct {
 	dialer     ingress.OriginDialer
 	resolver   peekResolver
 	logger     *zerolog.Logger
+	metrics    Metrics
 }
 
-func NewDNSResolverService(dialer ingress.OriginDialer, logger *zerolog.Logger) *DNSResolverService {
+func NewDNSResolverService(dialer ingress.OriginDialer, logger *zerolog.Logger, metrics Metrics) *DNSResolverService {
 	return &DNSResolverService{
 		addresses: []netip.AddrPort{defaultResolverAddr},
 		dialer:    dialer,
 		resolver:  &resolver{dialFunc: net.Dial},
 		logger:    logger,
+		metrics:   metrics,
 	}
 }
 
-func NewStaticDNSResolverService(resolverAddrs []netip.AddrPort, dialer ingress.OriginDialer, logger *zerolog.Logger) *DNSResolverService {
-	s := NewDNSResolverService(dialer, logger)
+func NewStaticDNSResolverService(resolverAddrs []netip.AddrPort, dialer ingress.OriginDialer, logger *zerolog.Logger, metrics Metrics) *DNSResolverService {
+	s := NewDNSResolverService(dialer, logger, metrics)
 	s.addresses = resolverAddrs
 	s.static = true
 	return s
 }
 
 func (s *DNSResolverService) DialTCP(ctx context.Context, _ netip.AddrPort) (net.Conn, error) {
+	s.metrics.IncrementDNSTCPRequests()
 	dest := s.getAddress()
 	// The dialer ignores the provided address because the request will instead go to the local DNS resolver.
 	return s.dialer.DialTCP(ctx, dest)
 }
 
 func (s *DNSResolverService) DialUDP(_ netip.AddrPort) (net.Conn, error) {
+	s.metrics.IncrementDNSUDPRequests()
 	dest := s.getAddress()
 	// The dialer ignores the provided address because the request will instead go to the local DNS resolver.
 	return s.dialer.DialUDP(dest)

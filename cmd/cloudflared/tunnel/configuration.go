@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -229,14 +230,15 @@ func prepareTunnelConfig(
 	}, log)
 
 	// Setup DNS Resolver Service
+	originMetrics := origins.NewMetrics(prometheus.DefaultRegisterer)
 	dnsResolverAddrs := c.StringSlice(flags.VirtualDNSServiceResolverAddresses)
-	dnsService := origins.NewDNSResolverService(origins.NewDNSDialer(), log)
+	dnsService := origins.NewDNSResolverService(origins.NewDNSDialer(), log, originMetrics)
 	if len(dnsResolverAddrs) > 0 {
 		addrs, err := parseResolverAddrPorts(dnsResolverAddrs)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid %s provided: %w", flags.VirtualDNSServiceResolverAddresses, err)
 		}
-		dnsService = origins.NewStaticDNSResolverService(addrs, origins.NewDNSDialer(), log)
+		dnsService = origins.NewStaticDNSResolverService(addrs, origins.NewDNSDialer(), log, originMetrics)
 	}
 	originDialerService.AddReservedService(dnsService, []netip.AddrPort{origins.VirtualDNSServiceAddr})
 

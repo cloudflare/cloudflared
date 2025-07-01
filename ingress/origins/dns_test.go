@@ -14,7 +14,7 @@ import (
 
 func TestDNSResolver_DefaultResolver(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolverService(NewDNSDialer(), &log)
+	service := NewDNSResolverService(NewDNSDialer(), &log, &noopMetrics{})
 	mockResolver := &mockPeekResolver{
 		address: "127.0.0.2:53",
 	}
@@ -25,7 +25,7 @@ func TestDNSResolver_DefaultResolver(t *testing.T) {
 func TestStaticDNSResolver_DefaultResolver(t *testing.T) {
 	log := zerolog.Nop()
 	addresses := []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:53"), netip.MustParseAddrPort("1.0.0.1:53")}
-	service := NewStaticDNSResolverService(addresses, NewDNSDialer(), &log)
+	service := NewStaticDNSResolverService(addresses, NewDNSDialer(), &log, &noopMetrics{})
 	mockResolver := &mockPeekResolver{
 		address: "127.0.0.2:53",
 	}
@@ -35,7 +35,7 @@ func TestStaticDNSResolver_DefaultResolver(t *testing.T) {
 
 func TestDNSResolver_UpdateResolverAddress(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolverService(NewDNSDialer(), &log)
+	service := NewDNSResolverService(NewDNSDialer(), &log, &noopMetrics{})
 
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
@@ -64,7 +64,7 @@ func TestDNSResolver_UpdateResolverAddress(t *testing.T) {
 func TestStaticDNSResolver_RefreshLoopExits(t *testing.T) {
 	log := zerolog.Nop()
 	addresses := []netip.AddrPort{netip.MustParseAddrPort("1.1.1.1:53"), netip.MustParseAddrPort("1.0.0.1:53")}
-	service := NewStaticDNSResolverService(addresses, NewDNSDialer(), &log)
+	service := NewStaticDNSResolverService(addresses, NewDNSDialer(), &log, &noopMetrics{})
 
 	mockResolver := &mockPeekResolver{
 		address: "127.0.0.2:53",
@@ -85,7 +85,7 @@ func TestStaticDNSResolver_RefreshLoopExits(t *testing.T) {
 
 func TestDNSResolver_UpdateResolverAddressInvalid(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolverService(NewDNSDialer(), &log)
+	service := NewDNSResolverService(NewDNSDialer(), &log, &noopMetrics{})
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
 
@@ -109,7 +109,7 @@ func TestDNSResolver_UpdateResolverAddressInvalid(t *testing.T) {
 
 func TestDNSResolver_UpdateResolverErrorIgnored(t *testing.T) {
 	log := zerolog.Nop()
-	service := NewDNSResolverService(NewDNSDialer(), &log)
+	service := NewDNSResolverService(NewDNSDialer(), &log, &noopMetrics{})
 	resolverErr := errors.New("test resolver error")
 	mockResolver := &mockPeekResolver{err: resolverErr}
 	service.resolver = mockResolver
@@ -126,7 +126,7 @@ func TestDNSResolver_UpdateResolverErrorIgnored(t *testing.T) {
 func TestDNSResolver_DialUDPUsesResolvedAddress(t *testing.T) {
 	log := zerolog.Nop()
 	mockDialer := &mockDialer{expected: defaultResolverAddr}
-	service := NewDNSResolverService(mockDialer, &log)
+	service := NewDNSResolverService(mockDialer, &log, &noopMetrics{})
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
 
@@ -140,7 +140,7 @@ func TestDNSResolver_DialUDPUsesResolvedAddress(t *testing.T) {
 func TestDNSResolver_DialTCPUsesResolvedAddress(t *testing.T) {
 	log := zerolog.Nop()
 	mockDialer := &mockDialer{expected: defaultResolverAddr}
-	service := NewDNSResolverService(mockDialer, &log)
+	service := NewDNSResolverService(mockDialer, &log, &noopMetrics{})
 	mockResolver := &mockPeekResolver{}
 	service.resolver = mockResolver
 
