@@ -17,8 +17,8 @@ const (
 )
 
 var (
-	nonFipsPostQuantumStrictPKex []tls.CurveID = []tls.CurveID{X25519MLKEM768PQKex, X25519Kyber768Draft00PQKex}
-	nonFipsPostQuantumPreferPKex []tls.CurveID = []tls.CurveID{X25519MLKEM768PQKex, X25519Kyber768Draft00PQKex}
+	nonFipsPostQuantumStrictPKex []tls.CurveID = []tls.CurveID{X25519MLKEM768PQKex}
+	nonFipsPostQuantumPreferPKex []tls.CurveID = []tls.CurveID{X25519MLKEM768PQKex}
 	fipsPostQuantumStrictPKex    []tls.CurveID = []tls.CurveID{P256Kyber768Draft00PQKex}
 	fipsPostQuantumPreferPKex    []tls.CurveID = []tls.CurveID{P256Kyber768Draft00PQKex, tls.CurveP256}
 )
