@@ -92,17 +92,18 @@ type Options struct {
 	Address        string
 	ContainerID    string
 	PodID          string
+	NamespaceID    string   `default: "default"`
 	Toggles        Toggles
 }
 
 func collectLogs(
 	ctx context.Context,
 	client HTTPClient,
-	diagContainer, diagPod string,
+	diagContainer, diagPod string, diagNamespace string
 ) (string, error) {
 	var collector LogCollector
 	if diagPod != "" {
-		collector = NewKubernetesLogCollector(diagContainer, diagPod)
+		collector = NewKubernetesLogCollector(diagContainer, diagPod, diagNamespace)
 	} else if diagContainer != "" {
 		collector = NewDockerLogCollector(diagContainer)
 	} else {
@@ -370,6 +371,7 @@ func createJobs(
 	tunnel *TunnelState,
 	diagContainer string,
 	diagPod string,
+	diagNamespace string,
 	noDiagSystem bool,
 	noDiagRuntime bool,
 	noDiagMetrics bool,
@@ -406,7 +408,7 @@ func createJobs(
 		{
 			jobName: logInformationJobName,
 			fn: func(ctx context.Context) (string, error) {
-				return collectLogs(ctx, client, diagContainer, diagPod)
+				return collectLogs(ctx, client, diagContainer, diagPod, diagNamespace)
 			},
 			bypass: noDiagLogs,
 		},
@@ -524,6 +526,7 @@ func RunDiagnostic(
 		tunnel,
 		options.ContainerID,
 		options.PodID,
+		options.NamespaceID,
 		options.Toggles.NoDiagSystem,
 		options.Toggles.NoDiagRuntime,
 		options.Toggles.NoDiagMetrics,
