@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -20,9 +19,9 @@ type newLocalConfig struct {
 
 // Config is the original config as read and parsed by cloudflared.
 type Config struct {
-	Ingress      *ingress.Ingress
-	WarpRouting  ingress.WarpRoutingConfig
-	WriteTimeout time.Duration
+	Ingress             *ingress.Ingress
+	WarpRouting         ingress.WarpRoutingConfig
+	OriginDialerService *ingress.OriginDialerService
 
 	// Extra settings used to configure this instance but that are not eligible for remotely management
 	// ie. (--protocol, --loglevel, ...)

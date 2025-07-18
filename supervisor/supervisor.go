@@ -13,7 +13,6 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/orchestration"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
@@ -78,7 +77,8 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	edgeBindAddr := config.EdgeBindAddr
 
 	datagramMetrics := v3.NewMetrics(prometheus.DefaultRegisterer)
-	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, ingress.DialUDPAddrPort, orchestrator.GetFlowLimiter())
+
+	sessionManager := v3.NewSessionManager(datagramMetrics, config.Log, config.OriginDialerService, orchestrator.GetFlowLimiter())
 
 	edgeTunnelServer := EdgeTunnelServer{
 		config:            config,
@@ -124,6 +124,9 @@ func (s *Supervisor) Run(
 			}
 		}()
 	}
+
+	// Setup DNS Resolver refresh
+	go s.config.OriginDNSService.StartRefreshLoop(ctx)
 
 	if err := s.initialize(ctx, connectedSignal); err != nil {
 		if err == errEarlyShutdown {

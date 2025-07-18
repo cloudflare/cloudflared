@@ -1,3 +1,13 @@
+2025.7.0
+- 2025-07-03 TUN-9540: Use numeric user id for Dockerfiles
+- 2025-07-01 TUN-9161: Remove P256Kyber768Draft00PQKex curve from nonFips curve preferences
+- 2025-07-01 TUN-9531: Bump go-boring from 1.24.2 to 1.24.4
+- 2025-07-01 TUN-9511: Add metrics for virtual DNS origin
+- 2025-06-30 TUN-9470: Add OriginDialerService to include TCP
+- 2025-06-30 TUN-9473: Add --dns-resolver-addrs flag
+- 2025-06-27 TUN-9472: Add virtual DNS service
+- 2025-06-23 TUN-9469: Centralize UDP origin proxy dialing as ingress service
+
 2025.6.1
 - 2025-06-16 TUN-9467: add vulncheck to cloudflared
 - 2025-06-16 TUN-9495: Remove references to cloudflare-go

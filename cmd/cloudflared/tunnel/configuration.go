@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -25,6 +26,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -219,6 +221,27 @@ func prepareTunnelConfig(
 		resolvedRegion = endpoint
 	}
 
+	warpRoutingConfig := ingress.NewWarpRoutingConfig(&cfg.WarpRouting)
+
+	// Setup origin dialer service and virtual services
+	originDialerService := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   ingress.NewDialer(warpRoutingConfig),
+		TCPWriteTimeout: c.Duration(flags.WriteStreamTimeout),
+	}, log)
+
+	// Setup DNS Resolver Service
+	originMetrics := origins.NewMetrics(prometheus.DefaultRegisterer)
+	dnsResolverAddrs := c.StringSlice(flags.VirtualDNSServiceResolverAddresses)
+	dnsService := origins.NewDNSResolverService(origins.NewDNSDialer(), log, originMetrics)
+	if len(dnsResolverAddrs) > 0 {
+		addrs, err := parseResolverAddrPorts(dnsResolverAddrs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid %s provided: %w", flags.VirtualDNSServiceResolverAddresses, err)
+		}
+		dnsService = origins.NewStaticDNSResolverService(addrs, origins.NewDNSDialer(), log, originMetrics)
+	}
+	originDialerService.AddReservedService(dnsService, []netip.AddrPort{origins.VirtualDNSServiceAddr})
+
 	tunnelConfig := &supervisor.TunnelConfig{
 		ClientConfig:    clientConfig,
 		GracePeriod:     gracePeriod,
@@ -246,6 +269,8 @@ func prepareTunnelConfig(
 		DisableQUICPathMTUDiscovery:         c.Bool(flags.QuicDisablePathMTUDiscovery),
 		QUICConnectionLevelFlowControlLimit: c.Uint64(flags.QuicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(flags.QuicStreamLevelFlowControlLimit),
+		OriginDNSService:                    dnsService,
+		OriginDialerService:                 originDialerService,
 	}
 	icmpRouter, err := newICMPRouter(c, log)
 	if err != nil {
@@ -254,10 +279,10 @@ func prepareTunnelConfig(
 		tunnelConfig.ICMPRouterServer = icmpRouter
 	}
 	orchestratorConfig := &orchestration.Config{
-		Ingress:            &ingressRules,
-		WarpRouting:        ingress.NewWarpRoutingConfig(&cfg.WarpRouting),
-		ConfigurationFlags: parseConfigFlags(c),
-		WriteTimeout:       tunnelConfig.WriteStreamTimeout,
+		Ingress:             &ingressRules,
+		WarpRouting:         warpRoutingConfig,
+		OriginDialerService: originDialerService,
+		ConfigurationFlags:  parseConfigFlags(c),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }
@@ -493,4 +518,20 @@ func findLocalAddr(dst net.IP, port int) (netip.Addr, error) {
 	}
 	localAddr := localAddrPort.Addr()
 	return localAddr, nil
+}
+
+func parseResolverAddrPorts(input []string) ([]netip.AddrPort, error) {
+	// We don't allow more than 10 resolvers to be provided statically for the resolver service.
+	if len(input) > 10 {
+		return nil, errors.New("too many addresses provided, max: 10")
+	}
+	addrs := make([]netip.AddrPort, 0, len(input))
+	for _, val := range input {
+		addr, err := netip.ParseAddrPort(val)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, nil
 }

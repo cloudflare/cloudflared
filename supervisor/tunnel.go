@@ -24,6 +24,7 @@ import (
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/fips"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
@@ -60,10 +61,12 @@ type TunnelConfig struct {
 
 	NeedPQ bool
 
-	NamedTunnel      *connection.TunnelProperties
-	ProtocolSelector connection.ProtocolSelector
-	EdgeTLSConfigs   map[connection.Protocol]*tls.Config
-	ICMPRouterServer ingress.ICMPRouterServer
+	NamedTunnel         *connection.TunnelProperties
+	ProtocolSelector    connection.ProtocolSelector
+	EdgeTLSConfigs      map[connection.Protocol]*tls.Config
+	ICMPRouterServer    ingress.ICMPRouterServer
+	OriginDNSService    *origins.DNSResolverService
+	OriginDialerService *ingress.OriginDialerService
 
 	RPCTimeout         time.Duration
 	WriteStreamTimeout time.Duration
@@ -613,6 +616,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		datagramSessionManager = connection.NewDatagramV2Connection(
 			ctx,
 			conn,
+			e.config.OriginDialerService,
 			e.config.ICMPRouterServer,
 			connIndex,
 			e.config.RPCTimeout,

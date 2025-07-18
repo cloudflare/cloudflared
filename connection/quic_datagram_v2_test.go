@@ -84,6 +84,7 @@ func TestRateLimitOnNewDatagramV2UDPSession(t *testing.T) {
 		t.Context(),
 		conn,
 		nil,
+		nil,
 		0,
 		0*time.Second,
 		0*time.Second,

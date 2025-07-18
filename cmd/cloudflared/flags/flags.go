@@ -157,4 +157,7 @@ const (
 
 	// ApiURL is the command line flag used to define the base URL of the API
 	ApiURL = "api-url"
+
+	// Virtual DNS resolver service resolver addresses to use instead of dynamically fetching them from the OS.
+	VirtualDNSServiceResolverAddresses = "dns-resolver-addrs"
 )

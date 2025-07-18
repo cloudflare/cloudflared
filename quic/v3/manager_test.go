@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/mocks"
 
 	cfdflow "github.com/cloudflare/cloudflared/flow"
@@ -18,9 +19,21 @@ import (
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 )
 
+var (
+	testDefaultDialer = ingress.NewDialer(ingress.WarpRoutingConfig{
+		ConnectTimeout: config.CustomDuration{Duration: 1 * time.Second},
+		TCPKeepAlive:   config.CustomDuration{Duration: 15 * time.Second},
+		MaxActiveFlows: 0,
+	})
+)
+
 func TestRegisterSession(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0))
+	originDialerService := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 0,
+	}, &log)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0))
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,
@@ -76,7 +89,11 @@ func TestRegisterSession(t *testing.T) {
 
 func TestGetSession_Empty(t *testing.T) {
 	log := zerolog.Nop()
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, cfdflow.NewLimiter(0))
+	originDialerService := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 0,
+	}, &log)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0))
 
 	_, err := manager.GetSession(testRequestID)
 	if !errors.Is(err, v3.ErrSessionNotFound) {
@@ -86,6 +103,10 @@ func TestGetSession_Empty(t *testing.T) {
 
 func TestRegisterSessionRateLimit(t *testing.T) {
 	log := zerolog.Nop()
+	originDialerService := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 0,
+	}, &log)
 	ctrl := gomock.NewController(t)
 
 	flowLimiterMock := mocks.NewMockLimiter(ctrl)
@@ -93,7 +114,7 @@ func TestRegisterSessionRateLimit(t *testing.T) {
 	flowLimiterMock.EXPECT().Acquire("udp").Return(cfdflow.ErrTooManyActiveFlows)
 	flowLimiterMock.EXPECT().Release().Times(0)
 
-	manager := v3.NewSessionManager(&noopMetrics{}, &log, ingress.DialUDPAddrPort, flowLimiterMock)
+	manager := v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, flowLimiterMock)
 
 	request := v3.UDPSessionRegistrationDatagram{
 		RequestID:        testRequestID,
