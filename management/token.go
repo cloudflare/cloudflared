@@ -7,9 +7,12 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 )
 
+const tunnelstoreFEDIssuer = "fed-tunnelstore"
+
 type managementTokenClaims struct {
 	Tunnel tunnel `json:"tun"`
 	Actor  actor  `json:"actor"`
+	jwt.Claims
 }
 
 // VerifyTunnel compares the tun claim isn't empty
@@ -37,7 +40,7 @@ func (t *actor) verify() bool {
 	return t.ID != ""
 }
 
-func parseToken(token string) (*managementTokenClaims, error) {
+func ParseToken(token string) (*managementTokenClaims, error) {
 	jwt, err := jwt.ParseSigned(token, []jose.SignatureAlgorithm{jose.ES256})
 	if err != nil {
 		return nil, fmt.Errorf("malformed jwt: %v", err)
@@ -53,4 +56,8 @@ func parseToken(token string) (*managementTokenClaims, error) {
 		return nil, fmt.Errorf("invalid management token format provided")
 	}
 	return &claims, nil
+}
+
+func (m *managementTokenClaims) IsFed() bool {
+	return m.Issuer == tunnelstoreFEDIssuer
 }

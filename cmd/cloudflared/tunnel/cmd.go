@@ -97,7 +97,7 @@ var (
 		"no-tls-verify",
 		"no-chunked-encoding",
 		"http2-origin",
-		"management-hostname",
+		cfdflags.ManagementHostname,
 		"service-op-ip",
 		"local-ssh-port",
 		"ssh-idle-timeout",
@@ -459,8 +459,23 @@ func StartServer(
 		}
 	}
 
+	userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
+	var isFEDEndpoint bool
+	if err != nil {
+		isFEDEndpoint = false
+	} else {
+		isFEDEndpoint = userCreds.IsFEDEndpoint()
+	}
+
+	var managementHostname string
+	if isFEDEndpoint {
+		managementHostname = credentials.FedRampHostname
+	} else {
+		managementHostname = c.String(cfdflags.ManagementHostname)
+	}
+
 	mgmt := management.New(
-		c.String("management-hostname"),
+		managementHostname,
 		c.Bool("management-diagnostics"),
 		serviceIP,
 		connectorID,
@@ -1042,7 +1057,7 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Value:   false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "management-hostname",
+			Name:    cfdflags.ManagementHostname,
 			Usage:   "Management hostname to signify incoming management requests",
 			EnvVars: []string{"TUNNEL_MANAGEMENT_HOSTNAME"},
 			Hidden:  true,

@@ -51,6 +51,7 @@ func buildTailManagementTokenSubcommand() *cli.Command {
 
 func managementTokenCommand(c *cli.Context) error {
 	log := createLogger(c)
+
 	token, err := getManagementToken(c, log)
 	if err != nil {
 		return err
@@ -99,7 +100,7 @@ func buildTailCommand(subcommands []*cli.Command) *cli.Command {
 				EnvVars: []string{"TUNNEL_MANAGEMENT_TOKEN"},
 			},
 			&cli.StringFlag{
-				Name:    "management-hostname",
+				Name:    cfdflags.ManagementHostname,
 				Usage:   "Management hostname to signify incoming management requests",
 				EnvVars: []string{"TUNNEL_MANAGEMENT_HOSTNAME"},
 				Hidden:  true,
@@ -236,7 +237,14 @@ func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
 		return "", err
 	}
 
-	client, err := userCreds.Client(c.String(cfdflags.ApiURL), buildInfo.UserAgent(), log)
+	var apiURL string
+	if userCreds.IsFEDEndpoint() {
+		apiURL = credentials.FedRampBaseApiURL
+	} else {
+		apiURL = c.String(cfdflags.ApiURL)
+	}
+
+	client, err := userCreds.Client(apiURL, buildInfo.UserAgent(), log)
 	if err != nil {
 		return "", err
 	}
@@ -261,7 +269,7 @@ func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
 // buildURL will build the management url to contain the required query parameters to authenticate the request.
 func buildURL(c *cli.Context, log *zerolog.Logger) (url.URL, error) {
 	var err error
-	managementHostname := c.String("management-hostname")
+
 	token := c.String("token")
 	if token == "" {
 		token, err = getManagementToken(c, log)
@@ -269,6 +277,19 @@ func buildURL(c *cli.Context, log *zerolog.Logger) (url.URL, error) {
 			return url.URL{}, fmt.Errorf("unable to acquire management token for requested tunnel id: %w", err)
 		}
 	}
+
+	claims, err := management.ParseToken(token)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("failed to determine if token is FED: %w", err)
+	}
+
+	var managementHostname string
+	if claims.IsFed() {
+		managementHostname = credentials.FedRampHostname
+	} else {
+		managementHostname = c.String(cfdflags.ManagementHostname)
+	}
+
 	query := url.Values{}
 	query.Add("access_token", token)
 	connector := c.String("connector-id")

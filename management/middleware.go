@@ -12,14 +12,7 @@ const (
 	accessClaimsCtxKey ctxKey = iota
 )
 
-const (
-	connectorIDQuery = "connector_id"
-	accessTokenQuery = "access_token"
-)
-
-var (
-	errMissingAccessToken = managementError{Code: 1001, Message: "missing access_token query parameter"}
-)
+var errMissingAccessToken = managementError{Code: 1001, Message: "missing access_token query parameter"}
 
 // HTTP middleware setting the parsed access_token claims in the request context
 func ValidateAccessTokenQueryMiddleware(next http.Handler) http.Handler {
@@ -30,7 +23,7 @@ func ValidateAccessTokenQueryMiddleware(next http.Handler) http.Handler {
 			writeHTTPErrorResponse(w, errMissingAccessToken)
 			return
 		}
-		token, err := parseToken(accessToken)
+		token, err := ParseToken(accessToken)
 		if err != nil {
 			writeHTTPErrorResponse(w, errMissingAccessToken)
 			return
