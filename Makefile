@@ -54,8 +54,11 @@ endif
 IMPORT_PATH    := github.com/cloudflare/cloudflared
 PACKAGE_DIR    := $(CURDIR)/packaging
 PREFIX         := /usr
-INSTALL_BINDIR := $(PREFIX)/bin/
-INSTALL_MANDIR := $(PREFIX)/share/man/man1/
+ifeq ($(LOCAL_OS),freebsd)
+    PREFIX     := /usr/local
+endif
+INSTALL_BINDIR := $(PREFIX)/bin
+INSTALL_MANDIR := $(PREFIX)/share/man/man1
 
 LOCAL_ARCH ?= $(shell uname -m)
 ifneq ($(GOARCH),)
