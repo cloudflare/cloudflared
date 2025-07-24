@@ -54,7 +54,7 @@ endif
 IMPORT_PATH    := github.com/cloudflare/cloudflared
 PACKAGE_DIR    := $(CURDIR)/packaging
 PREFIX         := /usr
-ifeq ($(LOCAL_OS),freebsd)
+ifeq ($(shell go env GOOS),freebsd)
     PREFIX     := /usr/local
 endif
 INSTALL_BINDIR := $(PREFIX)/bin
