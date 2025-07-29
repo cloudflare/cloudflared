@@ -123,6 +123,9 @@ const (
 	// NoAutoUpdate is the command line flag to disable cloudflared from checking for updates
 	NoAutoUpdate = "no-autoupdate"
 
+	// NoConfigUpdate is the command line flag to disable cloudflared from accepting remote ingress configuration
+	NoConfigUpdate = "no-configupdate"
+
 	// LogLevel is the command line flag for the cloudflared logging level
 	LogLevel = "loglevel"
 

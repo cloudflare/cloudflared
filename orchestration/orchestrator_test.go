@@ -218,6 +218,48 @@ func TestUpdateConfiguration_FromMigration(t *testing.T) {
 	require.Len(t, orchestrator.config.Ingress.Rules, 1)
 }
 
+// Validates that a new version 0 will be applied if the configuration is loaded locally.
+// This will happen when a locally managed tunnel is migrated to remote configuration and receives its first configuration.
+func TestNoUpdateConfiguration(t *testing.T) {
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &testLogger)
+	flags := map[string]string{
+		"no-configupdate":"true",
+	}
+	initConfig := &Config{
+		Ingress:             &ingress.Ingress{},
+		OriginDialerService: originDialer,
+		ConfigurationFlags:  flags,
+
+	}
+	orchestrator, err := NewOrchestrator(t.Context(), initConfig, testTags, []ingress.Rule{}, &testLogger)
+	require.NoError(t, err)
+	initOriginProxy, err := orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+	require.Implements(t, (*connection.OriginProxy)(nil), initOriginProxy)
+
+	configJSONV2 := []byte(`
+{
+    "ingress": [
+	{
+            "hostname": "jira.tunnel.org",
+            "service": "http://192.16.19.1"
+        },
+        {
+            "service": "http_status:404"
+        }
+    ],
+    "warp-routing": {
+    }
+}
+`)
+	updateWithValidation(t, orchestrator, 0, configJSONV2)
+	require.Len(t, orchestrator.config.Ingress.Rules, 1)
+}
+
+
 // Validates that the default ingress rule will be set if there is no rule provided from the remote.
 func TestUpdateConfiguration_WithoutIngressRule(t *testing.T) {
 	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{

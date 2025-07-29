@@ -45,6 +45,7 @@ var (
 	configFlags = []string{
 		flags.AutoUpdateFreq,
 		flags.NoAutoUpdate,
+		flags.NoConfigUpdate,
 		flags.Retries,
 		flags.Protocol,
 		flags.LogLevel,

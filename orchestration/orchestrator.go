@@ -99,24 +99,33 @@ func (o *Orchestrator) UpdateConfig(version int32, config []byte) *pogs.UpdateCo
 			Err:                err,
 		}
 	}
+	if val, ok := o.config.ConfigurationFlags[flags.NoConfigUpdate]; ok && val == "true" {
+		body, err := json.Marshal(o.config.Ingress)
+		if err != nil {
+			o.log.Err(err)
+		}
+		o.log.Info().Str("acting config", string(body)).Msg("Update disabled, keeping old config")
+	} else {
+		if err := o.updateIngress(newConf.Ingress, newConf.WarpRouting); err != nil {
+			o.log.Err(err).
+				Int32("version", version).
+				Str("config", string(config)).
+				Msgf("Failed to update ingress")
+			return &pogs.UpdateConfigurationResponse{
+				LastAppliedVersion: o.currentVersion,
+				Err:                err,
+			}
+		}
 
-	if err := o.updateIngress(newConf.Ingress, newConf.WarpRouting); err != nil {
-		o.log.Err(err).
+		o.log.Info().
 			Int32("version", version).
 			Str("config", string(config)).
-			Msgf("Failed to update ingress")
-		return &pogs.UpdateConfigurationResponse{
-			LastAppliedVersion: o.currentVersion,
-			Err:                err,
-		}
+			Msg("Updated to new configuration")
+		configVersion.Set(float64(version))
 	}
+
 	o.currentVersion = version
 
-	o.log.Info().
-		Int32("version", version).
-		Str("config", string(config)).
-		Msg("Updated to new configuration")
-	configVersion.Set(float64(version))
 	return &pogs.UpdateConfigurationResponse{
 		LastAppliedVersion: o.currentVersion,
 	}
