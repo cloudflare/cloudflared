@@ -386,10 +386,11 @@ func setContentLength(req *http.Request) error {
 }
 
 func isTransferEncodingChunked(req *http.Request) bool {
+	contentEncodingVal := req.Header.Get("Content-Encoding") // AWS S3 uses Content-Encoding: aws-chunked
 	transferEncodingVal := req.Header.Get("Transfer-Encoding")
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
-	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
+	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked") || strings.Contains(strings.ToLower(contentEncodingVal), "chunked")
 }
 
 // A helper struct that guarantees a call to close only affects read side, but not write side.
