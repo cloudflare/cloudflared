@@ -1,3 +1,8 @@
+2025.8.0
+- 2025-08-07 vuln: Fix GO-2025-3770 vulnerability
+- 2025-07-23 TUN-9583: set proper url and hostname for cloudflared tail command
+- 2025-07-07 TUN-9542: Remove unsupported Debian-based releases
+
 2025.7.0
 - 2025-07-03 TUN-9540: Use numeric user id for Dockerfiles
 - 2025-07-01 TUN-9161: Remove P256Kyber768Draft00PQKex curve from nonFips curve preferences
