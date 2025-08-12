@@ -104,6 +104,10 @@ func Commands() []*cli.Command {
 							Name:  "no-verbose",
 							Usage: "print only the jwt to stdout",
 						},
+						&cli.BoolFlag{
+							Name:  "auto-close",
+							Usage: "automatically close the auth interstitial after action",
+						},
 						&cli.StringFlag{
 							Name: appURLFlag,
 						},
@@ -322,7 +326,7 @@ func curl(c *cli.Context) error {
 			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL, appInfo, log)
+		tok, err = token.FetchToken(appURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), log)
 		if err != nil {
 			log.Err(err).Msg("Failed to refresh token")
 			return err
@@ -442,7 +446,7 @@ func sshGen(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, log)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), log)
 	if err != nil {
 		return err
 	}
@@ -542,7 +546,7 @@ func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, 
 	if c.IsSet(sshTokenSecretFlag) {
 		headers.Add(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
-	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers}
+	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers, AutoCloseInterstitial: c.Bool(cfdflags.AutoCloseInterstitial)}
 
 	if valid, err := isTokenValid(options, log); err != nil {
 		return err

@@ -25,12 +25,12 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, log *zerolog.Logger) ([]byte, error) {
+func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, autoClose bool, log *zerolog.Logger) ([]byte, error) {
 	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
 	}
-	requestURL, err := buildRequestURL(transferURL, appAUD, key, value+encrypterClient.PublicKey(), shouldEncrypt, useHostOnly)
+	requestURL, err := buildRequestURL(transferURL, appAUD, key, value+encrypterClient.PublicKey(), shouldEncrypt, useHostOnly, autoClose)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 // BuildRequestURL creates a request suitable for a resource transfer.
 // it will return a constructed url based off the base url and query key/value provided.
 // cli will build a url for cli transfer request.
-func buildRequestURL(baseURL *url.URL, appAUD string, key, value string, cli, useHostOnly bool) (string, error) {
+func buildRequestURL(baseURL *url.URL, appAUD string, key, value string, cli, useHostOnly bool, autoClose bool) (string, error) {
 	q := baseURL.Query()
 	q.Set(key, value)
 	q.Set("aud", appAUD)
@@ -90,7 +90,11 @@ func buildRequestURL(baseURL *url.URL, appAUD string, key, value string, cli, us
 	q.Set("redirect_url", baseURL.String()) // we add the token as a query param on both the redirect_url and the main url
 	q.Set("send_org_token", "true")         // indicates that the cli endpoint should return both the org and app token
 	q.Set("edge_token_transfer", "true")    // use new LoginHelper service built on workers
-	baseURL.RawQuery = q.Encode()           // and this actual baseURL.
+	if autoClose {
+		q.Set("close_interstitial", "true") // Automatically close the success window.
+	}
+
+	baseURL.RawQuery = q.Encode() // and this actual baseURL.
 	baseURL.Path = "cdn-cgi/access/cli"
 	return baseURL.String(), nil
 }

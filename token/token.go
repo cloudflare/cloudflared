@@ -185,18 +185,18 @@ func Init(version string) {
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
 // it appends the full url as the redirect URL to the access cli request if opening the browser
-func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, appInfo, false, log)
+func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, autoClose bool, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, false, autoClose, log)
 }
 
 // FetchToken will either load a stored token or generate a new one
 // it appends the host of the appURL as the redirect URL to the access cli request if opening the browser
-func FetchToken(appURL *url.URL, appInfo *AppInfo, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, appInfo, true, log)
+func FetchToken(appURL *url.URL, appInfo *AppInfo, autoClose bool, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, true, autoClose, log)
 }
 
 // getToken will either load a stored token or generate a new one
-func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.Logger) (string, error) {
+func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose bool, log *zerolog.Logger) (string, error) {
 	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
 		return token, nil
 	}
@@ -249,18 +249,19 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, log *zerolog.
 			return appToken, nil
 		}
 	}
-	return getTokensFromEdge(appURL, appInfo.AppAUD, appTokenPath, orgTokenPath, useHostOnly, log)
+	return getTokensFromEdge(appURL, appInfo.AppAUD, appTokenPath, orgTokenPath, useHostOnly, autoClose, log)
 }
 
 // getTokensFromEdge will attempt to use the transfer service to retrieve an app and org token, save them to disk,
 // and return the app token.
-func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath string, useHostOnly bool, log *zerolog.Logger) (string, error) {
+func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath string, useHostOnly bool, autoClose bool, log *zerolog.Logger) (string, error) {
+	fmt.Println("Get tokens from edge ", autoClose)
 	// If no org token exists or if it couldn't be exchanged for an app token, then run the transfer service flow.
 
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	resourceData, err := RunTransfer(appURL, appAUD, keyName, keyName, "", true, useHostOnly, log)
+	resourceData, err := RunTransfer(appURL, appAUD, keyName, keyName, "", true, useHostOnly, autoClose, log)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run transfer service")
 	}

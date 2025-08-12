@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/logger"
@@ -97,6 +98,7 @@ func login(c *cli.Context) error {
 		callbackStoreURL,
 		false,
 		false,
+		c.Bool(cfdflags.AutoCloseInterstitial),
 		log,
 	)
 	if err != nil {
