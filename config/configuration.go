@@ -231,6 +231,10 @@ type OriginRequestConfig struct {
 	Http2Origin *bool `yaml:"http2Origin" json:"http2Origin,omitempty"`
 	// Access holds all access related configs
 	Access *AccessConfig `yaml:"access" json:"access,omitempty"`
+	// Custom headers to add/modify when forwarding to origin
+	Headers map[string]string `yaml:"headers" json:"headers,omitempty"`
+	// Headers to remove when forwarding to origin
+	RemoveHeaders []string `yaml:"removeHeaders" json:"removeHeaders,omitempty"`
 }
 
 type AccessConfig struct {

@@ -217,6 +217,10 @@ func (p *Proxy) proxyHTTPRequest(
 		roundTripReq.Header.Set("User-Agent", "")
 	}
 
+	if rule, ok := p.findRuleForRequest(roundTripReq); ok {
+		p.applyCustomHeaders(roundTripReq, rule)
+	}
+
 	_, ttfbSpan := tr.Tracer().Start(tr.Context(), "ttfb_origin")
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
@@ -393,4 +397,27 @@ func getDestFromRule(rule *ingress.Rule, req *http.Request) (string, error) {
 	default:
 		return rule.Service.String(), nil
 	}
+}
+
+func (p *Proxy) applyCustomHeaders(req *http.Request, rule *ingress.Rule) {
+	if rule == nil {
+		return
+	}
+
+	if rule.Config.Headers != nil {
+		for name, value := range rule.Config.Headers {
+			req.Header.Set(name, value)
+		}
+	}
+
+	if rule.Config.RemoveHeaders != nil {
+		for _, name := range rule.Config.RemoveHeaders {
+			req.Header.Del(name)
+		}
+	}
+}
+
+func (p *Proxy) findRuleForRequest(req *http.Request) (*ingress.Rule, bool) {
+	rule, _ := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+	return rule, rule != nil
 }

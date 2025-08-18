@@ -1014,3 +1014,55 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 		}
 	}()
 }
+
+func TestApplyCustomHeaders(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/test", nil)
+	
+	rule := &ingress.Rule{
+		Config: ingress.OriginRequestConfig{
+			Headers: map[string]string{
+				"X-Custom-Header": "custom-value",
+				"Authorization":    "Bearer token123",
+			},
+			RemoveHeaders: []string{"X-Unwanted", "Server"},
+		},
+	}
+	
+	req.Header.Set("X-Unwanted", "remove-me")
+	req.Header.Set("Server", "nginx")
+	req.Header.Set("Keep-Me", "keep-this")
+	
+	proxy := &Proxy{}	
+	proxy.applyCustomHeaders(req, rule)
+	
+	assert.Equal(t, "custom-value", req.Header.Get("X-Custom-Header"))
+	assert.Equal(t, "Bearer token123", req.Header.Get("Authorization"))
+	assert.Empty(t, req.Header.Get("X-Unwanted"))
+	assert.Empty(t, req.Header.Get("Server"))
+	assert.Equal(t, "keep-this", req.Header.Get("Keep-Me"))
+}
+
+func TestApplyCustomHeadersNoConfig(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/test", nil)
+	
+	rule := &ingress.Rule{
+		Config: ingress.OriginRequestConfig{},
+	}
+	
+	req.Header.Set("X-Original", "original-value")
+	
+	proxy := &Proxy{}
+	
+	proxy.applyCustomHeaders(req, rule)
+	
+	assert.Equal(t, "original-value", req.Header.Get("X-Original"))
+}
+
+func TestApplyCustomHeadersNilRule(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/test", nil)
+	
+	proxy := &Proxy{}
+	assert.NotPanics(t, func() {
+		proxy.applyCustomHeaders(req, nil)
+	})
+}

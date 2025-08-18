@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -137,6 +138,16 @@ func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 	var proxyPort uint
 	var proxyType string
 	var http2Origin bool
+	
+	var cliHeaders map[string]string
+	var cliRemoveHeaders []string
+	if c.IsSet("header") {
+		cliHeaders = parseHeadersFromCLI(c)
+	}
+	if c.IsSet("remove-header") {
+		cliRemoveHeaders = parseRemoveHeadersFromCLI(c)
+	}
+	
 	if flag := ProxyConnectTimeoutFlag; c.IsSet(flag) {
 		connectTimeout = config.CustomDuration{Duration: c.Duration(flag)}
 	}
@@ -209,6 +220,8 @@ func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 		ProxyPort:              proxyPort,
 		ProxyType:              proxyType,
 		Http2Origin:            http2Origin,
+		Headers:                cliHeaders,
+		RemoveHeaders:          cliRemoveHeaders,
 	}
 }
 
@@ -333,6 +346,12 @@ type OriginRequestConfig struct {
 
 	// Access holds all access related configs
 	Access config.AccessConfig `yaml:"access" json:"access,omitempty"`
+
+	// Custom headers to add/modify when forwarding to origin
+	Headers map[string]string `yaml:"headers" json:"headers,omitempty"`
+
+	// Headers to remove when forwarding to origin
+	RemoveHeaders []string `yaml:"removeHeaders" json:"removeHeaders,omitempty"`
 }
 
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {
@@ -456,6 +475,26 @@ func (defaults *OriginRequestConfig) setAccess(overrides config.OriginRequestCon
 	}
 }
 
+func (defaults *OriginRequestConfig) setHeaders(overrides config.OriginRequestConfig) {
+	if overrides.Headers != nil {
+		if defaults.Headers == nil {
+			defaults.Headers = make(map[string]string)
+		}
+		for k, v := range overrides.Headers {
+			defaults.Headers[k] = v
+		}
+	}
+}
+
+func (defaults *OriginRequestConfig) setRemoveHeaders(overrides config.OriginRequestConfig) {
+	if overrides.RemoveHeaders != nil {
+		if defaults.RemoveHeaders == nil {
+			defaults.RemoveHeaders = make([]string, 0)
+		}
+		defaults.RemoveHeaders = append(defaults.RemoveHeaders, overrides.RemoveHeaders...)
+	}
+}
+
 // SetConfig gets config for the requests that cloudflared sends to origins.
 // Each field has a setter method which sets a value for the field by trying to find:
 //  1. The user config for this rule
@@ -485,6 +524,8 @@ func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfi
 	cfg.setIPRules(overrides)
 	cfg.setHttp2Origin(overrides)
 	cfg.setAccess(overrides)
+	cfg.setHeaders(overrides)
+	cfg.setRemoveHeaders(overrides)
 
 	return cfg
 }
@@ -540,6 +581,8 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 		IPRules:                convertToRawIPRules(c.IPRules),
 		Http2Origin:            defaultBoolToNil(c.Http2Origin),
 		Access:                 access,
+		Headers:                c.Headers,
+		RemoveHeaders:          c.RemoveHeaders,
 	}
 }
 
@@ -582,4 +625,59 @@ func zeroUIntToNil(v uint) *uint {
 	}
 
 	return &v
+}
+
+func parseHeadersFromCLI(c *cli.Context) map[string]string {
+	headers := make(map[string]string)
+
+	if c.IsSet("header") {
+		headerFlags := c.StringSlice("header")
+		for _, headerFlag := range headerFlags {
+			if name, value, valid := parseHeaderFlag(headerFlag); valid {
+				headers[name] = value
+			}
+		}
+	}
+
+	return headers
+}
+
+func parseRemoveHeadersFromCLI(c *cli.Context) []string {
+	if c.IsSet("remove-header") {
+		return c.StringSlice("remove-header")
+	}
+	return nil
+}
+
+func parseHeaderFlag(headerFlag string) (name, value string, valid bool) {
+	parts := strings.SplitN(headerFlag, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	
+	name = strings.TrimSpace(parts[0])
+	value = strings.TrimSpace(parts[1])
+	
+	if name == "" || value == "" || !isValidHeaderName(name) {
+		return "", "", false
+	}
+	
+	return name, value, true
+}
+
+func isValidHeaderName(name string) bool {
+	if name == "" || strings.Contains(name, ":") {
+		return false
+	}
+	if strings.ContainsAny(name, " \t\r\n") {
+		return false
+	}
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+	if len(name) > 256 {
+		return false
+	}
+
+	return true
 }

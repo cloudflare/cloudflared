@@ -1056,6 +1056,19 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 			Value:   false,
 		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "header",
+			Aliases: []string{"H"},
+			Usage:   "Add custom header when forwarding to origin (format: 'Name: Value')",
+			EnvVars: []string{"TUNNEL_HEADERS"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:    "remove-header",
+			Usage:   "Remove header when forwarding to origin",
+			EnvVars: []string{"TUNNEL_REMOVE_HEADERS"},
+			Hidden:  shouldHide,
+		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    cfdflags.ManagementHostname,
 			Usage:   "Management hostname to signify incoming management requests",
