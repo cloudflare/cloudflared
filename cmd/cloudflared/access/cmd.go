@@ -51,6 +51,7 @@ Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
 {{end}}
 `
+	fedrampFlag = "fedramp"
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
@@ -79,6 +80,10 @@ func Commands() []*cli.Command {
 			Aliases:  []string{"forward"},
 			Category: "Access",
 			Usage:    "access <subcommand>",
+			Flags: []cli.Flag{&cli.BoolFlag{
+				Name:  fedrampFlag,
+				Usage: "use when performing operations in fedramp account",
+			}},
 			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected
@@ -326,7 +331,7 @@ func curl(c *cli.Context) error {
 			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), log)
+		tok, err = token.FetchToken(appURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), log)
 		if err != nil {
 			log.Err(err).Msg("Failed to refresh token")
 			return err
@@ -446,7 +451,7 @@ func sshGen(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), log)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), log)
 	if err != nil {
 		return err
 	}
@@ -546,7 +551,7 @@ func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, 
 	if c.IsSet(sshTokenSecretFlag) {
 		headers.Add(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
-	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers, AutoCloseInterstitial: c.Bool(cfdflags.AutoCloseInterstitial)}
+	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers, AutoCloseInterstitial: c.Bool(cfdflags.AutoCloseInterstitial), IsFedramp: c.Bool(fedrampFlag)}
 
 	if valid, err := isTokenValid(options, log); err != nil {
 		return err

@@ -47,6 +47,7 @@ func StartForwarder(forwarder config.Forwarder, shutdown <-chan struct{}, log *z
 	options := &carrier.StartOptions{
 		OriginURL: forwarder.URL,
 		Headers:   headers, //TODO: TUN-2688 support custom headers from config file
+		IsFedramp: forwarder.IsFedramp,
 	}
 
 	// we could add a cmd line variable for this bool if we want the SOCK5 server to be on the client side
@@ -92,6 +93,7 @@ func ssh(c *cli.Context) error {
 		OriginURL: url.String(),
 		Headers:   headers,
 		Host:      url.Host,
+		IsFedramp: c.Bool(fedrampFlag),
 	}
 
 	if connectTo := c.String(sshConnectTo); connectTo != "" {

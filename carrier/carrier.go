@@ -32,6 +32,7 @@ type StartOptions struct {
 	Host                  string
 	TLSClientConfig       *tls.Config
 	AutoCloseInterstitial bool
+	IsFedramp             bool
 }
 
 // Connection wraps up all the needed functions to forward over the tunnel
@@ -139,7 +140,7 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 		return nil, err
 	}
 
-	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, log)
+	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, options.IsFedramp, log)
 	if err != nil {
 		return nil, err
 	}

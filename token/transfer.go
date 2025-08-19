@@ -16,6 +16,7 @@ import (
 
 const (
 	baseStoreURL  = "https://login.cloudflareaccess.org/"
+	fedStoreURL   = "https://login.fed.cloudflareaccess.org/"
 	clientTimeout = time.Second * 60
 )
 
@@ -25,7 +26,7 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, autoClose bool, log *zerolog.Logger) ([]byte, error) {
+func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, autoClose bool, fedramp bool, log *zerolog.Logger) ([]byte, error) {
 	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -45,8 +46,14 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 
 	var resourceData []byte
 
+	storeURL := baseStoreURL
+
+	if fedramp {
+		storeURL = fedStoreURL
+	}
+
 	if shouldEncrypt {
-		buf, key, err := transferRequest(baseStoreURL+"transfer/"+encrypterClient.PublicKey(), log)
+		buf, key, err := transferRequest(storeURL+"transfer/"+encrypterClient.PublicKey(), log)
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +69,7 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 
 		resourceData = decrypted
 	} else {
-		buf, _, err := transferRequest(baseStoreURL+encrypterClient.PublicKey(), log)
+		buf, _, err := transferRequest(storeURL+encrypterClient.PublicKey(), log)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +138,12 @@ func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, 
 	// ignore everything other than server errors as the resource
 	// may not exist until the user does the interaction
 	if resp.StatusCode >= 500 {
-		return nil, "", fmt.Errorf("error on request %d", resp.StatusCode)
+		buf := new(bytes.Buffer)
+		if _, err := io.Copy(buf, resp.Body); err != nil {
+			return nil, "", err
+		}
+
+		return nil, "", fmt.Errorf("error on request %d: %s", resp.StatusCode, buf.String())
 	}
 	if resp.StatusCode != 200 {
 		log.Info().Msg("Waiting for login...")
