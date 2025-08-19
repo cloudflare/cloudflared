@@ -98,24 +98,17 @@ func NewDatagramV2Connection(ctx context.Context,
 }
 
 func (d *datagramV2Connection) Serve(ctx context.Context) error {
-	// If either goroutine returns nil error, we rely on this cancellation to make sure the other goroutine exits
-	// as fast as possible as well. Nil error means we want to exit for good (caller code won't retry serving this
-	// connection).
-	// If either goroutine returns a non nil error, then the error group cancels the context, thus also canceling the
-	// other goroutine as fast as possible.
-	ctx, cancel := context.WithCancel(ctx)
+	// If either goroutine from the errgroup returns at all (error or nil), we rely on its cancellation to make sure
+	// the other goroutines as well.
 	errGroup, ctx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		defer cancel()
 		return d.sessionManager.Serve(ctx)
 	})
 	errGroup.Go(func() error {
-		defer cancel()
 		return d.datagramMuxer.ServeReceive(ctx)
 	})
 	errGroup.Go(func() error {
-		defer cancel()
 		return d.packetRouter.Serve(ctx)
 	})
 

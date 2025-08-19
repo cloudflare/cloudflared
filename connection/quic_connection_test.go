@@ -847,7 +847,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		&log,
 	}
 
-	tunnelConn, err := NewTunnelConnection(
+	tunnelConn := NewTunnelConnection(
 		ctx,
 		conn,
 		index,
@@ -860,7 +860,6 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		0*time.Second,
 		&log,
 	)
-	require.NoError(t, err)
 	return tunnelConn, datagramConn
 }
 
