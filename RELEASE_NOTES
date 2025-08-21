@@ -1,3 +1,8 @@
+2025.8.1
+- 2025-08-19 AUTH-7480 update fed callback url for login helper
+- 2025-08-19 CUSTESC-53681: Correct QUIC connection management for datagram handlers
+- 2025-08-12 AUTH-7260: Add support for login interstitial auto closure
+
 2025.8.0
 - 2025-08-07 vuln: Fix GO-2025-3770 vulnerability
 - 2025-07-23 TUN-9583: set proper url and hostname for cloudflared tail command
