@@ -82,7 +82,7 @@ func (c *controlStream) ServeControlStream(
 	tunnelConfigGetter TunnelConfigJSONGetter,
 ) error {
 	registrationClient := c.registerClientFunc(ctx, rw, c.registerTimeout)
-
+	c.observer.logConnecting(c.connIndex, c.edgeAddress, c.protocol)
 	registrationDetails, err := registrationClient.RegisterConnection(
 		ctx,
 		c.tunnelProperties.Credentials.Auth(),

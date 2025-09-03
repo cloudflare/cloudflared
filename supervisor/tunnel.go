@@ -556,6 +556,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	pqMode := connOptions.FeatureSnapshot.PostQuantum
 	curvePref, err := curvePreference(pqMode, fips.IsFipsEnabled(), tlsConfig.CurvePreferences)
 	if err != nil {
+		connLogger.ConnAwareLogger().Err(err).Msgf("failed to get curve preferences")
 		return err, true
 	}
 
@@ -627,7 +628,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 	}
 
 	// Wrap the [quic.Connection] as a TunnelConnection
-	tunnelConn, err := connection.NewTunnelConnection(
+	tunnelConn := connection.NewTunnelConnection(
 		ctx,
 		conn,
 		connIndex,
@@ -640,17 +641,13 @@ func (e *EdgeTunnelServer) serveQUIC(
 		e.config.GracePeriod,
 		connLogger.Logger(),
 	)
-	if err != nil {
-		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to create new tunnel connection")
-		return err, true
-	}
 
 	// Serve the TunnelConnection
 	errGroup, serveCtx := errgroup.WithContext(ctx)
 	errGroup.Go(func() error {
 		err := tunnelConn.Serve(serveCtx)
 		if err != nil {
-			connLogger.ConnAwareLogger().Err(err).Msg("Failed to serve tunnel connection")
+			connLogger.ConnAwareLogger().Err(err).Msg("failed to serve tunnel connection")
 		}
 		return err
 	})

@@ -175,7 +175,7 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 		// Monitor the context of cloudflared
 		case <-ctx.Done():
 			return ctx.Err()
-		// Monitor the context of the underlying connection
+		// Monitor the context of the underlying quic connection
 		case <-connCtx.Done():
 			return connCtx.Err()
 		// Monitor for any hard errors from reading the connection

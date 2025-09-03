@@ -132,6 +132,7 @@ func (s *Supervisor) Run(
 		if err == errEarlyShutdown {
 			return nil
 		}
+		s.log.Logger().Error().Err(err).Msg("initial tunnel connection failed")
 		return err
 	}
 	var tunnelsWaiting []int
@@ -154,6 +155,7 @@ func (s *Supervisor) Run(
 		// (note that this may also be caused by context cancellation)
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
+			s.log.ConnAwareLogger().Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 			if tunnelError.err != nil && !shuttingDown {
 				switch tunnelError.err.(type) {
 				case ReconnectSignal:
@@ -166,7 +168,6 @@ func (s *Supervisor) Run(
 				if _, retry := s.tunnelsProtocolFallback[tunnelError.index].GetMaxBackoffDuration(ctx); !retry {
 					continue
 				}
-				s.log.ConnAwareLogger().Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -285,7 +286,10 @@ func (s *Supervisor) startFirstTunnel(
 			*quic.IdleTimeoutError,
 			*quic.ApplicationError,
 			edgediscovery.DialError,
-			*connection.EdgeQuicDialError:
+			*connection.EdgeQuicDialError,
+			*connection.ControlStreamError,
+			*connection.StreamListenerError,
+			*connection.DatagramManagerError:
 			// Try again for these types of errors
 		default:
 			// Uncaught errors should bail startup
@@ -301,13 +305,9 @@ func (s *Supervisor) startTunnel(
 	index int,
 	connectedSignal *signal.Signal,
 ) {
-	var err error
-	defer func() {
-		s.tunnelErrors <- tunnelError{index: index, err: err}
-	}()
-
 	// nolint: gosec
-	err = s.edgeTunnelServer.Serve(ctx, uint8(index), s.tunnelsProtocolFallback[index], connectedSignal)
+	err := s.edgeTunnelServer.Serve(ctx, uint8(index), s.tunnelsProtocolFallback[index], connectedSignal)
+	s.tunnelErrors <- tunnelError{index: index, err: err}
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {

@@ -20,7 +20,9 @@ and [docgen](https://github.com/go-chi/docgen). We hope you enjoy it too!
 
 ## Install
 
-`go get -u github.com/go-chi/chi/v5`
+```sh
+go get -u github.com/go-chi/chi/v5
+```
 
 
 ## Features
@@ -65,7 +67,7 @@ func main() {
 
 **REST Preview:**
 
-Here is a little preview of how routing looks like with chi. Also take a look at the generated routing docs
+Here is a little preview of what routing looks like with chi. Also take a look at the generated routing docs
 in JSON ([routes.json](https://github.com/go-chi/chi/blob/master/_examples/rest/routes.json)) and in
 Markdown ([routes.md](https://github.com/go-chi/chi/blob/master/_examples/rest/routes.md)).
 
@@ -194,7 +196,7 @@ type Router interface {
 	// path, with a fresh middleware stack for the inline-Router.
 	Group(fn func(r Router)) Router
 
-	// Route mounts a sub-Router along a `pattern`` string.
+	// Route mounts a sub-Router along a `pattern` string.
 	Route(pattern string, fn func(r Router)) Router
 
 	// Mount attaches another http.Handler along ./pattern/*
@@ -354,6 +356,7 @@ with `net/http` can be used with chi's mux.
 | [RouteHeaders]         | Route handling for request headers                                      |
 | [SetHeader]            | Short-hand middleware to set a response header key/value                |
 | [StripSlashes]         | Strip slashes on routing paths                                          |
+| [Sunset]               | Sunset set Deprecation/Sunset header to response                        |
 | [Throttle]             | Puts a ceiling on the number of concurrent requests                     |
 | [Timeout]              | Signals to the request context when the timeout deadline is reached     |
 | [URLFormat]            | Parse extension from url and put it on request context                  |
@@ -380,6 +383,7 @@ with `net/http` can be used with chi's mux.
 [RouteHeaders]: https://pkg.go.dev/github.com/go-chi/chi/middleware#RouteHeaders
 [SetHeader]: https://pkg.go.dev/github.com/go-chi/chi/middleware#SetHeader
 [StripSlashes]: https://pkg.go.dev/github.com/go-chi/chi/middleware#StripSlashes
+[Sunset]: https://pkg.go.dev/github.com/go-chi/chi/v5/middleware#Sunset
 [Throttle]: https://pkg.go.dev/github.com/go-chi/chi/middleware#Throttle
 [ThrottleBacklog]: https://pkg.go.dev/github.com/go-chi/chi/middleware#ThrottleBacklog
 [ThrottleWithOpts]: https://pkg.go.dev/github.com/go-chi/chi/middleware#ThrottleWithOpts
@@ -467,7 +471,8 @@ how setting context on a request in Go works.
 
 * Carl Jackson for https://github.com/zenazn/goji
   * Parts of chi's thinking comes from goji, and chi's middleware package
-    sources from goji.
+    sources from [goji](https://github.com/zenazn/goji/tree/master/web/middleware).
+  * Please see goji's [LICENSE](https://github.com/zenazn/goji/blob/master/LICENSE) (MIT)
 * Armon Dadgar for https://github.com/armon/go-radix
 * Contributions: [@VojtechVitek](https://github.com/VojtechVitek)
 
@@ -494,7 +499,7 @@ Copyright (c) 2015-present [Peter Kieltyka](https://github.com/pkieltyka)
 
 Licensed under [MIT License](./LICENSE)
 
-[GoDoc]: https://pkg.go.dev/github.com/go-chi/chi?tab=versions
+[GoDoc]: https://pkg.go.dev/github.com/go-chi/chi/v5
 [GoDoc Widget]: https://godoc.org/github.com/go-chi/chi?status.svg
 [Travis]: https://travis-ci.org/go-chi/chi
 [Travis Widget]: https://travis-ci.org/go-chi/chi.svg?branch=master

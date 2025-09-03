@@ -1,7 +1,7 @@
 package config
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"strings"
@@ -16,6 +16,7 @@ type Forwarder struct {
 	TokenClientID string `json:"service_token_id" yaml:"serviceTokenID"`
 	TokenSecret   string `json:"secret_token_id" yaml:"serviceTokenSecret"`
 	Destination   string `json:"destination"`
+	IsFedramp     bool   `json:"is_fedramp" yaml:"isFedramp"`
 }
 
 // Tunnel represents a tunnel that should be started
@@ -46,24 +47,24 @@ type Root struct {
 
 // Hash returns the computed values to see if the forwarder values change
 func (f *Forwarder) Hash() string {
-	h := md5.New()
-	io.WriteString(h, f.URL)
-	io.WriteString(h, f.Listener)
-	io.WriteString(h, f.TokenClientID)
-	io.WriteString(h, f.TokenSecret)
-	io.WriteString(h, f.Destination)
+	h := sha256.New()
+	_, _ = io.WriteString(h, f.URL)
+	_, _ = io.WriteString(h, f.Listener)
+	_, _ = io.WriteString(h, f.TokenClientID)
+	_, _ = io.WriteString(h, f.TokenSecret)
+	_, _ = io.WriteString(h, f.Destination)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // Hash returns the computed values to see if the forwarder values change
 func (r *DNSResolver) Hash() string {
-	h := md5.New()
-	io.WriteString(h, r.Address)
-	io.WriteString(h, strings.Join(r.Bootstraps, ","))
-	io.WriteString(h, strings.Join(r.Upstreams, ","))
-	io.WriteString(h, fmt.Sprintf("%d", r.Port))
-	io.WriteString(h, fmt.Sprintf("%d", r.MaxUpstreamConnections))
-	io.WriteString(h, fmt.Sprintf("%v", r.Enabled))
+	h := sha256.New()
+	_, _ = io.WriteString(h, r.Address)
+	_, _ = io.WriteString(h, strings.Join(r.Bootstraps, ","))
+	_, _ = io.WriteString(h, strings.Join(r.Upstreams, ","))
+	_, _ = io.WriteString(h, fmt.Sprintf("%d", r.Port))
+	_, _ = io.WriteString(h, fmt.Sprintf("%d", r.MaxUpstreamConnections))
+	_, _ = io.WriteString(h, fmt.Sprintf("%v", r.Enabled))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

@@ -46,6 +46,15 @@ func (o *Observer) RegisterSink(sink EventSink) {
 	o.addSinkChan <- sink
 }
 
+func (o *Observer) logConnecting(connIndex uint8, address net.IP, protocol Protocol) {
+	o.log.Debug().
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		Uint8(LogFieldConnIndex, connIndex).
+		IPAddr(LogFieldIPAddress, address).
+		Str(LogFieldProtocol, protocol.String()).
+		Msg("Registering tunnel connection")
+}
+
 func (o *Observer) logConnected(connectionID uuid.UUID, connIndex uint8, location string, address net.IP, protocol Protocol) {
 	o.log.Info().
 		Int(management.EventTypeKey, int(management.Cloudflared)).
