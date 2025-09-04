@@ -111,6 +111,7 @@ def inner_wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
     metrics_url = f'http://localhost:{METRICS_PORT}/ready'
 
     with requests.Session() as s:
+        LOGGER.debug("Waiting for tunnel to be ready...")
         resp = send_request(s, metrics_url, True)
 
         ready_connections = resp.json()["readyConnections"]

@@ -1,0 +1,80 @@
+include:
+  - local: .ci/commons.gitlab-ci.yml
+
+###################################
+### Defaults for Windows Builds ###
+###################################
+.windows-build-defaults: &windows-build-defaults
+  rules:
+    - !reference [.default-rules, run-on-branch]
+  tags:
+    - windows-x86
+  cache: {}
+
+##########################################
+### Build Cloudflared Windows Binaries ###
+##########################################
+build-cloudflared-windows:
+  <<: *windows-build-defaults
+  stage: build
+  script:
+    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${GO_VERSION}" ".\.ci\scripts\windows\builds.ps1"
+  artifacts:
+    paths:
+      - artifacts/*
+
+######################################################
+### Load Environment Variables for Component Tests ###
+######################################################
+load-windows-env-variables:
+  rules:
+    - !reference [.default-rules, run-on-branch]
+  stage: pre-build
+  script:
+    - echo "COMPONENT_TESTS_CONFIG=component-test-config.yaml" >> windows.env
+    - echo "COMPONENT_TESTS_CONFIG_CONTENT=Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZC5leGUKY3JlZGVudGlhbHNfZmlsZTogY3JlZC5qc29uCm9yaWdpbmNlcnQ6IGNlcnQucGVtCnpvbmVfZG9tYWluOiBhcmdvdHVubmVsdGVzdC5jb20Kem9uZV90YWc6IDQ4Nzk2ZjFlNzBiYjc2NjljMjliYjUxYmEyODJiZjY1" >> windows.env
+    - echo "DNS_API_TOKEN=$DNS_API_TOKEN" >> windows.env
+    # We have to encode the `COMPONENT_TESTS_ORIGINCERT` secret, because it content is a file, otherwise we can't export it using gitlab
+    - echo "COMPONENT_TESTS_ORIGINCERT=$(echo "$COMPONENT_TESTS_ORIGINCERT" | base64 -w0)" >> windows.env
+  secrets:
+    DNS_API_TOKEN:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/_terraform_atlantis/component_tests_token/data@kv
+      file: false
+    COMPONENT_TESTS_ORIGINCERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/component_tests_cert_pem/data@kv
+      file: false
+  artifacts:
+    access: 'none'
+    reports:
+      dotenv: windows.env
+  cache: {}
+
+###################################
+### Run Windows Component Tests ###
+###################################
+component-tests-cloudflared-windows:
+  <<: *windows-build-defaults
+  stage: test
+  needs: ["load-windows-env-variables"]
+  script:
+    # We have to decode the secret we encoded on the `load-windows-env-variables` job
+    - $env:COMPONENT_TESTS_ORIGINCERT = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:COMPONENT_TESTS_ORIGINCERT))
+    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${GO_VERSION}" ".\.ci\scripts\windows\component-test.ps1"
+
+################################
+### Package Windows Binaries ###
+################################
+package-windows:
+  rules:
+    - !reference [.default-rules, run-on-master]
+  stage: package
+  needs:
+    - ci-image-get-image-ref
+    - build-cloudflared-windows
+  image: $BUILD_IMAGE
+  script:
+    - .ci/scripts/package-windows.sh
+  cache: {}
+  artifacts:
+    paths:
+      - artifacts/*
