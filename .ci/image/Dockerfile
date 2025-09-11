@@ -7,8 +7,9 @@ RUN apt-get update && \
     apt-get install --no-install-recommends --allow-downgrades -y \
         build-essential \
         git \
-        go-boring=1.24.4-1 \
+        go-boring=1.24.6-1 \
         libffi-dev \
+        procps \
         python3-dev \
         python3-pip \
         python3-setuptools \

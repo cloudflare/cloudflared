@@ -1,27 +1,13 @@
 variables:
-  # Define GOPATH within the project directory to allow GitLab CI to cache it.
-  # By default, Go places modules in GOMODCACHE, often outside the project.
-  # Explicitly setting GOMODCACHE ensures it's within the cached path.
-  GOPATH: "$CI_PROJECT_DIR/.go"
-  GOMODCACHE: "$GOPATH/pkg/mod"
-  GO_BIN_DIR: "$GOPATH/bin"
-  GO_VERSION: "go1.24.4"
-
-cache:
-  # Cache Go modules and the binaries.
-  # The 'key' ensures a unique cache per branch, or you can use a fixed key
-  # for a shared cache across all branches if that fits your workflow.
-  key: "$CI_COMMIT_REF_SLUG"
-  paths:
-    - ${GOPATH}/pkg/mod/ # For Go modules
-    - ${GO_BIN_DIR}/
+  GO_VERSION: "go1.24.6"
+  GIT_DEPTH: "0"
 
 default:
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.cfdata.org
 
-stages: [pre-build, build, test, package, release]
+stages: [pre-build, build, validate, test, package, release]
 
 include:
   #####################################################
@@ -33,6 +19,11 @@ include:
   ############# Build or Fetch CI Image ###############
   #####################################################
   - local: .ci/ci-image.gitlab-ci.yml
+
+  #####################################################
+  ################## Linux Builds ###################
+  #####################################################
+  - local: .ci/linux.gitlab-ci.yml
 
   #####################################################
   ################## Windows Builds ###################
@@ -48,27 +39,3 @@ include:
   ################# Release Packages ##################
   #####################################################
   - local: .ci/release.gitlab-ci.yml
-
-# Template for Go setup, including caching and installation
-.go_setup:
-  image: docker-registry.cfdata.org/stash/devtools/ci-builders/golang-1.24/master:3219-cc8b513@sha256:4fe3ff47ba07f9b23429f49fbd063cc1a34156dd11b8113e325ad3762f94a1db
-  before_script:
-    - mkdir -p ${GOPATH} ${GOMODCACHE} ${GO_BIN_DIR}
-    - export PATH=$PATH:${GO_BIN_DIR}
-    - go env -w GOMODCACHE=${GOMODCACHE} # Ensure go uses the cached module path
-
-    # Check if govulncheck is already installed and install it if not
-    - if [ ! -f ${GO_BIN_DIR}/govulncheck ]; then
-      echo "govulncheck not found in cache, installing...";
-      go install golang.org/x/vuln/cmd/govulncheck@latest;
-      else
-      echo "govulncheck found in cache, skipping installation.";
-      fi
-
-vulncheck:
-  stage: build
-  extends: .go_setup
-  rules:
-    - !reference [.default-rules, run-on-branch]
-  script:
-    - make vulncheck

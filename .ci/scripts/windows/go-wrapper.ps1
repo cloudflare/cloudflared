@@ -3,7 +3,7 @@ Param(
     [string]$ScriptToExecute
 )
 
-# This script its a wrapper that downloads a specific version
+# The script is a wrapper that downloads a specific version
 # of go, adds it to the PATH and executes a script with that go
 # version in the path.
 

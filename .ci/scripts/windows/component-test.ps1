@@ -31,7 +31,7 @@ Write-Host "Running component tests"
 try {
     python -m pip --disable-pip-version-check install --upgrade -r component-tests/requirements.txt --use-pep517
     python component-tests/setup.py --type create
-    python -m pytest component-tests -o log_cli=true --log-cli-level=INFO
+    python -m pytest component-tests -o log_cli=true --log-cli-level=INFO --junit-xml=report.xml
     if ($LASTEXITCODE -ne 0) {
         throw "Failed component tests"
     }

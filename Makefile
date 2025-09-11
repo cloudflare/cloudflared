@@ -128,6 +128,8 @@ endif
 #for FIPS compliance, FPM defaults to MD5.
 RPM_DIGEST := --rpm-digest sha256
 
+GO_TEST_LOG_OUTPUT = /tmp/gotest.log
+
 .PHONY: all
 all: cloudflared test
 
@@ -137,7 +139,7 @@ clean:
 
 .PHONY: vulncheck
 vulncheck:
-	@govulncheck ./...
+	@go run -mod=readonly golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 .PHONY: cloudflared
 cloudflared:
@@ -160,11 +162,9 @@ generate-docker-version:
 
 .PHONY: test
 test: vet
-ifndef CI
-	go test -v -mod=vendor -race $(LDFLAGS) ./...
-else
-	@mkdir -p .cover
-	go test -v -mod=vendor -race $(LDFLAGS) -coverprofile=".cover/c.out" ./...
+	$Q go test -json -v -mod=vendor -race $(LDFLAGS) ./... 2>&1 | tee $(GO_TEST_LOG_OUTPUT)
+ifneq ($(FIPS), true)
+	@go run -mod=readonly github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest -input $(GO_TEST_LOG_OUTPUT)
 endif
 
 .PHONY: cover
@@ -254,7 +254,7 @@ capnp:
 
 .PHONY: vet
 vet:
-	go vet -mod=vendor github.com/cloudflare/cloudflared/...
+	$Q go vet -mod=vendor github.com/cloudflare/cloudflared/...
 
 .PHONY: fmt
 fmt:
@@ -263,7 +263,7 @@ fmt:
 
 .PHONY: fmt-check
 fmt-check:
-	@./fmt-check.sh
+	@./.ci/scripts/fmt-check.sh
 
 .PHONY: lint
 lint:
@@ -272,3 +272,23 @@ lint:
 .PHONY: mocks
 mocks:
 	go generate mocks/mockgen.go
+
+.PHONY: ci-build
+ci-build:
+	@GOOS=linux GOARCH=amd64 $(MAKE) cloudflared
+	@mkdir -p artifacts
+	@mv cloudflared artifacts/cloudflared
+
+.PHONY: ci-fips-build
+ci-fips-build:
+	@FIPS=true GOOS=linux GOARCH=amd64 $(MAKE) cloudflared
+	@mkdir -p artifacts
+	@mv cloudflared artifacts/cloudflared
+
+.PHONY: ci-test
+ci-test: fmt-check lint test
+	@go run -mod=readonly github.com/jstemmer/go-junit-report/v2@latest -in $(GO_TEST_LOG_OUTPUT) -parser gojson -out report.xml -set-exit-code
+
+.PHONY: ci-fips-test
+ci-fips-test:
+	@FIPS=true $(MAKE) ci-test

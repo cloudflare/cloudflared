@@ -1,0 +1,90 @@
+.golang-inputs: &golang_inputs
+  runOnMR: true
+  runOnBranches: '^master$'
+  outputDir: artifacts
+  runner: linux-x86-8cpu-16gb
+  stage: build
+  golangVersion: "boring-1.24"
+  CGO_ENABLED: 1
+
+include:
+  ###################
+  ### Linux Build ###
+  ###################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+    inputs:
+      <<: *golang_inputs
+      jobPrefix: linux-build
+      GOLANG_MAKE_TARGET: ci-build
+
+  ########################
+  ### Linux FIPS Build ###
+  ########################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+    inputs:
+      <<: *golang_inputs
+      jobPrefix: linux-fips-build
+      GOLANG_MAKE_TARGET: ci-fips-build
+
+  #################
+  ### Unit Tests ##
+  #################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+    inputs:
+      <<: *golang_inputs
+      stage: test
+      jobPrefix: test
+      GOLANG_MAKE_TARGET: ci-test
+
+  ######################
+  ### Unit Tests FIPS ##
+  ######################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+    inputs:
+      <<: *golang_inputs
+      stage: test
+      jobPrefix: test-fips
+      GOLANG_MAKE_TARGET: ci-fips-test
+
+  #################
+  ### Vuln Check ##
+  #################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+    inputs:
+      <<: *golang_inputs
+      runOnBranches: '^$'
+      stage: validate
+      jobPrefix: vulncheck
+      GOLANG_MAKE_TARGET: vulncheck
+
+#################################
+### Run Linux Component Tests ###
+#################################
+component-tests-linux: &component-tests-linux
+  stage: test
+  extends: .component-tests
+  needs:
+    - ci-image-get-image-ref
+    - linux-build-boring-make
+  script:
+    - ./.ci/scripts/component-tests.sh
+  variables: &component-tests-variables
+    CI: 1
+    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZApjcmVkZW50aWFsc19maWxlOiBjcmVkLmpzb24Kb3JpZ2luY2VydDogY2VydC5wZW0Kem9uZV9kb21haW46IGFyZ290dW5uZWx0ZXN0LmNvbQp6b25lX3RhZzogNDg3OTZmMWU3MGJiNzY2OWMyOWJiNTFiYTI4MmJmNjU=
+  tags:
+    - linux-x86-8cpu-16gb
+  artifacts:
+    reports:
+      junit: report.xml
+
+######################################
+### Run Linux FIPS Component Tests ###
+######################################
+component-tests-linux-fips:
+  <<: *component-tests-linux
+  needs:
+    - ci-image-get-image-ref
+    - linux-fips-build-boring-make
+  variables:
+    <<: *component-tests-variables
+    COMPONENT_TESTS_FIPS: 1

@@ -8,10 +8,9 @@ include:
     inputs:
       stage: pre-build
       jobPrefix: ci-image
-      # runOnChangesTo: [".ci/image/**"]
-      # runOnMR: true
-      # runOnBranches: '^master$'
-      runOnBranches: "^.+$"
+      runOnChangesTo: [".ci/image/**"]
+      runOnMR: true
+      runOnBranches: '^master$'
       commentImageRefs: false
       runner: vm-linux-x86-4cpu-8gb
       EXTRA_DIB_ARGS: "--manifest=.ci/image/.docker-images"
@@ -23,9 +22,8 @@ include:
     inputs:
       stage: pre-build
       jobPrefix: ci-image
-      # runOnMR: true
-      # runOnBranches: '^master$'
-      runOnBranches: "^.+$"
+      runOnMR: true
+      runOnBranches: '^master$'
       IMAGE_PATH: "$REGISTRY_HOST/stash/tun/cloudflared/ci-image/master"
       VARIABLE_NAME: BUILD_IMAGE
       needs:

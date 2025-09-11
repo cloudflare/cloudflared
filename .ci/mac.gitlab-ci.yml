@@ -6,7 +6,7 @@ include:
 ###############################
 .mac-build-defaults: &mac-build-defaults
   rules:
-    - !reference [.default-rules, run-on-branch]
+    - !reference [.default-rules, run-on-mr]
   tags:
     - "macstadium-${RUNNER_ARCH}"
   parallel:
