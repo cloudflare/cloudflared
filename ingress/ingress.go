@@ -317,7 +317,7 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 				return Ingress{}, err
 			}
 			if access.Required {
-				verifier := middleware.NewJWTValidator(access.TeamName, "", access.AudTag)
+				verifier := middleware.NewJWTValidator(access.TeamName, access.Environment, access.AudTag)
 				handlers = append(handlers, verifier)
 			}
 		}
