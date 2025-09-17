@@ -123,28 +123,6 @@ bookworm: &bookworm
       - export GOOS=linux
       - export GOARCH=arm64
       - make cloudflared-deb
-  package-windows:
-    build_dir: *build_dir
-    builddeps:
-      - *pinned_go
-      - build-essential
-      - python3-dev
-      - libffi-dev
-      - python3-setuptools
-      - python3-pip
-      - wget
-      # libmsi and libgcab are libraries the wixl binary depends on.
-      - libmsi-dev
-      - libgcab-dev
-      - python3-venv
-    pre-cache:
-      - wget https://github.com/sudarshan-reddy/msitools/releases/download/v0.101b/wixl -P /usr/local/bin
-      - chmod a+x /usr/local/bin/wixl
-    post-cache:
-      - python3 -m venv env
-      - . env/bin/activate
-      - pip install pynacl==1.4.0 pygithub==1.55
-      - .teamcity/package-windows.sh
   test:
     build_dir: *build_dir
     builddeps: &build_deps_tests

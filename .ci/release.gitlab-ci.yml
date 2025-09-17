@@ -1,0 +1,39 @@
+include:
+  - local: .ci/commons.gitlab-ci.yml
+
+###########################################
+### Push Cloudflared Binaries to Github ###
+###########################################
+release-cloudflared-to-github:
+  stage: release
+  image: $BUILD_IMAGE
+  extends: .check-tag
+  needs:
+    - ci-image-get-image-ref
+    - package-windows
+    - build-and-sign-cloudflared-macos
+  rules:
+    - !reference [.default-rules, run-on-master]
+  cache:
+    paths:
+      - .cache/pip
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+    KV_NAMESPACE: 380e19aa04314648949b6ad841417ebe
+    KV_ACCOUNT: 5ab4e9dfbd435d24068829fda0077963
+  secrets:
+    KV_API_TOKEN:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_kv_api_token/data@kv
+      file: false
+    API_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_github_api_key/data@kv
+      file: false
+  script:
+    - python3 --version ; pip --version  # For debugging
+    - python3 -m venv venv
+    - source venv/bin/activate
+    - pip install pynacl==1.4.0 pygithub==1.55
+    - echo $VERSION
+    - echo $TAG_EXISTS
+    - echo "Running release because tag exists."
+    - make gitlab-release

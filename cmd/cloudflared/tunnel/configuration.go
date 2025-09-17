@@ -36,7 +36,6 @@ import (
 const (
 	secretValue       = "*****"
 	icmpFunnelTimeout = time.Second * 10
-	fedRampRegion     = "fed" // const string denoting the region used to connect to FEDRamp servers
 )
 
 var (

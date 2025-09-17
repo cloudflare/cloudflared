@@ -242,6 +242,8 @@ type AccessConfig struct {
 
 	// AudTag is the AudTag to verify access JWT against.
 	AudTag []string `yaml:"audTag" json:"audTag"`
+
+	Environment string `yaml:"environment" json:"environment,omitempty"`
 }
 
 type IngressIPRule struct {

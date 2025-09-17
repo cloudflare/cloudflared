@@ -10,7 +10,6 @@ import pytest
 
 import requests
 import yaml
-import json
 from retrying import retry
 
 from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
@@ -34,6 +33,12 @@ def fips_enabled():
 
 nofips = pytest.mark.skipif(
         fips_enabled(), reason=f"Only runs without FIPS (COMPONENT_TESTS_FIPS=0)")
+
+def skip_on_ci(reason):
+    env_ci = os.getenv("CI")
+    running_in_ci = env_ci is not None and env_ci != "0"
+    return pytest.mark.skipif(
+        running_in_ci, reason=f"This test can't run on CI due to: {reason}")
 
 def write_config(directory, config):
     config_path = directory / "config.yml"
@@ -111,6 +116,7 @@ def inner_wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
     metrics_url = f'http://localhost:{METRICS_PORT}/ready'
 
     with requests.Session() as s:
+        LOGGER.debug("Waiting for tunnel to be ready...")
         resp = send_request(s, metrics_url, True)
 
         ready_connections = resp.json()["readyConnections"]

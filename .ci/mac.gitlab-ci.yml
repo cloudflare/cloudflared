@@ -1,0 +1,66 @@
+include:
+  - local: .ci/commons.gitlab-ci.yml
+
+###############################
+### Defaults for Mac Builds ###
+###############################
+.mac-build-defaults: &mac-build-defaults
+  rules:
+    - !reference [.default-rules, run-on-mr]
+  tags:
+    - "macstadium-${RUNNER_ARCH}"
+  parallel:
+    matrix:
+      - RUNNER_ARCH: [arm, intel]
+  cache: {}
+
+######################################
+### Build Cloudflared Mac Binaries ###
+######################################
+build-cloudflared-macos: &build-mac
+  <<: *mac-build-defaults
+  stage: build
+  artifacts:
+    paths:
+      - artifacts/*
+  script:
+    - '[ "${RUNNER_ARCH}" = "arm" ] && export TARGET_ARCH=arm64'
+    - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
+    - ARCH=$(uname -m)
+    - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
+    - ./.ci/scripts/mac/install-go.sh
+    - BUILD_SCRIPT=.ci/scripts/mac/build.sh
+    - if [[ ! -x ${BUILD_SCRIPT} ]] ; then exit ; fi
+    - set -euo pipefail
+    - echo "Executing ${BUILD_SCRIPT}"
+    - exec ${BUILD_SCRIPT}
+
+###############################################
+### Build and Sign Cloudflared Mac Binaries ###
+###############################################
+build-and-sign-cloudflared-macos:
+  <<: *build-mac
+  rules:
+    - !reference [.default-rules, run-on-master]
+  secrets:
+    APPLE_DEV_CA_CERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert_v2/data@kv
+      file: false
+    CFD_CODE_SIGN_CERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_cert_v2/data@kv
+      file: false
+    CFD_CODE_SIGN_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_key_v2/data@kv
+      file: false
+    CFD_CODE_SIGN_PASS:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_pass_v2/data@kv
+      file: false
+    CFD_INSTALLER_CERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_cert_v2/data@kv
+      file: false
+    CFD_INSTALLER_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_key_v2/data@kv
+      file: false
+    CFD_INSTALLER_PASS:
+      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_pass_v2/data@kv
+      file: false

@@ -1,0 +1,53 @@
+## A set of predefined rules to use on the different jobs
+.default-rules:
+  # Rules to run the job only on the master branch
+  run-on-master:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - when: never
+  # Rules to run the job only on merge requests
+  run-on-mr:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - when: never
+  # Rules to run the job on merge_requests and master branch
+  run-always:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH != null && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always
+    - when: never
+
+# This before_script is injected into every job that runs on master meaning that if there is no tag the step
+# will succeed but only write "No tag present - Skipping" to the console.
+.check-tag:
+  before_script:
+    - |
+      # Check if there is a Git tag pointing to HEAD
+      echo "Tag found: $(git tag --points-at HEAD | grep .)"
+      if git tag --points-at HEAD | grep .; then
+        echo "Tag found: $(git tag --points-at HEAD | grep .)"
+        export "VERSION=$(git tag --points-at HEAD | grep .)"
+      else
+        echo "No tag present — skipping."
+        exit 0
+      fi
+
+.component-tests:
+  image: $BUILD_IMAGE
+  rules:
+    - !reference [.default-rules, run-always]
+  variables:
+    COMPONENT_TESTS_CONFIG: component-test-config.yaml
+    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZC5leGUKY3JlZGVudGlhbHNfZmlsZTogY3JlZC5qc29uCm9yaWdpbmNlcnQ6IGNlcnQucGVtCnpvbmVfZG9tYWluOiBhcmdvdHVubmVsdGVzdC5jb20Kem9uZV90YWc6IDQ4Nzk2ZjFlNzBiYjc2NjljMjliYjUxYmEyODJiZjY1
+  secrets:
+    DNS_API_TOKEN:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/_terraform_atlantis/component_tests_token/data@kv
+      file: false
+    COMPONENT_TESTS_ORIGINCERT:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/component_tests_cert_pem/data@kv
+      file: false
+  cache: {}

@@ -1,172 +1,41 @@
 variables:
-  # Define GOPATH within the project directory to allow GitLab CI to cache it.
-  # By default, Go places modules in GOMODCACHE, often outside the project.
-  # Explicitly setting GOMODCACHE ensures it's within the cached path.
-  GOPATH: "$CI_PROJECT_DIR/.go"
-  GOMODCACHE: "$GOPATH/pkg/mod"
-  GO_BIN_DIR: "$GOPATH/bin"
-
-cache:
-  # Cache Go modules and the binaries.
-  # The 'key' ensures a unique cache per branch, or you can use a fixed key
-  # for a shared cache across all branches if that fits your workflow.
-  key: "$CI_COMMIT_REF_SLUG"
-  paths:
-    - ${GOPATH}/pkg/mod/ # For Go modules
-    - ${GO_BIN_DIR}/
-
-stages: [build, release]
+  GO_VERSION: "go1.24.6"
+  GIT_DEPTH: "0"
 
 default:
   id_tokens:
     VAULT_ID_TOKEN:
       aud: https://vault.cfdata.org
 
-# This before_script is injected into every job that runs on master meaning that if there is no tag the step
-# will succeed but only write "No tag present - Skipping" to the console.
-.check_tag:
-  before_script:
-    - |
-      # Check if there is a Git tag pointing to HEAD
-      echo "Tag found: $(git tag --points-at HEAD | grep .)"
-      if git tag --points-at HEAD | grep .; then
-        echo "Tag found: $(git tag --points-at HEAD | grep .)"
-        export "VERSION=$(git tag --points-at HEAD | grep .)"
-      else
-        echo "No tag present — skipping."
-        exit 0
-      fi
+stages: [pre-build, build, validate, test, package, release]
 
-## A set of predefined rules to use on the different jobs
-.default_rules:
-  # Rules to run the job only on the master branch
-  run_on_master:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: always
-    - when: never
-  # Rules to run the job only on branches that are not master. This is needed because for now
-  # we need to keep a similar behavior due to the integration with teamcity, which requires us
-  # to not trigger pipelines on tags and/or merge requests.
-  run_on_branch:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - if: $CI_PIPELINE_SOURCE != "merge_request_event" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
-      when: always
-    - when: never
+include:
+  #####################################################
+  ########## Import Commons Configurations ############
+  #####################################################
+  - local: .ci/commons.gitlab-ci.yml
 
+  #####################################################
+  ############# Build or Fetch CI Image ###############
+  #####################################################
+  - local: .ci/ci-image.gitlab-ci.yml
 
-# Template for Go setup, including caching and installation
-.go_setup:
-  image: docker-registry.cfdata.org/stash/devtools/ci-builders/golang-1.24/master:3090-3e32590@sha256:fc81df4f8322f022d93712ee40bb1e5752fdbe9868d1e5a23fd851ad6fbecb91
-  before_script:
-    - mkdir -p ${GOPATH} ${GOMODCACHE} ${GO_BIN_DIR}
-    - export PATH=$PATH:${GO_BIN_DIR}
-    - go env -w GOMODCACHE=${GOMODCACHE} # Ensure go uses the cached module path
+  #####################################################
+  ################## Linux Builds ###################
+  #####################################################
+  - local: .ci/linux.gitlab-ci.yml
 
-    # Check if govulncheck is already installed and install it if not
-    - if [ ! -f ${GO_BIN_DIR}/govulncheck ]; then
-      echo "govulncheck not found in cache, installing...";
-      go install golang.org/x/vuln/cmd/govulncheck@latest;
-      else
-      echo "govulncheck found in cache, skipping installation.";
-      fi
+  #####################################################
+  ################## Windows Builds ###################
+  #####################################################
+  - local: .ci/windows.gitlab-ci.yml
 
-# -----------------------------------------------
-# Stage 1: Build on every PR
-# -----------------------------------------------
-build_cloudflared_macos: &build
-  stage: build
-  rules:
-    - !reference [.default_rules, run_on_branch]
-  tags:
-    - "macstadium-${RUNNER_ARCH}"
-  parallel:
-    matrix:
-      - RUNNER_ARCH: [arm, intel]
-  artifacts:
-    paths:
-      - artifacts/*
-  script:
-    - '[ "${RUNNER_ARCH}" = "arm" ] && export TARGET_ARCH=arm64'
-    - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
-    - ARCH=$(uname -m)
-    - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
-    - ./.teamcity/mac/install-go.sh
-    - BUILD_SCRIPT=.teamcity/mac/build.sh
-    - if [[ ! -x ${BUILD_SCRIPT} ]] ; then exit ; fi
-    - set -euo pipefail
-    - echo "Executing ${BUILD_SCRIPT}"
-    - exec ${BUILD_SCRIPT}
+  #####################################################
+  ################### macOS Builds ####################
+  #####################################################
+  - local: .ci/mac.gitlab-ci.yml
 
-vulncheck:
-  stage: build
-  extends: .go_setup
-  rules:
-    - !reference [.default_rules, run_on_branch]
-  script:
-    - make vulncheck
-
-# -----------------------------------------------
-# Stage 1: Build and sign only on releases
-# -----------------------------------------------
-build_and_sign_cloudflared_macos:
-  <<: *build
-  rules:
-    - !reference [.default_rules, run_on_master]
-  secrets:
-    APPLE_DEV_CA_CERT:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert_v2/data@kv
-      file: false
-    CFD_CODE_SIGN_CERT:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_cert_v2/data@kv
-      file: false
-    CFD_CODE_SIGN_KEY:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_key_v2/data@kv
-      file: false
-    CFD_CODE_SIGN_PASS:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_code_sign_pass_v2/data@kv
-      file: false
-    CFD_INSTALLER_CERT:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_cert_v2/data@kv
-      file: false
-    CFD_INSTALLER_KEY:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_key_v2/data@kv
-      file: false
-    CFD_INSTALLER_PASS:
-      vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cfd_installer_pass_v2/data@kv
-      file: false
-
-# -----------------------------------------------
-# Stage 2: Release to Github after building and signing
-# -----------------------------------------------
-release_cloudflared_macos_to_github:
-  stage: release
-  image: docker-registry.cfdata.org/stash/tun/docker-images/cloudflared-ci/main:6-8616fe631b76-amd64@sha256:96f4fd05e66cec03e0864c1bcf09324c130d4728eef45ee994716da499183614
-  extends: .check_tag
-  dependencies:
-    - build_and_sign_cloudflared_macos
-  rules:
-    - !reference [.default_rules, run_on_master]
-  cache:
-    paths:
-      - .cache/pip
-  variables:
-    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-    KV_NAMESPACE: 380e19aa04314648949b6ad841417ebe
-    KV_ACCOUNT: 5ab4e9dfbd435d24068829fda0077963
-  secrets:
-    KV_API_TOKEN:
-      vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_kv_api_token/data@kv
-      file: false
-    API_KEY:
-      vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_github_api_key/data@kv
-      file: false
-  script:
-    - python3 --version ; pip --version  # For debugging
-    - python3 -m venv venv
-    - source venv/bin/activate
-    - pip install pynacl==1.4.0 pygithub==1.55
-    - echo $VERSION
-    - echo $TAG_EXISTS
-    - echo "Running release because tag exists."
-    - make macos-release
+  #####################################################
+  ################# Release Packages ##################
+  #####################################################
+  - local: .ci/release.gitlab-ci.yml

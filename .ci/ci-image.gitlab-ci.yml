@@ -1,0 +1,31 @@
+# Builds a custom CI Image when necessary
+
+include:
+  #####################################################
+  ############## Build and Push CI Image ##############
+  #####################################################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/docker-image/build-push-image@~latest
+    inputs:
+      stage: pre-build
+      jobPrefix: ci-image
+      runOnChangesTo: [".ci/image/**"]
+      runOnMR: true
+      runOnBranches: '^master$'
+      commentImageRefs: false
+      runner: vm-linux-x86-4cpu-8gb
+      EXTRA_DIB_ARGS: "--manifest=.ci/image/.docker-images"
+
+  #####################################################
+  ## Resolve the image reference for downstream jobs ##
+  #####################################################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/docker-image/get-image-ref@~latest
+    inputs:
+      stage: pre-build
+      jobPrefix: ci-image
+      runOnMR: true
+      runOnBranches: '^master$'
+      IMAGE_PATH: "$REGISTRY_HOST/stash/tun/cloudflared/ci-image/master"
+      VARIABLE_NAME: BUILD_IMAGE
+      needs:
+        - job: ci-image-build-push-image
+          optional: true
