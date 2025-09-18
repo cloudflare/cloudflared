@@ -1,3 +1,9 @@
+2025.9.0
+- 2025-09-15 TUN-9820: Add support for FedRAMP in originRequest Access config
+- 2025-09-11 TUN-9800: Migrate cloudflared-ci pipelines to Gitlab CI
+- 2025-09-04 TUN-9803: Add windows builds to gitlab-ci
+- 2025-08-27 TUN-9755: Set endpoint in tunnel credentials when generating locally managed tunnel with a Fed token
+
 2025.8.1
 - 2025-08-19 AUTH-7480 update fed callback url for login helper
 - 2025-08-19 CUSTESC-53681: Correct QUIC connection management for datagram handlers
