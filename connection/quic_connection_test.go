@@ -149,7 +149,6 @@ func TestQUICServer(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		test := test // capture range variable
 		t.Run(test.desc, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			// Start a UDP Listener for QUIC.
@@ -499,7 +498,6 @@ func TestBuildHTTPRequest(t *testing.T) {
 
 	log := zerolog.Nop()
 	for _, test := range tests {
-		test := test // capture range variable
 		t.Run(test.name, func(t *testing.T) {
 			req, err := buildHTTPRequest(t.Context(), test.connectRequest, test.body, 0, &log)
 			require.NoError(t, err)
