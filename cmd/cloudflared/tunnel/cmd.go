@@ -459,12 +459,18 @@ func StartServer(
 		}
 	}
 
-	userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
 	var isFEDEndpoint bool
-	if err != nil {
-		isFEDEndpoint = false
+	// For remotely-managed tunnels: use endpoint info from token credentials
+	if c.String(TunnelTokenFlag) != "" {
+		isFEDEndpoint = strings.ToLower(namedTunnel.Credentials.Endpoint) == credentials.FedEndpoint
 	} else {
-		isFEDEndpoint = userCreds.IsFEDEndpoint()
+		// For locally-managed tunnels: check origin certificate
+		userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
+		if err != nil {
+			isFEDEndpoint = false
+		} else {
+			isFEDEndpoint = userCreds.IsFEDEndpoint()
+		}
 	}
 
 	var managementHostname string
