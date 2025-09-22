@@ -139,7 +139,7 @@ clean:
 
 .PHONY: vulncheck
 vulncheck:
-	@go run -mod=readonly golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@./.ci/scripts/vuln-check.sh
 
 .PHONY: cloudflared
 cloudflared:
