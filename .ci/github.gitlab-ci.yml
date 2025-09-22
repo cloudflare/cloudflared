@@ -1,0 +1,19 @@
+include:
+  - local: .ci/commons.gitlab-ci.yml
+
+######################################
+### Sync master branch with Github ###
+######################################
+push-github:
+  stage: sync
+  rules:
+    #- !reference [.default-rules, run-on-master]
+    - !reference [.default-rules, run-on-mr]
+  script:
+    - ./.ci/scripts/github-push.sh
+  secrets:
+    CLOUDFLARED_DEPLOY_SSH_KEY:
+      # vault: gitlab/cloudflare/tun/cloudflared/_branch/master/cloudflared_github_ssh/data@kv
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/cloudflared_github_ssh/data@kv
+      file: false
+  cache: {}
