@@ -281,7 +281,7 @@ of uptime. Previous cloudflared versions will soon be unable to run legacy tempo
 ### Bug Fixes
 
 - Tunnel create and delete commands no longer use path to credentials from the configuration file.
-  If you need ot place tunnel credentials file at a specific location, you must use `--credentials-file` flag.
+  If you need to place tunnel credentials file at a specific location, you must use `--credentials-file` flag.
 - Access ssh-gen creates properly named keys for SSH short lived certs.
 
 
