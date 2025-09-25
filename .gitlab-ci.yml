@@ -7,13 +7,18 @@ default:
     VAULT_ID_TOKEN:
       aud: https://vault.cfdata.org
 
-stages: [pre-build, build, validate, test, package, release]
+stages: [sync, pre-build, build, validate, test, package, release]
 
 include:
   #####################################################
   ########## Import Commons Configurations ############
   #####################################################
   - local: .ci/commons.gitlab-ci.yml
+
+  #####################################################
+  ########### Sync Repository with Github #############
+  #####################################################
+  - local: .ci/github.gitlab-ci.yml
 
   #####################################################
   ############# Build or Fetch CI Image ###############

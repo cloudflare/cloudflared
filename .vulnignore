@@ -1,0 +1,3 @@
+# Add vulnerability IDs (e.g., GO-2022-0450) to ignore, one per line.
+# You can also add comments on the same line after the ID.
+GO-2025-3942 # Ignore core-dns vulnerability since we will be removing the proxy-dns feature in the near future

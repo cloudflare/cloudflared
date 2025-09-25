@@ -1,3 +1,7 @@
+2025.9.1
+- 2025-09-22 TUN-9855: Create script to ignore vulnerabilities from govuln check
+- 2025-09-19 TUN-9852: Remove fmt.Println from cloudflared access command
+
 2025.9.0
 - 2025-09-15 TUN-9820: Add support for FedRAMP in originRequest Access config
 - 2025-09-11 TUN-9800: Migrate cloudflared-ci pipelines to Gitlab CI
