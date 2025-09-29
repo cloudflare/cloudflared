@@ -3,6 +3,7 @@ package ingress
 import (
 	"encoding/json"
 	"flag"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/ipaccess"
+	"github.com/stretchr/testify/assert"
 )
 
 // Ensure that the nullable config from `config` package and the
@@ -413,6 +415,187 @@ func TestDefaultConfigFromCLI(t *testing.T) {
 	}
 	actual := originRequestFromSingleRule(c)
 	require.Equal(t, expected, actual)
+}
+
+func TestOriginRequestConfigHeaders(t *testing.T) {
+	config := OriginRequestConfig{
+		Headers: map[string]string{
+			"X-Custom-Header": "custom-value",
+			"Authorization":    "Bearer token123",
+		},
+		RemoveHeaders: []string{"X-Unwanted", "Server"},
+	}
+
+	jsonData, err := json.Marshal(config)
+	assert.NoError(t, err)
+	assert.Contains(t, string(jsonData), "X-Custom-Header")
+	assert.Contains(t, string(jsonData), "custom-value")
+	assert.Contains(t, string(jsonData), "X-Unwanted")
+
+	var unmarshaled OriginRequestConfig
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	assert.NoError(t, err)
+	assert.Equal(t, "custom-value", unmarshaled.Headers["X-Custom-Header"])
+	assert.Equal(t, "Bearer token123", unmarshaled.Headers["Authorization"])
+	assert.Contains(t, unmarshaled.RemoveHeaders, "X-Unwanted")
+	assert.Contains(t, unmarshaled.RemoveHeaders, "Server")
+}
+
+func TestParseHeaderFlag(t *testing.T) {
+	name, value, valid := parseHeaderFlag("X-Custom-Header: custom-value")
+	assert.True(t, valid)
+	assert.Equal(t, "X-Custom-Header", name)
+	assert.Equal(t, "custom-value", value)
+
+	name, value, valid = parseHeaderFlag("  Authorization  :  Bearer token  ")
+	assert.True(t, valid)
+	assert.Equal(t, "Authorization", name)
+	assert.Equal(t, "Bearer token", value)
+
+	name, value, valid = parseHeaderFlag("X-Header:   ")
+	assert.False(t, valid)
+
+	name, value, valid = parseHeaderFlag("   : value")
+	assert.False(t, valid)
+
+	_, _, valid = parseHeaderFlag("invalid-format")
+	assert.False(t, valid)
+
+	_, _, valid = parseHeaderFlag(": value-only")
+	assert.False(t, valid)
+
+	_, _, valid = parseHeaderFlag("name-only:")
+	assert.False(t, valid)
+
+	_, _, valid = parseHeaderFlag("")
+	assert.False(t, valid)
+
+	name, value, valid = parseHeaderFlag("X-Special: value with @#$%^&*()")
+	assert.True(t, valid)
+	assert.Equal(t, "X-Special", name)
+	assert.Equal(t, "value with @#$%^&*()", value)
+
+	name, value, valid = parseHeaderFlag("X-URL: https://example.com:8080/path")
+	assert.True(t, valid)
+	assert.Equal(t, "X-URL", name)
+	assert.Equal(t, "https://example.com:8080/path", value)
+}
+
+func TestIsValidHeaderName(t *testing.T) {
+	assert.True(t, isValidHeaderName("X-Custom-Header"))
+	assert.True(t, isValidHeaderName("Authorization"))
+	assert.True(t, isValidHeaderName("Content-Type"))
+	assert.True(t, isValidHeaderName("X-API-Key"))
+	assert.True(t, isValidHeaderName("User-Agent"))
+	
+	assert.False(t, isValidHeaderName(""))
+	assert.False(t, isValidHeaderName(" "))
+	assert.False(t, isValidHeaderName("\t"))
+	assert.False(t, isValidHeaderName("\n"))
+	assert.False(t, isValidHeaderName("\r"))
+	
+	assert.False(t, isValidHeaderName("Header With Space"))
+	assert.False(t, isValidHeaderName("Header\tWith\tTab"))
+	assert.False(t, isValidHeaderName("Header\nWith\nNewline"))
+	assert.False(t, isValidHeaderName("Header\rWith\rCarriageReturn"))
+	
+	assert.False(t, isValidHeaderName(":Header"))
+	assert.False(t, isValidHeaderName("Header:"))
+	assert.False(t, isValidHeaderName("Header::Value"))
+	
+	longHeader := strings.Repeat("A", 257)
+	assert.False(t, isValidHeaderName(longHeader))
+
+	boundaryHeader := strings.Repeat("A", 256)
+	assert.True(t, isValidHeaderName(boundaryHeader))
+	
+	assert.True(t, isValidHeaderName("X"))
+	assert.True(t, isValidHeaderName("a"))
+	assert.True(t, isValidHeaderName("1"))
+	
+	assert.True(t, isValidHeaderName("X-Header"))
+	assert.True(t, isValidHeaderName("X_Header"))
+	assert.True(t, isValidHeaderName("X.Header"))
+}
+
+func TestParseHeadersFromCLI(t *testing.T) {
+	app := cli.NewApp()
+	app.Flags = []cli.Flag{
+		&cli.StringSliceFlag{
+			Name: "header",
+		},
+	}
+	
+	app.Action = func(c *cli.Context) error {
+		headers := parseHeadersFromCLI(c)
+		
+		assert.Equal(t, 3, len(headers))
+		assert.Equal(t, "test-value", headers["X-Test-Header"])
+		assert.Equal(t, "static-key-123", headers["X-API-Key"])
+		assert.Equal(t, "Bearer token", headers["Authorization"])
+		
+		assert.NotContains(t, headers, "Invalid-Header")
+		assert.NotContains(t, headers, "X-Empty")
+		
+		return nil
+	}
+	
+	err := app.Run([]string{"app", "--header", "X-Test-Header: test-value", "--header", "X-API-Key: static-key-123", "--header", "Authorization: Bearer token", "--header", "Invalid-Header", "--header", "X-Empty: "})
+	assert.NoError(t, err)
+}
+
+func TestParseRemoveHeadersFromCLI(t *testing.T) {
+	app := cli.NewApp()
+	app.Flags = []cli.Flag{
+		&cli.StringSliceFlag{
+			Name: "remove-header",
+		},
+	}
+	
+	app.Action = func(c *cli.Context) error {
+		removeHeaders := parseRemoveHeadersFromCLI(c)
+		
+		assert.Equal(t, 3, len(removeHeaders))
+		assert.Contains(t, removeHeaders, "X-Unwanted")
+		assert.Contains(t, removeHeaders, "Server")
+		assert.Contains(t, removeHeaders, "User-Agent")
+		
+		return nil
+	}
+	
+	err := app.Run([]string{"app", "--remove-header", "X-Unwanted", "--remove-header", "Server", "--remove-header", "User-Agent"})
+	assert.NoError(t, err)
+}
+
+func TestParseHeadersFromCLINotSet(t *testing.T) {
+	app := cli.NewApp()
+	
+	app.Action = func(c *cli.Context) error {
+		headers := parseHeadersFromCLI(c)
+		
+		assert.Equal(t, 0, len(headers))
+		assert.NotNil(t, headers)
+		
+		return nil
+	}
+	
+	err := app.Run([]string{"app"})
+	assert.NoError(t, err)
+}
+
+func TestParseRemoveHeadersFromCLINotSet(t *testing.T) {
+	app := cli.NewApp()
+	
+	app.Action = func(c *cli.Context) error {
+		removeHeaders := parseRemoveHeadersFromCLI(c)
+
+		assert.Nil(t, removeHeaders)
+		
+		return nil
+	}
+	
+	err := app.Run([]string{"app"})
+	assert.NoError(t, err)
 }
 
 func newIPRule(t *testing.T, prefix string, ports []int, allow bool) ipaccess.Rule {
