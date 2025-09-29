@@ -211,7 +211,7 @@ bookworm: &bookworm
       - make github-release
   r2-linux-release:
     build_dir: *build_dir
-    builddeps:
+    builddeps: &r2-linux-release-deps
       - *pinned_go
       - build-essential
       - fakeroot
@@ -230,5 +230,14 @@ bookworm: &bookworm
       - . env/bin/activate
       - pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
       - make r2-linux-release
+
+  r2-next-linux-release:
+    build_dir: *build_dir
+    builddeps: *r2-linux-release-deps
+    post-cache:
+      - python3 -m venv env
+      - . env/bin/activate
+      - pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
+      - make r2-next-linux-release
 
 trixie: *bookworm

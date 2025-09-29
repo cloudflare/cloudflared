@@ -246,6 +246,11 @@ gitlab-release:
 r2-linux-release:
 	python3 ./release_pkgs.py
 
+.PHONY: r2-next-linux-release
+# Publishes to a separate R2 repository during GPG key rollover, using dual-key signing.
+r2-next-linux-release:
+	python3 ./release_pkgs.py --upload-repo-file
+
 .PHONY: capnp
 capnp:
 	which capnp  # https://capnproto.org/install.html
