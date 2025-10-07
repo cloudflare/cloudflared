@@ -22,6 +22,11 @@ const (
 	// this value (maxDatagramPayloadLen).
 	maxOriginUDPPacketSize = 1500
 
+	// The maximum amount of datagrams a session will queue up before it begins dropping datagrams.
+	// This channel buffer is small because we assume that the dedicated writer to the origin is typically
+	// fast enought to keep the channel empty.
+	writeChanCapacity = 16
+
 	logFlowID        = "flowID"
 	logPacketSizeKey = "packetSize"
 )
@@ -49,7 +54,7 @@ func newSessionIdleErr(timeout time.Duration) error {
 }
 
 type Session interface {
-	io.WriteCloser
+	io.Closer
 	ID() RequestID
 	ConnectionID() uint8
 	RemoteAddr() net.Addr
@@ -58,6 +63,7 @@ type Session interface {
 	Migrate(eyeball DatagramConn, ctx context.Context, logger *zerolog.Logger)
 	// Serve starts the event loop for processing UDP packets
 	Serve(ctx context.Context) error
+	Write(payload []byte)
 }
 
 type session struct {
@@ -67,12 +73,18 @@ type session struct {
 	originAddr     net.Addr
 	localAddr      net.Addr
 	eyeball        atomic.Pointer[DatagramConn]
+	writeChan      chan []byte
 	// activeAtChan is used to communicate the last read/write time
 	activeAtChan chan time.Time
-	closeChan    chan error
-	contextChan  chan context.Context
-	metrics      Metrics
-	log          *zerolog.Logger
+	errChan      chan error
+	// The close channel signal only exists for the write loop because the read loop is always waiting on a read
+	// from the UDP socket to the origin. To close the read loop we close the socket.
+	// Additionally, we can't close the writeChan to indicate that writes are complete because the producer (edge)
+	// side may still be trying to write to this session.
+	closeWrite  chan struct{}
+	contextChan chan context.Context
+	metrics     Metrics
+	log         *zerolog.Logger
 
 	// A special close function that we wrap with sync.Once to make sure it is only called once
 	closeFn func() error
@@ -89,10 +101,12 @@ func NewSession(
 	log *zerolog.Logger,
 ) Session {
 	logger := log.With().Str(logFlowID, id.String()).Logger()
-	// closeChan has two slots to allow for both writers (the closeFn and the Serve routine) to both be able to
-	// write to the channel without blocking since there is only ever one value read from the closeChan by the
+	writeChan := make(chan []byte, writeChanCapacity)
+	// errChan has three slots to allow for all writers (the closeFn, the read loop and the write loop) to
+	// write to the channel without blocking since there is only ever one value read from the errChan by the
 	// waitForCloseCondition.
-	closeChan := make(chan error, 2)
+	errChan := make(chan error, 3)
+	closeWrite := make(chan struct{})
 	session := &session{
 		id:             id,
 		closeAfterIdle: closeAfterIdle,
@@ -100,10 +114,12 @@ func NewSession(
 		originAddr:     originAddr,
 		localAddr:      localAddr,
 		eyeball:        atomic.Pointer[DatagramConn]{},
+		writeChan:      writeChan,
 		// activeAtChan has low capacity. It can be full when there are many concurrent read/write. markActive() will
 		// drop instead of blocking because last active time only needs to be an approximation
 		activeAtChan: make(chan time.Time, 1),
-		closeChan:    closeChan,
+		errChan:      errChan,
+		closeWrite:   closeWrite,
 		// contextChan is an unbounded channel to help enforce one active migration of a session at a time.
 		contextChan: make(chan context.Context),
 		metrics:     metrics,
@@ -111,9 +127,12 @@ func NewSession(
 		closeFn: sync.OnceValue(func() error {
 			// We don't want to block on sending to the close channel if it is already full
 			select {
-			case closeChan <- SessionCloseErr:
+			case errChan <- SessionCloseErr:
 			default:
 			}
+			// Indicate to the write loop that the session is now closed
+			close(closeWrite)
+			// Close the socket directly to unblock the read loop and cause it to also end
 			return origin.Close()
 		}),
 	}
@@ -154,66 +173,107 @@ func (s *session) Migrate(eyeball DatagramConn, ctx context.Context, logger *zer
 }
 
 func (s *session) Serve(ctx context.Context) error {
-	go func() {
-		// QUIC implementation copies data to another buffer before returning https://github.com/quic-go/quic-go/blob/v0.24.0/session.go#L1967-L1975
-		// This makes it safe to share readBuffer between iterations
-		readBuffer := [maxOriginUDPPacketSize + DatagramPayloadHeaderLen]byte{}
-		// To perform a zero copy write when passing the datagram to the connection, we prepare the buffer with
-		// the required datagram header information. We can reuse this buffer for this session since the header is the
-		// same for the each read.
-		_ = MarshalPayloadHeaderTo(s.id, readBuffer[:DatagramPayloadHeaderLen])
-		for {
-			// Read from the origin UDP socket
-			n, err := s.origin.Read(readBuffer[DatagramPayloadHeaderLen:])
-			if err != nil {
-				if errors.Is(err, io.EOF) ||
-					errors.Is(err, io.ErrUnexpectedEOF) {
-					s.log.Debug().Msgf("flow (origin) connection closed: %v", err)
-				}
-				s.closeChan <- err
-				return
-			}
-			if n < 0 {
-				s.log.Warn().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was negative and was dropped")
-				continue
-			}
-			if n > maxDatagramPayloadLen {
-				connectionIndex := s.ConnectionID()
-				s.metrics.PayloadTooLarge(connectionIndex)
-				s.log.Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
-				continue
-			}
-			// We need to synchronize on the eyeball in-case that the connection was migrated. This should be rarely a point
-			// of lock contention, as a migration can only happen during startup of a session before traffic flow.
-			eyeball := *(s.eyeball.Load())
-			// Sending a packet to the session does block on the [quic.Connection], however, this is okay because it
-			// will cause back-pressure to the kernel buffer if the writes are not fast enough to the edge.
-			err = eyeball.SendUDPSessionDatagram(readBuffer[:DatagramPayloadHeaderLen+n])
-			if err != nil {
-				s.closeChan <- err
-				return
-			}
-			// Mark the session as active since we proxied a valid packet from the origin.
-			s.markActive()
-		}
-	}()
+	go s.writeLoop()
+	go s.readLoop()
 	return s.waitForCloseCondition(ctx, s.closeAfterIdle)
 }
 
-func (s *session) Write(payload []byte) (n int, err error) {
-	n, err = s.origin.Write(payload)
-	if err != nil {
-		s.log.Err(err).Msg("failed to write payload to flow (remote)")
-		return n, err
+// Read datagrams from the origin and write them to the connection.
+func (s *session) readLoop() {
+	// QUIC implementation copies data to another buffer before returning https://github.com/quic-go/quic-go/blob/v0.24.0/session.go#L1967-L1975
+	// This makes it safe to share readBuffer between iterations
+	readBuffer := [maxOriginUDPPacketSize + DatagramPayloadHeaderLen]byte{}
+	// To perform a zero copy write when passing the datagram to the connection, we prepare the buffer with
+	// the required datagram header information. We can reuse this buffer for this session since the header is the
+	// same for the each read.
+	_ = MarshalPayloadHeaderTo(s.id, readBuffer[:DatagramPayloadHeaderLen])
+	for {
+		// Read from the origin UDP socket
+		n, err := s.origin.Read(readBuffer[DatagramPayloadHeaderLen:])
+		if err != nil {
+			if isConnectionClosed(err) {
+				s.log.Debug().Msgf("flow (read) connection closed: %v", err)
+			}
+			s.closeSession(err)
+			return
+		}
+		if n < 0 {
+			s.log.Warn().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was negative and was dropped")
+			continue
+		}
+		if n > maxDatagramPayloadLen {
+			connectionIndex := s.ConnectionID()
+			s.metrics.PayloadTooLarge(connectionIndex)
+			s.log.Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
+			continue
+		}
+		// We need to synchronize on the eyeball in-case that the connection was migrated. This should be rarely a point
+		// of lock contention, as a migration can only happen during startup of a session before traffic flow.
+		eyeball := *(s.eyeball.Load())
+		// Sending a packet to the session does block on the [quic.Connection], however, this is okay because it
+		// will cause back-pressure to the kernel buffer if the writes are not fast enough to the edge.
+		err = eyeball.SendUDPSessionDatagram(readBuffer[:DatagramPayloadHeaderLen+n])
+		if err != nil {
+			s.closeSession(err)
+			return
+		}
+		// Mark the session as active since we proxied a valid packet from the origin.
+		s.markActive()
 	}
-	// Write must return a non-nil error if it returns n < len(p). https://pkg.go.dev/io#Writer
-	if n < len(payload) {
-		s.log.Err(io.ErrShortWrite).Msg("failed to write the full payload to flow (remote)")
-		return n, io.ErrShortWrite
+}
+
+func (s *session) Write(payload []byte) {
+	select {
+	case s.writeChan <- payload:
+	default:
+		s.log.Error().Msg("failed to write flow payload to origin: dropped")
 	}
-	// Mark the session as active since we proxied a packet to the origin.
-	s.markActive()
-	return n, err
+}
+
+// Read datagrams from the write channel to the origin.
+func (s *session) writeLoop() {
+	for {
+		select {
+		case <-s.closeWrite:
+			// When the closeWrite channel is closed, we will no longer write to the origin and end this
+			// goroutine since the session is now closed.
+			return
+		case payload := <-s.writeChan:
+			n, err := s.origin.Write(payload)
+			if err != nil {
+				if isConnectionClosed(err) {
+					s.log.Debug().Msgf("flow (write) connection closed: %v", err)
+				}
+				s.log.Err(err).Msg("failed to write flow payload to origin")
+				s.closeSession(err)
+				// If we fail to write to the origin socket, we need to end the writer and close the session
+				return
+			}
+			// Write must return a non-nil error if it returns n < len(p). https://pkg.go.dev/io#Writer
+			if n < len(payload) {
+				s.log.Err(io.ErrShortWrite).Msg("failed to write the full flow payload to origin")
+				continue
+			}
+			// Mark the session as active since we successfully proxied a packet to the origin.
+			s.markActive()
+		}
+	}
+}
+
+func isConnectionClosed(err error) bool {
+	return errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+// Send an error to the error channel to report that an error has either happened on the tunnel or origin side of the
+// proxied connection.
+func (s *session) closeSession(err error) {
+	select {
+	case s.errChan <- err:
+	default:
+		// In the case that the errChan is already full, we will skip over it and return as to not block
+		// the caller because we should start cleaning up the session.
+		s.log.Warn().Msg("error channel was full")
+	}
 }
 
 // ResetIdleTimer will restart the current idle timer.
@@ -240,7 +300,8 @@ func (s *session) Close() error {
 
 func (s *session) waitForCloseCondition(ctx context.Context, closeAfterIdle time.Duration) error {
 	connCtx := ctx
-	// Closing the session at the end cancels read so Serve() can return
+	// Closing the session at the end cancels read so Serve() can return, additionally, it closes the
+	// closeWrite channel which indicates to the write loop to return.
 	defer s.Close()
 	if closeAfterIdle == 0 {
 		// Provided that the default caller doesn't specify one
@@ -260,7 +321,9 @@ func (s *session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 			// still be active on the existing connection.
 			connCtx = newContext
 			continue
-		case reason := <-s.closeChan:
+		case reason := <-s.errChan:
+			// Any error returned here is from the read or write loops indicating that it can no longer process datagrams
+			// and as such the session needs to close.
 			return reason
 		case <-checkIdleTimer.C:
 			// The check idle timer will only return after an idle period since the last active

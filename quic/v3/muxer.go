@@ -17,6 +17,9 @@ const (
 	// Allocating a 16 channel buffer here allows for the writer to be slightly faster than the reader.
 	// This has worked previously well for datagramv2, so we will start with this as well
 	demuxChanCapacity = 16
+	// This provides a small buffer for the PacketRouter to poll ICMP packets from the QUIC connection
+	// before writing them to the origin.
+	icmpDatagramChanCapacity = 128
 
 	logSrcKey      = "src"
 	logDstKey      = "dst"
@@ -59,14 +62,15 @@ type QuicConnection interface {
 }
 
 type datagramConn struct {
-	conn           QuicConnection
-	index          uint8
-	sessionManager SessionManager
-	icmpRouter     ingress.ICMPRouter
-	metrics        Metrics
-	logger         *zerolog.Logger
-	datagrams      chan []byte
-	readErrors     chan error
+	conn             QuicConnection
+	index            uint8
+	sessionManager   SessionManager
+	icmpRouter       ingress.ICMPRouter
+	metrics          Metrics
+	logger           *zerolog.Logger
+	datagrams        chan []byte
+	icmpDatagramChan chan *ICMPDatagram
+	readErrors       chan error
 
 	icmpEncoderPool sync.Pool // a pool of *packet.Encoder
 	icmpDecoderPool sync.Pool
@@ -75,14 +79,15 @@ type datagramConn struct {
 func NewDatagramConn(conn QuicConnection, sessionManager SessionManager, icmpRouter ingress.ICMPRouter, index uint8, metrics Metrics, logger *zerolog.Logger) DatagramConn {
 	log := logger.With().Uint8("datagramVersion", 3).Logger()
 	return &datagramConn{
-		conn:           conn,
-		index:          index,
-		sessionManager: sessionManager,
-		icmpRouter:     icmpRouter,
-		metrics:        metrics,
-		logger:         &log,
-		datagrams:      make(chan []byte, demuxChanCapacity),
-		readErrors:     make(chan error, 2),
+		conn:             conn,
+		index:            index,
+		sessionManager:   sessionManager,
+		icmpRouter:       icmpRouter,
+		metrics:          metrics,
+		logger:           &log,
+		datagrams:        make(chan []byte, demuxChanCapacity),
+		icmpDatagramChan: make(chan *ICMPDatagram, icmpDatagramChanCapacity),
+		readErrors:       make(chan error, 2),
 		icmpEncoderPool: sync.Pool{
 			New: func() any {
 				return packet.NewEncoder()
@@ -168,6 +173,9 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 	readCtx, cancel := context.WithCancel(connCtx)
 	defer cancel()
 	go c.pollDatagrams(readCtx)
+	// Processing ICMP datagrams also monitors the reader context since the ICMP datagrams from the reader are the input
+	// for the routine.
+	go c.processICMPDatagrams(readCtx)
 	for {
 		// We make sure to monitor the context of cloudflared and the underlying connection to return if any errors occur.
 		var datagram []byte
@@ -181,58 +189,59 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 		// Monitor for any hard errors from reading the connection
 		case err := <-c.readErrors:
 			return err
-		// Otherwise, wait and dequeue datagrams as they come in
+		// Wait and dequeue datagrams as they come in
 		case d := <-c.datagrams:
 			datagram = d
 		}
 
 		// Each incoming datagram will be processed in a new go routine to handle the demuxing and action associated.
-		go func() {
-			typ, err := ParseDatagramType(datagram)
+		typ, err := ParseDatagramType(datagram)
+		if err != nil {
+			c.logger.Err(err).Msgf("unable to parse datagram type: %d", typ)
+			continue
+		}
+		switch typ {
+		case UDPSessionRegistrationType:
+			reg := &UDPSessionRegistrationDatagram{}
+			err := reg.UnmarshalBinary(datagram)
 			if err != nil {
-				c.logger.Err(err).Msgf("unable to parse datagram type: %d", typ)
-				return
+				c.logger.Err(err).Msgf("unable to unmarshal session registration datagram")
+				continue
 			}
-			switch typ {
-			case UDPSessionRegistrationType:
-				reg := &UDPSessionRegistrationDatagram{}
-				err := reg.UnmarshalBinary(datagram)
-				if err != nil {
-					c.logger.Err(err).Msgf("unable to unmarshal session registration datagram")
-					return
-				}
-				logger := c.logger.With().Str(logFlowID, reg.RequestID.String()).Logger()
-				// We bind the new session to the quic connection context instead of cloudflared context to allow for the
-				// quic connection to close and close only the sessions bound to it. Closing of cloudflared will also
-				// initiate the close of the quic connection, so we don't have to worry about the application context
-				// in the scope of a session.
-				c.handleSessionRegistrationDatagram(connCtx, reg, &logger)
-			case UDPSessionPayloadType:
-				payload := &UDPSessionPayloadDatagram{}
-				err := payload.UnmarshalBinary(datagram)
-				if err != nil {
-					c.logger.Err(err).Msgf("unable to unmarshal session payload datagram")
-					return
-				}
-				logger := c.logger.With().Str(logFlowID, payload.RequestID.String()).Logger()
-				c.handleSessionPayloadDatagram(payload, &logger)
-			case ICMPType:
-				packet := &ICMPDatagram{}
-				err := packet.UnmarshalBinary(datagram)
-				if err != nil {
-					c.logger.Err(err).Msgf("unable to unmarshal icmp datagram")
-					return
-				}
-				c.handleICMPPacket(packet)
-			case UDPSessionRegistrationResponseType:
-				// cloudflared should never expect to receive UDP session responses as it will not initiate new
-				// sessions towards the edge.
-				c.logger.Error().Msgf("unexpected datagram type received: %d", UDPSessionRegistrationResponseType)
-				return
-			default:
-				c.logger.Error().Msgf("unknown datagram type received: %d", typ)
+			logger := c.logger.With().Str(logFlowID, reg.RequestID.String()).Logger()
+			// We bind the new session to the quic connection context instead of cloudflared context to allow for the
+			// quic connection to close and close only the sessions bound to it. Closing of cloudflared will also
+			// initiate the close of the quic connection, so we don't have to worry about the application context
+			// in the scope of a session.
+			//
+			// Additionally, we spin out the registration into a separate go routine to handle the Serve'ing of the
+			// session in a separate routine from the demuxer.
+			go c.handleSessionRegistrationDatagram(connCtx, reg, &logger)
+		case UDPSessionPayloadType:
+			payload := &UDPSessionPayloadDatagram{}
+			err := payload.UnmarshalBinary(datagram)
+			if err != nil {
+				c.logger.Err(err).Msgf("unable to unmarshal session payload datagram")
+				continue
 			}
-		}()
+			logger := c.logger.With().Str(logFlowID, payload.RequestID.String()).Logger()
+			c.handleSessionPayloadDatagram(payload, &logger)
+		case ICMPType:
+			packet := &ICMPDatagram{}
+			err := packet.UnmarshalBinary(datagram)
+			if err != nil {
+				c.logger.Err(err).Msgf("unable to unmarshal icmp datagram")
+				continue
+			}
+			c.handleICMPPacket(packet)
+		case UDPSessionRegistrationResponseType:
+			// cloudflared should never expect to receive UDP session responses as it will not initiate new
+			// sessions towards the edge.
+			c.logger.Error().Msgf("unexpected datagram type received: %d", UDPSessionRegistrationResponseType)
+			continue
+		default:
+			c.logger.Error().Msgf("unknown datagram type received: %d", typ)
+		}
 	}
 }
 
@@ -243,24 +252,21 @@ func (c *datagramConn) handleSessionRegistrationDatagram(ctx context.Context, da
 		Str(logDstKey, datagram.Dest.String()).
 		Logger()
 	session, err := c.sessionManager.RegisterSession(datagram, c)
-	switch err {
-	case nil:
-		// Continue as normal
-	case ErrSessionAlreadyRegistered:
-		// Session is already registered and likely the response got lost
-		c.handleSessionAlreadyRegistered(datagram.RequestID, &log)
-		return
-	case ErrSessionBoundToOtherConn:
-		// Session is already registered but to a different connection
-		c.handleSessionMigration(datagram.RequestID, &log)
-		return
-	case ErrSessionRegistrationRateLimited:
-		// There are too many concurrent sessions so we return an error to force a retry later
-		c.handleSessionRegistrationRateLimited(datagram, &log)
-		return
-	default:
-		log.Err(err).Msg("flow registration failure")
-		c.handleSessionRegistrationFailure(datagram.RequestID, &log)
+	if err != nil {
+		switch err {
+		case ErrSessionAlreadyRegistered:
+			// Session is already registered and likely the response got lost
+			c.handleSessionAlreadyRegistered(datagram.RequestID, &log)
+		case ErrSessionBoundToOtherConn:
+			// Session is already registered but to a different connection
+			c.handleSessionMigration(datagram.RequestID, &log)
+		case ErrSessionRegistrationRateLimited:
+			// There are too many concurrent sessions so we return an error to force a retry later
+			c.handleSessionRegistrationRateLimited(datagram, &log)
+		default:
+			log.Err(err).Msg("flow registration failure")
+			c.handleSessionRegistrationFailure(datagram.RequestID, &log)
+		}
 		return
 	}
 	log = log.With().Str(logSrcKey, session.LocalAddr().String()).Logger()
@@ -365,21 +371,42 @@ func (c *datagramConn) handleSessionPayloadDatagram(datagram *UDPSessionPayloadD
 		logger.Err(err).Msgf("unable to find flow")
 		return
 	}
-	// We ignore the bytes written to the socket because any partial write must return an error.
-	_, err = s.Write(datagram.Payload)
-	if err != nil {
-		logger.Err(err).Msgf("unable to write payload for the flow")
-		return
-	}
+	s.Write(datagram.Payload)
 }
 
-// Handles incoming ICMP datagrams.
+// Handles incoming ICMP datagrams into a serialized channel to be handled by a single consumer.
 func (c *datagramConn) handleICMPPacket(datagram *ICMPDatagram) {
 	if c.icmpRouter == nil {
 		// ICMPRouter is disabled so we drop the current packet and ignore all incoming ICMP packets
 		return
 	}
+	select {
+	case c.icmpDatagramChan <- datagram:
+	default:
+		// If the ICMP datagram channel is full, drop any additional incoming.
+		c.logger.Warn().Msg("failed to write icmp packet to origin: dropped")
+	}
+}
 
+// Consumes from the ICMP datagram channel to write out the ICMP requests to an origin.
+func (c *datagramConn) processICMPDatagrams(ctx context.Context) {
+	if c.icmpRouter == nil {
+		// ICMPRouter is disabled so we ignore all incoming ICMP packets
+		return
+	}
+
+	for {
+		select {
+		// If the provided context is closed we want to exit the write loop
+		case <-ctx.Done():
+			return
+		case datagram := <-c.icmpDatagramChan:
+			c.writeICMPPacket(datagram)
+		}
+	}
+}
+
+func (c *datagramConn) writeICMPPacket(datagram *ICMPDatagram) {
 	// Decode the provided ICMPDatagram as an ICMP packet
 	rawPacket := packet.RawPacket{Data: datagram.Payload}
 	cachedDecoder := c.icmpDecoderPool.Get()

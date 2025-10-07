@@ -1,6 +1,7 @@
 package v3_test
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"net/netip"
@@ -14,10 +15,16 @@ import (
 
 func makePayload(size int) []byte {
 	payload := make([]byte, size)
-	for i := range len(payload) {
-		payload[i] = 0xfc
-	}
+	_, _ = rand.Read(payload)
 	return payload
+}
+
+func makePayloads(size int, count int) [][]byte {
+	payloads := make([][]byte, count)
+	for i := range payloads {
+		payloads[i] = makePayload(size)
+	}
+	return payloads
 }
 
 func TestSessionRegistration_MarshalUnmarshal(t *testing.T) {
