@@ -36,7 +36,7 @@ ifdef PACKAGE_MANAGER
 	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/cmd/cloudflared/updater.BuiltForPackageManager=$(PACKAGE_MANAGER)"
 endif
 
-ifdef CONTAINER_BUILD 
+ifdef CONTAINER_BUILD
 	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/metrics.Runtime=virtual"
 endif
 
@@ -122,7 +122,7 @@ ifneq ($(TARGET_ARM), )
 	ARM_COMMAND := GOARM=$(TARGET_ARM)
 endif
 
-ifeq ($(TARGET_ARM), 7) 
+ifeq ($(TARGET_ARM), 7)
 	PACKAGE_ARCH := armhf
 else
 	PACKAGE_ARCH := $(TARGET_ARCH)
@@ -185,7 +185,7 @@ fuzz:
 	@go test -fuzz=FuzzIPDecoder -fuzztime=600s ./packet
 	@go test -fuzz=FuzzICMPDecoder -fuzztime=600s ./packet
 	@go test -fuzz=FuzzSessionWrite -fuzztime=600s ./quic/v3
-	@go test -fuzz=FuzzSessionServe -fuzztime=600s ./quic/v3
+	@go test -fuzz=FuzzSessionRead -fuzztime=600s ./quic/v3
 	@go test -fuzz=FuzzRegistrationDatagram -fuzztime=600s ./quic/v3
 	@go test -fuzz=FuzzPayloadDatagram -fuzztime=600s ./quic/v3
 	@go test -fuzz=FuzzRegistrationResponseDatagram -fuzztime=600s ./quic/v3

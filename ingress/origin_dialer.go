@@ -11,6 +11,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const writeDeadlineUDP = 200 * time.Millisecond
+
 // OriginTCPDialer provides a TCP dial operation to a requested address.
 type OriginTCPDialer interface {
 	DialTCP(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
@@ -141,6 +143,21 @@ func (d *Dialer) DialUDP(dest netip.AddrPort) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to dial udp to origin %s: %w", dest, err)
 	}
+	return &writeDeadlineConn{
+		Conn: conn,
+	}, nil
+}
 
-	return conn, nil
+// writeDeadlineConn is a wrapper around a net.Conn that sets a write deadline of 200ms.
+// This is to prevent the socket from blocking on the write operation if it were to occur. However,
+// we typically never expect this to occur except under high load or kernel issues.
+type writeDeadlineConn struct {
+	net.Conn
+}
+
+func (w *writeDeadlineConn) Write(b []byte) (int, error) {
+	if err := w.SetWriteDeadline(time.Now().Add(writeDeadlineUDP)); err != nil {
+		return 0, err
+	}
+	return w.Conn.Write(b)
 }
