@@ -199,12 +199,12 @@ func (s *session) readLoop() {
 			return
 		}
 		if n < 0 {
+			s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedReadFailed)
 			s.log.Warn().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was negative and was dropped")
 			continue
 		}
 		if n > maxDatagramPayloadLen {
-			connectionIndex := s.ConnectionID()
-			s.metrics.PayloadTooLarge(connectionIndex)
+			s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedReadTooLarge)
 			s.log.Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
 			continue
 		}
@@ -227,6 +227,7 @@ func (s *session) Write(payload []byte) {
 	select {
 	case s.writeChan <- payload:
 	default:
+		s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedWriteFull)
 		s.log.Error().Msg("failed to write flow payload to origin: dropped")
 	}
 }
@@ -244,6 +245,7 @@ func (s *session) writeLoop() {
 			if err != nil {
 				// Check if this is a write deadline exceeded to the connection
 				if errors.Is(err, os.ErrDeadlineExceeded) {
+					s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedWriteDeadlineExceeded)
 					s.log.Warn().Err(err).Msg("flow (write) deadline exceeded: dropping packet")
 					continue
 				}
@@ -257,6 +259,7 @@ func (s *session) writeLoop() {
 			}
 			// Write must return a non-nil error if it returns n < len(p). https://pkg.go.dev/io#Writer
 			if n < len(payload) {
+				s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedWriteFailed)
 				s.log.Err(io.ErrShortWrite).Msg("failed to write the full flow payload to origin")
 				continue
 			}
@@ -330,6 +333,7 @@ func (s *session) waitForCloseCondition(ctx context.Context, closeAfterIdle time
 		case reason := <-s.errChan:
 			// Any error returned here is from the read or write loops indicating that it can no longer process datagrams
 			// and as such the session needs to close.
+			s.metrics.FailedFlow(s.ConnectionID())
 			return reason
 		case <-checkIdleTimer.C:
 			// The check idle timer will only return after an idle period since the last active
