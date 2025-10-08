@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -241,6 +242,11 @@ func (s *session) writeLoop() {
 		case payload := <-s.writeChan:
 			n, err := s.origin.Write(payload)
 			if err != nil {
+				// Check if this is a write deadline exceeded to the connection
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					s.log.Warn().Err(err).Msg("flow (write) deadline exceeded: dropping packet")
+					continue
+				}
 				if isConnectionClosed(err) {
 					s.log.Debug().Msgf("flow (write) connection closed: %v", err)
 				}
