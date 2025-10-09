@@ -368,6 +368,7 @@ func (c *datagramConn) handleSessionRegistrationRateLimited(datagram *UDPSession
 func (c *datagramConn) handleSessionPayloadDatagram(datagram *UDPSessionPayloadDatagram, logger *zerolog.Logger) {
 	s, err := c.sessionManager.GetSession(datagram.RequestID)
 	if err != nil {
+		c.metrics.DroppedUDPDatagram(c.index, DroppedWriteFlowUnknown)
 		logger.Err(err).Msgf("unable to find flow")
 		return
 	}
@@ -384,6 +385,7 @@ func (c *datagramConn) handleICMPPacket(datagram *ICMPDatagram) {
 	case c.icmpDatagramChan <- datagram:
 	default:
 		// If the ICMP datagram channel is full, drop any additional incoming.
+		c.metrics.DroppedICMPPackets(c.index, DroppedWriteFull)
 		c.logger.Warn().Msg("failed to write icmp packet to origin: dropped")
 	}
 }
@@ -413,6 +415,7 @@ func (c *datagramConn) writeICMPPacket(datagram *ICMPDatagram) {
 	defer c.icmpDecoderPool.Put(cachedDecoder)
 	decoder, ok := cachedDecoder.(*packet.ICMPDecoder)
 	if !ok {
+		c.metrics.DroppedICMPPackets(c.index, DroppedWriteFailed)
 		c.logger.Error().Msg("Could not get ICMPDecoder from the pool. Dropping packet")
 		return
 	}
@@ -420,6 +423,7 @@ func (c *datagramConn) writeICMPPacket(datagram *ICMPDatagram) {
 	icmp, err := decoder.Decode(rawPacket)
 
 	if err != nil {
+		c.metrics.DroppedICMPPackets(c.index, DroppedWriteFailed)
 		c.logger.Err(err).Msgf("unable to marshal icmp packet")
 		return
 	}
@@ -427,6 +431,7 @@ func (c *datagramConn) writeICMPPacket(datagram *ICMPDatagram) {
 	// If the ICMP packet's TTL is expired, we won't send it to the origin and immediately return a TTL Exceeded Message
 	if icmp.TTL <= 1 {
 		if err := c.SendICMPTTLExceed(icmp, rawPacket); err != nil {
+			c.metrics.DroppedICMPPackets(c.index, DroppedWriteFailed)
 			c.logger.Err(err).Msg("failed to return ICMP TTL exceed error")
 		}
 		return
@@ -438,6 +443,7 @@ func (c *datagramConn) writeICMPPacket(datagram *ICMPDatagram) {
 	// connection context which will have no tracing information available.
 	err = c.icmpRouter.Request(c.conn.Context(), icmp, newPacketResponder(c, c.index))
 	if err != nil {
+		c.metrics.DroppedICMPPackets(c.index, DroppedWriteFailed)
 		c.logger.Err(err).
 			Str(logSrcKey, icmp.Src.String()).
 			Str(logDstKey, icmp.Dst.String()).
