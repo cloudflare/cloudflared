@@ -189,11 +189,22 @@ class PkgCreator:
     def import_gpg_keys(self, private_key, public_key):
         gpg = gnupg.GPG()
         private_key = base64.b64decode(private_key)
-        gpg.import_keys(private_key)
+        import_result = gpg.import_keys(private_key)
+        if not import_result.fingerprints:
+            raise Exception("Failed to import private key")
+
         public_key = base64.b64decode(public_key)
         gpg.import_keys(public_key)
+
+        imported_fingerprint = import_result.fingerprints[0]
         data = gpg.list_keys(secret=True)
-        return (data[0]["fingerprint"], data[0]["uids"][0])
+
+        # Find the specific key we just imported by comparing fingerprints
+        for key in data:
+            if key["fingerprint"] == imported_fingerprint:
+                return (key["fingerprint"], key["uids"][0])
+
+        raise Exception(f"Could not find imported key with fingerprint {imported_fingerprint}")
 
     def import_multiple_gpg_keys(self, primary_private_key, primary_public_key, secondary_private_key=None, secondary_public_key=None):
         """
