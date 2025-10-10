@@ -45,6 +45,6 @@ func (m *mockFeatureSelector) Snapshot() features.FeatureSnapshot {
 	return features.FeatureSnapshot{
 		PostQuantum:     features.PostQuantumPrefer,
 		DatagramVersion: features.DatagramV3,
-		FeaturesList:    []string{features.FeaturePostQuantum, features.FeatureDatagramV3_1},
+		FeaturesList:    []string{features.FeaturePostQuantum, features.FeatureDatagramV3_2},
 	}
 }
