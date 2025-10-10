@@ -322,7 +322,7 @@ def create_rpm_packaging(
     repo_file = pkg_creator.create_repo_file(artifacts_path, binary_name, base_url, gpg_key_url)
 
     print("Uploading repo file")
-    pkg_uploader.upload_pkg_to_r2(repo_file, binary_name + "repo")
+    pkg_uploader.upload_pkg_to_r2(binary_name + "repo", repo_file)
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "rpm", None, binary_name)
