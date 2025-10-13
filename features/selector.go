@@ -23,9 +23,10 @@ const (
 // If the TXT record is missing a key, the field will unmarshal to the default Go value
 
 type featuresRecord struct {
-	DatagramV3Percentage uint32 `json:"dv3_1"`
+	DatagramV3Percentage uint32 `json:"dv3_2"`
 
 	// DatagramV3Percentage int32 `json:"dv3"` // Removed in TUN-9291
+	// DatagramV3Percentage uint32 `json:"dv3_1"` // Removed in TUN-9883
 	// PostQuantumPercentage int32 `json:"pq"` // Removed in TUN-7970
 }
 
@@ -105,7 +106,7 @@ func (fs *featureSelector) postQuantumMode() PostQuantumMode {
 
 func (fs *featureSelector) datagramVersion() DatagramVersion {
 	// If user provides the feature via the cli, we take it as priority over remote feature evaluation
-	if slices.Contains(fs.cliFeatures, FeatureDatagramV3_1) {
+	if slices.Contains(fs.cliFeatures, FeatureDatagramV3_2) {
 		return DatagramV3
 	}
 	// If the user specifies DatagramV2, we also take that over remote
