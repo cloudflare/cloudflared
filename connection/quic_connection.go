@@ -33,6 +33,8 @@ const (
 	HTTPMethodKey = "HttpMethod"
 	// HTTPHostKey is used to get or set http host in QUIC ALPN if the underlying proxy connection type is HTTP.
 	HTTPHostKey = "HttpHost"
+	// HTTPStatus is used to return http status code in QUIC ALPN if the underlying proxy connection type is HTTP.
+	HTTPStatus = "HttpStatus"
 
 	QUICMetadataFlowID = "FlowID"
 )
@@ -287,7 +289,7 @@ func (hrw *httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
 
 func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
 	metadata := make([]pogs.Metadata, 0)
-	metadata = append(metadata, pogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(status)})
+	metadata = append(metadata, pogs.Metadata{Key: HTTPStatus, Val: strconv.Itoa(status)})
 	for k, vv := range header {
 		for _, v := range vv {
 			httpHeaderKey := fmt.Sprintf("%s:%s", HTTPHeaderKey, k)
@@ -327,7 +329,7 @@ func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {
-	_ = hrw.WriteConnectResponseData(err, pogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
+	_ = hrw.WriteConnectResponseData(err, pogs.Metadata{Key: HTTPStatus, Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
 func (hrw *httpResponseAdapter) WriteConnectResponseData(respErr error, metadata ...pogs.Metadata) error {
