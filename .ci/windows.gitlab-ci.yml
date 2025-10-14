@@ -36,7 +36,7 @@ load-windows-env-variables:
     # We have to encode the `COMPONENT_TESTS_ORIGINCERT` secret, because it content is a file, otherwise we can't export it using gitlab
     - echo "COMPONENT_TESTS_ORIGINCERT=$(echo "$COMPONENT_TESTS_ORIGINCERT" | base64 -w0)" >> windows.env
   variables:
-    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZC5leGUKY3JlZGVudGlhbHNfZmlsZTogY3JlZC5qc29uCm9yaWdpbmNlcnQ6IGNlcnQucGVtCnpvbmVfZG9tYWluOiBhcmdvdHVubmVsdGVzdC5jb20Kem9uZV90YWc6IDQ4Nzk2ZjFlNzBiYjc2NjljMjliYjUxYmEyODJiZjY1
+    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiAuL2Nsb3VkZmxhcmVkLmV4ZQpjcmVkZW50aWFsc19maWxlOiBjcmVkLmpzb24Kb3JpZ2luY2VydDogY2VydC5wZW0Kem9uZV9kb21haW46IGFyZ290dW5uZWx0ZXN0LmNvbQp6b25lX3RhZzogNDg3OTZmMWU3MGJiNzY2OWMyOWJiNTFiYTI4MmJmNjU=
   artifacts:
     access: 'none'
     reports:

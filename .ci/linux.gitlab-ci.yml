@@ -79,7 +79,7 @@ component-tests-linux: &component-tests-linux
     - ./.ci/scripts/component-tests.sh
   variables: &component-tests-variables
     CI: 1
-    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZApjcmVkZW50aWFsc19maWxlOiBjcmVkLmpzb24Kb3JpZ2luY2VydDogY2VydC5wZW0Kem9uZV9kb21haW46IGFyZ290dW5uZWx0ZXN0LmNvbQp6b25lX3RhZzogNDg3OTZmMWU3MGJiNzY2OWMyOWJiNTFiYTI4MmJmNjU=
+    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiAuL2Nsb3VkZmxhcmVkCmNyZWRlbnRpYWxzX2ZpbGU6IGNyZWQuanNvbgpvcmlnaW5jZXJ0OiBjZXJ0LnBlbQp6b25lX2RvbWFpbjogYXJnb3R1bm5lbHRlc3QuY29tCnpvbmVfdGFnOiA0ODc5NmYxZTcwYmI3NjY5YzI5YmI1MWJhMjgyYmY2NQ==
   tags:
     - linux-x86-8cpu-16gb
   artifacts:
