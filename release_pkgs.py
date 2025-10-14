@@ -50,7 +50,7 @@ class PkgUploader:
             config=config,
         )
 
-        print(f"uploading asset: {filename} to {upload_file_path} in bucket{self.bucket_name}...")
+        print(f"uploading asset: {filename} to {upload_file_path} in bucket {self.bucket_name}...")
         try:
             r2.upload_file(filename, self.bucket_name, upload_file_path)
         except ClientError as e:
@@ -133,16 +133,16 @@ class PkgCreator:
     """
 
     def create_repo_file(self, file_path, binary_name, baseurl, gpgkey_url):
-        repo_file = os.path.join(file_path, binary_name + '.repo')
-        with open(repo_file, "w+") as repo_file:
-            repo_file.write(f"[{binary_name}-stable]")
-            repo_file.write(f"{binary_name}-stable")
-            repo_file.write(f"baseurl={baseurl}/rpm")
-            repo_file.write("enabled=1")
-            repo_file.write("type=rpm")
-            repo_file.write("gpgcheck=1")
-            repo_file.write(f"gpgkey={gpgkey_url}")
-        return repo_file
+        repo_file_path = os.path.join(file_path, binary_name + '.repo')
+        with open(repo_file_path, "w+") as repo_file:
+            repo_file.write(f"[{binary_name}-stable]\n")
+            repo_file.write(f"name={binary_name}-stable\n")
+            repo_file.write(f"baseurl={baseurl}/rpm\n")
+            repo_file.write("enabled=1\n")
+            repo_file.write("type=rpm\n")
+            repo_file.write("gpgcheck=1\n")
+            repo_file.write(f"gpgkey={gpgkey_url}\n")
+        return repo_file_path
 
 
     def _sign_rpms(self, file_path, gpg_key_name):
@@ -153,7 +153,7 @@ class PkgCreator:
             raise
 
     def _sign_repomd(self):
-        p = Popen(["gpg", "--batch", "--detach-sign", "--armor", "./rpm/repodata/repomd.xml"], stdout=PIPE, stderr=PIPE)
+        p = Popen(["gpg", "--batch", "--yes", "--detach-sign", "--armor", "./rpm/repodata/repomd.xml"], stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if p.returncode != 0:
             print(f"sign repomd result => {out}, {err}")
@@ -322,7 +322,7 @@ def create_rpm_packaging(
     repo_file = pkg_creator.create_repo_file(artifacts_path, binary_name, base_url, gpg_key_url)
 
     print("Uploading repo file")
-    pkg_uploader.upload_pkg_to_r2(binary_name + "repo", repo_file)
+    pkg_uploader.upload_pkg_to_r2(repo_file, binary_name + ".repo")
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "rpm", None, binary_name)
