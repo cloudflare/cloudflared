@@ -1,3 +1,17 @@
+2025.10.0
+- 2025-10-14 chore: Fix upload of RPM repo file during double signing
+- 2025-10-13 TUN-9882: Bump datagram v3 write channel capacity
+- 2025-10-10 chore: Fix import of GPG keys when two keys are provided
+- 2025-10-10 chore: Fix parameter order when uploading RPM .repo file to R2
+- 2025-10-10 TUN-9883: Add new datagram v3 feature flag
+- 2025-10-09 chore: Force usage of go-boring 1.24
+- 2025-10-08 TUN-9882: Improve metrics for datagram v3
+- 2025-10-07 GRC-16749: Add fedramp tags to catalog
+- 2025-10-07 TUN-9882: Add buffers for UDP and ICMP datagrams in datagram v3
+- 2025-10-07 TUN-9882: Add write deadline for UDP origin writes
+- 2025-09-29 TUN-9776: Support signing Debian packages with two keys for rollover
+- 2025-09-22 TUN-9800: Add pipeline to sync between gitlab and github repos
+
 2025.9.1
 - 2025-09-22 TUN-9855: Create script to ignore vulnerabilities from govuln check
 - 2025-09-19 TUN-9852: Remove fmt.Println from cloudflared access command
