@@ -26,7 +26,7 @@ const (
 	// The maximum amount of datagrams a session will queue up before it begins dropping datagrams.
 	// This channel buffer is small because we assume that the dedicated writer to the origin is typically
 	// fast enought to keep the channel empty.
-	writeChanCapacity = 16
+	writeChanCapacity = 512
 
 	logFlowID        = "flowID"
 	logPacketSizeKey = "packetSize"
