@@ -459,7 +459,7 @@ if __name__ == "__main__":
         "./built_artifacts",
         args.release_tag,
         args.binary,
-        primary_gpg_key_name,
+        secondary_gpg_key_name,
         args.pkg_upload_url,
         args.gpg_public_key_url,
         args.upload_repo_file,
