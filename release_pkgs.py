@@ -430,11 +430,17 @@ if __name__ == "__main__":
     secondary_gpg_key_name = None
     if len(key_results) > 1:
         secondary_gpg_key_id, secondary_gpg_key_name = key_results[1]
-    # Import RPM public keys (one or two)
-    pkg_creator.import_rpm_key(args.gpg_public_key)
+
+    if args.args.gpg_private_key_2:
+        print(f"signing RPM with secondary gpg_key: {secondary_gpg_key_id}")
+        pkg_creator.import_rpm_key(args.gpg_public_key_2)
+    else:
+        print(f"signing RPM with primary gpg_key: {primary_gpg_key_name}")
+        pkg_creator.import_rpm_key(args.gpg_public_key)
+
 
     pkg_uploader = PkgUploader(args.account, args.bucket, args.id, args.secret)
-    print(f"signing with primary gpg_key: {primary_gpg_key_id} and secondary gpg_key: {secondary_gpg_key_id}")
+    print(f"signing deb with primary gpg_key: {primary_gpg_key_id} and secondary gpg_key: {secondary_gpg_key_id}")
     create_deb_packaging(
         pkg_creator,
         pkg_uploader,
