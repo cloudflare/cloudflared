@@ -1,4 +1,4 @@
-pinned_go: &pinned_go go-boring=1.24.4-1
+pinned_go: &pinned_go go-boring=1.24.9-1
 
 build_dir: &build_dir /cfsetup_build
 default-flavor: bookworm

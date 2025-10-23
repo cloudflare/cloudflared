@@ -1,5 +1,5 @@
 variables:
-  GO_VERSION: "go1.24.6"
+  GO_VERSION: "go1.24.9"
   GIT_DEPTH: "0"
 
 default:
