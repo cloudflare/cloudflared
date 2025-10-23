@@ -19,6 +19,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/carrier"
 	"github.com/cloudflare/cloudflared/cfio"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/stream"
@@ -90,55 +91,65 @@ func (p *Proxy) ProxyHTTP(
 
 	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
 		trace.WithAttributes(attribute.String("req-host", req.Host)))
-	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path, req.Header.Get(carrier.CFJumpDestinationHeader))
 	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
 	ruleSpan.End()
+
 	logger := newHTTPLogger(p.log, tr.ConnIndex, req, ruleNum, rule.Service.String())
 	logHTTPRequest(&logger, req)
+
 	if err, applied := p.applyIngressMiddleware(rule, req, w); err != nil {
 		if applied {
 			logRequestError(&logger, err)
-			return nil
 		}
 		return err
 	}
 
+	if _, isStreamBased := rule.Service.(ingress.StreamBasedOriginProxy); isStreamBased || rule.Config.BastionMode {
+		return p.handleStreamBasedService(rule, req, w, tr, &logger)
+	}
+
+	return p.handleHTTPBasedService(rule, req, w, tr, isWebsocket, &logger)
+}
+
+func (p *Proxy) handleStreamBasedService(rule *ingress.Rule, req *http.Request, w connection.ResponseWriter, tr *tracing.TracedHTTPRequest, logger *zerolog.Logger) error {
+	// If in bastion mode, we need to resolve the destination from the request, so service like http_status:404
+	// won't work since it doesn't have EstablishConnection method to resolve the destination
+	if _, ok := rule.Service.(ingress.StreamBasedOriginProxy); !ok && rule.Config.BastionMode {
+		return fmt.Errorf("Unsupported service to stream to in bastion mode: %s", rule.Service)
+	}
+
+	dest, err := getDestFromRule(rule, req)
+	if err != nil {
+		return err
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("response writer is not a flusher")
+	}
+
+	rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
+	if err := p.proxyStream(tr.ToTracedContext(), rws, dest, rule.Service.(ingress.StreamBasedOriginProxy), logger); err != nil {
+		logRequestError(logger, err)
+		return err
+	}
+	return nil
+}
+
+func (p *Proxy) handleHTTPBasedService(rule *ingress.Rule, req *http.Request, w connection.ResponseWriter, tr *tracing.TracedHTTPRequest, isWebsocket bool, logger *zerolog.Logger) error {
 	switch originProxy := rule.Service.(type) {
 	case ingress.HTTPOriginProxy:
-		if err := p.proxyHTTPRequest(
-			w,
-			tr,
-			originProxy,
-			isWebsocket,
-			rule.Config.DisableChunkedEncoding,
-			&logger,
-		); err != nil {
-			logRequestError(&logger, err)
+		if err := p.proxyHTTPRequest(w, tr, originProxy, isWebsocket, rule.Config.DisableChunkedEncoding, logger); err != nil {
+			logRequestError(logger, err)
 			return err
 		}
-		return nil
-	case ingress.StreamBasedOriginProxy:
-		dest, err := getDestFromRule(rule, req)
-		if err != nil {
-			return err
-		}
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return fmt.Errorf("response writer is not a flusher")
-		}
-		rws := connection.NewHTTPResponseReadWriterAcker(w, flusher, req)
-		logger := logger.With().Str(logFieldDestAddr, dest).Logger()
-		if err := p.proxyStream(tr.ToTracedContext(), rws, dest, originProxy, &logger); err != nil {
-			logRequestError(&logger, err)
-			return err
-		}
-		return nil
 	case ingress.HTTPLocalProxy:
 		p.proxyLocalRequest(originProxy, w, req, isWebsocket)
-		return nil
 	default:
 		return fmt.Errorf("Unrecognized service: %s, %t", rule.Service, originProxy)
 	}
+	return nil
 }
 
 // ProxyTCP proxies to a TCP connection between the origin service and cloudflared.
@@ -387,10 +398,9 @@ func copyTrailers(w connection.ResponseWriter, response *http.Response) {
 }
 
 func getDestFromRule(rule *ingress.Rule, req *http.Request) (string, error) {
-	switch rule.Service.String() {
-	case ingress.ServiceBastion:
-		return carrier.ResolveBastionDest(req)
-	default:
+	if rule.Config.BastionMode || rule.Service.String() == config.BastionFlag {
+		return carrier.ResolveBastionDest(req, rule.Config.BastionMode, rule.Service.String())
+	} else {
 		return rule.Service.String(), nil
 	}
 }
