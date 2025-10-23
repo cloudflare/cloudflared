@@ -60,7 +60,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-TimeoutStartSec=0
+TimeoutStartSec=15
 Type=notify
 ExecStart={{ .Path }} --no-autoupdate{{ range .ExtraArgs }} {{ . }}{{ end }}
 Restart=on-failure
