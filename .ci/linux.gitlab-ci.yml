@@ -5,6 +5,7 @@
   runner: linux-x86-8cpu-16gb
   stage: build
   golangVersion: "boring-1.24"
+  imageVersion: "3371-f5539bd6f83d@sha256:a2a68f580070f9411d0d3155959ed63b700ef319b5fcc62db340e92227bbc628"
   CGO_ENABLED: 1
 
 include:
@@ -16,7 +17,6 @@ include:
       <<: *golang_inputs
       jobPrefix: linux-build
       GOLANG_MAKE_TARGET: ci-build
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
 
   ########################
   ### Linux FIPS Build ###
@@ -26,8 +26,6 @@ include:
       <<: *golang_inputs
       jobPrefix: linux-fips-build
       GOLANG_MAKE_TARGET: ci-fips-build
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
   #################
   ### Unit Tests ##
@@ -38,8 +36,6 @@ include:
       stage: test
       jobPrefix: test
       GOLANG_MAKE_TARGET: ci-test
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
   ######################
   ### Unit Tests FIPS ##
@@ -50,8 +46,6 @@ include:
       stage: test
       jobPrefix: test-fips
       GOLANG_MAKE_TARGET: ci-fips-test
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
   #################
   ### Vuln Check ##
@@ -63,8 +57,6 @@ include:
       stage: validate
       jobPrefix: vulncheck
       GOLANG_MAKE_TARGET: vulncheck
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
 #################################
 ### Run Linux Component Tests ###
