@@ -1,3 +1,15 @@
+2025.10.1
+- 2025-10-30 chore: Update ci image to use goboring 1.24.9
+- 2025-10-28 TUN-9849: Add cf-proxy-* to control response headers
+- 2025-10-24 TUN-9961: Add pkg.cloudflared.com index.html to git repo
+- 2025-10-23 TUN-9954: Update from go1.24.6 to go1.24.9
+- 2025-10-23 Fix systemd service installation hanging
+- 2025-10-21 TUN-9941: Use new GPG key for RPM builds
+- 2025-10-21 TUN-9941: Fix typo causing r2-release-next deployment to fail
+- 2025-10-21 TUN-9941: Lookup correct key for RPM signature
+- 2025-10-15 TUN-9919: Make RPM postinstall scriplet idempotent
+- 2025-10-14 TUN-9916: Fix the cloudflared binary path used in the component test
+
 2025.10.0
 - 2025-10-14 chore: Fix upload of RPM repo file during double signing
 - 2025-10-13 TUN-9882: Bump datagram v3 write channel capacity
