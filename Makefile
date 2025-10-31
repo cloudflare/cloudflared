@@ -221,10 +221,6 @@ cloudflared-deb: cloudflared cloudflared.1
 cloudflared-rpm: cloudflared cloudflared.1
 	$(call build_package,rpm)
 
-.PHONY: cloudflared-pkg
-cloudflared-pkg: cloudflared cloudflared.1
-	$(call build_package,osxpkg)
-
 .PHONY: cloudflared-msi
 cloudflared-msi:
 	wixl --define Version=$(VERSION) --define Path=$(EXECUTABLE_PATH) --output cloudflared-$(VERSION)-$(TARGET_ARCH).msi cloudflared.wxs
@@ -235,12 +231,8 @@ github-release-dryrun:
 
 .PHONY: github-release
 github-release:
-	python3 github_release.py --path $(PWD)/built_artifacts --release-version $(VERSION)
-	python3 github_message.py --release-version $(VERSION)
-
-.PHONY: gitlab-release
-gitlab-release:
 	python3 github_release.py --path $(PWD)/artifacts/ --release-version $(VERSION)
+	python3 github_message.py --release-version $(VERSION)
 
 .PHONY: r2-linux-release
 r2-linux-release:

@@ -16,7 +16,13 @@ RUN apt-get update && \
         python3-venv \
         # libmsi and libgcab are libraries the wixl binary depends on.
         libmsi-dev \
-        libgcab-dev && \
+        libgcab-dev \
+        # deb and rpm build tools
+        rubygem-fpm \
+        rpm \
+        # create deb and rpm repository files
+        reprepro \
+        createrepo-c && \
     rm -rf /var/lib/apt/lists/* && \
     # Install wixl
     curl -o /usr/local/bin/wixl -L https://pkg.cloudflare.com/binaries/wixl && \

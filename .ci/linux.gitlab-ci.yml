@@ -8,6 +8,18 @@
   imageVersion: "3371-f5539bd6f83d@sha256:a2a68f580070f9411d0d3155959ed63b700ef319b5fcc62db340e92227bbc628"
   CGO_ENABLED: 1
 
+.default-packaging-job: &packaging-job-defaults
+  stage: build
+  needs:
+    - ci-image-get-image-ref
+  rules:
+    - !reference [.default-rules, run-on-master]
+  image: $BUILD_IMAGE
+  cache: {}
+  artifacts:
+    paths:
+      - artifacts/*
+
 include:
   ###################
   ### Linux Build ###
@@ -89,3 +101,22 @@ component-tests-linux-fips:
   variables:
     <<: *component-tests-variables
     COMPONENT_TESTS_FIPS: 1
+
+################################
+####### Linux Packaging ########
+################################
+linux-packaging:
+  <<: *packaging-job-defaults
+  parallel:
+    matrix:
+      - ARCH: ["386", "amd64", "arm", "armhf", "arm64"]
+  script:
+    - ./.ci/scripts/linux/build-packages.sh ${ARCH}
+
+################################
+##### Linux FIPS Packaging #####
+################################
+linux-packaging-fips:
+  <<: *packaging-job-defaults
+  script:
+    - ./.ci/scripts/linux/build-packages-fips.sh
