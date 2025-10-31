@@ -7,7 +7,7 @@ default:
     VAULT_ID_TOKEN:
       aud: https://vault.cfdata.org
 
-stages: [sync, pre-build, build, validate, test, package, release]
+stages: [sync, pre-build, build, validate, test, package, release, review]
 
 include:
   #####################################################
@@ -44,3 +44,10 @@ include:
   ################# Release Packages ##################
   #####################################################
   - local: .ci/release.gitlab-ci.yml
+
+  #####################################################
+  ############## Manual Claude Review #################
+  #####################################################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/ai/review@~latest
+    inputs:
+      whenToRun: "manual"
