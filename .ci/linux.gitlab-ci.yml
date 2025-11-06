@@ -9,7 +9,7 @@
   CGO_ENABLED: 1
 
 .default-packaging-job: &packaging-job-defaults
-  stage: build
+  stage: package
   needs:
     - ci-image-get-image-ref
   rules:
@@ -73,7 +73,7 @@ include:
 #################################
 ### Run Linux Component Tests ###
 #################################
-component-tests-linux: &component-tests-linux
+linux-component-tests: &linux-component-tests
   stage: test
   extends: .component-tests
   needs:
@@ -93,8 +93,8 @@ component-tests-linux: &component-tests-linux
 ######################################
 ### Run Linux FIPS Component Tests ###
 ######################################
-component-tests-linux-fips:
-  <<: *component-tests-linux
+linux-component-tests-fips:
+  <<: *linux-component-tests
   needs:
     - ci-image-get-image-ref
     - linux-fips-build-boring-make

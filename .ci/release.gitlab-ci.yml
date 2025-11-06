@@ -28,7 +28,7 @@ include:
   cache:
     paths:
       - .cache/pip
-  variables:
+  variables: &release-job-variables
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
     # KV Vars
     KV_NAMESPACE: 380e19aa04314648949b6ad841417ebe
@@ -73,10 +73,10 @@ release-cloudflared-to-github:
   <<: *release-job-defaults
   extends: .check-tag
   needs:
-    - build-and-sign-cloudflared-macos
     - ci-image-get-image-ref
     - linux-packaging
     - linux-packaging-fips
+    - macos-build-and-sign-cloudflared
     - windows-package-sign
   script:
     - ./.ci/scripts/release-target.sh github-release
@@ -100,6 +100,7 @@ release-cloudflared-to-r2:
 release-cloudflared-nightly-to-r2:
   <<: *release-job-defaults
   variables:
+    <<: *release-job-variables
     R2_BUCKET: cloudflared-pkgs-next
     GPG_PUBLIC_KEY_URL: "https://next.pkg.cloudflare.com/cloudflare-ascii-pubkey.gpg"
     PKG_URL: "https://next.pkg.cloudflare.com/cloudflared"
