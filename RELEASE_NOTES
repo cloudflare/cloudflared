@@ -1,3 +1,6 @@
+2025.11.1
+- 2025-11-07 TUN-9800: Fix docker hub push step
+
 2025.11.0
 - 2025-11-06 TUN-9863: Introduce Code Signing for Windows Builds
 - 2025-11-06 TUN-9800: Prefix gitlab steps with operating system
