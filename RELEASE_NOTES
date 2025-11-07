@@ -1,3 +1,11 @@
+2025.11.0
+- 2025-11-06 TUN-9863: Introduce Code Signing for Windows Builds
+- 2025-11-06 TUN-9800: Prefix gitlab steps with operating system
+- 2025-11-04 chore: Update cloudflared signing key name in index.html
+- 2025-10-31 chore: add claude review
+- 2025-10-31 Chore: Update documentation links in README
+- 2025-10-31 TUN-9800: Add pipelines for linux packaging
+
 2025.10.1
 - 2025-10-30 chore: Update ci image to use goboring 1.24.9
 - 2025-10-28 TUN-9849: Add cf-proxy-* to control response headers
