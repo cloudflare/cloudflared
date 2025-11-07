@@ -1,0 +1,151 @@
+.register_inputs: &register_inputs
+  stage: release-internal
+  runOnBranches: "^master$"
+  COMPONENT: "common"
+
+.register_inputs_stable_bookworm: &register_inputs_stable_bookworm
+  <<: *register_inputs
+  runOnChangesTo: ['RELEASE_NOTES']
+  FLAVOR: "bookworm"
+  SERIES: "stable"
+
+.register_inputs_stable_trixie: &register_inputs_stable_trixie
+  <<: *register_inputs
+  runOnChangesTo: ['RELEASE_NOTES']
+  FLAVOR: "trixie"
+  SERIES: "stable"
+
+.register_inputs_next_bookworm: &register_inputs_next_bookworm
+  <<: *register_inputs
+  FLAVOR: "bookworm"
+  SERIES: next
+
+.register_inputs_next_trixie: &register_inputs_next_trixie
+  <<: *register_inputs
+  FLAVOR: "trixie"
+  SERIES: next
+
+################################################
+### Generate Debian Package for Internal APT ###
+################################################
+.cloudflared-apt-build: &cloudflared_apt_build
+  stage: package
+  needs:
+    - ci-image-get-image-ref
+    - linux-packaging # For consistency, we only run this job after we knew we could build the packages for external delivery
+  image: $BUILD_IMAGE
+  cache: {}
+  script:
+    - make cloudflared-deb
+  artifacts:
+    paths:
+      - cloudflared*.deb
+
+##############
+### Stable ###
+##############
+cloudflared-amd64-stable:
+  <<: *cloudflared_apt_build
+  rules:
+    - !reference [.default-rules, run-on-release]
+  variables: &amd64-stable-vars
+    GOOS: linux
+    GOARCH: amd64
+    FIPS: true
+    ORIGINAL_NAME: true
+    CGO_ENABLED: 1
+
+cloudflared-arm64-stable:
+  <<: *cloudflared_apt_build
+  rules:
+    - !reference [.default-rules, run-on-release]
+  variables: &arm64-stable-vars
+    GOOS: linux
+    GOARCH: arm64
+    FIPS: false # TUN-7595
+    ORIGINAL_NAME: true
+    CGO_ENABLED: 1
+
+############
+### Next ###
+############
+cloudflared-amd64-next:
+  <<: *cloudflared_apt_build
+  rules:
+    - !reference [.default-rules, run-on-master]
+  variables:
+    <<: *amd64-stable-vars
+    NIGHTLY: true
+
+cloudflared-arm64-next:
+  <<: *cloudflared_apt_build
+  rules:
+    - !reference [.default-rules, run-on-master]
+  variables:
+    <<: *arm64-stable-vars
+    NIGHTLY: true
+
+include:
+  - local: .ci/commons.gitlab-ci.yml
+
+  ##########################################
+  ### Publish Packages to Internal Repos ###
+  ##########################################
+  # Bookworm AMD64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_stable_bookworm
+      jobPrefix: cloudflared-bookworm-amd64
+      needs: &amd64-stable ["cloudflared-amd64-stable"]
+
+  # Bookworm ARM64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_stable_bookworm
+      jobPrefix: cloudflared-bookworm-arm64
+      needs: &arm64-stable ["cloudflared-arm64-stable"]
+
+  # Trixie AMD64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_stable_trixie
+      jobPrefix: cloudflared-trixie-amd64
+      needs: *amd64-stable
+
+  # Trixie ARM64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_stable_trixie
+      jobPrefix: cloudflared-trixie-arm64
+      needs: *arm64-stable
+
+  ##################################################
+  ### Publish Nightly Packages to Internal Repos ###
+  ##################################################
+  # Bookworm AMD64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_next_bookworm
+      jobPrefix: cloudflared-nightly-bookworm-amd64
+      needs: &amd64-next ['cloudflared-amd64-next']
+
+  # Bookworm ARM64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_next_bookworm
+      jobPrefix: cloudflared-nightly-bookworm-arm64
+      needs: &arm64-next ['cloudflared-arm64-next']
+
+  # Trixie AMD64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_next_trixie
+      jobPrefix: cloudflared-nightly-trixie-amd64
+      needs: *amd64-next
+
+  # Trixie ARM64
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      <<: *register_inputs_next_trixie
+      jobPrefix: cloudflared-nightly-trixie-arm64
+      needs: *arm64-next

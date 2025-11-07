@@ -28,8 +28,6 @@ include:
 .default-release-job: &release-job-defaults
   stage: release
   image: $BUILD_IMAGE
-  rules:
-    - !reference [.default-rules, run-on-master]
   cache:
     paths:
       - .cache/pip
@@ -76,7 +74,8 @@ include:
 ###########################################
 release-cloudflared-to-github:
   <<: *release-job-defaults
-  extends: .check-tag
+  rules:
+    - !reference [.default-rules, run-on-release]
   needs:
     - ci-image-get-image-ref
     - linux-packaging
@@ -91,7 +90,8 @@ release-cloudflared-to-github:
 #########################################
 release-cloudflared-to-r2:
   <<: *release-job-defaults
-  extends: .check-tag
+  rules:
+    - !reference [.default-rules, run-on-release]
   needs:
     - ci-image-get-image-ref
     - linux-packaging # We only release non-FIPS binaries to R2
@@ -104,6 +104,8 @@ release-cloudflared-to-r2:
 #################################################
 release-cloudflared-nightly-to-r2:
   <<: *release-job-defaults
+  rules:
+    - !reference [.default-rules, run-on-master]
   variables:
     <<: *release-job-variables
     R2_BUCKET: cloudflared-pkgs-next
@@ -120,6 +122,8 @@ release-cloudflared-nightly-to-r2:
 #############################
 generate-version-file:
   <<: *release-job-defaults
+  rules:
+    - !reference [.default-rules, run-on-release]
   needs:
     - ci-image-get-image-ref
   script:

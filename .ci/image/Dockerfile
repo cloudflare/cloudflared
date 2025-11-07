@@ -22,7 +22,10 @@ RUN apt-get update && \
         rpm \
         # create deb and rpm repository files
         reprepro \
-        createrepo-c && \
+        createrepo-c \
+        # gcc for cross architecture compilation in arm
+        gcc-aarch64-linux-gnu \
+        libc6-dev-arm64-cross && \
     rm -rf /var/lib/apt/lists/* && \
     # Install wixl
     curl -o /usr/local/bin/wixl -L https://pkg.cloudflare.com/binaries/wixl && \
