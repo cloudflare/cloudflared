@@ -16,8 +16,13 @@ include:
         - release-cloudflared-to-r2
       commentImageRefs: false
       runner: vm-linux-x86-4cpu-8gb
-      DOCKER_USER_BRANCH: svcgithubdockerhubcloudflar045
-      DOCKER_PASSWORD_BRANCH: gitlab/cloudflare/tun/cloudflared/_dev/dockerhub/svc_password/data
+      # Based on if the CI reference is protected or not the CI component will
+      # either use _BRANCH or _PROD, therefore, to prevent the pipelines from failing
+      # we simply set both to the same value.
+      DOCKER_USER_BRANCH: &docker-hub-user svcgithubdockerhubcloudflar045
+      DOCKER_PASSWORD_BRANCH: &docker-hub-password gitlab/cloudflare/tun/cloudflared/_dev/dockerhub/svc_password/data
+      DOCKER_USER_PROD: *docker-hub-user
+      DOCKER_PASSWORD_PROD: *docker-hub-password
       EXTRA_DIB_ARGS: --overwrite
 
 .default-release-job: &release-job-defaults
