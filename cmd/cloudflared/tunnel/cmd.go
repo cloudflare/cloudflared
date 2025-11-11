@@ -459,9 +459,10 @@ func StartServer(
 		}
 	}
 
-	userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
 	var isFEDEndpoint bool
-	if err != nil {
+	if c.String(TunnelTokenFlag) != "" || c.String(TunnelTokenFileFlag) != "" {
+		isFEDEndpoint = false
+	} else if userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log); err != nil {
 		isFEDEndpoint = false
 	} else {
 		isFEDEndpoint = userCreds.IsFEDEndpoint()
