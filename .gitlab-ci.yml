@@ -1,5 +1,5 @@
 variables:
-  GO_VERSION: "go1.24.6"
+  GO_VERSION: "go1.24.9"
   GIT_DEPTH: "0"
 
 default:
@@ -7,7 +7,7 @@ default:
     VAULT_ID_TOKEN:
       aud: https://vault.cfdata.org
 
-stages: [sync, pre-build, build, validate, test, package, release]
+stages: [sync, pre-build, build, validate, test, package, release, release-internal, review]
 
 include:
   #####################################################
@@ -44,3 +44,15 @@ include:
   ################# Release Packages ##################
   #####################################################
   - local: .ci/release.gitlab-ci.yml
+
+  #####################################################
+  ########## Release Packages Internally ##############
+  #####################################################
+  - local: .ci/apt-internal.gitlab-ci.yml
+
+  #####################################################
+  ############## Manual Claude Review #################
+  #####################################################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/ai/review@~latest
+    inputs:
+      whenToRun: "manual"

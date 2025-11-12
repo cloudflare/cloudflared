@@ -107,7 +107,13 @@ class TestManagement:
             assert resp.status_code == 404, "Expected cloudflared to return 404 for /metrics"
 
 
+
+
 @retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
 def send_request(url, headers={}):
     with requests.Session() as s:
-        return s.get(url, timeout=BACKOFF_SECS, headers=headers)
+        resp = s.get(url, timeout=BACKOFF_SECS, headers=headers)
+        if resp.status_code == 530:
+            LOGGER.debug(f"Received 530 status, retrying request to {url}")
+            raise Exception(f"Received 530 status code from {url}")
+        return resp

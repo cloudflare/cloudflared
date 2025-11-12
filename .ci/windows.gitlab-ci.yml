@@ -14,7 +14,7 @@ include:
 ##########################################
 ### Build Cloudflared Windows Binaries ###
 ##########################################
-build-cloudflared-windows:
+windows-build-cloudflared:
   <<: *windows-build-defaults
   stage: build
   script:
@@ -26,7 +26,7 @@ build-cloudflared-windows:
 ######################################################
 ### Load Environment Variables for Component Tests ###
 ######################################################
-load-windows-env-variables:
+windows-load-env-variables:
   stage: pre-build
   extends: .component-tests
   script:
@@ -35,8 +35,29 @@ load-windows-env-variables:
     - echo "DNS_API_TOKEN=$DNS_API_TOKEN" >> windows.env
     # We have to encode the `COMPONENT_TESTS_ORIGINCERT` secret, because it content is a file, otherwise we can't export it using gitlab
     - echo "COMPONENT_TESTS_ORIGINCERT=$(echo "$COMPONENT_TESTS_ORIGINCERT" | base64 -w0)" >> windows.env
+    - echo "KEY_VAULT_URL=$KEY_VAULT_URL" >> windows.env
+    - echo "KEY_VAULT_CLIENT_ID=$KEY_VAULT_CLIENT_ID" >> windows.env
+    - echo "KEY_VAULT_TENANT_ID=$KEY_VAULT_TENANT_ID" >> windows.env
+    - echo "KEY_VAULT_SECRET=$KEY_VAULT_SECRET" >> windows.env
+    - echo "KEY_VAULT_CERTIFICATE=$KEY_VAULT_CERTIFICATE" >> windows.env
   variables:
-    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZC5leGUKY3JlZGVudGlhbHNfZmlsZTogY3JlZC5qc29uCm9yaWdpbmNlcnQ6IGNlcnQucGVtCnpvbmVfZG9tYWluOiBhcmdvdHVubmVsdGVzdC5jb20Kem9uZV90YWc6IDQ4Nzk2ZjFlNzBiYjc2NjljMjliYjUxYmEyODJiZjY1
+    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiAuL2Nsb3VkZmxhcmVkLmV4ZQpjcmVkZW50aWFsc19maWxlOiBjcmVkLmpzb24Kb3JpZ2luY2VydDogY2VydC5wZW0Kem9uZV9kb21haW46IGFyZ290dW5uZWx0ZXN0LmNvbQp6b25lX3RhZzogNDg3OTZmMWU3MGJiNzY2OWMyOWJiNTFiYTI4MmJmNjU=
+  secrets:
+    KEY_VAULT_URL:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/app_info/key_vault_url@kv
+      file: false
+    KEY_VAULT_CLIENT_ID:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/app_info/key_vault_client_id@kv
+      file: false
+    KEY_VAULT_TENANT_ID:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/app_info/key_vault_tenant_id@kv
+      file: false
+    KEY_VAULT_SECRET:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/secret/key_vault_secret@kv
+      file: false
+    KEY_VAULT_CERTIFICATE:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/certificate/key_vault_certificate@kv
+      file: false
   artifacts:
     access: 'none'
     reports:
@@ -45,12 +66,12 @@ load-windows-env-variables:
 ###################################
 ### Run Windows Component Tests ###
 ###################################
-component-tests-cloudflared-windows:
+windows-component-tests-cloudflared:
   <<: *windows-build-defaults
   stage: test
-  needs: ["load-windows-env-variables"]
+  needs: ["windows-load-env-variables"]
   script:
-    # We have to decode the secret we encoded on the `load-windows-env-variables` job
+    # We have to decode the secret we encoded on the `windows-load-env-variables` job
     - $env:COMPONENT_TESTS_ORIGINCERT = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:COMPONENT_TESTS_ORIGINCERT))
     - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${GO_VERSION}" ".\.ci\scripts\windows\component-test.ps1"
   artifacts:
@@ -60,17 +81,34 @@ component-tests-cloudflared-windows:
 ################################
 ### Package Windows Binaries ###
 ################################
-package-windows:
+windows-package:
   rules:
     - !reference [.default-rules, run-on-master]
   stage: package
   needs:
     - ci-image-get-image-ref
-    - build-cloudflared-windows
+    - windows-build-cloudflared
   image: $BUILD_IMAGE
   script:
     - .ci/scripts/package-windows.sh
   cache: {}
+  artifacts:
+    paths:
+      - artifacts/*
+
+#############################
+### Sign Windows Binaries ###
+#############################
+windows-package-sign:
+  <<: *windows-build-defaults
+  rules:
+    - !reference [.default-rules, run-on-master]
+  stage: package
+  needs:
+    - windows-package
+    - windows-load-env-variables
+  script:
+    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\sign-msi.ps1"
   artifacts:
     paths:
       - artifacts/*

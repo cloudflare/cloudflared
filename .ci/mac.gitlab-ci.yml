@@ -17,7 +17,7 @@ include:
 ######################################
 ### Build Cloudflared Mac Binaries ###
 ######################################
-build-cloudflared-macos: &build-mac
+macos-build-cloudflared: &mac-build
   <<: *mac-build-defaults
   stage: build
   artifacts:
@@ -38,8 +38,8 @@ build-cloudflared-macos: &build-mac
 ###############################################
 ### Build and Sign Cloudflared Mac Binaries ###
 ###############################################
-build-and-sign-cloudflared-macos:
-  <<: *build-mac
+macos-build-and-sign-cloudflared:
+  <<: *mac-build
   rules:
     - !reference [.default-rules, run-on-master]
   secrets:

@@ -7,7 +7,7 @@ RUN apt-get update && \
     apt-get install --no-install-recommends --allow-downgrades -y \
         build-essential \
         git \
-        go-boring=1.24.6-1 \
+        go-boring=1.24.9-1 \
         libffi-dev \
         procps \
         python3-dev \
@@ -16,7 +16,16 @@ RUN apt-get update && \
         python3-venv \
         # libmsi and libgcab are libraries the wixl binary depends on.
         libmsi-dev \
-        libgcab-dev && \
+        libgcab-dev \
+        # deb and rpm build tools
+        rubygem-fpm \
+        rpm \
+        # create deb and rpm repository files
+        reprepro \
+        createrepo-c \
+        # gcc for cross architecture compilation in arm
+        gcc-aarch64-linux-gnu \
+        libc6-dev-arm64-cross && \
     rm -rf /var/lib/apt/lists/* && \
     # Install wixl
     curl -o /usr/local/bin/wixl -L https://pkg.cloudflare.com/binaries/wixl && \

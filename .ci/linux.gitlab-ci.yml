@@ -5,7 +5,20 @@
   runner: linux-x86-8cpu-16gb
   stage: build
   golangVersion: "boring-1.24"
+  imageVersion: "3371-f5539bd6f83d@sha256:a2a68f580070f9411d0d3155959ed63b700ef319b5fcc62db340e92227bbc628"
   CGO_ENABLED: 1
+
+.default-packaging-job: &packaging-job-defaults
+  stage: package
+  needs:
+    - ci-image-get-image-ref
+  rules:
+    - !reference [.default-rules, run-on-master]
+  image: $BUILD_IMAGE
+  cache: {}
+  artifacts:
+    paths:
+      - artifacts/*
 
 include:
   ###################
@@ -16,7 +29,6 @@ include:
       <<: *golang_inputs
       jobPrefix: linux-build
       GOLANG_MAKE_TARGET: ci-build
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
 
   ########################
   ### Linux FIPS Build ###
@@ -26,8 +38,6 @@ include:
       <<: *golang_inputs
       jobPrefix: linux-fips-build
       GOLANG_MAKE_TARGET: ci-fips-build
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
   #################
   ### Unit Tests ##
@@ -38,8 +48,6 @@ include:
       stage: test
       jobPrefix: test
       GOLANG_MAKE_TARGET: ci-test
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
   ######################
   ### Unit Tests FIPS ##
@@ -50,8 +58,6 @@ include:
       stage: test
       jobPrefix: test-fips
       GOLANG_MAKE_TARGET: ci-fips-test
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
   #################
   ### Vuln Check ##
@@ -63,13 +69,11 @@ include:
       stage: validate
       jobPrefix: vulncheck
       GOLANG_MAKE_TARGET: vulncheck
-      imageVersion: "3308-283bdf9@sha256:fcd83570c91565a72eab132c38e0f589a481e2f3d4f3779f9f9a93eb555fee4a"
-
 
 #################################
 ### Run Linux Component Tests ###
 #################################
-component-tests-linux: &component-tests-linux
+linux-component-tests: &linux-component-tests
   stage: test
   extends: .component-tests
   needs:
@@ -79,7 +83,7 @@ component-tests-linux: &component-tests-linux
     - ./.ci/scripts/component-tests.sh
   variables: &component-tests-variables
     CI: 1
-    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiBjbG91ZGZsYXJlZApjcmVkZW50aWFsc19maWxlOiBjcmVkLmpzb24Kb3JpZ2luY2VydDogY2VydC5wZW0Kem9uZV9kb21haW46IGFyZ290dW5uZWx0ZXN0LmNvbQp6b25lX3RhZzogNDg3OTZmMWU3MGJiNzY2OWMyOWJiNTFiYTI4MmJmNjU=
+    COMPONENT_TESTS_CONFIG_CONTENT: Y2xvdWRmbGFyZWRfYmluYXJ5OiAuL2Nsb3VkZmxhcmVkCmNyZWRlbnRpYWxzX2ZpbGU6IGNyZWQuanNvbgpvcmlnaW5jZXJ0OiBjZXJ0LnBlbQp6b25lX2RvbWFpbjogYXJnb3R1bm5lbHRlc3QuY29tCnpvbmVfdGFnOiA0ODc5NmYxZTcwYmI3NjY5YzI5YmI1MWJhMjgyYmY2NQ==
   tags:
     - linux-x86-8cpu-16gb
   artifacts:
@@ -89,11 +93,30 @@ component-tests-linux: &component-tests-linux
 ######################################
 ### Run Linux FIPS Component Tests ###
 ######################################
-component-tests-linux-fips:
-  <<: *component-tests-linux
+linux-component-tests-fips:
+  <<: *linux-component-tests
   needs:
     - ci-image-get-image-ref
     - linux-fips-build-boring-make
   variables:
     <<: *component-tests-variables
     COMPONENT_TESTS_FIPS: 1
+
+################################
+####### Linux Packaging ########
+################################
+linux-packaging:
+  <<: *packaging-job-defaults
+  parallel:
+    matrix:
+      - ARCH: ["386", "amd64", "arm", "armhf", "arm64"]
+  script:
+    - ./.ci/scripts/linux/build-packages.sh ${ARCH}
+
+################################
+##### Linux FIPS Packaging #####
+################################
+linux-packaging-fips:
+  <<: *packaging-job-defaults
+  script:
+    - ./.ci/scripts/linux/build-packages-fips.sh

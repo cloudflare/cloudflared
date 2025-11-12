@@ -260,7 +260,7 @@ def upload_from_directories(pkg_uploader, directory, release, binary):
 
 
 """ 
-    1. looks into a built_artifacts folder for cloudflared debs
+    1. looks into a artifacts folder for cloudflared debs
     2. creates Packages.gz, InRelease (signed) files
     3. uploads them to Cloudflare R2 
 
@@ -294,7 +294,7 @@ def create_deb_packaging(pkg_creator, pkg_uploader, releases, primary_gpg_key_id
     for release in releases:
         for arch in archs:
             print(f"creating deb pkgs for {release} and {arch}...")
-            pkg_creator.create_deb_pkgs(release, f"./built_artifacts/cloudflared-linux-{arch}.deb")
+            pkg_creator.create_deb_pkgs(release, f"./artifacts/cloudflared-linux-{arch}.deb")
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "dists", None, binary_name)
@@ -382,10 +382,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--gpg-public-key-url-2", default=os.environ.get("GPG_PUBLIC_KEY_URL_2"), help="Secondary GPG public key url for rollover"
-    )
-
-    parser.add_argument(
         "--pkg-upload-url", default=os.environ.get("PKG_URL"), help="URL to be used by downloaders"
     )
 
@@ -430,11 +426,17 @@ if __name__ == "__main__":
     secondary_gpg_key_name = None
     if len(key_results) > 1:
         secondary_gpg_key_id, secondary_gpg_key_name = key_results[1]
-    # Import RPM public keys (one or two)
-    pkg_creator.import_rpm_key(args.gpg_public_key)
+
+    if args.gpg_private_key_2:
+        print(f"signing RPM with secondary gpg_key: {secondary_gpg_key_id}")
+        pkg_creator.import_rpm_key(args.gpg_public_key_2)
+    else:
+        print(f"signing RPM with primary gpg_key: {primary_gpg_key_name}")
+        pkg_creator.import_rpm_key(args.gpg_public_key)
+
 
     pkg_uploader = PkgUploader(args.account, args.bucket, args.id, args.secret)
-    print(f"signing with primary gpg_key: {primary_gpg_key_id} and secondary gpg_key: {secondary_gpg_key_id}")
+    print(f"signing deb with primary gpg_key: {primary_gpg_key_id} and secondary gpg_key: {secondary_gpg_key_id}")
     create_deb_packaging(
         pkg_creator,
         pkg_uploader,
@@ -450,10 +452,10 @@ if __name__ == "__main__":
     create_rpm_packaging(
         pkg_creator,
         pkg_uploader,
-        "./built_artifacts",
+        "./artifacts",
         args.release_tag,
         args.binary,
-        primary_gpg_key_name,
+        secondary_gpg_key_name,
         args.pkg_upload_url,
         args.gpg_public_key_url,
         args.upload_repo_file,

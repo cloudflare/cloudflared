@@ -1,0 +1,212 @@
+<!-- TODO(TUN-9963): Create pipeline to push this file to repo automatically -->
+
+<html>
+<body>
+<h1>Cloudflare packages</h1>
+<ul>
+    <li><a href="#cloudflared-packages">Cloudflared packages</a></li>
+    <li><a href="#gokeyless-packages">Gokeyless Packages</a></li>
+</ul>
+
+<br>
+<h2><a name="cloudflared-packages">Cloudflared</a></h2>
+
+<ul>
+    <li><a href="#debian-any">Any Debian Based Distribution (Recommended)</a></li>
+    <li><a href="#debian-bookworm">Debian Bookworm</a></li>
+    <li><a href="#ubuntu-focal">Ubuntu 20.04 (Focal Fossa)</a></li>
+    <li><a href="#ubuntu-jammy">Ubuntu 22.04 (Jammy Jellyfish)</a></li>
+    <li><a href="#ubuntu-noble">Ubuntu 24.04 (Noble Numbat)</a></li>
+    <li><a href="#Amazon-Linux">Amazon Linux</a></li>
+    <li><a href="#RHEL-generic">RHEL Generic</a></li>
+    <li><a href="#centos-7">Centos 7</a></li>
+    <li><a href="#centos-8">Centos 8</a></li>
+    <li><a href="#centos-stream">Centos Stream</a></li>
+</ul>
+
+<h3 style="color: #d9534f;">Warning: Public Key Rollover (30 October 2025)</h3>
+<p style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 10px 0;">
+    <strong>We have rolled our public key for package signing.</strong> If you are using RPM-based distributions (RHEL,
+    CentOS, Amazon Linux, etc.) or Debian Trixie and have the old key installed, RPM/Deb packages will no longer work with the old key.
+    Please update your repository configuration using the instructions below to ensure you can continue receiving
+    package updates. The previous keys will still work for other distributions for the time being, but it is now DEPRECATED and will be removed on 30 April 2026
+</p>
+
+<h3><a name="debian-any">Any Debian Based Distribution (Recommended)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+# Stable
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+# Nightly
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://next.pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+# install cloudflared
+sudo apt-get update && sudo apt-get install cloudflared
+</pre>
+
+<h3><a name="debian-bookworm">Debian Bookworm</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+# Stable
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared bookworm main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+# Nightly
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://next.pkg.cloudflare.com/cloudflared bookworm main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+# install cloudflared
+sudo apt-get update && sudo apt-get install cloudflared
+</pre>
+
+<h3><a name="ubuntu-focal">Ubuntu 20.04 (Focal Fossa)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+# Stable
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared focal main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+# Nightly
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://next.pkg.cloudflare.com/cloudflared focal main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+# install cloudflared
+sudo apt-get update && sudo apt-get install cloudflared
+</pre>
+
+<h3><a name="ubuntu-jammy">Ubuntu 22.04 (Jammy Jellyfish)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+# Stable
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+# Nightly
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://next.pkg.cloudflare.com/cloudflared jammy main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+# install cloudflared
+sudo apt-get update && sudo apt-get install cloudflared
+</pre>
+
+<h3><a name="ubuntu-noble">Ubuntu 24.04 (Noble Numbat)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+# Stable
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared noble main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+# Nightly
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://next.pkg.cloudflare.com/cloudflared noble main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+
+# install cloudflared
+sudo apt-get update && sudo apt-get install cloudflared
+</pre>
+
+<h3><a name="Amazon-Linux">Amazon Linux</a></h3>
+<pre>
+# Add cloudflared.repo to /etc/yum.repos.d/
+# Stable
+curl -fsSl https://pkg.cloudflare.com/cloudflared.repo | sudo tee /etc/yum.repos.d/cloudflared.repo
+# Nightly
+curl -fsSl https://next.pkg.cloudflare.com/cloudflared.repo | sudo tee /etc/yum.repos.d/cloudflared.repo
+
+#update repo
+sudo yum update
+
+# install cloudflared
+sudo yum install cloudflared
+</pre>
+
+
+<h3><a name="RHEL-generic">RHEL Generic</a></h3>
+<pre>
+# Add cloudflared.repo to /etc/yum.repos.d/
+# Stable
+curl -fsSl https://pkg.cloudflare.com/cloudflared.repo | sudo tee /etc/yum.repos.d/cloudflared.repo
+# Nightly
+curl -fsSl https://next.pkg.cloudflare.com/cloudflared.repo | sudo tee /etc/yum.repos.d/cloudflared.repo
+
+#update repo
+sudo yum update
+
+# install cloudflared
+sudo yum install cloudflared
+</pre>
+
+
+<h3><a name="centos-7">Centos 7</a></h3>
+<pre>
+# This requires yum config-manager
+sudo yum install yum-utils
+
+# Add cloudflared.repo to config-manager
+# Stable
+sudo yum-config-manager --add-repo https://pkg.cloudflare.com/cloudflared.repo
+# Nightly
+sudo yum-config-manager --add-repo https://next.pkg.cloudflare.com/cloudflared.repo
+
+# install cloudflared
+yum install cloudflared
+</pre>
+
+<h3><a name="centos-8">Centos 8</a></h3>
+<pre>
+# This requires dnf config-manager
+# Add cloudflared.repo to config-manager
+# Stable
+sudo dnf config-manager --add-repo https://pkg.cloudflare.com/cloudflared.repo
+# Nightly
+sudo dnf config-manager --add-repo https://next.pkg.cloudflare.com/cloudflared.repo
+
+# install cloudflared
+sudo dnf install cloudflared
+</pre>
+
+<h3><a name="centos-stream">Centos Stream</a></h3>
+<pre>
+# This requires dnf config-manager
+# Add cloudflared.repo to config-manager
+# Stable
+sudo dnf config-manager --add-repo https://pkg.cloudflare.com/cloudflared.repo
+# Nightly
+sudo dnf config-manager --add-repo https://next.pkg.cloudflare.com/cloudflared.repo
+
+# install cloudflared
+sudo dnf install cloudflared
+</pre>
+
+
+<h2><a name="gokeyless-packages"></a>Gokeyless</a></h2>
+<h3><a name="go-keyless-debian">Debian</a></h3>
+<pre>
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless buster main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
+
+# install gokeyless
+sudo apt-get update && sudo apt-get install gokeyless
+</pre>
+
+<h3><a name="go-keyless-centos">Centos 8</a></h3>
+<pre>
+# This requires dnf config-manager
+# Add gokeyless.repo to config-manager
+sudo dnf config-manager --add-repo https://pkg.cloudflare.com/gokeyless.repo
+
+# install gokeyless
+sudo dnf install gokeyless
+</pre>
+</body>
+</html>

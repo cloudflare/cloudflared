@@ -1,26 +1,48 @@
 include:
   - local: .ci/commons.gitlab-ci.yml
 
-###########################################
-### Push Cloudflared Binaries to Github ###
-###########################################
-release-cloudflared-to-github:
+  ######################################
+  ### Build and Push DockerHub Image ###
+  ######################################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/docker-image/build-push-image@~latest
+    inputs:
+      stage: release
+      jobPrefix: docker-hub
+      runOnMR: false
+      runOnBranches: '^master$'
+      runOnChangesTo: ['RELEASE_NOTES']
+      needs:
+        - generate-version-file
+        - release-cloudflared-to-r2
+      commentImageRefs: false
+      runner: vm-linux-x86-4cpu-8gb
+      # Based on if the CI reference is protected or not the CI component will
+      # either use _BRANCH or _PROD, therefore, to prevent the pipelines from failing
+      # we simply set both to the same value.
+      DOCKER_USER_BRANCH: &docker-hub-user svcgithubdockerhubcloudflar045
+      DOCKER_PASSWORD_BRANCH: &docker-hub-password gitlab/cloudflare/tun/cloudflared/_dev/dockerhub/svc_password/data
+      DOCKER_USER_PROD: *docker-hub-user
+      DOCKER_PASSWORD_PROD: *docker-hub-password
+      EXTRA_DIB_ARGS: --overwrite
+
+.default-release-job: &release-job-defaults
   stage: release
   image: $BUILD_IMAGE
-  extends: .check-tag
-  needs:
-    - ci-image-get-image-ref
-    - package-windows
-    - build-and-sign-cloudflared-macos
-  rules:
-    - !reference [.default-rules, run-on-master]
   cache:
     paths:
       - .cache/pip
-  variables:
+  variables: &release-job-variables
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+    # KV Vars
     KV_NAMESPACE: 380e19aa04314648949b6ad841417ebe
-    KV_ACCOUNT: 5ab4e9dfbd435d24068829fda0077963
+    KV_ACCOUNT: &cf-account 5ab4e9dfbd435d24068829fda0077963
+    # R2 Vars
+    R2_BUCKET: cloudflared-pkgs
+    R2_ACCOUNT_ID: *cf-account
+    # APT and RPM Repository Vars
+    GPG_PUBLIC_KEY_URL: "https://pkg.cloudflare.com/cloudflare-ascii-pubkey.gpg"
+    PKG_URL: "https://pkg.cloudflare.com/cloudflared"
+    BINARY_NAME: cloudflared
   secrets:
     KV_API_TOKEN:
       vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_kv_api_token/data@kv
@@ -28,12 +50,84 @@ release-cloudflared-to-github:
     API_KEY:
       vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_github_api_key/data@kv
       file: false
+    R2_CLIENT_ID:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/_terraform_atlantis/r2_api_token/client_id@kv
+      file: false
+    R2_CLIENT_SECRET:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/_terraform_atlantis/r2_api_token/client_secret@kv
+      file: false
+    LINUX_SIGNING_PUBLIC_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/gpg_v1/public_key@kv
+      file: false
+    LINUX_SIGNING_PRIVATE_KEY:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/gpg_v1/private_key@kv
+      file: false
+    LINUX_SIGNING_PUBLIC_KEY_2:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/gpg_v2/public_key@kv
+      file: false
+    LINUX_SIGNING_PRIVATE_KEY_2:
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/gpg_v2/private_key@kv
+      file: false
+
+###########################################
+### Push Cloudflared Binaries to Github ###
+###########################################
+release-cloudflared-to-github:
+  <<: *release-job-defaults
+  rules:
+    - !reference [.default-rules, run-on-release]
+  needs:
+    - ci-image-get-image-ref
+    - linux-packaging
+    - linux-packaging-fips
+    - macos-build-and-sign-cloudflared
+    - windows-package-sign
   script:
-    - python3 --version ; pip --version  # For debugging
-    - python3 -m venv venv
-    - source venv/bin/activate
-    - pip install pynacl==1.4.0 pygithub==1.55
-    - echo $VERSION
-    - echo $TAG_EXISTS
-    - echo "Running release because tag exists."
-    - make gitlab-release
+    - ./.ci/scripts/release-target.sh github-release
+
+#########################################
+### Upload Cloudflared Binaries to R2 ###
+#########################################
+release-cloudflared-to-r2:
+  <<: *release-job-defaults
+  rules:
+    - !reference [.default-rules, run-on-release]
+  needs:
+    - ci-image-get-image-ref
+    - linux-packaging # We only release non-FIPS binaries to R2
+    - release-cloudflared-to-github
+  script:
+    - ./.ci/scripts/release-target.sh r2-linux-release
+
+#################################################
+### Upload Cloudflared Nightly Binaries to R2 ###
+#################################################
+release-cloudflared-nightly-to-r2:
+  <<: *release-job-defaults
+  rules:
+    - !reference [.default-rules, run-on-master]
+  variables:
+    <<: *release-job-variables
+    R2_BUCKET: cloudflared-pkgs-next
+    GPG_PUBLIC_KEY_URL: "https://next.pkg.cloudflare.com/cloudflare-ascii-pubkey.gpg"
+    PKG_URL: "https://next.pkg.cloudflare.com/cloudflared"
+  needs:
+    - ci-image-get-image-ref
+    - linux-packaging # We only release non-FIPS binaries to R2
+  script:
+    - ./.ci/scripts/release-target.sh r2-linux-release
+
+#############################
+### Generate Version File ###
+#############################
+generate-version-file:
+  <<: *release-job-defaults
+  rules:
+    - !reference [.default-rules, run-on-release]
+  needs:
+    - ci-image-get-image-ref
+  script:
+    - make generate-docker-version
+  artifacts:
+    paths:
+      - versions

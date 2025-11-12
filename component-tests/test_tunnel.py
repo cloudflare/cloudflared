@@ -33,13 +33,20 @@ class TestTunnel:
         LOGGER.debug(config)
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"],  cfd_args=["run"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
-            resp = send_request(config.get_url()+"/")
-            assert resp.status_code == 503, "Expected cloudflared to return 503 for all requests with no ingress defined"
-            resp = send_request(config.get_url()+"/test")
-            assert resp.status_code == 503, "Expected cloudflared to return 503 for all requests with no ingress defined"
+            expected_status_code = 503
+            resp = send_request(config.get_url()+"/", expected_status_code)
+            assert resp.status_code == expected_status_code, "Expected cloudflared to return 503 for all requests with no ingress defined"
+            resp = send_request(config.get_url()+"/test", expected_status_code)
+            assert resp.status_code == expected_status_code, "Expected cloudflared to return 503 for all requests with no ingress defined"
 
+def retry_if_result_none(result):
+    '''
+    Returns True if the result is None, indicating that the function should be retried.
+    '''
+    return result is None
 
-@retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
-def send_request(url, headers={}):
+@retry(retry_on_result=retry_if_result_none, stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
+def send_request(url, expected_status_code=200):
     with requests.Session() as s:
-        return s.get(url, timeout=BACKOFF_SECS, headers=headers)
+        resp = s.get(url, timeout=BACKOFF_SECS)
+        return resp if resp.status_code == expected_status_code else None
