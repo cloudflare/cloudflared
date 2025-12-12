@@ -178,8 +178,13 @@ fi
 if [[ ! -z "$CODE_SIGN_NAME" ]]; then
   codesign --keychain $HOME/Library/Keychains/cloudflared_build_keychain.keychain-db -s "${CODE_SIGN_NAME}" -fv --options runtime --timestamp ${BINARY_NAME}
 
- # notarize the binary
- # TODO: TUN-5789
+  echo "Uploading ${BINARY_NAME} to apple portal."
+  xcrun notarytool submit                                                     \
+    "${BINARY_NAME}"                                                          \
+    --keychain $HOME/Library/Keychains/cloudflared_build_keychain.keychain-db \
+    --verbose                                                                 \
+    --wait                                                                    \
+    --timeout 15m
 fi
 
 ARCH_TARGET_DIRECTORY="${TARGET_DIRECTORY}/${TARGET_ARCH}-build"
@@ -207,8 +212,16 @@ if [[ ! -z "$PKG_SIGN_NAME" ]]; then
       --sign "${PKG_SIGN_NAME}" \
       ${PKGNAME}
 
-      # notarize the package
-      # TODO: TUN-5789
+  echo "Uploading ${PKG_NAME} to apple portal."
+  xcrun notarytool submit                                                     \
+    "${PKG_NAME}"                                                             \
+    --keychain $HOME/Library/Keychains/cloudflared_build_keychain.keychain-db \
+    --verbose                                                                 \
+    --wait                                                                    \
+    --timeout 15m
+
+  echo "Stapling ${PKG_NAME}"
+  xcrun stapler staple "${PKG_NAME}"
 else
     pkgbuild --identifier com.cloudflare.${PRODUCT} \
       --version ${VERSION} \
