@@ -295,7 +295,7 @@ func TestServeWS(t *testing.T) {
 	require.False(t, respWriter.panicked)
 }
 
-// TestNoWriteAfterServeHTTPReturns is a regression test of https://jira.cfops.it/browse/TUN-5184
+// TestNoWriteAfterServeHTTPReturns is a regression test of https://jira.cfdata.org/browse/TUN-5184
 // to make sure we don't write to the ResponseWriter after the ServeHTTP method returns
 func TestNoWriteAfterServeHTTPReturns(t *testing.T) {
 	cfdHTTP2Conn, edgeTCPConn := newTestHTTP2Connection()
