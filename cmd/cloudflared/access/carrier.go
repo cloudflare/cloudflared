@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -68,6 +70,10 @@ func ssh(c *cli.Context) error {
 		outputTerminal = logger.EnableTerminalLog
 	}
 	log := logger.CreateSSHLoggerFromContext(c, outputTerminal)
+
+	if c.IsSet(sshPidFileFlag) {
+		writePidFile(c.String(sshPidFileFlag), log)
+	}
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
@@ -144,4 +150,19 @@ func ssh(c *cli.Context) error {
 		s = stream.NewDebugStream(s, &logger, maxMessages)
 	}
 	return carrier.StartClient(wsConn, s, options)
+}
+
+func writePidFile(path string, log *zerolog.Logger) {
+	expandedPath, err := homedir.Expand(path)
+	if err != nil {
+		log.Err(err).Str("path", path).Msg("Unable to expand pidfile path")
+		return
+	}
+	file, err := os.Create(expandedPath)
+	if err != nil {
+		log.Err(err).Str("path", expandedPath).Msg("Unable to write pidfile")
+		return
+	}
+	defer file.Close()
+	fmt.Fprintf(file, "%d", os.Getpid())
 }
