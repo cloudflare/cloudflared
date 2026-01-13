@@ -50,6 +50,7 @@ const (
 	noDiagNetworkFlagName   = "no-diag-network"
 	diagContainerIDFlagName = "diag-container-id"
 	diagPodFlagName         = "diag-pod-id"
+	diagNamespaceFlagName   = "diag-namespace-id"
 
 	LogFieldTunnelID = "tunnelID"
 )
@@ -209,6 +210,11 @@ var (
 	diagPodFlag = &cli.StringFlag{
 		Name:  diagPodFlagName,
 		Usage: "Kubernetes POD to collect logs from",
+		Value: "",
+	}
+	diagNamespaceFlagName = &cli.StringFlag{
+		Name:  diagNamespaceFlagName,
+		Usage: "Kubernetes Namespace to collect logs from",
 		Value: "",
 	}
 	noDiagLogsFlag = &cli.BoolFlag{
@@ -1105,6 +1111,7 @@ func diagCommand(ctx *cli.Context) error {
 		Address:        sctx.c.String(flags.Metrics),
 		ContainerID:    sctx.c.String(diagContainerIDFlagName),
 		PodID:          sctx.c.String(diagPodFlagName),
+		NamespaceID:    sctx.c.String(diagNamespaceFlagName),
 		Toggles: diagnostic.Toggles{
 			NoDiagLogs:    sctx.c.Bool(noDiagLogsFlagName),
 			NoDiagMetrics: sctx.c.Bool(noDiagMetricsFlagName),
@@ -1136,7 +1143,7 @@ func diagCommand(ctx *cli.Context) error {
 	}
 
 	if errors.Is(err, diagnostic.ErrLogConfigurationIsInvalid) {
-		log.Info().Msg("Couldn't extract logs from the instance. If the instance is running in a containerized environment use the option --diag-container-id or --diag-pod-id. If there is no logging configuration use --no-diag-logs.")
+		log.Info().Msg("Couldn't extract logs from the instance. If the instance is running in a containerized environment use the option --diag-container-id, --diag-pod-id or --diag-namespace-id. If there is no logging configuration use --no-diag-logs.")
 	}
 
 	if err != nil {
