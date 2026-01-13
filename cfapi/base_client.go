@@ -207,9 +207,11 @@ func (r *response) checkErrors() error {
 		return r.Errors[0]
 	}
 	var messages string
+	var messagesSb210 strings.Builder
 	for _, e := range r.Errors {
-		messages += fmt.Sprintf("%s; ", e)
+		messagesSb210.WriteString(fmt.Sprintf("%s; ", e))
 	}
+	messages += messagesSb210.String()
 	return fmt.Errorf("API errors: %s", messages)
 }
 
