@@ -391,7 +391,15 @@ func StartServer(
 	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 
-	go waitForSignal(graceShutdownC, log)
+	// reloadC is used to trigger configuration reloads via SIGHUP.
+	// Channel is created here but waitForSignal is started later, after localWatcher
+	// is ready to consume from reloadC (to avoid race condition).
+	var reloadC chan struct{}
+	configPath := c.String("config")
+	if configPath != "" && c.String(TunnelTokenFlag) == "" {
+		// Only enable hot reload for locally configured tunnels (not token-based)
+		reloadC = make(chan struct{}, 1)
+	}
 
 	if c.IsSet(cfdflags.ProxyDns) {
 		dnsReadySignal := make(chan struct{})
@@ -488,6 +496,20 @@ func StartServer(
 	if err != nil {
 		return err
 	}
+
+	// Start local config watcher for hot reload if enabled
+	if reloadC != nil {
+		localWatcher := orchestration.NewLocalConfigWatcher(orchestrator, configPath, log)
+		readyC := localWatcher.Run(ctx, reloadC)
+		<-readyC // Wait until watcher is ready to receive signals
+	} else if configPath == "" {
+		log.Debug().Msg("Configuration hot reload disabled: no config file specified")
+	} else {
+		log.Debug().Msg("Configuration hot reload disabled: token-based tunnel")
+	}
+
+	// Start signal handler after localWatcher is ready to avoid race condition
+	go waitForSignal(graceShutdownC, reloadC, log)
 
 	metricsListener, err := metrics.CreateMetricsListener(&listeners, c.String("metrics"))
 	if err != nil {
