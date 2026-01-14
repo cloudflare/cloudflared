@@ -1,7 +1,7 @@
 # use a builder image for building cloudflare
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
-FROM golang:1.24.9 AS builder
+FROM golang:1.24.11 AS builder
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
   TARGET_GOOS=${TARGET_GOOS} \
@@ -20,7 +20,7 @@ COPY . .
 RUN make cloudflared
 
 # use a distroless base image with glibc
-FROM gcr.io/distroless/base-debian12:nonroot
+FROM gcr.io/distroless/base-debian13:nonroot
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
