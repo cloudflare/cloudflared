@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+set -e -u -o pipefail
 
 # Fetch cloudflared from the artifacts folder
 mv ./artifacts/cloudflared ./cloudflared

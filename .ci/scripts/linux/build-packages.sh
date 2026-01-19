@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e -u -o pipefail
 
 # Check if architecture argument is provided
 if [ $# -eq 0 ]; then

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e -u -o pipefail
 VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
 

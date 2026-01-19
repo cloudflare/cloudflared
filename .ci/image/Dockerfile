@@ -15,9 +15,11 @@ RUN apt-get update && \
         python3-venv \
         # tool to create msi packages
         wixl \
-        # deb and rpm build tools
-        rubygem-fpm \
+        # install ruby and rpm which are required to install fpm package builder
         rpm \
+        ruby \
+        ruby-dev \
+        rubygems \
         # create deb and rpm repository files
         reprepro \
         createrepo-c \
@@ -25,6 +27,13 @@ RUN apt-get update && \
         gcc-aarch64-linux-gnu \
         libc6-dev-arm64-cross && \
     rm -rf /var/lib/apt/lists/* && \
+    # Install fpm gem
+    gem install fpm --no-document && \
+    # Initialize rpm repository, SQL Lite DB
+    mkdir -p /var/lib/rpm && \
+    rpm --initdb && \
+    chmod -R 777 /var/lib/rpm && \
+    # Create work directory
     mkdir -p opt
 
 WORKDIR /opt

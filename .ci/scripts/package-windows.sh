@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e -u -o pipefail
+
 python3 -m venv env
 . env/bin/activate
 pip install pynacl==1.4.0 pygithub==1.55

@@ -18,3 +18,4 @@ ssh_server_tests/.env
 /.cover
 built_artifacts/
 component-tests/.venv
+/artifacts

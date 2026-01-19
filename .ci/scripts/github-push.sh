@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+set -e -u -o pipefail
 
 BRANCH="master"
 TMP_PATH="$PWD/tmp"

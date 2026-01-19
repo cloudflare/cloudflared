@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+set -e -u -o pipefail
 
 OUTPUT=$(go run -mod=readonly golang.org/x/tools/cmd/goimports@v0.30.0 -l -d -local github.com/cloudflare/cloudflared $(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc))
 

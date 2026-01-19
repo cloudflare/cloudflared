@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+set -e -u -o pipefail
 
 # Check if a make target is provided as an argument
 if [ $# -eq 0 ]; then
