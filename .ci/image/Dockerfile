@@ -13,9 +13,8 @@ RUN apt-get update && \
         python3-pip \
         python3-setuptools \
         python3-venv \
-        # libmsi and libgcab are libraries the wixl binary depends on.
-        libmsi-dev \
-        libgcab-dev \
+        # tool to create msi packages
+        wixl \
         # deb and rpm build tools
         rubygem-fpm \
         rpm \
@@ -26,9 +25,6 @@ RUN apt-get update && \
         gcc-aarch64-linux-gnu \
         libc6-dev-arm64-cross && \
     rm -rf /var/lib/apt/lists/* && \
-    # Install wixl
-    curl -o /usr/local/bin/wixl -L https://pkg.cloudflare.com/binaries/wixl && \
-    chmod a+x /usr/local/bin/wixl && \
     mkdir -p opt
 
 WORKDIR /opt
