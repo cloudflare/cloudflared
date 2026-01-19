@@ -1,3 +1,8 @@
+2026.1.1
+- 2026-01-19 fix: Update boto3 to run on trixie
+- 2026-01-19 fix: Fix wixl bundling tool for windows msi packages
+- 2026-01-19 fix: rpm bundling and rpm key import
+
 2026.1.0
 - 2026-01-13 TUN-10162: Update go to 1.24.11 and Debian distroless to debian13
 - 2025-11-21 Replace jira.cfops.it with jira.cfdata.org in connection/http2_test.go
