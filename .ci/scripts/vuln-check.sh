@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -e -u
 
 # Define the file to store the list of vulnerabilities to ignore.
 IGNORE_FILE=".vulnignore"

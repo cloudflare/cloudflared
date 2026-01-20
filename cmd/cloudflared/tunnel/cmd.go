@@ -427,15 +427,16 @@ func StartServer(
 		return waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, log)
 	}
 
+	if namedTunnel == nil {
+		return fmt.Errorf("namedTunnel is nil outside of DNS proxy stand-alone mode")
+	}
+
 	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
 
 	observer := connection.NewObserver(log, logTransport)
 
 	// Send Quick Tunnel URL to UI if applicable
-	var quickTunnelURL string
-	if namedTunnel != nil {
-		quickTunnelURL = namedTunnel.QuickTunnelUrl
-	}
+	quickTunnelURL := namedTunnel.QuickTunnelUrl
 	if quickTunnelURL != "" {
 		observer.SendURL(quickTunnelURL)
 	}
@@ -459,14 +460,7 @@ func StartServer(
 		}
 	}
 
-	userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
-	var isFEDEndpoint bool
-	if err != nil {
-		isFEDEndpoint = false
-	} else {
-		isFEDEndpoint = userCreds.IsFEDEndpoint()
-	}
-
+	isFEDEndpoint := namedTunnel.Credentials.Endpoint == credentials.FedEndpoint
 	var managementHostname string
 	if isFEDEndpoint {
 		managementHostname = credentials.FedRampHostname

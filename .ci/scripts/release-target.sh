@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+set -e -u -o pipefail
 
 # Check if a make target is provided as an argument
 if [ $# -eq 0 ]; then
@@ -14,5 +14,5 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Our release scripts are written in python, so we should install their dependecies here.
-pip install pynacl==1.4.0 pygithub==1.55 boto3==1.22.9 python-gnupg==0.4.9
+pip install pynacl==1.4.0 pygithub==1.55 boto3==1.42.30 python-gnupg==0.4.9
 make $MAKE_TARGET

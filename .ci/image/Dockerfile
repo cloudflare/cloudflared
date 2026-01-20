@@ -13,12 +13,13 @@ RUN apt-get update && \
         python3-pip \
         python3-setuptools \
         python3-venv \
-        # libmsi and libgcab are libraries the wixl binary depends on.
-        libmsi-dev \
-        libgcab-dev \
-        # deb and rpm build tools
-        rubygem-fpm \
+        # tool to create msi packages
+        wixl \
+        # install ruby and rpm which are required to install fpm package builder
         rpm \
+        ruby \
+        ruby-dev \
+        rubygems \
         # create deb and rpm repository files
         reprepro \
         createrepo-c \
@@ -26,9 +27,13 @@ RUN apt-get update && \
         gcc-aarch64-linux-gnu \
         libc6-dev-arm64-cross && \
     rm -rf /var/lib/apt/lists/* && \
-    # Install wixl
-    curl -o /usr/local/bin/wixl -L https://pkg.cloudflare.com/binaries/wixl && \
-    chmod a+x /usr/local/bin/wixl && \
+    # Install fpm gem
+    gem install fpm --no-document && \
+    # Initialize rpm repository, SQL Lite DB
+    mkdir -p /var/lib/rpm && \
+    rpm --initdb && \
+    chmod -R 777 /var/lib/rpm && \
+    # Create work directory
     mkdir -p opt
 
 WORKDIR /opt

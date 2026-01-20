@@ -1,3 +1,16 @@
+2026.1.1
+- 2026-01-19 fix: Update boto3 to run on trixie
+- 2026-01-19 fix: Fix wixl bundling tool for windows msi packages
+- 2026-01-19 fix: rpm bundling and rpm key import
+
+2026.1.0
+- 2026-01-13 TUN-10162: Update go to 1.24.11 and Debian distroless to debian13
+- 2025-11-21 Replace jira.cfops.it with jira.cfdata.org in connection/http2_test.go
+- 2025-11-19 TUN-9863: Update pipelines to use cloudflared EV Certificate
+- 2025-11-07 TUN-9800: Migrate apt internal builds to Gitlab
+- 2025-11-04 TUN-9998: Don't need to read origin cert to determine if the endpoint is fedramp
+- 2025-10-13 TUN-9910: Make the metadata key to carry HTTP status over QUIC transport a constant
+
 2025.11.1
 - 2025-11-07 TUN-9800: Fix docker hub push step
 
