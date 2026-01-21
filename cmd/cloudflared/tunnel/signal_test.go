@@ -52,8 +52,120 @@ func TestSignalShutdown(t *testing.T) {
 			}
 		})
 
-		waitForSignal(graceShutdownC, &log)
+		waitForSignal(graceShutdownC, nil, &log)
 		assert.True(t, channelClosed(graceShutdownC))
+	}
+}
+
+func TestSignalSIGHUP_WithReloadChannel(t *testing.T) {
+	log := zerolog.Nop()
+
+	graceShutdownC := make(chan struct{})
+	reloadC := make(chan struct{}, 1)
+
+	go func() {
+		// sleep for a tick to prevent sending signal before calling waitForSignal
+		time.Sleep(tick)
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGHUP)
+		// Give time for signal to be processed
+		time.Sleep(tick)
+		// Send SIGTERM to exit waitForSignal
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	}()
+
+	time.AfterFunc(time.Second, func() {
+		select {
+		case <-graceShutdownC:
+		default:
+			close(graceShutdownC)
+			t.Fatal("waitForSignal timed out")
+		}
+	})
+
+	waitForSignal(graceShutdownC, reloadC, &log)
+
+	// Check that reload signal was received
+	select {
+	case <-reloadC:
+		// Expected - SIGHUP should trigger reload
+	default:
+		t.Fatal("Expected reload channel to receive signal from SIGHUP")
+	}
+}
+
+func TestSignalSIGHUP_WithoutReloadChannel(t *testing.T) {
+	log := zerolog.Nop()
+
+	graceShutdownC := make(chan struct{})
+
+	go func() {
+		// sleep for a tick to prevent sending signal before calling waitForSignal
+		time.Sleep(tick)
+		// Send SIGHUP without reload channel - should be ignored
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGHUP)
+		time.Sleep(tick)
+		// Send SIGTERM to exit waitForSignal
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	}()
+
+	time.AfterFunc(time.Second, func() {
+		select {
+		case <-graceShutdownC:
+		default:
+			close(graceShutdownC)
+			t.Fatal("waitForSignal timed out")
+		}
+	})
+
+	// Should complete without panic or deadlock
+	waitForSignal(graceShutdownC, nil, &log)
+	assert.True(t, channelClosed(graceShutdownC))
+}
+
+func TestSignalSIGHUP_ReloadInProgress(t *testing.T) {
+	log := zerolog.Nop()
+
+	graceShutdownC := make(chan struct{})
+	// Create buffered channel and fill it
+	reloadC := make(chan struct{}, 1)
+	reloadC <- struct{}{} // Pre-fill to simulate reload in progress
+
+	go func() {
+		// sleep for a tick to prevent sending signal before calling waitForSignal
+		time.Sleep(tick)
+		// Send SIGHUP while reload is "in progress"
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGHUP)
+		time.Sleep(tick)
+		// Send SIGTERM to exit waitForSignal
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	}()
+
+	time.AfterFunc(time.Second, func() {
+		select {
+		case <-graceShutdownC:
+		default:
+			close(graceShutdownC)
+			t.Fatal("waitForSignal timed out")
+		}
+	})
+
+	// Should complete without blocking (non-blocking send)
+	waitForSignal(graceShutdownC, reloadC, &log)
+
+	// Channel should still have exactly one signal (the pre-filled one)
+	select {
+	case <-reloadC:
+		// Expected - drain the one signal
+	default:
+		t.Fatal("Expected reload channel to have signal")
+	}
+
+	// Should be empty now
+	select {
+	case <-reloadC:
+		t.Fatal("Expected reload channel to be empty after draining")
+	default:
+		// Expected - channel is empty
 	}
 }
 
