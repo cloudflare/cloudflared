@@ -56,7 +56,7 @@ windows-load-env-variables:
       vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/secret/key_vault_secret@kv
       file: false
     KEY_VAULT_CERTIFICATE:
-      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/certificate_v2/key_vault_certificate@kv
+      vault: gitlab/cloudflare/tun/cloudflared/_dev/azure_vault/certificate/key_vault_certificate@kv
       file: false
   artifacts:
     access: 'none'
