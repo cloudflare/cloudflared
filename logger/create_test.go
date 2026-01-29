@@ -3,6 +3,7 @@ package logger
 import (
 	"io"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -129,4 +130,29 @@ func TestResilientMultiWriter_Management(t *testing.T) {
 			assert.Equal(t, 1, managementWriter.WriteCalls)
 		})
 	}
+}
+
+func TestTimestampFunctions(t *testing.T) {
+	t.Run("utcNow returns UTC", func(t *testing.T) {
+		ts := utcNow()
+		_, offset := ts.Zone()
+		assert.Equal(t, 0, offset)
+	})
+
+	t.Run("localNow returns local timezone", func(t *testing.T) {
+		ts := localNow()
+		expected := time.Now()
+		_, expectedOffset := expected.Zone()
+		_, actualOffset := ts.Zone()
+		assert.Equal(t, expectedOffset, actualOffset)
+	})
+
+	t.Run("configureTimestampFunc sets local time when true", func(t *testing.T) {
+		configureTimestampFunc(true)
+		ts := zerolog.TimestampFunc()
+		expected := time.Now()
+		_, expectedOffset := expected.Zone()
+		_, actualOffset := ts.Zone()
+		assert.Equal(t, expectedOffset, actualOffset)
+	})
 }

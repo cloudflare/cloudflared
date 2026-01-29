@@ -44,6 +44,16 @@ func utcNow() time.Time {
 	return time.Now().UTC()
 }
 
+func localNow() time.Time {
+	return time.Now()
+}
+
+func configureTimestampFunc(useLocalTime bool) {
+	if useLocalTime {
+		zerolog.TimestampFunc = localNow
+	}
+}
+
 func fallbackLogger(err error) *zerolog.Logger {
 	failLog := fallbacklog.With().Logger()
 	fallbacklog.Error().Msgf("Falling back to a default logger due to logger setup failure: %s", err)
@@ -146,6 +156,8 @@ func createFromContext(
 	logDirectoryFlagName string,
 	disableTerminal bool,
 ) *zerolog.Logger {
+	configureTimestampFunc(c.Bool(cfdflags.LogLocalTime))
+
 	logLevel := c.String(logLevelFlagName)
 	logFile := c.String(cfdflags.LogFile)
 	logDirectory := c.String(logDirectoryFlagName)
