@@ -143,6 +143,9 @@ const (
 	LogFormatOutputValueDefault = "default"
 	LogFormatOutputValueJSON    = "json"
 
+	// LogLocalTime uses local timezone instead of UTC for log timestamps.
+	LogLocalTime = "log-local-time"
+
 	// TraceOutput is the command line flag to set the name of trace output file
 	TraceOutput = "trace-output"
 

@@ -115,6 +115,7 @@ var (
 		cfdflags.LogFile,
 		cfdflags.LogDirectory,
 		cfdflags.TraceOutput,
+		cfdflags.LogLocalTime,
 		cfdflags.ProxyDns,
 		"proxy-dns-port",
 		"proxy-dns-address",

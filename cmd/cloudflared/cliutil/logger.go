@@ -54,6 +54,12 @@ func ConfigureLoggingFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_TRACE_OUTPUT"},
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name:    flags.LogLocalTime,
+			Usage:   "Use local timezone for log timestamps instead of UTC.",
+			EnvVars: []string{"TUNNEL_LOG_LOCAL_TIME"},
+			Hidden:  shouldHide,
+		}),
 		FlagLogOutput,
 	}
 }
