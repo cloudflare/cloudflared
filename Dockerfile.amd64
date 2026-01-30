@@ -16,6 +16,8 @@ RUN GOOS=linux GOARCH=amd64 make cloudflared
 
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian13:nonroot
+# Enable metrics for healthcheck
+ENV TUNNEL_METRICS=127.0.0.1:60123
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
@@ -27,6 +29,10 @@ COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cl
 # https://github.com/kubernetes/kubernetes/blob/v1.33.2/pkg/kubelet/kuberuntime/security_context_others.go#L49
 # The `nonroot` user maps to `65532`, from: https://github.com/GoogleContainerTools/distroless/blob/main/common/variables.bzl#L18
 USER 65532:65532
+
+# Check if cloudflared is healthy
+HEALTHCHECK --interval=30s --timeout=30s --retries=3 \
+  CMD cloudflared tunnel --metrics localhost:60123 ready
 
 # command / entrypoint of container
 ENTRYPOINT ["cloudflared", "--no-autoupdate"]
