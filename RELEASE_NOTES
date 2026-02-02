@@ -1,3 +1,8 @@
+2026.1.2
+- 2026-01-23 Revert "TUN-9863: Update pipelines to use cloudflared EV Certificate"
+- 2026-01-21 Revert "TUN-9886 notarize cloudflared"
+- 2025-12-12 TUN-9886 notarize cloudflared
+
 2026.1.1
 - 2026-01-19 fix: Update boto3 to run on trixie
 - 2026-01-19 fix: Fix wixl bundling tool for windows msi packages
