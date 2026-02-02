@@ -32,7 +32,7 @@ echo "====================================="
 CLEAN_IGNORES=$(grep -v '^\s*#' "$IGNORE_FILE" | cut -d'#' -f1 | sed 's/ //g' | sort -u || true)
 
 # Filter out the ignored vulnerabilities.
-UNIGNORED_VULNS=$(echo "$VULN_OUTPUT" | grep 'Vulnerability')
+UNIGNORED_VULNS=$(echo "$VULN_OUTPUT" | grep 'Vulnerability' || true)
 
 # If the list of ignored vulnerabilities is not empty, filter them out.
 if [ -n "$CLEAN_IGNORES" ]; then

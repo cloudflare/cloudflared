@@ -5,7 +5,7 @@ import base64
 
 from dataclasses import dataclass, InitVar
 
-from constants import METRICS_PORT, PROXY_DNS_PORT
+from constants import METRICS_PORT
 
 # frozen=True raises exception when assigning to fields. This emulates immutability
 
@@ -98,11 +98,4 @@ class QuickTunnelConfig(BaseConfig):
         # https://docs.python.org/3/library/dataclasses.html#frozen-instances
         object.__setattr__(self, 'full_config',
                            self.merge_config(additional_config))
-
-@dataclass(frozen=True)
-class ProxyDnsConfig(BaseConfig):
-    full_config = {
-        "port": PROXY_DNS_PORT,
-        "no-autoupdate": True,
-    }
 

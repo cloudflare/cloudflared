@@ -1,3 +1,14 @@
+## 2026.2.0
+### Breaking Change
+- Removes the `proxy-dns` feature from cloudflared. This feature allowed running a local DNS over HTTPS (DoH) proxy.
+  Users who relied on this functionality should migrate to alternative solutions.
+  
+  Removed commands and flags:
+  - `cloudflared proxy-dns`
+  - `cloudflared tunnel proxy-dns` 
+  - `--proxy-dns`, `--proxy-dns-port`, `--proxy-dns-address`, `--proxy-dns-upstream`, `--proxy-dns-max-upstream-conns`, `--proxy-dns-bootstrap`
+  - `resolver` section in configuration file
+
 ## 2025.7.1
 ### Notices
 - `cloudflared` will no longer officially support Debian and Ubuntu distros that reached end-of-life: `buster`, `bullseye`, `impish`, `trusty`.

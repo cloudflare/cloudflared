@@ -39,7 +39,6 @@ import (
 	"github.com/cloudflare/cloudflared/signal"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
-	"github.com/cloudflare/cloudflared/tunneldns"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 	"github.com/cloudflare/cloudflared/validation"
 )
@@ -115,12 +114,6 @@ var (
 		cfdflags.LogFile,
 		cfdflags.LogDirectory,
 		cfdflags.TraceOutput,
-		cfdflags.ProxyDns,
-		"proxy-dns-port",
-		"proxy-dns-address",
-		"proxy-dns-upstream",
-		"proxy-dns-max-upstream-conns",
-		"proxy-dns-bootstrap",
 		cfdflags.IsAutoUpdated,
 		cfdflags.Edge,
 		cfdflags.Region,
@@ -181,8 +174,7 @@ func Commands() []*cli.Command {
 		buildCleanupCommand(),
 		buildTokenCommand(),
 		buildDiagCommand(),
-		// for compatibility, allow following as tunnel subcommands
-		proxydns.Command(true),
+		proxydns.Command(), // removed feature, only here for error message
 		cliutil.RemovedCommand("db-connect"),
 	}
 
@@ -258,9 +250,8 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Run a quick tunnel
 	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
-	// We don't support running proxy-dns and a quick tunnel at the same time as the same process
 	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
-	if !c.IsSet(cfdflags.ProxyDns) && c.String("quick-service") != "" && shouldRunQuickTunnel {
+	if c.String("quick-service") != "" && shouldRunQuickTunnel {
 		return RunQuickTunnel(sc)
 	}
 
@@ -272,16 +263,6 @@ func TunnelCommand(c *cli.Context) error {
 	// Classic tunnel usage is no longer supported
 	if c.String("hostname") != "" {
 		return errDeprecatedClassicTunnel
-	}
-
-	if c.IsSet(cfdflags.ProxyDns) {
-		if shouldRunQuickTunnel {
-			return fmt.Errorf("running a quick tunnel with `proxy-dns` is not supported")
-		}
-		// NamedTunnelProperties are nil since proxy dns server does not need it.
-		// This is supported for legacy reasons: dns proxy server is not a tunnel and ideally should
-		// not run as part of cloudflared tunnel.
-		return StartServer(sc.c, buildInfo, nil, sc.log)
 	}
 
 	return errors.New(tunnelCmdErrorMessage)
@@ -393,24 +374,12 @@ func StartServer(
 
 	go waitForSignal(graceShutdownC, log)
 
-	if c.IsSet(cfdflags.ProxyDns) {
-		dnsReadySignal := make(chan struct{})
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			errC <- runDNSProxyServer(c, dnsReadySignal, ctx.Done(), log)
-		}()
-		// Wait for proxy-dns to come up (if used)
-		<-dnsReadySignal
-	}
-
 	connectedSignal := signal.New(make(chan struct{}))
 	go notifySystemd(connectedSignal)
 	if c.IsSet("pidfile") {
 		go writePidFile(connectedSignal, c.String("pidfile"), log)
 	}
 
-	// update needs to be after DNS proxy is up to resolve equinox server address
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -420,15 +389,8 @@ func StartServer(
 		errC <- autoupdater.Run(ctx)
 	}()
 
-	// Serve DNS proxy stand-alone if no tunnel type (quick, adhoc, named) is going to run
-	if dnsProxyStandAlone(c, namedTunnel) {
-		connectedSignal.Notify()
-		// no grace period, handle SIGINT/SIGTERM immediately
-		return waitToShutdown(&wg, cancel, errC, graceShutdownC, 0, log)
-	}
-
 	if namedTunnel == nil {
-		return fmt.Errorf("namedTunnel is nil outside of DNS proxy stand-alone mode")
+		return fmt.Errorf("namedTunnel is nil")
 	}
 
 	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
@@ -641,7 +603,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 	flags := configureCloudflaredFlags(shouldHide)
 	flags = append(flags, configureProxyFlags(shouldHide)...)
 	flags = append(flags, cliutil.ConfigureLoggingFlags(shouldHide)...)
-	flags = append(flags, configureProxyDNSFlags(shouldHide)...)
+	flags = append(flags, proxydns.ConfigureProxyDNSFlags(shouldHide)...) // removed feature, only kept to not break any script that might be setting these flags
 	flags = append(flags, []cli.Flag{
 		credentialsFileFlag,
 		altsrc.NewBoolFlag(&cli.BoolFlag{
@@ -1167,57 +1129,6 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			Usage:   "Listen port for the proxy.",
 			Value:   0,
 			EnvVars: []string{"TUNNEL_PROXY_PORT"},
-			Hidden:  shouldHide,
-		}),
-	}
-}
-
-func configureProxyDNSFlags(shouldHide bool) []cli.Flag {
-	return []cli.Flag{
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    cfdflags.ProxyDns,
-			Usage:   "Run a DNS over HTTPS proxy server.",
-			EnvVars: []string{"TUNNEL_DNS"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    "proxy-dns-port",
-			Value:   53,
-			Usage:   "Listen on given port for the DNS over HTTPS proxy server.",
-			EnvVars: []string{"TUNNEL_DNS_PORT"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "proxy-dns-address",
-			Usage:   "Listen address for the DNS over HTTPS proxy server.",
-			Value:   "localhost",
-			EnvVars: []string{"TUNNEL_DNS_ADDRESS"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:    "proxy-dns-upstream",
-			Usage:   "Upstream endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value:   cli.NewStringSlice("https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query"),
-			EnvVars: []string{"TUNNEL_DNS_UPSTREAM"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
-			Name:    "proxy-dns-max-upstream-conns",
-			Usage:   "Maximum concurrent connections to upstream. Setting to 0 means unlimited.",
-			Value:   tunneldns.MaxUpstreamConnsDefault,
-			Hidden:  shouldHide,
-			EnvVars: []string{"TUNNEL_DNS_MAX_UPSTREAM_CONNS"},
-		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
-			Name:  "proxy-dns-bootstrap",
-			Usage: "bootstrap endpoint URL, you can specify multiple endpoints for redundancy.",
-			Value: cli.NewStringSlice(
-				"https://162.159.36.1/dns-query",
-				"https://162.159.46.1/dns-query",
-				"https://[2606:4700:4700::1111]/dns-query",
-				"https://[2606:4700:4700::1001]/dns-query",
-			),
-			EnvVars: []string{"TUNNEL_DNS_BOOTSTRAP"},
 			Hidden:  shouldHide,
 		}),
 	}

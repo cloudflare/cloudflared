@@ -19,7 +19,7 @@ class TestTail:
         with the access token and start and stop streaming on-demand.
         """
         print("test_start_stop_streaming")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
@@ -38,7 +38,7 @@ class TestTail:
         Validates that a streaming logs connection will stream logs
         """
         print("test_streaming_logs")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
@@ -65,7 +65,7 @@ class TestTail:
         but not http when filters applied.
         """
         print("test_streaming_logs_filters")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
@@ -92,7 +92,7 @@ class TestTail:
         Validates that a streaming logs connection will stream logs with sampling.
         """
         print("test_streaming_logs_sampling")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
@@ -120,7 +120,7 @@ class TestTail:
         Validates that a streaming logs session can be overriden by the same actor 
         """
         print("test_streaming_logs_actor_override")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
