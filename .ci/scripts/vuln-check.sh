@@ -4,13 +4,14 @@ set -e -u
 # Define the file to store the list of vulnerabilities to ignore.
 IGNORE_FILE=".vulnignore"
 
+go version
 # Check if the ignored vulnerabilities file exists. If not, create an empty one.
 if [ ! -f "$IGNORE_FILE" ]; then
-    touch "$IGNORE_FILE"
-    echo "Created an empty file to store ignored vulnerabilities: $IGNORE_FILE"
-    echo "# Add vulnerability IDs (e.g., GO-2022-0450) to ignore, one per line." >> "$IGNORE_FILE"
-    echo "# You can also add comments on the same line after the ID." >> "$IGNORE_FILE"
-    echo "" >> "$IGNORE_FILE"
+  touch "$IGNORE_FILE"
+  echo "Created an empty file to store ignored vulnerabilities: $IGNORE_FILE"
+  echo "# Add vulnerability IDs (e.g., GO-2022-0450) to ignore, one per line." >>"$IGNORE_FILE"
+  echo "# You can also add comments on the same line after the ID." >>"$IGNORE_FILE"
+  echo "" >>"$IGNORE_FILE"
 fi
 
 # Run govulncheck and capture its output.
@@ -35,18 +36,18 @@ UNIGNORED_VULNS=$(echo "$VULN_OUTPUT" | grep 'Vulnerability')
 
 # If the list of ignored vulnerabilities is not empty, filter them out.
 if [ -n "$CLEAN_IGNORES" ]; then
-    UNIGNORED_VULNS=$(echo "$UNIGNORED_VULNS" | grep -vFf <(echo "$CLEAN_IGNORES") || true)
+  UNIGNORED_VULNS=$(echo "$UNIGNORED_VULNS" | grep -vFf <(echo "$CLEAN_IGNORES") || true)
 fi
 
 # If there are any vulnerabilities that were not in our ignore list, print them and exit with an error.
 if [ -n "$UNIGNORED_VULNS" ]; then
-    echo "🚨 Found new, unignored vulnerabilities:"
-    echo "-------------------------------------"
-    echo "$UNIGNORED_VULNS"
-    echo "-------------------------------------"
-    echo "Exiting with an error. ❌"
-    exit 1
+  echo "🚨 Found new, unignored vulnerabilities:"
+  echo "-------------------------------------"
+  echo "$UNIGNORED_VULNS"
+  echo "-------------------------------------"
+  echo "Exiting with an error. ❌"
+  exit 1
 else
-    echo "🎉 No new vulnerabilities found. All clear! ✨"
-    exit 0
+  echo "🎉 No new vulnerabilities found. All clear! ✨"
+  exit 0
 fi
