@@ -1,11 +1,11 @@
 .golang-inputs: &golang_inputs
   runOnMR: true
-  runOnBranches: '^master$'
+  runOnBranches: "^master$"
   outputDir: artifacts
   runner: linux-x86-8cpu-16gb
   stage: build
   golangVersion: "boring-1.24"
-  imageVersion: "3393-947ec7a@sha256:f81acc2c8ecaa84acb290c43c080702ae3aba6464201a20f9d6eff619be7c878"
+  imageVersion: "3462-0b23466e0715@sha256:42e8533370666a2463041572293a79e1449001ef803a993e6a860be00858c806"
   CGO_ENABLED: 1
 
 .default-packaging-job: &packaging-job-defaults
@@ -65,7 +65,7 @@ include:
   - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
     inputs:
       <<: *golang_inputs
-      runOnBranches: '^$'
+      runOnBranches: "^$"
       stage: validate
       jobPrefix: vulncheck
       GOLANG_MAKE_TARGET: vulncheck

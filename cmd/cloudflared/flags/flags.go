@@ -111,9 +111,6 @@ const (
 	// ICMPV6Src is the command line flag to set the source address and the interface name to send/receive ICMPv6 messages
 	ICMPV6Src = "icmpv6-src"
 
-	// ProxyDns is the command line flag to run DNS server over HTTPS
-	ProxyDns = "proxy-dns"
-
 	// Name is the command line to set the name of the tunnel
 	Name = "name"
 

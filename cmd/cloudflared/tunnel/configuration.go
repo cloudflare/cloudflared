@@ -111,13 +111,6 @@ func isSecretEnvVar(key string) bool {
 	return false
 }
 
-func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.TunnelProperties) bool {
-	return c.IsSet(flags.ProxyDns) &&
-		!(c.IsSet(flags.Name) || // adhoc-named tunnel
-			c.IsSet(ingress.HelloWorldFlag) || // quick or named tunnel
-			namedTunnel != nil) // named tunnel
-}
-
 func prepareTunnelConfig(
 	ctx context.Context,
 	c *cli.Context,

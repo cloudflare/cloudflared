@@ -25,7 +25,7 @@ class TestManagement:
         # Skipping this test for windows for now and will address it as part of tun-7377
         if platform.system() == "Windows":
             return
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         headers = {}
         headers["Content-Type"] = "application/json"
@@ -52,7 +52,7 @@ class TestManagement:
         # Skipping this test for windows for now and will address it as part of tun-7377
         if platform.system() == "Windows":
             return
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
@@ -73,7 +73,7 @@ class TestManagement:
         # Skipping this test for windows for now and will address it as part of tun-7377
         if platform.system() == "Windows":
             return
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
@@ -94,7 +94,7 @@ class TestManagement:
         # Skipping this test for windows for now and will address it as part of tun-7377
         if platform.system() == "Windows":
             return
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics=false"], new_process=True):

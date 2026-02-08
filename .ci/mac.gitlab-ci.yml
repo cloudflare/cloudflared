@@ -28,7 +28,7 @@ macos-build-cloudflared: &mac-build
     - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
     - ARCH=$(uname -m)
     - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
-    - ./.ci/scripts/mac/install-go.sh
+    - ./.ci/scripts/mac/install-go.sh "$MAC_GO_VERSION"
     - BUILD_SCRIPT=.ci/scripts/mac/build.sh
     - if [[ ! -x ${BUILD_SCRIPT} ]] ; then exit ; fi
     - set -euo pipefail

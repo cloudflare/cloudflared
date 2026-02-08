@@ -18,7 +18,7 @@ windows-build-cloudflared:
   <<: *windows-build-defaults
   stage: build
   script:
-    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${GO_VERSION}" ".\.ci\scripts\windows\builds.ps1"
+    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${WIN_GO_VERSION}" ".\.ci\scripts\windows\builds.ps1"
   artifacts:
     paths:
       - artifacts/*
@@ -73,7 +73,7 @@ windows-component-tests-cloudflared:
   script:
     # We have to decode the secret we encoded on the `windows-load-env-variables` job
     - $env:COMPONENT_TESTS_ORIGINCERT = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:COMPONENT_TESTS_ORIGINCERT))
-    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${GO_VERSION}" ".\.ci\scripts\windows\component-test.ps1"
+    - powershell -ExecutionPolicy Bypass -File ".\.ci\scripts\windows\go-wrapper.ps1" "${WIN_GO_VERSION}" ".\.ci\scripts\windows\component-test.ps1"
   artifacts:
     reports:
       junit: report.xml

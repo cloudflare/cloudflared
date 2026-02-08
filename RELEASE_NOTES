@@ -1,3 +1,7 @@
+2026.2.0
+- 2026-02-06 TUN-10216: TUN fix cloudflare vulnerabilities GO-2026-4340 and GO-2026-4341
+- 2026-02-02 TUN-9858: Remove proxy-dns feature from cloudflared
+
 2026.1.2
 - 2026-01-23 Revert "TUN-9863: Update pipelines to use cloudflared EV Certificate"
 - 2026-01-21 Revert "TUN-9886 notarize cloudflared"

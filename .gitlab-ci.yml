@@ -1,5 +1,7 @@
 variables:
-  GO_VERSION: "go1.24.11"
+  GO_VERSION: "1.24.13"
+  MAC_GO_VERSION: "go@$GO_VERSION"
+  WIN_GO_VERSION: "go$GO_VERSION"
   GIT_DEPTH: "0"
 
 default:

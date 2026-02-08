@@ -149,7 +149,7 @@ To determine if an update happened in a script, check for error code 11.`,
 		},
 	}
 	cmds = append(cmds, tunnel.Commands()...)
-	cmds = append(cmds, proxydns.Command(false))
+	cmds = append(cmds, proxydns.Command()) // removed feature, only here for error message
 	cmds = append(cmds, access.Commands()...)
 	cmds = append(cmds, tail.Command())
 	return cmds
