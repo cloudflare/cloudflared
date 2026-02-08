@@ -12,12 +12,20 @@ import (
 type KubernetesLogCollector struct {
 	containerID string // This member identifies the container by identifier or name
 	pod         string // This member identifies the pod where the container is deployed
+	namespace   string // This member identifies the namespace where the pod is deployed
 }
 
-func NewKubernetesLogCollector(containerID, pod string) *KubernetesLogCollector {
+func NewKubernetesLogCollector(containerID, pod string, namespace ...string) *KubernetesLogCollector {
+    ns := "default"
+
+	if len(namespace) > 0 && namespace[0] != "" {
+		ns = namespace[0]
+	}
+
 	return &KubernetesLogCollector{
-		containerID,
-		pod,
+		containerID: containerID,
+		pod:         pod,
+		namespace:   ns
 	}
 }
 
@@ -38,6 +46,8 @@ func (collector *KubernetesLogCollector) Collect(ctx context.Context) (*LogInfor
 			ctx,
 			"kubectl",
 			"logs",
+			"-n",
+			collector.namespace,
 			collector.pod,
 			"--since-time",
 			since,
@@ -51,6 +61,8 @@ func (collector *KubernetesLogCollector) Collect(ctx context.Context) (*LogInfor
 			ctx,
 			"kubectl",
 			"logs",
+			"-n",
+			collector.namespace,
 			collector.pod,
 			"--since-time",
 			since,
