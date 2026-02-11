@@ -10,7 +10,7 @@ import (
 	"github.com/cloudflare/cloudflared/logger"
 )
 
-const removedMessage = "dns-proxy feature is not supported, since version 2026.2.0"
+const removedMessage = "dns-proxy feature is no longer supported"
 
 func Command() *cli.Command {
 	return &cli.Command{
@@ -24,7 +24,7 @@ func Command() *cli.Command {
 func Run(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 	err := errors.New(removedMessage)
-	log.Err(err).Msg("DNS Proxy is no longer supported")
+	log.Error().Msg("DNS Proxy is no longer supported since version 2026.2.0 (https://developers.cloudflare.com/changelog/2025-11-11-cloudflared-proxy-dns/). As an alternative consider using https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/dns-over-https-client/")
 
 	return err
 }
