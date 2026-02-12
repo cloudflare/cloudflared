@@ -410,7 +410,14 @@ func determineICMPv4Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Ad
 		return netip.Addr{}, fmt.Errorf("expect IPv4, but %s is IPv6", userDefinedSrc)
 	}
 
-	addr, err := findLocalAddr(net.ParseIP("192.168.0.1"), 53)
+	// First try to find an IP from a preferred physical interface,
+	// avoiding virtual/bridge interfaces (Docker, etc.)
+	if addr := findPreferredIP(true, logger); addr.IsValid() {
+		return addr, nil
+	}
+
+	// Fall back to dialing a public IP to determine the default route interface
+	addr, err := findLocalAddr(net.ParseIP("8.8.8.8"), 53)
 	if err != nil {
 		addr = netip.IPv4Unspecified()
 		logger.Debug().Err(err).Msgf("Failed to determine the IPv4 for this machine. It will use %s to send/listen for ICMPv4 echo", addr)
@@ -421,6 +428,125 @@ func determineICMPv4Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Ad
 type interfaceIP struct {
 	name string
 	ip   net.IP
+}
+
+// virtualInterfacePrefixes are prefixes for virtual/bridge interfaces that should be deprioritized
+var virtualInterfacePrefixes = []string{
+	"br-",      // Docker bridge
+	"docker",   // Docker
+	"veth",     // Virtual ethernet (containers)
+	"virbr",    // libvirt bridge
+	"vboxnet",  // VirtualBox
+	"vmnet",    // VMware
+	"lxcbr",    // LXC bridge
+	"lxdbr",    // LXD bridge
+	"cni",      // Kubernetes CNI
+	"flannel",  // Flannel overlay
+	"cali",     // Calico
+	"weave",    // Weave
+	"podman",   // Podman
+}
+
+// physicalInterfacePrefixes are prefixes for physical interfaces that should be prioritized
+var physicalInterfacePrefixes = []string{
+	"eth",  // Traditional ethernet (Linux)
+	"enp",  // Systemd predictable naming (PCI)
+	"ens",  // Systemd predictable naming (slot)
+	"eno",  // Systemd predictable naming (onboard)
+	"wlan", // Traditional wireless (Linux)
+	"wlp",  // Systemd predictable naming (wireless PCI)
+	"en",   // macOS/BSD ethernet and wireless
+}
+
+// isVirtualInterface returns true if the interface name matches a known virtual/bridge interface pattern
+func isVirtualInterface(name string) bool {
+	for _, prefix := range virtualInterfacePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// isPhysicalInterface returns true if the interface name matches a known physical interface pattern
+func isPhysicalInterface(name string) bool {
+	for _, prefix := range physicalInterfacePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// findPreferredIP returns an IP address from a preferred physical interface.
+// It prioritizes interfaces matching physical patterns and excludes virtual/bridge interfaces.
+// Returns zero value if no suitable interface is found.
+func findPreferredIP(wantIPv4 bool, logger *zerolog.Logger) netip.Addr {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return netip.Addr{}
+	}
+
+	var fallbackIP netip.Addr
+	for _, iface := range interfaces {
+		// Skip interfaces that are down or loopback
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			ip := ipnet.IP
+			parsedIP, err := netip.ParseAddr(ip.String())
+			if err != nil {
+				continue
+			}
+
+			// Check IP version match
+			if wantIPv4 && !parsedIP.Is4() {
+				continue
+			}
+			if !wantIPv4 && !parsedIP.Is6() {
+				continue
+			}
+
+			// Skip link-local addresses for IPv4
+			if wantIPv4 && ip.IsLinkLocalUnicast() {
+				continue
+			}
+
+			// For IPv6, skip if it's link-local and we're looking for a routable address
+			// (link-local is fine as a fallback)
+			isLinkLocal := ip.IsLinkLocalUnicast()
+
+			// Skip virtual interfaces
+			if isVirtualInterface(iface.Name) {
+				continue
+			}
+
+			// Prefer physical interfaces
+			if isPhysicalInterface(iface.Name) && !isLinkLocal {
+				logger.Debug().Msgf("Selected %s from physical interface %s for ICMP proxy", parsedIP, iface.Name)
+				return parsedIP
+			}
+
+			// Store as fallback if we haven't found one yet
+			if !fallbackIP.IsValid() && !isLinkLocal {
+				fallbackIP = parsedIP
+			}
+		}
+	}
+
+	return fallbackIP
 }
 
 func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger, ipv4Src netip.Addr) (addr netip.Addr, zone string, err error) {
@@ -447,6 +573,11 @@ func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger, ipv4Src n
 
 	interfacesWithIPv6 := make([]interfaceIP, 0)
 	for _, interf := range interfaces {
+		// Skip virtual/bridge interfaces
+		if isVirtualInterface(interf.Name) {
+			continue
+		}
+
 		interfaceAddrs, err := interf.Addrs()
 		if err != nil {
 			continue
@@ -483,6 +614,17 @@ func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger, ipv4Src n
 		}
 	}
 
+	// Prefer physical interfaces when selecting from available IPv6 interfaces
+	for _, interf := range interfacesWithIPv6 {
+		if isPhysicalInterface(interf.name) {
+			addr, err := netip.ParseAddr(interf.ip.String())
+			if err == nil {
+				return addr, interf.name, nil
+			}
+		}
+	}
+
+	// Fall back to any non-virtual interface with IPv6
 	for _, interf := range interfacesWithIPv6 {
 		addr, err := netip.ParseAddr(interf.ip.String())
 		if err == nil {
