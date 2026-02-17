@@ -99,44 +99,53 @@ func newMetricsHandler(
 	return router
 }
 
-// CreateMetricsListener will create a new [net.Listener] by using an
+// CreateMetricsListener will create a new set of [net.Listener] by using an
 // known set of ports when the default address is passed with the fallback
 // of choosing a random port when none is available.
 //
 // In case the provided address is not the default one then it will be used
 // as is.
-func CreateMetricsListener(listeners *gracenet.Net, laddr string) (net.Listener, error) {
-	if laddr == GetMetricsDefaultAddress(Runtime) {
+func CreateMetricsListener(listeners *gracenet.Net, laddrs []string) ([]net.Listener, error) {
+	// If the user didn't provide any address, use the default one
+	if len(laddrs) == 1 && laddrs[0] == GetMetricsDefaultAddress(Runtime) {
 		// On the presence of the default address select
 		// a port from the known set of addresses iteratively.
 		addresses := GetMetricsKnownAddresses(Runtime)
 		for _, address := range addresses {
 			listener, err := listeners.Listen("tcp", address)
 			if err == nil {
-				return listener, nil
+				return []net.Listener{listener}, nil
 			}
 		}
 
 		// When no port is available then bind to a random one
-		listener, err := listeners.Listen("tcp", laddr)
+		listener, err := listeners.Listen("tcp", laddrs[0])
 		if err != nil {
 			return nil, fmt.Errorf("failed to listen to default metrics address: %w", err)
 		}
 
-		return listener, nil
+		return []net.Listener{listener}, nil
 	}
 
-	// Explicitly got a local address then bind to it
-	listener, err := listeners.Listen("tcp", laddr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to bind to address (%s): %w", laddr, err)
+	// Explicitly got local addresses then bind to them
+	var ls []net.Listener
+	for _, laddr := range laddrs {
+		listener, err := listeners.Listen("tcp", laddr)
+		if err != nil {
+			// Close already opened listeners
+			for _, l := range ls {
+				l.Close()
+			}
+			return nil, fmt.Errorf("failed to bind to address (%s): %w", laddr, err)
+		}
+		ls = append(ls, listener)
 	}
 
-	return listener, nil
+	return ls, nil
 }
 
 func ServeMetrics(
-	l net.Listener,
+	listeners []net.Listener,
 	ctx context.Context,
 	config Config,
 	log *zerolog.Logger,
@@ -153,12 +162,17 @@ func ServeMetrics(
 		Handler:      h,
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err = server.Serve(l)
-	}()
-	log.Info().Msgf("Starting metrics server on %s", fmt.Sprintf("%v/metrics", l.Addr()))
+	for _, l := range listeners {
+		wg.Add(1)
+		go func(l net.Listener) {
+			defer wg.Done()
+			if serveErr := server.Serve(l); serveErr != nil && serveErr != http.ErrServerClosed {
+				log.Err(serveErr).Msgf("Metrics server failed on %s", l.Addr())
+			}
+		}(l)
+		log.Info().Msgf("Starting metrics server on %s", fmt.Sprintf("%v/metrics", l.Addr()))
+	}
+
 	// server.Serve will hang if server.Shutdown is called before the server is
 	// fully started up. So add artificial delay.
 	time.Sleep(startupTime)
@@ -174,12 +188,8 @@ func ServeMetrics(
 	cancel()
 
 	wg.Wait()
-	if err == http.ErrServerClosed {
-		log.Info().Msg("Metrics server stopped")
-		return nil
-	}
-	log.Err(err).Msg("Metrics server failed")
-	return err
+	log.Info().Msg("Metrics server stopped")
+	return nil
 }
 
 func RegisterBuildInfo(buildType, buildTime, version string) {

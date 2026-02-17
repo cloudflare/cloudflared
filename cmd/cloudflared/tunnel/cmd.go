@@ -445,13 +445,15 @@ func StartServer(
 		return err
 	}
 
-	metricsListener, err := metrics.CreateMetricsListener(&listeners, c.String("metrics"))
+	metricsListeners, err := metrics.CreateMetricsListener(&listeners, c.StringSlice("metrics"))
 	if err != nil {
 		log.Err(err).Msg("Error opening metrics server listener")
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 
-	defer metricsListener.Close()
+	for _, l := range metricsListeners {
+		defer l.Close()
+	}
 	wg.Add(1)
 
 	go func() {
@@ -484,7 +486,7 @@ func StartServer(
 			QuickTunnelHostname: quickTunnelURL,
 			Orchestrator:        orchestrator,
 		}
-		errC <- metrics.ServeMetrics(metricsListener, ctx, metricsConfig, log)
+		errC <- metrics.ServeMetrics(metricsListeners, ctx, metricsConfig, log)
 	}()
 
 	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int(cfdflags.HaConnections))
@@ -877,9 +879,9 @@ func configureCloudflaredFlags(shouldHide bool) []cli.Flag {
 			Value:   false,
 			Hidden:  shouldHide,
 		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
 			Name:  cfdflags.Metrics,
-			Value: metrics.GetMetricsDefaultAddress(metrics.Runtime),
+			Value: cli.NewStringSlice(metrics.GetMetricsDefaultAddress(metrics.Runtime)),
 			Usage: fmt.Sprintf(
 				`Listen address for metrics reporting. If no address is passed cloudflared will try to bind to %v.
 If all are unavailable, a random port will be used. Note that when running cloudflared from an virtual
