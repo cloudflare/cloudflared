@@ -2,7 +2,6 @@ package cfapi
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 	"reflect"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var loc, _ = time.LoadLocation("UTC")
@@ -52,7 +52,6 @@ func Test_unmarshalTunnel(t *testing.T) {
 }
 
 func TestUnmarshalTunnelOk(t *testing.T) {
-
 	jsonBody := `{"success": true, "result": {"id": "00000000-0000-0000-0000-000000000000","name":"test","created_at":"0001-01-01T00:00:00Z","connections":[]}}`
 	expected := Tunnel{
 		ID:          uuid.Nil,
@@ -61,12 +60,11 @@ func TestUnmarshalTunnelOk(t *testing.T) {
 		Connections: []Connection{},
 	}
 	actual, err := unmarshalTunnel(bytes.NewReader([]byte(jsonBody)))
-	assert.NoError(t, err)
-	assert.Equal(t, &expected, actual)
+	require.NoError(t, err)
+	require.Equal(t, &expected, actual)
 }
 
 func TestUnmarshalTunnelErr(t *testing.T) {
-
 	tests := []string{
 		`abc`,
 		`{"success": true, "result": abc}`,
@@ -76,7 +74,53 @@ func TestUnmarshalTunnelErr(t *testing.T) {
 
 	for i, test := range tests {
 		_, err := unmarshalTunnel(bytes.NewReader([]byte(test)))
-		assert.Error(t, err, fmt.Sprintf("Test #%v failed", i))
+		assert.Error(t, err, "Test #%v failed", i)
+	}
+}
+
+func TestManagementResource_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource ManagementResource
+		want     string
+	}{
+		{
+			name:     "Logs",
+			resource: Logs,
+			want:     "logs",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.resource.String())
+		})
+	}
+}
+
+func TestManagementResource_String_Unknown(t *testing.T) {
+	unknown := ManagementResource(999)
+	assert.Equal(t, "", unknown.String())
+}
+
+func TestManagementEndpointPath(t *testing.T) {
+	tunnelID := uuid.MustParse("b34cc7ce-925b-46ee-bc23-4cb5c18d8292")
+
+	tests := []struct {
+		name     string
+		resource ManagementResource
+		want     string
+	}{
+		{
+			name:     "Logs resource",
+			resource: Logs,
+			want:     "b34cc7ce-925b-46ee-bc23-4cb5c18d8292/management/logs",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := managementEndpointPath(tunnelID, tt.resource)
+			assert.Equal(t, tt.want, got)
+		})
 	}
 }
 
@@ -97,6 +141,6 @@ func TestUnmarshalConnections(t *testing.T) {
 		}},
 	}
 	actual, err := parseConnectionsDetails(bytes.NewReader([]byte(jsonBody)))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, []*ActiveClient{&expected}, actual)
 }

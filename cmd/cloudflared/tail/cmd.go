@@ -18,6 +18,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"nhooyr.io/websocket"
 
+	"github.com/cloudflare/cloudflared/cfapi"
+
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/credentials"
@@ -52,7 +54,7 @@ func buildTailManagementTokenSubcommand() *cli.Command {
 func managementTokenCommand(c *cli.Context) error {
 	log := createLogger(c)
 
-	token, err := getManagementToken(c, log)
+	token, err := getManagementToken(c, log, cfapi.Logs)
 	if err != nil {
 		return err
 	}
@@ -231,7 +233,7 @@ func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
 }
 
 // getManagementToken will make a call to the Cloudflare API to acquire a management token for the requested tunnel.
-func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
+func getManagementToken(c *cli.Context, log *zerolog.Logger, res cfapi.ManagementResource) (string, error) {
 	userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
 	if err != nil {
 		return "", err
@@ -258,7 +260,7 @@ func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
 		return "", errors.New("unable to parse provided tunnel id as a valid UUID")
 	}
 
-	token, err := client.GetManagementToken(tunnelID)
+	token, err := client.GetManagementToken(tunnelID, res)
 	if err != nil {
 		return "", err
 	}
@@ -267,12 +269,12 @@ func getManagementToken(c *cli.Context, log *zerolog.Logger) (string, error) {
 }
 
 // buildURL will build the management url to contain the required query parameters to authenticate the request.
-func buildURL(c *cli.Context, log *zerolog.Logger) (url.URL, error) {
+func buildURL(c *cli.Context, log *zerolog.Logger, res cfapi.ManagementResource) (url.URL, error) {
 	var err error
 
 	token := c.String("token")
 	if token == "" {
-		token, err = getManagementToken(c, log)
+		token, err = getManagementToken(c, log, res)
 		if err != nil {
 			return url.URL{}, fmt.Errorf("unable to acquire management token for requested tunnel id: %w", err)
 		}
@@ -345,7 +347,7 @@ func Run(c *cli.Context) error {
 		return nil
 	}
 
-	u, err := buildURL(c, log)
+	u, err := buildURL(c, log, cfapi.Logs)
 	if err != nil {
 		log.Err(err).Msg("unable to construct management request URL")
 		return nil

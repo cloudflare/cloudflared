@@ -15,6 +15,21 @@ import (
 
 var ErrTunnelNameConflict = errors.New("tunnel with name already exists")
 
+type ManagementResource int
+
+const (
+	Logs ManagementResource = iota
+)
+
+func (r ManagementResource) String() string {
+	switch r {
+	case Logs:
+		return "logs"
+	default:
+		return ""
+	}
+}
+
 type Tunnel struct {
 	ID          uuid.UUID    `json:"id"`
 	Name        string       `json:"name"`
@@ -48,10 +63,6 @@ type ActiveClient struct {
 type newTunnel struct {
 	Name         string `json:"name"`
 	TunnelSecret []byte `json:"tunnel_secret"`
-}
-
-type managementRequest struct {
-	Resources []string `json:"resources"`
 }
 
 type CleanupParams struct {
@@ -137,15 +148,16 @@ func (r *RESTClient) GetTunnelToken(tunnelID uuid.UUID) (token string, err error
 	return "", r.statusCodeToError("get tunnel token", resp)
 }
 
-func (r *RESTClient) GetManagementToken(tunnelID uuid.UUID) (token string, err error) {
+// managementEndpointPath returns the path segment for a management resource endpoint
+func managementEndpointPath(tunnelID uuid.UUID, res ManagementResource) string {
+	return fmt.Sprintf("%v/management/%s", tunnelID, res.String())
+}
+
+func (r *RESTClient) GetManagementToken(tunnelID uuid.UUID, res ManagementResource) (token string, err error) {
 	endpoint := r.baseEndpoints.accountLevel
-	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/management", tunnelID))
+	endpoint.Path = path.Join(endpoint.Path, managementEndpointPath(tunnelID, res))
 
-	body := &managementRequest{
-		Resources: []string{"logs"},
-	}
-
-	resp, err := r.sendRequest("POST", endpoint, body)
+	resp, err := r.sendRequest("POST", endpoint, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "REST request failed")
 	}
