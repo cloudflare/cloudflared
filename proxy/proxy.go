@@ -220,11 +220,23 @@ func (p *Proxy) proxyHTTPRequest(
 	_, ttfbSpan := tr.Tracer().Start(tr.Context(), "ttfb_origin")
 	resp, err := httpService.RoundTrip(roundTripReq)
 	if err != nil {
-		tracing.EndWithErrorStatus(ttfbSpan, err)
-		if err := roundTripReq.Context().Err(); err != nil {
-			return errors.Wrap(err, "Incoming request ended abruptly")
+		// Check for GOAWAY error and retry once if applicable
+		const goawayMsg = "http2: Transport received Server's graceful shutdown GOAWAY"
+		if err.Error() == goawayMsg && roundTripReq.GetBody != nil {
+			// Reset the body for retry
+			newBody, getBodyErr := roundTripReq.GetBody()
+			if getBodyErr == nil {
+				roundTripReq.Body = newBody
+				resp, err = httpService.RoundTrip(roundTripReq)
+			}
 		}
-		return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
+		if err != nil {
+			tracing.EndWithErrorStatus(ttfbSpan, err)
+			if err := roundTripReq.Context().Err(); err != nil {
+				return errors.Wrap(err, "Incoming request ended abruptly")
+			}
+			return errors.Wrap(err, "Unable to reach the origin service. The service may be down or it may not be responding to traffic from cloudflared")
+		}
 	}
 
 	tracing.EndWithStatusCode(ttfbSpan, resp.StatusCode)
