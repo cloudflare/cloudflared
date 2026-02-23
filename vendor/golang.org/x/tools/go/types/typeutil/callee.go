@@ -12,6 +12,7 @@ import (
 
 // Callee returns the named target of a function call, if any:
 // a function, method, builtin, or variable.
+// It returns nil for a T(x) conversion.
 //
 // Functions and methods may potentially have type parameters.
 //
@@ -48,7 +49,7 @@ func StaticCallee(info *types.Info, call *ast.CallExpr) *types.Func {
 // This function should live in typesinternal, but cannot because it would
 // create an import cycle.
 //
-//go:linkname usedIdent
+//go:linkname usedIdent golang.org/x/tools/go/types/typeutil.usedIdent
 func usedIdent(info *types.Info, e ast.Expr) *ast.Ident {
 	if info.Types == nil || info.Uses == nil {
 		panic("one of info.Types or info.Uses is nil; both must be populated")
@@ -78,7 +79,7 @@ func usedIdent(info *types.Info, e ast.Expr) *ast.Ident {
 // interfaceMethod reports whether its argument is a method of an interface.
 // This function should live in typesinternal, but cannot because it would create an import cycle.
 //
-//go:linkname interfaceMethod
+//go:linkname interfaceMethod golang.org/x/tools/go/types/typeutil.interfaceMethod
 func interfaceMethod(f *types.Func) bool {
 	recv := f.Signature().Recv()
 	return recv != nil && types.IsInterface(recv.Type())

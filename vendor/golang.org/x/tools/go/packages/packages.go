@@ -229,14 +229,6 @@ type Config struct {
 	// consistent package metadata about unsaved files. However,
 	// drivers may vary in their level of support for overlays.
 	Overlay map[string][]byte
-
-	// -- Hidden configuration fields only for use in x/tools --
-
-	// modFile will be used for -modfile in go command invocations.
-	modFile string
-
-	// modFlag will be used for -modfile in go command invocations.
-	modFlag string
 }
 
 // Load loads and returns the Go packages named by the given patterns.
@@ -568,12 +560,6 @@ type ModuleError struct {
 func init() {
 	packagesinternal.GetDepsErrors = func(p any) []*packagesinternal.PackageError {
 		return p.(*Package).depsErrors
-	}
-	packagesinternal.SetModFile = func(config any, value string) {
-		config.(*Config).modFile = value
-	}
-	packagesinternal.SetModFlag = func(config any, value string) {
-		config.(*Config).modFlag = value
 	}
 	packagesinternal.TypecheckCgo = int(typecheckCgo)
 	packagesinternal.DepsErrors = int(needInternalDepsErrors)
@@ -1041,11 +1027,15 @@ func (ld *loader) refine(response *DriverResponse) ([]*Package, error) {
 // Precondition: ld.Mode&(NeedSyntax|NeedTypes|NeedTypesInfo) != 0.
 func (ld *loader) loadPackage(lpkg *loaderPackage) {
 	if lpkg.PkgPath == "unsafe" {
-		// Fill in the blanks to avoid surprises.
+		// To avoid surprises, fill in the blanks consistent
+		// with other packages. (For example, some analyzers
+		// assert that each needed types.Info map is non-nil
+		// even when there is no syntax that would cause them
+		// to consult the map.)
 		lpkg.Types = types.Unsafe
 		lpkg.Fset = ld.Fset
 		lpkg.Syntax = []*ast.File{}
-		lpkg.TypesInfo = new(types.Info)
+		lpkg.TypesInfo = ld.newTypesInfo()
 		lpkg.TypesSizes = ld.sizes
 		return
 	}
@@ -1194,20 +1184,7 @@ func (ld *loader) loadPackage(lpkg *loaderPackage) {
 		return
 	}
 
-	// Populate TypesInfo only if needed, as it
-	// causes the type checker to work much harder.
-	if ld.Config.Mode&NeedTypesInfo != 0 {
-		lpkg.TypesInfo = &types.Info{
-			Types:        make(map[ast.Expr]types.TypeAndValue),
-			Defs:         make(map[*ast.Ident]types.Object),
-			Uses:         make(map[*ast.Ident]types.Object),
-			Implicits:    make(map[ast.Node]types.Object),
-			Instances:    make(map[*ast.Ident]types.Instance),
-			Scopes:       make(map[ast.Node]*types.Scope),
-			Selections:   make(map[*ast.SelectorExpr]*types.Selection),
-			FileVersions: make(map[*ast.File]string),
-		}
-	}
+	lpkg.TypesInfo = ld.newTypesInfo()
 	lpkg.TypesSizes = ld.sizes
 
 	importer := importerFunc(func(path string) (*types.Package, error) {
@@ -1319,6 +1296,24 @@ func (ld *loader) loadPackage(lpkg *loaderPackage) {
 		}
 	}
 	lpkg.IllTyped = illTyped
+}
+
+func (ld *loader) newTypesInfo() *types.Info {
+	// Populate TypesInfo only if needed, as it
+	// causes the type checker to work much harder.
+	if ld.Config.Mode&NeedTypesInfo == 0 {
+		return nil
+	}
+	return &types.Info{
+		Types:        make(map[ast.Expr]types.TypeAndValue),
+		Defs:         make(map[*ast.Ident]types.Object),
+		Uses:         make(map[*ast.Ident]types.Object),
+		Implicits:    make(map[ast.Node]types.Object),
+		Instances:    make(map[*ast.Ident]types.Instance),
+		Scopes:       make(map[ast.Node]*types.Scope),
+		Selections:   make(map[*ast.SelectorExpr]*types.Selection),
+		FileVersions: make(map[*ast.File]string),
+	}
 }
 
 // An importFunc is an implementation of the single-method
