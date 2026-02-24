@@ -1,0 +1,31 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [master, feat/h2c-origin]
+  pull_request:
+    branches: [master, feat/h2c-origin]
+  schedule:
+    - cron: "30 5 * * 1"
+
+permissions:
+  security-events: write
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4

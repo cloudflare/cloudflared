@@ -1,0 +1,66 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Monday 6am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/cloudflare/cloudflared.git || true
+
+      - name: Fetch upstream
+        run: git fetch upstream master
+
+      - name: Fast-forward master
+        run: |
+          git checkout master
+          git merge --ff-only upstream/master
+          git push origin master
+
+      - name: Rebase feature branch
+        id: rebase
+        continue-on-error: true
+        run: |
+          git checkout feat/h2c-origin
+          git rebase master
+          git push --force-with-lease origin feat/h2c-origin
+
+      - name: Open issue on conflict
+        if: steps.rebase.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'upstream-conflict',
+            });
+            if (existing.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Upstream sync conflict on feat/h2c-origin',
+                body: `The automatic rebase of \`feat/h2c-origin\` onto \`master\` failed.\n\nPlease resolve the conflict manually:\n\`\`\`bash\ngit fetch origin\ngit checkout feat/h2c-origin\ngit rebase origin/master\n# resolve conflicts\ngit push --force-with-lease origin feat/h2c-origin\n\`\`\`\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                labels: ['upstream-conflict'],
+              });
+            }

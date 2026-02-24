@@ -1,21 +1,29 @@
-on: [push, pull_request]
 name: Check
+
+on:
+  push:
+    branches: [master, feat/h2c-origin]
+  pull_request:
+    branches: [master, feat/h2c-origin]
+
 jobs:
   check:
     strategy:
       matrix:
-        go-version: [1.22.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - name: Install Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ matrix.go-version }}
-    - name: Checkout code
-      uses: actions/checkout@v4
-    - name: Allow unprivileged ICMP (Linux)
-      if: runner.os == 'Linux'
-      run: sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
-    - name: Test
-      run: make test
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Allow unprivileged ICMP (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
+
+      - name: Test
+        run: make test
