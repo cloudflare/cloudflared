@@ -14,5 +14,8 @@ jobs:
         go-version: ${{ matrix.go-version }}
     - name: Checkout code
       uses: actions/checkout@v4
+    - name: Allow unprivileged ICMP (Linux)
+      if: runner.os == 'Linux'
+      run: sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
     - name: Test
       run: make test
