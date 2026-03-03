@@ -72,6 +72,8 @@ $ go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -h
 
 ## Linting
 
+Lint with [`golangci-lint`](https://github.com/golangci/golangci-lint):
+
 ```console
 $ golangci-lint run
 ```

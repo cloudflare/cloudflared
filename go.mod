@@ -3,15 +3,15 @@ module github.com/cloudflare/cloudflared
 go 1.24.0
 
 require (
-	github.com/coreos/go-oidc/v3 v3.10.0
+	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/facebookgo/grace v0.0.0-20180706040059-75cf19382434
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9
-	github.com/getsentry/sentry-go v0.16.0
+	github.com/getsentry/sentry-go v0.43.0
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/cors v1.2.1
-	github.com/go-jose/go-jose/v4 v4.1.0
+	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/gobwas/ws v1.2.1
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.6.0

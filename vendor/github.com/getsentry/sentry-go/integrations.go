@@ -2,11 +2,14 @@ package sentry
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 // ================================
@@ -26,12 +29,12 @@ func (mi *modulesIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(mi.processor)
 }
 
-func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
+func (mi *modulesIntegration) processor(event *Event, _ *EventHint) *Event {
 	if len(event.Modules) == 0 {
 		mi.once.Do(func() {
 			info, ok := debug.ReadBuildInfo()
 			if !ok {
-				Logger.Print("The Modules integration is not available in binaries built without module support.")
+				debuglog.Print("The Modules integration is not available in binaries built without module support.")
 				return
 			}
 			mi.modules = extractModules(info)
@@ -69,7 +72,7 @@ func (ei *environmentIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(ei.processor)
 }
 
-func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Event {
+func (ei *environmentIntegration) processor(event *Event, _ *EventHint) *Event {
 	// Initialize maps as necessary.
 	contextNames := []string{"device", "os", "runtime"}
 	if event.Contexts == nil {
@@ -130,17 +133,17 @@ func (iei *ignoreErrorsIntegration) Name() string {
 }
 
 func (iei *ignoreErrorsIntegration) SetupOnce(client *Client) {
-	iei.ignoreErrors = transformStringsIntoRegexps(client.Options().IgnoreErrors)
+	iei.ignoreErrors = transformStringsIntoRegexps(client.options.IgnoreErrors)
 	client.AddEventProcessor(iei.processor)
 }
 
-func (iei *ignoreErrorsIntegration) processor(event *Event, hint *EventHint) *Event {
+func (iei *ignoreErrorsIntegration) processor(event *Event, _ *EventHint) *Event {
 	suspects := getIgnoreErrorsSuspects(event)
 
 	for _, suspect := range suspects {
 		for _, pattern := range iei.ignoreErrors {
-			if pattern.Match([]byte(suspect)) {
-				Logger.Printf("Event dropped due to being matched by `IgnoreErrors` option."+
+			if pattern.Match([]byte(suspect)) || strings.Contains(suspect, pattern.String()) {
+				debuglog.Printf("Event dropped due to being matched by `IgnoreErrors` option."+
 					"| Value matched: %s | Filter used: %s", suspect, pattern)
 				return nil
 			}
@@ -178,6 +181,40 @@ func getIgnoreErrorsSuspects(event *Event) []string {
 }
 
 // ================================
+// Ignore Transactions Integration
+// ================================
+
+type ignoreTransactionsIntegration struct {
+	ignoreTransactions []*regexp.Regexp
+}
+
+func (iei *ignoreTransactionsIntegration) Name() string {
+	return "IgnoreTransactions"
+}
+
+func (iei *ignoreTransactionsIntegration) SetupOnce(client *Client) {
+	iei.ignoreTransactions = transformStringsIntoRegexps(client.options.IgnoreTransactions)
+	client.AddEventProcessor(iei.processor)
+}
+
+func (iei *ignoreTransactionsIntegration) processor(event *Event, _ *EventHint) *Event {
+	suspect := event.Transaction
+	if suspect == "" {
+		return event
+	}
+
+	for _, pattern := range iei.ignoreTransactions {
+		if pattern.Match([]byte(suspect)) || strings.Contains(suspect, pattern.String()) {
+			debuglog.Printf("Transaction dropped due to being matched by `IgnoreTransactions` option."+
+				"| Value matched: %s | Filter used: %s", suspect, pattern)
+			return nil
+		}
+	}
+
+	return event
+}
+
+// ================================
 // Contextify Frames Integration
 // ================================
 
@@ -198,7 +235,7 @@ func (cfi *contextifyFramesIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(cfi.processor)
 }
 
-func (cfi *contextifyFramesIntegration) processor(event *Event, hint *EventHint) *Event {
+func (cfi *contextifyFramesIntegration) processor(event *Event, _ *EventHint) *Event {
 	// Range over all exceptions
 	for _, ex := range event.Exception {
 		// If it has no stacktrace, just bail out
@@ -290,4 +327,67 @@ func (cfi *contextifyFramesIntegration) addContextLinesToFrame(frame Frame, line
 		}
 	}
 	return frame
+}
+
+// ================================
+// Global Tags Integration
+// ================================
+
+const envTagsPrefix = "SENTRY_TAGS_"
+
+type globalTagsIntegration struct {
+	tags    map[string]string
+	envTags map[string]string
+}
+
+func (ti *globalTagsIntegration) Name() string {
+	return "GlobalTags"
+}
+
+func (ti *globalTagsIntegration) SetupOnce(client *Client) {
+	ti.tags = make(map[string]string, len(client.options.Tags))
+	for k, v := range client.options.Tags {
+		ti.tags[k] = v
+	}
+
+	ti.envTags = loadEnvTags()
+
+	client.AddEventProcessor(ti.processor)
+}
+
+func (ti *globalTagsIntegration) processor(event *Event, _ *EventHint) *Event {
+	if len(ti.tags) == 0 && len(ti.envTags) == 0 {
+		return event
+	}
+
+	if event.Tags == nil {
+		event.Tags = make(map[string]string, len(ti.tags)+len(ti.envTags))
+	}
+
+	for k, v := range ti.tags {
+		if _, ok := event.Tags[k]; !ok {
+			event.Tags[k] = v
+		}
+	}
+
+	for k, v := range ti.envTags {
+		if _, ok := event.Tags[k]; !ok {
+			event.Tags[k] = v
+		}
+	}
+
+	return event
+}
+
+func loadEnvTags() map[string]string {
+	tags := map[string]string{}
+	for _, pair := range os.Environ() {
+		parts := strings.Split(pair, "=")
+		if !strings.HasPrefix(parts[0], envTagsPrefix) {
+			continue
+		}
+		tag := strings.TrimPrefix(parts[0], envTagsPrefix)
+		tags[tag] = parts[1]
+	}
+	return tags
 }

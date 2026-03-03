@@ -1,22 +1,17 @@
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - bodyclose
-    - deadcode
-    - depguard
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
     - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
     - godot
-    - gofmt
-    - goimports
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - misspell
@@ -24,26 +19,44 @@ linters:
     - prealloc
     - revive
     - staticcheck
-    - structcheck
-    - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - prealloc
-    - path: _test\.go
-      text: "G306:"
-      linters:
-        - gosec
-    - path: errors_test\.go
-      linters:
-        - unused
-    - path: http/example_test\.go
-      linters:
-        - errcheck
-        - bodyclose
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - goconst
+          - prealloc
+        path: _test\.go
+      - linters:
+          - gosec
+        path: _test\.go
+        text: 'G306:'
+      - linters:
+          - unused
+        path: errors_test\.go
+      - linters:
+          - bodyclose
+          - errcheck
+        path: http/example_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

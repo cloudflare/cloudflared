@@ -1,4 +1,8 @@
+# Code coverage artifacts
 coverage.txt
+coverage.out
+coverage.html
+.coverage/
 
 # Just my personal way of tracking stuff — Kamil
 FIXME.md
@@ -8,3 +12,6 @@ TODO.md
 # IDE system files
 .idea
 .vscode
+
+# Local Claude Code settings that should not be committed
+.claude/settings.local.json
