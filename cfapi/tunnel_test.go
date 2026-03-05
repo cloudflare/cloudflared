@@ -89,6 +89,16 @@ func TestManagementResource_String(t *testing.T) {
 			resource: Logs,
 			want:     "logs",
 		},
+		{
+			name:     "Admin",
+			resource: Admin,
+			want:     "admin",
+		},
+		{
+			name:     "HostDetails",
+			resource: HostDetails,
+			want:     "host_details",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -114,6 +124,16 @@ func TestManagementEndpointPath(t *testing.T) {
 			name:     "Logs resource",
 			resource: Logs,
 			want:     "b34cc7ce-925b-46ee-bc23-4cb5c18d8292/management/logs",
+		},
+		{
+			name:     "Admin resource",
+			resource: Admin,
+			want:     "b34cc7ce-925b-46ee-bc23-4cb5c18d8292/management/admin",
+		},
+		{
+			name:     "HostDetails resource",
+			resource: HostDetails,
+			want:     "b34cc7ce-925b-46ee-bc23-4cb5c18d8292/management/host_details",
 		},
 	}
 	for _, tt := range tests {

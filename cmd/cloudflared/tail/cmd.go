@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,13 +12,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
 	"nhooyr.io/websocket"
 
 	"github.com/cloudflare/cloudflared/cfapi"
-
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/credentials"
@@ -52,9 +49,9 @@ func buildTailManagementTokenSubcommand() *cli.Command {
 }
 
 func managementTokenCommand(c *cli.Context) error {
-	log := createLogger(c)
+	log := cliutil.CreateStderrLogger(c)
 
-	token, err := getManagementToken(c, log, cfapi.Logs)
+	token, err := cliutil.GetManagementToken(c, log, cfapi.Logs, buildInfo)
 	if err != nil {
 		return err
 	}
@@ -163,31 +160,6 @@ func handleValidationError(resp *http.Response, log *zerolog.Logger) {
 	}
 }
 
-// logger will be created to emit only against the os.Stderr as to not obstruct with normal output from
-// management requests
-func createLogger(c *cli.Context) *zerolog.Logger {
-	level, levelErr := zerolog.ParseLevel(c.String(cfdflags.LogLevel))
-	if levelErr != nil {
-		level = zerolog.InfoLevel
-	}
-	var writer io.Writer
-	switch c.String(cfdflags.LogFormatOutput) {
-	case cfdflags.LogFormatOutputValueJSON:
-		// zerolog by default outputs as JSON
-		writer = os.Stderr
-	case cfdflags.LogFormatOutputValueDefault:
-		// "default" and unset use the same logger output format
-		fallthrough
-	default:
-		writer = zerolog.ConsoleWriter{
-			Out:        colorable.NewColorable(os.Stderr),
-			TimeFormat: time.RFC3339,
-		}
-	}
-	log := zerolog.New(writer).With().Timestamp().Logger().Level(level)
-	return &log
-}
-
 // parseFilters will attempt to parse provided filters to send to with the EventStartStreaming
 func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
 	var level *management.LogLevel
@@ -232,49 +204,13 @@ func parseFilters(c *cli.Context) (*management.StreamingFilters, error) {
 	}, nil
 }
 
-// getManagementToken will make a call to the Cloudflare API to acquire a management token for the requested tunnel.
-func getManagementToken(c *cli.Context, log *zerolog.Logger, res cfapi.ManagementResource) (string, error) {
-	userCreds, err := credentials.Read(c.String(cfdflags.OriginCert), log)
-	if err != nil {
-		return "", err
-	}
-
-	var apiURL string
-	if userCreds.IsFEDEndpoint() {
-		apiURL = credentials.FedRampBaseApiURL
-	} else {
-		apiURL = c.String(cfdflags.ApiURL)
-	}
-
-	client, err := userCreds.Client(apiURL, buildInfo.UserAgent(), log)
-	if err != nil {
-		return "", err
-	}
-
-	tunnelIDString := c.Args().First()
-	if tunnelIDString == "" {
-		return "", errors.New("no tunnel ID provided")
-	}
-	tunnelID, err := uuid.Parse(tunnelIDString)
-	if err != nil {
-		return "", errors.New("unable to parse provided tunnel id as a valid UUID")
-	}
-
-	token, err := client.GetManagementToken(tunnelID, res)
-	if err != nil {
-		return "", err
-	}
-
-	return token, nil
-}
-
 // buildURL will build the management url to contain the required query parameters to authenticate the request.
 func buildURL(c *cli.Context, log *zerolog.Logger, res cfapi.ManagementResource) (url.URL, error) {
 	var err error
 
 	token := c.String("token")
 	if token == "" {
-		token, err = getManagementToken(c, log, res)
+		token, err = cliutil.GetManagementToken(c, log, res, buildInfo)
 		if err != nil {
 			return url.URL{}, fmt.Errorf("unable to acquire management token for requested tunnel id: %w", err)
 		}
@@ -325,7 +261,7 @@ func printJSON(log *management.Log, logger *zerolog.Logger) {
 
 // Run implements a foreground runner
 func Run(c *cli.Context) error {
-	log := createLogger(c)
+	log := cliutil.CreateStderrLogger(c)
 
 	signals := make(chan os.Signal, 10)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)

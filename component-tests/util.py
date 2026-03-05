@@ -185,3 +185,49 @@ def send_request(session, url, require_ok):
     if require_ok:
         assert resp.status_code == 200, f"{url} returned {resp}"
     return resp if resp.status_code == 200 else None
+
+
+def decode_jwt_payload(token):
+    """
+    Decode the payload section of a JWT token without signature verification.
+    
+    JWT Structure:
+    ==============
+    A JWT consists of three Base64URL-encoded parts separated by dots:
+        HEADER.PAYLOAD.SIGNATURE
+    
+    The payload contains the JWT claims (the actual data/permissions).
+    
+    Args:
+        token (str): The complete JWT token string
+        
+    Returns:
+        dict: The decoded payload as a dictionary containing JWT claims
+        
+    Raises:
+        ValueError: If the token doesn't have exactly 3 parts
+        
+    Note:
+        This function does NOT verify the signature - it only decodes the payload.
+        Use this only when you trust the token source (e.g., tokens you just generated).
+    """
+    import base64
+    import json
+    
+    # Split JWT into its three components
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
+    
+    # Extract and decode the payload (middle section)
+    # Base64 requires padding to be a multiple of 4 characters
+    payload_encoded = parts[1]
+    remainder = len(payload_encoded) % 4
+    if remainder != 0:
+        payload_padded = payload_encoded + '=' * (4 - remainder)
+    else:
+        payload_padded = payload_encoded
+    
+    # Decode from Base64URL format and parse JSON
+    decoded_payload = base64.urlsafe_b64decode(payload_padded)
+    return json.loads(decoded_payload)

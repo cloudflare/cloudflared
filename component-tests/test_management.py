@@ -1,10 +1,11 @@
 #!/usr/bin/env python
+import json
 import requests
 from conftest import CfdModes
 from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
 from retrying import retry
 from cli import CloudflaredCli
-from util import LOGGER, write_config, start_cloudflared, wait_tunnel_ready, send_requests
+from util import LOGGER, write_config, start_cloudflared, wait_tunnel_ready, send_requests, decode_jwt_payload
 import platform
 
 """
@@ -35,7 +36,7 @@ class TestManagement:
                               require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
             connector_id = cfd_cli.get_connector_id(config)[0]
-            url = cfd_cli.get_management_url("host_details", config, config_path)
+            url = cfd_cli.get_management_url("host_details", config, config_path, resource="host_details")
             resp = send_request(url, headers=headers)
             
             # Assert response json.
@@ -58,7 +59,7 @@ class TestManagement:
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_url("metrics", config, config_path)
+            url = cfd_cli.get_management_url("metrics", config, config_path, resource="admin")
             resp = send_request(url)
             
             # Assert response.
@@ -79,7 +80,7 @@ class TestManagement:
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_url("debug/pprof/heap", config, config_path)
+            url = cfd_cli.get_management_url("debug/pprof/heap", config, config_path, resource="admin")
             resp = send_request(url)
             
             # Assert response.
@@ -100,11 +101,44 @@ class TestManagement:
         with start_cloudflared(tmp_path, config, cfd_pre_args=["tunnel", "--ha-connections", "1", "--management-diagnostics=false"], new_process=True):
             wait_tunnel_ready(require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_url("metrics", config, config_path)
+            url = cfd_cli.get_management_url("metrics", config, config_path, resource="admin")
             resp = send_request(url)
             
             # Assert response.
             assert resp.status_code == 404, "Expected cloudflared to return 404 for /metrics"
+
+    def test_tail_token_command(self, tmp_path, component_tests_config):
+        """
+        Validates that 'cloudflared tail token' command returns a token 
+        scoped for 'logs' and 'ping' resources.
+        """
+        # TUN-7377: wait_tunnel_ready does not work properly in windows
+        if platform.system() == "Windows":
+            return
+        
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
+        LOGGER.debug(config)
+        config_path = write_config(tmp_path, config.full_config)
+        
+        cfd_cli = CloudflaredCli(config, config_path, LOGGER)
+        token = cfd_cli.get_tail_token(config, config_path)
+        
+        # Verify token was returned
+        assert token, "Expected non-empty token to be returned"
+        
+        # Decode JWT payload to verify resource claims
+        claims = decode_jwt_payload(token)
+
+        resource_tag = 'res'
+        # Verify the token has 'logs' and 'ping' in resource array
+        assert resource_tag in claims, f"Expected {resource_tag} claim in token"
+        assert isinstance(claims['res'], list), f"Expected {resource_tag} to be an array"
+        assert 'logs' in claims[resource_tag], \
+            f"Expected 'logs' in resource array, got: {claims[resource_tag]}"
+        assert 'ping' in claims[resource_tag], \
+            f"Expected 'ping' in resource array, got: {claims[resource_tag]}"
+        
+        LOGGER.info(f"Tail token successfully verified with resources: {claims[resource_tag]}")
 
 
 
