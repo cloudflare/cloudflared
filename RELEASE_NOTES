@@ -1,3 +1,12 @@
+2026.3.0
+- 2026-03-05 TUN-10292: Add cloudflared management token command
+- 2026-03-03 chore: Addressing small fixes and typos
+- 2026-03-03 fix: Update go-sentry and go-oidc to address CVE's
+- 2026-02-24 TUN-10258: add agents.md
+- 2026-02-23 TUN-10267: Update mods to fix CVE GO-2026-4394
+- 2026-02-20 TUN-10247: Update tail command to use /management/logs endpoint
+- 2026-02-11 TUN-9858: Add more information to proxy-dns removal message
+
 2026.2.0
 - 2026-02-06 TUN-10216: TUN fix cloudflare vulnerabilities GO-2026-4340 and GO-2026-4341
 - 2026-02-02 TUN-9858: Remove proxy-dns feature from cloudflared
