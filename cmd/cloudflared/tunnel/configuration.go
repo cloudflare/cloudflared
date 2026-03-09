@@ -27,6 +27,7 @@ import (
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/ingress/origins"
+	"github.com/cloudflare/cloudflared/k8s"
 	"github.com/cloudflare/cloudflared/orchestration"
 	"github.com/cloudflare/cloudflared/supervisor"
 	"github.com/cloudflare/cloudflared/tlsconfig"
@@ -151,6 +152,36 @@ func prepareTunnelConfig(
 	}
 
 	cfg := config.GetConfiguration()
+
+	// If Kubernetes integration is enabled, discover services and merge with config
+	if cfg.Kubernetes.Enabled {
+		k8sCfg := &k8s.Config{
+			Enabled:           cfg.Kubernetes.Enabled,
+			Namespace:         cfg.Kubernetes.Namespace,
+			BaseDomain:        cfg.Kubernetes.BaseDomain,
+			KubeconfigPath:    cfg.Kubernetes.KubeconfigPath,
+			ExposeAPIServer:   cfg.Kubernetes.ExposeAPIServer,
+			APIServerHostname: cfg.Kubernetes.APIServerHostname,
+			LabelSelector:     cfg.Kubernetes.LabelSelector,
+		}
+		if err := k8sCfg.Validate(); err != nil {
+			log.Warn().Err(err).Msg("Kubernetes integration config validation failed, skipping K8s discovery")
+		} else {
+			// Use a timeout so K8s discovery doesn't block tunnel startup indefinitely.
+			k8sCtx, k8sCancel := context.WithTimeout(ctx, 30*time.Second)
+			services, err := k8s.DiscoverServices(k8sCtx, k8sCfg, log)
+			k8sCancel()
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to discover Kubernetes services, continuing without K8s rules")
+			} else if len(services) > 0 {
+				k8sRules := k8s.GenerateIngressRules(services, log)
+				cfg.Ingress = k8s.MergeWithExistingRules(cfg.Ingress, k8sRules)
+				log.Info().Int("k8sServices", len(services)).Int("totalRules", len(cfg.Ingress)).
+					Msg("Merged Kubernetes-discovered services into ingress rules")
+			}
+		}
+	}
+
 	ingressRules, err := ingress.ParseIngressFromConfigAndCLI(cfg, c, log)
 	if err != nil {
 		return nil, nil, err
