@@ -48,6 +48,9 @@ type Orchestrator struct {
 	shutdownC <-chan struct{}
 	// Closing proxyShutdownC will close the previous proxy
 	proxyShutdownC chan<- struct{}
+	// OverrideProxy allows injecting a custom OriginProxy implementation.
+	// When set, GetOriginProxy returns this instead of the ingress-based proxy.
+	OverrideProxy connection.OriginProxy
 }
 
 func NewOrchestrator(ctx context.Context,
@@ -280,6 +283,10 @@ func (o *Orchestrator) GetVersionedConfigJSON() ([]byte, error) {
 
 // GetOriginProxy returns an interface to proxy to origin. It satisfies connection.ConfigManager interface
 func (o *Orchestrator) GetOriginProxy() (connection.OriginProxy, error) {
+	if o.OverrideProxy != nil {
+		return o.OverrideProxy, nil
+	}
+
 	val := o.proxy.Load()
 	if val == nil {
 		err := fmt.Errorf("origin proxy not configured")
