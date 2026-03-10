@@ -5,32 +5,44 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debug"
+	"github.com/getsentry/sentry-go/internal/debuglog"
+	httpInternal "github.com/getsentry/sentry-go/internal/http"
+	"github.com/getsentry/sentry-go/internal/protocol"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
-// maxErrorDepth is the maximum number of errors reported in a chain of errors.
-// This protects the SDK from an arbitrarily long chain of wrapped errors.
-//
-// An additional consideration is that arguably reporting a long chain of errors
-// is of little use when debugging production errors with Sentry. The Sentry UI
-// is not optimized for long chains either. The top-level error together with a
-// stack trace is often the most useful information.
-const maxErrorDepth = 10
+// The identifier of the SDK.
+const sdkIdentifier = "sentry.go"
 
-// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
-// meant to bound memory usage and prevent too large transaction events that
-// would be rejected by Sentry.
-const defaultMaxSpans = 1000
+const (
+	// maxErrorDepth is the maximum number of errors reported in a chain of errors.
+	// This protects the SDK from an arbitrarily long chain of wrapped errors.
+	//
+	// An additional consideration is that arguably reporting a long chain of errors
+	// is of little use when debugging production errors with Sentry. The Sentry UI
+	// is not optimized for long chains either. The top-level error together with a
+	// stack trace is often the most useful information.
+	maxErrorDepth = 100
+
+	// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
+	// meant to bound memory usage and prevent too large transaction events that
+	// would be rejected by Sentry.
+	defaultMaxSpans = 1000
+
+	// defaultMaxBreadcrumbs is the default maximum number of breadcrumbs added to
+	// an event. Can be overwritten with the MaxBreadcrumbs option.
+	defaultMaxBreadcrumbs = 100
+)
 
 // hostname is the host name reported by the kernel. It is precomputed once to
 // avoid syscalls when capturing events.
@@ -75,9 +87,9 @@ type usageError struct {
 	error
 }
 
-// Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
-// can be enabled by either using Logger.SetOutput directly or with Debug client option.
-var Logger = log.New(io.Discard, "[Sentry] ", log.LstdFlags)
+// DebugLogger is an instance of log.Logger that is used to provide debug information about running Sentry Client
+// can be enabled by either using debuglog.SetOutput directly or with Debug client option.
+var DebugLogger = debuglog.GetLogger()
 
 // EventProcessor is a function that processes an event.
 // Event processors are used to change an event before it is sent to Sentry.
@@ -88,7 +100,7 @@ type EventProcessor func(event *Event, hint *EventHint) *Event
 // ApplyToEvent changes an event based on external data and/or
 // an event hint.
 type EventModifier interface {
-	ApplyToEvent(event *Event, hint *EventHint) *Event
+	ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event
 }
 
 var globalEventProcessors []EventProcessor
@@ -131,19 +143,35 @@ type ClientOptions struct {
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
+	// Control with URLs trace propagation should be enabled. Does not support regex patterns.
+	TracePropagationTargets []string
+	// PropagateTraceparent is used to control whether the W3C Trace Context HTTP traceparent header
+	// is propagated on outgoing http requests.
+	PropagateTraceparent bool
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
 	IgnoreErrors []string
+	// List of regexp strings that will be used to match against a transaction's
+	// name.  If a match is found, then the transaction  will be dropped.
+	IgnoreTransactions []string
 	// If this flag is enabled, certain personally identifiable information (PII) is added by active integrations.
 	// By default, no such data is sent.
 	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
-	// Use it to mutate the event or return nil to discard the event.
-	// See EventProcessor if you need to mutate transactions.
+	// You can use it to mutate the event or return nil to discard it.
 	BeforeSend func(event *Event, hint *EventHint) *Event
+	// BeforeSendLong is called before log events are sent to Sentry.
+	// You can use it to mutate the log event or return nil to discard it.
+	BeforeSendLog func(event *Log) *Log
+	// BeforeSendTransaction is called before transaction events are sent to Sentry.
+	// Use it to mutate the transaction or return nil to discard the transaction.
+	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	// BeforeSendMetric is called before metric events are sent to Sentry.
+	// You can use it to mutate the metric or return nil to discard it.
+	BeforeSendMetric func(metric *Metric) *Metric
 	// Integrations to be installed on the current Client, receives default
 	// integrations.
 	Integrations func([]Integration) []Integration
@@ -214,18 +242,50 @@ type ClientOptions struct {
 	// is not optimized for long chains either. The top-level error together with a
 	// stack trace is often the most useful information.
 	MaxErrorDepth int
+	// Default event tags. These are overridden by tags set on a scope.
+	Tags map[string]string
+	// EnableLogs controls when logs should be emitted.
+	EnableLogs bool
+	// DisableMetrics controls when metrics should be emitted.
+	DisableMetrics bool
+	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
+	// Each element can be either:
+	// - A single-element slice [code] for a specific status code
+	// - A two-element slice [min, max] for a range of status codes (inclusive)
+	// When an HTTP request results in a status code that matches any of these codes or ranges,
+	// the transaction will not be sent to Sentry.
+	//
+	// Examples:
+	//   [][]int{{404}}                           // ignore only status code 404
+	//   [][]int{{400, 405}}                     // ignore status codes 400-405
+	//   [][]int{{404}, {500}}                   // ignore status codes 404 and 500
+	//   [][]int{{404}, {400, 405}, {500, 599}}  // ignore 404, range 400-405, and range 500-599
+	//
+	// By default, this ignores 404 status codes.
+	//
+	// IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
+	// used for defaulting to 404 ignores.
+	TraceIgnoreStatusCodes [][]int
+	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
+	DisableTelemetryBuffer bool
 }
 
 // Client is the underlying processor that is used by the main API and Hub
 // instances. It must be created with NewClient.
 type Client struct {
+	mu              sync.RWMutex
 	options         ClientOptions
 	dsn             *Dsn
 	eventProcessors []EventProcessor
 	integrations    []Integration
+	sdkIdentifier   string
+	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport Transport
+	Transport          Transport
+	batchLogger        *logBatchProcessor
+	batchMeter         *metricBatchProcessor
+	telemetryProcessor *telemetry.Processor
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -236,12 +296,34 @@ type Client struct {
 // single goroutine) or hub methods (for concurrent programs, for example web
 // servers).
 func NewClient(options ClientOptions) (*Client, error) {
+	// The default error event sample rate for all SDKs is 1.0 (send all).
+	//
+	// In Go, the zero value (default) for float64 is 0.0, which means that
+	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
+	// initializing the SDK with Init(ClientOptions{}) without an explicit
+	// SampleRate would drop all events.
+	//
+	// To retain the desired default behavior, we exceptionally flip SampleRate
+	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
+	// anyway, and the same end result can be achieved in many other ways like
+	// not initializing the SDK, setting the DSN to the empty string or using an
+	// event processor that always returns nil.
+	//
+	// An alternative API could be such that default options don't need to be
+	// the same as Go's zero values, for example using the Functional Options
+	// pattern. That would either require a breaking change if we want to reuse
+	// the obvious NewClient name, or a new function as an alternative
+	// constructor.
+	if options.SampleRate == 0.0 {
+		options.SampleRate = 1.0
+	}
+
 	if options.Debug {
 		debugWriter := options.DebugWriter
 		if debugWriter == nil {
 			debugWriter = os.Stderr
 		}
-		Logger.SetOutput(debugWriter)
+		debuglog.SetOutput(debugWriter)
 	}
 
 	if options.Dsn == "" {
@@ -262,6 +344,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.MaxSpans == 0 {
 		options.MaxSpans = defaultMaxSpans
+	}
+
+	if options.TraceIgnoreStatusCodes == nil {
+		options.TraceIgnoreStatusCodes = [][]int{{404}}
 	}
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -297,11 +383,28 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	client := Client{
-		options: options,
-		dsn:     dsn,
+		options:       options,
+		dsn:           dsn,
+		sdkIdentifier: sdkIdentifier,
+		sdkVersion:    SDKVersion,
 	}
 
 	client.setupTransport()
+
+	// noop Telemetry Buffers and Processor fow now
+	// if !options.DisableTelemetryBuffer {
+	// 	client.setupTelemetryProcessor()
+	// } else
+	if options.EnableLogs {
+		client.batchLogger = newLogBatchProcessor(&client)
+		client.batchLogger.Start()
+	}
+
+	if !options.DisableMetrics {
+		client.batchMeter = newMetricBatchProcessor(&client)
+		client.batchMeter.Start()
+	}
+
 	client.setupIntegrations()
 
 	return &client, nil
@@ -315,20 +418,63 @@ func (client *Client) setupTransport() {
 		if opts.Dsn == "" {
 			transport = new(noopTransport)
 		} else {
-			httpTransport := NewHTTPTransport()
-			// When tracing is enabled, use larger buffer to
-			// accommodate more concurrent events.
-			// TODO(tracing): consider using separate buffers per
-			// event type.
-			if opts.EnableTracing {
-				httpTransport.BufferSize = 1000
-			}
-			transport = httpTransport
+			transport = NewHTTPTransport()
 		}
 	}
 
 	transport.Configure(opts)
 	client.Transport = transport
+}
+
+func (client *Client) setupTelemetryProcessor() { // nolint: unused
+	if client.options.DisableTelemetryBuffer {
+		return
+	}
+
+	if client.dsn == nil {
+		debuglog.Println("Telemetry buffer disabled: no DSN configured")
+		return
+	}
+
+	// We currently disallow using custom Transport with the new Telemetry Processor, due to the difference in transport signatures.
+	// The option should be enabled when the new Transport interface signature changes.
+	if client.options.Transport != nil {
+		debuglog.Println("Cannot enable Telemetry Processor/Buffers with custom Transport: fallback to old transport")
+		if client.options.EnableLogs {
+			client.batchLogger = newLogBatchProcessor(client)
+			client.batchLogger.Start()
+		}
+		if !client.options.DisableMetrics {
+			client.batchMeter = newMetricBatchProcessor(client)
+			client.batchMeter.Start()
+		}
+		return
+	}
+
+	transport := httpInternal.NewAsyncTransport(httpInternal.TransportOptions{
+		Dsn:           client.options.Dsn,
+		HTTPClient:    client.options.HTTPClient,
+		HTTPTransport: client.options.HTTPTransport,
+		HTTPProxy:     client.options.HTTPProxy,
+		HTTPSProxy:    client.options.HTTPSProxy,
+		CaCerts:       client.options.CaCerts,
+	})
+	client.Transport = &internalAsyncTransportAdapter{transport: transport}
+
+	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+	}
+
+	sdkInfo := &protocol.SdkInfo{
+		Name:    client.sdkIdentifier,
+		Version: client.sdkVersion,
+	}
+
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, &client.dsn.Dsn, sdkInfo)
 }
 
 func (client *Client) setupIntegrations() {
@@ -337,6 +483,8 @@ func (client *Client) setupIntegrations() {
 		new(environmentIntegration),
 		new(modulesIntegration),
 		new(ignoreErrorsIntegration),
+		new(ignoreTransactionsIntegration),
+		new(globalTagsIntegration),
 	}
 
 	if client.options.Integrations != nil {
@@ -345,12 +493,12 @@ func (client *Client) setupIntegrations() {
 
 	for _, integration := range integrations {
 		if client.integrationAlreadyInstalled(integration.Name()) {
-			Logger.Printf("Integration %s is already installed\n", integration.Name())
+			debuglog.Printf("Integration %s is already installed\n", integration.Name())
 			continue
 		}
 		client.integrations = append(client.integrations, integration)
 		integration.SetupOnce(client)
-		Logger.Printf("Integration installed: %s\n", integration.Name())
+		debuglog.Printf("Integration installed: %s\n", integration.Name())
 	}
 
 	sort.Slice(client.integrations, func(i, j int) bool {
@@ -370,29 +518,96 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 }
 
 // Options return ClientOptions for the current Client.
-func (client Client) Options() ClientOptions {
+func (client *Client) Options() ClientOptions {
+	// Note: internally, consider using `client.options` instead of `client.Options()` to avoid copying the object each time.
 	return client.options
 }
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromMessage(message, LevelInfo)
+	event := client.EventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromException(exception, LevelError)
+	event := client.EventFromException(exception, LevelError)
 	return client.CaptureEvent(event, hint, scope)
+}
+
+// CaptureCheckIn captures a check in.
+func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+	event := client.EventFromCheckIn(checkIn, monitorConfig)
+	if event != nil && event.CheckIn != nil {
+		client.CaptureEvent(event, nil, scope)
+		return &event.CheckIn.ID
+	}
+	return nil
 }
 
 // CaptureEvent captures an event on the currently active client if any.
 //
-// The event must already be assembled. Typically code would instead use
+// The event must already be assembled. Typically, code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	return client.processEvent(event, hint, scope)
+}
+
+func (client *Client) captureLog(log *Log, _ *Scope) bool {
+	if log == nil {
+		return false
+	}
+
+	if client.options.BeforeSendLog != nil {
+		log = client.options.BeforeSendLog(log)
+		if log == nil {
+			debuglog.Println("Log dropped due to BeforeSendLog callback.")
+			return false
+		}
+	}
+
+	if client.telemetryProcessor != nil {
+		if !client.telemetryProcessor.Add(log) {
+			debuglog.Print("Dropping log: telemetry buffer full or category missing")
+			return false
+		}
+	} else if client.batchLogger != nil {
+		if !client.batchLogger.Send(log) {
+			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
+	if metric == nil {
+		return false
+	}
+
+	if client.options.BeforeSendMetric != nil {
+		metric = client.options.BeforeSendMetric(metric)
+		if metric == nil {
+			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
+			return false
+		}
+	}
+
+	if client.telemetryProcessor != nil {
+		if !client.telemetryProcessor.Add(metric) {
+			debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
+			return false
+		}
+	} else if client.batchMeter != nil {
+		if !client.batchMeter.Send(metric) {
+			debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
+			return false
+		}
+	}
+
+	return true
 }
 
 // Recover captures a panic.
@@ -437,11 +652,11 @@ func (client *Client) RecoverWithContext(
 	var event *Event
 	switch err := err.(type) {
 	case error:
-		event = client.eventFromException(err, LevelFatal)
+		event = client.EventFromException(err, LevelFatal)
 	case string:
-		event = client.eventFromMessage(err, LevelFatal)
+		event = client.EventFromMessage(err, LevelFatal)
 	default:
-		event = client.eventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
+		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
 	}
 	return client.CaptureEvent(event, hint, scope)
 }
@@ -458,19 +673,67 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
+	if client.batchLogger != nil || client.batchMeter != nil || client.telemetryProcessor != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		return client.FlushWithContext(ctx)
+	}
 	return client.Transport.Flush(timeout)
 }
 
-func (client *Client) eventFromMessage(message string, level Level) *Event {
+// FlushWithContext waits until the underlying Transport sends any buffered events
+// to the Sentry server, blocking for at most the duration specified by the context.
+// It returns false if the context is canceled before the events are sent. In such a case,
+// some events may not be delivered.
+//
+// FlushWithContext should be called before terminating the program to ensure no
+// events are unintentionally dropped.
+//
+// Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
+// CaptureException, or CaptureMessage. To send events synchronously over the network,
+// configure the SDK to use HTTPSyncTransport during initialization with Init.
+
+func (client *Client) FlushWithContext(ctx context.Context) bool {
+	if client.batchLogger != nil {
+		client.batchLogger.Flush(ctx.Done())
+	}
+	if client.batchMeter != nil {
+		client.batchMeter.Flush(ctx.Done())
+	}
+	if client.telemetryProcessor != nil {
+		return client.telemetryProcessor.FlushWithContext(ctx)
+	}
+	return client.Transport.FlushWithContext(ctx)
+}
+
+// Close clean up underlying Transport resources.
+//
+// Close should be called after Flush and before terminating the program
+// otherwise some events may be lost.
+func (client *Client) Close() {
+	if client.telemetryProcessor != nil {
+		client.telemetryProcessor.Close(5 * time.Second)
+	}
+	if client.batchLogger != nil {
+		client.batchLogger.Shutdown()
+	}
+	if client.batchMeter != nil {
+		client.batchMeter.Shutdown()
+	}
+	client.Transport.Close()
+}
+
+// EventFromMessage creates an event from the given message string.
+func (client *Client) EventFromMessage(message string, level Level) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
-		return client.eventFromException(err, level)
+		return client.EventFromException(err, level)
 	}
 	event := NewEvent()
 	event.Level = level
 	event.Message = message
 
-	if client.Options().AttachStacktrace {
+	if client.options.AttachStacktrace {
 		event.Threads = []Thread{{
 			Stacktrace: NewStacktrace(),
 			Crashed:    false,
@@ -481,51 +744,60 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 	return event
 }
 
-func (client *Client) eventFromException(exception error, level Level) *Event {
+// EventFromException creates a new Sentry event from the given `error` instance.
+func (client *Client) EventFromException(exception error, level Level) *Event {
+	event := NewEvent()
+	event.Level = level
+
 	err := exception
 	if err == nil {
 		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
 	}
 
-	event := NewEvent()
-	event.Level = level
-
-	for i := 0; i < client.options.MaxErrorDepth && err != nil; i++ {
-		event.Exception = append(event.Exception, Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
-		})
-		switch previous := err.(type) {
-		case interface{ Unwrap() error }:
-			err = previous.Unwrap()
-		case interface{ Cause() error }:
-			err = previous.Cause()
-		default:
-			err = nil
-		}
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	// We only add to the most recent error to avoid duplication and because the
-	// current stack is most likely unrelated to errors deeper in the chain.
-	if event.Exception[0].Stacktrace == nil {
-		event.Exception[0].Stacktrace = NewStacktrace()
-	}
-
-	// event.Exception should be sorted such that the most recent error is last.
-	reverse(event.Exception)
+	event.SetException(err, client.options.MaxErrorDepth)
 
 	return event
 }
 
-// reverse reverses the slice a in place.
-func reverse(a []Exception) {
-	for i := len(a)/2 - 1; i >= 0; i-- {
-		opp := len(a) - 1 - i
-		a[i], a[opp] = a[opp], a[i]
+// EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
+func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
+	if checkIn == nil {
+		return nil
 	}
+
+	event := NewEvent()
+	event.Type = checkInType
+
+	var checkInID EventID
+	if checkIn.ID == "" {
+		checkInID = EventID(uuid())
+	} else {
+		checkInID = checkIn.ID
+	}
+
+	event.CheckIn = &CheckIn{
+		ID:          checkInID,
+		MonitorSlug: checkIn.MonitorSlug,
+		Status:      checkIn.Status,
+		Duration:    checkIn.Duration,
+	}
+	event.MonitorConfig = monitorConfig
+
+	return event
+}
+
+func (client *Client) SetSDKIdentifier(identifier string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	client.sdkIdentifier = identifier
+}
+
+func (client *Client) GetSDKIdentifier() string {
+	client.mu.RLock()
+	defer client.mu.RUnlock()
+
+	return client.sdkIdentifier
 }
 
 func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
@@ -534,35 +806,11 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return client.CaptureException(err, hint, scope)
 	}
 
-	options := client.Options()
-
-	// The default error event sample rate for all SDKs is 1.0 (send all).
-	//
-	// In Go, the zero value (default) for float64 is 0.0, which means that
-	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
-	// initializing the SDK with Init(ClientOptions{}) without an explicit
-	// SampleRate would drop all events.
-	//
-	// To retain the desired default behavior, we exceptionally flip SampleRate
-	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
-	// anyway, and the same end result can be achieved in many other ways like
-	// not initializing the SDK, setting the DSN to the empty string or using an
-	// event processor that always returns nil.
-	//
-	// An alternative API could be such that default options don't need to be
-	// the same as Go's zero values, for example using the Functional Options
-	// pattern. That would either require a breaking change if we want to reuse
-	// the obvious NewClient name, or a new function as an alternative
-	// constructor.
-	if options.SampleRate == 0.0 {
-		options.SampleRate = 1.0
-	}
-
 	// Transactions are sampled by options.TracesSampleRate or
-	// options.TracesSampler when they are started. All other events
-	// (errors, messages) are sampled here.
-	if event.Type != transactionType && !sample(options.SampleRate) {
-		Logger.Println("Event dropped due to SampleRate hit.")
+	// options.TracesSampler when they are started. Other events
+	// (errors, messages) are sampled here. Does not apply to check-ins.
+	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
+		debuglog.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
 
@@ -570,24 +818,42 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return nil
 	}
 
-	// As per spec, transactions do not go through BeforeSend.
-	if event.Type != transactionType && options.BeforeSend != nil {
-		if hint == nil {
-			hint = &EventHint{}
+	// Apply beforeSend* processors
+	if hint == nil {
+		hint = &EventHint{}
+	}
+	switch event.Type {
+	case transactionType:
+		if client.options.BeforeSendTransaction != nil {
+			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
+				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
+				return nil
+			}
 		}
-		if event = options.BeforeSend(event, hint); event == nil {
-			Logger.Println("Event dropped due to BeforeSend callback.")
-			return nil
+	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
+	default:
+		if client.options.BeforeSend != nil {
+			if event = client.options.BeforeSend(event, hint); event == nil {
+				debuglog.Println("Event dropped due to BeforeSend callback.")
+				return nil
+			}
 		}
 	}
 
-	client.Transport.SendEvent(event)
+	if client.telemetryProcessor != nil {
+		if !client.telemetryProcessor.Add(event) {
+			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
+		}
+	} else {
+		client.Transport.SendEvent(event)
+	}
 
 	return &event.EventID
 }
 
 func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	if event.EventID == "" {
+		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
 		event.EventID = EventID(uuid())
 	}
 
@@ -600,7 +866,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.ServerName == "" {
-		event.ServerName = client.Options().ServerName
+		event.ServerName = client.options.ServerName
 
 		if event.ServerName == "" {
 			event.ServerName = hostname
@@ -608,20 +874,20 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.Release == "" {
-		event.Release = client.Options().Release
+		event.Release = client.options.Release
 	}
 
 	if event.Dist == "" {
-		event.Dist = client.Options().Dist
+		event.Dist = client.options.Dist
 	}
 
 	if event.Environment == "" {
-		event.Environment = client.Options().Environment
+		event.Environment = client.options.Environment
 	}
 
 	event.Platform = "go"
 	event.Sdk = SdkInfo{
-		Name:         SDKIdentifier,
+		Name:         client.GetSDKIdentifier(),
 		Version:      SDKVersion,
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
@@ -631,7 +897,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if scope != nil {
-		event = scope.ApplyToEvent(event, hint)
+		event = scope.ApplyToEvent(event, hint, client)
 		if event == nil {
 			return nil
 		}
@@ -641,7 +907,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
+			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
 			return nil
 		}
 	}
@@ -650,7 +916,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
+			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			return nil
 		}
 	}
@@ -658,7 +924,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	return event
 }
 
-func (client Client) listIntegrations() []string {
+func (client *Client) listIntegrations() []string {
 	integrations := make([]string, len(client.integrations))
 	for i, integration := range client.integrations {
 		integrations[i] = integration.Name()
@@ -666,7 +932,7 @@ func (client Client) listIntegrations() []string {
 	return integrations
 }
 
-func (client Client) integrationAlreadyInstalled(name string) bool {
+func (client *Client) integrationAlreadyInstalled(name string) bool {
 	for _, integration := range client.integrations {
 		if integration.Name() == name {
 			return true

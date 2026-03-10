@@ -9,7 +9,18 @@ default:
     VAULT_ID_TOKEN:
       aud: https://vault.cfdata.org
 
-stages: [sync, pre-build, build, validate, test, package, release, release-internal, review]
+stages:
+  [
+    sync,
+    pre-build,
+    build,
+    validate,
+    test,
+    package,
+    release,
+    release-internal,
+    review,
+  ]
 
 include:
   #####################################################
@@ -56,5 +67,3 @@ include:
   ############## Manual Claude Review #################
   #####################################################
   - component: $CI_SERVER_FQDN/cloudflare/ci/ai/review@~latest
-    inputs:
-      whenToRun: "manual"

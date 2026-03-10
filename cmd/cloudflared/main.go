@@ -13,6 +13,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/access"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/management"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/proxydns"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tail"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
@@ -91,6 +92,7 @@ func main() {
 	tracing.Init(Version)
 	token.Init(Version)
 	tail.Init(bInfo)
+	management.Init(bInfo)
 	runApp(app, graceShutdownC)
 }
 
@@ -152,6 +154,7 @@ To determine if an update happened in a script, check for error code 11.`,
 	cmds = append(cmds, proxydns.Command()) // removed feature, only here for error message
 	cmds = append(cmds, access.Commands()...)
 	cmds = append(cmds, tail.Command())
+	cmds = append(cmds, management.Command())
 	return cmds
 }
 

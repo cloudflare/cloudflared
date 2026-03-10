@@ -10,10 +10,10 @@
 
 # Official Sentry SDK for Go
 
-[![Build Status](https://github.com/getsentry/sentry-go/workflows/go-workflow/badge.svg)](https://github.com/getsentry/sentry-go/actions?query=workflow%3Ago-workflow)
+[![Build Status](https://github.com/getsentry/sentry-go/actions/workflows/test.yml/badge.svg)](https://github.com/getsentry/sentry-go/actions/workflows/test.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/getsentry/sentry-go)](https://goreportcard.com/report/github.com/getsentry/sentry-go)
 [![Discord](https://img.shields.io/discord/621778831602221064)](https://discord.gg/Ww9hbqr)
-[![GoDoc](https://godoc.org/github.com/getsentry/sentry-go?status.svg)](https://godoc.org/github.com/getsentry/sentry-go)
+[![X Follow](https://img.shields.io/twitter/follow/sentry?label=sentry&style=social)](https://x.com/intent/follow?screen_name=sentry)
 [![go.dev](https://img.shields.io/badge/go.dev-pkg-007d9c.svg?style=flat)](https://pkg.go.dev/github.com/getsentry/sentry-go)
 
 `sentry-go` provides a Sentry client implementation for the Go programming
@@ -42,7 +42,7 @@ though support for this configuration is best-effort.
 $ go get github.com/getsentry/sentry-go@latest
 ```
 
-Check out the [list of released versions](https://pkg.go.dev/github.com/getsentry/sentry-go?tab=versions).
+Check out the [list of released versions](https://github.com/getsentry/sentry-go/releases).
 
 ## Configuration
 
@@ -62,30 +62,32 @@ More on this in the [Configuration section of the official Sentry Go SDK documen
 
 The SDK supports reporting errors and tracking application performance.
 
-To get started, have a look at one of our [examples](example/):
-- [Basic error instrumentation](example/basic/main.go)
-- [Error and tracing for HTTP servers](example/http/main.go)
+To get started, have a look at one of our [examples](_examples/):
+- [Basic error instrumentation](_examples/basic/main.go)
+- [Error and tracing for HTTP servers](_examples/http/main.go)
 
 We also provide a [complete API reference](https://pkg.go.dev/github.com/getsentry/sentry-go).
 
 For more detailed information about how to get the most out of `sentry-go`,
-checkout the official documentation:
+check out the official documentation:
 
 - [Sentry Go SDK documentation](https://docs.sentry.io/platforms/go/)
 - Guides:
   - [net/http](https://docs.sentry.io/platforms/go/guides/http/)
   - [echo](https://docs.sentry.io/platforms/go/guides/echo/)
   - [fasthttp](https://docs.sentry.io/platforms/go/guides/fasthttp/)
+  - [fiber](https://docs.sentry.io/platforms/go/guides/fiber/)
   - [gin](https://docs.sentry.io/platforms/go/guides/gin/)
   - [iris](https://docs.sentry.io/platforms/go/guides/iris/)
-  - [martini](https://docs.sentry.io/platforms/go/guides/martini/)
+  - [logrus](https://docs.sentry.io/platforms/go/guides/logrus/)
   - [negroni](https://docs.sentry.io/platforms/go/guides/negroni/)
+  - [slog](https://docs.sentry.io/platforms/go/guides/slog/)
+  - [zerolog](https://docs.sentry.io/platforms/go/guides/zerolog/)
 
 ## Resources
 
 - [Bug Tracker](https://github.com/getsentry/sentry-go/issues)
 - [GitHub Project](https://github.com/getsentry/sentry-go)
-- [![GoDoc](https://godoc.org/github.com/getsentry/sentry-go?status.svg)](https://godoc.org/github.com/getsentry/sentry-go)
 - [![go.dev](https://img.shields.io/badge/go.dev-pkg-007d9c.svg?style=flat)](https://pkg.go.dev/github.com/getsentry/sentry-go)
 - [![Documentation](https://img.shields.io/badge/documentation-sentry.io-green.svg)](https://docs.sentry.io/platforms/go/)
 - [![Discussions](https://img.shields.io/github/discussions/getsentry/sentry-go.svg)](https://github.com/getsentry/sentry-go/discussions)
@@ -96,7 +98,7 @@ checkout the official documentation:
 ## License
 
 Licensed under
-[The 2-Clause BSD License](https://opensource.org/licenses/BSD-2-Clause), see
+[The MIT License](https://opensource.org/licenses/mit/), see
 [`LICENSE`](LICENSE).
 
 ## Community

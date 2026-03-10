@@ -19,12 +19,18 @@ type ManagementResource int
 
 const (
 	Logs ManagementResource = iota
+	Admin
+	HostDetails
 )
 
 func (r ManagementResource) String() string {
 	switch r {
 	case Logs:
 		return "logs"
+	case Admin:
+		return "admin"
+	case HostDetails:
+		return "host_details"
 	default:
 		return ""
 	}

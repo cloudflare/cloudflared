@@ -1,11 +1,46 @@
-minVersion: 0.23.1
-changelogPolicy: simple
+minVersion: 2.14.0
+changelog:
+  policy: auto
+versioning:
+  policy: auto
 artifactProvider:
   name: none
 targets:
   - name: github
-    includeNames: /none/
     tagPrefix: v
+  - name: github
+    tagPrefix: otel/v
+    tagOnly: true
+  - name: github
+    tagPrefix: echo/v
+    tagOnly: true
+  - name: github
+    tagPrefix: fasthttp/v
+    tagOnly: true
+  - name: github
+    tagPrefix: fiber/v
+    tagOnly: true
+  - name: github
+    tagPrefix: gin/v
+    tagOnly: true
+  - name: github
+    tagPrefix: iris/v
+    tagOnly: true
+  - name: github
+    tagPrefix: negroni/v
+    tagOnly: true
+  - name: github
+    tagPrefix: logrus/v
+    tagOnly: true
+  - name: github
+    tagPrefix: slog/v
+    tagOnly: true
+  - name: github
+    tagPrefix: zerolog/v
+    tagOnly: true
+  - name: github
+    tagPrefix: zap/v
+    tagOnly: true
   - name: registry
     sdks:
       github:getsentry/sentry-go:

@@ -25,7 +25,7 @@ class TestTail:
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=3) as websocket:
                 await websocket.send('{"type": "start_streaming"}')
                 await websocket.send('{"type": "stop_streaming"}')
@@ -44,7 +44,7 @@ class TestTail:
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming
                 await websocket.send(json.dumps({
@@ -71,7 +71,7 @@ class TestTail:
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming with tcp logs only
                 await websocket.send(json.dumps({
@@ -98,7 +98,7 @@ class TestTail:
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming with info logs only
                 await websocket.send(json.dumps({
@@ -126,7 +126,7 @@ class TestTail:
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             task = asyncio.ensure_future(start_streaming_to_be_remotely_closed(url))
             override_task = asyncio.ensure_future(start_streaming_override(url))
             await asyncio.wait([task, override_task])

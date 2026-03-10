@@ -361,35 +361,43 @@ func (parsed *rawJSONWebSignature) sanitized(signatureAlgorithms []SignatureAlgo
 	return obj, nil
 }
 
+const tokenDelim = "."
+
 // parseSignedCompact parses a message in compact format.
 func parseSignedCompact(
 	input string,
 	payload []byte,
 	signatureAlgorithms []SignatureAlgorithm,
 ) (*JSONWebSignature, error) {
-	// Three parts is two separators
-	if strings.Count(input, ".") != 2 {
+	protected, s, ok := strings.Cut(input, tokenDelim)
+	if !ok { // no period found
 		return nil, fmt.Errorf("go-jose/go-jose: compact JWS format must have three parts")
 	}
-	parts := strings.SplitN(input, ".", 3)
+	claims, sig, ok := strings.Cut(s, tokenDelim)
+	if !ok { // only one period found
+		return nil, fmt.Errorf("go-jose/go-jose: compact JWS format must have three parts")
+	}
+	if strings.ContainsRune(sig, '.') { // too many periods found
+		return nil, fmt.Errorf("go-jose/go-jose: compact JWS format must have three parts")
+	}
 
-	if parts[1] != "" && payload != nil {
+	if claims != "" && payload != nil {
 		return nil, fmt.Errorf("go-jose/go-jose: payload is not detached")
 	}
 
-	rawProtected, err := base64.RawURLEncoding.DecodeString(parts[0])
+	rawProtected, err := base64.RawURLEncoding.DecodeString(protected)
 	if err != nil {
 		return nil, err
 	}
 
 	if payload == nil {
-		payload, err = base64.RawURLEncoding.DecodeString(parts[1])
+		payload, err = base64.RawURLEncoding.DecodeString(claims)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	signature, err := base64.RawURLEncoding.DecodeString(sig)
 	if err != nil {
 		return nil, err
 	}
