@@ -63,6 +63,10 @@ func (mcr *mockOrchestrator) GetOriginProxy() (OriginProxy, error) {
 	return mcr.originProxy, nil
 }
 
+func (*mockOrchestrator) GetFlowLimiter() cfdflow.Limiter {
+	return nil
+}
+
 func (mcr *mockOrchestrator) WarpRoutingEnabled() (enabled bool) {
 	return true
 }
