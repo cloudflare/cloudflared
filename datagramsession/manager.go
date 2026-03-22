@@ -50,7 +50,7 @@ type manager struct {
 	closedChan         <-chan struct{}
 	sessions           map[uuid.UUID]*Session
 	log                *zerolog.Logger
-	// timeout waiting for an API to finish. This can be overriden in test
+	// timeout waiting for an API to finish. This can be overridden in test
 	timeout time.Duration
 }
 
