@@ -84,6 +84,14 @@ else ifeq ($(shell echo $(LOCAL_ARCH) | head -c 4),armv)
     TARGET_ARCH ?= arm
 else ifeq ($(LOCAL_ARCH),s390x)
     TARGET_ARCH ?= s390x
+else ifeq ($(LOCAL_ARCH),mips)
+    TARGET_ARCH ?= mips
+else ifeq ($(LOCAL_ARCH),mipsle)
+    TARGET_ARCH ?= mipsle
+else ifeq ($(LOCAL_ARCH),mips64)
+    TARGET_ARCH ?= mips64
+else ifeq ($(LOCAL_ARCH),mips64le)
+    TARGET_ARCH ?= mips64le
 else
     $(error This system's architecture $(LOCAL_ARCH) isn't supported)
 endif
@@ -119,8 +127,14 @@ ifneq ($(TARGET_ARM), )
 	ARM_COMMAND := GOARM=$(TARGET_ARM)
 endif
 
+ifneq ($(TARGET_MIPS), )
+	MIPS_COMMAND := GOMIPS=$(TARGET_MIPS)
+endif
+
 ifeq ($(TARGET_ARM), 7)
 	PACKAGE_ARCH := armhf
+else ifeq ($(TARGET_ARCH), mipsle)
+	PACKAGE_ARCH := mipsel
 else
 	PACKAGE_ARCH := $(TARGET_ARCH)
 endif
@@ -146,7 +160,7 @@ cloudflared:
 ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
 endif
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) $(MIPS_COMMAND) go build -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
 ifeq ($(FIPS), true)
 	./check-fips.sh cloudflared
 endif

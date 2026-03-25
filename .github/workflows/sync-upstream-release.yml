@@ -1,0 +1,306 @@
+name: Sync Upstream Release
+
+on:
+  schedule:
+    # Check for new upstream releases every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Specific upstream tag to sync (leave empty to auto-detect latest)'
+        required: false
+        type: string
+      force:
+        description: 'Force re-release even if tag already exists'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_REPO: cloudflare/cloudflared
+  GO_VERSION: '1.24.0'
+
+jobs:
+  check-upstream:
+    name: Check for new upstream release
+    runs-on: ubuntu-latest
+    outputs:
+      new_release: ${{ steps.check.outputs.new_release }}
+      upstream_tag: ${{ steps.check.outputs.upstream_tag }}
+      release_name: ${{ steps.check.outputs.release_name }}
+    steps:
+      - name: Determine upstream tag
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${{ inputs.upstream_tag }}" ]]; then
+            UPSTREAM_TAG="${{ inputs.upstream_tag }}"
+            echo "Using manually specified tag: ${UPSTREAM_TAG}"
+          else
+            echo "Fetching latest release from upstream ${UPSTREAM_REPO}..."
+            UPSTREAM_TAG=$(gh api "repos/${UPSTREAM_REPO}/releases/latest" --jq '.tag_name')
+            echo "Latest upstream release: ${UPSTREAM_TAG}"
+          fi
+
+          if [[ -z "${UPSTREAM_TAG}" ]]; then
+            echo "::error::Failed to determine upstream tag"
+            exit 1
+          fi
+
+          # Check if this release already exists in our fork
+          FORCE="${{ inputs.force }}"
+          EXISTING=$(gh api "repos/${{ github.repository }}/releases/tags/${UPSTREAM_TAG}" --jq '.tag_name' 2>/dev/null || echo "")
+
+          if [[ -n "${EXISTING}" && "${FORCE}" != "true" ]]; then
+            echo "Release ${UPSTREAM_TAG} already exists in fork, skipping."
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New release detected: ${UPSTREAM_TAG}"
+            echo "new_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "upstream_tag=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${UPSTREAM_TAG}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: check-upstream
+    if: needs.check-upstream.outputs.new_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Standard architectures
+          - goos: linux
+            goarch: amd64
+            artifact_suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            artifact_suffix: linux-arm64
+          - goos: linux
+            goarch: arm
+            goarm: '7'
+            artifact_suffix: linux-armhf
+          - goos: linux
+            goarch: arm
+            goarm: '5'
+            artifact_suffix: linux-arm
+          - goos: linux
+            goarch: '386'
+            artifact_suffix: linux-386
+          # EdgeOS / MIPS architectures
+          - goos: linux
+            goarch: mipsle
+            gomips: softfloat
+            artifact_suffix: linux-mipsle
+          - goos: linux
+            goarch: mips64
+            artifact_suffix: linux-mips64
+          # Darwin
+          - goos: darwin
+            goarch: amd64
+            artifact_suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            artifact_suffix: darwin-arm64
+
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Checkout upstream at release tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ needs.check-upstream.outputs.upstream_tag }}
+          fetch-depth: 0
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          GOMIPS: ${{ matrix.gomips }}
+        run: |
+          VERSION="${{ needs.check-upstream.outputs.upstream_tag }}"
+          DATE=$(date -u '+%Y-%m-%d-%H:%M UTC')
+
+          go build -mod=vendor \
+            -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.BuildTime=${DATE}'" \
+            -o cloudflared-${{ matrix.artifact_suffix }} \
+            github.com/cloudflare/cloudflared/cmd/cloudflared
+
+      - name: Generate checksum
+        run: |
+          sha256sum cloudflared-${{ matrix.artifact_suffix }} > cloudflared-${{ matrix.artifact_suffix }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflared-${{ matrix.artifact_suffix }}
+          path: |
+            cloudflared-${{ matrix.artifact_suffix }}
+            cloudflared-${{ matrix.artifact_suffix }}.sha256
+          retention-days: 1
+
+  package-deb:
+    name: Package .deb (${{ matrix.arch }})
+    needs: [check-upstream, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            artifact_suffix: linux-amd64
+            deb_arch: amd64
+          - arch: arm64
+            artifact_suffix: linux-arm64
+            deb_arch: arm64
+          - arch: armhf
+            artifact_suffix: linux-armhf
+            deb_arch: armhf
+          - arch: mipsle
+            artifact_suffix: linux-mipsle
+            deb_arch: mipsel
+          - arch: mips64
+            artifact_suffix: linux-mips64
+            deb_arch: mips64
+
+    steps:
+      - name: Checkout (for packaging scripts)
+        uses: actions/checkout@v4
+
+      - name: Install FPM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install fpm --no-document
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cloudflared-${{ matrix.artifact_suffix }}
+
+      - name: Build .deb package
+        run: |
+          VERSION="${{ needs.check-upstream.outputs.upstream_tag }}"
+          BINARY="cloudflared-${{ matrix.artifact_suffix }}"
+
+          chmod +x "${BINARY}"
+          mkdir -p packaging
+          cp "${BINARY}" packaging/cloudflared
+
+          # Generate man page
+          sed -e "s/\$\${VERSION}/${VERSION}/; s/\$\${DATE}/$(date -u '+%Y-%m-%d-%H:%M UTC')/" \
+            cloudflared_man_template > packaging/cloudflared.1
+
+          fpm -C packaging -s dir -t deb \
+            --description 'Cloudflare Tunnel daemon' \
+            --vendor 'Cloudflare' \
+            --license 'Apache License Version 2.0' \
+            --url 'https://github.com/cloudflare/cloudflared' \
+            -m 'Cloudflare <support@cloudflare.com>' \
+            -a ${{ matrix.deb_arch }} \
+            -v "${VERSION}" \
+            -n cloudflared \
+            --after-install postinst.sh \
+            --after-remove postrm.sh \
+            cloudflared=/usr/bin/ cloudflared.1=/usr/share/man/man1/
+
+          # Rename to a predictable name
+          mv cloudflared_*.deb "cloudflared_${VERSION}_${{ matrix.deb_arch }}.deb"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflared-deb-${{ matrix.arch }}
+          path: cloudflared_*.deb
+          retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: [check-upstream, build, package-deb]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name 'cloudflared-*' -o -name '*.deb' -o -name '*.sha256' \) -exec cp {} release/ \;
+          echo "Release assets:"
+          ls -la release/
+
+      - name: Fetch upstream release notes
+        id: release_notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.check-upstream.outputs.upstream_tag }}"
+          BODY=$(gh api "repos/${UPSTREAM_REPO}/releases/tags/${TAG}" --jq '.body' 2>/dev/null || echo "")
+
+          # Write release notes to file
+          {
+            echo "## Synced from upstream [cloudflare/cloudflared ${TAG}](https://github.com/cloudflare/cloudflared/releases/tag/${TAG})"
+            echo ""
+            echo "### Additional builds in this release"
+            echo "- \`cloudflared-linux-mipsle\` — For UniFi EdgeRouter X / ER-X-SFP (MediaTek MT7621, MIPS little-endian, softfloat)"
+            echo "- \`cloudflared-linux-mips64\` — For UniFi EdgeRouter Lite / ER-4 / ER-6P / ER-12 (Cavium Octeon, MIPS64 big-endian)"
+            echo "- \`.deb\` packages for \`mipsel\` and \`mips64\` architectures, installable on EdgeOS via \`dpkg -i\`"
+            echo ""
+            echo "### EdgeOS Quick Install"
+            echo '```bash'
+            echo "# For EdgeRouter X (mipsle):"
+            echo "curl -L -o /tmp/cloudflared.deb https://github.com/${{ github.repository }}/releases/download/${TAG}/cloudflared_${TAG}_mipsel.deb"
+            echo "sudo dpkg -i /tmp/cloudflared.deb"
+            echo ""
+            echo "# For EdgeRouter Lite/4/6P/12 (mips64):"
+            echo "curl -L -o /tmp/cloudflared.deb https://github.com/${{ github.repository }}/releases/download/${TAG}/cloudflared_${TAG}_mips64.deb"
+            echo "sudo dpkg -i /tmp/cloudflared.deb"
+            echo '```'
+            echo ""
+            echo "---"
+            echo ""
+            echo "### Upstream Release Notes"
+            echo ""
+            if [[ -n "${BODY}" ]]; then
+              echo "${BODY}"
+            else
+              echo "No release notes available from upstream."
+            fi
+          } > release_notes.md
+
+      - name: Delete existing release (if force)
+        if: inputs.force == true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.check-upstream.outputs.upstream_tag }}"
+          gh release delete "${TAG}" --repo "${{ github.repository }}" --yes 2>/dev/null || true
+          gh api "repos/${{ github.repository }}/git/refs/tags/${TAG}" -X DELETE 2>/dev/null || true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.check-upstream.outputs.upstream_tag }}"
+
+          gh release create "${TAG}" \
+            --repo "${{ github.repository }}" \
+            --title "cloudflared ${TAG}" \
+            --notes-file release_notes.md \
+            release/*
