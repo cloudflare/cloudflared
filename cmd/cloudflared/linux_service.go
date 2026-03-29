@@ -225,7 +225,7 @@ func installLinuxService(c *cli.Context) error {
 		return err
 	}
 
-	templateArgs.ExtraArgs = extraArgs
+	templateArgs.ExtraArgs = buildServiceRunArgs(c, extraArgs)
 
 	switch {
 	case isSystemd():
