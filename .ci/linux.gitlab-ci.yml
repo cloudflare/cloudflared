@@ -4,8 +4,8 @@
   outputDir: artifacts
   runner: linux-x86-8cpu-16gb
   stage: build
-  golangVersion: "boring-1.24"
-  imageVersion: "3462-0b23466e0715@sha256:42e8533370666a2463041572293a79e1449001ef803a993e6a860be00858c806"
+  golangVersion: "boring-1.26"
+  imageVersion: "3501-fc698419a625@sha256:aff18c895a50e8451982484e629319e893ebd411675e0482d247079801253e7b"
   CGO_ENABLED: 1
 
 .default-packaging-job: &packaging-job-defaults

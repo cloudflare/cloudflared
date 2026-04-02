@@ -62,7 +62,7 @@ For example, as of January 2023 Cloudflare will support cloudflared version 2023
 ### Requirements
 - [GNU Make](https://www.gnu.org/software/make/)
 - [capnp](https://capnproto.org/install.html)
-- [go >= 1.24](https://go.dev/doc/install)
+- [go >= 1.26](https://go.dev/doc/install)
 - Optional tools:
   - [capnpc-go](https://pkg.go.dev/zombiezen.com/go/capnproto2/capnpc-go)
   - [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports)
