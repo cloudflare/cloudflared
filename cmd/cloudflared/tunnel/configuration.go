@@ -384,16 +384,12 @@ func determineICMPSources(c *cli.Context, logger *zerolog.Logger) (netip.Addr, n
 
 	logger.Info().Msgf("ICMP proxy will use %s as source for IPv4", ipv4Src)
 
-	ipv6Src, zone, err := determineICMPv6Src(c.String(flags.ICMPV6Src), logger, ipv4Src)
+	ipv6Src, err := determineICMPv6Src(c.String(flags.ICMPV6Src), logger)
 	if err != nil {
 		return netip.Addr{}, netip.Addr{}, errors.Wrap(err, "failed to determine IPv6 source address for ICMP proxy")
 	}
 
-	if zone != "" {
-		logger.Info().Msgf("ICMP proxy will use %s in zone %s as source for IPv6", ipv6Src, zone)
-	} else {
-		logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
-	}
+	logger.Info().Msgf("ICMP proxy will use %s as source for IPv6", ipv6Src)
 
 	return ipv4Src, ipv6Src, nil
 }
@@ -418,80 +414,24 @@ func determineICMPv4Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Ad
 	return addr, nil
 }
 
-type interfaceIP struct {
-	name string
-	ip   net.IP
-}
-
-func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger, ipv4Src netip.Addr) (addr netip.Addr, zone string, err error) {
+func determineICMPv6Src(userDefinedSrc string, logger *zerolog.Logger) (netip.Addr, error) {
 	if userDefinedSrc != "" {
 		addr, err := netip.ParseAddr(userDefinedSrc)
 		if err != nil {
-			return netip.Addr{}, "", err
+			return netip.Addr{}, err
 		}
 		if addr.Is6() {
-			return addr, addr.Zone(), nil
+			return addr, nil
 		}
-		return netip.Addr{}, "", fmt.Errorf("expect IPv6, but %s is IPv4", userDefinedSrc)
+		return netip.Addr{}, fmt.Errorf("expect IPv6, but %s is IPv4", userDefinedSrc)
 	}
 
-	// Loop through all the interfaces, the preference is
-	// 1. The interface where ipv4Src is in
-	// 2. Interface with IPv6 address
-	// 3. Unspecified interface
-
-	interfaces, err := net.Interfaces()
+	addr, err := findLocalAddr(net.ParseIP("fd00::1"), 53)
 	if err != nil {
-		return netip.IPv6Unspecified(), "", nil
+		addr = netip.IPv6Unspecified()
+		logger.Debug().Err(err).Msgf("Failed to determine the IPv6 for this machine. It will use %s to send/listen for ICMPv6 echo", addr)
 	}
-
-	interfacesWithIPv6 := make([]interfaceIP, 0)
-	for _, interf := range interfaces {
-		interfaceAddrs, err := interf.Addrs()
-		if err != nil {
-			continue
-		}
-
-		foundIPv4SrcInterface := false
-		for _, interfaceAddr := range interfaceAddrs {
-			if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
-				ip := ipnet.IP
-				if ip.Equal(ipv4Src.AsSlice()) {
-					foundIPv4SrcInterface = true
-				}
-				if ip.To4() == nil {
-					interfacesWithIPv6 = append(interfacesWithIPv6, interfaceIP{
-						name: interf.Name,
-						ip:   ip,
-					})
-				}
-			}
-		}
-		// Found the interface of ipv4Src. Loop through the addresses to see if there is an IPv6
-		if foundIPv4SrcInterface {
-			for _, interfaceAddr := range interfaceAddrs {
-				if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
-					ip := ipnet.IP
-					if ip.To4() == nil {
-						addr, err := netip.ParseAddr(ip.String())
-						if err == nil {
-							return addr, interf.Name, nil
-						}
-					}
-				}
-			}
-		}
-	}
-
-	for _, interf := range interfacesWithIPv6 {
-		addr, err := netip.ParseAddr(interf.ip.String())
-		if err == nil {
-			return addr, interf.name, nil
-		}
-	}
-	logger.Debug().Err(err).Msgf("Failed to determine the IPv6 for this machine. It will use %s to send/listen for ICMPv6 echo", netip.IPv6Unspecified())
-
-	return netip.IPv6Unspecified(), "", nil
+	return addr, nil
 }
 
 // FindLocalAddr tries to dial UDP and returns the local address picked by the OS
