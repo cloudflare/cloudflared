@@ -186,20 +186,141 @@ sudo dnf install cloudflared
 </pre>
 
 
-<h2><a name="gokeyless-packages"></a>Gokeyless</a></h2>
-<h3><a name="go-keyless-debian">Debian</a></h3>
+<h2><a name="gokeyless-packages">Gokeyless</a></h2>
+
+<ul>
+    <li><a href="#gokeyless-debian-any">Any Debian Based Distribution (Recommended)</a></li>
+    <li><a href="#gokeyless-debian-bookworm">Debian Bookworm</a></li>
+    <li><a href="#gokeyless-ubuntu-focal">Ubuntu 20.04 (Focal Fossa)</a></li>
+    <li><a href="#gokeyless-ubuntu-jammy">Ubuntu 22.04 (Jammy Jellyfish)</a></li>
+    <li><a href="#gokeyless-ubuntu-noble">Ubuntu 24.04 (Noble Numbat)</a></li>
+    <li><a href="#gokeyless-amazon-linux">Amazon Linux</a></li>
+    <li><a href="#gokeyless-rhel-generic">RHEL Generic</a></li>
+    <li><a href="#gokeyless-centos-7">Centos 7</a></li>
+    <li><a href="#gokeyless-centos-8">Centos 8</a></li>
+    <li><a href="#gokeyless-centos-stream">Centos Stream</a></li>
+</ul>
+
+<h3 style="color: #d9534f;">Warning: Public Key Rollover (30 October 2025)</h3>
+<p style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 10px 0;">
+    <strong>We have rolled our public key for package signing.</strong> If you are using RPM-based distributions (RHEL,
+    CentOS, Amazon Linux, etc.) or Debian Trixie and have the old key installed, RPM/Deb packages will no longer work with the old key.
+    Please update your repository configuration using the instructions below to ensure you can continue receiving
+    package updates. The previous keys will still work for other distributions for the time being, but it is now DEPRECATED and will be removed on 30 April 2026
+</p>
+
+<h3><a name="gokeyless-debian-any">Any Debian Based Distribution (Recommended)</a></h3>
 <pre>
+# Add cloudflare gpg key
 sudo mkdir -p --mode=0755 /usr/share/keyrings
 curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
 
 # Add this repo to your apt repositories
-echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless buster main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless any main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
 
 # install gokeyless
 sudo apt-get update && sudo apt-get install gokeyless
 </pre>
 
-<h3><a name="go-keyless-centos">Centos 8</a></h3>
+<h3><a name="gokeyless-debian-bookworm">Debian Bookworm</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless bookworm main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
+
+# install gokeyless
+sudo apt-get update && sudo apt-get install gokeyless
+</pre>
+
+<h3><a name="gokeyless-ubuntu-focal">Ubuntu 20.04 (Focal Fossa)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless focal main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
+
+# install gokeyless
+sudo apt-get update && sudo apt-get install gokeyless
+</pre>
+
+<h3><a name="gokeyless-ubuntu-jammy">Ubuntu 22.04 (Jammy Jellyfish)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless jammy main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
+
+# install gokeyless
+sudo apt-get update && sudo apt-get install gokeyless
+</pre>
+
+<h3><a name="gokeyless-ubuntu-noble">Ubuntu 24.04 (Noble Numbat)</a></h3>
+<pre>
+# Add cloudflare gpg key
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+
+# Add this repo to your apt repositories
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/gokeyless noble main' | sudo tee /etc/apt/sources.list.d/cloudflare.list
+
+# install gokeyless
+sudo apt-get update && sudo apt-get install gokeyless
+</pre>
+
+<h3><a name="gokeyless-amazon-linux">Amazon Linux</a></h3>
+<pre>
+# Add gokeyless.repo to /etc/yum.repos.d/
+curl -fsSl https://pkg.cloudflare.com/gokeyless.repo | sudo tee /etc/yum.repos.d/gokeyless.repo
+
+#update repo
+sudo yum update
+
+# install gokeyless
+sudo yum install gokeyless
+</pre>
+
+<h3><a name="gokeyless-rhel-generic">RHEL Generic</a></h3>
+<pre>
+# Add gokeyless.repo to /etc/yum.repos.d/
+curl -fsSl https://pkg.cloudflare.com/gokeyless.repo | sudo tee /etc/yum.repos.d/gokeyless.repo
+
+#update repo
+sudo yum update
+
+# install gokeyless
+sudo yum install gokeyless
+</pre>
+
+<h3><a name="gokeyless-centos-7">Centos 7</a></h3>
+<pre>
+# This requires yum config-manager
+sudo yum install yum-utils
+
+# Add gokeyless.repo to config-manager
+sudo yum-config-manager --add-repo https://pkg.cloudflare.com/gokeyless.repo
+
+# install gokeyless
+sudo yum install gokeyless
+</pre>
+
+<h3><a name="gokeyless-centos-8">Centos 8</a></h3>
+<pre>
+# This requires dnf config-manager
+# Add gokeyless.repo to config-manager
+sudo dnf config-manager --add-repo https://pkg.cloudflare.com/gokeyless.repo
+
+# install gokeyless
+sudo dnf install gokeyless
+</pre>
+
+<h3><a name="gokeyless-centos-stream">Centos Stream</a></h3>
 <pre>
 # This requires dnf config-manager
 # Add gokeyless.repo to config-manager
