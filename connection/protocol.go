@@ -19,6 +19,9 @@ const (
 	edgeH2TLSServerName = "h2.cftunnel.com"
 	// edgeQUICServerName is the server name to establish quic connection with edge.
 	edgeQUICServerName = "quic.cftunnel.com"
+	// probeTLSServerName is the server name used for pre-flight connectivity checks.
+	probeTLSServerName = "probe.cftunnel.com"
+	quicProtos         = "argotunnel"
 	AutoSelectFlag     = "auto"
 	// SRV and TXT record resolution TTL
 	ResolveTTL = time.Hour
@@ -69,7 +72,24 @@ func (p Protocol) TLSSettings() *TLSSettings {
 	case QUIC:
 		return &TLSSettings{
 			ServerName: edgeQUICServerName,
-			NextProtos: []string{"argotunnel"},
+			NextProtos: []string{quicProtos},
+		}
+	default:
+		return nil
+	}
+}
+
+// ProbeTLSSettings returns TLS settings for pre-flight connectivity checks.
+func (p Protocol) ProbeTLSSettings() *TLSSettings {
+	switch p {
+	case HTTP2:
+		return &TLSSettings{
+			ServerName: probeTLSServerName,
+		}
+	case QUIC:
+		return &TLSSettings{
+			ServerName: probeTLSServerName,
+			NextProtos: []string{quicProtos},
 		}
 	default:
 		return nil
