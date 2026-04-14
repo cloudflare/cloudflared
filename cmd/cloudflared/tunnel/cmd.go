@@ -44,6 +44,7 @@ import (
 )
 
 const (
+	//nolint:gosec // This is the Sentry DSN for cloudflared which is safe to be public
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
 
 	LogFieldCommand             = "command"
@@ -230,7 +231,7 @@ func TunnelCommand(c *cli.Context) error {
 		return err
 	}
 
-	// Run a adhoc named tunnel
+	// Run an adhoc named tunnel
 	// Allows for the creation, routing (optional), and startup of a tunnel in one command
 	// --name required
 	// --url or --hello-world required
@@ -240,8 +241,8 @@ func TunnelCommand(c *cli.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "Invalid hostname provided")
 		}
-		url := c.String("url")
-		if url == hostname && url != "" && hostname != "" {
+		tunnelURL := c.String("url")
+		if tunnelURL == hostname && tunnelURL != "" && hostname != "" {
 			return fmt.Errorf("hostname and url shouldn't match. See --help for more information")
 		}
 
@@ -257,7 +258,7 @@ func TunnelCommand(c *cli.Context) error {
 
 	// If user provides a config, check to see if they meant to use `tunnel run` instead
 	if ref := config.GetConfiguration().TunnelID; ref != "" {
-		return fmt.Errorf("Use `cloudflared tunnel run` to start tunnel %s", ref)
+		return fmt.Errorf("use `cloudflared tunnel run` to start tunnel %s", ref)
 	}
 
 	// Classic tunnel usage is no longer supported
@@ -345,12 +346,14 @@ func StartServer(
 				traceLog.Err(err).Msg("Failed to close temporary trace output file")
 			}
 			traceOutputFilepath := c.String(cfdflags.TraceOutput)
+			//nolint:gosec // File path is safe because it is explicitly provided by the user via the --trace-output flag
 			if err := os.Rename(tmpTraceFile.Name(), traceOutputFilepath); err != nil {
 				traceLog.
 					Err(err).
 					Str(LogFieldTraceOutputFilepath, traceOutputFilepath).
 					Msg("Failed to rename temporary trace output file")
 			} else {
+				//nolint:gosec // File path is safe, since it is created by os.CreateTemp
 				err := os.Remove(tmpTraceFile.Name())
 				if err != nil {
 					traceLog.Err(err).Msg("Failed to remove the temporary trace file")
@@ -368,7 +371,7 @@ func StartServer(
 	info.Log(log)
 	logClientOptions(c, log)
 
-	// this context drives the server, when it's cancelled tunnel and all other components (origins, dns, etc...) should stop
+	// this context drives the server, when it's canceled tunnel and all other components (origins, dns, etc...) should stop
 	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 
@@ -451,7 +454,7 @@ func StartServer(
 		return errors.Wrap(err, "Error opening metrics server listener")
 	}
 
-	defer metricsListener.Close()
+	defer func() { _ = metricsListener.Close() }()
 	wg.Add(1)
 
 	go func() {
@@ -565,13 +568,14 @@ func writePidFile(waitForSignal *signal.Signal, pidPathname string, log *zerolog
 		log.Err(err).Str(LogFieldPIDPathname, pidPathname).Msg("Unable to expand the path, try to use absolute path in --pidfile")
 		return
 	}
-	file, err := os.Create(expandedPath)
+	cleanPath := filepath.Clean(expandedPath)
+	file, err := os.Create(cleanPath)
 	if err != nil {
 		log.Err(err).Str(LogFieldExpandedPath, expandedPath).Msg("Unable to write pid")
 		return
 	}
-	defer file.Close()
-	fmt.Fprintf(file, "%d", os.Getpid())
+	defer func() { _ = file.Close() }()
+	_, _ = fmt.Fprintf(file, "%d", os.Getpid())
 }
 
 func hostnameFromURI(uri string) string {
@@ -1135,6 +1139,12 @@ func sshFlags(shouldHide bool) []cli.Flag {
 }
 
 func stdinControl(reconnectCh chan supervisor.ReconnectSignal, log *zerolog.Logger) {
+	helpStr := strings.Join([]string{
+		"Supported command:",
+		"reconnect [delay]",
+		"- restarts one randomly chosen connection with optional delay before reconnect\n",
+	}, "\n")
+
 	for {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -1143,7 +1153,7 @@ func stdinControl(reconnectCh chan supervisor.ReconnectSignal, log *zerolog.Logg
 
 			switch parts[0] {
 			case "":
-				break
+				continue
 			case "reconnect":
 				var reconnect supervisor.ReconnectSignal
 				if len(parts) > 1 {
@@ -1155,13 +1165,11 @@ func stdinControl(reconnectCh chan supervisor.ReconnectSignal, log *zerolog.Logg
 				}
 				log.Info().Msgf("Sending %+v", reconnect)
 				reconnectCh <- reconnect
+			case "help":
+				log.Info().Msg(helpStr)
 			default:
 				log.Info().Str(LogFieldCommand, command).Msg("Unknown command")
-				fallthrough
-			case "help":
-				log.Info().Msg(`Supported command:
-reconnect [delay]
-- restarts one randomly chosen connection with optional delay before reconnect`)
+				log.Info().Msg(helpStr)
 			}
 		}
 	}
