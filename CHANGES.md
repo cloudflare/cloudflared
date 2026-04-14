@@ -1,3 +1,7 @@
+## 2026.4.0
+### Breaking Change
+- The default value of `--edge-ip-version` has changed from `4` to `auto`. This means cloudflared will now use whichever address family (IPv4 or IPv6) the system resolver returns first, instead of always preferring IPv4. Users who require IPv4-only connections should explicitly set `--edge-ip-version 4`.
+
 ## 2026.2.0
 ### Breaking Change
 - Removes the `proxy-dns` feature from cloudflared. This feature allowed running a local DNS over HTTPS (DoH) proxy.

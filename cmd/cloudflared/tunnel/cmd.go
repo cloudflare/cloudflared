@@ -631,7 +631,7 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Name:    cfdflags.EdgeIpVersion,
 			Usage:   "Cloudflare Edge IP address version to connect with. {4, 6, auto}",
 			EnvVars: []string{"TUNNEL_EDGE_IP_VERSION"},
-			Value:   "4",
+			Value:   "auto",
 			Hidden:  false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
