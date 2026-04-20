@@ -1,0 +1,10 @@
+# Example Cloudflare Tunnel config for koolshare router.
+# Copy this file to /koolshare/configs/cloudflared/config.yml and update values.
+
+tunnel: <your-tunnel-uuid>
+credentials-file: /koolshare/configs/cloudflared/<your-tunnel-uuid>.json
+
+ingress:
+  - hostname: router.example.com
+    service: http://127.0.0.1:80
+  - service: http_status:404
