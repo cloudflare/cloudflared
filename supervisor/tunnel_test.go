@@ -4,9 +4,11 @@ import (
 	"testing"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
@@ -16,6 +18,40 @@ import (
 type dynamicMockFetcher struct {
 	protocolPercents edgediscovery.ProtocolPercents
 	err              error
+}
+
+func TestConnectedFuseUpdatesHAConnectionsOnce(t *testing.T) {
+	fuse := newBooleanFuse()
+	connectedFuse := &connectedFuse{
+		fuse: fuse,
+		backoff: &protocolFallback{
+			BackoffHandler: retry.NewBackoff(3, time.Millisecond, false),
+		},
+	}
+	initial := haConnectionsValue(t)
+	defer haConnections.Set(initial)
+
+	connectedFuse.Connected()
+	assert.Equal(t, initial+1, haConnectionsValue(t))
+
+	connectedFuse.Connected()
+	assert.Equal(t, initial+1, haConnectionsValue(t))
+}
+
+func TestUnconnectedFuseDoesNotUpdateHAConnections(t *testing.T) {
+	initial := haConnectionsValue(t)
+	defer haConnections.Set(initial)
+
+	fuse := newBooleanFuse()
+	fuse.Fuse(false)
+
+	assert.Equal(t, initial, haConnectionsValue(t))
+}
+
+func haConnectionsValue(t *testing.T) float64 {
+	var metric dto.Metric
+	require.NoError(t, haConnections.Write(&metric))
+	return metric.GetGauge().GetValue()
 }
 
 func (dmf *dynamicMockFetcher) fetch() edgediscovery.PercentageFetcher {
