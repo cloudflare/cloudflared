@@ -3,6 +3,8 @@ package prechecks
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
@@ -13,12 +15,9 @@ type Status int
 const (
 	// Pass indicates the check completed successfully.
 	Pass Status = iota
-	// Warn indicates a soft failure: cloudflared can still run but in a
-	// degraded state (e.g. one transport blocked, API unreachable).
-	Warn
-	// Fail indicates a check failure that the user should act on (e.g.
-	// DNS unresolvable, both transports blocked). cloudflared still starts;
-	// this status is purely informational.
+	// Fail indicates the check did not succeed. Whether this is a hard failure
+	// or a degraded-but-functional state depends on which probe(s) failed — see
+	// Report.hasHardFail and Report.hasWarn.
 	Fail
 	// Skip indicates the check was not executed because a prerequisite
 	// check (typically DNS) failed first.
@@ -30,8 +29,6 @@ func (s Status) String() string {
 	switch s {
 	case Pass:
 		return "PASS"
-	case Warn:
-		return "WARN"
 	case Fail:
 		return "FAIL"
 	case Skip:
@@ -41,8 +38,24 @@ func (s Status) String() string {
 	}
 }
 
+// ProbeType identifies which connectivity probe produced a CheckResult.
+// It is used by hasHardFail and hasWarn to evaluate severity without
+// matching against human-readable strings.
+type ProbeType int
+
+const (
+	ProbeTypeDNS           ProbeType = iota // DNS resolution
+	ProbeTypeQUIC                           // UDP/QUIC transport
+	ProbeTypeHTTP2                          // TCP/HTTP2 transport
+	ProbeTypeManagementAPI                  // Cloudflare management API
+)
+
 // CheckResult holds the outcome of one individual connectivity probe.
 type CheckResult struct {
+	// Type identifies which probe produced this result. Used for severity
+	// classification in hasHardFail and hasWarn.
+	Type ProbeType
+
 	// Component is the human-readable probe category shown in the table header
 	// column, e.g. "DNS Resolution", "QUIC Connectivity".
 	Component string
@@ -58,9 +71,8 @@ type CheckResult struct {
 	// "Resolved successfully" or "Handshake failed".
 	Details string
 
-	// Action is non-empty when ProbeStatus is Warn or Fail and contains
-	// a human-readable remediation instruction, e.g.
-	// "Allow outbound QUIC on port 7844."
+	// Action is non-empty when ProbeStatus is Fail and contains a human-readable
+	// remediation instruction, e.g. "Allow outbound QUIC on port 7844."
 	Action string
 }
 
@@ -68,6 +80,11 @@ type CheckResult struct {
 // Pre-checks run in parallel with tunnel initialization and are purely
 // diagnostic: the Report is displayed to the user but never gates startup.
 type Report struct {
+	// RunID is a unique identifier for this pre-check run. It is included in
+	// every structured log line so that all results from a single invocation
+	// can be correlated across log aggregation systems.
+	RunID uuid.UUID
+
 	// Results contains one entry per executed probe, in the order they were
 	// collected.
 	Results []CheckResult
