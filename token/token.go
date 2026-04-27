@@ -400,7 +400,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	token, err := getTokenIfExists(path)
+	raw, token, err := getTokenIfExists(path)
 	if err != nil {
 		return "", err
 	}
@@ -414,7 +414,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.CompactSerialize()
+	return raw, nil
 }
 
 func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
@@ -422,7 +422,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	token, err := getTokenIfExists(path)
+	raw, token, err := getTokenIfExists(path)
 	if err != nil {
 		return "", err
 	}
@@ -436,20 +436,24 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
-	return token.CompactSerialize()
+	return raw, nil
 }
 
-// GetTokenIfExists will return the token from local storage if it exists and not expired
-func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
+// getTokenIfExists will return the token from local storage if it exists and not expired.
+// It returns both the raw token string (as stored on disk) and the parsed JWS object.
+// Callers should use the raw string when returning the token to preserve the original
+// serialization and avoid invalidating the JWT signature.
+func getTokenIfExists(path string) (string, *jose.JSONWebSignature, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	token, err := jose.ParseSigned(string(content), signatureAlgs)
+	raw := strings.TrimSpace(string(content))
+	token, err := jose.ParseSigned(raw, signatureAlgs)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return token, nil
+	return raw, token, nil
 }
 
 // RemoveTokenIfExists removes the a token from local storage if it exists
