@@ -61,6 +61,9 @@ type TunnelConfig struct {
 
 	NeedPQ bool
 
+	// NoPrechecks disables connectivity pre-checks at startup.
+	NoPrechecks bool
+
 	NamedTunnel         *connection.TunnelProperties
 	ProtocolSelector    connection.ProtocolSelector
 	EdgeTLSConfigs      map[connection.Protocol]*tls.Config

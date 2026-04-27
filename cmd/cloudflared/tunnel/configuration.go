@@ -261,6 +261,7 @@ func prepareTunnelConfig(
 		DisableQUICPathMTUDiscovery:         c.Bool(flags.QuicDisablePathMTUDiscovery),
 		QUICConnectionLevelFlowControlLimit: c.Uint64(flags.QuicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(flags.QuicStreamLevelFlowControlLimit),
+		NoPrechecks:                         c.Bool(flags.NoPrechecks),
 		OriginDNSService:                    dnsService,
 		OriginDialerService:                 originDialerService,
 	}
@@ -300,7 +301,7 @@ func gracePeriod(c *cli.Context) (time.Duration, error) {
 }
 
 func isRunningFromTerminal() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) // nolint:gosec
 }
 
 // ParseConfigIPVersion returns the IP version from possible expected values from config
@@ -341,7 +342,7 @@ func testIPBindable(ip net.IP) error {
 	if err != nil {
 		return err
 	}
-	listener.Close()
+	_ = listener.Close()
 	return nil
 }
 
@@ -503,7 +504,7 @@ func findLocalAddr(dst net.IP, port int) (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	defer udpConn.Close()
+	defer func() { _ = udpConn.Close() }()
 	localAddrPort, err := netip.ParseAddrPort(udpConn.LocalAddr().String())
 	if err != nil {
 		return netip.Addr{}, err

@@ -120,6 +120,9 @@ const (
 	// NoAutoUpdate is the command line flag to disable cloudflared from checking for updates
 	NoAutoUpdate = "no-autoupdate"
 
+	// NoPrechecks is the command line flag to skip connectivity pre-checks at startup.
+	NoPrechecks = "no-prechecks"
+
 	// LogLevel is the command line flag for the cloudflared logging level
 	LogLevel = "loglevel"
 
