@@ -257,7 +257,28 @@ type Configuration struct {
 	Ingress       []UnvalidatedIngressRule
 	WarpRouting   WarpRoutingConfig   `yaml:"warp-routing"`
 	OriginRequest OriginRequestConfig `yaml:"originRequest"`
+	Kubernetes    KubernetesConfig    `yaml:"kubernetes"`
 	sourceFile    string
+}
+
+// KubernetesConfig holds the configuration for the Kubernetes service discovery
+// integration. When enabled, cloudflared will discover annotated Kubernetes
+// services and automatically generate ingress rules for them.
+type KubernetesConfig struct {
+	// Enabled turns the Kubernetes watcher on.
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Namespace limits discovery to a single namespace. Empty means all namespaces.
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	// BaseDomain is the base domain appended when generating hostnames.
+	BaseDomain string `yaml:"baseDomain,omitempty" json:"baseDomain,omitempty"`
+	// KubeconfigPath is an optional path to a kubeconfig file.
+	KubeconfigPath string `yaml:"kubeconfigPath,omitempty" json:"kubeconfigPath,omitempty"`
+	// ExposeAPIServer, when true, creates an ingress rule for the K8s API server.
+	ExposeAPIServer bool `yaml:"exposeAPIServer,omitempty" json:"exposeAPIServer,omitempty"`
+	// APIServerHostname is the public hostname for the K8s API server.
+	APIServerHostname string `yaml:"apiServerHostname,omitempty" json:"apiServerHostname,omitempty"`
+	// LabelSelector is an optional Kubernetes label selector.
+	LabelSelector string `yaml:"labelSelector,omitempty" json:"labelSelector,omitempty"`
 }
 
 type WarpRoutingConfig struct {

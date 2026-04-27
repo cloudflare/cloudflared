@@ -3,6 +3,7 @@ package tunnel
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"github.com/cloudflare/cloudflared/diagnostic"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/k8s"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
 	"github.com/cloudflare/cloudflared/metrics"
@@ -176,6 +178,7 @@ func Commands() []*cli.Command {
 		buildCleanupCommand(),
 		buildTokenCommand(),
 		buildDiagCommand(),
+		buildKubernetesSubcommand(),
 		proxydns.Command(), // removed feature, only here for error message
 		cliutil.RemovedCommand("db-connect"),
 	}
@@ -447,6 +450,45 @@ func StartServer(
 	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, internalRules, tunnelConfig.Log)
 	if err != nil {
 		return err
+	}
+
+	// Start Kubernetes service watcher if enabled
+	cfg := config.GetConfiguration()
+	if cfg.Kubernetes.Enabled {
+		k8sCfg := &k8s.Config{
+			Enabled:           cfg.Kubernetes.Enabled,
+			Namespace:         cfg.Kubernetes.Namespace,
+			BaseDomain:        cfg.Kubernetes.BaseDomain,
+			KubeconfigPath:    cfg.Kubernetes.KubeconfigPath,
+			ExposeAPIServer:   cfg.Kubernetes.ExposeAPIServer,
+			APIServerHostname: cfg.Kubernetes.APIServerHostname,
+			LabelSelector:     cfg.Kubernetes.LabelSelector,
+		}
+		if err := k8sCfg.Validate(); err != nil {
+			log.Warn().Err(err).Msg("Kubernetes config validation failed, watcher will not start")
+		} else {
+			k8sWatcher := k8s.NewWatcher(k8sCfg, log, func(services []k8s.ServiceInfo) {
+				log.Info().Int("count", len(services)).Msg("Kubernetes service change detected, updating ingress rules")
+				k8sRules := k8s.GenerateIngressRules(services, log)
+				updatedIngress := k8s.MergeWithExistingRules(cfg.Ingress, k8sRules)
+				newConfigBytes, err := json.Marshal(ingress.RemoteConfigJSON{
+					IngressRules: updatedIngress,
+					WarpRouting:  cfg.WarpRouting,
+				})
+				if err != nil {
+					log.Err(err).Msg("Failed to marshal updated K8s ingress config")
+					return
+				}
+				resp := orchestrator.UpdateK8sConfig(newConfigBytes)
+				if resp.Err != nil {
+					log.Err(resp.Err).Msg("Failed to apply K8s ingress config update")
+				} else {
+					log.Info().Int("services", len(services)).Msg("Successfully applied K8s ingress config update")
+				}
+			})
+			go k8sWatcher.Run(ctx)
+			log.Info().Msg("Kubernetes service watcher started")
+		}
 	}
 
 	metricsListener, err := metrics.CreateMetricsListener(&listeners, c.String("metrics"))
