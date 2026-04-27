@@ -45,7 +45,21 @@ Once installed, you can authenticate `cloudflared` into your Cloudflare account 
   * Via public [DNS records in Cloudflare](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/dns/)
   * Or via a public hostname guided by a [Cloudflare Load Balancer](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/public-load-balancers/)
   * Or from [WARP client private traffic](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/private-net/)
+ 
+## Required permissions
 
+### Account level permissions
+
+- Cloudflare One Connector Read and Monitor: cloudflared;
+- Cloudflare Gateway
+- Cloudflare Zero Trust
+- Load Balancer
+- Cloudflare Access
+
+## Zone level permissions (scope to the relevant domain)
+
+- Zone Versioning Read
+- Domain DNS
 
 ## TryCloudflare
 
