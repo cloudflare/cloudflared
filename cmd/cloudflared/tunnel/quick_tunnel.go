@@ -84,7 +84,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 
 	if !sc.c.IsSet(flags.Protocol) {
-		_ = sc.c.Set(flags.Protocol, "quic")
+		_ = sc.c.Set(flags.Protocol, "auto")
 	}
 
 	// Override the number of connections used. Quick tunnels shouldn't be used for production usage,
