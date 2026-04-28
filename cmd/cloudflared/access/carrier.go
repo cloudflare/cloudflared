@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -68,6 +70,21 @@ func ssh(c *cli.Context) error {
 		outputTerminal = logger.EnableTerminalLog
 	}
 	log := logger.CreateSSHLoggerFromContext(c, outputTerminal)
+
+	if pidFile := c.String(sshPidFileFlag); pidFile != "" {
+		expandedPidFile, err := homedir.Expand(pidFile)
+		if err != nil {
+			log.Err(err).Msg("unable to expand pidfile path")
+		} else if err := writePidFile(expandedPidFile, log); err != nil {
+			log.Err(err).Msg("failed to write pidfile")
+		} else {
+			defer func() {
+				if err := os.Remove(expandedPidFile); err != nil {
+					log.Err(err).Msg("failed to remove pidfile")
+				}
+			}()
+		}
+	}
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
@@ -144,4 +161,18 @@ func ssh(c *cli.Context) error {
 		s = stream.NewDebugStream(s, &logger, maxMessages)
 	}
 	return carrier.StartClient(wsConn, s, options)
+}
+
+// writePidFile writes the current process ID to the given path.
+func writePidFile(path string, log *zerolog.Logger) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("unable to create pidfile %q: %w", path, err)
+	}
+	defer file.Close()
+	if _, err := fmt.Fprintf(file, "%d", os.Getpid()); err != nil {
+		return fmt.Errorf("unable to write pid to %q: %w", path, err)
+	}
+	log.Info().Str("pidfile", path).Msg("wrote pidfile")
+	return nil
 }
