@@ -189,10 +189,12 @@ type TunnelServer interface {
 }
 
 func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolFallback *protocolFallback, connectedSignal *signal.Signal) error {
-	haConnections.Inc()
-	defer haConnections.Dec()
-
 	connectedFuse := newBooleanFuse()
+	defer func() {
+		if connectedFuse.Value() {
+			haConnections.Dec()
+		}
+	}()
 	go func() {
 		if connectedFuse.Await() {
 			connectedSignal.Notify()
@@ -705,7 +707,9 @@ type connectedFuse struct {
 }
 
 func (cf *connectedFuse) Connected() {
-	cf.fuse.Fuse(true)
+	if cf.fuse.Fuse(true) {
+		haConnections.Inc()
+	}
 	cf.backoff.reset()
 }
 
