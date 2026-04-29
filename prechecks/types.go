@@ -90,8 +90,9 @@ type Report struct {
 	Results []CheckResult
 
 	// SuggestedProtocol is the connection protocol the pre-checks recommend
-	// based on transport probe results.
-	SuggestedProtocol connection.Protocol
+	// based on transport probe results. Nil when no valid protocol is available
+	// (e.g., when both transports fail or DNS is unresolvable).
+	SuggestedProtocol *connection.Protocol
 }
 
 // Config controls the behavior of a pre-check Run().

@@ -110,9 +110,19 @@ func summaryLine(r Report) string {
 	case r.hasHardFail():
 		return "SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel."
 	case r.hasWarn():
-		return fmt.Sprintf("SUMMARY: Environment ready with degraded transport. cloudflared will proceed using '%s'.", r.SuggestedProtocol)
+		if r.SuggestedProtocol == nil {
+			return "SUMMARY: Environment ready with degraded transport."
+		}
+
+		protocol := r.SuggestedProtocol.String()
+		return fmt.Sprintf("SUMMARY: Environment ready with degraded transport. cloudflared will proceed using '%s'.", protocol)
 	default:
-		return fmt.Sprintf("SUMMARY: Environment is healthy. cloudflared will use '%s' as primary protocol.", r.SuggestedProtocol)
+		if r.SuggestedProtocol == nil {
+			return "SUMMARY: Environment is healthy."
+		}
+
+		protocol := r.SuggestedProtocol.String()
+		return fmt.Sprintf("SUMMARY: Environment is healthy. cloudflared will use '%s' as primary protocol.", protocol)
 	}
 }
 
@@ -210,9 +220,16 @@ func (r Report) LogEvent(logger *zerolog.Logger) {
 			Msg(logMsgPrecheck)
 	}
 
-	logger.Info().
-		Str(logFieldRunID, runID).
-		Bool(logFieldHardFail, r.hasHardFail()).
-		Str(logFieldSuggestedProtocol, r.SuggestedProtocol.String()).
-		Msg(logMsgPrecheckComplete)
+	if r.SuggestedProtocol != nil {
+		logger.Info().
+			Str(logFieldRunID, runID).
+			Bool(logFieldHardFail, r.hasHardFail()).
+			Str(logFieldSuggestedProtocol, r.SuggestedProtocol.String()).
+			Msg(logMsgPrecheckComplete)
+	} else {
+		logger.Info().
+			Str(logFieldRunID, runID).
+			Bool(logFieldHardFail, r.hasHardFail()).
+			Msg(logMsgPrecheckComplete)
+	}
 }

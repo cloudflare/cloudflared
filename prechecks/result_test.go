@@ -23,7 +23,7 @@ var fixedRunID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 func allPassReport() Report {
 	return Report{
 		RunID:             fixedRunID,
-		SuggestedProtocol: connection.QUIC,
+		SuggestedProtocol: new(connection.QUIC),
 		Results: []CheckResult{
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
@@ -39,7 +39,7 @@ func allPassReport() Report {
 func quicBlockedReport() Report {
 	return Report{
 		RunID:             fixedRunID,
-		SuggestedProtocol: connection.HTTP2,
+		SuggestedProtocol: new(connection.HTTP2),
 		Results: []CheckResult{
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
@@ -62,7 +62,7 @@ func quicBlockedReport() Report {
 func apiFailReport() Report {
 	return Report{
 		RunID:             fixedRunID,
-		SuggestedProtocol: connection.QUIC,
+		SuggestedProtocol: new(connection.QUIC),
 		Results: []CheckResult{
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
@@ -84,7 +84,7 @@ func apiFailReport() Report {
 func bothTransportsBlockedReport() Report {
 	return Report{
 		RunID:             fixedRunID,
-		SuggestedProtocol: connection.HTTP2,
+		SuggestedProtocol: nil,
 		Results: []CheckResult{
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
 			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
@@ -112,7 +112,7 @@ func bothTransportsBlockedReport() Report {
 func dnsFailReport() Report {
 	return Report{
 		RunID:             fixedRunID,
-		SuggestedProtocol: connection.HTTP2,
+		SuggestedProtocol: nil,
 		Results: []CheckResult{
 			{
 				Type:        ProbeTypeDNS,
@@ -218,7 +218,7 @@ func TestString_DNSFail(t *testing.T) {
 
 func TestString_EmptyResults(t *testing.T) {
 	t.Parallel()
-	r := Report{RunID: fixedRunID, SuggestedProtocol: connection.QUIC}
+	r := Report{RunID: fixedRunID, SuggestedProtocol: new(connection.QUIC)}
 	out := r.String()
 	// Must not panic and must still emit a valid skeleton.
 	assert.Contains(t, out, "CONNECTIVITY PRE-CHECKS")
@@ -230,15 +230,15 @@ func TestString_EmptyResults(t *testing.T) {
 
 // logEntry is a helper struct to unmarshal a single JSON log line emitted by LogEvent.
 type logEntry struct {
-	Level             string `json:"level"`
-	RunID             string `json:"run_id"`
-	Component         string `json:"component"`
-	Target            string `json:"target"`
-	Status            string `json:"status"`
-	Details           string `json:"details"`
-	Message           string `json:"message"`
-	HardFail          *bool  `json:"hard_fail"`
-	SuggestedProtocol string `json:"suggested_protocol"`
+	Level             string  `json:"level"`
+	RunID             string  `json:"run_id"`
+	Component         string  `json:"component"`
+	Target            string  `json:"target"`
+	Status            string  `json:"status"`
+	Details           string  `json:"details"`
+	Message           string  `json:"message"`
+	HardFail          *bool   `json:"hard_fail"`
+	SuggestedProtocol *string `json:"suggested_protocol"`
 }
 
 // captureLogLines runs LogEvent against a buffer-backed zerolog logger and
@@ -299,7 +299,8 @@ func TestLogEvent_AllPass(t *testing.T) {
 	assert.Equal(t, fixedRunID.String(), summary.RunID)
 	require.NotNil(t, summary.HardFail)
 	assert.False(t, *summary.HardFail)
-	assert.Equal(t, "quic", summary.SuggestedProtocol)
+	require.NotNil(t, summary.SuggestedProtocol)
+	assert.Equal(t, "quic", *summary.SuggestedProtocol)
 }
 
 func TestLogEvent_QuicBlocked(t *testing.T) {
@@ -318,7 +319,8 @@ func TestLogEvent_QuicBlocked(t *testing.T) {
 	summary := entries[len(entries)-1]
 	require.NotNil(t, summary.HardFail)
 	assert.False(t, *summary.HardFail)
-	assert.Equal(t, "http2", summary.SuggestedProtocol)
+	require.NotNil(t, summary.SuggestedProtocol)
+	assert.Equal(t, "http2", *summary.SuggestedProtocol)
 	assert.Equal(t, fixedRunID.String(), summary.RunID)
 }
 
@@ -342,7 +344,8 @@ func TestLogEvent_APIFail(t *testing.T) {
 	summary := entries[len(entries)-1]
 	require.NotNil(t, summary.HardFail)
 	assert.False(t, *summary.HardFail)
-	assert.Equal(t, "quic", summary.SuggestedProtocol)
+	require.NotNil(t, summary.SuggestedProtocol)
+	assert.Equal(t, "quic", *summary.SuggestedProtocol)
 }
 
 func TestLogEvent_BothTransportsBlocked(t *testing.T) {
@@ -359,6 +362,7 @@ func TestLogEvent_BothTransportsBlocked(t *testing.T) {
 	summary := entries[len(entries)-1]
 	require.NotNil(t, summary.HardFail)
 	assert.True(t, *summary.HardFail)
+	assert.Nil(t, summary.SuggestedProtocol)
 }
 
 func TestLogEvent_DNSFail(t *testing.T) {
@@ -381,11 +385,12 @@ func TestLogEvent_DNSFail(t *testing.T) {
 	summary := entries[len(entries)-1]
 	require.NotNil(t, summary.HardFail)
 	assert.True(t, *summary.HardFail)
+	assert.Nil(t, summary.SuggestedProtocol)
 }
 
 func TestLogEvent_EmptyReport(t *testing.T) {
 	t.Parallel()
-	r := Report{RunID: fixedRunID, SuggestedProtocol: connection.HTTP2}
+	r := Report{RunID: fixedRunID, SuggestedProtocol: new(connection.HTTP2)}
 	entries := captureLogLines(t, r)
 
 	// No result lines, only the summary.
@@ -394,7 +399,8 @@ func TestLogEvent_EmptyReport(t *testing.T) {
 	assert.Equal(t, fixedRunID.String(), entries[0].RunID)
 	require.NotNil(t, entries[0].HardFail)
 	assert.False(t, *entries[0].HardFail)
-	assert.Equal(t, "http2", entries[0].SuggestedProtocol)
+	require.NotNil(t, entries[0].SuggestedProtocol)
+	assert.Equal(t, "http2", *entries[0].SuggestedProtocol)
 }
 
 // hasHardFail / hasWarn helper tests
