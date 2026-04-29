@@ -79,4 +79,11 @@ To locally run the tests run `make test`
 To format the code and keep a good code quality use `make fmt` and `make lint`
 
 ### Mocks
-After changes on interfaces you might need to regenerate the mocks, so run `make mock`
+After changes on interfaces you might need to regenerate the mocks, so run `make mocks`
+
+### Git Hooks
+To avoid CI errors, you can install pre-push hooks that run linting and tests before each push:
+```bash
+make install-hooks
+```
+This will configure git to use the hooks in `.githooks/` that run `make fmt-check lint test` before each push.
