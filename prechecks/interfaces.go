@@ -10,6 +10,8 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/connection/dialopts"
+
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 )
 
@@ -65,6 +67,7 @@ type QUICDialer interface {
 		localAddr net.IP,
 		connIndex uint8,
 		logger *zerolog.Logger,
+		opts dialopts.DialOpts,
 	) (quic.Connection, error)
 }
 

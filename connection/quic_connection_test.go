@@ -29,6 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/cloudflare/cloudflared/connection/dialopts"
+
 	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/config"
 	cfdflow "github.com/cloudflare/cloudflared/flow"
@@ -156,7 +158,7 @@ func TestQUICServer(t *testing.T) {
 			require.NoError(t, err)
 			udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
 			require.NoError(t, err)
-			defer udpListener.Close()
+			defer func() { _ = udpListener.Close() }()
 			quicTransport := &quic.Transport{Conn: udpListener, ConnectionIDLength: 16}
 			quicListener, err := quicTransport.Listen(testTLSServerConfig, testQUICConfig)
 			require.NoError(t, err)
@@ -523,7 +525,7 @@ func TestServeUDPSession(t *testing.T) {
 	require.NoError(t, err)
 	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
 	require.NoError(t, err)
-	defer udpListener.Close()
+	defer func() { _ = udpListener.Close() }()
 
 	ctx, cancel := context.WithCancel(t.Context())
 
@@ -614,7 +616,7 @@ func TestTCPProxy_FlowRateLimited(t *testing.T) {
 
 	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
 	require.NoError(t, err)
-	defer udpListener.Close()
+	defer func() { _ = udpListener.Close() }()
 
 	quicTransport := &quic.Transport{Conn: udpListener, ConnectionIDLength: 16}
 	quicListener, err := quicTransport.Listen(testTLSServerConfig, testQUICConfig)
@@ -658,7 +660,7 @@ func TestTCPProxy_FlowRateLimited(t *testing.T) {
 
 func testCreateUDPConnReuseSourcePortForEdgeIP(t *testing.T, edgeIP netip.AddrPort) {
 	logger := zerolog.Nop()
-	conn, err := createUDPConnForConnIndex(0, nil, edgeIP, &logger)
+	conn, err := createUDPConnForConnIndex(0, nil, edgeIP, dialopts.DialOpts{}, &logger)
 	require.NoError(t, err)
 
 	getPortFunc := func(conn *net.UDPConn) int {
@@ -669,22 +671,112 @@ func testCreateUDPConnReuseSourcePortForEdgeIP(t *testing.T, edgeIP netip.AddrPo
 	initialPort := getPortFunc(conn)
 
 	// close conn
-	conn.Close()
+	_ = conn.Close()
 
 	// should get the same port as before.
-	conn, err = createUDPConnForConnIndex(0, nil, edgeIP, &logger)
+	conn, err = createUDPConnForConnIndex(0, nil, edgeIP, dialopts.DialOpts{}, &logger)
 	require.NoError(t, err)
 	require.Equal(t, initialPort, getPortFunc(conn))
 
 	// new index, should get a different port
-	conn1, err := createUDPConnForConnIndex(1, nil, edgeIP, &logger)
+	conn1, err := createUDPConnForConnIndex(1, nil, edgeIP, dialopts.DialOpts{}, &logger)
 	require.NoError(t, err)
 	require.NotEqual(t, initialPort, getPortFunc(conn1))
 
 	// not closing the conn and trying to obtain a new conn for same index should give a different random port
-	conn, err = createUDPConnForConnIndex(0, nil, edgeIP, &logger)
+	conn, err = createUDPConnForConnIndex(0, nil, edgeIP, dialopts.DialOpts{}, &logger)
 	require.NoError(t, err)
 	require.NotEqual(t, initialPort, getPortFunc(conn))
+}
+
+// TestSkipPortReuse tests that skipPortReuse uses a random ephemeral port for each dial.
+func TestSkipPortReuse(t *testing.T) {
+	t.Parallel()
+	logger := zerolog.Nop()
+	edgeIP := netip.MustParseAddrPort("127.0.0.1:0")
+
+	// First dial with skipPortReuse should allocate a random port
+	conn1, err := createUDPConnForConnIndex(0, nil, edgeIP, dialopts.DialOpts{SkipPortReuse: true}, &logger)
+	require.NoError(t, err)
+	port1 := conn1.LocalAddr().(*net.UDPAddr).Port
+
+	// Don't close conn1 yet - keep it open to prevent port reuse
+	// Second dial with skipPortReuse should allocate a different random port
+	conn2, err := createUDPConnForConnIndex(0, nil, edgeIP, dialopts.DialOpts{SkipPortReuse: true}, &logger)
+	require.NoError(t, err)
+	port2 := conn2.LocalAddr().(*net.UDPAddr).Port
+
+	// Now close both connections
+	_ = conn1.Close()
+	_ = conn2.Close()
+	// With skipPortReuse, ports should be different (random allocation)
+	require.NotEqual(t, port1, port2, "With skipPortReuse, each dial should use a different random port")
+}
+
+// TestDialQuicWithSkipPortReuse tests that DialQuic works correctly with the WithSkipPortReuse option.
+func TestDialQuicWithSkipPortReuse(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	// Start a mock QUIC server (similar to TestQUICServer)
+	udpListener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	defer func() { _ = udpListener.Close() }()
+
+	serverAddr := netip.MustParseAddrPort(udpListener.LocalAddr().String())
+
+	quicTransport := &quic.Transport{Conn: udpListener, ConnectionIDLength: 16}
+	quicListener, err := quicTransport.Listen(testTLSServerConfig, testQUICConfig)
+	require.NoError(t, err)
+
+	serverDone := make(chan struct{})
+	go func() {
+		// Accept one connection
+		session, err := quicListener.Accept(ctx)
+		if err != nil {
+			close(serverDone)
+			return
+		}
+		// Keep session open until context is cancelled
+		<-ctx.Done()
+		_ = session.CloseWithError(0, "test done")
+		close(serverDone)
+	}()
+
+	// Test DialQuic with WithSkipPortReuse option
+	tlsClientConfig := &tls.Config{
+		// nolint: gosec
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"argotunnel"},
+	}
+
+	log := zerolog.New(io.Discard)
+	dialCtx, dialCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer dialCancel()
+
+	// Dial with skipPortReuse option - should use a random ephemeral port
+	conn, err := DialQuic(
+		dialCtx,
+		testQUICConfig,
+		tlsClientConfig,
+		serverAddr,
+		nil, // connect on a random port
+		0,
+		&log,
+		dialopts.DialOpts{SkipPortReuse: true},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+
+	// Verify we can get connection state
+	_ = conn.ConnectionState()
+
+	// Clean up
+	_ = conn.CloseWithError(0, "test done")
+	cancel()
+	<-serverDone
 }
 
 func serveSession(ctx context.Context, datagramConn *datagramV2Connection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
@@ -719,7 +811,7 @@ func serveSession(ctx context.Context, datagramConn *datagramV2Connection, edgeQ
 	// Close connection to terminate session
 	switch closeType {
 	case closedByOrigin:
-		originConn.Close()
+		_ = originConn.Close()
 	case closedByRemote:
 		err = datagramConn.UnregisterUdpSession(ctx, sessionID, expectedReason)
 		require.NoError(t, err)
@@ -813,6 +905,7 @@ func testTunnelConnection(t *testing.T, serverAddr netip.AddrPort, index uint8) 
 		nil, // connect on a random port
 		index,
 		&log,
+		dialopts.DialOpts{},
 	)
 	require.NoError(t, err)
 

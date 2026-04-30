@@ -19,6 +19,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/connection/dialopts"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
@@ -129,23 +130,23 @@ type EdgeAddrHandler interface {
 	ShouldGetNewAddress(connIndex uint8, err error) (needsNewAddress bool, connectivityError error)
 }
 
-func NewIPAddrFallback(maxRetries uint8) *ipAddrFallback {
-	return &ipAddrFallback{
+func NewIPAddrFallback(maxRetries uint8) *IpAddrFallback {
+	return &IpAddrFallback{
 		retriesByConnIndex: make(map[uint8]uint8),
 		maxRetries:         maxRetries,
 	}
 }
 
-// ipAddrFallback will have more conditions to fall back to a new address for certain
+// IpAddrFallback will have more conditions to fall back to a new address for certain
 // edge connection errors. This means that this handler will return true for isConnectivityError
 // for more cases like duplicate connection register and edge quic dial errors.
-type ipAddrFallback struct {
+type IpAddrFallback struct {
 	m                  sync.Mutex
 	retriesByConnIndex map[uint8]uint8
 	maxRetries         uint8
 }
 
-func (f *ipAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsNewAddress bool, connectivityError error) {
+func (f *IpAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsNewAddress bool, connectivityError error) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	switch err.(type) {
@@ -597,6 +598,7 @@ func (e *EdgeTunnelServer) serveQUIC(
 		e.edgeBindAddr,
 		connIndex,
 		connLogger.Logger(),
+		dialopts.DialOpts{},
 	)
 	if err != nil {
 		connLogger.ConnAwareLogger().Err(err).Msgf("Failed to dial a quic connection")
