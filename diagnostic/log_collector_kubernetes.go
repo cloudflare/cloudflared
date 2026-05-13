@@ -22,18 +22,19 @@ func NewKubernetesLogCollector(containerID, pod string) *KubernetesLogCollector 
 }
 
 func (collector *KubernetesLogCollector) Collect(ctx context.Context) (*LogInformation, error) {
-	tmp := os.TempDir()
-	outputHandle, err := os.Create(filepath.Join(tmp, logFilename))
+	// nolint: gosec
+	outputHandle, err := os.Create(filepath.Join(os.TempDir(), logFilename))
 	if err != nil {
 		return nil, fmt.Errorf("error opening output file: %w", err)
 	}
 
-	defer outputHandle.Close()
+	defer func() { _ = outputHandle.Close() }()
 
 	var command *exec.Cmd
 	// Calculate 2 weeks ago
 	since := time.Now().Add(twoWeeksOffset).Format(time.RFC3339)
 	if collector.containerID != "" {
+		// nolint: gosec
 		command = exec.CommandContext(
 			ctx,
 			"kubectl",
@@ -47,6 +48,7 @@ func (collector *KubernetesLogCollector) Collect(ctx context.Context) (*LogInfor
 			collector.containerID,
 		)
 	} else {
+		// nolint: gosec
 		command = exec.CommandContext(
 			ctx,
 			"kubectl",

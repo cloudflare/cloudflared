@@ -72,3 +72,7 @@ func (c ConnectionOptionsSnapshot) ConnectionOptions() *pogs.ConnectionOptions {
 func (c ConnectionOptionsSnapshot) LogFields(event *zerolog.Event) *zerolog.Event {
 	return event.Strs("features", c.client.Features)
 }
+
+func (c *Config) ConnectionFeaturesSnapshot() features.FeatureSnapshot {
+	return c.featureSelector.Snapshot()
+}

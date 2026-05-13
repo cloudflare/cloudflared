@@ -1,3 +1,5 @@
+version: "2"
+
 linters:
   enable:
     # Some of the linters below are commented out. We should uncomment and start running them, but they return
@@ -14,10 +16,7 @@ linters:
     - errcheck         # Errcheck is a program for checking for unchecked errors in Go code. These unchecked errors can be critical bugs in some cases.
     - errname          # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
     - exhaustive       # Check exhaustiveness of enum switch statements.
-    - gofmt            # Gofmt checks whether code was gofmt-ed. By default this tool runs with -s option to check for code simplification.
-    - goimports        # Check import statements are formatted according to the 'goimport' command. Reformat imports in autofix mode.
     - gosec            # Inspects source code for security problems.
-    - gosimple         # Linter for Go source code that specializes in simplifying code.
     - govet            # Vet examines Go source code and reports suspicious constructs. It is roughly the same as 'go vet' and uses its passes.
     - ineffassign      # Detects when assignments to existing variables are not used.
     - importas         # Enforces consistent import aliases.
@@ -36,7 +35,13 @@ linters:
     - wastedassign     # Finds wasted assignment statements.
     - whitespace       # Whitespace is a linter that checks for unnecessary newlines at the start and end of functions, if, for, etc.
     - zerologlint      # Detects the wrong usage of zerolog that a user forgets to dispatch with Send or Msg.
-  # Other linters are disabled, list of all is here: https://golangci-lint.run/usage/linters/
+    # Other linters are disabled, list of all is here: https://golangci-lint.run/usage/linters/
+
+formatters:
+  enable:
+    - gofmt      # Formats code according to Go standard formatting
+    - goimports  # Formats imports and groups them properly
+
 run:
   timeout: 5m
   modules-download-mode: vendor
@@ -44,9 +49,10 @@ run:
 # output configuration options
 output:
   formats:
-    - format: 'colored-line-number'
-  print-issued-lines: true
-  print-linter-name: true
+    text:
+      colors: true
+      print-linter-name: true
+      print-issued-lines: true
 
 issues:
   # Maximum issues count per one linter.
@@ -67,7 +73,7 @@ issues:
   new: true
   # Show only new issues created after git revision `REV`.
   # Default: ""
-  new-from-rev: ac34f94d423273c8fa8fdbb5f2ac60e55f2c77d5
+  new-from-rev: d2a87e9b93456ad7f82417400f4209d513668487
   # Show issues in any part of update files (requires new-from-rev or new-from-patch).
   # Default: false
   whole-files: true

@@ -13,7 +13,6 @@ const (
 	linuxManagedLogsPath          = "/var/log/cloudflared.err"
 	darwinManagedLogsPath         = "/Library/Logs/com.cloudflare.cloudflared.err.log"
 	linuxServiceConfigurationPath = "/etc/systemd/system/cloudflared.service"
-	linuxSystemdPath              = "/run/systemd/system"
 )
 
 type HostLogCollector struct {
@@ -27,14 +26,13 @@ func NewHostLogCollector(client HTTPClient) *HostLogCollector {
 }
 
 func extractLogsFromJournalCtl(ctx context.Context) (*LogInformation, error) {
-	tmp := os.TempDir()
-
-	outputHandle, err := os.Create(filepath.Join(tmp, logFilename))
+	// nolint: gosec
+	outputHandle, err := os.Create(filepath.Join(os.TempDir(), logFilename))
 	if err != nil {
 		return nil, fmt.Errorf("error opening output file: %w", err)
 	}
 
-	defer outputHandle.Close()
+	defer func() { _ = outputHandle.Close() }()
 
 	command := exec.CommandContext(
 		ctx,

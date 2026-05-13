@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseRequestHeaders(t *testing.T) {
@@ -13,6 +14,30 @@ func TestParseRequestHeaders(t *testing.T) {
 	assert.Equal(t, "value", values.Get("client"))
 	assert.Equal(t, "safe-value", values.Get("secret"))
 	assert.Equal(t, "000:000:0:1:asd", values.Get("cf-trace-id"))
+}
+
+func TestBracketBareIPv6(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"https://::1", "https://[::1]"},
+		{"https://::1/path", "https://[::1]/path"},
+		{"https://::1:8080", "https://[::1:8080]"},
+		{"https://::1:8080/path", "https://[::1:8080]/path"},
+		{"https://::1?query=1", "https://[::1]?query=1"},         // query without path
+		{"https://::1#fragment", "https://[::1]#fragment"},       // fragment without path
+		{"https://[::1]", "https://[::1]"},                       // already bracketed
+		{"https://[::1]:8080", "https://[::1]:8080"},             // already bracketed with port
+		{"https://127.0.0.1", "https://127.0.0.1"},               // IPv4 unchanged
+		{"https://example.com", "https://example.com"},           // hostname unchanged
+		{"https://example.com:8080", "https://example.com:8080"}, // hostname:port unchanged
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.expected, bracketBareIPv6(tt.input))
+		})
+	}
 }
 
 func TestParseURL(t *testing.T) {
@@ -28,8 +53,8 @@ func TestParseURL(t *testing.T) {
 		{"localhost", "localhost"},
 		{"127.0.0.1", "127.0.0.1"},
 		{"127.0.0.1:9090", "127.0.0.1:9090"},
-		{"::1", "::1"},
-		{"::1:8080", "::1:8080"},
+		{"::1", "[::1]"},
+		{"::1:8080", "[::1:8080]"},
 		{"[::1]", "[::1]"},
 		{"[::1]:8080", "[::1]:8080"},
 		{":8080", ":8080"},
@@ -49,7 +74,7 @@ func TestParseURL(t *testing.T) {
 					input := fmt.Sprintf("%s%s%s", scheme, host.input, path)
 					expected := fmt.Sprintf("%s%s%s", "https://", host.expected, path)
 					url, err := parseURL(input)
-					assert.NoError(t, err, "input: %s\texpected: %s", input, expected)
+					require.NoError(t, err, "input: %s\texpected: %s", input, expected)
 					assert.Equal(t, expected, url.String())
 					assert.Equal(t, host.expected, url.Host)
 					assert.Equal(t, "https", url.Scheme)

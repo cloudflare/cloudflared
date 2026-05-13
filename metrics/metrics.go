@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" //nolint:gosec // G108: the sensitive /debug/pprof/cmdline endpoint is explicitly blocked in newMetricsHandler
 	"runtime"
 	"sync"
 	"time"
@@ -70,6 +70,11 @@ func newMetricsHandler(
 	log *zerolog.Logger,
 ) *http.ServeMux {
 	router := http.NewServeMux()
+	// Block /debug/pprof/cmdline to prevent leaking secret command-line arguments
+	// (e.g. tunnel tokens) that are exposed via os.Args.
+	router.HandleFunc("/debug/pprof/cmdline", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	})
 	router.Handle("/debug/", http.DefaultServeMux)
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {

@@ -42,6 +42,10 @@ type FeatureSnapshot struct {
 	// We provide the list of features since we need it to send in the ConnectionOptions during connection
 	// registrations.
 	FeaturesList []string
+
+	// SkipPrechecks indicates when to skip connectivity pre-checks at startup.
+	// Controlled via DNS TXT record to allow remote kill-switch in case of issues.
+	SkipPrechecks bool
 }
 
 type PostQuantumMode uint8

@@ -100,6 +100,7 @@ func login(c *cli.Context) error {
 		c.Bool(cfdflags.AutoCloseInterstitial),
 		isFEDRamp,
 		log,
+		"",
 	)
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to write the certificate.\n\nYour browser will download the certificate instead. You will have to manually\ncopy it to the following path:\n\n%s\n", path)
@@ -122,7 +123,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	if err := os.WriteFile(path, resourceData, 0600); err != nil {
+	if err := os.WriteFile(path, resourceData, 0600); err != nil { // nolint: gosec
 		return errors.Wrap(err, fmt.Sprintf("error writing cert to %s", path))
 	}
 

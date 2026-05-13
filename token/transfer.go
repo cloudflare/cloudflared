@@ -26,7 +26,10 @@ const (
 // The "dance" we refer to is building a HTTP request, opening that in a browser waiting for
 // the user to complete an action, while it long polls in the background waiting for an
 // action to be completed to download the resource.
-func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, autoClose bool, fedramp bool, log *zerolog.Logger) ([]byte, error) {
+//
+// If urlFilePath is non-empty, the generated auth URL is written to that path so
+// other waiting processes can display it to the user. Pass "" to skip.
+func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, autoClose bool, fedramp bool, log *zerolog.Logger, urlFilePath string) ([]byte, error) {
 	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
 	if err != nil {
 		return nil, err
@@ -34,6 +37,11 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 	requestURL, err := buildRequestURL(transferURL, appAUD, key, value+encrypterClient.PublicKey(), shouldEncrypt, useHostOnly, autoClose)
 	if err != nil {
 		return nil, err
+	}
+
+	// write auth URL to companion file so other waiting processes can display it
+	if urlFilePath != "" {
+		_ = os.WriteFile(urlFilePath, []byte(requestURL), 0600) // nolint: gosec
 	}
 
 	// See AUTH-1423 for why we use stderr (the way git wraps ssh)
@@ -129,11 +137,11 @@ func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, 
 		return nil, "", err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // nolint: gosec
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// ignore everything other than server errors as the resource
 	// may not exist until the user does the interaction

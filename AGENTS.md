@@ -60,6 +60,16 @@ make vet
 cd component-tests && python -m pytest test_file.py::test_function_name
 ```
 
+Notes on linting:
+
+- `.golangci.yaml` is configured with `new-from-rev` and `whole-files: true`.
+  Touching a file triggers linting of the ENTIRE file, not just the changed
+  hunks. Expect to fix pre-existing issues in files you modify, or add
+  targeted `// nolint: <linter>` comments with a short justification.
+- Prefer `defer func() { _ = resource.Close() }()` over `defer resource.Close()`
+  for `io.Closer` values whose error truly does not matter — this satisfies
+  `errcheck` without hiding real failures elsewhere.
+
 ## Project Knowledge
 
 ### Package Structure
@@ -67,6 +77,24 @@ cd component-tests && python -m pytest test_file.py::test_function_name
 - Use meaningful package names that reflect functionality
 - Package names should be lowercase, single words when possible
 - Avoid generic names like `util`, `common`, `helper`
+
+#### Well-known shared packages
+
+- `crypto/`: Single source of truth for TLS curve preferences and other
+  cryptographic primitives shared by every edge-facing transport. Import as
+  `cfdcrypto "github.com/cloudflare/cloudflared/crypto"` to avoid colliding
+  with the standard library's `crypto` package. Do NOT duplicate TLS curve
+  or cipher selection logic in other packages.
+- `tlsconfig/`: Builds the base `*tls.Config` used for edge connections
+  (`CreateTunnelConfig`) and loads origin/CA pools. Curve selection is
+  intentionally NOT set here; it is applied per-connection from the
+  `crypto/` package so the same config can be cloned and reused across
+  protocols.
+- `features/`: Runtime feature flags including `PostQuantumMode`
+  (`PostQuantumPrefer` = default, `PostQuantumStrict` = `--post-quantum`).
+- `fips/`: Build-tag driven FIPS detection. Only `fips.IsFipsEnabled()` is
+  exposed; never branch on `fipsEnabled` inside a function if the two
+  branches return the same value.
 
 ### Function and Method Guidelines
 
@@ -171,6 +199,30 @@ type TunnelProperties struct {
 - Use channels for goroutine communication
 - Protect shared state with mutexes
 - Prefer `sync.RWMutex` for read-heavy workloads
+- `*tls.Config` values stored in shared maps (e.g.
+  `TunnelConfig.EdgeTLSConfigs`) must be `Clone()`d before mutating
+  per-connection fields like `CurvePreferences` or `NextProtos`. Writing
+  through the shared pointer races with concurrent connection attempts.
+
+### TLS & Post-Quantum key exchange
+
+- Per-connection TLS configuration for edge connections is built via
+  `cfdcrypto.TLSConfigWithCurvePreferences(tlsConfig, pqMode)`. It clones
+  the provided `*tls.Config` and sets `CurvePreferences` based on `pqMode`,
+  so callers never need to clone or mutate `CurvePreferences` themselves.
+  Do NOT reach for the package-private `getCurvePreferences` helper; the
+  exported `TLSConfigWithCurvePreferences` is the only supported entry
+  point.
+- Two PQ modes are supported and apply identically to QUIC and HTTP/2:
+  - `PostQuantumPrefer` (default): `[X25519MLKEM768, P256Kyber768Draft00, CurveP256]`
+  - `PostQuantumStrict` (`--post-quantum`): `[X25519MLKEM768, P256Kyber768Draft00]`
+- FIPS and non-FIPS builds use the same curve list. Do NOT reintroduce a
+  `fipsEnabled` branch in curve-selection code; if the two modes ever
+  diverge, express the divergence inside `crypto/` so call sites remain
+  untouched.
+- HTTP/2 supports post-quantum handshakes. Never re-add a
+  `PostQuantumStrict`-based rejection to H2 code paths, and never force
+  `--post-quantum` to select QUIC-only in protocol selection.
 
 ### Configuration
 

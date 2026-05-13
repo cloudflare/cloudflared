@@ -11,12 +11,10 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"github.com/urfave/cli/v2"
 )
 
 const (
 	OriginCAPoolFlag = "origin-ca-pool"
-	CaCertFlag       = "cacert"
 )
 
 // CertReloader can load and reload a TLS certificate from a particular filepath.
@@ -65,7 +63,7 @@ func (cr *CertReloader) LoadCert() error {
 
 	// Keep the old certificate if there's a problem reading the new one.
 	if err != nil {
-		sentry.CaptureException(fmt.Errorf("Error parsing X509 key pair: %v", err))
+		sentry.CaptureException(fmt.Errorf("error parsing X509 key pair: %v", err))
 		return err
 	}
 	cr.certificate = &cert
@@ -77,6 +75,7 @@ func LoadOriginCA(originCAPoolFilename string, log *zerolog.Logger) (*x509.CertP
 
 	if originCAPoolFilename != "" {
 		var err error
+		// nolint:gosec
 		originCustomCAPool, err = os.ReadFile(originCAPoolFilename)
 		if err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("unable to read the file %s for --%s", originCAPoolFilename, OriginCAPoolFlag))
@@ -116,6 +115,7 @@ func LoadCustomOriginCA(originCAFilename string) (*x509.CertPool, error) {
 		return certPool, nil
 	}
 
+	// nolint: gosec
 	customOriginCA, err := os.ReadFile(originCAFilename)
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("unable to read the file %s", originCAFilename))
@@ -127,10 +127,10 @@ func LoadCustomOriginCA(originCAFilename string) (*x509.CertPool, error) {
 	return certPool, nil
 }
 
-func CreateTunnelConfig(c *cli.Context, serverName string) (*tls.Config, error) {
+func CreateTunnelConfig(caCert string, serverName string) (*tls.Config, error) {
 	var rootCAs []string
-	if c.String(CaCertFlag) != "" {
-		rootCAs = append(rootCAs, c.String(CaCertFlag))
+	if caCert != "" {
+		rootCAs = append(rootCAs, caCert)
 	}
 
 	userConfig := &TLSParameters{RootCAs: rootCAs, ServerName: serverName}

@@ -421,7 +421,7 @@ func listCommand(c *cli.Context) error {
 
 func formatAndPrintTunnelList(tunnels []*cfapi.Tunnel, showRecentlyDisconnected bool) {
 	writer := tabWriter()
-	defer writer.Flush()
+	defer func() { _ = writer.Flush() }()
 
 	_, _ = fmt.Fprintln(writer, "You can obtain more detailed information for each tunnel with `cloudflared tunnel info <name/uuid>`")
 
@@ -444,13 +444,14 @@ func formatAndPrintTunnelList(tunnels []*cfapi.Tunnel, showRecentlyDisconnected 
 func fmtConnections(connections []cfapi.Connection, showRecentlyDisconnected bool) string {
 	// Count connections per colo
 	numConnsPerColo := make(map[string]uint, len(connections))
-	for _, connection := range connections {
-		if !connection.IsPendingReconnect || showRecentlyDisconnected {
-			numConnsPerColo[connection.ColoName]++
+	for _, cfConnections := range connections {
+		if !cfConnections.IsPendingReconnect || showRecentlyDisconnected {
+			numConnsPerColo[cfConnections.ColoName]++
 		}
 	}
 
 	// Get sorted list of colos
+	// nolint: prealloc
 	sortedColos := []string{}
 	for coloName := range numConnsPerColo {
 		sortedColos = append(sortedColos, coloName)
@@ -488,11 +489,12 @@ func readyCommand(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	// nolint: gosec // URL is constructed from the user-configured local metrics endpoint.
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != 200 {
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
@@ -613,7 +615,7 @@ func getTunnel(sc *subcommandContext, tunnelID uuid.UUID) (*cfapi.Tunnel, error)
 
 func formatAndPrintConnectionsList(tunnelInfo Info, showRecentlyDisconnected bool) {
 	writer := tabWriter()
-	defer writer.Flush()
+	defer func() { _ = writer.Flush() }()
 
 	// Print the general tunnel info table
 	_, _ = fmt.Fprintf(writer, "NAME:     %s\nID:       %s\nCREATED:  %s\n\n", tunnelInfo.Name, tunnelInfo.ID, tunnelInfo.CreatedAt)
@@ -654,14 +656,14 @@ func formatAndPrintConnectionsList(tunnelInfo Info, showRecentlyDisconnected boo
 
 func tabWriter() *tabwriter.Writer {
 	const (
-		minWidth = 0
-		tabWidth = 8
-		padding  = 1
-		padChar  = ' '
-		flags    = 0
+		minWidth    = 0
+		tabWidth    = 8
+		padding     = 1
+		padChar     = ' '
+		formatFlags = 0
 	)
 
-	writer := tabwriter.NewWriter(os.Stdout, minWidth, tabWidth, padding, padChar, flags)
+	writer := tabwriter.NewWriter(os.Stdout, minWidth, tabWidth, padding, padChar, formatFlags)
 	return writer
 }
 
@@ -712,7 +714,8 @@ func renderOutput(format string, v interface{}) error {
 }
 
 func buildRunCommand() *cli.Command {
-	flags := []cli.Flag{
+	//nolint: prealloc
+	cliFlags := []cli.Flag{
 		credentialsFileFlag,
 		credentialsContentsFlag,
 		postQuantumFlag,
@@ -725,7 +728,7 @@ func buildRunCommand() *cli.Command {
 		maxActiveFlowsFlag,
 		dnsResolverAddrsFlag,
 	}
-	flags = append(flags, configureProxyFlags(false)...)
+	cliFlags = append(cliFlags, configureProxyFlags(false)...)
 	return &cli.Command{
 		Name:      "run",
 		Action:    cliutil.ConfiguredAction(runCommand),
@@ -740,7 +743,7 @@ func buildRunCommand() *cli.Command {
   If you experience other problems running the tunnel, "cloudflared tunnel cleanup" may help by removing
   any old connection records.
 `,
-		Flags:              flags,
+		Flags:              cliFlags,
 		CustomHelpTemplate: commandHelpTemplate(),
 	}
 }
@@ -765,6 +768,7 @@ func runCommand(c *cli.Context) error {
 	// Check if tokenStr is blank before checking for tokenFile
 	if tokenStr == "" {
 		if tokenFile := c.String(TunnelTokenFileFlag); tokenFile != "" {
+			// nolint: gosec
 			data, err := os.ReadFile(tokenFile)
 			if err != nil {
 				return cliutil.UsageError("Failed to read token file: %s", err.Error())
@@ -1105,6 +1109,7 @@ func diagCommand(ctx *cli.Context) error {
 		Address:        sctx.c.String(flags.Metrics),
 		ContainerID:    sctx.c.String(diagContainerIDFlagName),
 		PodID:          sctx.c.String(diagPodFlagName),
+		Region:         sctx.c.String(flags.Region),
 		Toggles: diagnostic.Toggles{
 			NoDiagLogs:    sctx.c.Bool(noDiagLogsFlagName),
 			NoDiagMetrics: sctx.c.Bool(noDiagMetricsFlagName),

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.24
-
 package ssh
 
 import (
@@ -13,26 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime"
-	"slices"
 
 	"golang.org/x/crypto/curve25519"
 )
-
-const (
-	kexAlgoMLKEM768xCurve25519SHA256 = "mlkem768x25519-sha256"
-)
-
-func init() {
-	// After Go 1.24rc1 mlkem swapped the order of return values of Encapsulate.
-	// See #70950.
-	if runtime.Version() == "go1.24rc1" {
-		return
-	}
-	supportedKexAlgos = slices.Insert(supportedKexAlgos, 0, kexAlgoMLKEM768xCurve25519SHA256)
-	preferredKexAlgos = slices.Insert(preferredKexAlgos, 0, kexAlgoMLKEM768xCurve25519SHA256)
-	kexAlgoMap[kexAlgoMLKEM768xCurve25519SHA256] = &mlkem768WithCurve25519sha256{}
-}
 
 // mlkem768WithCurve25519sha256 implements the hybrid ML-KEM768 with
 // curve25519-sha256 key exchange method, as described by

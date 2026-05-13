@@ -20,7 +20,7 @@ type Regions struct {
 
 // ResolveEdge resolves the Cloudflare edge, returning all regions discovered.
 func ResolveEdge(log *zerolog.Logger, region string, overrideIPVersion ConfigIPVersion) (*Regions, error) {
-	edgeAddrs, err := edgeDiscovery(log, getRegionalServiceName(region))
+	edgeAddrs, err := EdgeDiscovery(log, RegionalServiceName(region))
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +91,7 @@ func (rs *Regions) GetUnusedAddr(excluding *EdgeAddr, connID int) *EdgeAddr {
 	// evenly across both regions.
 	if rs.region1.AvailableAddrs() == rs.region2.AvailableAddrs() {
 		regions := []Region{rs.region1, rs.region2}
+		//nolint:gosec
 		firstChoice := rand.Intn(2)
 		return getAddrs(excluding, connID, &regions[firstChoice], &regions[1-firstChoice])
 	}
@@ -131,11 +132,13 @@ func (rs *Regions) GiveBack(addr *EdgeAddr, hasConnectivityError bool) bool {
 	return rs.region2.GiveBack(addr, hasConnectivityError)
 }
 
-// Return regionalized service name if `region` isn't empty, otherwise return the global service name for origintunneld
-func getRegionalServiceName(region string) string {
+// RegionalServiceName returns the SRV service name for the given region.
+// When region is empty it returns the global service name ("v2-origintunneld").
+// Otherwise, it prepends the region, e.g. "us-v2-origintunneld".
+func RegionalServiceName(region string) string {
 	if region != "" {
-		return region + "-" + srvService // Example: `us-v2-origintunneld`
+		return region + "-" + srvService
 	}
 
-	return srvService // Global service is just `v2-origintunneld`
+	return srvService
 }

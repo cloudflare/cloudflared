@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,6 +17,8 @@ import (
 	"github.com/rs/zerolog"
 
 	network "github.com/cloudflare/cloudflared/diagnostic/network"
+	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/prechecks"
 )
 
 const (
@@ -32,6 +35,7 @@ const (
 	networkInformationJobName    = "network information"
 	cliConfigurationJobName      = "cli configuration"
 	configurationJobName         = "configuration"
+	prechecksJobName             = "connectivity pre-checks"
 )
 
 // Struct used to hold the results of different routines executing the network collection.
@@ -92,6 +96,7 @@ type Options struct {
 	Address        string
 	ContainerID    string
 	PodID          string
+	Region         string
 	Toggles        Toggles
 }
 
@@ -126,13 +131,14 @@ func collectLogs(
 	if err != nil {
 		return "", fmt.Errorf("error opening log file while collecting logs: %w", err)
 	}
-	defer logHandle.Close()
+	defer func() { _ = logHandle.Close() }()
 
+	// nolint: gosec
 	outputLogHandle, err := os.Create(filepath.Join(os.TempDir(), logFilename))
 	if err != nil {
 		return "", ErrCreatingTemporaryFile
 	}
-	defer outputLogHandle.Close()
+	defer func() { _ = outputLogHandle.Close() }()
 
 	_, err = io.Copy(outputLogHandle, logHandle)
 	if err != nil {
@@ -229,12 +235,13 @@ func networkInformationCollectors() (rawNetworkCollector, jsonNetworkCollector c
 }
 
 func rawNetworkInformationWriter(resultMap map[string]networkCollectionResult) (string, error) {
+	// nolint: gosec // Intentionally creating a temporary diagnostic file in the OS temp directory.
 	networkDumpHandle, err := os.Create(filepath.Join(os.TempDir(), rawNetworkBaseName))
 	if err != nil {
 		return "", ErrCreatingTemporaryFile
 	}
 
-	defer networkDumpHandle.Close()
+	defer func() { _ = networkDumpHandle.Close() }()
 
 	var exitErr error
 
@@ -260,12 +267,13 @@ func rawNetworkInformationWriter(resultMap map[string]networkCollectionResult) (
 }
 
 func jsonNetworkInformationWriter(resultMap map[string]networkCollectionResult) (string, error) {
+	// nolint: gosec
 	networkDumpHandle, err := os.Create(filepath.Join(os.TempDir(), networkBaseName))
 	if err != nil {
 		return "", ErrCreatingTemporaryFile
 	}
 
-	defer networkDumpHandle.Close()
+	defer func() { _ = networkDumpHandle.Close() }()
 
 	encoder := newFormattedEncoder(networkDumpHandle)
 
@@ -290,11 +298,12 @@ func jsonNetworkInformationWriter(resultMap map[string]networkCollectionResult) 
 
 func collectFromEndpointAdapter(collect collectToWriterFunc, fileName string) collectFunc {
 	return func(ctx context.Context) (string, error) {
+		// nolint: gosec
 		dumpHandle, err := os.Create(filepath.Join(os.TempDir(), fileName))
 		if err != nil {
 			return "", ErrCreatingTemporaryFile
 		}
-		defer dumpHandle.Close()
+		defer func() { _ = dumpHandle.Close() }()
 
 		err = collect(ctx, dumpHandle)
 		if err != nil {
@@ -349,12 +358,12 @@ func resolveInstanceBaseURL(
 		if !strings.HasPrefix(metricsServerAddress, "http://") {
 			metricsServerAddress = "http://" + metricsServerAddress
 		}
-		url, err := url.Parse(metricsServerAddress)
+		baseUrl, err := url.Parse(metricsServerAddress)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("provided address is not valid: %w", err)
 		}
 
-		return url, nil, nil, nil
+		return baseUrl, nil, nil, nil
 	}
 
 	tunnelState, foundTunnelStates, err := FindMetricsServer(log, client, addresses)
@@ -368,6 +377,7 @@ func resolveInstanceBaseURL(
 func createJobs(
 	client *httpClient,
 	tunnel *TunnelState,
+	region string,
 	diagContainer string,
 	diagPod string,
 	noDiagSystem bool,
@@ -430,17 +440,62 @@ func createJobs(
 			fn:      collectFromEndpointAdapter(client.GetTunnelConfiguration, configurationBaseName),
 			bypass:  false,
 		},
+		{
+			jobName: prechecksJobName,
+			fn:      collectPrechecks(region),
+			bypass:  noDiagNetwork,
+		},
 	}
 
 	return jobs
 }
 
+// collectPrechecks runs connectivity pre-checks and writes the results to a JSON file.
+func collectPrechecks(region string) collectFunc {
+	return func(ctx context.Context) (string, error) {
+		cfg := prechecks.Config{
+			Region:    region,
+			IPVersion: allregions.Auto,
+			Timeout:   defaultTimeout,
+		}
+
+		// Create a no-op logger since we don't want to spam logs during diagnostic collection
+		log := zerolog.New(io.Discard)
+
+		dialers := prechecks.RunDialers{
+			DNSResolver:      &prechecks.EdgeDNSResolver{Log: &log},
+			TCPDialer:        &prechecks.EdgeTCPDialer{},
+			QUICDialer:       &prechecks.EdgeQUICDialer{},
+			ManagementDialer: &prechecks.NetManagementDialer{Dialer: net.Dialer{}},
+		}
+
+		emptyCert := ""
+		report := prechecks.Run(ctx, emptyCert, cfg, &log, dialers)
+
+		// Write the report to a JSON file
+		// nolint: gosec
+		dumpHandle, err := os.Create(filepath.Join(os.TempDir(), prechecksBaseName))
+		if err != nil {
+			return "", ErrCreatingTemporaryFile
+		}
+		defer func() { _ = dumpHandle.Close() }()
+
+		encoder := newFormattedEncoder(dumpHandle)
+		if err := encoder.Encode(report); err != nil {
+			return dumpHandle.Name(), fmt.Errorf("error encoding prechecks report: %w", err)
+		}
+
+		return dumpHandle.Name(), nil
+	}
+}
+
 func createTaskReport(taskReport map[string]taskResult) (string, error) {
+	// nolint: gosec
 	dumpHandle, err := os.Create(filepath.Join(os.TempDir(), taskResultBaseName))
 	if err != nil {
 		return "", ErrCreatingTemporaryFile
 	}
-	defer dumpHandle.Close()
+	defer func() { _ = dumpHandle.Close() }()
 
 	encoder := newFormattedEncoder(dumpHandle)
 
@@ -522,6 +577,7 @@ func RunDiagnostic(
 	jobs := createJobs(
 		client,
 		tunnel,
+		options.Region,
 		options.ContainerID,
 		options.PodID,
 		options.Toggles.NoDiagSystem,
@@ -545,7 +601,7 @@ func RunDiagnostic(
 
 		defer func() {
 			if !errors.Is(v.Err, ErrCreatingTemporaryFile) {
-				os.Remove(v.path)
+				_ = os.Remove(v.path)
 			}
 		}()
 	}

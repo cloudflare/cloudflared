@@ -1,0 +1,24 @@
+sudo: false
+language: go
+go:
+  - 1.6
+  - 1.7
+  - tip
+
+before_script:
+  - go get github.com/GeertJohan/fgt
+  - go get github.com/golang/lint/golint
+  - go get golang.org/x/tools/cmd/goimports
+  - go get honnef.co/go/staticcheck/cmd/staticcheck
+
+script:
+  - find . -name \*.go | xargs fgt goimports -l
+  - fgt go vet ./...
+  - fgt golint ./...
+  - fgt staticcheck ./...
+  - go test ./...
+
+notifications:
+  email:
+    recipients:
+    - kyle@cloudflare.com

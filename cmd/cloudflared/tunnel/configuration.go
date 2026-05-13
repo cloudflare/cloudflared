@@ -140,23 +140,13 @@ func prepareTunnelConfig(
 	}
 	tags = append(tags, pogs.Tag{Name: "ID", Value: clientConfig.ConnectorID.String()})
 
-	clientFeatures := featureSelector.Snapshot()
-	pqMode := clientFeatures.PostQuantum
-	if pqMode == features.PostQuantumStrict {
-		// Error if the user tries to force a non-quic transport protocol
-		if transportProtocol != connection.AutoSelectFlag && transportProtocol != connection.QUIC.String() {
-			return nil, nil, fmt.Errorf("post-quantum is only supported with the quic transport")
-		}
-		transportProtocol = connection.QUIC.String()
-	}
-
 	cfg := config.GetConfiguration()
 	ingressRules, err := ingress.ParseIngressFromConfigAndCLI(cfg, c, log)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), isPostQuantumEnforced, edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -168,7 +158,7 @@ func prepareTunnelConfig(
 		if tlsSettings == nil {
 			return nil, nil, fmt.Errorf("%s has unknown TLS settings", p)
 		}
-		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, tlsSettings.ServerName)
+		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c.String(flags.CACert), tlsSettings.ServerName)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
 		}
@@ -261,6 +251,7 @@ func prepareTunnelConfig(
 		DisableQUICPathMTUDiscovery:         c.Bool(flags.QuicDisablePathMTUDiscovery),
 		QUICConnectionLevelFlowControlLimit: c.Uint64(flags.QuicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(flags.QuicStreamLevelFlowControlLimit),
+		NoPrechecks:                         c.Bool(flags.NoPrechecks),
 		OriginDNSService:                    dnsService,
 		OriginDialerService:                 originDialerService,
 	}
@@ -300,7 +291,7 @@ func gracePeriod(c *cli.Context) (time.Duration, error) {
 }
 
 func isRunningFromTerminal() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) // nolint:gosec
 }
 
 // ParseConfigIPVersion returns the IP version from possible expected values from config
@@ -341,7 +332,7 @@ func testIPBindable(ip net.IP) error {
 	if err != nil {
 		return err
 	}
-	listener.Close()
+	_ = listener.Close()
 	return nil
 }
 
@@ -503,7 +494,7 @@ func findLocalAddr(dst net.IP, port int) (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	defer udpConn.Close()
+	defer func() { _ = udpConn.Close() }()
 	localAddrPort, err := netip.ParseAddrPort(udpConn.LocalAddr().String())
 	if err != nil {
 		return netip.Addr{}, err

@@ -7,6 +7,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
@@ -43,12 +44,11 @@ func TestWaitForBackoffFallback(t *testing.T) {
 		"auto",
 		"",
 		false,
-		false,
 		mockFetcher.fetch(),
 		resolveTTL,
 		&log,
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	initProtocol := protocolSelector.Current()
 	assert.Equal(t, connection.QUIC, initProtocol)
@@ -106,12 +106,11 @@ func TestWaitForBackoffFallback(t *testing.T) {
 		"quic",
 		"",
 		false,
-		false,
 		mockFetcher.fetch(),
 		resolveTTL,
 		&log,
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	protoFallback = &protocolFallback{backoff, protocolSelector.Current(), false}
 	for i := 0; i < int(maxRetries-1); i++ {
 		protoFallback.BackoffTimer() // simulate retry

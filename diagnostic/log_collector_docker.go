@@ -20,18 +20,18 @@ func NewDockerLogCollector(containerID string) *DockerLogCollector {
 }
 
 func (collector *DockerLogCollector) Collect(ctx context.Context) (*LogInformation, error) {
-	tmp := os.TempDir()
-
-	outputHandle, err := os.Create(filepath.Join(tmp, logFilename))
+	// nolint: gosec
+	outputHandle, err := os.Create(filepath.Join(os.TempDir(), logFilename))
 	if err != nil {
 		return nil, fmt.Errorf("error opening output file: %w", err)
 	}
 
-	defer outputHandle.Close()
+	defer func() { _ = outputHandle.Close() }()
 
 	// Calculate 2 weeks ago
 	since := time.Now().Add(twoWeeksOffset).Format(time.RFC3339)
 
+	// nolint: gosec
 	command := exec.CommandContext(
 		ctx,
 		"docker",

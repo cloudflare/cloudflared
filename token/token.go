@@ -1,23 +1,18 @@
 package token
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-
-	"github.com/cloudflare/cloudflared/config"
-	"github.com/cloudflare/cloudflared/retry"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 const (
@@ -41,15 +36,10 @@ type AppInfo struct {
 	AppDomain  string
 }
 
-type lock struct {
-	lockFilePath string
-	backoff      *retry.BackoffHandler
-	sigHandler   *signalHandler
-}
-
-type signalHandler struct {
-	sigChannel chan os.Signal
-	signals    []os.Signal
+// lockContent is the JSON structure written into lock files.
+type lockContent struct {
+	PID       int32 `json:"pid"`
+	StartTime int64 `json:"start_time"`
 }
 
 type jwtPayload struct {
@@ -100,83 +90,174 @@ func (p jwtPayload) isExpired() bool {
 	return int(time.Now().Unix()) > p.Exp
 }
 
-func (s *signalHandler) register(handler func()) {
-	s.sigChannel = make(chan os.Signal, 1)
-	signal.Notify(s.sigChannel, s.signals...)
-	go func(s *signalHandler) {
-		for range s.sigChannel {
-			handler()
+const (
+	lockRetryInterval  = 2 * time.Second
+	lockTimeout        = 10 * time.Minute
+	startTimeTolerance = int64(1000) // milliseconds
+)
+
+// acquireLockFile loops until it successfully creates a lock file for the
+// given token file path. The lock file is created at tokenPath + ".lock".
+//
+// On each iteration:
+//  1. Try to create the file atomically with O_CREATE|O_EXCL.
+//     If that succeeds, write our PID + start time and return nil.
+//  2. If the file already exists, read it and check whether the owning
+//     process is still alive (PID exists and start time matches).
+//  3. If the owner is alive, sleep for lockRetryInterval and retry.
+//  4. If the owner is dead (stale lock), remove the file and immediately
+//     retry the O_EXCL create. No sleep (the atomic create is the
+//     tiebreaker if multiple processes race to reclaim).
+func acquireLockFile(tokenPath string, log *zerolog.Logger) error {
+	lockPath := tokenPath + ".lock"
+	deadline := time.Now().Add(lockTimeout)
+	lastURL := ""
+	for {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for lock file %s", lockPath)
 		}
-	}(s)
-}
+		err := tryCreateLockFile(lockPath)
+		if err == nil {
+			log.Debug().Str("path", lockPath).Msg("lock file acquired")
+			return nil
+		}
+		if !os.IsExist(err) {
+			return errors.Wrapf(err, "failed to create lock file %s", lockPath)
+		}
 
-func (s *signalHandler) deregister() {
-	signal.Stop(s.sigChannel)
-	close(s.sigChannel)
-}
-
-func errDeleteTokenFailed(lockFilePath string) error {
-	return fmt.Errorf("failed to acquire a new Access token. Please try to delete %s", lockFilePath)
-}
-
-// newLock will get a new file lock
-func newLock(path string) *lock {
-	lockPath := path + ".lock"
-	backoff := retry.NewBackoff(uint(7), retry.DefaultBaseTime, false)
-	return &lock{
-		lockFilePath: lockPath,
-		backoff:      &backoff,
-		sigHandler: &signalHandler{
-			signals: []os.Signal{syscall.SIGINT, syscall.SIGTERM},
-		},
-	}
-}
-
-func (l *lock) Acquire() error {
-	// Intercept SIGINT and SIGTERM to release lock before exiting
-	l.sigHandler.register(func() {
-		_ = l.deleteLockFile()
-		os.Exit(0)
-	})
-
-	// Check for a lock file
-	// if the lock file exists; start polling
-	// if not, create the lock file and go through the normal flow.
-	// See AUTH-1736 for the reason why we do all this
-	for isTokenLocked(l.lockFilePath) {
-		if l.backoff.Backoff(context.Background()) {
+		// lock file exists, so check if the owner is still alive
+		stale, content, checkErr := isLockFileStale(lockPath)
+		if checkErr != nil {
+			// file may be mid-write by another racer, or was removed
+			// between our O_EXCL attempt and this read
+			log.Debug().Err(checkErr).Str("path", lockPath).
+				Msg("could not read lock file, retrying")
+			time.Sleep(lockRetryInterval)
 			continue
 		}
 
-		if err := l.deleteLockFile(); err != nil {
-			return err
+		if !stale {
+			// try to display the auth URL so the user can open a browser
+			// manually if the original window is not visible
+			if authURL := readAuthURL(tokenPath); authURL != "" && authURL != lastURL {
+				fmt.Fprintf(os.Stderr, "\nAnother cloudflared process (pid %d) "+
+					"is already waiting for authentication.\n\n"+
+					"If a browser window did not open, please visit "+
+					"the following URL:\n\n%s\n\n", content.PID, authURL)
+				lastURL = authURL
+			}
+			log.Debug().Str("path", lockPath).
+				Msg("lock file is held by another process, retrying")
+			time.Sleep(lockRetryInterval)
+			continue
+		}
+
+		// stale, so remove and immediately retry
+		log.Debug().Str("path", lockPath).Int32("stale_pid", content.PID).
+			Msg("reclaiming stale lock file")
+		if removeErr := os.Remove(lockPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			log.Debug().Err(removeErr).Str("path", lockPath).
+				Msg("could not remove stale lock file, retrying")
+			time.Sleep(lockRetryInterval)
+			continue
 		}
 	}
+}
 
-	// Create a lock file so other processes won't also try to get the token at
-	// the same time
-	if err := os.WriteFile(l.lockFilePath, []byte{}, 0600); err != nil {
+// readAuthURL reads the auth URL companion file for the given token path.
+// Returns the URL string, or empty string if the file doesn't exist or
+// can't be read.
+func readAuthURL(tokenPath string) string {
+	data, err := os.ReadFile(tokenPath + ".url") // nolint: gosec
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// tryCreateLockFile atomically creates the lock file using O_CREATE|O_EXCL
+// and writes the current process's PID and start time into it as JSON.
+// The file is created with 0600 permissions (owner read/write only).
+func tryCreateLockFile(path string) (retErr error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600) // nolint: gosec
+	if err != nil {
 		return err
 	}
-	return nil
-}
+	defer func() {
+		if retErr != nil {
+			_ = f.Close()
+			_ = os.Remove(path)
+			return
+		}
+		retErr = f.Close()
+	}()
 
-func (l *lock) deleteLockFile() error {
-	if err := os.Remove(l.lockFilePath); err != nil && !os.IsNotExist(err) {
-		return errDeleteTokenFailed(l.lockFilePath)
+	content, err := newSelfLockContent()
+	if err != nil {
+		return err
 	}
-	return nil
+
+	return json.NewEncoder(f).Encode(content)
 }
 
-func (l *lock) Release() error {
-	defer l.sigHandler.deregister()
-	return l.deleteLockFile()
+// newSelfLockContent returns a lockContent describing the current process.
+func newSelfLockContent() (lockContent, error) {
+	pid := int32(os.Getpid()) // nolint: gosec
+	p, err := process.NewProcess(pid)
+	if err != nil {
+		return lockContent{}, fmt.Errorf("failed to look up own process: %w", err)
+	}
+	ct, err := p.CreateTime()
+	if err != nil {
+		return lockContent{}, fmt.Errorf("failed to get own start time: %w", err)
+	}
+	return lockContent{PID: pid, StartTime: ct}, nil
 }
 
-// isTokenLocked checks to see if there is another process attempting to get the token already
-func isTokenLocked(lockFilePath string) bool {
-	exists, err := config.FileExists(lockFilePath)
-	return exists && err == nil
+// isLockFileStale reads the lock file and checks whether the owning process
+// is dead or has a mismatched start time. Returns (true, content, nil) if
+// stale, (false, content, nil) if actively held, or an error if the file
+// cannot be read.
+func isLockFileStale(path string) (bool, lockContent, error) {
+	data, err := os.ReadFile(path) // nolint: gosec
+	if err != nil {
+		return false, lockContent{}, err
+	}
+	var content lockContent
+	if err := json.Unmarshal(data, &content); err != nil {
+		// corrupt or empty file (treat as stale)
+		return true, lockContent{}, nil
+	}
+
+	p, err := process.NewProcess(content.PID)
+	if err != nil {
+		return true, content, nil // process does not exist
+	}
+	// CreateTime reads /proc/{pid}/stat on Linux (world-readable, always works).
+	// On Windows and macOS it can fail for processes owned by a different user,
+	// but cloudflared instances sharing a lock file are always running as the
+	// same user (the lock directory is derived from ~ via go-homedir).
+	ct, err := p.CreateTime()
+	if err != nil {
+		return true, content, nil // cannot query process (treat as stale)
+	}
+
+	diff := ct - content.StartTime
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > startTimeTolerance {
+		return true, content, nil // PID was recycled (different process)
+	}
+
+	// If the lock file is older than lockTimeout, the auth flow is
+	// definitely complete and the process is no longer doing auth work.
+	info, err := os.Stat(path)
+	if err == nil && time.Since(info.ModTime()) > lockTimeout {
+		return true, content, nil
+	}
+
+	return false, content, nil // process is alive and actively authenticating
 }
 
 func Init(version string) {
@@ -206,13 +287,9 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 		return "", errors.Wrap(err, "failed to generate app token file path")
 	}
 
-	fileLockAppToken := newLock(appTokenPath)
-	if err = fileLockAppToken.Acquire(); err != nil {
+	if err = acquireLockFile(appTokenPath, log); err != nil {
 		return "", errors.Wrap(err, "failed to acquire app token lock")
 	}
-	defer func() {
-		_ = fileLockAppToken.Release()
-	}()
 
 	// check to see if another process has gotten a token while we waited for the lock
 	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
@@ -228,13 +305,9 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 			return "", errors.Wrap(err, "failed to generate org token file path")
 		}
 
-		fileLockOrgToken := newLock(orgTokenPath)
-		if err = fileLockOrgToken.Acquire(); err != nil {
+		if err = acquireLockFile(orgTokenPath, log); err != nil {
 			return "", errors.Wrap(err, "failed to acquire org token lock")
 		}
-		defer func() {
-			_ = fileLockOrgToken.Release()
-		}()
 		// check if an org token has been created since the lock was acquired
 		orgToken, err = GetOrgTokenIfExists(appInfo.AuthDomain)
 	}
@@ -243,7 +316,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 			log.Debug().Msgf("failed to exchange org token for app token: %s", err)
 		} else {
 			// generate app path
-			if err := os.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil {
+			if err := os.WriteFile(appTokenPath, []byte(appToken), 0600); err != nil { // nolint: gosec
 				return "", errors.Wrap(err, "failed to write app token to disk")
 			}
 			return appToken, nil
@@ -260,7 +333,7 @@ func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath strin
 	// this weird parameter is the resource name (token) and the key/value
 	// we want to send to the transfer service. the key is token and the value
 	// is blank (basically just the id generated in the transfer service)
-	resourceData, err := RunTransfer(appURL, appAUD, keyName, keyName, "", true, useHostOnly, autoClose, isFedramp, log)
+	resourceData, err := RunTransfer(appURL, appAUD, keyName, keyName, "", true, useHostOnly, autoClose, isFedramp, log, appTokenPath+".url")
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run transfer service")
 	}
@@ -303,11 +376,11 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 		return nil, errors.Wrap(err, "failed to create app info request")
 	}
 	appInfoReq.Header.Add("User-Agent", userAgent)
-	resp, err := client.Do(appInfoReq)
+	resp, err := client.Do(appInfoReq) // nolint: gosec
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get app info")
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	var aud string
 	location := resp.Request.URL
@@ -374,11 +447,11 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 		return "", errors.Wrap(err, "failed to create app token request")
 	}
 	appTokenRequest.Header.Add("User-Agent", userAgent)
-	resp, err := client.Do(appTokenRequest)
+	resp, err := client.Do(appTokenRequest) // nolint: gosec
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get app token")
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	var appToken string
 	for _, c := range resp.Cookies() {
 		//if Org token revoked on exchange, getTokensFromEdge instead
@@ -441,7 +514,7 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 
 // GetTokenIfExists will return the token from local storage if it exists and not expired
 func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) // nolint: gosec
 	if err != nil {
 		return nil, err
 	}

@@ -34,4 +34,5 @@ const (
 	cliConfigurationBaseName  = "cli-configuration.json"
 	configurationBaseName     = "configuration.json"
 	taskResultBaseName        = "task-result.json"
+	prechecksBaseName         = "prechecks.json"
 )

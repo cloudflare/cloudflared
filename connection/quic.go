@@ -11,6 +11,8 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
+
+	"github.com/cloudflare/cloudflared/connection/dialopts"
 )
 
 var (
@@ -26,8 +28,9 @@ func DialQuic(
 	localAddr net.IP,
 	connIndex uint8,
 	logger *zerolog.Logger,
+	opts dialopts.DialOpts,
 ) (quic.Connection, error) {
-	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, edgeAddr, logger)
+	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, edgeAddr, opts, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +38,7 @@ func DialQuic(
 	conn, err := quic.Dial(ctx, udpConn, net.UDPAddrFromAddrPort(edgeAddr), tlsConfig, quicConfig)
 	if err != nil {
 		// close the udp server socket in case of error connecting to the edge
-		udpConn.Close()
+		_ = udpConn.Close()
 		return nil, &EdgeQuicDialError{Cause: err}
 	}
 
@@ -47,10 +50,7 @@ func DialQuic(
 	return conn, nil
 }
 
-func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, edgeIP netip.AddrPort, logger *zerolog.Logger) (*net.UDPConn, error) {
-	portMapMutex.Lock()
-	defer portMapMutex.Unlock()
-
+func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, edgeIP netip.AddrPort, opts dialopts.DialOpts, logger *zerolog.Logger) (*net.UDPConn, error) {
 	listenNetwork := "udp"
 	// https://github.com/quic-go/quic-go/issues/3793 DF bit cannot be set for dual stack listener ("udp") on macOS,
 	// to set the DF bit properly, the network string needs to be specific to the IP family.
@@ -62,15 +62,24 @@ func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, edgeIP netip.Add
 		}
 	}
 
+	// Probes skip port reuse entirely to avoid interfering with the main connection flow.
+	// They use a random ephemeral port for each dial.
+	if opts.SkipPortReuse {
+		return net.ListenUDP(listenNetwork, &net.UDPAddr{IP: localIP, Port: 0})
+	}
+
+	portMapMutex.Lock()
+	defer portMapMutex.Unlock()
+
 	// if port was not set yet, it will be zero, so bind will randomly allocate one.
 	if port, ok := portForConnIndex[connIndex]; ok {
 		udpConn, err := net.ListenUDP(listenNetwork, &net.UDPAddr{IP: localIP, Port: port})
 		// if there wasn't an error, or if port was 0 (independently of error or not, just return)
 		if err == nil {
 			return udpConn, nil
-		} else {
-			logger.Debug().Err(err).Msgf("Unable to reuse port %d for connIndex %d. Falling back to random allocation.", port, connIndex)
 		}
+
+		logger.Debug().Err(err).Msgf("Unable to reuse port %d for connIndex %d. Falling back to random allocation.", port, connIndex)
 	}
 
 	// if we reached here, then there was an error or port as not been allocated it.
@@ -95,7 +104,7 @@ type wrapCloseableConnQuicConnection struct {
 
 func (w *wrapCloseableConnQuicConnection) CloseWithError(errorCode quic.ApplicationErrorCode, reason string) error {
 	err := w.Connection.CloseWithError(errorCode, reason)
-	w.udpConn.Close()
+	_ = w.udpConn.Close()
 
 	return err
 }

@@ -1,0 +1,29 @@
+#!/bin/sh
+# Pre-push hook for cloudflared
+# Runs linting and tests before allowing pushes
+
+set -e
+
+echo "========================================"
+echo "Running pre-push checks..."
+echo "========================================"
+
+# Run formatting check
+echo ""
+echo "==> Checking formatting..."
+make fmt-check
+
+# Run linter
+echo ""
+echo "==> Running linter..."
+make lint
+
+# Run tests
+echo ""
+echo "==> Running tests..."
+make test
+
+echo ""
+echo "========================================"
+echo "All pre-push checks passed!"
+echo "========================================"
