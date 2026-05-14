@@ -38,6 +38,7 @@ const (
 	sshGenCertFlag     = "short-lived-cert"
 	sshConnectTo       = "connect-to"
 	sshDebugStream     = "debug-stream"
+	sshPidFileFlag     = "pidfile"
 	sshConfigTemplate  = `
 Add to your {{.Home}}/.ssh/config:
 
@@ -203,6 +204,11 @@ func Commands() []*cli.Command {
 							Name:   sshDebugStream,
 							Hidden: true,
 							Usage:  "Writes up-to the max provided stream payloads to the logger as debug statements.",
+						},
+						&cli.StringFlag{
+							Name:    sshPidFileFlag,
+							Usage:   "Write the application's PID to this file",
+							EnvVars: []string{"TUNNEL_SERVICE_PIDFILE"},
 						},
 					},
 				},
