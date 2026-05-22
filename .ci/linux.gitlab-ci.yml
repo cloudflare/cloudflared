@@ -5,7 +5,7 @@
   runner: linux-x86-8cpu-16gb
   stage: build
   golangVersion: "boring-1.26"
-  imageVersion: "3595-779e088c0ec4@sha256:a9825d640211b76915a60071e9bef3f73ad3572ce770c7c7dd36b3dd3687504c"
+  imageVersion: "3605-596a300@sha256:19fa512630b4c5681082c68fd98902e2f92092fc216412df44f7dda31cfa57c3"
   CGO_ENABLED: 1
 
 .default-packaging-job: &packaging-job-defaults

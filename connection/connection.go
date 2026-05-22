@@ -84,7 +84,7 @@ type TunnelToken struct {
 }
 
 func (t TunnelToken) Credentials() Credentials {
-	// nolint: gosimple
+	// nolint: staticcheck
 	return Credentials{
 		AccountTag:   t.AccountTag,
 		TunnelSecret: t.TunnelSecret,
@@ -122,6 +122,7 @@ const (
 
 // ShouldFlush returns whether this kind of connection should actively flush data
 func (t Type) shouldFlush() bool {
+	// nolint: exhaustive
 	switch t {
 	case TypeWebsocket, TypeTCP, TypeControlStream:
 		return true
@@ -131,6 +132,7 @@ func (t Type) shouldFlush() bool {
 }
 
 func (t Type) String() string {
+	// nolint: exhaustive
 	switch t {
 	case TypeWebsocket:
 		return "websocket"
