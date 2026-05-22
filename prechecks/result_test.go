@@ -25,11 +25,11 @@ func allPassReport() Report {
 		RunID:             fixedRunID,
 		SuggestedProtocol: new(connection.QUIC),
 		Results: []CheckResult{
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
-			{Type: ProbeTypeQUIC, Component: "UDP Connectivity", Target: "Port 7844 (QUIC)", ProbeStatus: Pass, Details: "Handshake successful"},
-			{Type: ProbeTypeHTTP2, Component: "TCP Connectivity", Target: "Port 7844 (HTTP/2)", ProbeStatus: Pass, Details: "TLS handshake successful"},
-			{Type: ProbeTypeManagementAPI, Component: "Cloudflare API", Target: "api.cloudflare.com:443", ProbeStatus: Pass, Details: "Reachable"},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
+			{Type: ProbeTypeQUIC, Component: "UDP Connectivity", Target: "Port 7844 (QUIC)", ProbeStatus: Pass, Details: detailsQUICHandshakeSuccessful},
+			{Type: ProbeTypeHTTP2, Component: "TCP Connectivity", Target: "Port 7844 (HTTP/2)", ProbeStatus: Pass, Details: detailsHTTP2HandshakeSuccessful},
+			{Type: ProbeTypeManagementAPI, Component: "Cloudflare API", Target: "api.cloudflare.com:443", ProbeStatus: Pass, Details: detailsApiReachable},
 		},
 	}
 }
@@ -41,18 +41,18 @@ func quicBlockedReport() Report {
 		RunID:             fixedRunID,
 		SuggestedProtocol: new(connection.HTTP2),
 		Results: []CheckResult{
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
 			{
 				Type:        ProbeTypeQUIC,
 				Component:   "UDP Connectivity",
 				Target:      "Port 7844 (QUIC)",
 				ProbeStatus: Fail,
-				Details:     "Handshake failed",
-				Action:      "Allow outbound QUIC on port 7844. cloudflared will use http2 in the meantime.",
+				Details:     detailsQUICHandshakeFailed,
+				Action:      actionQUICBlocked,
 			},
-			{Type: ProbeTypeHTTP2, Component: "TCP Connectivity", Target: "Port 7844 (HTTP/2)", ProbeStatus: Pass, Details: "TLS handshake successful"},
-			{Type: ProbeTypeManagementAPI, Component: "Cloudflare API", Target: "api.cloudflare.com:443", ProbeStatus: Pass, Details: "Reachable"},
+			{Type: ProbeTypeHTTP2, Component: "TCP Connectivity", Target: "Port 7844 (HTTP/2)", ProbeStatus: Pass, Details: detailsHTTP2HandshakeSuccessful},
+			{Type: ProbeTypeManagementAPI, Component: "Cloudflare API", Target: "api.cloudflare.com:443", ProbeStatus: Pass, Details: detailsApiReachable},
 		},
 	}
 }
@@ -64,10 +64,10 @@ func apiFailReport() Report {
 		RunID:             fixedRunID,
 		SuggestedProtocol: new(connection.QUIC),
 		Results: []CheckResult{
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
-			{Type: ProbeTypeQUIC, Component: "UDP Connectivity", Target: "Port 7844 (QUIC)", ProbeStatus: Pass, Details: "Handshake successful"},
-			{Type: ProbeTypeHTTP2, Component: "TCP Connectivity", Target: "Port 7844 (HTTP/2)", ProbeStatus: Pass, Details: "TLS handshake successful"},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
+			{Type: ProbeTypeQUIC, Component: "UDP Connectivity", Target: "Port 7844 (QUIC)", ProbeStatus: Pass, Details: detailsQUICHandshakeSuccessful},
+			{Type: ProbeTypeHTTP2, Component: "TCP Connectivity", Target: "Port 7844 (HTTP/2)", ProbeStatus: Pass, Details: detailsHTTP2HandshakeSuccessful},
 			{
 				Type:        ProbeTypeManagementAPI,
 				Component:   "Cloudflare API",
@@ -86,14 +86,14 @@ func bothTransportsBlockedReport() Report {
 		RunID:             fixedRunID,
 		SuggestedProtocol: nil,
 		Results: []CheckResult{
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
-			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: "Resolved successfully"},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region1.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
+			{Type: ProbeTypeDNS, Component: "DNS Resolution", Target: "region2.v2.argotunnel.com", ProbeStatus: Pass, Details: dnsResolvedSuccessfully},
 			{
 				Type:        ProbeTypeQUIC,
 				Component:   "UDP Connectivity",
 				Target:      "Port 7844 (QUIC)",
 				ProbeStatus: Fail,
-				Details:     "Handshake failed",
+				Details:     detailsQUICHandshakeFailed,
 				Action:      "Allow outbound QUIC and/or TCP on port 7844 to the Cloudflare edge.",
 			},
 			{
@@ -101,9 +101,9 @@ func bothTransportsBlockedReport() Report {
 				Component:   "TCP Connectivity",
 				Target:      "Port 7844 (HTTP/2)",
 				ProbeStatus: Fail,
-				Details:     "Blocked or unreachable",
+				Details:     detailsHTTP2BlockedOrUnreachable,
 			},
-			{Type: ProbeTypeManagementAPI, Component: "Cloudflare API", Target: "api.cloudflare.com:443", ProbeStatus: Pass, Details: "Reachable"},
+			{Type: ProbeTypeManagementAPI, Component: "Cloudflare API", Target: "api.cloudflare.com:443", ProbeStatus: Pass, Details: detailsApiReachable},
 		},
 	}
 }
@@ -137,11 +137,11 @@ func TestString_AllPass(t *testing.T) {
 	want := "" +
 		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
 		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           PASS    Handshake successful\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    TLS handshake successful\n" +
-		"Cloudflare API    api.cloudflare.com:443     PASS    Reachable\n" +
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"UDP Connectivity  Port 7844 (QUIC)           PASS    QUIC connection successful\n" +
+		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful\n" +
+		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable\n" +
 		"\n" +
 		"SUMMARY: Environment is healthy. cloudflared will use 'quic' as primary protocol.\n" +
 		"--------------------------------------------------------------------------------\n"
@@ -153,12 +153,12 @@ func TestString_QuicBlocked(t *testing.T) {
 	want := "" +
 		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
 		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           FAIL    Handshake failed\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    TLS handshake successful\n" +
-		"Cloudflare API    api.cloudflare.com:443     PASS    Reachable\n" +
-		"WARNING: Allow outbound QUIC on port 7844. cloudflared will use http2 in the meantime.\n" +
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"UDP Connectivity  Port 7844 (QUIC)           FAIL    QUIC connection failed\n" +
+		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful\n" +
+		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable\n" +
+		"WARNING: Allow outbound QUIC traffic on port 7844 or use HTTP2.\n" +
 		"\n" +
 		"SUMMARY: Environment ready with degraded transport. cloudflared will proceed using 'http2'.\n" +
 		"--------------------------------------------------------------------------------\n"
@@ -170,10 +170,10 @@ func TestString_APIFail(t *testing.T) {
 	want := "" +
 		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
 		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           PASS    Handshake successful\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    TLS handshake successful\n" +
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"UDP Connectivity  Port 7844 (QUIC)           PASS    QUIC connection successful\n" +
+		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful\n" +
 		"Cloudflare API    api.cloudflare.com:443     FAIL    Connection refused\n" +
 		"WARNING: cloudflared will still run, but automatic software updates are unavailable. Ensure port 443 TCP to api.cloudflare.com is open if you want auto-updates.\n" +
 		"\n" +
@@ -187,11 +187,11 @@ func TestString_BothTransportsBlocked(t *testing.T) {
 	want := "" +
 		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
 		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           FAIL    Handshake failed\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         FAIL    Blocked or unreachable\n" +
-		"Cloudflare API    api.cloudflare.com:443     PASS    Reachable\n" +
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
+		"UDP Connectivity  Port 7844 (QUIC)           FAIL    QUIC connection failed\n" +
+		"TCP Connectivity  Port 7844 (HTTP/2)         FAIL    HTTP/2 connection is blocked or unreachable\n" +
+		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable\n" +
 		"ERROR: Allow outbound QUIC and/or TCP on port 7844 to the Cloudflare edge.\n" +
 		"\n" +
 		"SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel.\n" +
@@ -276,11 +276,11 @@ func TestLogEvent_AllPass(t *testing.T) {
 		status    string
 		details   string
 	}{
-		{"DNS Resolution", "region1.v2.argotunnel.com", "pass", "Resolved successfully"},
-		{"DNS Resolution", "region2.v2.argotunnel.com", "pass", "Resolved successfully"},
-		{"UDP Connectivity", "Port 7844 (QUIC)", "pass", "Handshake successful"},
-		{"TCP Connectivity", "Port 7844 (HTTP/2)", "pass", "TLS handshake successful"},
-		{"Cloudflare API", "api.cloudflare.com:443", "pass", "Reachable"},
+		{"DNS Resolution", "region1.v2.argotunnel.com", "pass", dnsResolvedSuccessfully},
+		{"DNS Resolution", "region2.v2.argotunnel.com", "pass", dnsResolvedSuccessfully},
+		{"UDP Connectivity", "Port 7844 (QUIC)", "pass", detailsQUICHandshakeSuccessful},
+		{"TCP Connectivity", "Port 7844 (HTTP/2)", "pass", detailsHTTP2HandshakeSuccessful},
+		{"Cloudflare API", "api.cloudflare.com:443", "pass", detailsApiReachable},
 	}
 	for i, exp := range expected {
 		e := entries[i]
@@ -312,7 +312,7 @@ func TestLogEvent_QuicBlocked(t *testing.T) {
 	assert.Equal(t, "fail", quic.Status)
 	assert.Equal(t, "UDP Connectivity", quic.Component)
 	assert.Equal(t, "Port 7844 (QUIC)", quic.Target)
-	assert.Equal(t, "Handshake failed", quic.Details)
+	assert.Equal(t, "QUIC connection failed", quic.Details)
 	assert.Equal(t, fixedRunID.String(), quic.RunID)
 
 	// Summary: not a hard fail (HTTP/2 still works), protocol falls back to http2.
@@ -354,9 +354,9 @@ func TestLogEvent_BothTransportsBlocked(t *testing.T) {
 
 	// Both transport rows carry status=fail.
 	assert.Equal(t, "fail", entries[2].Status)
-	assert.Equal(t, "Handshake failed", entries[2].Details)
+	assert.Equal(t, "QUIC connection failed", entries[2].Details)
 	assert.Equal(t, "fail", entries[3].Status)
-	assert.Equal(t, "Blocked or unreachable", entries[3].Details)
+	assert.Equal(t, "HTTP/2 connection is blocked or unreachable", entries[3].Details)
 
 	summary := entries[len(entries)-1]
 	require.NotNil(t, summary.HardFail)

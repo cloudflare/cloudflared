@@ -25,7 +25,7 @@ const (
 
 	// Action messages for each probe outcome.
 	actionDNSFail        = "Ensure your DNS resolver can resolve '%s'. Run: dig A %s @1.1.1.1. If that fails, contact your network administrator."
-	actionQUICBlocked    = "QUIC traffic failed to connect to port 7844."
+	actionQUICBlocked    = "Allow outbound QUIC traffic on port 7844 or use HTTP2."
 	actionHTTP2Blocked   = "Allow outbound TCP on port 7844."
 	actionAPIUnreachable = "cloudflared will still run, but automatic software updates are unavailable. " +
 		"Ensure port 443 TCP to api.cloudflare.com is open if you want auto-updates."
@@ -43,16 +43,16 @@ const (
 	noDNSTarget     = "No DNS target (Using edge flag)"
 
 	// Details messages for CheckResult.
-	detailsNoAddressesReturned    = "No addresses returned"
-	detailsResolvedSuccessfully   = "Resolved successfully"
-	detailsHandshakeFailed        = "Handshake failed"
-	detailsHandshakeSuccessful    = "Handshake successful"
-	detailsBlockedOrUnreachable   = "Blocked or unreachable"
-	detailsTLSHandshakeSuccessful = "TLS handshake successful"
-	detailsConnectionFailed       = "Connection failed"
-	detailsTCPPortReachable       = "TCP port reachable (TLS not validated)"
-	detailsDNSPrerequisiteFailed  = "DNS prerequisite failed"
-	detailsTLSConfigFailed        = "TLS configuration failed"
+	dnsNoAddressesReturned           = "No addresses returned"
+	dnsResolvedSuccessfully          = "DNS Resolved successfully"
+	detailsQUICHandshakeFailed       = "QUIC connection failed"
+	detailsQUICHandshakeSuccessful   = "QUIC connection successful"
+	detailsHTTP2BlockedOrUnreachable = "HTTP/2 connection is blocked or unreachable"
+	detailsHTTP2HandshakeSuccessful  = "HTTP/2 connection successful"
+	detailsAPIConnectionFailed       = "API Connection failed"
+	detailsApiReachable              = "API is reachable"
+	detailsDNSPrerequisiteFailed     = "DNS prerequisite failed"
+	detailsTLSConfigFailed           = "TLS configuration failed"
 
 	// Region hostname templates.
 	region1Global = "region1.v2.argotunnel.com"
@@ -140,7 +140,7 @@ func probeDNS(
 
 	addrGroups, err := resolver.Resolve(region)
 	if err != nil || len(addrGroups) == 0 {
-		detail := detailsNoAddressesReturned
+		detail := dnsNoAddressesReturned
 		if err != nil {
 			detail = err.Error()
 		}
@@ -158,12 +158,12 @@ func probeDNS(
 		group := addrGroups[i]
 		if len(group) == 0 {
 			resolved = append(resolved, ResolvedTarget{
-				DNSResult: newDNSCheckResult(target, Fail, detailsNoAddressesReturned, fmt.Sprintf(actionDNSFail, target, target)),
+				DNSResult: newDNSCheckResult(target, Fail, dnsNoAddressesReturned, fmt.Sprintf(actionDNSFail, target, target)),
 			})
 		} else {
 			resolved = append(resolved, ResolvedTarget{
 				Addrs:     group,
-				DNSResult: newDNSCheckResult(target, Pass, detailsResolvedSuccessfully, ""),
+				DNSResult: newDNSCheckResult(target, Pass, dnsResolvedSuccessfully, ""),
 			})
 		}
 	}
@@ -209,7 +209,7 @@ func probeQUIC(
 			Component:   componentUDPConnectivity,
 			Target:      targetPortQUIC,
 			ProbeStatus: Fail,
-			Details:     detailsHandshakeFailed,
+			Details:     detailsQUICHandshakeFailed,
 			Action:      actionQUICBlocked,
 		}
 	}
@@ -223,7 +223,7 @@ func probeQUIC(
 		Component:   componentUDPConnectivity,
 		Target:      targetPortQUIC,
 		ProbeStatus: Pass,
-		Details:     detailsHandshakeSuccessful,
+		Details:     detailsQUICHandshakeSuccessful,
 	}
 }
 
@@ -243,7 +243,7 @@ func probeHTTP2(ctx context.Context, tlsConfig *tls.Config, dialer TCPDialer, ad
 			Component:   componentTCPConnectivity,
 			Target:      targetPortHTTP2,
 			ProbeStatus: Fail,
-			Details:     detailsBlockedOrUnreachable,
+			Details:     detailsHTTP2BlockedOrUnreachable,
 			Action:      actionHTTP2Blocked,
 		}
 	}
@@ -254,7 +254,7 @@ func probeHTTP2(ctx context.Context, tlsConfig *tls.Config, dialer TCPDialer, ad
 		Component:   componentTCPConnectivity,
 		Target:      targetPortHTTP2,
 		ProbeStatus: Pass,
-		Details:     detailsTLSHandshakeSuccessful,
+		Details:     detailsHTTP2HandshakeSuccessful,
 	}
 }
 
@@ -273,7 +273,7 @@ func probeManagementAPI(ctx context.Context, dialer ManagementDialer) CheckResul
 			Component:   componentCloudflareAPI,
 			Target:      targetAPI,
 			ProbeStatus: Fail,
-			Details:     detailsConnectionFailed,
+			Details:     detailsAPIConnectionFailed,
 			Action:      actionAPIUnreachable,
 		}
 	}
@@ -284,7 +284,7 @@ func probeManagementAPI(ctx context.Context, dialer ManagementDialer) CheckResul
 		Component:   componentCloudflareAPI,
 		Target:      targetAPI,
 		ProbeStatus: Pass,
-		Details:     detailsTCPPortReachable,
+		Details:     detailsApiReachable,
 	}
 }
 
@@ -363,11 +363,11 @@ func resolveStaticEdge(addrs []string, log *zerolog.Logger) []ResolvedTarget {
 		if len(resolved) > 0 {
 			targets = append(targets, ResolvedTarget{
 				Addrs:     resolved,
-				DNSResult: newDNSCheckResult(addr, Pass, detailsResolvedSuccessfully, ""),
+				DNSResult: newDNSCheckResult(addr, Pass, dnsResolvedSuccessfully, ""),
 			})
 		} else {
 			targets = append(targets, ResolvedTarget{
-				DNSResult: newDNSCheckResult(addr, Fail, detailsNoAddressesReturned, fmt.Sprintf(actionDNSFail, addr, addr)),
+				DNSResult: newDNSCheckResult(addr, Fail, dnsNoAddressesReturned, fmt.Sprintf(actionDNSFail, addr, addr)),
 			})
 		}
 	}

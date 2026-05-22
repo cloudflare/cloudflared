@@ -124,7 +124,7 @@ func TestProbeDNS_Success(t *testing.T) {
 	assert.Equal(t, ProbeTypeDNS, targets[0].DNSResult.Type)
 	assert.Equal(t, testRegion1Global, targets[0].DNSResult.Target)
 	assert.Equal(t, Pass, targets[0].DNSResult.ProbeStatus)
-	assert.Equal(t, detailsResolvedSuccessfully, targets[0].DNSResult.Details)
+	assert.Equal(t, dnsResolvedSuccessfully, targets[0].DNSResult.Details)
 }
 
 func TestProbeDNS_MultipleRegions(t *testing.T) {
@@ -184,7 +184,7 @@ func TestProbeDNS_EmptyResults(t *testing.T) {
 	require.Len(t, targets, 2)
 	assert.Empty(t, targets[0].Addrs)
 	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
-	assert.Equal(t, detailsNoAddressesReturned, targets[0].DNSResult.Details)
+	assert.Equal(t, dnsNoAddressesReturned, targets[0].DNSResult.Details)
 }
 
 func TestProbeDNS_EmptyGroup(t *testing.T) {
@@ -200,7 +200,7 @@ func TestProbeDNS_EmptyGroup(t *testing.T) {
 	require.Len(t, targets, 1)
 	assert.Empty(t, targets[0].Addrs)
 	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
-	assert.Equal(t, detailsNoAddressesReturned, targets[0].DNSResult.Details)
+	assert.Equal(t, dnsNoAddressesReturned, targets[0].DNSResult.Details)
 }
 
 func TestProbeDNS_RegionFlag(t *testing.T) {
@@ -236,7 +236,7 @@ func TestProbeQUIC_Success(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
 }
 
 func TestProbeQUIC_DialError(t *testing.T) {
@@ -254,7 +254,7 @@ func TestProbeQUIC_DialError(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeFailed, result.Details)
+	assert.Equal(t, detailsQUICHandshakeFailed, result.Details)
 	assert.Equal(t, actionQUICBlocked, result.Action)
 }
 
@@ -274,7 +274,7 @@ func TestProbeQUIC_CloseErrorDoesNotAffectResult(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
 }
 
 func TestProbeQUIC_ContextTimeout(t *testing.T) {
@@ -291,7 +291,7 @@ func TestProbeQUIC_ContextTimeout(t *testing.T) {
 	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
 
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeFailed, result.Details)
+	assert.Equal(t, detailsQUICHandshakeFailed, result.Details)
 }
 
 // probeHTTP2 tests.
@@ -310,7 +310,7 @@ func TestProbeHTTP2_Success(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeHTTP2, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsTLSHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsHTTP2HandshakeSuccessful, result.Details)
 }
 
 func TestProbeHTTP2_DialError(t *testing.T) {
@@ -327,7 +327,7 @@ func TestProbeHTTP2_DialError(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeHTTP2, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsBlockedOrUnreachable, result.Details)
+	assert.Equal(t, detailsHTTP2BlockedOrUnreachable, result.Details)
 	assert.Equal(t, actionHTTP2Blocked, result.Action)
 }
 
@@ -347,7 +347,7 @@ func TestProbeManagementAPI_Success(t *testing.T) {
 	assert.Equal(t, "Cloudflare API", result.Component)
 	assert.Equal(t, "api.cloudflare.com:443", result.Target)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsTCPPortReachable, result.Details)
+	assert.Equal(t, detailsApiReachable, result.Details)
 }
 
 func TestProbeManagementAPI_DialError(t *testing.T) {
@@ -362,7 +362,7 @@ func TestProbeManagementAPI_DialError(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeManagementAPI, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsConnectionFailed, result.Details)
+	assert.Equal(t, detailsAPIConnectionFailed, result.Details)
 	assert.Equal(t, actionAPIUnreachable, result.Action)
 }
 
@@ -516,7 +516,7 @@ func TestProbeQUIC_IPv6Address(t *testing.T) {
 	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
 
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
 }
 
 // IPv6 address tests for probeHTTP2.
@@ -571,7 +571,7 @@ func TestResolveStaticEdge_InvalidAddr(t *testing.T) {
 	require.Len(t, targets, 1)
 	assert.Equal(t, "not-a-valid-addr", targets[0].DNSResult.Target)
 	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
-	assert.Equal(t, detailsNoAddressesReturned, targets[0].DNSResult.Details)
+	assert.Equal(t, dnsNoAddressesReturned, targets[0].DNSResult.Details)
 	assert.Empty(t, targets[0].Addrs)
 }
 
