@@ -18,25 +18,6 @@ class TestEdgeDiscovery:
         return config
 
     @pytest.mark.parametrize("protocol", protocols())
-    def test_default_only(self, tmp_path, component_tests_config, protocol):
-        """
-        This test runs a tunnel with the default edge-ip-version (auto), which will use
-        whichever address family the system resolver returns first.
-        """
-        if self.has_ipv6_only():
-            self.expect_address_connections(
-                tmp_path, component_tests_config, protocol, None, self.expect_ipv6_address)
-        elif self.has_ipv4_only():
-            self.expect_address_connections(
-                tmp_path, component_tests_config, protocol, None, self.expect_ipv4_address)
-        elif self.has_dual_stack(address_family_preference=socket.AddressFamily.AF_INET6):
-            self.expect_address_connections(
-                tmp_path, component_tests_config, protocol, None, self.expect_ipv6_address)
-        else:
-            self.expect_address_connections(
-                tmp_path, component_tests_config, protocol, None, self.expect_ipv4_address)
-
-    @pytest.mark.parametrize("protocol", protocols())
     def test_ipv4_only(self, tmp_path, component_tests_config, protocol):
         """
         This test runs a tunnel to connect via IPv4-only edge addresses

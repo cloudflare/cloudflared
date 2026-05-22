@@ -2,6 +2,7 @@ import logging
 import os
 import platform
 import subprocess
+import threading
 from contextlib import contextmanager
 from time import sleep
 import sys
@@ -12,7 +13,65 @@ import requests
 import yaml
 from retrying import retry
 
-from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
+from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS, GRACEFUL_SHUTDOWN_TIMEOUT, READER_THREAD_JOIN_TIMEOUT
+
+class CloudflaredProcess:
+    """
+    Wrapper around a Popen process that continuously drains stdout and stderr
+    in background threads to prevent OS pipe buffers from filling up and
+    blocking the child process. Captured output is logged when the process
+    is cleaned up.
+    """
+
+    def __init__(self, cmd, allow_input, capture_output):
+        output = subprocess.PIPE if capture_output else subprocess.DEVNULL
+        stdin = subprocess.PIPE if allow_input else None
+        self.process = subprocess.Popen(cmd, stdin=stdin, stdout=output, stderr=subprocess.STDOUT)
+
+        self._capture_output = capture_output
+        self._stdout_lines = []
+        self._threads = []
+        if capture_output:
+            self._threads.append(self._start_reader(self.process.stdout, self._stdout_lines))
+
+    @staticmethod
+    def _start_reader(pipe, sink):
+        def _drain():
+            for line in pipe:
+                sink.append(line)
+            pipe.close()
+        t = threading.Thread(target=_drain, daemon=True)
+        t.start()
+        return t
+
+    def terminate(self):
+        """Terminate the process if it is still running."""
+        if self.process.poll() is None:
+            self.process.terminate()
+
+    def cleanup(self):
+        """Terminate, wait for exit, join reader threads, and log output."""
+        self.terminate()
+        try:
+            self.process.wait(timeout=GRACEFUL_SHUTDOWN_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+        for t in self._threads:
+            t.join(timeout=READER_THREAD_JOIN_TIMEOUT)
+        if self._capture_output:
+            stdout = b"".join(self._stdout_lines).decode("utf-8", errors="replace")
+            if stdout:
+                LOGGER.info(f"cloudflared stdout:\n{stdout}")
+
+    @property
+    def stdout_lines(self):
+        return self._stdout_lines
+
+    # Proxy common Popen attributes so callers can still use the wrapper
+    # as if it were a Popen (e.g. send_signal, stdin, pid, returncode).
+    def __getattr__(self, name):
+        return getattr(self.process, name)
 
 def configure_logger():
     logger = logging.getLogger(__name__)
@@ -75,20 +134,15 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
     LOGGER.info(f"Run cmd {cmd} with config {config}")
     return cmd
 
-
 @contextmanager
 def run_cloudflared_background(cmd, allow_input, capture_output):
-    output = subprocess.PIPE if capture_output else subprocess.DEVNULL
-    stdin = subprocess.PIPE if allow_input else None
     cfd = None
     try:
-        cfd = subprocess.Popen(cmd, stdin=stdin, stdout=output, stderr=output)
+        cfd = CloudflaredProcess(cmd, allow_input, capture_output)
         yield cfd
     finally:
         if cfd:
-            cfd.terminate()
-            if capture_output:
-                LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
+            cfd.cleanup()
     
 
 def get_quicktunnel_url():
