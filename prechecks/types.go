@@ -74,6 +74,19 @@ type CheckResult struct {
 	Action string
 }
 
+// ResolvedTarget bundles a resolved edge target's addresses with the DNS
+// CheckResult that describes it. This keeps addr groups and their report rows
+// together as a single unit, avoiding parallel-slice synchronization.
+type ResolvedTarget struct {
+	// Addrs holds the resolved edge addresses for this target. May be empty
+	// when DNS resolution succeeded structurally but returned no IPs.
+	Addrs []*allregions.EdgeAddr
+
+	// DNSResult is the CheckResult representing DNS resolution for this target.
+	// Its Target field is the human-readable label used across all probe rows.
+	DNSResult CheckResult
+}
+
 // Report aggregates all CheckResults produced by a single Run() invocation.
 // Pre-checks run in parallel with tunnel initialization and are purely
 // diagnostic: the Report is displayed to the user but never gates startup.
@@ -107,4 +120,10 @@ type Config struct {
 	// checks. It mirrors the --edge-ip-version CLI flag so that the pre-check
 	// exercises the same code paths the tunnel itself will use.
 	IPVersion allregions.ConfigIPVersion
+
+	// EdgeAddrs, when non-empty, contains the --edge flag values (explicit
+	// edge addresses). When set, DNS probing is skipped entirely — there are
+	// no SRV records to validate — and transport probes target each addr
+	// individually, labeled with the original addr string.
+	EdgeAddrs []string
 }

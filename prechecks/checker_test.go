@@ -420,47 +420,101 @@ func TestRun_BothFamiliesProbed(t *testing.T) {
 	assert.Equal(t, connection.QUIC, *report.SuggestedProtocol)
 }
 
-// TestRun_IPv4OnlySkipsV6 verifies that when IPv4Only is configured only V4
-// addresses are probed (2 regions × 1 V4 = 2 dials per transport).
-func TestRun_IPv4OnlySkipsV6(t *testing.T) {
+// TestRun_IPVersionRestriction verifies that when a single IP family is
+// configured, only that family is probed (2 regions × 1 addr = 2 dials per
+// transport) and the excluded family is never dialled.
+func TestRun_IPVersionRestriction(t *testing.T) {
 	t.Parallel()
-	ctrl := gomock.NewController(t)
 
-	dns := mocks.NewMockDNSResolver(ctrl)
-	tcp := mocks.NewMockTCPDialer(ctrl)
-	quicD := mocks.NewMockQUICDialer(ctrl)
-	mgmt := mocks.NewMockManagementDialer(ctrl)
+	tests := []struct {
+		name      string
+		ipVersion allregions.ConfigIPVersion
+	}{
+		{"IPv4Only skips V6", allregions.IPv4Only},
+		{"IPv6Only skips V4", allregions.IPv6Only},
+	}
 
-	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrsBothFamilies(), nil)
-	// IPv4Only: only V4 addresses are probed → 2 regions × 1 V4 = 2 calls each.
-	// V6 addresses must never be dialed.
-	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nopConn{}, nil).Times(2)
-	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&fakeQUICConn{}, nil).Times(2)
-	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nopConn{}, nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
 
-	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.IPv4Only},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+			dns := mocks.NewMockDNSResolver(ctrl)
+			tcp := mocks.NewMockTCPDialer(ctrl)
+			quicD := mocks.NewMockQUICDialer(ctrl)
+			mgmt := mocks.NewMockManagementDialer(ctrl)
 
-	requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
+			dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrsBothFamilies(), nil)
+			// 2 regions × 1 addr per restricted family = 2 dials each.
+			tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nopConn{}, nil).Times(2)
+			quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&fakeQUICConn{}, nil).Times(2)
+			mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nopConn{}, nil)
+
+			report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: tt.ipVersion},
+				nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+			requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
+		})
+	}
 }
 
-// TestRun_IPv6OnlySkipsV4 verifies that when IPv6Only is configured only V6
-// addresses are probed (2 regions × 1 V6 = 2 dials per transport).
-func TestRun_IPv6OnlySkipsV4(t *testing.T) {
+// TestRun_EdgeAddrs_SingleAddr verifies that a single --edge addr bypasses DNS
+// probing. The report contains one DNS Skip row, transport rows labeled with
+// the raw addr string, and the Management API row.
+func TestRun_EdgeAddrs_SingleAddr(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 
-	dns := mocks.NewMockDNSResolver(ctrl)
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
 
-	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrsBothFamilies(), nil)
-	// IPv6Only: only V6 addresses are probed → 2 regions × 1 V6 = 2 calls each.
-	// V4 addresses must never be dialled.
+	// DNS resolver must NOT be called when EdgeAddrs is set.
+	dns := mocks.NewMockDNSResolver(ctrl)
+	dns.EXPECT().Resolve(gomock.Any()).Times(0)
+
+	// One addr resolves to one group → one dial per transport.
+	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil).Times(1)
+	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&fakeQUICConn{}, nil).Times(1)
+	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil)
+
+	cfg := Config{
+		EdgeAddrs: []string{"127.0.0.1:7844"},
+		Timeout:   2 * time.Second,
+		IPVersion: allregions.Auto,
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+	// 1 DNS Skip + 1 QUIC + 1 HTTP2 + 1 API = 4 results.
+	requireStatuses(t, report, Pass, Pass, Pass, Pass)
+	assert.Equal(t, ProbeTypeDNS, report.Results[0].Type, "first row must be DNS skip")
+	assert.Equal(t, "127.0.0.1:7844", report.Results[1].Target, "QUIC target must be the raw --edge addr")
+	assert.Equal(t, "127.0.0.1:7844", report.Results[2].Target, "HTTP2 target must be the raw --edge addr")
+	require.NotNil(t, report.SuggestedProtocol)
+	assert.Equal(t, connection.QUIC, *report.SuggestedProtocol)
+}
+
+// TestRun_EdgeAddrs_MultipleAddrs verifies that multiple --edge addrs produce
+// one transport row per addr, each labeled with its original addr string.
+func TestRun_EdgeAddrs_MultipleAddrs(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	tcp := mocks.NewMockTCPDialer(ctrl)
+	quicD := mocks.NewMockQUICDialer(ctrl)
+	mgmt := mocks.NewMockManagementDialer(ctrl)
+
+	dns := mocks.NewMockDNSResolver(ctrl)
+	dns.EXPECT().Resolve(gomock.Any()).Times(0)
+
+	// Two addrs → two groups → two dials per transport.
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(2)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -468,8 +522,60 @@ func TestRun_IPv6OnlySkipsV4(t *testing.T) {
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
-	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.IPv6Only},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+	cfg := Config{
+		EdgeAddrs: []string{"127.0.0.1:7844", "127.0.0.2:7844"},
+		Timeout:   2 * time.Second,
+		IPVersion: allregions.Auto,
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
+	// 2 DNS Pass (one per addr) + 2 QUIC + 2 HTTP2 + 1 API = 7 results.
 	requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
+	assert.Equal(t, ProbeTypeDNS, report.Results[0].Type, "first row must be DNS skip addr1")
+	assert.Equal(t, "127.0.0.1:7844", report.Results[0].Target, "DNS skip addr1 label")
+	assert.Equal(t, ProbeTypeDNS, report.Results[1].Type, "second row must be DNS skip addr2")
+	assert.Equal(t, "127.0.0.2:7844", report.Results[1].Target, "DNS skip addr2 label")
+	assert.Equal(t, "127.0.0.1:7844", report.Results[2].Target, "QUIC addr1")
+	assert.Equal(t, "127.0.0.2:7844", report.Results[3].Target, "QUIC addr2")
+	assert.Equal(t, "127.0.0.1:7844", report.Results[4].Target, "HTTP2 addr1")
+	assert.Equal(t, "127.0.0.2:7844", report.Results[5].Target, "HTTP2 addr2")
+}
+
+// TestRun_EdgeAddrs_UnresolvableAddr verifies that when all --edge addrs fail
+// to resolve, the DNS resolver is not called and transport rows are skipped,
+// mirroring the DNS skip row.
+func TestRun_EdgeAddrs_UnresolvableAddr(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	tcp := mocks.NewMockTCPDialer(ctrl)
+	quicD := mocks.NewMockQUICDialer(ctrl)
+	mgmt := mocks.NewMockManagementDialer(ctrl)
+
+	dns := mocks.NewMockDNSResolver(ctrl)
+	dns.EXPECT().Resolve(gomock.Any()).Times(0)
+
+	// Unresolvable addr → no groups → no transport dials.
+	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil)
+
+	cfg := Config{
+		EdgeAddrs: []string{"not-a-valid-addr"},
+		Timeout:   2 * time.Second,
+		IPVersion: allregions.Auto,
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+	// 1 DNS Fail + 1 QUIC Skip + 1 HTTP2 Skip + 1 API = 4 results.
+	requireStatuses(t, report, Fail, Skip, Skip, Pass)
+	assert.Equal(t, ProbeTypeDNS, report.Results[0].Type)
+	assert.Equal(t, "not-a-valid-addr", report.Results[0].Target)
+	assert.Equal(t, ProbeTypeQUIC, report.Results[1].Type)
+	assert.Equal(t, ProbeTypeHTTP2, report.Results[2].Type)
+	assert.Nil(t, report.SuggestedProtocol)
+	assert.True(t, report.hasHardFail())
 }

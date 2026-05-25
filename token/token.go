@@ -407,7 +407,7 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 func handleRedirects(req *http.Request, via []*http.Request, orgToken string) error {
 	// attach org token to login request
 	if strings.Contains(req.URL.Path, AccessLoginWorkerPath) {
-		req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken})
+		req.AddCookie(&http.Cookie{Name: tokenCookie, Value: orgToken}) //nolint: gosec
 	}
 
 	// attach app session cookie to authorized request
@@ -417,7 +417,7 @@ func handleRedirects(req *http.Request, via []*http.Request, orgToken string) er
 			if prevReq != nil && prevReq.Response != nil {
 				for _, c := range prevReq.Response.Cookies() {
 					if c.Name == appSessionCookie {
-						req.AddCookie(&http.Cookie{Name: appSessionCookie, Value: c.Value})
+						req.AddCookie(&http.Cookie{Name: appSessionCookie, Value: c.Value}) //nolint: gosec
 						return nil
 					}
 				}

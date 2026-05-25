@@ -66,9 +66,6 @@ type TunnelConfig struct {
 	// NoPrechecks disables connectivity pre-checks at startup.
 	NoPrechecks bool
 
-	// Prechecks enables connectivity pre-checks at startup.
-	Prechecks bool
-
 	NamedTunnel         *connection.TunnelProperties
 	ProtocolSelector    connection.ProtocolSelector
 	EdgeTLSConfigs      map[connection.Protocol]*tls.Config

@@ -539,19 +539,11 @@ func runPrechecks(c *cli.Context, log *zerolog.Logger, region string) {
 	cfg := prechecks.Config{
 		Region:    region,
 		IPVersion: ipVersion,
-	}
-
-	// Mirror the static/dynamic edge selection from supervisor/supervisor.go:
-	// when --edge addresses are provided, bypass DNS discovery entirely.
-	var dnsResolver prechecks.DNSResolver
-	if edgeAddrs := c.StringSlice(cfdflags.Edge); len(edgeAddrs) > 0 {
-		dnsResolver = &prechecks.StaticEdgeDNSResolver{Addrs: edgeAddrs, Log: log}
-	} else {
-		dnsResolver = &prechecks.EdgeDNSResolver{Log: log}
+		EdgeAddrs: c.StringSlice(cfdflags.Edge),
 	}
 
 	dialers := prechecks.RunDialers{
-		DNSResolver:      dnsResolver,
+		DNSResolver:      &prechecks.EdgeDNSResolver{Log: log},
 		TCPDialer:        &prechecks.EdgeTCPDialer{},
 		QUICDialer:       &prechecks.EdgeQUICDialer{},
 		ManagementDialer: &prechecks.NetManagementDialer{Dialer: net.Dialer{}},

@@ -117,15 +117,14 @@ func TestProbeDNS_Success(t *testing.T) {
 	resolver := mocks.NewMockDNSResolver(ctrl)
 	resolver.EXPECT().Resolve("").Return([][]*allregions.EdgeAddr{{v4Addr, v6Addr}}, nil)
 
-	addrs, results := probeDNS(resolver, "")
+	targets := probeDNS(resolver, "")
 
-	require.NotNil(t, addrs)
-	require.Len(t, results, 1)
-	assert.Len(t, addrs, 1)
-	assert.Equal(t, ProbeTypeDNS, results[0].Type)
-	assert.Equal(t, testRegion1Global, results[0].Target)
-	assert.Equal(t, Pass, results[0].ProbeStatus)
-	assert.Equal(t, detailsResolvedSuccessfully, results[0].Details)
+	require.Len(t, targets, 1)
+	assert.NotEmpty(t, targets[0].Addrs)
+	assert.Equal(t, ProbeTypeDNS, targets[0].DNSResult.Type)
+	assert.Equal(t, testRegion1Global, targets[0].DNSResult.Target)
+	assert.Equal(t, Pass, targets[0].DNSResult.ProbeStatus)
+	assert.Equal(t, dnsResolvedSuccessfully, targets[0].DNSResult.Details)
 }
 
 func TestProbeDNS_MultipleRegions(t *testing.T) {
@@ -139,17 +138,17 @@ func TestProbeDNS_MultipleRegions(t *testing.T) {
 	resolver := mocks.NewMockDNSResolver(ctrl)
 	resolver.EXPECT().Resolve("").Return([][]*allregions.EdgeAddr{{v4Addr1}, {v4Addr2}}, nil)
 
-	addrs, results := probeDNS(resolver, "")
+	targets := probeDNS(resolver, "")
 
-	require.NotNil(t, addrs)
-	require.Len(t, results, 2)
-	assert.Len(t, addrs, 2)
+	require.Len(t, targets, 2)
 
-	assert.Equal(t, testRegion1Global, results[0].Target)
-	assert.Equal(t, Pass, results[0].ProbeStatus)
+	assert.Equal(t, testRegion1Global, targets[0].DNSResult.Target)
+	assert.Equal(t, Pass, targets[0].DNSResult.ProbeStatus)
+	assert.NotEmpty(t, targets[0].Addrs)
 
-	assert.Equal(t, testRegion2Global, results[1].Target)
-	assert.Equal(t, Pass, results[1].ProbeStatus)
+	assert.Equal(t, testRegion2Global, targets[1].DNSResult.Target)
+	assert.Equal(t, Pass, targets[1].DNSResult.ProbeStatus)
+	assert.NotEmpty(t, targets[1].Addrs)
 }
 
 func TestProbeDNS_ResolverError(t *testing.T) {
@@ -160,17 +159,16 @@ func TestProbeDNS_ResolverError(t *testing.T) {
 	resolver := mocks.NewMockDNSResolver(ctrl)
 	resolver.EXPECT().Resolve("").Return(nil, errors.New("DNS lookup failed"))
 
-	addrs, results := probeDNS(resolver, "")
+	targets := probeDNS(resolver, "")
 
-	assert.Nil(t, addrs)
-	require.Len(t, results, 2)
-
-	assert.Equal(t, Fail, results[0].ProbeStatus)
-	assert.Equal(t, "DNS lookup failed", results[0].Details)
-	assert.Contains(t, results[0].Action, testRegion1Global)
-	assert.Contains(t, results[1].Action, testRegion2Global)
-
-	assert.Equal(t, Fail, results[1].ProbeStatus)
+	require.Len(t, targets, 2)
+	assert.Empty(t, targets[0].Addrs)
+	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
+	assert.Equal(t, "DNS lookup failed", targets[0].DNSResult.Details)
+	assert.Contains(t, targets[0].DNSResult.Action, testRegion1Global)
+	assert.Empty(t, targets[1].Addrs)
+	assert.Equal(t, Fail, targets[1].DNSResult.ProbeStatus)
+	assert.Contains(t, targets[1].DNSResult.Action, testRegion2Global)
 }
 
 func TestProbeDNS_EmptyResults(t *testing.T) {
@@ -181,12 +179,12 @@ func TestProbeDNS_EmptyResults(t *testing.T) {
 	resolver := mocks.NewMockDNSResolver(ctrl)
 	resolver.EXPECT().Resolve("").Return([][]*allregions.EdgeAddr{}, nil)
 
-	addrs, results := probeDNS(resolver, "")
+	targets := probeDNS(resolver, "")
 
-	assert.Nil(t, addrs)
-	require.Len(t, results, 2)
-	assert.Equal(t, Fail, results[0].ProbeStatus)
-	assert.Equal(t, "No addresses returned", results[0].Details)
+	require.Len(t, targets, 2)
+	assert.Empty(t, targets[0].Addrs)
+	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
+	assert.Equal(t, dnsNoAddressesReturned, targets[0].DNSResult.Details)
 }
 
 func TestProbeDNS_EmptyGroup(t *testing.T) {
@@ -197,12 +195,12 @@ func TestProbeDNS_EmptyGroup(t *testing.T) {
 	resolver := mocks.NewMockDNSResolver(ctrl)
 	resolver.EXPECT().Resolve("").Return([][]*allregions.EdgeAddr{{}}, nil)
 
-	addrs, results := probeDNS(resolver, "")
+	targets := probeDNS(resolver, "")
 
-	require.NotNil(t, addrs)
-	require.Len(t, results, 1)
-	assert.Equal(t, Fail, results[0].ProbeStatus)
-	assert.Equal(t, "No addresses returned", results[0].Details)
+	require.Len(t, targets, 1)
+	assert.Empty(t, targets[0].Addrs)
+	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
+	assert.Equal(t, dnsNoAddressesReturned, targets[0].DNSResult.Details)
 }
 
 func TestProbeDNS_RegionFlag(t *testing.T) {
@@ -214,10 +212,10 @@ func TestProbeDNS_RegionFlag(t *testing.T) {
 	resolver := mocks.NewMockDNSResolver(ctrl)
 	resolver.EXPECT().Resolve("us").Return([][]*allregions.EdgeAddr{{v4Addr}}, nil)
 
-	_, results := probeDNS(resolver, "us")
+	targets := probeDNS(resolver, "us")
 
-	require.Len(t, results, 1)
-	assert.Equal(t, testRegion1US, results[0].Target)
+	require.Len(t, targets, 1)
+	assert.Equal(t, testRegion1US, targets[0].DNSResult.Target)
 }
 
 // probeQUIC tests.
@@ -238,7 +236,7 @@ func TestProbeQUIC_Success(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
 }
 
 func TestProbeQUIC_DialError(t *testing.T) {
@@ -256,7 +254,7 @@ func TestProbeQUIC_DialError(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeFailed, result.Details)
+	assert.Equal(t, detailsQUICHandshakeFailed, result.Details)
 	assert.Equal(t, actionQUICBlocked, result.Action)
 }
 
@@ -276,7 +274,7 @@ func TestProbeQUIC_CloseErrorDoesNotAffectResult(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
 }
 
 func TestProbeQUIC_ContextTimeout(t *testing.T) {
@@ -293,7 +291,7 @@ func TestProbeQUIC_ContextTimeout(t *testing.T) {
 	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
 
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeFailed, result.Details)
+	assert.Equal(t, detailsQUICHandshakeFailed, result.Details)
 }
 
 // probeHTTP2 tests.
@@ -312,7 +310,7 @@ func TestProbeHTTP2_Success(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeHTTP2, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsTLSHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsHTTP2HandshakeSuccessful, result.Details)
 }
 
 func TestProbeHTTP2_DialError(t *testing.T) {
@@ -329,7 +327,7 @@ func TestProbeHTTP2_DialError(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeHTTP2, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsBlockedOrUnreachable, result.Details)
+	assert.Equal(t, detailsHTTP2BlockedOrUnreachable, result.Details)
 	assert.Equal(t, actionHTTP2Blocked, result.Action)
 }
 
@@ -349,7 +347,7 @@ func TestProbeManagementAPI_Success(t *testing.T) {
 	assert.Equal(t, "Cloudflare API", result.Component)
 	assert.Equal(t, "api.cloudflare.com:443", result.Target)
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsTCPPortReachable, result.Details)
+	assert.Equal(t, detailsApiReachable, result.Details)
 }
 
 func TestProbeManagementAPI_DialError(t *testing.T) {
@@ -364,7 +362,7 @@ func TestProbeManagementAPI_DialError(t *testing.T) {
 
 	assert.Equal(t, ProbeTypeManagementAPI, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
-	assert.Equal(t, detailsConnectionFailed, result.Details)
+	assert.Equal(t, detailsAPIConnectionFailed, result.Details)
 	assert.Equal(t, actionAPIUnreachable, result.Action)
 }
 
@@ -373,7 +371,7 @@ func TestProbeManagementAPI_DialError(t *testing.T) {
 func TestSkipResult(t *testing.T) {
 	t.Parallel()
 
-	result := skipResult(ProbeTypeQUIC, "UDP Connectivity", "Port 7844 (QUIC)")
+	result := skipResult(ProbeTypeQUIC, "UDP Connectivity", "Port 7844 (QUIC)", detailsDNSPrerequisiteFailed)
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, "UDP Connectivity", result.Component)
@@ -518,7 +516,7 @@ func TestProbeQUIC_IPv6Address(t *testing.T) {
 	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
 
 	assert.Equal(t, Pass, result.ProbeStatus)
-	assert.Equal(t, detailsHandshakeSuccessful, result.Details)
+	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
 }
 
 // IPv6 address tests for probeHTTP2.
@@ -536,4 +534,62 @@ func TestProbeHTTP2_IPv6Address(t *testing.T) {
 	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr)
 
 	assert.Equal(t, Pass, result.ProbeStatus)
+}
+
+// resolveStaticEdge tests.
+
+// TestResolveStaticEdge_SingleAddr verifies that a single resolvable --edge
+// addr produces one group labeled with the original addr string.
+func TestResolveStaticEdge_SingleAddr(t *testing.T) {
+	t.Parallel()
+	logger := zerolog.Nop()
+	targets := resolveStaticEdge([]string{"127.0.0.1:7844"}, &logger)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "127.0.0.1:7844", targets[0].DNSResult.Target)
+	assert.Equal(t, Pass, targets[0].DNSResult.ProbeStatus)
+	assert.NotEmpty(t, targets[0].Addrs)
+}
+
+// TestResolveStaticEdge_MultipleAddrs verifies that multiple --edge addrs each
+// produce their own ResolvedTarget, preserving per-addr structure and label order.
+func TestResolveStaticEdge_MultipleAddrs(t *testing.T) {
+	t.Parallel()
+	logger := zerolog.Nop()
+	targets := resolveStaticEdge([]string{"127.0.0.1:7844", "127.0.0.2:7844"}, &logger)
+	require.Len(t, targets, 2)
+	assert.Equal(t, "127.0.0.1:7844", targets[0].DNSResult.Target)
+	assert.Equal(t, "127.0.0.2:7844", targets[1].DNSResult.Target)
+}
+
+// TestResolveStaticEdge_InvalidAddr verifies that an unresolvable addr is
+// silently skipped and does not appear in the output.
+func TestResolveStaticEdge_InvalidAddr(t *testing.T) {
+	t.Parallel()
+	logger := zerolog.Nop()
+	// "not-a-valid-addr" has no port — ResolveTCPAddr will fail.
+	targets := resolveStaticEdge([]string{"not-a-valid-addr"}, &logger)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "not-a-valid-addr", targets[0].DNSResult.Target)
+	assert.Equal(t, Fail, targets[0].DNSResult.ProbeStatus)
+	assert.Equal(t, dnsNoAddressesReturned, targets[0].DNSResult.Details)
+	assert.Empty(t, targets[0].Addrs)
+}
+
+// TestResolveStaticEdge_PartiallyValid verifies that a mix of valid and invalid
+// addrs produces one ResolvedTarget per addr — valid ones with Addrs and a Skip
+// DNSResult, invalid ones with nil Addrs and a Fail DNSResult.
+func TestResolveStaticEdge_PartiallyValid(t *testing.T) {
+	t.Parallel()
+	logger := zerolog.Nop()
+	targets := resolveStaticEdge([]string{"127.0.0.1:7844", "not-a-valid-addr", "127.0.0.2:7844"}, &logger)
+	require.Len(t, targets, 3)
+	assert.Equal(t, "127.0.0.1:7844", targets[0].DNSResult.Target)
+	assert.Equal(t, Pass, targets[0].DNSResult.ProbeStatus)
+	assert.NotEmpty(t, targets[0].Addrs)
+	assert.Equal(t, "not-a-valid-addr", targets[1].DNSResult.Target)
+	assert.Equal(t, Fail, targets[1].DNSResult.ProbeStatus)
+	assert.Empty(t, targets[1].Addrs)
+	assert.Equal(t, "127.0.0.2:7844", targets[2].DNSResult.Target)
+	assert.Equal(t, Pass, targets[2].DNSResult.ProbeStatus)
+	assert.NotEmpty(t, targets[2].Addrs)
 }

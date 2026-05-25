@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import json
 import os
+import time
 
-from constants import MAX_LOG_LINES
+from constants import MAX_LOG_LINES, LOG_POLL_INTERVAL, LOG_POLL_TIMEOUT
 from util import start_cloudflared, wait_tunnel_ready, send_requests
 
 # Rolling logger rotate log files after 1 MB
@@ -12,12 +13,14 @@ expect_message = "Starting Hello"
 
 
 def assert_log_to_terminal(cloudflared):
-    for _ in range(0, MAX_LOG_LINES):
-        line = cloudflared.stderr.readline()
-        if not line:
-            break
-        if expect_message.encode() in line:
-            return
+    # All logs are drained by a background thread into cloudflared.stdout_lines.
+    # Poll the accumulated lines until the expected message appears.
+    deadline = time.monotonic() + LOG_POLL_TIMEOUT
+    while time.monotonic() < deadline:
+        for line in list(cloudflared.stdout_lines):
+            if expect_message.encode() in line:
+                return
+        time.sleep(LOG_POLL_INTERVAL)
     raise Exception(f"terminal log doesn't contain {expect_message}")
 
 

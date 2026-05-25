@@ -1,10 +1,9 @@
 import json
 import subprocess
-from time import sleep
 
 from constants import MANAGEMENT_HOST_NAME
 from setup import get_config_from_file
-from util import get_tunnel_connector_id
+from util import get_tunnel_connector_id, CloudflaredProcess
 
 SINGLE_CASE_TIMEOUT = 600
 
@@ -83,38 +82,12 @@ class CloudflaredCli:
 
     def __enter__(self):
         self.basecmd += ["run"]
-        self.process = subprocess.Popen(self.basecmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.logger.info(f"Run cmd {self.basecmd}")
-        return self.process
+        self.cfd = CloudflaredProcess(self.basecmd, allow_input=False, capture_output=True)
+        return self.cfd
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        terminate_gracefully(self.process, self.logger, self.basecmd)
-        self.logger.debug(f"{self.basecmd} logs: {self.process.stderr.read()}")
-
-
-def terminate_gracefully(process, logger, cmd):
-    process.terminate()
-    process_terminated = wait_for_terminate(process)
-    if not process_terminated:
-        process.kill()
-        logger.warning(f"{cmd}: cloudflared did not terminate within wait period. Killing process. logs: \
-                stdout: {process.stdout.read()}, stderr: {process.stderr.read()}")
-
-
-def wait_for_terminate(opened_subprocess, attempts=10, poll_interval=1):
-    """
-        wait_for_terminate polls the opened_subprocess every x seconds for a given number of attempts.
-        It returns true if the subprocess was terminated and false if it didn't.
-    """
-    for _ in range(attempts):
-        if _is_process_stopped(opened_subprocess):
-            return True
-        sleep(poll_interval)
-    return False
-
-
-def _is_process_stopped(process):
-    return process.poll() is not None
+        self.cfd.cleanup()
 
 
 def cert_path():

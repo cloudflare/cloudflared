@@ -30,16 +30,17 @@ type RunDialers struct {
 	ManagementDialer ManagementDialer
 }
 
-// TransportResults holds the per-region results for each transport probe type.
-// Each slice has one entry per DNS-resolved region, in the same order as dnsResults.
+// TransportResults holds the per-target results for each transport probe type.
+// Each slice has one entry per resolved target group, in the same order as the
+// target labels slice.
 type TransportResults struct {
-	QUIC          []CheckResult // one per region
-	HTTP2         []CheckResult // one per region
-	ManagementAPI CheckResult   // single target, no regions
+	QUIC          []CheckResult // one per target group
+	HTTP2         []CheckResult // one per target group
+	ManagementAPI CheckResult   // single target, no groups
 }
 
 // Collect returns all results as a slice in a consistent order for reporting:
-// all QUIC rows first (one per region), then all HTTP2 rows, then Management API.
+// all QUIC rows first (one per target), then all HTTP2 rows, then Management API.
 func (tr TransportResults) Collect() []CheckResult {
 	results := make([]CheckResult, 0, len(tr.QUIC)+len(tr.HTTP2)+1)
 	results = append(results, tr.QUIC...)
@@ -50,8 +51,11 @@ func (tr TransportResults) Collect() []CheckResult {
 
 // Run executes the following connectivity pre-checks:
 //
-//  1. DNS resolution (sequential – transport probes depend on its output).
-//  2. QUIC, HTTP/2, and Management API probes run concurrently.
+//  1. Edge address resolution — either DNS-based SRV discovery (normal path)
+//     or direct resolution of --edge addresses (static path). The static path
+//     skips DNS probe rows entirely since there are no SRV records to validate.
+//  2. QUIC, HTTP/2, and Management API probes run concurrently against the
+//     resolved addresses.
 //
 // Each failed probe is retried up to maxRetries times with exponential backoff.
 // The suite is bounded by cfg.Timeout (defaultTimeout if zero).
@@ -64,19 +68,39 @@ func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, ru
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	// Build TLS configs once per protocol
+	// Build TLS configs once per protocol.
 	quicTLSConfig, quicTLSErr := probeTLSConfig(caCert, connection.QUIC)
 	http2TLSConfig, http2TLSErr := probeTLSConfig(caCert, connection.HTTP2)
 
-	// 1) DNS – must complete before transport probes know which addresses to dial.
-	addrGroups, dnsResults := runDNSProbe(ctx, runDialers.DNSResolver, cfg.Region)
+	// 1) Resolve edge addresses. Each ResolvedTarget bundles its addr group
+	//    with the DNS CheckResult that labels it, keeping the two in sync.
+	var resolvedTargets []ResolvedTarget
+	if len(cfg.EdgeAddrs) > 0 {
+		// Static path: explicit --edge addresses, one ResolvedTarget per addr.
+		resolvedTargets = resolveStaticEdge(cfg.EdgeAddrs, log)
+	} else {
+		// Normal path: SRV-based discovery; DNS rows carry Pass or Fail status.
+		resolvedTargets = runDNSProbe(ctx, runDialers.DNSResolver, cfg.Region)
+	}
 
-	dnsOK := !slices.ContainsFunc(dnsResults, func(r CheckResult) bool {
-		return r.ProbeStatus != Pass
+	// Extract parallel slices for the transport probe layer.
+	// nolint:prealloc // False positive. The linter is confused by the append used when producing Report.Results
+	dnsResults := make([]CheckResult, len(resolvedTargets))
+	perGroupAddrs := make([][]*allregions.EdgeAddr, len(resolvedTargets))
+	targetLabels := make([]string, len(resolvedTargets))
+	for i, rt := range resolvedTargets {
+		dnsResults[i] = rt.DNSResult
+		perGroupAddrs[i] = rt.Addrs
+		targetLabels[i] = rt.DNSResult.Target
+	}
+
+	// dnsOK is true when at least one target has addresses to probe.
+	dnsOK := slices.ContainsFunc(resolvedTargets, func(r ResolvedTarget) bool {
+		return len(r.Addrs) > 0
 	})
 
-	// 2) Run probes concurrently. Each probe type gets its own buffered channel —
-	//    one send, one receive, no routing or name-parsing required.
+	// 2) Run transport probes concurrently. Each probe type gets its own
+	//    buffered channel — one send, one receive, no routing required.
 	var results TransportResults
 
 	mgmtCh := make(chan CheckResult)
@@ -85,12 +109,12 @@ func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, ru
 	}()
 
 	if !dnsOK {
-		// DNS failed: emit one skip row per region so the table stays consistent.
-		results.QUIC = skipResultsForRegions(dnsResults, ProbeTypeQUIC, componentUDPConnectivity)
-		results.HTTP2 = skipResultsForRegions(dnsResults, ProbeTypeHTTP2, componentTCPConnectivity)
+		// No addresses available: emit one skip row per target so the table
+		// stays consistent with the DNS rows above.
+		results.QUIC = skipResultsForTargets(dnsResults, ProbeTypeQUIC, componentUDPConnectivity)
+		results.HTTP2 = skipResultsForTargets(dnsResults, ProbeTypeHTTP2, componentTCPConnectivity)
 	} else {
-		perRegionAddrs := addrsByRegion(addrGroups, cfg.IPVersion)
-		regionTargets := dnsTargets(dnsResults)
+		filteredAddrs := addrsByGroup(perGroupAddrs, cfg.IPVersion)
 
 		quicCh := make(chan []CheckResult, 1)
 		http2Ch := make(chan []CheckResult, 1)
@@ -99,11 +123,11 @@ func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, ru
 			if quicTLSErr != nil {
 				log.Warn().Err(quicTLSErr).Msg("Failed to build QUIC probe TLS config")
 				quicCh <- tlsConfigErrResults(ProbeTypeQUIC, componentUDPConnectivity,
-					regionTargets, fmt.Sprintf("%s: %v", detailsTLSConfigFailed, quicTLSErr), actionQUICBlocked)
+					targetLabels, fmt.Sprintf("%s: %v", detailsTLSConfigFailed, quicTLSErr), actionQUICBlocked)
 				return
 			}
-			quicCh <- probeAllRegions(ctx, ProbeTypeQUIC, componentUDPConnectivity,
-				perRegionAddrs, regionTargets,
+			quicCh <- probeAllTargets(ctx, ProbeTypeQUIC, componentUDPConnectivity,
+				filteredAddrs, targetLabels,
 				func(addr *allregions.EdgeAddr) CheckResult {
 					return probeQUIC(ctx, quicTLSConfig, runDialers.QUICDialer, addr, log)
 				})
@@ -113,11 +137,11 @@ func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, ru
 			if http2TLSErr != nil {
 				log.Warn().Err(http2TLSErr).Msg("Failed to build HTTP/2 probe TLS config")
 				http2Ch <- tlsConfigErrResults(ProbeTypeHTTP2, componentTCPConnectivity,
-					regionTargets, fmt.Sprintf("%s: %v", detailsTLSConfigFailed, http2TLSErr), actionHTTP2Blocked)
+					targetLabels, fmt.Sprintf("%s: %v", detailsTLSConfigFailed, http2TLSErr), actionHTTP2Blocked)
 				return
 			}
-			http2Ch <- probeAllRegions(ctx, ProbeTypeHTTP2, componentTCPConnectivity,
-				perRegionAddrs, regionTargets,
+			http2Ch <- probeAllTargets(ctx, ProbeTypeHTTP2, componentTCPConnectivity,
+				filteredAddrs, targetLabels,
 				func(addr *allregions.EdgeAddr) CheckResult {
 					return probeHTTP2(ctx, http2TLSConfig, runDialers.TCPDialer, addr)
 				})
@@ -136,11 +160,11 @@ func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, ru
 	}
 }
 
-// tlsConfigErrResults returns one Fail CheckResult per region target, used when
+// tlsConfigErrResults returns one Fail CheckResult per target, used when
 // TLS config construction fails before any dial is attempted.
-func tlsConfigErrResults(probeType ProbeType, component string, regionTargets []string, details, action string) []CheckResult {
-	results := make([]CheckResult, len(regionTargets))
-	for i, target := range regionTargets {
+func tlsConfigErrResults(probeType ProbeType, component string, targets []string, details, action string) []CheckResult {
+	results := make([]CheckResult, len(targets))
+	for i, target := range targets {
 		results[i] = CheckResult{
 			Type:        probeType,
 			Component:   component,
@@ -153,47 +177,32 @@ func tlsConfigErrResults(probeType ProbeType, component string, regionTargets []
 	return results
 }
 
-func runDNSProbe(ctx context.Context, resolver DNSResolver, region string) ([][]*allregions.EdgeAddr, []CheckResult) {
-	var addrGroups [][]*allregions.EdgeAddr
-	var dnsResults []CheckResult
-	withRetry(ctx, maxRetries, func() bool {
-		addrGroups, dnsResults = probeDNS(resolver, region)
-		for _, r := range dnsResults {
-			if r.ProbeStatus == Fail {
-				return false
-			}
-		}
-		return len(dnsResults) > 0
-	})
-	return addrGroups, dnsResults
-}
-
-// probeAllRegions probes each region sequentially and returns one CheckResult
-// per region. Within each region, all available addresses (V4 and/or V6) are
-// tried and the best result is kept.
-func probeAllRegions(
+// probeAllTargets probes each target group sequentially and returns one
+// CheckResult per group. Within each group, all available addresses (V4 and/or
+// V6) are tried and the best result is kept.
+func probeAllTargets(
 	ctx context.Context,
 	probeType ProbeType,
 	component string,
-	perRegionAddrs [][]*allregions.EdgeAddr,
-	regionTargets []string,
+	perGroupAddrs [][]*allregions.EdgeAddr,
+	targets []string,
 	probeFn func(*allregions.EdgeAddr) CheckResult,
 ) []CheckResult {
-	results := make([]CheckResult, len(perRegionAddrs))
-	for i, addrs := range perRegionAddrs {
-		results[i] = probeRegion(ctx, probeType, component, regionTargets[i], addrs, probeFn)
+	results := make([]CheckResult, len(perGroupAddrs))
+	for i, addrs := range perGroupAddrs {
+		results[i] = probeTarget(ctx, probeType, component, targets[i], addrs, probeFn)
 	}
 	return results
 }
 
-// probeRegion probes all addresses for a single region (typically one V4 and/or
-// one V6) and returns the best result. Any address passing means the region is
-// reachable, so Pass beats Fail within a region.
-func probeRegion(
+// probeTarget probes all addresses for a single target group (typically one V4
+// and/or one V6) and returns the best result. Any address passing means the
+// target is reachable, so Pass beats Fail within a group.
+func probeTarget(
 	ctx context.Context,
 	probeType ProbeType,
 	component string,
-	regionTarget string,
+	target string,
 	addrs []*allregions.EdgeAddr,
 	probeFn func(*allregions.EdgeAddr) CheckResult,
 ) CheckResult {
@@ -201,7 +210,7 @@ func probeRegion(
 		return CheckResult{
 			Type:        probeType,
 			Component:   component,
-			Target:      regionTarget,
+			Target:      target,
 			ProbeStatus: Skip,
 			Details:     "No suitable address found for configured IP version",
 		}
@@ -213,7 +222,7 @@ func probeRegion(
 			best = r
 		}
 	}
-	best.Target = regionTarget
+	best.Target = target
 	return best
 }
 
@@ -238,11 +247,11 @@ func probeWithRetry(ctx context.Context, addr *allregions.EdgeAddr, probeFn func
 	return r
 }
 
-// addrsByRegion returns the addresses to probe for each DNS-resolved region,
-// preserving the per-region grouping. Each inner slice contains at most one V4
+// addrsByGroup returns the addresses to probe for each resolved target group,
+// preserving the per-group structure. Each inner slice contains at most one V4
 // and one V6 address (subject to ipVersion).
-func addrsByRegion(addrGroups [][]*allregions.EdgeAddr, ipVersion allregions.ConfigIPVersion) [][]*allregions.EdgeAddr {
-	perRegion := make([][]*allregions.EdgeAddr, 0, len(addrGroups))
+func addrsByGroup(addrGroups [][]*allregions.EdgeAddr, ipVersion allregions.ConfigIPVersion) [][]*allregions.EdgeAddr {
+	perGroup := make([][]*allregions.EdgeAddr, 0, len(addrGroups))
 	for _, group := range addrGroups {
 		v4, v6 := addrsByFamily(group, ipVersion)
 		var addrs []*allregions.EdgeAddr
@@ -252,27 +261,17 @@ func addrsByRegion(addrGroups [][]*allregions.EdgeAddr, ipVersion allregions.Con
 		if v6 != nil {
 			addrs = append(addrs, v6)
 		}
-		perRegion = append(perRegion, addrs)
+		perGroup = append(perGroup, addrs)
 	}
-	return perRegion
+	return perGroup
 }
 
-// dnsTargets extracts the Target hostname from each DNS CheckResult so that
-// transport probe rows reuse the same region hostnames.
-func dnsTargets(dnsResults []CheckResult) []string {
-	targets := make([]string, len(dnsResults))
-	for i, r := range dnsResults {
-		targets[i] = r.Target
-	}
-	return targets
-}
-
-// skipResultsForRegions returns one skip CheckResult per DNS region, using each
-// region's hostname as the Target so the output table row aligns with its DNS row.
-func skipResultsForRegions(dnsResults []CheckResult, probeType ProbeType, component string) []CheckResult {
-	results := make([]CheckResult, len(dnsResults))
-	for i, dns := range dnsResults {
-		results[i] = skipResult(probeType, component, dns.Target)
+// skipResultsForTargets returns one skip CheckResult per entry in results,
+// using each entry's Target label so the transport row aligns with its DNS row.
+func skipResultsForTargets(targets []CheckResult, probeType ProbeType, component string) []CheckResult {
+	results := make([]CheckResult, len(targets))
+	for i, t := range targets {
+		results[i] = skipResult(probeType, component, t.Target, detailsDNSPrerequisiteFailed)
 	}
 	return results
 }
@@ -320,7 +319,7 @@ func suggestProtocol(quicResults, http2Results []CheckResult) *connection.Protoc
 }
 
 // withRetry calls fn up to 1+maxAttempts times, stopping as soon as fn returns
-// true. Between attempts it sleeps with exponential backoff bounded by
+// true. Between attempts, it sleeps with exponential backoff bounded by
 // maxRetryDelay, and stops early if ctx is done.
 func withRetry(ctx context.Context, maxAttempts int, fn func() bool) {
 	b := backoff.NewWithoutJitter(maxRetryDelay, retryBaseDelay)

@@ -1,3 +1,11 @@
+2026.5.1
+- 2026-05-22 fix: Bump go to 1.26.3 and go.opentelemetry.io/otel and go-jose/v4 to fix CVE's
+- 2026-05-22 TUN-10391: Avoid blocking cloudflared due to logging
+- 2026-05-22 TUN-10391: Add precheck integration tests
+- 2026-05-14 TUN-10511: Revise --edge support for pre-checks
+- 2026-05-13 fix: Update golang.org/x/net to v0.54.0
+- 2026-05-13 TUN-10525: Add prechecks kill switch
+
 2026.5.0
 - 2026-05-08 Bump golang.org/x/net from v0.40.0 to v0.53.0
 - 2026-05-07 TUN-10507: Bump go and go-boring to 1.26.2
