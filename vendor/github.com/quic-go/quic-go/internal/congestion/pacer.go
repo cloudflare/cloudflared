@@ -1,8 +1,10 @@
 package congestion
 
 import (
+	"math"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -12,7 +14,7 @@ const maxBurstSizePackets = 10
 type pacer struct {
 	budgetAtLastSent  protocol.ByteCount
 	maxDatagramSize   protocol.ByteCount
-	lastSentTime      time.Time
+	lastSentTime      monotime.Time
 	adjustedBandwidth func() uint64 // in bytes/s
 }
 
@@ -33,7 +35,7 @@ func newPacer(getBandwidth func() Bandwidth) *pacer {
 	return p
 }
 
-func (p *pacer) SentPacket(sendTime time.Time, size protocol.ByteCount) {
+func (p *pacer) SentPacket(sendTime monotime.Time, size protocol.ByteCount) {
 	budget := p.Budget(sendTime)
 	if size >= budget {
 		p.budgetAtLastSent = 0
@@ -43,12 +45,17 @@ func (p *pacer) SentPacket(sendTime time.Time, size protocol.ByteCount) {
 	p.lastSentTime = sendTime
 }
 
-func (p *pacer) Budget(now time.Time) protocol.ByteCount {
+func (p *pacer) Budget(now monotime.Time) protocol.ByteCount {
 	if p.lastSentTime.IsZero() {
 		return p.maxBurstSize()
 	}
-	budget := p.budgetAtLastSent + (protocol.ByteCount(p.adjustedBandwidth())*protocol.ByteCount(now.Sub(p.lastSentTime).Nanoseconds()))/1e9
-	if budget < 0 { // protect against overflows
+	delta := now.Sub(p.lastSentTime)
+	var added protocol.ByteCount
+	if delta > 0 {
+		added = p.timeScaledBandwidth(uint64(delta.Nanoseconds()))
+	}
+	budget := p.budgetAtLastSent + added
+	if added > 0 && budget < p.budgetAtLastSent {
 		budget = protocol.MaxByteCount
 	}
 	return min(p.maxBurstSize(), budget)
@@ -56,16 +63,35 @@ func (p *pacer) Budget(now time.Time) protocol.ByteCount {
 
 func (p *pacer) maxBurstSize() protocol.ByteCount {
 	return max(
-		protocol.ByteCount(uint64((protocol.MinPacingDelay+protocol.TimerGranularity).Nanoseconds())*p.adjustedBandwidth())/1e9,
+		p.timeScaledBandwidth(uint64((protocol.MinPacingDelay + protocol.TimerGranularity).Nanoseconds())),
 		maxBurstSizePackets*p.maxDatagramSize,
 	)
 }
 
+// timeScaledBandwidth calculates the number of bytes that may be sent within
+// a given time interval (ns nanoseconds), based on the current bandwidth estimate.
+// It caps the scaled value to the maximum allowed burst and handles overflows.
+func (p *pacer) timeScaledBandwidth(ns uint64) protocol.ByteCount {
+	bw := p.adjustedBandwidth()
+	if bw == 0 {
+		return 0
+	}
+	const nsPerSecond = 1e9
+	maxBurst := maxBurstSizePackets * p.maxDatagramSize
+	var scaled protocol.ByteCount
+	if ns > math.MaxUint64/bw {
+		scaled = maxBurst
+	} else {
+		scaled = protocol.ByteCount(bw * ns / nsPerSecond)
+	}
+	return scaled
+}
+
 // TimeUntilSend returns when the next packet should be sent.
-// It returns the zero value of time.Time if a packet can be sent immediately.
-func (p *pacer) TimeUntilSend() time.Time {
+// It returns zero if a packet can be sent immediately.
+func (p *pacer) TimeUntilSend() monotime.Time {
 	if p.budgetAtLastSent >= p.maxDatagramSize {
-		return time.Time{}
+		return 0
 	}
 	diff := 1e9 * uint64(p.maxDatagramSize-p.budgetAtLastSent)
 	bw := p.adjustedBandwidth()

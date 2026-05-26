@@ -19,7 +19,7 @@ func parseRetireConnectionIDFrame(b []byte, _ protocol.Version) (*RetireConnecti
 }
 
 func (f *RetireConnectionIDFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
-	b = append(b, retireConnectionIDFrameType)
+	b = append(b, byte(FrameTypeRetireConnectionID))
 	b = quicvarint.Append(b, f.SequenceNumber)
 	return b, nil
 }

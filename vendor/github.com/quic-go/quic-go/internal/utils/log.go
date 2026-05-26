@@ -31,9 +31,9 @@ type Logger interface {
 	WithPrefix(prefix string) Logger
 	Debug() bool
 
-	Errorf(format string, args ...interface{})
-	Infof(format string, args ...interface{})
-	Debugf(format string, args ...interface{})
+	Errorf(format string, args ...any)
+	Infof(format string, args ...any)
+	Debugf(format string, args ...any)
 }
 
 // DefaultLogger is used by quic-go for logging.
@@ -61,27 +61,27 @@ func (l *defaultLogger) SetLogTimeFormat(format string) {
 }
 
 // Debugf logs something
-func (l *defaultLogger) Debugf(format string, args ...interface{}) {
+func (l *defaultLogger) Debugf(format string, args ...any) {
 	if l.logLevel == LogLevelDebug {
 		l.logMessage(format, args...)
 	}
 }
 
 // Infof logs something
-func (l *defaultLogger) Infof(format string, args ...interface{}) {
+func (l *defaultLogger) Infof(format string, args ...any) {
 	if l.logLevel >= LogLevelInfo {
 		l.logMessage(format, args...)
 	}
 }
 
 // Errorf logs something
-func (l *defaultLogger) Errorf(format string, args ...interface{}) {
+func (l *defaultLogger) Errorf(format string, args ...any) {
 	if l.logLevel >= LogLevelError {
 		l.logMessage(format, args...)
 	}
 }
 
-func (l *defaultLogger) logMessage(format string, args ...interface{}) {
+func (l *defaultLogger) logMessage(format string, args ...any) {
 	var pre string
 
 	if len(l.timeFormat) > 0 {

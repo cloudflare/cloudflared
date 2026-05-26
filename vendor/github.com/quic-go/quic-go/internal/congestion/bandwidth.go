@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"math"
 	"time"
 
 	"github.com/quic-go/quic-go/internal/protocol"
@@ -9,8 +8,6 @@ import (
 
 // Bandwidth of a connection
 type Bandwidth uint64
-
-const infBandwidth Bandwidth = math.MaxUint64
 
 const (
 	// BitsPerSecond is 1 bit per second

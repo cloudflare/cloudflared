@@ -4,82 +4,82 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 )
 
-// Helper to convert logging.ByteCount(alias for int64) to float64 used in prometheus
-func byteCountToPromCount(count logging.ByteCount) float64 {
+// byteCountToPromCount converts an int64 byte count to float64 used in prometheus.
+func byteCountToPromCount(count int64) float64 {
 	return float64(count)
 }
 
-// Helper to convert Duration to float64 used in prometheus
+// durationToPromGauge converts a Duration to float64 milliseconds used in prometheus.
 func durationToPromGauge(duration time.Duration) float64 {
 	return float64(duration.Milliseconds())
 }
 
-// Helper to convert https://pkg.go.dev/github.com/quic-go/quic-go@v0.23.0/logging#PacketType into string
-func packetTypeString(pt logging.PacketType) string {
+// packetTypeString converts a qlog.PacketType to a Prometheus-safe label string.
+// The allowlist prevents unbounded cardinality if upstream adds new values.
+func packetTypeString(pt qlog.PacketType) string {
 	switch pt {
-	case logging.PacketTypeInitial:
-		return "initial"
-	case logging.PacketTypeHandshake:
-		return "handshake"
-	case logging.PacketTypeRetry:
-		return "retry"
-	case logging.PacketType0RTT:
-		return "0_rtt"
-	case logging.PacketTypeVersionNegotiation:
-		return "version_negotiation"
-	case logging.PacketType1RTT:
-		return "1_rtt"
-	case logging.PacketTypeStatelessReset:
-		return "stateless_reset"
-	case logging.PacketTypeNotDetermined:
-		return "undetermined"
+	case qlog.PacketTypeInitial,
+		qlog.PacketTypeHandshake,
+		qlog.PacketType0RTT,
+		qlog.PacketType1RTT,
+		qlog.PacketTypeRetry,
+		qlog.PacketTypeVersionNegotiation,
+		qlog.PacketTypeStatelessReset:
+		return string(pt)
 	default:
 		return "unknown_packet_type"
 	}
 }
 
-// Helper to convert https://pkg.go.dev/github.com/quic-go/quic-go@v0.23.0/logging#PacketDropReason into string
-func packetDropReasonString(reason logging.PacketDropReason) string {
+// packetDropReasonString converts a qlog.PacketDropReason to a Prometheus-safe label string.
+// The allowlist passes known values through and guards against unbounded cardinality.
+func packetDropReasonString(reason qlog.PacketDropReason) string {
 	switch reason {
-	case logging.PacketDropKeyUnavailable:
-		return "key_unavailable"
-	case logging.PacketDropUnknownConnectionID:
-		return "unknown_conn_id"
-	case logging.PacketDropHeaderParseError:
-		return "header_parse_err"
-	case logging.PacketDropPayloadDecryptError:
-		return "payload_decrypt_err"
-	case logging.PacketDropProtocolViolation:
-		return "protocol_violation"
-	case logging.PacketDropDOSPrevention:
-		return "dos_prevention"
-	case logging.PacketDropUnsupportedVersion:
-		return "unsupported_version"
-	case logging.PacketDropUnexpectedPacket:
-		return "unexpected_packet"
-	case logging.PacketDropUnexpectedSourceConnectionID:
-		return "unexpected_src_conn_id"
-	case logging.PacketDropUnexpectedVersion:
-		return "unexpected_version"
-	case logging.PacketDropDuplicate:
-		return "duplicate"
+	case qlog.PacketDropKeyUnavailable,
+		qlog.PacketDropUnknownConnectionID,
+		qlog.PacketDropHeaderParseError,
+		qlog.PacketDropPayloadDecryptError,
+		qlog.PacketDropProtocolViolation,
+		qlog.PacketDropDOSPrevention,
+		qlog.PacketDropUnsupportedVersion,
+		qlog.PacketDropUnexpectedPacket,
+		qlog.PacketDropUnexpectedSourceConnectionID,
+		qlog.PacketDropUnexpectedVersion,
+		qlog.PacketDropDuplicate:
+		return string(reason)
 	default:
 		return "unknown_reason"
 	}
 }
 
-// Helper to convert https://pkg.go.dev/github.com/quic-go/quic-go@v0.23.0/logging#PacketLossReason into string
-func packetLossReasonString(reason logging.PacketLossReason) string {
+// packetLossReasonString converts a qlog.PacketLossReason to a Prometheus-safe label string.
+func packetLossReasonString(reason qlog.PacketLossReason) string {
 	switch reason {
-	case logging.PacketLossReorderingThreshold:
-		return "reordering"
-	case logging.PacketLossTimeThreshold:
-		return "timeout"
+	case qlog.PacketLossReorderingThreshold,
+		qlog.PacketLossTimeThreshold:
+		return string(reason)
 	default:
 		return "unknown_loss_reason"
+	}
+}
+
+// congestionStateToFloat maps a qlog.CongestionState string to a numeric value for prometheus gauges.
+// Mapping: slow_start=0, congestion_avoidance=1, application_limited=2, recovery=3, unknown=-1.
+func congestionStateToFloat(state qlog.CongestionState) float64 {
+	switch state {
+	case qlog.CongestionStateSlowStart:
+		return 0
+	case qlog.CongestionStateCongestionAvoidance:
+		return 1
+	case qlog.CongestionStateApplicationLimited:
+		return 2
+	case qlog.CongestionStateRecovery:
+		return 3
+	default:
+		return -1
 	}
 }
 

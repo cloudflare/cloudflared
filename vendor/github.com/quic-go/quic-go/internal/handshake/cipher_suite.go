@@ -23,14 +23,14 @@ type cipherSuite struct {
 
 func (s cipherSuite) IVLen() int { return aeadNonceLength }
 
-func getCipherSuite(id uint16) *cipherSuite {
+func getCipherSuite(id uint16) cipherSuite {
 	switch id {
 	case tls.TLS_AES_128_GCM_SHA256:
-		return &cipherSuite{ID: tls.TLS_AES_128_GCM_SHA256, Hash: crypto.SHA256, KeyLen: 16, AEAD: aeadAESGCMTLS13}
+		return cipherSuite{ID: tls.TLS_AES_128_GCM_SHA256, Hash: crypto.SHA256, KeyLen: 16, AEAD: aeadAESGCMTLS13}
 	case tls.TLS_CHACHA20_POLY1305_SHA256:
-		return &cipherSuite{ID: tls.TLS_CHACHA20_POLY1305_SHA256, Hash: crypto.SHA256, KeyLen: 32, AEAD: aeadChaCha20Poly1305}
+		return cipherSuite{ID: tls.TLS_CHACHA20_POLY1305_SHA256, Hash: crypto.SHA256, KeyLen: 32, AEAD: aeadChaCha20Poly1305}
 	case tls.TLS_AES_256_GCM_SHA384:
-		return &cipherSuite{ID: tls.TLS_AES_256_GCM_SHA384, Hash: crypto.SHA384, KeyLen: 32, AEAD: aeadAESGCMTLS13}
+		return cipherSuite{ID: tls.TLS_AES_256_GCM_SHA384, Hash: crypto.SHA384, KeyLen: 32, AEAD: aeadAESGCMTLS13}
 	default:
 		panic(fmt.Sprintf("unknown cypher suite: %d", id))
 	}

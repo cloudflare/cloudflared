@@ -13,6 +13,31 @@ type Reader interface {
 
 var _ Reader = &bytes.Reader{}
 
+// A Peeker can peek bytes without consuming them.
+type Peeker interface {
+	Peek(b []byte) (int, error)
+}
+
+// Peek reads a number in the QUIC varint format without consuming bytes.
+func Peek(p Peeker) (uint64, error) {
+	var b [8]byte
+
+	// first peek 1 byte to determine the varint length
+	if _, err := p.Peek(b[:1]); err != nil {
+		return 0, err
+	}
+
+	l := 1 << (b[0] >> 6) // 1, 2, 4, or 8 bytes
+	if l == 1 {
+		return uint64(b[0] & 0b00111111), nil
+	}
+	if _, err := p.Peek(b[:l]); err != nil {
+		return 0, err
+	}
+	val, _, err := Parse(b[:l])
+	return val, err
+}
+
 type byteReader struct {
 	io.Reader
 }
@@ -31,7 +56,12 @@ func NewReader(r io.Reader) Reader {
 
 func (r *byteReader) ReadByte() (byte, error) {
 	var b [1]byte
-	n, err := r.Read(b[:])
+	var n int
+	var err error
+	for n == 0 && err == nil {
+		n, err = r.Read(b[:])
+	}
+
 	if n == 1 && err == io.EOF {
 		err = nil
 	}
@@ -53,7 +83,7 @@ type byteWriter struct {
 var _ Writer = &byteWriter{}
 
 // NewWriter returns a Writer for w.
-// If r already implements both io.ByteWriter and io.Writer, NewWriter returns w.
+// If w already implements both io.ByteWriter and io.Writer, NewWriter returns w.
 // Otherwise, w is wrapped to add the missing interfaces.
 func NewWriter(w io.Writer) Writer {
 	if w, ok := w.(Writer); ok {

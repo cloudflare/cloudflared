@@ -235,3 +235,40 @@ func (s *frameSorter) Pop() (protocol.ByteCount, []byte, func()) {
 func (s *frameSorter) HasMoreData() bool {
 	return len(s.queue) > 0
 }
+
+var errTooLittleData = errors.New("too little data")
+
+// Peek copies len(p) consecutive bytes starting at offset into p, without removing them.
+// It is only possible to peek from an offset where a frame starts.
+//
+// If there isn't enough consecutive data available, errTooLittleData is returned.
+func (s *frameSorter) Peek(offset protocol.ByteCount, p []byte) error {
+	if len(p) == 0 {
+		return nil
+	}
+
+	// first, check if we have enough consecutive data available
+	pos := offset
+	remaining := len(p)
+	for remaining > 0 {
+		entry, ok := s.queue[pos]
+		if !ok {
+			return errTooLittleData
+		}
+		entryLen := len(entry.Data)
+		if remaining <= entryLen {
+			break // enough data available
+		}
+		remaining -= entryLen
+		pos += protocol.ByteCount(entryLen)
+	}
+
+	pos = offset
+	var copied int
+	for copied < len(p) {
+		entry := s.queue[pos] // the entry is guaranteed to exist from the check above
+		copied += copy(p[copied:], entry.Data)
+		pos += protocol.ByteCount(len(entry.Data))
+	}
+	return nil
+}
