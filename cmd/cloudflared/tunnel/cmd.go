@@ -551,8 +551,8 @@ func runPrechecks(c *cli.Context, log *zerolog.Logger, region string) {
 
 	report := prechecks.Run(c.Context, c.String(cfdflags.CACert), cfg, log, dialers)
 
-	// Output the human-readable table to console
-	fmt.Println(report.String())
+	// Output the human-readable table
+	cliutil.LogTable(log, report.String(), "CONNECTIVITY PRE-CHECKS")
 
 	// Also log structured results for log aggregation
 	report.LogEvent(log)

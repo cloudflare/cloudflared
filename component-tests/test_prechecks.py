@@ -5,8 +5,8 @@ Integration tests for cloudflared connectivity pre-checks (TUN-10391).
 Scope
 -----
 These tests verify the end-to-end behavior of cloudflared pre-checks:
-- that the human-readable table written to stdout has the correct structure
-  and content,
+- that the human-readable table written to the log output has the correct
+  structure and content,
 - that structured JSON log lines are emitted with the expected fields, and
 - that running the `diag` subcommand against a live tunnel instance produces a
   zip archive that contains prechecks.json.
@@ -25,15 +25,24 @@ without real firewall intervention is:
 DNS failure and Management API failure cannot be triggered via CLI flags alone;
 they require network-level intervention outside the component-test harness.
 
-stdout design
--------------
-fmt.Println(report.String()) runs inside a goroutine that is started
-concurrently with the tunnel.  We poll a --logfile for the "precheck complete"
-sentinel before leaving the `with` block, ensuring the goroutine has finished.
-We then call cfd.terminate().  After the `with` block exits, the process is
-dead and all output has been captured by CloudflaredProcess's background reader
-thread (stderr is merged into stdout).  We read the accumulated lines from
-cfd.stdout_lines.
+stdout/stderr design
+--------------------
+The pre-checks table is emitted via cliutil.LogTable, which wraps the content
+in an ASCII box and logs each line at Info level through zerolog.  zerolog
+writes to stderr, which the test harness merges into stdout (stderr=STDOUT in
+Popen).  We poll a --logfile for the "precheck complete" sentinel before
+leaving the `with` block, ensuring the goroutine has finished.  We then call
+cfd.terminate().  After the `with` block exits, the process is dead and all
+output has been captured by CloudflaredProcess's background reader thread.  We
+read the accumulated lines from cfd.stdout_lines.
+
+Box format (cliutil.asciiBox with padding=2, title="CONNECTIVITY PRE-CHECKS"):
+  +----...----+
+  |  CONNECTIVITY PRE-CHECKS  |    (centered title)
+  +----...----+
+  |  COMPONENT  TARGET  ...   |    (content rows)
+  ...
+  +----...----+
 """
 
 import json
@@ -46,11 +55,13 @@ import zipfile as zipfilemod
 from constants import METRICS_PORT
 from util import LOGGER, start_cloudflared, wait_tunnel_ready
 
-# stdout table constants
-TABLE_WIDTH = 80
-HEADER_LINE = "--- CONNECTIVITY PRE-CHECKS " + "-" * (TABLE_WIDTH - len("--- CONNECTIVITY PRE-CHECKS ") - 1)
-COL_HEADER  = "COMPONENT"       # first token of the column-header row
-SEPARATOR   = "-" * TABLE_WIDTH
+# ASCII box constants (cliutil.asciiBox, padding=2, title="CONNECTIVITY PRE-CHECKS")
+BOX_TITLE      = "CONNECTIVITY PRE-CHECKS"
+BOX_BORDER_RE  = re.compile(r"^\+(-+)\+$", re.MULTILINE)   # matches +----...----+
+COL_HEADER     = "COMPONENT"                  # first word of the column-header row
+
+# zerolog console format: "2006-01-02T15:04:05Z LVL <message>"
+_LOG_PREFIX_RE = re.compile(r"^\S+ \w+ ")
 
 # Component names (probes.go: componentXxx)
 COMP_DNS  = "DNS Resolution"
@@ -164,23 +175,46 @@ class TableRow:
         return f"TableRow({self.component!r}, {self.target!r}, {self.status!r}, {self.details!r})"
 
 
+def _strip_log_prefix(line: str) -> str:
+    """Remove the zerolog console prefix ('2006-01-02T15:04:05Z LVL ') if present."""
+    return _LOG_PREFIX_RE.sub("", line, count=1)
+
+
+def _unbox_line(line: str) -> str:
+    """Strip the box border padding from a content line: '|  text  |' -> 'text'.
+
+    Accepts lines that may still carry a zerolog console prefix; the prefix is
+    removed before the box delimiters are stripped.
+    """
+    msg = _strip_log_prefix(line)
+    if msg.startswith("|") and msg.endswith("|"):
+        return msg[1:-1].strip()
+    return msg.strip()
+
+
 def _parse_table(stdout: str) -> list[TableRow]:
     """
     Parse the data rows from a precheck table in stdout.
 
-    text/tabwriter uses padding=2, so columns are separated by two or more
-    spaces.  We skip the column-header row and stop at blank lines, SUMMARY,
-    separator, ERROR, or WARNING lines.
+    The table is now wrapped in an ASCII box by cliutil.LogTable.  Each
+    content line has the form '|  <content>  |', optionally preceded by a
+    zerolog console prefix.  We strip both the prefix and the box borders
+    before splitting on two-or-more spaces (text/tabwriter padding=2).
+
+    We skip the column-header row and stop at blank lines, SUMMARY, box
+    border lines, ERROR, or WARNING lines.
     """
     rows = []
     in_data = False
-    for line in stdout.splitlines():
+    for raw_line in stdout.splitlines():
+        msg = _strip_log_prefix(raw_line)
+        line = _unbox_line(raw_line)
         if line.startswith("COMPONENT"):
             in_data = True
             continue
         if not in_data:
             continue
-        if (line == "" or line.startswith("SUMMARY") or line.startswith("---")
+        if (line == "" or line.startswith("SUMMARY") or BOX_BORDER_RE.match(msg)
                 or line.startswith("ERROR") or line.startswith("WARNING")):
             in_data = False
             continue
@@ -261,14 +295,18 @@ class TestPrechecksHappyPath:
         LOGGER.debug(f"[happy-path] stdout:\n{stdout}")
         LOGGER.debug(f"[happy-path] log_lines:\n{log_lines}")
 
+        # Strip zerolog console prefixes so pattern matching works on raw messages.
+        messages = "\n".join(_strip_log_prefix(l) for l in stdout.splitlines())
+
         # ── table structure ──────────────────────────────────────────────────
-        # stderr is merged into stdout so log lines precede the table.
-        assert HEADER_LINE in stdout, \
-            f"Expected header line in output;\ngot:\n{stdout}"
-        assert COL_HEADER in stdout, \
+        # zerolog writes to stderr which is merged into stdout by the harness.
+        # The table is wrapped in an ASCII box by cliutil.LogTable.
+        assert BOX_TITLE in messages, \
+            f"Expected box title '{BOX_TITLE}' in output;\ngot:\n{stdout}"
+        assert COL_HEADER in messages, \
             f"Expected column header row in output;\ngot:\n{stdout}"
-        assert SEPARATOR in stdout, \
-            f"Expected closing separator in output;\ngot:\n{stdout}"
+        assert BOX_BORDER_RE.search(messages), \
+            f"Expected box border line (+---+) in output;\ngot:\n{stdout}"
 
         # ── row content ──────────────────────────────────────────────────────
         rows = _parse_table(stdout)
@@ -306,11 +344,11 @@ class TestPrechecksHappyPath:
         assert api_rows[0].details == DETAILS_API_OK, f"API row details wrong: {api_rows[0]}"
 
         # ── no action lines ──────────────────────────────────────────────────
-        assert PREFIX_ERROR   not in stdout, f"Unexpected ERROR action:\n{stdout}"
-        assert PREFIX_WARNING not in stdout, f"Unexpected WARNING action:\n{stdout}"
+        assert PREFIX_ERROR   not in messages, f"Unexpected ERROR action:\n{stdout}"
+        assert PREFIX_WARNING not in messages, f"Unexpected WARNING action:\n{stdout}"
 
-        # ── exact summary line ───────────────────────────────────────────────
-        assert SUMMARY_HEALTHY in stdout, \
+        # ── summary line ─────────────────────────────────────────────────────
+        assert SUMMARY_HEALTHY in messages, \
             f"Expected healthy summary;\ngot:\n{stdout}"
 
         # ── structured log ───────────────────────────────────────────────────
@@ -366,14 +404,18 @@ class TestPrechecksHardFail:
         LOGGER.debug(f"[hard-fail] stdout:\n{stdout}")
         LOGGER.debug(f"[hard-fail] log_lines:\n{log_lines}")
 
+        # Strip zerolog console prefixes so pattern matching works on raw messages.
+        messages = "\n".join(_strip_log_prefix(l) for l in stdout.splitlines())
+
         # ── table structure ──────────────────────────────────────────────────
-        # stderr is merged into stdout so log lines precede the table.
-        assert HEADER_LINE in stdout, \
-            f"Expected header line in output;\ngot:\n{stdout}"
-        assert COL_HEADER in stdout, \
+        # zerolog writes to stderr which is merged into stdout by the harness.
+        # The table is wrapped in an ASCII box by cliutil.LogTable.
+        assert BOX_TITLE in messages, \
+            f"Expected box title '{BOX_TITLE}' in output;\ngot:\n{stdout}"
+        assert COL_HEADER in messages, \
             f"Expected column header row in output;\ngot:\n{stdout}"
-        assert SEPARATOR in stdout, \
-            f"Expected closing separator in output;\ngot:\n{stdout}"
+        assert BOX_BORDER_RE.search(messages), \
+            f"Expected box border line (+---+) in output;\ngot:\n{stdout}"
 
         # ── row content ──────────────────────────────────────────────────────
         rows = _parse_table(stdout)
@@ -404,12 +446,12 @@ class TestPrechecksHardFail:
         assert api_rows[0].status  == PASS,           f"API row not PASS: {api_rows[0]}"
         assert api_rows[0].details == DETAILS_API_OK, f"API row details wrong: {api_rows[0]}"
 
-        assert f"{PREFIX_ERROR}{ACTION_QUIC_BLOCKED}"  in stdout, \
+        assert f"{PREFIX_ERROR}{ACTION_QUIC_BLOCKED}"  in messages, \
             f"Expected QUIC ERROR action;\ngot:\n{stdout}"
-        assert f"{PREFIX_ERROR}{ACTION_HTTP2_BLOCKED}" in stdout, \
+        assert f"{PREFIX_ERROR}{ACTION_HTTP2_BLOCKED}" in messages, \
             f"Expected HTTP/2 ERROR action;\ngot:\n{stdout}"
 
-        assert SUMMARY_CRITICAL in stdout, \
+        assert SUMMARY_CRITICAL in messages, \
             f"Expected critical summary;\ngot:\n{stdout}"
 
         _assert_precheck_summary_log(log_lines, hard_fail=True, suggested_protocol=None)
