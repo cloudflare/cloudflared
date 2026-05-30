@@ -28,7 +28,6 @@ import (
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/ingress/origins"
 	"github.com/cloudflare/cloudflared/management"
-	"github.com/cloudflare/cloudflared/orchestration"
 	quicpogs "github.com/cloudflare/cloudflared/quic"
 	v3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/retry"
@@ -95,7 +94,7 @@ func (c *TunnelConfig) connectionFeatures() features.FeatureSnapshot {
 func StartTunnelDaemon(
 	ctx context.Context,
 	config *TunnelConfig,
-	orchestrator *orchestration.Orchestrator,
+	orchestrator connection.Orchestrator,
 	connectedSignal *signal.Signal,
 	reconnectCh chan ReconnectSignal,
 	graceShutdownC <-chan struct{},
@@ -177,7 +176,7 @@ func (f *IpAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsN
 
 type EdgeTunnelServer struct {
 	config            *TunnelConfig
-	orchestrator      *orchestration.Orchestrator
+	orchestrator      connection.Orchestrator
 	sessionManager    v3.SessionManager
 	datagramMetrics   v3.Metrics
 	edgeAddrHandler   EdgeAddrHandler
