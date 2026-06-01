@@ -1,3 +1,6 @@
+2026.5.2
+- 2026-05-26 TUN-10391: Avoid using fmt.Println
+
 2026.5.1
 - 2026-05-22 fix: Bump go to 1.26.3 and go.opentelemetry.io/otel and go-jose/v4 to fix CVE's
 - 2026-05-22 TUN-10391: Avoid blocking cloudflared due to logging

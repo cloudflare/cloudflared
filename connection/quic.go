@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection/dialopts"
+	cfdquic "github.com/cloudflare/cloudflared/quic"
 )
 
 var (
@@ -29,7 +30,7 @@ func DialQuic(
 	connIndex uint8,
 	logger *zerolog.Logger,
 	opts dialopts.DialOpts,
-) (quic.Connection, error) {
+) (cfdquic.QUICConnection, error) {
 	udpConn, err := createUDPConnForConnIndex(connIndex, localAddr, edgeAddr, opts, logger)
 	if err != nil {
 		return nil, err
@@ -43,11 +44,7 @@ func DialQuic(
 	}
 
 	// wrap the session, so that the UDPConn is closed after session is closed.
-	conn = &wrapCloseableConnQuicConnection{
-		conn,
-		udpConn,
-	}
-	return conn, nil
+	return cfdquic.NewQUICConnection(conn, udpConn)
 }
 
 func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, edgeIP netip.AddrPort, opts dialopts.DialOpts, logger *zerolog.Logger) (*net.UDPConn, error) {
@@ -95,16 +92,4 @@ func createUDPConnForConnIndex(connIndex uint8, localIP net.IP, edgeIP netip.Add
 	}
 
 	return udpConn, err
-}
-
-type wrapCloseableConnQuicConnection struct {
-	quic.Connection
-	udpConn *net.UDPConn
-}
-
-func (w *wrapCloseableConnQuicConnection) CloseWithError(errorCode quic.ApplicationErrorCode, reason string) error {
-	err := w.Connection.CloseWithError(errorCode, reason)
-	_ = w.udpConn.Close()
-
-	return err
 }

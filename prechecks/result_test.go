@@ -134,85 +134,80 @@ func dnsFailReport() Report {
 
 func TestString_AllPass(t *testing.T) {
 	t.Parallel()
-	want := "" +
-		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
-		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           PASS    QUIC connection successful\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful\n" +
-		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable\n" +
-		"\n" +
-		"SUMMARY: Environment is healthy. cloudflared will use 'quic' as primary protocol.\n" +
-		"--------------------------------------------------------------------------------\n"
+	want := []string{
+		"COMPONENT         TARGET                     STATUS  DETAILS",
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"UDP Connectivity  Port 7844 (QUIC)           PASS    QUIC connection successful",
+		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful",
+		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable",
+		"",
+		"SUMMARY: Environment is healthy. cloudflared will use 'quic' as primary protocol.",
+	}
 	assert.Equal(t, want, allPassReport().String())
 }
 
 func TestString_QuicBlocked(t *testing.T) {
 	t.Parallel()
-	want := "" +
-		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
-		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           FAIL    QUIC connection failed\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful\n" +
-		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable\n" +
-		"WARNING: Allow outbound QUIC traffic on port 7844 or use HTTP2.\n" +
-		"\n" +
-		"SUMMARY: Environment ready with degraded transport. cloudflared will proceed using 'http2'.\n" +
-		"--------------------------------------------------------------------------------\n"
+	want := []string{
+		"COMPONENT         TARGET                     STATUS  DETAILS",
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"UDP Connectivity  Port 7844 (QUIC)           FAIL    QUIC connection failed",
+		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful",
+		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable",
+		"WARNING: Allow outbound QUIC traffic on port 7844 or use HTTP2.",
+		"",
+		"SUMMARY: Environment ready with degraded transport. cloudflared will proceed using 'http2'.",
+	}
 	assert.Equal(t, want, quicBlockedReport().String())
 }
 
 func TestString_APIFail(t *testing.T) {
 	t.Parallel()
-	want := "" +
-		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
-		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           PASS    QUIC connection successful\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful\n" +
-		"Cloudflare API    api.cloudflare.com:443     FAIL    Connection refused\n" +
-		"WARNING: cloudflared will still run, but automatic software updates are unavailable. Ensure port 443 TCP to api.cloudflare.com is open if you want auto-updates.\n" +
-		"\n" +
-		"SUMMARY: Environment ready with degraded transport. cloudflared will proceed using 'quic'.\n" +
-		"--------------------------------------------------------------------------------\n"
+	want := []string{
+		"COMPONENT         TARGET                     STATUS  DETAILS",
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"UDP Connectivity  Port 7844 (QUIC)           PASS    QUIC connection successful",
+		"TCP Connectivity  Port 7844 (HTTP/2)         PASS    HTTP/2 connection successful",
+		"Cloudflare API    api.cloudflare.com:443     FAIL    Connection refused",
+		"WARNING: cloudflared will still run, but automatic software updates are unavailable. Ensure port 443 TCP to api.cloudflare.com is open if you want auto-updates.",
+		"",
+		"SUMMARY: Environment ready with degraded transport. cloudflared will proceed using 'quic'.",
+	}
 	assert.Equal(t, want, apiFailReport().String())
 }
 
 func TestString_BothTransportsBlocked(t *testing.T) {
 	t.Parallel()
-	want := "" +
-		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
-		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           FAIL    QUIC connection failed\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         FAIL    HTTP/2 connection is blocked or unreachable\n" +
-		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable\n" +
-		"ERROR: Allow outbound QUIC and/or TCP on port 7844 to the Cloudflare edge.\n" +
-		"\n" +
-		"SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel.\n" +
-		"--------------------------------------------------------------------------------\n"
+	want := []string{
+		"COMPONENT         TARGET                     STATUS  DETAILS",
+		"DNS Resolution    region1.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"DNS Resolution    region2.v2.argotunnel.com  PASS    DNS Resolved successfully",
+		"UDP Connectivity  Port 7844 (QUIC)           FAIL    QUIC connection failed",
+		"TCP Connectivity  Port 7844 (HTTP/2)         FAIL    HTTP/2 connection is blocked or unreachable",
+		"Cloudflare API    api.cloudflare.com:443     PASS    API is reachable",
+		"ERROR: Allow outbound QUIC and/or TCP on port 7844 to the Cloudflare edge.",
+		"",
+		"SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel.",
+	}
 	assert.Equal(t, want, bothTransportsBlockedReport().String())
 }
 
 func TestString_DNSFail(t *testing.T) {
 	t.Parallel()
-	want := "" +
-		"--- CONNECTIVITY PRE-CHECKS ----------------------------------------------------\n" +
-		"COMPONENT         TARGET                     STATUS  DETAILS\n" +
-		"DNS Resolution    region1.v2.argotunnel.com  FAIL    No addresses returned\n" +
-		"DNS Resolution    region2.v2.argotunnel.com  FAIL    No addresses returned\n" +
-		"UDP Connectivity  Port 7844 (QUIC)           SKIP    DNS prerequisite failed\n" +
-		"TCP Connectivity  Port 7844 (HTTP/2)         SKIP    DNS prerequisite failed\n" +
-		"Cloudflare API    api.cloudflare.com:443     FAIL    Connection refused\n" +
-		"ERROR: Ensure your DNS resolver can resolve 'region1.v2.argotunnel.com'. Run: dig A region1.v2.argotunnel.com @1.1.1.1. If that fails, contact your network administrator.\n" +
-		"\n" +
-		"SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel.\n" +
-		"--------------------------------------------------------------------------------\n"
+	want := []string{
+		"COMPONENT         TARGET                     STATUS  DETAILS",
+		"DNS Resolution    region1.v2.argotunnel.com  FAIL    No addresses returned",
+		"DNS Resolution    region2.v2.argotunnel.com  FAIL    No addresses returned",
+		"UDP Connectivity  Port 7844 (QUIC)           SKIP    DNS prerequisite failed",
+		"TCP Connectivity  Port 7844 (HTTP/2)         SKIP    DNS prerequisite failed",
+		"Cloudflare API    api.cloudflare.com:443     FAIL    Connection refused",
+		"ERROR: Ensure your DNS resolver can resolve 'region1.v2.argotunnel.com'. Run: dig A region1.v2.argotunnel.com @1.1.1.1. If that fails, contact your network administrator.",
+		"",
+		"SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel.",
+	}
 	assert.Equal(t, want, dnsFailReport().String())
 }
 
@@ -221,9 +216,9 @@ func TestString_EmptyResults(t *testing.T) {
 	r := Report{RunID: fixedRunID, SuggestedProtocol: new(connection.QUIC)}
 	out := r.String()
 	// Must not panic and must still emit a valid skeleton.
-	assert.Contains(t, out, "CONNECTIVITY PRE-CHECKS")
-	assert.Contains(t, out, "SUMMARY:")
-	assert.Contains(t, out, separator())
+	require.Len(t, out, 3)
+	assert.Contains(t, out[0], "COMPONENT")
+	assert.Contains(t, out[2], "SUMMARY:")
 }
 
 // LogEvent() / structured log renderer tests

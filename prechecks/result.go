@@ -10,18 +10,11 @@ import (
 )
 
 const (
-	// tableWidth is the total character width of the separator lines.
-	tableWidth = 80
-
 	// Status names.
 	passStatus    = "PASS"
 	failStatus    = "FAIL"
 	skipStatus    = "SKIP"
 	unknownStatus = "UNKNOWN"
-
-	// Section separators.
-	sectionChar = "-"
-	headerTitle = "CONNECTIVITY PRE-CHECKS"
 
 	// Log message constants.
 	logMsgPrecheck         = "precheck"
@@ -35,8 +28,6 @@ const (
 	logFieldDetails           = "details"
 	logFieldHardFail          = "hard_fail"
 	logFieldSuggestedProtocol = "suggested_protocol"
-
-	sep = " "
 )
 
 // statusLabel returns the display label for a given Status.
@@ -58,21 +49,9 @@ func (s Status) logString() string {
 	return strings.ToLower(s.String())
 }
 
-// separator returns a full-width horizontal line.
-func separator() string {
-	return strings.Repeat(sectionChar, tableWidth)
-}
-
-// header returns the top section title line.
-func header() string {
-	leftDashes := strings.Repeat(sectionChar, 3)
-	rightLen := tableWidth - len(leftDashes) - len(headerTitle) - len(sep)*2
-	return leftDashes + sep + headerTitle + sep + strings.Repeat(sectionChar, rightLen)
-}
-
 // renderTable uses text/tabwriter to format the results rows with
-// automatically aligned columns, returning the rendered string.
-func renderTable(results []CheckResult) string {
+// automatically aligned columns, returning the rendered lines.
+func renderTable(results []CheckResult) []string {
 	var buf bytes.Buffer
 	// minwidth=0, tabwidth=8, padding=2, padchar=' ', flags=0
 	w := tabwriter.NewWriter(&buf, 0, 8, 2, ' ', 0)
@@ -81,27 +60,27 @@ func renderTable(results []CheckResult) string {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Component, r.Target, r.ProbeStatus.statusLabel(), r.Details)
 	}
 	_ = w.Flush()
-	return buf.String()
+	return strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
 }
 
 // renderActions collects all non-empty Action strings from results and returns
 // the formatted warning/error block that appears between the table and SUMMARY.
 // A Fail result is rendered as ERROR when the report is a hard fail, and as
 // WARNING otherwise (degraded but tunnel can still run).
-func renderActions(r Report) string {
+func renderActions(r Report) []string {
 	hardFail := r.hasHardFail()
-	var sb strings.Builder
+	actions := make([]string, 0)
 	for _, res := range r.Results {
 		if res.Action == "" || res.ProbeStatus != Fail {
 			continue
 		}
 		if hardFail {
-			_, _ = fmt.Fprintf(&sb, "ERROR: %s\n", res.Action)
+			actions = append(actions, fmt.Sprintf("ERROR: %s", res.Action))
 		} else {
-			_, _ = fmt.Fprintf(&sb, "WARNING: %s\n", res.Action)
+			actions = append(actions, fmt.Sprintf("WARNING: %s", res.Action))
 		}
 	}
-	return sb.String()
+	return actions
 }
 
 // summaryLine builds the SUMMARY: line based on the Report state.
@@ -181,28 +160,12 @@ func (r Report) hasWarn() bool {
 	return (quicFail != http2Fail) || apiFail
 }
 
-// String renders the Report as a human-readable table suitable for os.Stdout.
-func (r Report) String() string {
-	var sb strings.Builder
-
-	sb.WriteString(header())
-	sb.WriteString("\n")
-
-	sb.WriteString(renderTable(r.Results))
-
-	actions := renderActions(r)
-	if actions != "" {
-		sb.WriteString(actions)
-	}
-
-	sb.WriteString("\n")
-	sb.WriteString(summaryLine(r))
-	sb.WriteString("\n")
-
-	sb.WriteString(separator())
-	sb.WriteString("\n")
-
-	return sb.String()
+// String renders the Report as human-readable table lines suitable for logging.
+func (r Report) String() []string {
+	lines := renderTable(r.Results)
+	lines = append(lines, renderActions(r)...)
+	lines = append(lines, "", summaryLine(r))
+	return lines
 }
 
 // LogEvent emits each CheckResult as a structured zerolog log line, followed by
