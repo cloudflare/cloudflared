@@ -17,12 +17,13 @@ import (
 	reflect "reflect"
 	time "time"
 
-	quic "github.com/quic-go/quic-go"
+	quic0 "github.com/quic-go/quic-go"
 	zerolog "github.com/rs/zerolog"
 	gomock "go.uber.org/mock/gomock"
 
 	dialopts "github.com/cloudflare/cloudflared/connection/dialopts"
 	allregions "github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	quic "github.com/cloudflare/cloudflared/quic"
 )
 
 // MockDNSResolver is a mock of DNSResolver interface.
@@ -176,10 +177,10 @@ func (m *MockQUICDialer) EXPECT() *MockQUICDialerMockRecorder {
 }
 
 // DialQuic mocks base method.
-func (m *MockQUICDialer) DialQuic(ctx context.Context, quicConfig *quic.Config, tlsConfig *tls.Config, addr netip.AddrPort, localAddr net.IP, connIndex uint8, logger *zerolog.Logger, opts dialopts.DialOpts) (quic.Connection, error) {
+func (m *MockQUICDialer) DialQuic(ctx context.Context, quicConfig *quic0.Config, tlsConfig *tls.Config, addr netip.AddrPort, localAddr net.IP, connIndex uint8, logger *zerolog.Logger, opts dialopts.DialOpts) (quic.QUICConnection, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DialQuic", ctx, quicConfig, tlsConfig, addr, localAddr, connIndex, logger, opts)
-	ret0, _ := ret[0].(quic.Connection)
+	ret0, _ := ret[0].(quic.QUICConnection)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -197,19 +198,19 @@ type MockQUICDialerDialQuicCall struct {
 }
 
 // Return rewrite *gomock.Call.Return
-func (c *MockQUICDialerDialQuicCall) Return(arg0 quic.Connection, arg1 error) *MockQUICDialerDialQuicCall {
+func (c *MockQUICDialerDialQuicCall) Return(arg0 quic.QUICConnection, arg1 error) *MockQUICDialerDialQuicCall {
 	c.Call = c.Call.Return(arg0, arg1)
 	return c
 }
 
 // Do rewrite *gomock.Call.Do
-func (c *MockQUICDialerDialQuicCall) Do(f func(context.Context, *quic.Config, *tls.Config, netip.AddrPort, net.IP, uint8, *zerolog.Logger, dialopts.DialOpts) (quic.Connection, error)) *MockQUICDialerDialQuicCall {
+func (c *MockQUICDialerDialQuicCall) Do(f func(context.Context, *quic0.Config, *tls.Config, netip.AddrPort, net.IP, uint8, *zerolog.Logger, dialopts.DialOpts) (quic.QUICConnection, error)) *MockQUICDialerDialQuicCall {
 	c.Call = c.Call.Do(f)
 	return c
 }
 
 // DoAndReturn rewrite *gomock.Call.DoAndReturn
-func (c *MockQUICDialerDialQuicCall) DoAndReturn(f func(context.Context, *quic.Config, *tls.Config, netip.AddrPort, net.IP, uint8, *zerolog.Logger, dialopts.DialOpts) (quic.Connection, error)) *MockQUICDialerDialQuicCall {
+func (c *MockQUICDialerDialQuicCall) DoAndReturn(f func(context.Context, *quic0.Config, *tls.Config, netip.AddrPort, net.IP, uint8, *zerolog.Logger, dialopts.DialOpts) (quic.QUICConnection, error)) *MockQUICDialerDialQuicCall {
 	c.Call = c.Call.DoAndReturn(f)
 	return c
 }

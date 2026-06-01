@@ -17,6 +17,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	edgedial "github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
 
@@ -96,7 +97,7 @@ func (d *EdgeQUICDialer) DialQuic(
 	connIndex uint8,
 	logger *zerolog.Logger,
 	opts dialopts.DialOpts,
-) (quic.Connection, error) {
+) (cfdquic.QUICConnection, error) {
 	return connection.DialQuic(ctx, quicConfig, tlsConfig, addr, localAddr, connIndex, logger, opts)
 }
 

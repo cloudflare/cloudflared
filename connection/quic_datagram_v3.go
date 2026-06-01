@@ -7,12 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/management"
-	cfdquic "github.com/cloudflare/cloudflared/quic/v3"
+	cfdquic "github.com/cloudflare/cloudflared/quic"
+	cfdquicv3 "github.com/cloudflare/cloudflared/quic/v3"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -22,20 +22,20 @@ var (
 )
 
 type datagramV3Connection struct {
-	conn  quic.Connection
+	conn  cfdquic.QUICConnection
 	index uint8
 	// datagramMuxer mux/demux datagrams from quic connection
-	datagramMuxer cfdquic.DatagramConn
-	metrics       cfdquic.Metrics
+	datagramMuxer cfdquicv3.DatagramConn
+	metrics       cfdquicv3.Metrics
 	logger        *zerolog.Logger
 }
 
 func NewDatagramV3Connection(ctx context.Context,
-	conn quic.Connection,
-	sessionManager cfdquic.SessionManager,
+	conn cfdquic.QUICConnection,
+	sessionManager cfdquicv3.SessionManager,
 	icmpRouter ingress.ICMPRouter,
 	index uint8,
-	metrics cfdquic.Metrics,
+	metrics cfdquicv3.Metrics,
 	logger *zerolog.Logger,
 ) DatagramSessionHandler {
 	log := logger.
@@ -43,7 +43,7 @@ func NewDatagramV3Connection(ctx context.Context,
 		Int(management.EventTypeKey, int(management.UDP)).
 		Uint8(LogFieldConnIndex, index).
 		Logger()
-	datagramMuxer := cfdquic.NewDatagramConn(conn, sessionManager, icmpRouter, index, metrics, &log)
+	datagramMuxer := cfdquicv3.NewDatagramConn(conn, sessionManager, icmpRouter, index, metrics, &log)
 
 	return &datagramV3Connection{
 		conn,
