@@ -20,6 +20,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 
 	"github.com/cloudflare/cloudflared/packet"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -177,6 +180,55 @@ func (ip *icmpProxy) listenResponse(ctx context.Context, flow *icmpEchoFlow) {
 	}
 }
 
+func enableReceiveTTL(conn *icmp.PacketConn, listenIP netip.Addr) error {
+	if listenIP.Is4() {
+		ipv4Conn := conn.IPv4PacketConn()
+		if ipv4Conn == nil {
+			return nil
+		}
+		if err := ipv4Conn.SetControlMessage(ipv4.FlagTTL, true); err != nil {
+			return fmt.Errorf("failed to enable IPv4 TTL control message: %w", err)
+		}
+		return nil
+	}
+
+	ipv6Conn := conn.IPv6PacketConn()
+	if ipv6Conn == nil {
+		return nil
+	}
+	if err := ipv6Conn.SetControlMessage(ipv6.FlagHopLimit, true); err != nil {
+		return fmt.Errorf("failed to enable IPv6 hop limit control message: %w", err)
+	}
+	return nil
+}
+
+func readICMPReply(conn *icmp.PacketConn, buf []byte) (int, net.Addr, receivedTTL, error) {
+	if ipv4Conn := conn.IPv4PacketConn(); ipv4Conn != nil {
+		n, cm, from, err := ipv4Conn.ReadFrom(buf)
+		if err != nil {
+			return 0, nil, receivedTTL{}, err
+		}
+		if cm == nil {
+			return n, from, receivedTTL{}, nil
+		}
+		return n, from, receivedTTLFromControlMessage(cm.TTL), nil
+	}
+
+	if ipv6Conn := conn.IPv6PacketConn(); ipv6Conn != nil {
+		n, cm, from, err := ipv6Conn.ReadFrom(buf)
+		if err != nil {
+			return 0, nil, receivedTTL{}, err
+		}
+		if cm == nil {
+			return n, from, receivedTTL{}, nil
+		}
+		return n, from, receivedTTLFromControlMessage(cm.HopLimit), nil
+	}
+
+	n, from, err := conn.ReadFrom(buf)
+	return n, from, receivedTTL{}, err
+}
+
 // Listens for ICMP response and handles error logging
 func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf []byte) (done bool) {
 	_, span := flow.responder.ReplySpan(ctx, ip.logger)
@@ -186,7 +238,7 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 		attribute.Int("originalEchoID", flow.originalEchoID),
 	)
 
-	n, from, err := flow.originConn.ReadFrom(buf)
+	n, from, ttl, err := readICMPReply(flow.originConn, buf)
 	if err != nil {
 		if flow.IsClosed() {
 			tracing.EndWithErrorStatus(span, fmt.Errorf("flow was closed"))
@@ -196,7 +248,7 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 		tracing.EndWithErrorStatus(span, err)
 		return true
 	}
-	reply, err := parseReply(from, buf[:n])
+	reply, err := parseReply(from, buf[:n], ttl)
 	if err != nil {
 		ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply")
 		tracing.EndWithErrorStatus(span, err)
@@ -209,9 +261,15 @@ func (ip *icmpProxy) handleResponse(ctx context.Context, flow *icmpEchoFlow, buf
 		return false
 	}
 
-	if err := flow.returnToSrc(reply); err != nil {
+	sent, err := flow.returnToSrc(reply)
+	if err != nil {
 		ip.logger.Error().Err(err).Str("dst", from.String()).Msg("Failed to send ICMP reply")
 		tracing.EndWithErrorStatus(span, err)
+		return false
+	}
+	if !sent {
+		ip.logger.Debug().Str("dst", from.String()).Msg("Drop ICMP echo reply because TTL expired")
+		tracing.End(span)
 		return false
 	}
 
