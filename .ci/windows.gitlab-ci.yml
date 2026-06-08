@@ -8,7 +8,7 @@ include:
   rules:
     - !reference [.default-rules, run-always]
   tags:
-    - windows-x86
+    - canary-windows-x86
   cache: {}
 
 ##########################################
