@@ -1,3 +1,7 @@
+2026.6.0
+- 2026-06-08 TUN-10558: Bump go to v1.24.4, x/crypto to v0.52.0 and google.golang.org/grpc to v1.81.1
+- 2026-06-01 TUN-10563: introduce QUICConnection interface
+
 2026.5.2
 - 2026-05-26 TUN-10391: Avoid using fmt.Println
 
