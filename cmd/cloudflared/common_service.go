@@ -24,7 +24,8 @@ func getServiceExtraArgsFromCliArgs(c *cli.Context, log *zerolog.Logger) ([]stri
 		// currently, we only support extra args for token
 		return buildArgsForToken(c, log)
 	} else {
-		// empty extra args
-		return make([]string, 0), nil
+		return []string{
+			"tunnel", "run",
+		}, nil
 	}
 }
