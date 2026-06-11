@@ -1,0 +1,8 @@
+images:
+  - name: cloudflared-daemon
+    dockerfile: Dockerfile.$ARCH
+    context: .
+    version_file: versions-internal
+    architectures:
+    - amd64
+    - arm64
