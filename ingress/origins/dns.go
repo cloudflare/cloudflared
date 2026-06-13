@@ -205,8 +205,8 @@ func (r *resolver) peekDial(ctx context.Context, network, address string) (net.C
 
 // NewDNSDialer creates a custom dialer for the DNS resolver service to utilize.
 func NewDNSDialer() *ingress.Dialer {
-	return &ingress.Dialer{
-		Dialer: net.Dialer{
+	// For DNS, use direct connection to avoid circular dependencies
+	netDialer := &net.Dialer{
 			// We want short timeouts for the DNS requests
 			Timeout: 5 * time.Second,
 			// We do not want keep alive since the edge will not reuse TCP connections per request
@@ -214,6 +214,9 @@ func NewDNSDialer() *ingress.Dialer {
 			KeepAliveConfig: net.KeepAliveConfig{
 				Enable: false,
 			},
-		},
+	}
+
+	return &ingress.Dialer{
+		Dialer: netDialer,
 	}
 }
