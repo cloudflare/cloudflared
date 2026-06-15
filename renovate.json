@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "schedule:nonOfficeHours"
+  ],
+  "enabledManagers": [
+    "dockerfile"
+  ],
+  "dockerfile": {
+    "managerFilePatterns": [
+      "/(^|/)Dockerfile\\.amd64$/",
+      "/(^|/)Dockerfile\\.arm64$/"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Disable updates for everything by default; only the distroless base image is managed for now",
+      "matchPackageNames": [
+        "*"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Keep any distroless base image up to date by pinning and updating its digest, since tags like :nonroot are rolling tags without a semver version",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "gcr.io/distroless/**"
+      ],
+      "enabled": true,
+      "pinDigests": true
+    }
+  ]
+}
