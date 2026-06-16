@@ -43,7 +43,7 @@ func (tc *tcpConnection) Stream(_ context.Context, tunnelConn io.ReadWriter, _ *
 
 func (tc *tcpConnection) Write(b []byte) (int, error) {
 	if tc.writeTimeout > 0 {
-		if err := tc.Conn.SetWriteDeadline(time.Now().Add(tc.writeTimeout)); err != nil {
+		if err := tc.SetWriteDeadline(time.Now().Add(tc.writeTimeout)); err != nil {
 			tc.logger.Err(err).Msg("Error setting write deadline for TCP connection")
 		}
 	}
