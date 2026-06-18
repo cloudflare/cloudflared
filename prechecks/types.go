@@ -126,4 +126,13 @@ type Config struct {
 	// no SRV records to validate — and transport probes target each addr
 	// individually, labeled with the original addr string.
 	EdgeAddrs []string
+
+	// ProtocolOverride is the raw --protocol flag value (e.g. "quic",
+	// "http2", "h2mux"). When non-empty and not "auto", the pre-checks still
+	// probe both transports for diagnostic completeness, but the reported
+	// SuggestedProtocol honours the override so that the summary message
+	// reflects what cloudflared will actually use — not what the probe
+	// heuristic would recommend on its own. Parsing happens inside the
+	// prechecks package.
+	ProtocolOverride string
 }

@@ -537,9 +537,10 @@ func runPrechecks(c *cli.Context, log *zerolog.Logger, region string) {
 	}
 
 	cfg := prechecks.Config{
-		Region:    region,
-		IPVersion: ipVersion,
-		EdgeAddrs: c.StringSlice(cfdflags.Edge),
+		Region:           region,
+		IPVersion:        ipVersion,
+		EdgeAddrs:        c.StringSlice(cfdflags.Edge),
+		ProtocolOverride: c.String(cfdflags.Protocol),
 	}
 
 	dialers := prechecks.RunDialers{

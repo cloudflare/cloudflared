@@ -587,3 +587,144 @@ func TestRun_EdgeAddrs_UnresolvableAddr(t *testing.T) {
 	assert.Nil(t, report.SuggestedProtocol)
 	assert.True(t, report.hasHardFail())
 }
+
+// ---------------------------------------------------------------------------
+// Protocol override tests
+// ---------------------------------------------------------------------------
+
+// TestRun_ProtocolOverride_HTTP2_BothPass verifies that when --protocol http2
+// is set and both transports are reachable, the summary reports HTTP/2 (not
+// QUIC, which would otherwise win the heuristic).
+func TestRun_ProtocolOverride_HTTP2_BothPass(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	dns := mocks.NewMockDNSResolver(ctrl)
+	tcp := mocks.NewMockTCPDialer(ctrl)
+	quicD := mocks.NewMockQUICDialer(ctrl)
+	mgmt := mocks.NewMockManagementDialer(ctrl)
+	fakeQUICConn := newFakeQUICConn(ctrl)
+
+	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
+	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil).AnyTimes()
+	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(fakeQUICConn, nil).AnyTimes()
+	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil)
+
+	cfg := Config{
+		Timeout:          2 * time.Second,
+		IPVersion:        allregions.Auto,
+		ProtocolOverride: "http2",
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+	// Both transports pass, but the override must win — HTTP/2 is reported.
+	require.NotNil(t, report.SuggestedProtocol)
+	assert.Equal(t, connection.HTTP2, *report.SuggestedProtocol,
+		"override http2 should be reported even though QUIC probes also passed")
+	assert.False(t, report.hasHardFail())
+}
+
+// TestRun_ProtocolOverride_QUIC_BothPass verifies that when --protocol quic is
+// set and both transports are reachable, the summary reports QUIC (same as the
+// heuristic would choose, but driven by the override).
+func TestRun_ProtocolOverride_QUIC_BothPass(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	dns := mocks.NewMockDNSResolver(ctrl)
+	tcp := mocks.NewMockTCPDialer(ctrl)
+	quicD := mocks.NewMockQUICDialer(ctrl)
+	mgmt := mocks.NewMockManagementDialer(ctrl)
+	fakeQUICConn := newFakeQUICConn(ctrl)
+
+	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
+	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil).AnyTimes()
+	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(fakeQUICConn, nil).AnyTimes()
+	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil)
+
+	cfg := Config{
+		Timeout:          2 * time.Second,
+		IPVersion:        allregions.Auto,
+		ProtocolOverride: "quic",
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+	require.NotNil(t, report.SuggestedProtocol)
+	assert.Equal(t, connection.QUIC, *report.SuggestedProtocol)
+	assert.False(t, report.hasHardFail())
+}
+
+// TestRun_ProtocolOverride_HTTP2_QUICBlocked verifies that when --protocol http2
+// is set and QUIC is blocked, we still report HTTP/2 (not a fallback to the
+// heuristic, since the overridden transport is healthy).
+func TestRun_ProtocolOverride_HTTP2_QUICBlocked(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	dns := mocks.NewMockDNSResolver(ctrl)
+	tcp := mocks.NewMockTCPDialer(ctrl)
+	quicD := mocks.NewMockQUICDialer(ctrl)
+	mgmt := mocks.NewMockManagementDialer(ctrl)
+
+	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
+	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil).AnyTimes()
+	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("blocked")).AnyTimes()
+	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil)
+
+	cfg := Config{
+		Timeout:          2 * time.Second,
+		IPVersion:        allregions.Auto,
+		ProtocolOverride: "http2",
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+	require.NotNil(t, report.SuggestedProtocol)
+	assert.Equal(t, connection.HTTP2, *report.SuggestedProtocol)
+	assert.False(t, report.hasHardFail())
+}
+
+// TestRun_ProtocolOverride_HTTP2_BothBlocked verifies that when --protocol http2
+// is set but the HTTP/2 transport itself also fails (hard fail), the override
+// falls through to the heuristic which returns nil — there is no usable protocol.
+func TestRun_ProtocolOverride_HTTP2_BothBlocked(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	dns := mocks.NewMockDNSResolver(ctrl)
+	tcp := mocks.NewMockTCPDialer(ctrl)
+	quicD := mocks.NewMockQUICDialer(ctrl)
+	mgmt := mocks.NewMockManagementDialer(ctrl)
+
+	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
+	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("blocked")).AnyTimes()
+	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("blocked")).AnyTimes()
+	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nopConn{}, nil)
+
+	cfg := Config{
+		Timeout:          2 * time.Second,
+		IPVersion:        allregions.Auto,
+		ProtocolOverride: "http2",
+	}
+	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+	// The overridden transport (HTTP/2) is blocked, so the override cannot be
+	// honoured and the hard-fail path reports no suggested protocol.
+	assert.Nil(t, report.SuggestedProtocol)
+	assert.True(t, report.hasHardFail())
+}
