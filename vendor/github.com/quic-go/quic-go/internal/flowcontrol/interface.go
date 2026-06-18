@@ -1,7 +1,8 @@
 package flowcontrol
 
 import (
-	"github.com/quic-go/quic-go/internal/monotime"
+	"time"
+
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -11,7 +12,7 @@ type flowController interface {
 	UpdateSendWindow(protocol.ByteCount) (updated bool)
 	AddBytesSent(protocol.ByteCount)
 	// for receiving
-	GetWindowUpdate(monotime.Time) protocol.ByteCount // returns 0 if no update is necessary
+	GetWindowUpdate(time.Time) protocol.ByteCount // returns 0 if no update is necessary
 }
 
 // A StreamFlowController is a flow controller for a QUIC stream.
@@ -21,7 +22,7 @@ type StreamFlowController interface {
 	// UpdateHighestReceived is called when a new highest offset is received
 	// final has to be to true if this is the final offset of the stream,
 	// as contained in a STREAM frame with FIN bit, and the RESET_STREAM frame
-	UpdateHighestReceived(offset protocol.ByteCount, final bool, now monotime.Time) error
+	UpdateHighestReceived(offset protocol.ByteCount, final bool, now time.Time) error
 	// Abandon is called when reading from the stream is aborted early,
 	// and there won't be any further calls to AddBytesRead.
 	Abandon()
@@ -40,7 +41,7 @@ type connectionFlowControllerI interface {
 	ConnectionFlowController
 	// The following two methods are not supposed to be called from outside this packet, but are needed internally
 	// for sending
-	EnsureMinimumWindowSize(protocol.ByteCount, monotime.Time)
+	EnsureMinimumWindowSize(protocol.ByteCount, time.Time)
 	// for receiving
-	IncrementHighestReceived(protocol.ByteCount, monotime.Time) error
+	IncrementHighestReceived(protocol.ByteCount, time.Time) error
 }

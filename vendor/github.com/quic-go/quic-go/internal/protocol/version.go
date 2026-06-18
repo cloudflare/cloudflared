@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	mrand "math/rand/v2"
-	"slices"
 	"sync"
 )
 
@@ -37,6 +36,7 @@ func IsValidVersion(v Version) bool {
 }
 
 func (vn Version) String() string {
+	//nolint:exhaustive
 	switch vn {
 	case VersionUnknown:
 		return "unknown"
@@ -64,7 +64,12 @@ func (vn Version) toGQUICVersion() int {
 
 // IsSupportedVersion returns true if the server supports this version
 func IsSupportedVersion(supported []Version, v Version) bool {
-	return slices.Contains(supported, v)
+	for _, t := range supported {
+		if t == v {
+			return true
+		}
+	}
+	return false
 }
 
 // ChooseSupportedVersion finds the best version in the overlap of ours and theirs
@@ -73,8 +78,10 @@ func IsSupportedVersion(supported []Version, v Version) bool {
 // The bool returned indicates if a matching version was found.
 func ChooseSupportedVersion(ours, theirs []Version) (Version, bool) {
 	for _, ourVer := range ours {
-		if slices.Contains(theirs, ourVer) {
-			return ourVer, true
+		for _, theirVer := range theirs {
+			if ourVer == theirVer {
+				return ourVer, true
+			}
 		}
 	}
 	return 0, false

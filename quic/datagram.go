@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/packet"
@@ -24,12 +25,12 @@ type BaseDatagramMuxer interface {
 }
 
 type DatagramMuxer struct {
-	session   QUICConnection
+	session   quic.Connection
 	logger    *zerolog.Logger
 	demuxChan chan<- *packet.Session
 }
 
-func NewDatagramMuxer(quicSession QUICConnection, log *zerolog.Logger, demuxChan chan<- *packet.Session) *DatagramMuxer {
+func NewDatagramMuxer(quicSession quic.Connection, log *zerolog.Logger, demuxChan chan<- *packet.Session) *DatagramMuxer {
 	logger := log.With().Uint8("datagramVersion", 1).Logger()
 	return &DatagramMuxer{
 		session:   quicSession,

@@ -12,9 +12,9 @@ import (
 // QUICConnection defines the subset of [quic.Connection] methods used by cloudflared.
 // Consumers should accept this interface; producers should return [*ConnWithCloser].
 type QUICConnection interface {
-	AcceptStream(ctx context.Context) (*quic.Stream, error)
-	OpenStream() (*quic.Stream, error)
-	OpenStreamSync(ctx context.Context) (*quic.Stream, error)
+	AcceptStream(ctx context.Context) (quic.Stream, error)
+	OpenStream() (quic.Stream, error)
+	OpenStreamSync(ctx context.Context) (quic.Stream, error)
 	CloseWithError(code quic.ApplicationErrorCode, reason string) error
 	Context() context.Context
 	SendDatagram(payload []byte) error
@@ -28,9 +28,9 @@ type QUICConnection interface {
 var _ QUICConnection = (*ConnWithCloser)(nil)
 
 var (
-	// error returned when the [NewQUICConnection] is called with a nil conn argument
+	// error returned when the [NewConnWithCloser] is called with a nil conn argument
 	ErrNilQuicConnection = errors.New("the provided quic connection is nil")
-	// error returned when the [NewQUICConnection] is called with a nil closer argument
+	// error returned when the [NewConnWithCloser] is called with a nil closer argument
 	ErrNilCloser = errors.New("the provided closer is nil")
 )
 
@@ -38,15 +38,16 @@ var (
 // underlying [*net.UDPConn]). When [CloseWithError] is called the QUIC
 // connection is closed first, then the closer is closed deterministically.
 //
-// All fields are non-nil after successful construction via [NewQUICConnection].
+// A nil conn is only safe for [CloseWithError] (used in tests). All other
+// delegated methods will panic on a nil conn.
 type ConnWithCloser struct {
-	conn   *quic.Conn
+	conn   quic.Connection
 	closer io.Closer
 }
 
 // NewQUICConnection returns a [*ConnWithCloser] that will close closer after
 // the QUIC connection is closed.
-func NewQUICConnection(conn *quic.Conn, closer io.Closer) (*ConnWithCloser, error) {
+func NewQUICConnection(conn quic.Connection, closer io.Closer) (*ConnWithCloser, error) {
 	if conn == nil {
 		return nil, ErrNilQuicConnection
 	}
@@ -67,15 +68,15 @@ func (c *ConnWithCloser) CloseWithError(code quic.ApplicationErrorCode, reason s
 	return errors.Join(connErr, closerErr)
 }
 
-func (c *ConnWithCloser) AcceptStream(ctx context.Context) (*quic.Stream, error) {
+func (c *ConnWithCloser) AcceptStream(ctx context.Context) (quic.Stream, error) {
 	return c.conn.AcceptStream(ctx)
 }
 
-func (c *ConnWithCloser) OpenStream() (*quic.Stream, error) {
+func (c *ConnWithCloser) OpenStream() (quic.Stream, error) {
 	return c.conn.OpenStream()
 }
 
-func (c *ConnWithCloser) OpenStreamSync(ctx context.Context) (*quic.Stream, error) {
+func (c *ConnWithCloser) OpenStreamSync(ctx context.Context) (quic.Stream, error) {
 	return c.conn.OpenStreamSync(ctx)
 }
 

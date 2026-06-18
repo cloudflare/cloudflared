@@ -16,7 +16,7 @@ var generateConnectionIDForInitial = protocol.GenerateConnectionIDForInitial
 // It resolves the address, and then creates a new UDP connection to dial the QUIC server.
 // When the QUIC connection is closed, this UDP connection is closed.
 // See [Dial] for more details.
-func DialAddr(ctx context.Context, addr string, tlsConf *tls.Config, conf *Config) (*Conn, error) {
+func DialAddr(ctx context.Context, addr string, tlsConf *tls.Config, conf *Config) (Connection, error) {
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
 		return nil, err
@@ -29,17 +29,12 @@ func DialAddr(ctx context.Context, addr string, tlsConf *tls.Config, conf *Confi
 	if err != nil {
 		return nil, err
 	}
-	conn, err := tr.dial(ctx, udpAddr, addr, tlsConf, conf, false)
-	if err != nil {
-		tr.Close()
-		return nil, err
-	}
-	return conn, nil
+	return tr.dial(ctx, udpAddr, addr, tlsConf, conf, false)
 }
 
 // DialAddrEarly establishes a new 0-RTT QUIC connection to a server.
 // See [DialAddr] for more details.
-func DialAddrEarly(ctx context.Context, addr string, tlsConf *tls.Config, conf *Config) (*Conn, error) {
+func DialAddrEarly(ctx context.Context, addr string, tlsConf *tls.Config, conf *Config) (EarlyConnection, error) {
 	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
 		return nil, err
@@ -62,7 +57,7 @@ func DialAddrEarly(ctx context.Context, addr string, tlsConf *tls.Config, conf *
 
 // DialEarly establishes a new 0-RTT QUIC connection to a server using a net.PacketConn.
 // See [Dial] for more details.
-func DialEarly(ctx context.Context, c net.PacketConn, addr net.Addr, tlsConf *tls.Config, conf *Config) (*Conn, error) {
+func DialEarly(ctx context.Context, c net.PacketConn, addr net.Addr, tlsConf *tls.Config, conf *Config) (EarlyConnection, error) {
 	dl, err := setupTransport(c, tlsConf, false)
 	if err != nil {
 		return nil, err
@@ -79,12 +74,12 @@ func DialEarly(ctx context.Context, c net.PacketConn, addr net.Addr, tlsConf *tl
 // If the PacketConn satisfies the [OOBCapablePacketConn] interface (as a [net.UDPConn] does),
 // ECN and packet info support will be enabled. In this case, ReadMsgUDP and WriteMsgUDP
 // will be used instead of ReadFrom and WriteTo to read/write packets.
-// The [tls.Config] must define an application protocol (using tls.Config.NextProtos).
+// The tls.Config must define an application protocol (using NextProtos).
 //
 // This is a convenience function. More advanced use cases should instantiate a [Transport],
 // which offers configuration options for a more fine-grained control of the connection establishment,
 // including reusing the underlying UDP socket for multiple QUIC connections.
-func Dial(ctx context.Context, c net.PacketConn, addr net.Addr, tlsConf *tls.Config, conf *Config) (*Conn, error) {
+func Dial(ctx context.Context, c net.PacketConn, addr net.Addr, tlsConf *tls.Config, conf *Config) (Connection, error) {
 	dl, err := setupTransport(c, tlsConf, false)
 	if err != nil {
 		return nil, err

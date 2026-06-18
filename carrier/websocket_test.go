@@ -2,11 +2,10 @@ package carrier
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"math/big"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -24,10 +23,19 @@ import (
 func websocketClientTLSConfig(t *testing.T) *tls.Config {
 	certPool := x509.NewCertPool()
 	helloCert, err := tlsconfig.GetHelloCertificateX509()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	certPool.AddCert(helloCert)
 	assert.NotNil(t, certPool)
 	return &tls.Config{RootCAs: certPool}
+}
+
+func TestWebsocketHeaders(t *testing.T) {
+	req := testRequest(t, "http://example.com", nil)
+	wsHeaders := websocketHeaders(req)
+	for _, header := range stripWebsocketHeaders {
+		assert.Empty(t, wsHeaders[header])
+	}
+	assert.Equal(t, "curl/7.59.0", wsHeaders.Get("User-Agent"))
 }
 
 func TestServe(t *testing.T) {
@@ -35,8 +43,8 @@ func TestServe(t *testing.T) {
 	shutdownC := make(chan struct{})
 	errC := make(chan error)
 	listener, err := hello.CreateTLSListener("localhost:1111")
-	require.NoError(t, err)
-	defer func() { _ = listener.Close() }()
+	assert.NoError(t, err)
+	defer listener.Close()
 
 	go func() {
 		errC <- hello.StartHelloWorldServer(&log, listener, shutdownC)
@@ -48,25 +56,19 @@ func TestServe(t *testing.T) {
 	assert.NotNil(t, tlsConfig)
 	d := gws.Dialer{TLSClientConfig: tlsConfig}
 	conn, resp, err := clientConnect(req, &d)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
+	assert.NoError(t, err)
 	assert.Equal(t, "websocket", resp.Header.Get("Upgrade"))
 
-	for range 1000 {
-		messageSize, err := rand.Int(rand.Reader, big.NewInt(2048))
-		require.NoError(t, err)
-		clientMessage := make([]byte, messageSize.Int64()+1)
-		for i := range clientMessage {
-			n, err := rand.Int(rand.Reader, big.NewInt(256))
-			n8 := uint8(n.Uint64()) //nolint:gosec // test-only
-			require.NoError(t, err)
-			clientMessage[i] = n8
-		}
+	for i := 0; i < 1000; i++ {
+		messageSize := rand.Int()%2048 + 1
+		clientMessage := make([]byte, messageSize)
+		// rand.Read always returns len(clientMessage) and a nil error
+		rand.Read(clientMessage)
 		err = conn.WriteMessage(websocket.BinaryFrame, clientMessage)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		messageType, message, err := conn.ReadMessage()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, websocket.BinaryFrame, messageType)
 		assert.Equal(t, clientMessage, message)
 	}
@@ -95,30 +97,27 @@ func TestWebsocketWrapper(t *testing.T) {
 	req := testRequest(t, testAddr, nil)
 	conn, resp, err := clientConnect(req, &d)
 	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, "websocket", resp.Header.Get("Upgrade"))
 
 	// Websocket now connected to test server so lets check our wrapper
 	wrapper := cfwebsocket.GorillaConn{Conn: conn}
 	buf := make([]byte, 100)
-	_, err = wrapper.Write([]byte("abc"))
-	require.NoError(t, err)
+	wrapper.Write([]byte("abc"))
 	n, err := wrapper.Read(buf)
 	require.NoError(t, err)
-	require.Equal(t, 3, n)
+	require.Equal(t, n, 3)
 	require.Equal(t, "abc", string(buf[:n]))
 
 	// Test partial read, read 1 of 3 bytes in one read and the other 2 in another read
-	_, err = wrapper.Write([]byte("abc"))
-	require.NoError(t, err)
+	wrapper.Write([]byte("abc"))
 	buf = buf[:1]
 	n, err = wrapper.Read(buf)
 	require.NoError(t, err)
-	require.Equal(t, 1, n)
+	require.Equal(t, n, 1)
 	require.Equal(t, "a", string(buf[:n]))
 	buf = buf[:cap(buf)]
 	n, err = wrapper.Read(buf)
 	require.NoError(t, err)
-	require.Equal(t, 2, n)
+	require.Equal(t, n, 2)
 	require.Equal(t, "bc", string(buf[:n]))
 }
