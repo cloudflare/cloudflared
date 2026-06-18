@@ -2,15 +2,19 @@ package ackhandler
 
 import (
 	"sync"
-	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
+type packetWithPacketNumber struct {
+	PacketNumber protocol.PacketNumber
+	*packet
+}
+
 // A Packet is a packet
 type packet struct {
-	SendTime        time.Time
-	PacketNumber    protocol.PacketNumber
+	SendTime        monotime.Time
 	StreamFrames    []StreamFrame
 	Frames          []Frame
 	LargestAcked    protocol.PacketNumber // InvalidPacketNumber if the packet doesn't contain an ACK
@@ -20,30 +24,30 @@ type packet struct {
 	IsPathMTUProbePacket bool // We don't report the loss of Path MTU probe packets to the congestion controller.
 
 	includedInBytesInFlight bool
-	declaredLost            bool
-	skippedPacket           bool
 	isPathProbePacket       bool
 }
 
-func (p *packet) outstanding() bool {
-	return !p.declaredLost && !p.skippedPacket && !p.IsPathMTUProbePacket && !p.isPathProbePacket
+func (p *packet) Outstanding() bool {
+	return !p.IsPathMTUProbePacket && !p.isPathProbePacket && p.IsAckEliciting()
+}
+
+func (p *packet) IsAckEliciting() bool {
+	return len(p.StreamFrames) > 0 || len(p.Frames) > 0
 }
 
 var packetPool = sync.Pool{New: func() any { return &packet{} }}
 
 func getPacket() *packet {
 	p := packetPool.Get().(*packet)
-	p.PacketNumber = 0
 	p.StreamFrames = nil
 	p.Frames = nil
 	p.LargestAcked = 0
 	p.Length = 0
 	p.EncryptionLevel = protocol.EncryptionLevel(0)
-	p.SendTime = time.Time{}
+	p.SendTime = 0
 	p.IsPathMTUProbePacket = false
 	p.includedInBytesInFlight = false
-	p.declaredLost = false
-	p.skippedPacket = false
+	p.isPathProbePacket = false
 	return p
 }
 

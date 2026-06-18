@@ -9,11 +9,13 @@ linters:
     - govet
     - ineffassign
     - misspell
+    - nolintlint
     - prealloc
     - staticcheck
     - unconvert
     - unparam
     - unused
+    - usetesting
   settings:
     depguard:
       rules:
@@ -35,9 +37,31 @@ linters:
           deny:
             - pkg: crypto/rsa
               desc: "use crypto/ed25519 instead"
+        ginkgo:
+          list-mode: original
+          deny:
+            - pkg: github.com/onsi/ginkgo
+              desc: "use standard Go tests"
+            - pkg: github.com/onsi/ginkgo/v2
+              desc: "use standard Go tests"
+            - pkg: github.com/onsi/gomega
+              desc: "use standard Go tests"
+        http3-internal:
+          list-mode: lax
+          files:
+            - '**/http3/**'
+          deny:
+            - pkg: 'github.com/quic-go/quic-go/internal'
+              desc: 'no dependency on quic-go/internal'
+          allow:
+            - 'github.com/quic-go/quic-go/internal/synctest'
     misspell:
       ignore-rules:
         - ect
+    # see https://github.com/ldez/usetesting/issues/10
+    usetesting:
+      context-background: false
+      context-todo: false
   exclusions:
     generated: lax
     presets:
