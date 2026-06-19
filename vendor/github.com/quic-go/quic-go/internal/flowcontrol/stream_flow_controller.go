@@ -2,8 +2,8 @@ package flowcontrol
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -46,7 +46,7 @@ func NewStreamFlowController(
 }
 
 // UpdateHighestReceived updates the highestReceived value, if the offset is higher.
-func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now time.Time) error {
+func (c *streamFlowController) UpdateHighestReceived(offset protocol.ByteCount, final bool, now monotime.Time) error {
 	// If the final offset for this stream is already known, check for consistency.
 	if c.receivedFinalOffset {
 		// If we receive another final offset, check that it's the same.
@@ -135,7 +135,7 @@ func (c *streamFlowController) shouldQueueWindowUpdate() bool {
 	return !c.receivedFinalOffset && c.hasWindowUpdate()
 }
 
-func (c *streamFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount {
+func (c *streamFlowController) GetWindowUpdate(now monotime.Time) protocol.ByteCount {
 	// If we already received the final offset for this stream, the peer won't need any additional flow control credit.
 	if c.receivedFinalOffset {
 		return 0

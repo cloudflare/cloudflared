@@ -2,8 +2,8 @@ package protocol
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -26,7 +26,7 @@ func (c ArbitraryLenConnectionID) String() string {
 	if c.Len() == 0 {
 		return "(empty)"
 	}
-	return fmt.Sprintf("%x", c.Bytes())
+	return hex.EncodeToString(c.Bytes())
 }
 
 const maxConnectionIDLen = 20
@@ -100,7 +100,7 @@ func (c ConnectionID) String() string {
 	if c.Len() == 0 {
 		return "(empty)"
 	}
-	return fmt.Sprintf("%x", c.Bytes())
+	return hex.EncodeToString(c.Bytes())
 }
 
 type DefaultConnectionIDGenerator struct {

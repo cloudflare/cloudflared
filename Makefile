@@ -162,6 +162,10 @@ container:
 generate-docker-version:
 	echo latest $(VERSION) > versions
 
+.PHONY: generate-internal-image-version
+generate-internal-image-version:
+	echo $(VERSION) > versions-internal
+
 
 .PHONY: test
 test: vet

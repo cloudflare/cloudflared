@@ -50,6 +50,7 @@ func (p *Path) Probe(ctx context.Context) error {
 			p.validated.Store(true)
 			return nil
 		case <-timerChan:
+			nextProbeDur *= 2 // exponential backoff
 			p.pathManager.enqueueProbe(p)
 		case <-path.ProbeSent():
 		case <-p.abandon:
@@ -61,7 +62,6 @@ func (p *Path) Probe(ctx context.Context) error {
 		}
 		timer = time.NewTimer(nextProbeDur)
 		timerChan = timer.C
-		nextProbeDur *= 2 // exponential backoff
 	}
 }
 
@@ -128,6 +128,9 @@ type pathManagerOutgoing struct {
 	pathToSwitchTo *pathOutgoing
 }
 
+// newPathManagerOutgoing creates a new pathManagerOutgoing object. This
+// function must be side-effect free as it may be called multiple times for a
+// single connection.
 func newPathManagerOutgoing(
 	getConnID func(pathID) (_ protocol.ConnectionID, ok bool),
 	retireConnID func(pathID),

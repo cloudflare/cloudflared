@@ -2,12 +2,13 @@ coverage:
   round: nearest
   ignore:
     - http3/gzip_reader.go
+    - example/
     - interop/
     - internal/handshake/cipher_suite.go
+    - internal/mocks/
     - internal/utils/linkedlist/linkedlist.go
     - internal/testdata
-    - logging/connection_tracer_multiplexer.go
-    - logging/tracer_multiplexer.go
+    - internal/synctest
     - testutils/
     - fuzzing/
     - metrics/

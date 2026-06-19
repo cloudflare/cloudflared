@@ -17,13 +17,13 @@ var idleTimeoutError = quic.IdleTimeoutError{}
 
 type SafeStreamCloser struct {
 	lock         sync.Mutex
-	stream       quic.Stream
+	stream       *quic.Stream
 	writeTimeout time.Duration
 	log          *zerolog.Logger
 	closing      atomic.Bool
 }
 
-func NewSafeStreamCloser(stream quic.Stream, writeTimeout time.Duration, log *zerolog.Logger) *SafeStreamCloser {
+func NewSafeStreamCloser(stream *quic.Stream, writeTimeout time.Duration, log *zerolog.Logger) *SafeStreamCloser {
 	return &SafeStreamCloser{
 		stream:       stream,
 		writeTimeout: writeTimeout,

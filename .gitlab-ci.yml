@@ -64,6 +64,11 @@ include:
   - local: .ci/apt-internal.gitlab-ci.yml
 
   #####################################################
+  ########## Release Internal Docker Image ############
+  #####################################################
+  - local: .ci/internal-image.gitlab-ci.yml
+
+  #####################################################
   ############## Manual Claude Review #################
   #####################################################
   - component: $CI_SERVER_FQDN/cloudflare/ci/ai/review@~latest
