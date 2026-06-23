@@ -441,7 +441,11 @@ func uninstallSystemd(log *zerolog.Logger) error {
 	// Get only the installed services
 	installedServices := make(map[string]ServiceTemplate)
 	for serviceName, serviceTemplate := range systemdAllTemplates {
-		if err := runCommand("systemctl", "list-units", "--all", "|", "grep", serviceName); err == nil {
+		path, err := serviceTemplate.ResolvePath()
+		if err != nil {
+			return fmt.Errorf("error resolving path for service %q: %w", serviceName, err)
+		}
+		if _, err := os.Stat(path); err == nil {
 			installedServices[serviceName] = serviceTemplate
 		} else {
 			log.Info().Msgf("Service '%s' not installed, skipping its uninstall", serviceName)
