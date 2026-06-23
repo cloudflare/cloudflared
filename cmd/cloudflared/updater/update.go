@@ -306,8 +306,21 @@ func IsSysV() bool {
 		return false
 	}
 
+	// systemd and OpenRC keep the service alive, so let them restart it.
 	if _, err := os.Stat("/run/systemd/system"); err == nil {
 		return false
 	}
+	if IsOpenRC() {
+		return false
+	}
 	return true
+}
+
+func IsOpenRC() bool {
+	for _, path := range []string{"/sbin/openrc-run", "/usr/sbin/openrc-run", "/usr/bin/openrc-run"} {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
 }
