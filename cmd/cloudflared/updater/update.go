@@ -112,10 +112,10 @@ func CheckForUpdate(options updateOptions) (CheckResult, error) {
 func encodeWindowsPath(path string) string {
 	// We do this because Windows allows spaces in directories such as
 	// Program Files but does not allow these directories to be spaced in batch files.
-	targetPath := strings.Replace(path, "Program Files (x86)", "PROGRA~2", -1)
+	targetPath := strings.ReplaceAll(path, "Program Files (x86)", "PROGRA~2")
 	// This is to do the same in 32 bit systems. We do this second so that the first
 	// replace is for x86 dirs.
-	targetPath = strings.Replace(targetPath, "Program Files", "PROGRA~1", -1)
+	targetPath = strings.ReplaceAll(targetPath, "Program Files", "PROGRA~1")
 	return targetPath
 }
 

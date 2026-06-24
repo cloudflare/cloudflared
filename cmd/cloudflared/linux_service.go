@@ -302,14 +302,11 @@ func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
 		return err == nil && val != ""
 	}
 	if src.TunnelID == "" || !configPresent(tunnel.CredFileFlag) {
-		return nil, fmt.Errorf(`Configuration file %s must contain entries for the tunnel to run and its associated credentials:
-tunnel: TUNNEL-UUID
-credentials-file: CREDENTIALS-FILE
-`, src.Source())
+		return nil, fmt.Errorf("configuration file %s must contain entries for the tunnel to run and its associated credentials (tunnel: TUNNEL-UUID, credentials-file: CREDENTIALS-FILE)", src.Source())
 	}
 	if src.Source() != serviceConfigPath {
 		if exists, err := config.FileExists(serviceConfigPath); err != nil || exists {
-			return nil, fmt.Errorf("Possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
+			return nil, fmt.Errorf("possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
 		}
 
 		if err := copyFile(src.Source(), serviceConfigPath); err != nil {
@@ -527,25 +524,25 @@ func uninstallOpenRC(log *zerolog.Logger) error {
 func ensureConfigDirExists(configDir string) error {
 	ok, err := config.FileExists(configDir)
 	if !ok && err == nil {
-		err = os.Mkdir(configDir, 0o755)
+		err = os.Mkdir(configDir, 0o755) //nolint:gosec // config dir must be traversable by a non-root service user
 	}
 	return err
 }
 
 func copyFile(src, dest string) error {
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) //nolint:gosec // operator-provided service config path
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
-	destFile, err := os.Create(dest)
+	destFile, err := os.Create(dest) //nolint:gosec // operator-provided service config path
 	if err != nil {
 		return err
 	}
 	ok := false
 	defer func() {
-		destFile.Close()
+		_ = destFile.Close()
 		if !ok {
 			_ = os.Remove(dest)
 		}
