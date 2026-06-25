@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/inits"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 )
@@ -248,7 +249,7 @@ func (a *AutoUpdater) Run(ctx context.Context) error {
 		updateOutcome := loggedUpdate(a.log, updateOptions{updateDisabled: !a.configurable.enabled})
 		if updateOutcome.Updated {
 			buildInfo.CloudflaredVersion = updateOutcome.Version
-			if IsSysV() {
+			if inits.IsSysV() {
 				// SysV doesn't have a mechanism to keep service alive, we have to restart the process
 				a.log.Info().Msg("Restarting service managed by SysV...")
 				pid, err := a.listeners.StartProcess()
@@ -299,28 +300,4 @@ func wasInstalledFromPackageManager() bool {
 
 func isRunningFromTerminal() bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
-}
-
-func IsSysV() bool {
-	if runtime.GOOS != "linux" {
-		return false
-	}
-
-	// systemd and OpenRC keep the service alive, so let them restart it.
-	if _, err := os.Stat("/run/systemd/system"); err == nil {
-		return false
-	}
-	if IsOpenRC() {
-		return false
-	}
-	return true
-}
-
-func IsOpenRC() bool {
-	for _, path := range []string{"/sbin/openrc-run", "/usr/sbin/openrc-run", "/usr/bin/openrc-run"} {
-		if _, err := os.Stat(path); err == nil {
-			return true
-		}
-	}
-	return false
 }

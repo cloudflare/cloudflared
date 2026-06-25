@@ -12,8 +12,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/inits"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
-	"github.com/cloudflare/cloudflared/cmd/cloudflared/updater"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 )
@@ -235,11 +235,6 @@ var noUpdateServiceFlag = &cli.BoolFlag{
 	Value: false,
 }
 
-func isSystemd() bool {
-	_, err := os.Stat("/run/systemd/system")
-	return err == nil
-}
-
 func installLinuxService(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
@@ -269,10 +264,10 @@ func installLinuxService(c *cli.Context) error {
 	templateArgs.ExtraArgs = extraArgs
 
 	switch {
-	case isSystemd():
+	case inits.IsSystemd():
 		log.Info().Msgf("Using Systemd")
 		err = installSystemd(&templateArgs, autoUpdate, log)
-	case updater.IsOpenRC():
+	case inits.IsOpenRC():
 		log.Info().Msgf("Using OpenRC")
 		err = installOpenRC(&templateArgs, autoUpdate)
 	default:
@@ -417,10 +412,10 @@ func uninstallLinuxService(c *cli.Context) error {
 
 	var err error
 	switch {
-	case isSystemd():
+	case inits.IsSystemd():
 		log.Info().Msg("Using Systemd")
 		err = uninstallSystemd(log)
-	case updater.IsOpenRC():
+	case inits.IsOpenRC():
 		log.Info().Msg("Using OpenRC")
 		err = uninstallOpenRC(log)
 	default:
