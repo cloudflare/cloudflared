@@ -9,6 +9,7 @@
   ],
   "dockerfile": {
     "managerFilePatterns": [
+      "/(^|/)Dockerfile$/",
       "/(^|/)Dockerfile\\.amd64$/",
       "/(^|/)Dockerfile\\.arm64$/"
     ]
@@ -26,8 +27,8 @@
       "matchManagers": [
         "dockerfile"
       ],
-      "matchPackageNames": [
-        "gcr.io/distroless/**"
+      "matchPackagePrefixes": [
+        "gcr.io/distroless/"
       ],
       "enabled": true,
       "pinDigests": true
