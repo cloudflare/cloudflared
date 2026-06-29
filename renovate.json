@@ -27,11 +27,11 @@
       "matchManagers": [
         "dockerfile"
       ],
-      "matchPackagePrefixes": [
-        "gcr.io/distroless/"
-      ],
       "enabled": true,
-      "pinDigests": true
+      "pinDigests": true,
+      "matchPackageNames": [
+        "gcr.io/distroless/{/,}**"
+      ]
     }
   ]
 }
