@@ -25,9 +25,9 @@ type OriginConnection interface {
 type streamHandlerFunc func(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger)
 
 // DefaultStreamHandler is an implementation of streamHandlerFunc that
-// performs a two way io.Copy between originConn and remoteConn.
+// performs a two-way io.Copy between originConn and remoteConn.
 func DefaultStreamHandler(originConn io.ReadWriter, remoteConn net.Conn, log *zerolog.Logger) {
-	stream.Pipe(originConn, remoteConn, log)
+	stream.Pipe(originConn, remoteConn, stream.DefaultTimeoutAfterFirstClose, log)
 }
 
 // tcpConnection is an OriginConnection that directly streams to raw TCP.
@@ -38,7 +38,7 @@ type tcpConnection struct {
 }
 
 func (tc *tcpConnection) Stream(_ context.Context, tunnelConn io.ReadWriter, _ *zerolog.Logger) {
-	stream.Pipe(tunnelConn, tc, tc.logger)
+	stream.Pipe(tunnelConn, tc, stream.DefaultTimeoutAfterFirstClose, tc.logger)
 }
 
 func (tc *tcpConnection) Write(b []byte) (int, error) {

@@ -223,9 +223,9 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 			}
 			if ctx.Err() == context.DeadlineExceeded {
 				t.Errorf("Test timed out")
-				readPipe.Close()
-				writePipe.Close()
-				responseWriter.Close()
+				_ = readPipe.Close()
+				_ = writePipe.Close()
+				_ = responseWriter.Close()
 			}
 			return nil
 		})
@@ -647,7 +647,7 @@ func TestConnections(t *testing.T) {
 				ingressServiceScheme: "tcp://",
 				originService: func(t *testing.T, ln net.Listener) {
 					// closing the listener created by the test.
-					ln.Close()
+					_ = ln.Close()
 				},
 				eyeballResponseWriter: newTCPRespWriter(replayer),
 				eyeballRequestBody:    newTCPRequestBody([]byte("test2")),
@@ -756,6 +756,8 @@ func newTCPRequestBody(data []byte) *requestBody {
 	pr, pw := io.Pipe()
 	go func() {
 		_, _ = pw.Write(data)
+		// Close the write side once the payload has been sent.
+		_ = pw.Close()
 	}()
 	return &requestBody{
 		pr: pr,
@@ -801,8 +803,8 @@ func (p *pipedRequestBody) roundtrip(addr string) []byte {
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
-	defer resp.Body.Close()
+	defer func() { _ = conn.Close() }()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		panic(fmt.Errorf("resp returned status code: %d", resp.StatusCode))
@@ -949,7 +951,7 @@ func runEchoTCPService(t *testing.T, l net.Listener) {
 			if err != nil {
 				panic(err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			for {
 				buf := make([]byte, 1024)
@@ -987,7 +989,7 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			t.Log(err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			messageType, p, err := conn.ReadMessage()

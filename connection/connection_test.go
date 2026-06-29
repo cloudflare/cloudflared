@@ -151,7 +151,7 @@ func wsEchoEndpoint(w ResponseWriter, r *http.Request) error {
 	}()
 
 	originConn := &echoPipe{reader: readPipe, writer: writePipe}
-	stream.Pipe(wsConn, originConn, &log)
+	stream.Pipe(wsConn, originConn, 0, &log)
 	cancel()
 	wsConn.Close()
 	return nil
@@ -190,7 +190,7 @@ func wsFlakyEndpoint(w ResponseWriter, r *http.Request) error {
 	rInt, _ := rand.Int(rand.Reader, big.NewInt(50))
 	closedAfter := time.Millisecond * time.Duration(rInt.Int64())
 	originConn := &flakyConn{closeAt: time.Now().Add(closedAfter)}
-	stream.Pipe(wsConn, originConn, &log)
+	stream.Pipe(wsConn, originConn, 0, &log)
 	cancel()
 	wsConn.Close()
 	return nil

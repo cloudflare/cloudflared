@@ -37,7 +37,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 	}
 	defer func() { _ = wsConn.Close() }()
 
-	stream.Pipe(wsConn, conn, ws.log)
+	stream.Pipe(wsConn, conn, stream.DefaultTimeoutAfterFirstClose, ws.log)
 	return nil
 }
 
