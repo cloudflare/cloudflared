@@ -26,7 +26,7 @@ func (f *booleanFuse) Value() bool {
 	return f.value == 1
 }
 
-func (f *booleanFuse) Fuse(result bool) {
+func (f *booleanFuse) Fuse(result bool) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	newValue := int32(2)
@@ -36,7 +36,9 @@ func (f *booleanFuse) Fuse(result bool) {
 	if f.value == 0 {
 		f.value = newValue
 		f.cond.Broadcast()
+		return true
 	}
+	return false
 }
 
 // Await blocks until Fuse has been called at least once.
