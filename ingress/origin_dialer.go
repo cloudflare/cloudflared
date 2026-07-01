@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/net/proxy"
 )
 
 const writeDeadlineUDP = 200 * time.Millisecond
@@ -117,20 +118,33 @@ func (d *OriginDialerService) DialUDP(addr netip.AddrPort) (net.Conn, error) {
 }
 
 type Dialer struct {
-	Dialer net.Dialer
+	Dialer proxy.Dialer
 }
 
 func NewDialer(config WarpRoutingConfig) *Dialer {
+	// Create proxy-aware dialer for warp routing
+	proxyDialer := createProxyDialer(config.ConnectTimeout.Duration, config.TCPKeepAlive.Duration, nil)
 	return &Dialer{
-		Dialer: net.Dialer{
-			Timeout:   config.ConnectTimeout.Duration,
-			KeepAlive: config.TCPKeepAlive.Duration,
-		},
+		Dialer: proxyDialer,
 	}
 }
 
+// createProxyDialer creates a proxy.Dialer that respects proxy environment variables
+func createProxyDialer(timeout, keepAlive time.Duration, logger *zerolog.Logger) proxy.Dialer {
+	// Reuse the unified proxy logic from origin_service.go
+	return newProxyAwareDialer(timeout, keepAlive, logger)
+}
+
 func (d *Dialer) DialTCP(ctx context.Context, dest netip.AddrPort) (net.Conn, error) {
-	conn, err := d.Dialer.DialContext(ctx, "tcp", dest.String())
+	var conn net.Conn
+	var err error
+
+	if contextDialer, ok := d.Dialer.(proxy.ContextDialer); ok {
+		conn, err = contextDialer.DialContext(ctx, "tcp", dest.String())
+	} else {
+		conn, err = d.Dialer.Dial("tcp", dest.String())
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("unable to dial tcp to origin %s: %w", dest, err)
 	}
