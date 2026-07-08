@@ -64,8 +64,8 @@ github.com/getsentry/sentry-go/internal/telemetry
 github.com/getsentry/sentry-go/internal/util
 # github.com/gin-gonic/gin v1.9.1
 ## explicit; go 1.20
-# github.com/go-chi/chi/v5 v5.2.2
-## explicit; go 1.20
+# github.com/go-chi/chi/v5 v5.3.1
+## explicit; go 1.23
 github.com/go-chi/chi/v5
 # github.com/go-chi/cors v1.2.1
 ## explicit; go 1.14

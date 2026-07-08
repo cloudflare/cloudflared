@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,11 +26,17 @@ const (
 	mPATCH
 	mPOST
 	mPUT
+	mQUERY
 	mTRACE
 )
 
 var mALL = mCONNECT | mDELETE | mGET | mHEAD |
-	mOPTIONS | mPATCH | mPOST | mPUT | mTRACE
+	mOPTIONS | mPATCH | mPOST | mPUT | mQUERY | mTRACE
+
+// methodQuery is the HTTP QUERY method (RFC 10008), a safe, idempotent
+// method that conveys a request body. It is defined here until net/http
+// provides an equivalent constant, at which point this is a 1-1 swap.
+const methodQuery = "QUERY"
 
 var methodMap = map[string]methodTyp{
 	http.MethodConnect: mCONNECT,
@@ -40,6 +47,7 @@ var methodMap = map[string]methodTyp{
 	http.MethodPatch:   mPATCH,
 	http.MethodPost:    mPOST,
 	http.MethodPut:     mPUT,
+	methodQuery:        mQUERY,
 	http.MethodTrace:   mTRACE,
 }
 
@@ -52,6 +60,7 @@ var reverseMethodMap = map[methodTyp]string{
 	mPATCH:   http.MethodPatch,
 	mPOST:    http.MethodPost,
 	mPUT:     http.MethodPut,
+	mQUERY:   methodQuery,
 	mTRACE:   http.MethodTrace,
 }
 
@@ -71,6 +80,7 @@ func RegisterMethod(method string) {
 	}
 	mt := methodTyp(2 << n)
 	methodMap[method] = mt
+	reverseMethodMap[mt] = method
 	mALL |= mt
 }
 
@@ -328,7 +338,7 @@ func (n *node) replaceChild(label, tail byte, child *node) {
 
 func (n *node) getEdge(ntyp nodeTyp, label, tail byte, prefix string) *node {
 	nds := n.children[ntyp]
-	for i := 0; i < len(nds); i++ {
+	for i := range nds {
 		if nds[i].label == label && nds[i].tail == tail {
 			if ntyp == ntRegexp && nds[i].prefix != prefix {
 				continue
@@ -429,9 +439,7 @@ func (n *node) findRoute(rctx *Context, method methodTyp, path string) *node {
 			}
 
 			// serially loop through each node grouped by the tail delimiter
-			for idx := 0; idx < len(nds); idx++ {
-				xn = nds[idx]
-
+			for _, xn = range nds {
 				// label for param nodes is the delimiter byte
 				p := strings.IndexByte(xsearch, xn.tail)
 
@@ -650,11 +658,9 @@ func (n *node) routes() []Route {
 				if h.handler == nil {
 					continue
 				}
-				m := methodTypString(mt)
-				if m == "" {
-					continue
+				if m, ok := reverseMethodMap[mt]; ok {
+					hs[m] = h.handler
 				}
-				hs[m] = h.handler
 			}
 
 			rt := Route{subroutes, hs, p}
@@ -772,29 +778,14 @@ func patParamKeys(pattern string) []string {
 	}
 }
 
-// longestPrefix finds the length of the shared prefix
-// of two strings
-func longestPrefix(k1, k2 string) int {
-	max := len(k1)
-	if l := len(k2); l < max {
-		max = l
-	}
-	var i int
-	for i = 0; i < max; i++ {
+// longestPrefix finds the length of the shared prefix of two strings
+func longestPrefix(k1, k2 string) (i int) {
+	for i = 0; i < min(len(k1), len(k2)); i++ {
 		if k1[i] != k2[i] {
 			break
 		}
 	}
-	return i
-}
-
-func methodTypString(method methodTyp) string {
-	for s, t := range methodMap {
-		if method == t {
-			return s
-		}
-	}
-	return ""
+	return
 }
 
 type nodes []*node
@@ -854,11 +845,15 @@ func Walk(r Routes, walkFn WalkFunc) error {
 
 func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.Handler) http.Handler) error {
 	for _, route := range r.Routes() {
-		mws := make([]func(http.Handler) http.Handler, len(parentMw))
-		copy(mws, parentMw)
-		mws = append(mws, r.Middlewares()...)
+		mws := slices.Concat(parentMw, r.Middlewares())
 
 		if route.SubRoutes != nil {
+			if handler, ok := route.Handlers["*"]; ok {
+				if chain, ok := handler.(*ChainHandler); ok {
+					mws = append(mws, chain.Middlewares...)
+				}
+			}
+
 			if err := walk(route.SubRoutes, walkFn, parentRoute+route.Pattern, mws...); err != nil {
 				return err
 			}
@@ -872,7 +867,7 @@ func walk(r Routes, walkFn WalkFunc, parentRoute string, parentMw ...func(http.H
 			}
 
 			fullRoute := parentRoute + route.Pattern
-			fullRoute = strings.Replace(fullRoute, "/*/", "/", -1)
+			fullRoute = strings.ReplaceAll(fullRoute, "/*/", "/")
 
 			if chain, ok := handler.(*ChainHandler); ok {
 				if err := walkFn(method, fullRoute, chain.Endpoint, append(mws, chain.Middlewares...)...); err != nil {

@@ -1,6 +1,6 @@
 // Package chi is a small, idiomatic and composable router for building HTTP services.
 //
-// chi requires Go 1.14 or newer.
+// chi supports the four most recent major versions of Go.
 //
 // Example:
 //
@@ -77,7 +77,7 @@ type Router interface {
 	// path, with a fresh middleware stack for the inline-Router.
 	Group(fn func(r Router)) Router
 
-	// Route mounts a sub-Router along a `pattern`` string.
+	// Route mounts a sub-Router along a `pattern` string.
 	Route(pattern string, fn func(r Router)) Router
 
 	// Mount attaches another http.Handler along ./pattern/*
@@ -102,6 +102,7 @@ type Router interface {
 	Patch(pattern string, h http.HandlerFunc)
 	Post(pattern string, h http.HandlerFunc)
 	Put(pattern string, h http.HandlerFunc)
+	Query(pattern string, h http.HandlerFunc)
 	Trace(pattern string, h http.HandlerFunc)
 
 	// NotFound defines a handler to respond whenever a route could
