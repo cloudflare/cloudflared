@@ -19,7 +19,7 @@ type StreamFrame struct {
 	fromPool bool
 }
 
-func ParseStreamFrame(b []byte, typ FrameType, _ protocol.Version) (*StreamFrame, int, error) {
+func parseStreamFrame(b []byte, typ uint64, _ protocol.Version) (*StreamFrame, int, error) {
 	startLen := len(b)
 	hasOffset := typ&0b100 > 0
 	fin := typ&0b1 > 0

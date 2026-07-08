@@ -9,7 +9,7 @@ import (
 var pool sync.Pool
 
 func init() {
-	pool.New = func() any {
+	pool.New = func() interface{} {
 		return &StreamFrame{
 			Data:     make([]byte, 0, protocol.MaxPacketBufferSize),
 			fromPool: true,

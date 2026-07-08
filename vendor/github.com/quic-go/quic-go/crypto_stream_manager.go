@@ -8,13 +8,13 @@ import (
 )
 
 type cryptoStreamManager struct {
-	initialStream   *initialCryptoStream
+	initialStream   *cryptoStream
 	handshakeStream *cryptoStream
 	oneRTTStream    *cryptoStream
 }
 
 func newCryptoStreamManager(
-	initialStream *initialCryptoStream,
+	initialStream *cryptoStream,
 	handshakeStream *cryptoStream,
 	oneRTTStream *cryptoStream,
 ) *cryptoStreamManager {
@@ -26,31 +26,35 @@ func newCryptoStreamManager(
 }
 
 func (m *cryptoStreamManager) HandleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel) error {
+	var str *cryptoStream
 	//nolint:exhaustive // CRYPTO frames cannot be sent in 0-RTT packets.
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return m.initialStream.HandleCryptoFrame(frame)
+		str = m.initialStream
 	case protocol.EncryptionHandshake:
-		return m.handshakeStream.HandleCryptoFrame(frame)
+		str = m.handshakeStream
 	case protocol.Encryption1RTT:
-		return m.oneRTTStream.HandleCryptoFrame(frame)
+		str = m.oneRTTStream
 	default:
 		return fmt.Errorf("received CRYPTO frame with unexpected encryption level: %s", encLevel)
 	}
+	return str.HandleCryptoFrame(frame)
 }
 
 func (m *cryptoStreamManager) GetCryptoData(encLevel protocol.EncryptionLevel) []byte {
+	var str *cryptoStream
 	//nolint:exhaustive // CRYPTO frames cannot be sent in 0-RTT packets.
 	switch encLevel {
 	case protocol.EncryptionInitial:
-		return m.initialStream.GetCryptoData()
+		str = m.initialStream
 	case protocol.EncryptionHandshake:
-		return m.handshakeStream.GetCryptoData()
+		str = m.handshakeStream
 	case protocol.Encryption1RTT:
-		return m.oneRTTStream.GetCryptoData()
+		str = m.oneRTTStream
 	default:
 		panic(fmt.Sprintf("received CRYPTO frame with unexpected encryption level: %s", encLevel))
 	}
+	return str.GetCryptoData()
 }
 
 func (m *cryptoStreamManager) GetPostHandshakeData(maxSize protocol.ByteCount) *wire.CryptoFrame {
