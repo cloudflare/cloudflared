@@ -30,7 +30,7 @@ func parseIPv4PktInfo(body []byte) (ip netip.Addr, ifIndex uint32, ok bool) {
 	if len(body) != 12 {
 		return netip.Addr{}, 0, false
 	}
-	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.LittleEndian.Uint32(body), true
+	return netip.AddrFrom4(*(*[4]byte)(body[8:12])), binary.NativeEndian.Uint32(body), true
 }
 
 func isGSOEnabled(syscall.RawConn) bool { return false }

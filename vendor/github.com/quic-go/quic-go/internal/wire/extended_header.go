@@ -61,7 +61,6 @@ func (h *ExtendedHeader) Append(b []byte, v protocol.Version) ([]byte, error) {
 
 	var packetType uint8
 	if v == protocol.Version2 {
-		//nolint:exhaustive
 		switch h.Type {
 		case protocol.PacketTypeInitial:
 			packetType = 0b01
@@ -73,7 +72,6 @@ func (h *ExtendedHeader) Append(b []byte, v protocol.Version) ([]byte, error) {
 			packetType = 0b00
 		}
 	} else {
-		//nolint:exhaustive
 		switch h.Type {
 		case protocol.PacketTypeInitial:
 			packetType = 0b00

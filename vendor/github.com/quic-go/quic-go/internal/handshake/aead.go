@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
-func createAEAD(suite *cipherSuite, trafficSecret []byte, v protocol.Version) *xorNonceAEAD {
+func createAEAD(suite cipherSuite, trafficSecret []byte, v protocol.Version) *xorNonceAEAD {
 	keyLabel := hkdfLabelKeyV1
 	ivLabel := hkdfLabelIVV1
 	if v == protocol.Version2 {

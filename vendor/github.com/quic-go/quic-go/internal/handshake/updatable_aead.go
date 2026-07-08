@@ -6,24 +6,33 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"fmt"
-	"time"
+	"sync/atomic"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
-// KeyUpdateInterval is the maximum number of packets we send or receive before initiating a key update.
-// It's a package-level variable to allow modifying it for testing purposes.
-var KeyUpdateInterval uint64 = protocol.KeyUpdateInterval
+var keyUpdateInterval atomic.Uint64
+
+func init() {
+	keyUpdateInterval.Store(protocol.KeyUpdateInterval)
+}
+
+func SetKeyUpdateInterval(v uint64) (reset func()) {
+	old := keyUpdateInterval.Swap(v)
+	return func() { keyUpdateInterval.Store(old) }
+}
 
 // FirstKeyUpdateInterval is the maximum number of packets we send or receive before initiating the first key update.
 // It's a package-level variable to allow modifying it for testing purposes.
 var FirstKeyUpdateInterval uint64 = 100
 
 type updatableAEAD struct {
-	suite *cipherSuite
+	suite cipherSuite
 
 	keyPhase           protocol.KeyPhase
 	largestAcked       protocol.PacketNumber
@@ -34,7 +43,7 @@ type updatableAEAD struct {
 	invalidPacketCount uint64
 
 	// Time when the keys should be dropped. Keys are dropped on the next call to Open().
-	prevRcvAEADExpiry time.Time
+	prevRcvAEADExpiry monotime.Time
 	prevRcvAEAD       cipher.AEAD
 
 	firstRcvdWithCurrentKey protocol.PacketNumber
@@ -57,7 +66,7 @@ type updatableAEAD struct {
 
 	rttStats *utils.RTTStats
 
-	tracer  *logging.ConnectionTracer
+	qlogger qlogwriter.Recorder
 	logger  utils.Logger
 	version protocol.Version
 
@@ -70,14 +79,14 @@ var (
 	_ ShortHeaderSealer = &updatableAEAD{}
 )
 
-func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer, logger utils.Logger, version protocol.Version) *updatableAEAD {
+func newUpdatableAEAD(rttStats *utils.RTTStats, qlogger qlogwriter.Recorder, logger utils.Logger, version protocol.Version) *updatableAEAD {
 	return &updatableAEAD{
 		firstPacketNumber:       protocol.InvalidPacketNumber,
 		largestAcked:            protocol.InvalidPacketNumber,
 		firstRcvdWithCurrentKey: protocol.InvalidPacketNumber,
 		firstSentWithCurrentKey: protocol.InvalidPacketNumber,
 		rttStats:                rttStats,
-		tracer:                  tracer,
+		qlogger:                 qlogger,
 		logger:                  logger,
 		version:                 version,
 	}
@@ -86,10 +95,17 @@ func newUpdatableAEAD(rttStats *utils.RTTStats, tracer *logging.ConnectionTracer
 func (a *updatableAEAD) rollKeys() {
 	if a.prevRcvAEAD != nil {
 		a.logger.Debugf("Dropping key phase %d ahead of scheduled time. Drop time was: %s", a.keyPhase-1, a.prevRcvAEADExpiry)
-		if a.tracer != nil && a.tracer.DroppedKey != nil {
-			a.tracer.DroppedKey(a.keyPhase - 1)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlog.KeyDiscarded{
+				KeyType:  qlog.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
+			a.qlogger.RecordEvent(qlog.KeyDiscarded{
+				KeyType:  qlog.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
 		}
-		a.prevRcvAEADExpiry = time.Time{}
+		a.prevRcvAEADExpiry = 0
 	}
 
 	a.keyPhase++
@@ -107,7 +123,7 @@ func (a *updatableAEAD) rollKeys() {
 	a.nextSendAEAD = createAEAD(a.suite, a.nextSendTrafficSecret, a.version)
 }
 
-func (a *updatableAEAD) startKeyDropTimer(now time.Time) {
+func (a *updatableAEAD) startKeyDropTimer(now monotime.Time) {
 	d := 3 * a.rttStats.PTO(true)
 	a.logger.Debugf("Starting key drop timer to drop key phase %d (in %s)", a.keyPhase-1, d)
 	a.prevRcvAEADExpiry = now.Add(d)
@@ -120,10 +136,10 @@ func (a *updatableAEAD) getNextTrafficSecret(hash crypto.Hash, ts []byte) []byte
 // SetReadKey sets the read key.
 // For the client, this function is called before SetWriteKey.
 // For the server, this function is called after SetWriteKey.
-func (a *updatableAEAD) SetReadKey(suite *cipherSuite, trafficSecret []byte) {
+func (a *updatableAEAD) SetReadKey(suite cipherSuite, trafficSecret []byte) {
 	a.rcvAEAD = createAEAD(suite, trafficSecret, a.version)
 	a.headerDecrypter = newHeaderProtector(suite, trafficSecret, false, a.version)
-	if a.suite == nil {
+	if a.suite.ID == 0 { // suite is not set yet
 		a.setAEADParameters(a.rcvAEAD, suite)
 	}
 
@@ -134,10 +150,10 @@ func (a *updatableAEAD) SetReadKey(suite *cipherSuite, trafficSecret []byte) {
 // SetWriteKey sets the write key.
 // For the client, this function is called after SetReadKey.
 // For the server, this function is called before SetReadKey.
-func (a *updatableAEAD) SetWriteKey(suite *cipherSuite, trafficSecret []byte) {
+func (a *updatableAEAD) SetWriteKey(suite cipherSuite, trafficSecret []byte) {
 	a.sendAEAD = createAEAD(suite, trafficSecret, a.version)
 	a.headerEncrypter = newHeaderProtector(suite, trafficSecret, false, a.version)
-	if a.suite == nil {
+	if a.suite.ID == 0 { // suite is not set yet
 		a.setAEADParameters(a.sendAEAD, suite)
 	}
 
@@ -145,7 +161,7 @@ func (a *updatableAEAD) SetWriteKey(suite *cipherSuite, trafficSecret []byte) {
 	a.nextSendAEAD = createAEAD(suite, a.nextSendTrafficSecret, a.version)
 }
 
-func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite *cipherSuite) {
+func (a *updatableAEAD) setAEADParameters(aead cipher.AEAD, suite cipherSuite) {
 	a.nonceBuf = make([]byte, aead.NonceSize())
 	a.aeadOverhead = aead.Overhead()
 	a.suite = suite
@@ -163,7 +179,7 @@ func (a *updatableAEAD) DecodePacketNumber(wirePN protocol.PacketNumber, wirePNL
 	return protocol.DecodePacketNumber(wirePNLen, a.highestRcvdPN, wirePN)
 }
 
-func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+func (a *updatableAEAD) Open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	dec, err := a.open(dst, src, rcvTime, pn, kp, ad)
 	if err == ErrDecryptionFailed {
 		a.invalidPacketCount++
@@ -177,13 +193,20 @@ func (a *updatableAEAD) Open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 	return dec, err
 }
 
-func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
+func (a *updatableAEAD) open(dst, src []byte, rcvTime monotime.Time, pn protocol.PacketNumber, kp protocol.KeyPhaseBit, ad []byte) ([]byte, error) {
 	if a.prevRcvAEAD != nil && !a.prevRcvAEADExpiry.IsZero() && rcvTime.After(a.prevRcvAEADExpiry) {
 		a.prevRcvAEAD = nil
 		a.logger.Debugf("Dropping key phase %d", a.keyPhase-1)
-		a.prevRcvAEADExpiry = time.Time{}
-		if a.tracer != nil && a.tracer.DroppedKey != nil {
-			a.tracer.DroppedKey(a.keyPhase - 1)
+		a.prevRcvAEADExpiry = 0
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlog.KeyDiscarded{
+				KeyType:  qlog.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
+			a.qlogger.RecordEvent(qlog.KeyDiscarded{
+				KeyType:  qlog.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase - 1,
+			})
 		}
 	}
 	binary.BigEndian.PutUint64(a.nonceBuf[len(a.nonceBuf)-8:], uint64(pn))
@@ -216,8 +239,17 @@ func (a *updatableAEAD) open(dst, src []byte, rcvTime time.Time, pn protocol.Pac
 		// The peer initiated this key update. It's safe to drop the keys for the previous generation now.
 		// Start a timer to drop the previous key generation.
 		a.startKeyDropTimer(rcvTime)
-		if a.tracer != nil && a.tracer.UpdatedKey != nil {
-			a.tracer.UpdatedKey(a.keyPhase, true)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlog.KeyUpdated{
+				Trigger:  qlog.KeyUpdateRemote,
+				KeyType:  qlog.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase,
+			})
+			a.qlogger.RecordEvent(qlog.KeyUpdated{
+				Trigger:  qlog.KeyUpdateRemote,
+				KeyType:  qlog.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase,
+			})
 		}
 		a.firstRcvdWithCurrentKey = pn
 		return dec, err
@@ -293,11 +325,11 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 			return true
 		}
 	}
-	if a.numRcvdWithCurrentKey >= KeyUpdateInterval {
+	if a.numRcvdWithCurrentKey >= keyUpdateInterval.Load() {
 		a.logger.Debugf("Received %d packets with current key phase. Initiating key update to the next key phase: %d", a.numRcvdWithCurrentKey, a.keyPhase+1)
 		return true
 	}
-	if a.numSentWithCurrentKey >= KeyUpdateInterval {
+	if a.numSentWithCurrentKey >= keyUpdateInterval.Load() {
 		a.logger.Debugf("Sent %d packets with current key phase. Initiating key update to the next key phase: %d", a.numSentWithCurrentKey, a.keyPhase+1)
 		return true
 	}
@@ -307,9 +339,17 @@ func (a *updatableAEAD) shouldInitiateKeyUpdate() bool {
 func (a *updatableAEAD) KeyPhase() protocol.KeyPhaseBit {
 	if a.shouldInitiateKeyUpdate() {
 		a.rollKeys()
-		a.logger.Debugf("Initiating key update to key phase %d", a.keyPhase)
-		if a.tracer != nil && a.tracer.UpdatedKey != nil {
-			a.tracer.UpdatedKey(a.keyPhase, false)
+		if a.qlogger != nil {
+			a.qlogger.RecordEvent(qlog.KeyUpdated{
+				Trigger:  qlog.KeyUpdateLocal,
+				KeyType:  qlog.KeyTypeClient1RTT,
+				KeyPhase: a.keyPhase,
+			})
+			a.qlogger.RecordEvent(qlog.KeyUpdated{
+				Trigger:  qlog.KeyUpdateLocal,
+				KeyType:  qlog.KeyTypeServer1RTT,
+				KeyPhase: a.keyPhase,
+			})
 		}
 	}
 	return a.keyPhase.Bit()

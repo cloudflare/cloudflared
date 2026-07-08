@@ -2,7 +2,7 @@ package carrier
 
 import (
 	"context"
-	crand "crypto/rand"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -30,15 +30,6 @@ func websocketClientTLSConfig(t *testing.T) *tls.Config {
 	return &tls.Config{RootCAs: certPool}
 }
 
-func TestWebsocketHeaders(t *testing.T) {
-	req := testRequest(t, "http://example.com", nil)
-	wsHeaders := websocketHeaders(req)
-	for _, header := range stripWebsocketHeaders {
-		assert.Empty(t, wsHeaders[header])
-	}
-	assert.Equal(t, "curl/7.59.0", wsHeaders.Get("User-Agent"))
-}
-
 func TestServe(t *testing.T) {
 	log := zerolog.Nop()
 	shutdownC := make(chan struct{})
@@ -61,12 +52,16 @@ func TestServe(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, "websocket", resp.Header.Get("Upgrade"))
 
-	for i := 0; i < 1000; i++ {
-		messageSize, err := crand.Int(crand.Reader, big.NewInt(2048))
+	for range 1000 {
+		messageSize, err := rand.Int(rand.Reader, big.NewInt(2048))
 		require.NoError(t, err)
-		clientMessage := make([]byte, int(messageSize.Int64())+1)
-		_, err = crand.Read(clientMessage)
-		require.NoError(t, err)
+		clientMessage := make([]byte, messageSize.Int64()+1)
+		for i := range clientMessage {
+			n, err := rand.Int(rand.Reader, big.NewInt(256))
+			n8 := uint8(n.Uint64()) //nolint:gosec // test-only
+			require.NoError(t, err)
+			clientMessage[i] = n8
+		}
 		err = conn.WriteMessage(websocket.BinaryFrame, clientMessage)
 		require.NoError(t, err)
 

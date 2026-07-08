@@ -141,7 +141,7 @@ func (dm *DatagramMuxerV2) demux(ctx context.Context, msgWithType []byte) error 
 	}
 	msgType := DatagramV2Type(msgWithType[len(msgWithType)-typeIDLen])
 	msg := msgWithType[0 : len(msgWithType)-typeIDLen]
-	switch msgType {
+	switch msgType { //nolint:exhaustive // default handles all non-UDP types via handlePacket
 	case DatagramTypeUDP:
 		return dm.handleSession(ctx, msg)
 	case DatagramTypeIP, DatagramTypeIPWithTrace, DatagramTypeTracingSpan:
@@ -170,7 +170,7 @@ func (dm *DatagramMuxerV2) handleSession(ctx context.Context, session []byte) er
 
 func (dm *DatagramMuxerV2) handlePacket(ctx context.Context, pk []byte, msgType DatagramV2Type) error {
 	var demuxedPacket Packet
-	switch msgType {
+	switch msgType { //nolint:exhaustive // DatagramTypeUDP is handled by the caller (demux)
 	case DatagramTypeIP:
 		demuxedPacket = RawPacket(packet.RawPacket{Data: pk})
 	case DatagramTypeIPWithTrace:
