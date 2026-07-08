@@ -1,3 +1,18 @@
+2026.7.0
+- 2026-07-08 chore: Bump go-chi to version 5.3.1
+- 2026-07-08 Revert "TUN-10557: Bump quic-go v0.59.1"
+- 2026-07-01 TUN-10621: Test websocket path
+- 2026-06-30 ci: add Semgrep OSS scanning workflow
+- 2026-06-29 TUN-10621: Propagate max wait timeout
+- 2026-06-29 Migrate config renovate.json
+- 2026-06-25 chore: Fix renovate
+- 2026-06-25 Pin dependencies
+- 2026-06-25 Consolidate init-system detection into shared inits package
+- 2026-06-24 Fix lint issues
+- 2026-06-22 Add OpenRC support
+- 2026-06-22 Fix broken installed-service detection in systemd uninstall
+- 2026-06-18 TUN-10557: Bump quic-go v0.59.1
+
 2026.6.1
 - 2026-06-18 TUN-10630: Fix precheck protocol override
 - 2026-06-18 Revert "TUN-10557: Bump quic-go v0.59.1"
