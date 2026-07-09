@@ -256,7 +256,7 @@ func (p *Proxy) proxyHTTPRequest(
 			reader: tr.Body,
 		}
 
-		stream.Pipe(eyeballStream, rwc, time.Second*0, logger)
+		stream.Pipe(eyeballStream, rwc, logger)
 		return nil
 	}
 
@@ -311,7 +311,7 @@ func (p *Proxy) proxyStream(
 
 // proxyTCPStream proxies private network type TCP connections as a stream towards an available origin.
 //
-// This is different from proxyStream because it's not leveraged ingress rule services and uses the
+// This is different than proxyStream because it's not leveraged ingress rule services and uses the
 // originDialer from OriginDialerService.
 func (p *Proxy) proxyTCPStream(
 	tr *tracing.TracedContext,
@@ -344,8 +344,7 @@ func (p *Proxy) proxyTCPStream(
 	connectLatency.Observe(float64(time.Since(start).Milliseconds()))
 	logger.Debug().Msg("proxy stream acknowledged")
 
-	stream.Pipe(tunnelConn, originConn, stream.DefaultTimeoutAfterFirstClose, logger)
-
+	stream.Pipe(tunnelConn, originConn, logger)
 	return nil
 }
 

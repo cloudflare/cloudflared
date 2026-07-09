@@ -38,7 +38,6 @@ func TestStreamTCPConnection(t *testing.T) {
 	tcpConn := tcpConnection{
 		Conn:         cfdConn,
 		writeTimeout: 30 * time.Second,
-		logger:       TestLogger,
 	}
 
 	eyeballConn, edgeConn := net.Pipe()
@@ -158,7 +157,7 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 			require.NoError(t, err)
 			defer func() { _ = wsForwarderInConn.Close() }()
 
-			stream.Pipe(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, stream.DefaultTimeoutAfterFirstClose, TestLogger)
+			stream.Pipe(wsForwarderInConn, &wsEyeball{wsForwarderOutConn}, TestLogger)
 			return nil
 		})
 

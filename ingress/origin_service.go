@@ -99,6 +99,7 @@ type rawTCPService struct {
 	name         string
 	dialer       net.Dialer
 	writeTimeout time.Duration
+	logger       *zerolog.Logger
 }
 
 func (o *rawTCPService) String() string {
@@ -232,12 +233,10 @@ func (o *helloWorld) start(
 	if err != nil {
 		return errors.Wrap(err, "Cannot start Hello World Server")
 	}
-	go func() {
-		_ = hello.StartHelloWorldServer(log, helloListener, shutdownC)
-	}()
+	go hello.StartHelloWorldServer(log, helloListener, shutdownC)
 	o.server = helloListener
 
-	o.url = &url.URL{
+	o.httpService.url = &url.URL{
 		Scheme: "https",
 		Host:   o.server.Addr().String(),
 	}
@@ -357,7 +356,7 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerol
 		IdleConnTimeout:       cfg.KeepAliveTimeout.Duration,
 		TLSHandshakeTimeout:   cfg.TLSTimeout.Duration,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: cfg.NoTLSVerify}, //nolint: gosec
+		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: cfg.NoTLSVerify},
 		ForceAttemptHTTP2:     cfg.Http2Origin,
 	}
 	if _, isHelloWorld := service.(*helloWorld); !isHelloWorld && cfg.OriginServerName != "" {
@@ -375,6 +374,7 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerol
 	// DialContext depends on which kind of origin is being used.
 	dialContext := dialer.DialContext
 	switch service := service.(type) {
+
 	// If this origin is a unix socket, enforce network type "unix".
 	case *unixSocketPath:
 		httpTransport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {

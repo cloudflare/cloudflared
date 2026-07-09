@@ -2,7 +2,6 @@ package stream
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"runtime/debug"
@@ -10,16 +9,11 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/cfio"
 )
-
-// DefaultTimeoutAfterFirstClose controls the upper bound of how long we wait for the second stream to finish.
-// We use bidirectional streams for our communication. Since the read and write sides can be closed independently,
-// we must have a way to close the second stream once the first one finishes. We don't want to wait indefinitely,
-// since we want to prevent misbehaving clients from blocking cloudflared.
-const DefaultTimeoutAfterFirstClose = time.Second * 10
 
 type Stream interface {
 	Reader
@@ -43,7 +37,7 @@ type nopCloseWriterAdapter struct {
 	io.ReadWriter
 }
 
-func noopCloseWriter(stream io.ReadWriter) *nopCloseWriterAdapter {
+func NopCloseWriterAdapter(stream io.ReadWriter) *nopCloseWriterAdapter {
 	return &nopCloseWriterAdapter{stream}
 }
 
@@ -78,7 +72,7 @@ func (s *bidirectionalStreamStatus) wait(maxWaitForSecondStream time.Duration) e
 
 		select {
 		case <-timer.C:
-			return fmt.Errorf("timeout waiting for second stream to finish %s", maxWaitForSecondStream)
+			return fmt.Errorf("timeout waiting for second stream to finish")
 		case <-s.doneChan:
 			return nil
 		}
@@ -91,19 +85,15 @@ func (s *bidirectionalStreamStatus) isAnyDone() bool {
 }
 
 // Pipe copies copy data to & from provided io.ReadWriters.
-func Pipe(tunnelConn, originConn io.ReadWriter, timeoutAfterFirstClose time.Duration, log *zerolog.Logger) {
-	if err := PipeBidirectional(noopCloseWriter(tunnelConn), noopCloseWriter(originConn), timeoutAfterFirstClose, log); err != nil {
-		log.Warn().Err(err).Msg("Failed to pipe bidirectional stream")
-	}
+func Pipe(tunnelConn, originConn io.ReadWriter, log *zerolog.Logger) {
+	_ = PipeBidirectional(NopCloseWriterAdapter(tunnelConn), NopCloseWriterAdapter(originConn), 0, log)
 }
 
-// PipeBidirectional copies data between two unidirectional streams. It is a special case of Pipe that accepts streams
-// whose read and write sides can be closed independently. The main difference is that when piping data from a reader
-// to a writer, if EOF is read, this implementation propagates the EOF signal to the destination by closing the write
-// side of the bidirectional stream.
-// Finally, once EOF is received from one of the provided streams, the other direction has a configured grace period to
-// finish; otherwise, the method returns a timeout error. It is, however, the responsibility of the caller to close
-// the associated streams at both ends in order to free all resources and goroutines.
+// PipeBidirectional copies data to two unidirectional streams. It is a special case of Pipe where it receives a concept that allows for Read and Write side to be closed independently.
+// The main difference is that when piping data from a reader to a writer, if EOF is read, then this implementation propagates the EOF signal to the destination/writer by closing the write side of the
+// Bidirectional Stream.
+// Finally, depending on once EOF is ready from one of the provided streams, the other direction of streaming data will have a configured time period to also finish, otherwise,
+// the method will return immediately  with a timeout error. It is however, the responsibility of the caller to close the associated streams in both ends in order to free all the resources/go-routines.
 func PipeBidirectional(downstream, upstream Stream, maxWaitForSecondStream time.Duration, log *zerolog.Logger) error {
 	status := newBiStreamStatus()
 
@@ -111,7 +101,7 @@ func PipeBidirectional(downstream, upstream Stream, maxWaitForSecondStream time.
 	go unidirectionalStream(upstream, downstream, "downstream->upstream", status, log)
 
 	if err := status.wait(maxWaitForSecondStream); err != nil {
-		return fmt.Errorf("unable to wait for both streams while proxying: %w", err)
+		return errors.Wrap(err, "unable to wait for both streams while proxying")
 	}
 
 	return nil
