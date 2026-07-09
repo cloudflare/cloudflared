@@ -156,6 +156,7 @@ func (fs *featureSelector) refresh(ctx context.Context) error {
 
 func (fs *featureSelector) refreshLoop(ctx context.Context, refreshFreq time.Duration) {
 	ticker := time.NewTicker(refreshFreq)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():

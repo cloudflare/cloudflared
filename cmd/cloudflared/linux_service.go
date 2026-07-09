@@ -524,7 +524,7 @@ func ensureConfigDirExists(configDir string) error {
 	return err
 }
 
-func copyFile(src, dest string) error {
+func copyFile(src, dest string) (err error) {
 	srcFile, err := os.Open(src) //nolint:gosec // operator-provided service config path
 	if err != nil {
 		return err
@@ -537,13 +537,19 @@ func copyFile(src, dest string) error {
 	}
 	ok := false
 	defer func() {
-		_ = destFile.Close()
+		// 关闭错误可能反映延迟刷盘失败; 失败时删除不完整的目标文件并返回错误, 避免保留损坏的 service 配置
+		if closeErr := destFile.Close(); closeErr != nil {
+			if err == nil {
+				err = closeErr
+			}
+			ok = false
+		}
 		if !ok {
 			_ = os.Remove(dest)
 		}
 	}()
 
-	if _, err := io.Copy(destFile, srcFile); err != nil {
+	if _, err = io.Copy(destFile, srcFile); err != nil {
 		return err
 	}
 

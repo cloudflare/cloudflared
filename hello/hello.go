@@ -206,6 +206,7 @@ func sseHandler(log *zerolog.Logger) http.HandlerFunc {
 		}
 		log.Info().Msgf("Server Sent Events every %s", freq)
 		ticker := time.NewTicker(freq)
+		defer ticker.Stop()
 		counter := 0
 		for {
 			select {

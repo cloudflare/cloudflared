@@ -240,6 +240,7 @@ func createUpdateConfig(updateDisabled bool, freq time.Duration, log *zerolog.Lo
 // download immediately and restart after starting (in the case that there is an upgrade available).
 func (a *AutoUpdater) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.configurable.freq)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():

@@ -120,7 +120,10 @@ func (s *Session) dstToTransport(buffer []byte) (closeSession bool, err error) {
 			Payload: buffer[:n],
 		}
 		if sendErr := s.sendFunc(&session); sendErr != nil {
-			return false, sendErr
+			// 发送到 edge transport 失败意味着链路已不可用, session 无法继续转发数据.
+			// 返回 closeSession=true 关闭会话, 避免在 origin 持续上报数据时陷入只读只失败的快速循环
+			// (与 quic/v3 session.readLoop 中发送失败即关闭的行为保持一致).
+			return true, sendErr
 		}
 	}
 	return err != nil, err

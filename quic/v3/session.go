@@ -85,7 +85,9 @@ type session struct {
 	closeWrite  chan struct{}
 	contextChan chan context.Context
 	metrics     Metrics
-	log         *zerolog.Logger
+	// log 通过 atomic.Pointer 保护: Migrate 在独立 goroutine 中重写 log, 而 readLoop/writeLoop/Write
+	// 并发读取, 直接使用 *zerolog.Logger 字段会产生数据竞争 (go test -race 会报 DATA RACE).
+	log atomic.Pointer[zerolog.Logger]
 
 	// A special close function that we wrap with sync.Once to make sure it is only called once
 	closeFn func() error
@@ -124,7 +126,6 @@ func NewSession(
 		// contextChan is an unbounded channel to help enforce one active migration of a session at a time.
 		contextChan: make(chan context.Context),
 		metrics:     metrics,
-		log:         &logger,
 		closeFn: sync.OnceValue(func() error {
 			// We don't want to block on sending to the close channel if it is already full
 			select {
@@ -138,6 +139,7 @@ func NewSession(
 		}),
 	}
 	session.eyeball.Store(&eyeball)
+	session.log.Store(&logger)
 	return session
 }
 
@@ -165,7 +167,7 @@ func (s *session) Migrate(eyeball DatagramConn, ctx context.Context, logger *zer
 		s.eyeball.Store(&eyeball)
 		s.contextChan <- ctx
 		log := logger.With().Str(logFlowID, s.id.String()).Logger()
-		s.log = &log
+		s.log.Store(&log)
 	}
 	// The session is already running so we want to restart the idle timeout since no proxied packets have come down yet.
 	s.markActive()
@@ -193,19 +195,19 @@ func (s *session) readLoop() {
 		n, err := s.origin.Read(readBuffer[DatagramPayloadHeaderLen:])
 		if err != nil {
 			if isConnectionClosed(err) {
-				s.log.Debug().Msgf("flow (read) connection closed: %v", err)
+				s.log.Load().Debug().Msgf("flow (read) connection closed: %v", err)
 			}
 			s.closeSession(err)
 			return
 		}
 		if n < 0 {
 			s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedReadFailed)
-			s.log.Warn().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was negative and was dropped")
+			s.log.Load().Warn().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was negative and was dropped")
 			continue
 		}
 		if n > maxDatagramPayloadLen {
 			s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedReadTooLarge)
-			s.log.Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
+			s.log.Load().Error().Int(logPacketSizeKey, n).Msg("flow (origin) packet read was too large and was dropped")
 			continue
 		}
 		// We need to synchronize on the eyeball in-case that the connection was migrated. This should be rarely a point
@@ -228,7 +230,7 @@ func (s *session) Write(payload []byte) {
 	case s.writeChan <- payload:
 	default:
 		s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedWriteFull)
-		s.log.Error().Msg("failed to write flow payload to origin: dropped")
+		s.log.Load().Error().Msg("failed to write flow payload to origin: dropped")
 	}
 }
 
@@ -246,13 +248,13 @@ func (s *session) writeLoop() {
 				// Check if this is a write deadline exceeded to the connection
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedWriteDeadlineExceeded)
-					s.log.Warn().Err(err).Msg("flow (write) deadline exceeded: dropping packet")
+					s.log.Load().Warn().Err(err).Msg("flow (write) deadline exceeded: dropping packet")
 					continue
 				}
 				if isConnectionClosed(err) {
-					s.log.Debug().Msgf("flow (write) connection closed: %v", err)
+					s.log.Load().Debug().Msgf("flow (write) connection closed: %v", err)
 				}
-				s.log.Err(err).Msg("failed to write flow payload to origin")
+				s.log.Load().Err(err).Msg("failed to write flow payload to origin")
 				s.closeSession(err)
 				// If we fail to write to the origin socket, we need to end the writer and close the session
 				return
@@ -260,7 +262,7 @@ func (s *session) writeLoop() {
 			// Write must return a non-nil error if it returns n < len(p). https://pkg.go.dev/io#Writer
 			if n < len(payload) {
 				s.metrics.DroppedUDPDatagram(s.ConnectionID(), DroppedWriteFailed)
-				s.log.Err(io.ErrShortWrite).Msg("failed to write the full flow payload to origin")
+				s.log.Load().Err(io.ErrShortWrite).Msg("failed to write the full flow payload to origin")
 				continue
 			}
 			// Mark the session as active since we successfully proxied a packet to the origin.
@@ -281,7 +283,7 @@ func (s *session) closeSession(err error) {
 	default:
 		// In the case that the errChan is already full, we will skip over it and return as to not block
 		// the caller because we should start cleaning up the session.
-		s.log.Warn().Msg("error channel was full")
+		s.log.Load().Warn().Msg("error channel was full")
 	}
 }
 

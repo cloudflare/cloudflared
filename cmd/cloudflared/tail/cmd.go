@@ -301,9 +301,13 @@ func Run(c *cli.Context) error {
 		HTTPHeader: header,
 	})
 	if err != nil {
-		if resp != nil && resp.StatusCode != http.StatusSwitchingProtocols {
-			handleValidationError(resp, log)
-			return nil
+		if resp != nil {
+			// nhooyr.io/websocket 要求 Dial 返回错误时由调用方负责关闭 resp.Body, 否则连接泄漏
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusSwitchingProtocols {
+				handleValidationError(resp, log)
+				return nil
+			}
 		}
 		log.Error().Err(err).Msgf("unable to start management log streaming session")
 		return nil

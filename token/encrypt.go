@@ -137,12 +137,13 @@ func (e *Encrypter) writeKey(key []byte, pemType, filename string) error {
 		return err
 	}
 
-	_, err = f.Write(data)
-	if err != nil {
-		return err
+	// 写入后必须关闭文件; 关闭错误可能反映延迟刷盘失败, 需要返回给调用方
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return writeErr
 	}
-
-	return nil
+	return closeErr
 }
 
 // fetchKey will load a a DER formatted key from disk
@@ -151,8 +152,11 @@ func (e *Encrypter) fetchKey(filename string) (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
 	buf := new(bytes.Buffer)
-	io.Copy(buf, f)
+	if _, err := io.Copy(buf, f); err != nil {
+		return nil, err
+	}
 
 	p, _ := pem.Decode(buf.Bytes())
 	if p == nil {

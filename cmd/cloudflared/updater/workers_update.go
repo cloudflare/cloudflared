@@ -190,10 +190,14 @@ func download(url, filepath string, isCompressed bool) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, r)
-	return err
+	// 显式关闭以捕获刷盘错误; 否则 io.Copy 成功但 Close 失败时会使用不完整的二进制执行更新
+	_, copyErr := io.Copy(out, r)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }
 
 // isCompressedFile is a really simple file extension check to see if this is a macos tar and gzipped
@@ -218,7 +222,6 @@ func writeBatchFile(targetPath string, newPath string, oldPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	cfdName := filepath.Base(targetPath)
 	oldName := filepath.Base(oldPath)
 
@@ -233,9 +236,16 @@ func writeBatchFile(targetPath string, newPath string, oldPath string) error {
 
 	t, err := template.New("batch").Parse(windowsUpdateCommandTemplate)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
-	return t.Execute(f, data)
+	// 显式关闭以捕获刷盘错误, 避免生成不完整的批处理文件却报告成功
+	execErr := t.Execute(f, data)
+	closeErr := f.Close()
+	if execErr != nil {
+		return execErr
+	}
+	return closeErr
 }
 
 // run each OS command for windows

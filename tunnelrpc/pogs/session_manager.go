@@ -164,7 +164,9 @@ func (c SessionManager_PogsClient) RegisterUdpSession(ctx context.Context, sessi
 		}
 		p.SetDstPort(dstPort)
 		p.SetCloseAfterIdleHint(int64(closeAfterIdleHint))
-		_ = p.SetTraceContext(traceContext)
+		if err := p.SetTraceContext(traceContext); err != nil {
+			return err
+		}
 		return nil
 	})
 	result, err := promise.Result().Struct()

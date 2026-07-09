@@ -11,7 +11,9 @@ type VersionWarningChecker struct {
 
 func StartWarningCheck(c *cli.Context) VersionWarningChecker {
 	checker := VersionWarningChecker{
-		warningChan: make(chan string),
+		// 带缓冲的 channel: getWarning 使用 select/default 非阻塞读取, 若在网络请求完成前被读取,
+		// 无缓冲 channel 会导致发送方 goroutine 永久阻塞, 造成泄漏. 缓冲为 1 保证发送方总能完成发送并 close.
+		warningChan: make(chan string, 1),
 	}
 
 	go func() {
