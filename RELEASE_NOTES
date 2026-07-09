@@ -1,3 +1,6 @@
+2026.7.1
+- 2026-07-09 Revert "TUN-10621: Propagate max wait timeout"
+
 2026.7.0
 - 2026-07-08 chore: Bump go-chi to version 5.3.1
 - 2026-07-08 Revert "TUN-10557: Bump quic-go v0.59.1"
