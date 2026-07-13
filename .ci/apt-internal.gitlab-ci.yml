@@ -3,22 +3,11 @@
   runOnBranches: "^master$"
   COMPONENT: "common"
 
-.register_inputs_stable_bookworm: &register_inputs_stable_bookworm
-  <<: *register_inputs
-  runOnChangesTo: ['RELEASE_NOTES']
-  FLAVOR: "bookworm"
-  SERIES: "stable"
-
 .register_inputs_stable_trixie: &register_inputs_stable_trixie
   <<: *register_inputs
   runOnChangesTo: ['RELEASE_NOTES']
   FLAVOR: "trixie"
   SERIES: "stable"
-
-.register_inputs_next_bookworm: &register_inputs_next_bookworm
-  <<: *register_inputs
-  FLAVOR: "bookworm"
-  SERIES: next
 
 .register_inputs_next_trixie: &register_inputs_next_trixie
   <<: *register_inputs
@@ -66,6 +55,10 @@ cloudflared-arm64-stable:
     ORIGINAL_NAME: true
     CGO_ENABLED: 1
 
+# Jobs names
+.amd64-stable: &amd64-stable ["cloudflared-amd64-stable"]
+.arm64-stable: &arm64-stable ["cloudflared-arm64-stable"]
+
 ############
 ### Next ###
 ############
@@ -85,25 +78,16 @@ cloudflared-arm64-next:
     <<: *arm64-stable-vars
     NIGHTLY: true
 
+# Jobs names
+.amd64-next: &amd64-next ["cloudflared-amd64-next"]
+.arm64-next: &arm64-next ["cloudflared-arm64-next"]
+
 include:
   - local: .ci/commons.gitlab-ci.yml
 
   ##########################################
   ### Publish Packages to Internal Repos ###
   ##########################################
-  # Bookworm AMD64
-  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
-    inputs:
-      <<: *register_inputs_stable_bookworm
-      jobPrefix: cloudflared-bookworm-amd64
-      needs: &amd64-stable ["cloudflared-amd64-stable"]
-
-  # Bookworm ARM64
-  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
-    inputs:
-      <<: *register_inputs_stable_bookworm
-      jobPrefix: cloudflared-bookworm-arm64
-      needs: &arm64-stable ["cloudflared-arm64-stable"]
 
   # Trixie AMD64
   - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
@@ -122,19 +106,6 @@ include:
   ##################################################
   ### Publish Nightly Packages to Internal Repos ###
   ##################################################
-  # Bookworm AMD64
-  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
-    inputs:
-      <<: *register_inputs_next_bookworm
-      jobPrefix: cloudflared-nightly-bookworm-amd64
-      needs: &amd64-next ['cloudflared-amd64-next']
-
-  # Bookworm ARM64
-  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
-    inputs:
-      <<: *register_inputs_next_bookworm
-      jobPrefix: cloudflared-nightly-bookworm-arm64
-      needs: &arm64-next ['cloudflared-arm64-next']
 
   # Trixie AMD64
   - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
