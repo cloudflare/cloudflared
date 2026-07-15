@@ -1,3 +1,12 @@
+2026.7.2
+- 2026-07-15 VULN-118896: MacOS service: use --token-file instead of --token
+- 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot Docker digest to b78832f
+- 2026-07-14 chore: Change internal image name
+- 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot-arm Docker digest to 7a4876f88
+- 2026-07-13 VULN-118896: Linux service: Use --token-file instead of --token
+- 2026-07-13 chore: Remove bookworm internal register publish
+- 2026-07-13 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to ce2a20e
+
 2026.7.1
 - 2026-07-09 Revert "TUN-10621: Propagate max wait timeout"
 
