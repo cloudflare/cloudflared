@@ -19,7 +19,7 @@ func parseDataBlockedFrame(b []byte, _ protocol.Version) (*DataBlockedFrame, int
 }
 
 func (f *DataBlockedFrame) Append(b []byte, version protocol.Version) ([]byte, error) {
-	b = append(b, byte(FrameTypeDataBlocked))
+	b = append(b, dataBlockedFrameType)
 	return quicvarint.Append(b, uint64(f.MaximumData)), nil
 }
 

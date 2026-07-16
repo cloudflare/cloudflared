@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -24,8 +25,19 @@ func runApp(app *cli.App, _ chan struct{}) {
 		Usage: "Manages the cloudflared launch agent",
 		Subcommands: []*cli.Command{
 			{
-				Name:   "install",
-				Usage:  "Install cloudflared as an user launch agent",
+				Name:      "install",
+				Usage:     "Install cloudflared as an user launch agent",
+				ArgsUsage: "[TOKEN]",
+				Description: `
+Installs cloudflared as a launchd-managed service.
+
+A token may optionally be provided. If a token is provided, it will be written
+to disk in the service configuration directory and the cloudflared service
+configured to use it via the --token-file argument.
+
+If no token is provided, cloudflared will run without the --token-file argument,
+causing it to look for credentials in a configuration file upon startup.`,
+
 				Action: cliutil.ConfiguredAction(installLaunchd),
 			},
 			{
@@ -76,38 +88,43 @@ func isRootUser() bool {
 	return os.Geteuid() == 0
 }
 
-func installPath() (string, error) {
-	// User is root, use /Library/LaunchDaemons instead of home directory
+func resolveLibraryPath(subPath, fileName string) (string, error) {
+	// We use the system-wide /Library/... instead of ~/Library/... if the user is root
 	if isRootUser() {
-		return fmt.Sprintf("/Library/LaunchDaemons/%s.plist", launchdIdentifier), nil
+		return path.Join("/Library", subPath, fileName), nil
 	}
-	userHomeDir, err := userHomeDir()
+
+	// This returns the home dir of the executing user using OS-specific method
+	// for discovering the home dir. It's not recommended to call this when the
+	// user has root permission as $HOME depends on what options the user uses
+	// with sudo.
+	userHomeDir, err := homedir.Dir()
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
-	return fmt.Sprintf("%s/Library/LaunchAgents/%s.plist", userHomeDir, launchdIdentifier), nil
+	return path.Join(userHomeDir, "Library", subPath, fileName), nil
+}
+
+// For docs on these subdirectories, see:
+// https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
+func installPath() (string, error) {
+	subpath := "LaunchAgents"
+	if isRootUser() {
+		subpath = "LaunchDaemons"
+	}
+	return resolveLibraryPath(subpath, launchdIdentifier+".plist")
 }
 
 func stdoutPath() (string, error) {
-	if isRootUser() {
-		return fmt.Sprintf("/Library/Logs/%s.out.log", launchdIdentifier), nil
-	}
-	userHomeDir, err := userHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s/Library/Logs/%s.out.log", userHomeDir, launchdIdentifier), nil
+	return resolveLibraryPath("Logs", launchdIdentifier+".out.log")
 }
 
 func stderrPath() (string, error) {
-	if isRootUser() {
-		return fmt.Sprintf("/Library/Logs/%s.err.log", launchdIdentifier), nil
-	}
-	userHomeDir, err := userHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s/Library/Logs/%s.err.log", userHomeDir, launchdIdentifier), nil
+	return resolveLibraryPath("Logs", launchdIdentifier+".err.log")
+}
+
+func configPath() (string, error) {
+	return resolveLibraryPath("Application Support", launchdIdentifier)
 }
 
 func installLaunchd(c *cli.Context) error {
@@ -125,18 +142,45 @@ func installLaunchd(c *cli.Context) error {
 	etPath, err := os.Executable()
 	if err != nil {
 		log.Err(err).Msg("Error determining executable path")
-		return fmt.Errorf("Error determining executable path: %v", err)
+		return fmt.Errorf("Error determining executable path: %w", err)
 	}
 	installPath, err := installPath()
 	if err != nil {
 		log.Err(err).Msg("Error determining install path")
 		return errors.Wrap(err, "Error determining install path")
 	}
-	extraArgs, err := getServiceExtraArgsFromCliArgs(c, log)
-	if err != nil {
-		errMsg := "Unable to determine extra arguments for launch daemon"
-		log.Err(err).Msg(errMsg)
-		return errors.Wrap(err, errMsg)
+
+	var extraArgs []string
+	if c.NArg() > 0 {
+		// The service has been installed using a token e.g.,
+		// $ cloudflared service install <token>
+		//
+		// Write the token file to a config directory so we can start the
+		// daemon with --token-file
+
+		// Don't use :=, if we did so we would create a new err variable and
+		// shadow the outer one, causing the defer below to not have access to
+		// the outer err
+		var cp string
+		cp, err = configPath()
+		if err != nil {
+			log.Err(err).Msg("Error determining path to config directory")
+			return err
+		}
+
+		// Ensure token file is removed if install fails at any point from now
+		// on
+		defer func() {
+			if err != nil {
+				removeTokenFile(cp, log)
+			}
+		}()
+
+		if err = writeTokenToConfigDir(c, cp); err != nil {
+			return fmt.Errorf("could not write token to configuration directory: %w", err)
+		}
+
+		extraArgs = buildArgsForTokenFile(cp)
 	}
 
 	stdoutPath, err := stdoutPath()
@@ -206,17 +250,13 @@ func uninstallLaunchd(c *cli.Context) error {
 	if err == nil {
 		log.Info().Msg("Launchd for cloudflared was uninstalled successfully")
 	}
-	return err
-}
 
-func userHomeDir() (string, error) {
-	// This returns the home dir of the executing user using OS-specific method
-	// for discovering the home dir. It's not recommended to call this function
-	// when the user has root permission as $HOME depends on what options the user
-	// use with sudo.
-	homeDir, err := homedir.Dir()
+	cp, err := configPath()
 	if err != nil {
-		return "", errors.Wrap(err, "Cannot determine home directory for the user")
+		log.Err(err).Msg("error determining path to config directory, not removing token file")
+		return err
 	}
-	return homeDir, nil
+	removeTokenFile(cp, log)
+
+	return nil
 }

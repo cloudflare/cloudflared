@@ -8,7 +8,7 @@ import (
 type PingFrame struct{}
 
 func (f *PingFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
-	return append(b, byte(FrameTypePing)), nil
+	return append(b, pingFrameType), nil
 }
 
 // Length of a written frame

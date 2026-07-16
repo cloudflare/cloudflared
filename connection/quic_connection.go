@@ -143,7 +143,7 @@ func (q *quicConnection) Serve(ctx context.Context) error {
 }
 
 // serveControlStream will serve the RPC; blocking until the control plane is done.
-func (q *quicConnection) serveControlStream(ctx context.Context, controlStream *quic.Stream) error {
+func (q *quicConnection) serveControlStream(ctx context.Context, controlStream quic.Stream) error {
 	return q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions.ConnectionOptions(), q.orchestrator)
 }
 
@@ -166,7 +166,7 @@ func (q *quicConnection) acceptStream(ctx context.Context) error {
 	}
 }
 
-func (q *quicConnection) runStream(quicStream *quic.Stream) {
+func (q *quicConnection) runStream(quicStream quic.Stream) {
 	ctx := quicStream.Context()
 	stream := cfdquic.NewSafeStreamCloser(quicStream, q.streamWriteTimeout, q.logger)
 	defer func() { _ = stream.Close() }()

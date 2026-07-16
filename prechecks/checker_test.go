@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,6 +67,15 @@ type nopConn struct{ net.Conn }
 
 func (nopConn) Close() error { return nil }
 
+// fakeQUICConn satisfies quic.Connection for tests. Only CloseWithError is
+// implemented; the pre-check never opens streams so the rest of the interface
+// is unused via the embedded nil.
+type fakeQUICConn struct {
+	quic.Connection
+}
+
+func (*fakeQUICConn) CloseWithError(_ quic.ApplicationErrorCode, _ string) error { return nil }
+
 // requireStatuses asserts the probe statuses in report.Results match
 // expected (in order), failing immediately on length mismatch.
 func requireStatuses(t *testing.T, report Report, expected ...Status) {
@@ -84,14 +94,6 @@ func nopLogger() *zerolog.Logger {
 	return &l
 }
 
-// newFakeQUICConn creates a mock QUIC connection with CloseWithError
-// expectation pre-configured so gomock does not fail at runtime.
-func newFakeQUICConn(ctrl *gomock.Controller) *mocks.MockQUICConnection {
-	conn := mocks.NewMockQUICConnection(ctrl)
-	conn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-	return conn
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -106,14 +108,13 @@ func TestRun_AllPass(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
 	// twoRegionAddrs has 2 regions × 1 V4 address each = 2 dials per transport.
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(2)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).Times(2)
+		Return(&fakeQUICConn{}, nil).Times(2)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -165,7 +166,6 @@ func TestRun_HTTP2Blocked(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 
-	fakeQUICConn := newFakeQUICConn(ctrl)
 	dns := mocks.NewMockDNSResolver(ctrl)
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
@@ -175,7 +175,7 @@ func TestRun_HTTP2Blocked(t *testing.T) {
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("connection refused")).AnyTimes()
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).AnyTimes()
+		Return(&fakeQUICConn{}, nil).AnyTimes()
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -229,7 +229,6 @@ func TestRun_PartialRegionQUICFail(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	// Two regions: 1.2.3.4 (region1) and 5.6.7.8 (region2).
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
@@ -242,7 +241,7 @@ func TestRun_PartialRegionQUICFail(t *testing.T) {
 	region1Addr := &net.UDPAddr{IP: net.ParseIP("1.2.3.4"), Port: 7844}
 	region2Addr := &net.UDPAddr{IP: net.ParseIP("5.6.7.8"), Port: 7844}
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), region1Addr.AddrPort(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).AnyTimes()
+		Return(&fakeQUICConn{}, nil).AnyTimes()
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), region2Addr.AddrPort(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("connection refused")).AnyTimes()
 
@@ -309,14 +308,13 @@ func TestRun_ManagementAPIFail(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
 	// twoRegionAddrs has 2 regions × 1 V4 address each; each succeeds on first try.
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(2)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).Times(2)
+		Return(&fakeQUICConn{}, nil).Times(2)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("connection refused")).AnyTimes()
 
@@ -341,14 +339,13 @@ func TestRun_RegionFlagForwardedToDNS(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	// The region string must be forwarded verbatim to the DNS resolver.
 	dns.EXPECT().Resolve("us").Return(twoRegionAddrs(), nil)
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(2)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).Times(2)
+		Return(&fakeQUICConn{}, nil).Times(2)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -376,7 +373,6 @@ func TestRun_QUICUsesProbeConnIndex(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -387,7 +383,7 @@ func TestRun_QUICUsesProbeConnIndex(t *testing.T) {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Eq(uint8(math.MaxUint8)),
 		gomock.Any(), gomock.Any(),
-	).Return(fakeQUICConn, nil).Times(2)
+	).Return(&fakeQUICConn{}, nil).Times(2)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -405,14 +401,13 @@ func TestRun_BothFamiliesProbed(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrsBothFamilies(), nil)
 	// 2 regions × 2 families = 4 dial calls each for QUIC and HTTP/2.
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(4)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).Times(4)
+		Return(&fakeQUICConn{}, nil).Times(4)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -448,14 +443,13 @@ func TestRun_IPVersionRestriction(t *testing.T) {
 			tcp := mocks.NewMockTCPDialer(ctrl)
 			quicD := mocks.NewMockQUICDialer(ctrl)
 			mgmt := mocks.NewMockManagementDialer(ctrl)
-			fakeQUICConn := newFakeQUICConn(ctrl)
 
 			dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrsBothFamilies(), nil)
 			// 2 regions × 1 addr per restricted family = 2 dials each.
 			tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(nopConn{}, nil).Times(2)
 			quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-				Return(fakeQUICConn, nil).Times(2)
+				Return(&fakeQUICConn{}, nil).Times(2)
 			mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(nopConn{}, nil)
 
@@ -477,7 +471,6 @@ func TestRun_EdgeAddrs_SingleAddr(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	// DNS resolver must NOT be called when EdgeAddrs is set.
 	dns := mocks.NewMockDNSResolver(ctrl)
@@ -487,7 +480,7 @@ func TestRun_EdgeAddrs_SingleAddr(t *testing.T) {
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(1)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).Times(1)
+		Return(&fakeQUICConn{}, nil).Times(1)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -517,7 +510,6 @@ func TestRun_EdgeAddrs_MultipleAddrs(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns := mocks.NewMockDNSResolver(ctrl)
 	dns.EXPECT().Resolve(gomock.Any()).Times(0)
@@ -526,7 +518,7 @@ func TestRun_EdgeAddrs_MultipleAddrs(t *testing.T) {
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).Times(2)
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).Times(2)
+		Return(&fakeQUICConn{}, nil).Times(2)
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -603,13 +595,12 @@ func TestRun_ProtocolOverride_HTTP2_BothPass(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).AnyTimes()
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).AnyTimes()
+		Return(&fakeQUICConn{}, nil).AnyTimes()
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 
@@ -639,13 +630,12 @@ func TestRun_ProtocolOverride_QUIC_BothPass(t *testing.T) {
 	tcp := mocks.NewMockTCPDialer(ctrl)
 	quicD := mocks.NewMockQUICDialer(ctrl)
 	mgmt := mocks.NewMockManagementDialer(ctrl)
-	fakeQUICConn := newFakeQUICConn(ctrl)
 
 	dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrs(), nil)
 	tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil).AnyTimes()
 	quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(fakeQUICConn, nil).AnyTimes()
+		Return(&fakeQUICConn{}, nil).AnyTimes()
 	mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nopConn{}, nil)
 

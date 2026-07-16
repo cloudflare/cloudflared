@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 )
 
@@ -95,8 +94,6 @@ func (e ECN) String() string {
 
 // A ByteCount in QUIC
 type ByteCount int64
-
-type AtomicByteCount atomic.Int64
 
 // MaxByteCount is the maximum value of a ByteCount
 const MaxByteCount = ByteCount(1<<62 - 1)

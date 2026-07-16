@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/inits"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/tunnel"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
@@ -22,8 +24,21 @@ func runApp(app *cli.App, _ chan struct{}) {
 		Usage: "Manages the cloudflared system service",
 		Subcommands: []*cli.Command{
 			{
-				Name:   "install",
-				Usage:  "Install cloudflared as a system service",
+				Name:      "install",
+				Usage:     "Install cloudflared as a system service",
+				ArgsUsage: "[TOKEN]",
+				Description: `
+Installs cloudflared as a service using the detected init system (e.g., sysv,
+systemd, openrc).
+
+A token may optionally be provided. If a token is provided, it will be written
+to disk in the service configuration directory and the cloudflared service
+configured to use it via the --token-file argument.
+
+If no token is provided, cloudflared will attempt to find a configuration file
+with tunnel credentials from a predetermined list of configuration directory
+paths. If found, it will use that configuration file and credentials (or error
+out if no configuration file with credentials was found).`,
 				Action: cliutil.ConfiguredAction(installLinuxService),
 				Flags: []cli.Flag{
 					noUpdateServiceFlag,
@@ -49,13 +64,14 @@ const (
 	cloudflaredService       = "cloudflared.service"
 	cloudflaredUpdateService = "cloudflared-update.service"
 	cloudflaredUpdateTimer   = "cloudflared-update.timer"
+	cloudflaredOpenRCService = "cloudflared"
 )
 
 var systemdAllTemplates = map[string]ServiceTemplate{
 	cloudflaredService: {
 		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredService),
 		Content: `[Unit]
-Description=cloudflared
+Description=Cloudflare Tunnel client
 After=network-online.target
 Wants=network-online.target
 
@@ -97,12 +113,12 @@ WantedBy=timers.target
 
 var sysvTemplate = ServiceTemplate{
 	Path:     "/etc/init.d/cloudflared",
-	FileMode: 0755,
+	FileMode: 0o755,
 	// nolint: dupword
 	Content: `#!/bin/sh
 # For RedHat and cousins:
 # chkconfig: 2345 99 01
-# description: cloudflared
+# description: Cloudflare Tunnel client
 # processname: {{.Path}}
 ### BEGIN INIT INFO
 # Provides:          {{.Path}}
@@ -110,8 +126,8 @@ var sysvTemplate = ServiceTemplate{
 # Required-Stop:
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: cloudflared
-# Description:       cloudflared agent
+# Short-Description: Cloudflare Tunnel client
+# Description:       Cloudflare Tunnel client
 ### END INIT INFO
 name=$(basename $(readlink -f $0))
 cmd="{{.Path}} --pidfile /var/run/$name.pid {{ range .ExtraArgs }} {{ . }}{{ end }}"
@@ -186,17 +202,50 @@ exit 0
 `,
 }
 
+var openrcTemplate = ServiceTemplate{
+	Path:     "/etc/init.d/" + cloudflaredOpenRCService,
+	FileMode: 0o755,
+	Content: `#!/sbin/openrc-run
+
+description="Cloudflare Tunnel client"
+
+: "${cloudflared_user:=root}"
+
+command="{{.Path}}"
+command_args="{{ range .ExtraArgs }} {{ . }}{{ end }}"
+command_user="${cloudflared_user}"
+
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/${RC_SVCNAME}.log"
+error_log="/var/log/${RC_SVCNAME}.err"
+
+# Use OpenRC's supervisor so the tunnel is restarted on failure.
+supervisor="supervise-daemon"
+respawn_delay=5
+respawn_max=0
+
+depend() {
+	need net
+	use dns logger
+	after net firewall
+}
+`,
+}
+
+var openrcConfTemplate = ServiceTemplate{
+	Path:     "/etc/conf.d/" + cloudflaredOpenRCService,
+	FileMode: 0o644,
+	Content: `# Configuration for the cloudflared OpenRC service.
+
+# User the cloudflared daemon runs as. Defaults to root.
+#cloudflared_user="cloudflared"
+`,
+}
+
 var noUpdateServiceFlag = &cli.BoolFlag{
 	Name:  "no-update-service",
 	Usage: "Disable auto-update of the cloudflared linux service, which restarts the server to upgrade for new versions.",
 	Value: false,
-}
-
-func isSystemd() bool {
-	if _, err := os.Stat("/run/systemd/system"); err == nil {
-		return true
-	}
-	return false
 }
 
 func installLinuxService(c *cli.Context) error {
@@ -210,27 +259,46 @@ func installLinuxService(c *cli.Context) error {
 		Path: etPath,
 	}
 
-	// Check if the "no update flag" is set
-	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
-
-	var extraArgsFunc func(c *cli.Context, log *zerolog.Logger) ([]string, error)
+	var extraArgs []string
 	if c.NArg() == 0 {
-		extraArgsFunc = buildArgsForConfig
+		// If passed no arguments e.g., "$ cloudflared service install",
+		// install the service using the detected config file (or error-out if
+		// no config exists).
+		if extraArgs, err = buildArgsForConfig(c, log); err != nil {
+			return err
+		}
 	} else {
-		extraArgsFunc = buildArgsForToken
-	}
+		// If passed one argument e.g., "$ cloudflared service install <token>"
+		// write the token to the config directory and install the service
+		// using --token-file pointing to that file. This is the quick setup
+		// the tunnel UI suggests.
 
-	extraArgs, err := extraArgsFunc(c, log)
-	if err != nil {
-		return err
+		// Ensure token file is removed if install fails
+		defer func() {
+			if err != nil {
+				removeTokenFile(serviceConfigDir, log)
+			}
+		}()
+
+		if err = writeTokenToConfigDir(c, serviceConfigDir); err != nil {
+			return fmt.Errorf("could not write token to configuration directory: %w", err)
+		}
+
+		extraArgs = buildArgsForTokenFile(serviceConfigDir)
 	}
 
 	templateArgs.ExtraArgs = extraArgs
 
+	// Check if the "no update flag" is set
+	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
+
 	switch {
-	case isSystemd():
+	case inits.IsSystemd():
 		log.Info().Msgf("Using Systemd")
 		err = installSystemd(&templateArgs, autoUpdate, log)
+	case inits.IsOpenRC():
+		log.Info().Msgf("Using OpenRC")
+		err = installOpenRC(&templateArgs, autoUpdate)
 	default:
 		log.Info().Msgf("Using SysV")
 		err = installSysv(&templateArgs, autoUpdate, log)
@@ -258,14 +326,11 @@ func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
 		return err == nil && val != ""
 	}
 	if src.TunnelID == "" || !configPresent(tunnel.CredFileFlag) {
-		return nil, fmt.Errorf(`Configuration file %s must contain entries for the tunnel to run and its associated credentials:
-tunnel: TUNNEL-UUID
-credentials-file: CREDENTIALS-FILE
-`, src.Source())
+		return nil, fmt.Errorf("configuration file %s must contain entries for the tunnel to run and its associated credentials (tunnel: TUNNEL-UUID, credentials-file: CREDENTIALS-FILE)", src.Source())
 	}
 	if src.Source() != serviceConfigPath {
 		if exists, err := config.FileExists(serviceConfigPath); err != nil || exists {
-			return nil, fmt.Errorf("Possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
+			return nil, fmt.Errorf("possible conflicting configuration in %[1]s and %[2]s. Either remove %[2]s or run `cloudflared --config %[2]s service install`", src.Source(), serviceConfigPath)
 		}
 
 		if err := copyFile(src.Source(), serviceConfigPath); err != nil {
@@ -348,22 +413,51 @@ func installSysv(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolo
 	return runCommand("service", "cloudflared", "start")
 }
 
+func installOpenRC(templateArgs *ServiceTemplateArgs, autoUpdate bool) error {
+	if autoUpdate {
+		templateArgs.ExtraArgs = append([]string{"--autoupdate-freq", "24h0m0s"}, templateArgs.ExtraArgs...)
+	} else {
+		templateArgs.ExtraArgs = append([]string{"--no-autoupdate"}, templateArgs.ExtraArgs...)
+	}
+
+	if err := openrcConfTemplate.Generate(templateArgs); err != nil {
+		return fmt.Errorf("error generating OpenRC conf.d template: %w", err)
+	}
+	if err := openrcTemplate.Generate(templateArgs); err != nil {
+		return fmt.Errorf("error generating OpenRC service template: %w", err)
+	}
+
+	if err := runCommand("rc-update", "add", cloudflaredOpenRCService, "default"); err != nil {
+		return fmt.Errorf("rc-update add %s default: %w", cloudflaredOpenRCService, err)
+	}
+	if err := runCommand("rc-service", cloudflaredOpenRCService, "start"); err != nil {
+		return fmt.Errorf("rc-service %s start: %w", cloudflaredOpenRCService, err)
+	}
+	return nil
+}
+
 func uninstallLinuxService(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
 	var err error
 	switch {
-	case isSystemd():
+	case inits.IsSystemd():
 		log.Info().Msg("Using Systemd")
 		err = uninstallSystemd(log)
+	case inits.IsOpenRC():
+		log.Info().Msg("Using OpenRC")
+		err = uninstallOpenRC(log)
 	default:
 		log.Info().Msg("Using SysV")
 		err = uninstallSysv(log)
 	}
 
+	removeTokenFile(serviceConfigDir, log)
+
 	if err == nil {
 		log.Info().Msg("Linux service for cloudflared uninstalled successfully")
 	}
+
 	return err
 }
 
@@ -371,7 +465,11 @@ func uninstallSystemd(log *zerolog.Logger) error {
 	// Get only the installed services
 	installedServices := make(map[string]ServiceTemplate)
 	for serviceName, serviceTemplate := range systemdAllTemplates {
-		if err := runCommand("systemctl", "list-units", "--all", "|", "grep", serviceName); err == nil {
+		path, err := serviceTemplate.ResolvePath()
+		if err != nil {
+			return fmt.Errorf("error resolving path for service %q: %w", serviceName, err)
+		}
+		if _, err := os.Stat(path); err == nil {
 			installedServices[serviceName] = serviceTemplate
 		} else {
 			log.Info().Msgf("Service '%s' not installed, skipping its uninstall", serviceName)
@@ -431,28 +529,39 @@ func uninstallSysv(log *zerolog.Logger) error {
 	return nil
 }
 
-func ensureConfigDirExists(configDir string) error {
-	ok, err := config.FileExists(configDir)
-	if !ok && err == nil {
-		err = os.Mkdir(configDir, 0755)
+func uninstallOpenRC(log *zerolog.Logger) error {
+	if err := runCommand("rc-service", cloudflaredOpenRCService, "stop"); err != nil {
+		log.Warn().Err(err).Msg("could not stop cloudflared OpenRC service, continuing uninstall")
 	}
-	return err
+	if err := runCommand("rc-update", "del", cloudflaredOpenRCService, "default"); err != nil {
+		log.Warn().Err(err).Msg("could not remove cloudflared from the default runlevel, continuing uninstall")
+	}
+	for _, template := range []ServiceTemplate{openrcTemplate, openrcConfTemplate} {
+		path, err := template.ResolvePath()
+		if err != nil {
+			return fmt.Errorf("error resolving OpenRC template path: %w", err)
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("error removing %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func copyFile(src, dest string) error {
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(src) //nolint:gosec // operator-provided service config path
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
-	destFile, err := os.Create(dest)
+	destFile, err := os.Create(dest) //nolint:gosec // operator-provided service config path
 	if err != nil {
 		return err
 	}
 	ok := false
 	defer func() {
-		destFile.Close()
+		_ = destFile.Close()
 		if !ok {
 			_ = os.Remove(dest)
 		}

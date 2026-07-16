@@ -1,3 +1,30 @@
+2026.7.2
+- 2026-07-15 VULN-118896: MacOS service: use --token-file instead of --token
+- 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot Docker digest to b78832f
+- 2026-07-14 chore: Change internal image name
+- 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot-arm Docker digest to 7a4876f88
+- 2026-07-13 VULN-118896: Linux service: Use --token-file instead of --token
+- 2026-07-13 chore: Remove bookworm internal register publish
+- 2026-07-13 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to ce2a20e
+
+2026.7.1
+- 2026-07-09 Revert "TUN-10621: Propagate max wait timeout"
+
+2026.7.0
+- 2026-07-08 chore: Bump go-chi to version 5.3.1
+- 2026-07-08 Revert "TUN-10557: Bump quic-go v0.59.1"
+- 2026-07-01 TUN-10621: Test websocket path
+- 2026-06-30 ci: add Semgrep OSS scanning workflow
+- 2026-06-29 TUN-10621: Propagate max wait timeout
+- 2026-06-29 Migrate config renovate.json
+- 2026-06-25 chore: Fix renovate
+- 2026-06-25 Pin dependencies
+- 2026-06-25 Consolidate init-system detection into shared inits package
+- 2026-06-24 Fix lint issues
+- 2026-06-22 Add OpenRC support
+- 2026-06-22 Fix broken installed-service detection in systemd uninstall
+- 2026-06-18 TUN-10557: Bump quic-go v0.59.1
+
 2026.6.1
 - 2026-06-18 TUN-10630: Fix precheck protocol override
 - 2026-06-18 Revert "TUN-10557: Bump quic-go v0.59.1"

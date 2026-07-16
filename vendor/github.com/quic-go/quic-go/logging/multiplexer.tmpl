@@ -1,0 +1,21 @@
+package logging
+
+func NewMultiplexed{{ .StructName }} (tracers ...*{{ .StructName }}) *{{ .StructName }} {
+    if len(tracers) == 0 {
+        return nil
+    }
+    if len(tracers) == 1 {
+        return tracers[0]
+    }
+    return &{{ .StructName }}{
+        {{- range .Fields }}
+        {{ .Name }}: func({{ .Params }}){{ .ReturnTypes }} {
+            for _, t := range tracers {
+                if t.{{ .Name }} != nil {
+                    t.{{ .Name }}({{ .Args }})
+                }
+            }
+        },
+        {{- end }}
+    }
+}

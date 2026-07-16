@@ -1,5 +1,5 @@
 images:
-  - name: cloudflared-daemon
+  - name: cloudflared
     dockerfile: Dockerfile.$ARCH
     context: .
     version_file: versions-internal

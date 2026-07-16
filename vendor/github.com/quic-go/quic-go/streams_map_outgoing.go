@@ -2,18 +2,15 @@ package quic
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"sync"
 
 	"github.com/quic-go/quic-go/internal/protocol"
-	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/wire"
 )
 
 type outgoingStream interface {
 	updateSendWindow(protocol.ByteCount)
-	enableResetStreamAt()
 	closeForShutdown(error)
 }
 
@@ -21,15 +18,15 @@ type outgoingStreamsMap[T outgoingStream] struct {
 	mutex sync.RWMutex
 
 	streamType protocol.StreamType
-	streams    map[protocol.StreamID]T
+	streams    map[protocol.StreamNum]T
 
 	openQueue []chan struct{}
 
-	nextStream  protocol.StreamID // stream ID of the stream returned by OpenStream(Sync)
-	maxStream   protocol.StreamID // the maximum stream ID we're allowed to open
-	blockedSent bool              // was a STREAMS_BLOCKED sent for the current maxStream
+	nextStream  protocol.StreamNum // stream ID of the stream returned by OpenStream(Sync)
+	maxStream   protocol.StreamNum // the maximum stream ID we're allowed to open
+	blockedSent bool               // was a STREAMS_BLOCKED sent for the current maxStream
 
-	newStream            func(protocol.StreamID) T
+	newStream            func(protocol.StreamNum) T
 	queueStreamIDBlocked func(*wire.StreamsBlockedFrame)
 
 	closeErr error
@@ -37,26 +34,14 @@ type outgoingStreamsMap[T outgoingStream] struct {
 
 func newOutgoingStreamsMap[T outgoingStream](
 	streamType protocol.StreamType,
-	newStream func(protocol.StreamID) T,
+	newStream func(protocol.StreamNum) T,
 	queueControlFrame func(wire.Frame),
-	pers protocol.Perspective,
 ) *outgoingStreamsMap[T] {
-	var nextStream protocol.StreamID
-	switch {
-	case streamType == protocol.StreamTypeBidi && pers == protocol.PerspectiveServer:
-		nextStream = protocol.FirstOutgoingBidiStreamServer
-	case streamType == protocol.StreamTypeBidi && pers == protocol.PerspectiveClient:
-		nextStream = protocol.FirstOutgoingBidiStreamClient
-	case streamType == protocol.StreamTypeUni && pers == protocol.PerspectiveServer:
-		nextStream = protocol.FirstOutgoingUniStreamServer
-	case streamType == protocol.StreamTypeUni && pers == protocol.PerspectiveClient:
-		nextStream = protocol.FirstOutgoingUniStreamClient
-	}
 	return &outgoingStreamsMap[T]{
 		streamType:           streamType,
-		streams:              make(map[protocol.StreamID]T),
+		streams:              make(map[protocol.StreamNum]T),
 		maxStream:            protocol.InvalidStreamNum,
-		nextStream:           nextStream,
+		nextStream:           1,
 		newStream:            newStream,
 		queueStreamIDBlocked: func(f *wire.StreamsBlockedFrame) { queueControlFrame(f) },
 	}
@@ -129,7 +114,7 @@ func (m *outgoingStreamsMap[T]) OpenStreamSync(ctx context.Context) (T, error) {
 func (m *outgoingStreamsMap[T]) openStream() T {
 	s := m.newStream(m.nextStream)
 	m.streams[m.nextStream] = s
-	m.nextStream += 4
+	m.nextStream++
 	return s
 }
 
@@ -140,55 +125,55 @@ func (m *outgoingStreamsMap[T]) maybeSendBlockedFrame() {
 		return
 	}
 
-	var streamLimit protocol.StreamNum
-	if m.maxStream != protocol.InvalidStreamID {
-		streamLimit = m.maxStream.StreamNum()
+	var streamNum protocol.StreamNum
+	if m.maxStream != protocol.InvalidStreamNum {
+		streamNum = m.maxStream
 	}
 	m.queueStreamIDBlocked(&wire.StreamsBlockedFrame{
 		Type:        m.streamType,
-		StreamLimit: streamLimit,
+		StreamLimit: streamNum,
 	})
 	m.blockedSent = true
 }
 
-func (m *outgoingStreamsMap[T]) GetStream(id protocol.StreamID) (T, error) {
+func (m *outgoingStreamsMap[T]) GetStream(num protocol.StreamNum) (T, error) {
 	m.mutex.RLock()
-	if id >= m.nextStream {
+	if num >= m.nextStream {
 		m.mutex.RUnlock()
-		return *new(T), &qerr.TransportError{
-			ErrorCode:    qerr.StreamStateError,
-			ErrorMessage: fmt.Sprintf("peer attempted to open stream %d", id),
+		return *new(T), streamError{
+			message: "peer attempted to open stream %d",
+			nums:    []protocol.StreamNum{num},
 		}
 	}
-	s := m.streams[id]
+	s := m.streams[num]
 	m.mutex.RUnlock()
 	return s, nil
 }
 
-func (m *outgoingStreamsMap[T]) DeleteStream(id protocol.StreamID) error {
+func (m *outgoingStreamsMap[T]) DeleteStream(num protocol.StreamNum) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if _, ok := m.streams[id]; !ok {
-		return &qerr.TransportError{
-			ErrorCode:    qerr.StreamStateError,
-			ErrorMessage: fmt.Sprintf("tried to delete unknown outgoing stream %d", id),
+	if _, ok := m.streams[num]; !ok {
+		return streamError{
+			message: "tried to delete unknown outgoing stream %d",
+			nums:    []protocol.StreamNum{num},
 		}
 	}
-	delete(m.streams, id)
+	delete(m.streams, num)
 	return nil
 }
 
-func (m *outgoingStreamsMap[T]) SetMaxStream(id protocol.StreamID) {
+func (m *outgoingStreamsMap[T]) SetMaxStream(num protocol.StreamNum) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if id <= m.maxStream {
+	if num <= m.maxStream {
 		return
 	}
-	m.maxStream = id
+	m.maxStream = num
 	m.blockedSent = false
-	if m.maxStream < m.nextStream-4+4*protocol.StreamID(len(m.openQueue)) {
+	if m.maxStream < m.nextStream-1+protocol.StreamNum(len(m.openQueue)) {
 		m.maybeSendBlockedFrame()
 	}
 	m.maybeUnblockOpenSync()
@@ -201,14 +186,6 @@ func (m *outgoingStreamsMap[T]) UpdateSendWindow(limit protocol.ByteCount) {
 	m.mutex.Lock()
 	for _, str := range m.streams {
 		str.updateSendWindow(limit)
-	}
-	m.mutex.Unlock()
-}
-
-func (m *outgoingStreamsMap[T]) EnableResetStreamAt() {
-	m.mutex.Lock()
-	for _, str := range m.streams {
-		str.enableResetStreamAt()
 	}
 	m.mutex.Unlock()
 }
