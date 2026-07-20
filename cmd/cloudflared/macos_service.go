@@ -142,7 +142,7 @@ func installLaunchd(c *cli.Context) error {
 	etPath, err := os.Executable()
 	if err != nil {
 		log.Err(err).Msg("Error determining executable path")
-		return fmt.Errorf("Error determining executable path: %w", err)
+		return fmt.Errorf("error determining executable path: %w", err)
 	}
 	installPath, err := installPath()
 	if err != nil {

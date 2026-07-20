@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/mocks"
 )
 
@@ -119,7 +120,7 @@ func TestRun_AllPass(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS + 2 QUIC + 2 HTTP2 + 1 API = 7 results.
 	requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
@@ -150,7 +151,7 @@ func TestRun_QUICBlocked(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS Pass + 2 QUIC Fail + 2 HTTP2 Pass + 1 API Pass.
 	requireStatuses(t, report, Pass, Pass, Fail, Fail, Pass, Pass, Pass)
@@ -180,7 +181,7 @@ func TestRun_HTTP2Blocked(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS Pass + 2 QUIC Pass + 2 HTTP2 Fail + 1 API Pass.
 	requireStatuses(t, report, Pass, Pass, Pass, Pass, Fail, Fail, Pass)
@@ -210,7 +211,7 @@ func TestRun_BothTransportsBlocked(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS Pass + 2 QUIC Fail + 2 HTTP2 Fail + 1 API Pass.
 	requireStatuses(t, report, Pass, Pass, Fail, Fail, Fail, Fail, Pass)
@@ -249,7 +250,7 @@ func TestRun_PartialRegionQUICFail(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS Pass + QUIC-region1 Pass + QUIC-region2 Fail + 2 HTTP2 Pass + 1 API Pass.
 	requireStatuses(t, report, Pass, Pass, Pass, Fail, Pass, Pass, Pass)
@@ -282,7 +283,7 @@ func TestRun_DNSFail_SkipsTransports(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// DNS failure emits 2 Fail rows (one per default region).
 	// Transport rows: one skip per DNS region for QUIC and HTTP/2 = 2 QUIC skips + 2 HTTP2 skips.
@@ -319,7 +320,7 @@ func TestRun_ManagementAPIFail(t *testing.T) {
 		Return(nil, errors.New("connection refused")).AnyTimes()
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS Pass + 2 QUIC Pass + 2 HTTP2 Pass + 1 API Fail.
 	requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Fail)
@@ -350,7 +351,7 @@ func TestRun_RegionFlagForwardedToDNS(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Region: "us", Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// DNS rows carry regional hostnames (indices 0 and 1).
 	assert.Equal(t, "us-region1.v2.argotunnel.com", report.Results[0].Target, "DNS region1")
@@ -388,7 +389,7 @@ func TestRun_QUICUsesProbeConnIndex(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 }
 
 // TestRun_BothFamiliesProbed verifies that when both V4 and V6 addresses are
@@ -412,7 +413,7 @@ func TestRun_BothFamiliesProbed(t *testing.T) {
 		Return(nopConn{}, nil)
 
 	report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: allregions.Auto},
-		nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+		features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS + 2 QUIC + 2 HTTP2 + 1 API = 7 results, all passing.
 	requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
@@ -454,7 +455,7 @@ func TestRun_IPVersionRestriction(t *testing.T) {
 				Return(nopConn{}, nil)
 
 			report := Run(t.Context(), emptyCert, Config{Timeout: 2 * time.Second, IPVersion: tt.ipVersion},
-				nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+				features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 			requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
 		})
@@ -489,7 +490,7 @@ func TestRun_EdgeAddrs_SingleAddr(t *testing.T) {
 		Timeout:   2 * time.Second,
 		IPVersion: allregions.Auto,
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 1 DNS Skip + 1 QUIC + 1 HTTP2 + 1 API = 4 results.
@@ -527,7 +528,7 @@ func TestRun_EdgeAddrs_MultipleAddrs(t *testing.T) {
 		Timeout:   2 * time.Second,
 		IPVersion: allregions.Auto,
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 2 DNS Pass (one per addr) + 2 QUIC + 2 HTTP2 + 1 API = 7 results.
@@ -567,7 +568,7 @@ func TestRun_EdgeAddrs_UnresolvableAddr(t *testing.T) {
 		Timeout:   2 * time.Second,
 		IPVersion: allregions.Auto,
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// 1 DNS Fail + 1 QUIC Skip + 1 HTTP2 Skip + 1 API = 4 results.
@@ -609,7 +610,7 @@ func TestRun_ProtocolOverride_HTTP2_BothPass(t *testing.T) {
 		IPVersion:        allregions.Auto,
 		ProtocolOverride: "http2",
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// Both transports pass, but the override must win — HTTP/2 is reported.
@@ -644,7 +645,7 @@ func TestRun_ProtocolOverride_QUIC_BothPass(t *testing.T) {
 		IPVersion:        allregions.Auto,
 		ProtocolOverride: "quic",
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	require.NotNil(t, report.SuggestedProtocol)
@@ -677,7 +678,7 @@ func TestRun_ProtocolOverride_HTTP2_QUICBlocked(t *testing.T) {
 		IPVersion:        allregions.Auto,
 		ProtocolOverride: "http2",
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	require.NotNil(t, report.SuggestedProtocol)
@@ -710,7 +711,7 @@ func TestRun_ProtocolOverride_HTTP2_BothBlocked(t *testing.T) {
 		IPVersion:        allregions.Auto,
 		ProtocolOverride: "http2",
 	}
-	report := Run(t.Context(), emptyCert, cfg, nopLogger(),
+	report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(),
 		RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
 
 	// The overridden transport (HTTP/2) is blocked, so the override cannot be
