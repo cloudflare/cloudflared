@@ -67,6 +67,9 @@ const (
 	cloudflaredOpenRCService = "cloudflared"
 )
 
+// OS-specific function for token file creation
+var createTokenFile = createTokenFileUnix
+
 var systemdAllTemplates = map[string]ServiceTemplate{
 	cloudflaredService: {
 		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredService),

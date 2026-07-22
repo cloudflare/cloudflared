@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 	"time"
 	"unsafe"
@@ -27,6 +28,12 @@ const (
 	windowsServiceName        = "Cloudflared"
 	windowsServiceDescription = "Cloudflared agent"
 	windowsServiceUrl         = "https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configure-tunnels/local-management/as-a-service/windows/"
+
+	// Env var that points to a directory for storing application-specific
+	// configuration and data (analogous to /etc/). Normally this points to
+	// C:\ProgramData.
+	programDataEnvVar = "PROGRAMDATA"
+	configDirName     = "cloudflared"
 
 	recoverActionDelay      = time.Second * 20
 	failureCountResetPeriod = time.Hour * 24
@@ -48,8 +55,18 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 		Usage: "Manages the cloudflared Windows service",
 		Subcommands: []*cli.Command{
 			{
-				Name:   "install",
-				Usage:  "Install cloudflared as a Windows service",
+				Name:      "install",
+				Usage:     "Install cloudflared as a Windows service",
+				ArgsUsage: "[TOKEN]",
+				Description: `
+Installs cloudflared as a Windows service
+
+A token may optionally be provided. If a token is provided, it will be written
+to disk in the service configuration directory and the cloudflared service
+configured to use it via the --token-file argument.
+
+If no token is provided, cloudflared will run without the --token-file argument,
+causing it to look for credentials in a configuration file upon startup.`,
 				Action: cliutil.ConfiguredAction(installWindowsService),
 			},
 			{
@@ -94,6 +111,105 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 		}
 		log.Fatal().Err(err).Msgf("%s service failed", windowsServiceName)
 	}
+}
+
+// Creates the token file at the given path, restricting its permissions by
+// modifying its Windows ACLs. We change the ACLs on the token file such that
+// the Administrators group and SYSTEM account (which is what cloudflared runs
+// as) have full access and all others are denied, with the Administrator group
+// owning the file.
+func createTokenFile(path string) error {
+	// This is a Windows Security Descriptor string describing the permissions
+	// we apply to the token file. This is the domain-specific language Windows
+	// uses for representing access rights.
+	//
+	// - O:BA         -> Set the owner to the builtin administrators group (BA)
+	// - D:           -> Start of discretionary access control list describing access rights
+	// - P            -> Set the SE_DACL_PROTECTED flag, which prevents the file from
+	//                   inheriting the (usually permissive) ACEs from its parent directory
+	// - (A;;FA;;;BA) -> ACE #1: Allow (A) Full access (FA) to the Builtin Administrators group (BA)
+	// - (A;;FA;;;SY) -> ACE #2: Ditto but for the Local System user (SY)
+	//
+	// Relevant Docs:
+	//
+	// - SecurityDescriptor string as a whole:
+	//     https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
+	// - SID Strings such as BA/SY
+	//     https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings
+	// - ACE Strings such as (A;;FA;;BA)
+	//     https://learn.microsoft.com/en-us/windows/win32/secauthz/ace-strings
+	const sdString = "O:BAD:P(A;;FA;;;BA)(A;;FA;;;SY)"
+	sd, err := windows.SecurityDescriptorFromString(sdString)
+	if err != nil {
+		return fmt.Errorf("create token security descriptor: %w", err)
+	}
+
+	pathRaw, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return fmt.Errorf("convert path to UTF-16: %w", err)
+	}
+
+	f, err := windows.CreateFile(
+		pathRaw,
+		windows.GENERIC_WRITE,
+		0,
+		&windows.SecurityAttributes{
+			Length:             uint32(unsafe.Sizeof(windows.SecurityAttributes{})),
+			SecurityDescriptor: sd,
+			InheritHandle:      0,
+		},
+		windows.CREATE_ALWAYS, // Will truncate the file if it exists
+		windows.FILE_ATTRIBUTE_NORMAL,
+		0,
+	)
+
+	if err != nil {
+		return fmt.Errorf("create token file: %w", err)
+	}
+
+	if err := windows.CloseHandle(f); err != nil {
+		return fmt.Errorf("close token file: %w", err)
+	}
+
+	// As with os.CreateFile / os.OpenFile on Unix, if the file already exists
+	// windows.CreateFile will not update the permission information, so we do
+	// that explicitly after creating the file.
+
+	owner, _, err := sd.Owner()
+	if err != nil {
+		return fmt.Errorf("get token file owner: %w", err)
+	}
+
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return fmt.Errorf("get token file DACL: %w", err)
+	}
+
+	// Bitmask indicating which security info we want to set on the file:
+	//
+	// OWNER_SECURITY_INFORMATION
+	//	-> Set file owner
+	// DACL_SECURITY_INFORMATION
+	// 	-> Set ACEs
+	// PROTECTED_DACL_SECURITY_INFORMATION
+	//  -> Update DACL to be "protected' such that it cannot inherit entries from its parent
+	const securityInfo = windows.OWNER_SECURITY_INFORMATION |
+		windows.DACL_SECURITY_INFORMATION |
+		windows.PROTECTED_DACL_SECURITY_INFORMATION
+
+	if err := windows.SetNamedSecurityInfo(
+		path,
+		windows.SE_FILE_OBJECT,
+		securityInfo,
+		owner,
+		nil,
+		dacl,
+		nil,
+	); err != nil {
+		return fmt.Errorf("set token file security info: %w", err)
+	}
+
+	return nil
 }
 
 type windowsService struct {
@@ -173,6 +289,15 @@ func (s *windowsService) Execute(serviceArgs []string, r <-chan svc.ChangeReques
 	}
 }
 
+func getConfigDir() (string, error) {
+	progDat, progDatSet := os.LookupEnv(programDataEnvVar)
+	if !progDatSet {
+		return "", fmt.Errorf("could not find program data directory, %s env var must be set", programDataEnvVar)
+	}
+
+	return filepath.Join(progDat, configDirName), nil
+}
+
 func installWindowsService(c *cli.Context) error {
 	zeroLogger := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
 
@@ -192,11 +317,35 @@ func installWindowsService(c *cli.Context) error {
 		s.Close()
 		return errors.New(serviceAlreadyExistsWarn(windowsServiceName))
 	}
-	extraArgs, err := getServiceExtraArgsFromCliArgs(c, &log)
-	if err != nil {
-		errMsg := "Unable to determine extra arguments for windows service"
-		log.Err(err).Msg(errMsg)
-		return errors.Wrap(err, errMsg)
+	var extraArgs []string
+	if c.NArg() > 0 {
+		// The service has been installed using a token e.g.,
+		// $ cloudflared service install <token>
+		//
+		// Write the token file to a config directory so we can start the
+		// service with --token-file.
+
+		// Don't use :=, if we did so we would create a new err variable and
+		// shadow the outer one, causing the defer below to not have access to
+		// the outer err
+		var configDir string
+		configDir, err = getConfigDir()
+		if err != nil {
+			return fmt.Errorf("locate config dir: %w", err)
+		}
+
+		// Remove token file if service install fails any point onwards from here
+		defer func() {
+			if err != nil {
+				removeTokenFile(configDir, zeroLogger)
+			}
+		}()
+
+		if err = writeTokenToConfigDir(c, configDir); err != nil {
+			return fmt.Errorf("write token to configuration directory at %s: %w", configDir, err)
+		}
+
+		extraArgs = buildArgsForTokenFile(configDir)
 	}
 
 	config := mgr.Config{StartType: mgr.StartAutomatic, DisplayName: windowsServiceDescription}
@@ -219,10 +368,13 @@ func installWindowsService(c *cli.Context) error {
 	}
 
 	err = s.Start()
-	if err == nil {
-		log.Info().Msg("Agent service for cloudflared installed successfully")
+	if err != nil {
+		s.Delete()
+		return errors.Wrap(err, "Cannot start service")
 	}
-	return err
+
+	log.Info().Msg("Agent service for cloudflared installed successfully")
+	return nil
 }
 
 func uninstallWindowsService(c *cli.Context) error {
@@ -258,6 +410,15 @@ func uninstallWindowsService(c *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "Cannot remove event logger")
 	}
+
+	configDir, err := getConfigDir()
+	if err != nil {
+		// We don't need to hard-error out here, this isn't critical, but we should log it
+		log.Warn().Err(err).Msgf("Failed to find configuration directory, not removing secret token file")
+	} else {
+		removeTokenFile(configDir, &log)
+	}
+
 	return nil
 }
 

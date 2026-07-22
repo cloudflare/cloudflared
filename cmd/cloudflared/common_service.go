@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	defaultTokenFile             = "token"
-	tokenPerms       os.FileMode = 0o600
+	defaultTokenFile = "token"
 )
 
 func ensureConfigDirExists(configDir string) error {
@@ -23,24 +22,44 @@ func ensureConfigDirExists(configDir string) error {
 		if errors.Is(err, os.ErrExist) {
 			return nil
 		}
-		return fmt.Errorf("failed to create config dir at %s: %w", configDir, err)
+		return fmt.Errorf("create config dir at %s: %w", configDir, err)
 	}
 	return nil
 }
 
+func createTokenFileUnix(path string) error {
+	const tokenPerms os.FileMode = 0o600
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, tokenPerms) //nolint:gosec // All callers of this function construct path from constant strings or well-known env vars (e.g., $HOME)
+	if err != nil {
+		return fmt.Errorf("create token file at %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// If the file already existed with unrestrictive permissions, os.OpenFile
+	// will not update its permissions, so perform an extra os.Chmod
+	if err := os.Chmod(path, tokenPerms); err != nil {
+		return fmt.Errorf("chmod token file at %s: %w", path, err)
+	}
+
+	return nil
+}
+
+// Write out the token file to the configuration directory with the correct
+// permissions. Since the method used to restrict the permissions is platform
+// dependent, make the function used to restrict the permissions an injectable
+// dependency
 func writeTokenToFile(path string, token string) error {
 	if _, err := tunnel.ParseToken(token); err != nil {
 		return cliutil.UsageError("Provided tunnel token is not valid (%s).", err)
 	}
 
-	if err := os.WriteFile(path, []byte(token), tokenPerms); err != nil {
-		return fmt.Errorf("failed to write token to %s: %w", path, err)
+	if err := createTokenFile(path); err != nil {
+		return fmt.Errorf("create token file at %s: %w", path, err)
 	}
 
-	// If the token file already existed with unrestrictive perms, os.WriteFile
-	// above will not update them
-	if err := os.Chmod(path, tokenPerms); err != nil {
-		return fmt.Errorf("failed to restrict permissions on token file %s: %w", path, err)
+	// Won't update permissions as file already exists
+	if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
+		return fmt.Errorf("write token to %s: %w", path, err)
 	}
 
 	return nil
@@ -62,7 +81,7 @@ func buildArgsForTokenFile(configDir string) []string {
 }
 
 func tokenPath(configDir string) string {
-	return path.Join(configDir, defaultTokenFile)
+	return filepath.Join(configDir, defaultTokenFile)
 }
 
 func writeTokenToConfigDir(c *cli.Context, configDir string) error {
@@ -75,27 +94,4 @@ func writeTokenToConfigDir(c *cli.Context, configDir string) error {
 	}
 
 	return nil
-}
-
-// nolint:unused // This function is used by the Windows build, the unused warning when building for Linux and MacOS is spurious
-func buildArgsForToken(c *cli.Context, log *zerolog.Logger) ([]string, error) {
-	token := c.Args().First()
-	if _, err := tunnel.ParseToken(token); err != nil {
-		return nil, cliutil.UsageError("Provided tunnel token is not valid (%s).", err)
-	}
-
-	return []string{
-		"tunnel", "run", "--token", token,
-	}, nil
-}
-
-// nolint:unused // This function is used by the Windows build, the unused warning when building for Linux and MacOS is spurious
-func getServiceExtraArgsFromCliArgs(c *cli.Context, log *zerolog.Logger) ([]string, error) {
-	if c.NArg() > 0 {
-		// currently, we only support extra args for token
-		return buildArgsForToken(c, log)
-	} else {
-		// empty extra args
-		return make([]string, 0), nil
-	}
 }

@@ -5,7 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -18,6 +18,9 @@ import (
 const (
 	launchdIdentifier = "com.cloudflare.cloudflared"
 )
+
+// OS-specific function for token file creation
+var createTokenFile = createTokenFileUnix
 
 func runApp(app *cli.App, _ chan struct{}) {
 	app.Commands = append(app.Commands, &cli.Command{
@@ -89,9 +92,11 @@ func isRootUser() bool {
 }
 
 func resolveLibraryPath(subPath, fileName string) (string, error) {
+	const libraryDirName = "Library"
+
 	// We use the system-wide /Library/... instead of ~/Library/... if the user is root
 	if isRootUser() {
-		return path.Join("/Library", subPath, fileName), nil
+		return filepath.Join("/", libraryDirName, subPath, fileName), nil
 	}
 
 	// This returns the home dir of the executing user using OS-specific method
@@ -102,7 +107,7 @@ func resolveLibraryPath(subPath, fileName string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "Cannot determine home directory for the user")
 	}
-	return path.Join(userHomeDir, "Library", subPath, fileName), nil
+	return filepath.Join(userHomeDir, libraryDirName, subPath, fileName), nil
 }
 
 // For docs on these subdirectories, see:
