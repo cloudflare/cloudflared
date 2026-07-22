@@ -1,3 +1,8 @@
+2026.7.3
+- 2026-07-22 VULN-143514: Windows svc: use --token-file instead of --token
+- 2026-07-22 fix: Bump golang.org/x/text and its dependencies to fix CVE
+- 2026-07-20 TUN-10701: Use curves for prechecks
+
 2026.7.2
 - 2026-07-15 VULN-118896: MacOS service: use --token-file instead of --token
 - 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot Docker digest to b78832f
