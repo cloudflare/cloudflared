@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -184,6 +185,35 @@ func TestHTTPServiceUsesIngressRuleScheme(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, respBody, []byte(p))
 	}
+}
+
+func TestUnixSocketTCPServiceEstablishConnection(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "cf-test-")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	socketPath := dir + "/sshd.sock"
+	originListener, err := net.Listen("unix", socketPath)
+	require.NoError(t, err)
+
+	listenerClosed := make(chan struct{})
+	tcpListenRoutine(originListener, listenerClosed)
+
+	svc := &unixSocketTCPService{path: socketPath}
+	require.NoError(t, svc.start(TestLogger, make(chan struct{}), OriginRequestConfig{}))
+
+	// Successful connection to the unix socket
+	conn, err := svc.EstablishConnection(context.Background(), "", TestLogger)
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+	conn.Close()
+
+	// Close the listener and verify that new connections fail
+	originListener.Close()
+	<-listenerClosed
+
+	_, err = svc.EstablishConnection(context.Background(), "", TestLogger)
+	require.Error(t, err)
 }
 
 func tcpListenRoutine(listener net.Listener, closeChan chan struct{}) {
