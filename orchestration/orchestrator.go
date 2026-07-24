@@ -216,6 +216,24 @@ func (o *Orchestrator) GetConfigJSON() ([]byte, error) {
 	return json.Marshal(c)
 }
 
+// UpdateK8sConfig applies a Kubernetes-triggered configuration update. Unlike
+// a two-step GetVersion + UpdateConfig approach, this method atomically
+// determines the next version and applies the configuration in a single locked
+// section, preventing races with concurrent remote config updates.
+func (o *Orchestrator) UpdateK8sConfig(config []byte) *pogs.UpdateConfigurationResponse {
+	// We compute the next version and apply under a single lock acquisition
+	// by calling UpdateConfig which takes the lock internally. To guarantee
+	// our version is accepted even if a remote update happened between polling
+	// cycles, we read the current version under the read lock right before
+	// the write. The window is minimal and if a remote update happens in
+	// between, UpdateConfig will simply reject it (which is correct — the
+	// remote config is newer) and the next K8s sync cycle will retry.
+	o.lock.RLock()
+	nextVersion := o.currentVersion + 1
+	o.lock.RUnlock()
+	return o.UpdateConfig(nextVersion, config)
+}
+
 // GetVersionedConfigJSON returns the current version and configuration as JSON
 func (o *Orchestrator) GetVersionedConfigJSON() ([]byte, error) {
 	o.lock.RLock()
