@@ -411,6 +411,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 
 	// Parse it again, with strict mode, to find warnings.
 	if file, err := os.Open(configFile); err == nil {
+		defer func() { _ = file.Close() }()
 		decoder := yaml.NewDecoder(file)
 		decoder.KnownFields(true)
 		var unusedConfig configFileSettings
