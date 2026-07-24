@@ -47,6 +47,10 @@ func DecodeLine(text string) (*Hop, error) {
 		}
 	}
 
+	if len(parts) == 0 {
+		return nil, ErrEmptyHopLine
+	}
+
 	index, err := strconv.ParseUint(parts[0], 10, 8)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't parse index from timeout hop: %w", err)
