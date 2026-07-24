@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
+	cfdflow "github.com/cloudflare/cloudflared/flow"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/websocket"
@@ -53,6 +54,7 @@ type Orchestrator interface {
 	UpdateConfig(version int32, config []byte) *pogs.UpdateConfigurationResponse
 	GetConfigJSON() ([]byte, error)
 	GetOriginProxy() (OriginProxy, error)
+	GetFlowLimiter() cfdflow.Limiter
 }
 
 type TunnelProperties struct {
