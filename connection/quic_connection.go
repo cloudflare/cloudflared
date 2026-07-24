@@ -418,6 +418,10 @@ type nopCloserReadWriter struct {
 	closed uint32
 }
 
+type readCloser interface {
+	CloseRead() error
+}
+
 func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 	if np.sawEOF {
 		return 0, io.EOF
@@ -436,7 +440,13 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 }
 
 func (np *nopCloserReadWriter) Close() error {
-	atomic.StoreUint32(&np.closed, 1)
+	if atomic.SwapUint32(&np.closed, 1) > 0 {
+		return nil
+	}
+
+	if closer, ok := np.ReadWriteCloser.(readCloser); ok {
+		return closer.CloseRead()
+	}
 
 	return nil
 }
