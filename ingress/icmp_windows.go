@@ -285,11 +285,16 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder ICM
 	responder.ExportSpan()
 
 	_, replySpan := responder.ReplySpan(ctx, ip.logger)
-	err = ip.handleEchoReply(pk, echo, resp, responder)
+	sent, err := ip.handleEchoReply(pk, echo, resp, responder)
 	if err != nil {
 		ip.logger.Err(err).Msg("Failed to send ICMP reply")
 		tracing.EndWithErrorStatus(replySpan, err)
 		return errors.Wrap(err, "failed to handle ICMP echo reply")
+	}
+	if !sent {
+		ip.logger.Debug().Str("dst", pk.Dst.String()).Msg("Drop ICMP echo reply because TTL expired")
+		tracing.End(replySpan)
+		return nil
 	}
 	observeICMPReply(ip.logger, replySpan, pk.Dst.String(), echo.ID, echo.Seq)
 	replySpan.SetAttributes(
@@ -300,7 +305,7 @@ func (ip *icmpProxy) Request(ctx context.Context, pk *packet.ICMP, responder ICM
 	return nil
 }
 
-func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, resp echoResp, responder ICMPResponder) error {
+func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, resp echoResp, responder ICMPResponder) (bool, error) {
 	var replyType icmp.Type
 	if request.Dst.Is4() {
 		replyType = ipv4.ICMPTypeEchoReply
@@ -308,12 +313,21 @@ func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, r
 		replyType = ipv6.ICMPTypeEchoReply
 	}
 
+	ttl := packet.DefaultTTL
+	if received, ok := resp.ttl(); ok {
+		forwarded, shouldForward := receivedTTLFromIPHeader(received).forwardedTTL()
+		if !shouldForward {
+			return false, nil
+		}
+		ttl = forwarded
+	}
+
 	pk := packet.ICMP{
 		IP: &packet.IP{
 			Src:      request.Dst,
 			Dst:      request.Src,
 			Protocol: layers.IPProtocol(request.Type.Protocol()),
-			TTL:      packet.DefaultTTL,
+			TTL:      ttl,
 		},
 		Message: &icmp.Message{
 			Type: replyType,
@@ -325,7 +339,7 @@ func (ip *icmpProxy) handleEchoReply(request *packet.ICMP, echoReq *icmp.Echo, r
 			},
 		},
 	}
-	return responder.ReturnPacket(&pk)
+	return true, responder.ReturnPacket(&pk)
 }
 
 func (ip *icmpProxy) icmpEchoRoundtrip(dst netip.Addr, echo *icmp.Echo) (echoResp, error) {
@@ -410,6 +424,7 @@ type echoResp interface {
 	status() ipStatus
 	rtt() uint32
 	payload() []byte
+	ttl() (uint8, bool)
 }
 
 type echoV4Resp struct {
@@ -427,6 +442,10 @@ func (r *echoV4Resp) rtt() uint32 {
 
 func (r *echoV4Resp) payload() []byte {
 	return r.data
+}
+
+func (r *echoV4Resp) ttl() (uint8, bool) {
+	return r.reply.Options.TTL, true
 }
 
 func newEchoV4Resp(replyBuf []byte) (*echoV4Resp, error) {
@@ -525,6 +544,10 @@ func (r *echoV6Resp) rtt() uint32 {
 
 func (r *echoV6Resp) payload() []byte {
 	return r.data
+}
+
+func (r *echoV6Resp) ttl() (uint8, bool) {
+	return 0, false
 }
 
 func newEchoV6Resp(replyBuf []byte, dataSize int) (*echoV6Resp, error) {
