@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -25,6 +27,7 @@ type HostnameRoute interface {
 	RecordType() string
 	UnmarshalResult(body io.Reader) (HostnameRouteResult, error)
 	String() string
+	Hostname() string
 }
 
 type HostnameRouteResult interface {
@@ -76,6 +79,10 @@ func (dr *DNSRoute) RecordType() string {
 
 func (dr *DNSRoute) String() string {
 	return fmt.Sprintf("%s %s", dr.RecordType(), dr.userHostname)
+}
+
+func (dr *DNSRoute) Hostname() string {
+	return dr.userHostname
 }
 
 func (res *DNSRouteResult) SuccessSummary() string {
@@ -139,6 +146,10 @@ func (lb *LBRoute) String() string {
 	return fmt.Sprintf("%s %s %s", lb.RecordType(), lb.lbName, lb.lbPool)
 }
 
+func (lr *LBRoute) Hostname() string {
+	return lr.lbName
+}
+
 func (lr *LBRoute) UnmarshalResult(body io.Reader) (HostnameRouteResult, error) {
 	var result LBRouteResult
 	err := parseResponse(body, &result)
@@ -176,7 +187,35 @@ func (res *LBRouteResult) SuccessSummary() string {
 }
 
 func (r *RESTClient) RouteTunnel(tunnelID uuid.UUID, route HostnameRoute) (HostnameRouteResult, error) {
+	// First, try to find the correct zone by fetching all zones and matching the hostname
+	zoneID := ""
+	zones, err := r.ListZones()
+	if err == nil {
+		longestMatch := ""
+		for _, zone := range zones {
+			// A hostname should end with the zone name EXACTLY or be a subdomain of it.
+			// e.g. "app.staging.example.com" ends with ".example.com" and "example.com" == "example.com"
+			if route.Hostname() == zone.Name || strings.HasSuffix(route.Hostname(), "."+zone.Name) {
+				// We want the most specific zone if there are multiple matches
+				// e.g. "staging.example.com" zone vs "example.com" zone
+				if len(zone.Name) > len(longestMatch) {
+					longestMatch = zone.Name
+					zoneID = zone.ID
+				}
+			}
+		}
+	}
+
 	endpoint := r.baseEndpoints.zoneLevel
+	if zoneID != "" {
+		// Construct dynamic endpoint using the correct zone ID instead of the default one
+		baseURL := strings.TrimSuffix(r.baseEndpoints.zones.String(), "/zones")
+		zoneEndpoint, err := url.Parse(fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneID))
+		if err == nil {
+			endpoint = *zoneEndpoint
+		}
+	}
+
 	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("%v/routes", tunnelID))
 	resp, err := r.sendRequest("PUT", endpoint, route)
 	if err != nil {
