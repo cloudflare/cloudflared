@@ -25,11 +25,6 @@ type SystemCollectorMock struct {
 	err        error
 }
 
-const (
-	systemInformationKey = "sikey"
-	errorKey             = "errkey"
-)
-
 func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnectionInfo) *tunnelstate.ConnTracker {
 	t.Helper()
 
