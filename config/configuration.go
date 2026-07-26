@@ -36,7 +36,7 @@ var (
 	defaultUserConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp"}
 	defaultNixConfigDirs  = []string{"/etc/cloudflared", DefaultUnixConfigLocation}
 
-	ErrNoConfigFile = fmt.Errorf("Cannot determine default configuration path. No file %v in %v", DefaultConfigFiles, DefaultConfigSearchDirectories())
+	ErrNoConfigFile = fmt.Errorf("cannot determine default configuration path. No file %v in %v", DefaultConfigFiles, DefaultConfigSearchDirectories())
 )
 
 const (
@@ -50,7 +50,8 @@ func DefaultConfigDirectory() string {
 		path := os.Getenv("CFDPATH")
 		if path == "" {
 			path = filepath.Join(os.Getenv("ProgramFiles(x86)"), "cloudflared")
-			if _, err := os.Stat(path); os.IsNotExist(err) { // doesn't exist, so return an empty failure string
+			// doesn't exist, so return an empty failure string
+			if _, err := os.Stat(path); os.IsNotExist(err) { //nolint:gosec // path is derived from a fixed local install location, not attacker-controlled input
 				return ""
 			}
 		}
@@ -88,7 +89,7 @@ func DefaultConfigSearchDirectories() []string {
 
 // FileExists checks to see if a file exist at the provided path.
 func FileExists(path string) (bool, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path is one of the local default config search paths, not attacker-controlled input
 	if err != nil {
 		if os.IsNotExist(err) {
 			// ignore missing files
@@ -127,19 +128,19 @@ func FindOrCreateConfigPath() string {
 	if path == "" {
 		// create the default directory if it doesn't exist
 		path = DefaultConfigPath()
-		if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil { //nolint:gosec // pre-existing default config dir permissions; tightening these is a behavior change out of scope here
 			return ""
 		}
 
 		// write a new config file out
-		file, err := os.Create(path)
+		file, err := os.Create(path) //nolint:gosec // path is derived from the local default config directory, not attacker-controlled input
 		if err != nil {
 			return ""
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		logDir := DefaultLogDirectory()
-		_ = os.MkdirAll(logDir, os.ModePerm) // try and create it. Doesn't matter if it succeed or not, only byproduct will be no logs
+		_ = os.MkdirAll(logDir, os.ModePerm) //nolint:gosec // pre-existing default log dir permissions; tightening these is a behavior change out of scope here. Doesn't matter if it succeeds or not, only byproduct will be no logs
 
 		c := Root{
 			LogDirectory: logDir,
@@ -392,7 +393,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	}
 
 	log.Debug().Msgf("Loading configuration from %s", configFile)
-	file, err := os.Open(configFile)
+	file, err := os.Open(configFile) //nolint:gosec // configFile comes from the --config flag / local config search, not attacker-controlled input
 	if err != nil {
 		// If does not exist and config file was not specificly specified then return ErrNoConfigFile found.
 		if os.IsNotExist(err) && !c.IsSet("config") {
@@ -400,7 +401,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 		}
 		return nil, "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
 		if err == io.EOF {
 			log.Error().Msgf("Configuration file %s was empty", configFile)
@@ -411,7 +412,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	configuration.sourceFile = configFile
 
 	// Parse it again, with strict mode, to find warnings.
-	if file, err := os.Open(configFile); err == nil {
+	if file, err := os.Open(configFile); err == nil { //nolint:gosec // configFile comes from the --config flag / local config search, not attacker-controlled input
 		decoder := yaml.NewDecoder(file)
 		decoder.KnownFields(true)
 		var unusedConfig configFileSettings
@@ -433,7 +434,7 @@ type CustomDuration struct {
 }
 
 func (s CustomDuration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.Duration.Seconds())
+	return json.Marshal(s.Seconds())
 }
 
 // Bounds on the number of seconds that can be converted to a time.Duration (nanoseconds)
@@ -457,7 +458,7 @@ func (s *CustomDuration) UnmarshalJSON(data []byte) error {
 }
 
 func (s *CustomDuration) MarshalYAML() (interface{}, error) {
-	return s.Duration.String(), nil
+	return s.String(), nil
 }
 
 func (s *CustomDuration) UnmarshalYAML(unmarshal func(interface{}) error) error {
