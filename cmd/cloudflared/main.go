@@ -50,7 +50,7 @@ var (
 
 func main() {
 	// FIXME: TUN-8148: Disable QUIC_GO ECN due to bugs in proper detection if supported
-	os.Setenv("QUIC_GO_DISABLE_ECN", "1")
+	_ = os.Setenv("QUIC_GO_DISABLE_ECN", "1")
 	metrics.RegisterBuildInfo(BuildType, BuildTime, Version)
 	_, _ = maxprocs.Set()
 	bInfo := cliutil.GetBuildInfo(BuildType, Version)
@@ -97,7 +97,7 @@ func main() {
 }
 
 func commands(version func(c *cli.Context)) []*cli.Command {
-	cmds := []*cli.Command{
+	cmds := []*cli.Command{ // nolint:prealloc // one-time startup registration; keep the literal readable
 		{
 			Name:   "update",
 			Action: cliutil.ConfiguredAction(updater.Update),
