@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -147,6 +148,25 @@ var rawJsonConfig = []byte(`
 	"http2Origin": true
 }
 `)
+
+func TestCustomDurationUnmarshalJSONOverflow(t *testing.T) {
+	var d CustomDuration
+
+	// A caller mistakenly supplying nanoseconds (as documented for time.Duration
+	// generally) instead of the seconds this type actually expects overflows
+	// int64 when multiplied by time.Second. This must be a clear error, not a
+	// silently wrapped negative duration that causes dials to fail instantly.
+	err := json.Unmarshal([]byte("10000000000"), &d)
+	require.Error(t, err)
+
+	require.NoError(t, json.Unmarshal([]byte("10"), &d))
+	assert.Equal(t, 10*time.Second, d.Duration)
+
+	require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf("%d", maxDurationSeconds)), &d))
+	assert.Equal(t, time.Duration(maxDurationSeconds)*time.Second, d.Duration)
+
+	require.Error(t, json.Unmarshal([]byte(fmt.Sprintf("%d", maxDurationSeconds+1)), &d))
+}
 
 func TestMarshalUnmarshalOriginRequest(t *testing.T) {
 	testCases := []struct {

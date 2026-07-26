@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -435,10 +436,20 @@ func (s CustomDuration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.Duration.Seconds())
 }
 
+// Bounds on the number of seconds that can be converted to a time.Duration (nanoseconds)
+// without overflowing int64.
+const (
+	maxDurationSeconds = int64(math.MaxInt64) / int64(time.Second)
+	minDurationSeconds = int64(math.MinInt64) / int64(time.Second)
+)
+
 func (s *CustomDuration) UnmarshalJSON(data []byte) error {
 	seconds, err := strconv.ParseInt(string(data), 10, 64)
 	if err != nil {
 		return err
+	}
+	if seconds > maxDurationSeconds || seconds < minDurationSeconds {
+		return fmt.Errorf("%d seconds overflows time.Duration, must be between %d and %d seconds", seconds, minDurationSeconds, maxDurationSeconds)
 	}
 
 	s.Duration = time.Duration(seconds * int64(time.Second))
