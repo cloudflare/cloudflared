@@ -39,15 +39,9 @@ const (
 	QUICMetadataFlowID = "FlowID"
 )
 
-// malformedRequestError indicates the request could not be built because of client-supplied data, such as a
-// Host header with a non-numeric port. It is reported to the eyeball as a 400 rather than a 502, since the
-// failure is not caused by the origin or the connection to it.
-type malformedRequestError struct {
-	cause error
-}
-
-func (e *malformedRequestError) Error() string { return e.cause.Error() }
-func (e *malformedRequestError) Unwrap() error { return e.cause }
+// errMalformedRequest marks a buildHTTPRequest failure caused by client-supplied data, such as a Host
+// header with a non-numeric port, so it is reported to the eyeball as 400 instead of the default 502.
+var errMalformedRequest = errors.New("malformed request")
 
 // quicConnection represents the type that facilitates Proxying via QUIC streams.
 type quicConnection struct {
@@ -216,8 +210,7 @@ func (q *quicConnection) handleDataStream(ctx context.Context, stream *rpcquic.R
 		if errors.Is(err, cfdflow.ErrTooManyActiveFlows) {
 			metadata = append(metadata, pogs.ErrorFlowConnectRateLimitedMetadata)
 		}
-		var malformedErr *malformedRequestError
-		if errors.As(err, &malformedErr) {
+		if errors.Is(err, errMalformedRequest) {
 			metadata = append(metadata, pogs.Metadata{Key: HTTPStatus, Val: strconv.Itoa(http.StatusBadRequest)})
 		}
 
@@ -366,7 +359,7 @@ func buildHTTPRequest(
 
 	req, err := http.NewRequestWithContext(ctx, method, dest, body)
 	if err != nil {
-		return nil, &malformedRequestError{cause: err}
+		return nil, fmt.Errorf("%w: %s", errMalformedRequest, err)
 	}
 
 	req.Host = host

@@ -511,7 +511,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 }
 
 // TestBuildHTTPRequestMalformedDest verifies that a Dest containing a non-numeric port (e.g. forwarded
-// verbatim from a client's malformed Host header) is reported as malformedRequestError, not a bare error,
+// verbatim from a client's malformed Host header) is reported as errMalformedRequest, not a bare error,
 // so that callers can distinguish a bad request from an origin/proxy failure.
 func TestBuildHTTPRequestMalformedDest(t *testing.T) {
 	log := zerolog.Nop()
@@ -524,10 +524,7 @@ func TestBuildHTTPRequestMalformedDest(t *testing.T) {
 	}
 
 	_, err := buildHTTPRequest(t.Context(), connectRequest, io.NopCloser(&bytes.Buffer{}), 0, &log)
-	require.Error(t, err)
-
-	var malformedErr *malformedRequestError
-	require.ErrorAs(t, err, &malformedErr)
+	require.ErrorIs(t, err, errMalformedRequest)
 }
 
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
