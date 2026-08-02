@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -509,6 +510,26 @@ func TestBuildHTTPRequest(t *testing.T) {
 	}
 }
 
+// TestBuildHTTPRequestMalformedDest verifies that a Dest containing a non-numeric port (e.g. forwarded
+// verbatim from a client's malformed Host header) is reported as malformedRequestError, not a bare error,
+// so that callers can distinguish a bad request from an origin/proxy failure.
+func TestBuildHTTPRequestMalformedDest(t *testing.T) {
+	log := zerolog.Nop()
+	connectRequest := &pogs.ConnectRequest{
+		Dest: "http://test.com:aaaa/foo",
+		Metadata: []pogs.Metadata{
+			{Key: "HttpHost", Val: "test.com:aaaa"},
+			{Key: "HttpMethod", Val: "get"},
+		},
+	}
+
+	_, err := buildHTTPRequest(t.Context(), connectRequest, io.NopCloser(&bytes.Buffer{}), 0, &log)
+	require.Error(t, err)
+
+	var malformedErr *malformedRequestError
+	require.ErrorAs(t, err, &malformedErr)
+}
+
 func (moc *mockOriginProxyWithRequest) ProxyTCP(ctx context.Context, rwa ReadWriteAcker, tcpRequest *TCPRequest) error {
 	if tcpRequest.Dest == "rate-limit-me" {
 		return pkgerrors.Wrap(cfdflow.ErrTooManyActiveFlows, "failed tcp stream")
@@ -643,6 +664,63 @@ func TestTCPProxy_FlowRateLimited(t *testing.T) {
 		// Got Rate Limited
 		assert.NotEmpty(t, response.Error)
 		assert.Contains(t, response.Metadata, pogs.ErrorFlowConnectRateLimitedMetadata)
+	}()
+
+	tunnelConn, _ := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), uint8(0))
+
+	connDone := make(chan struct{})
+	go func() {
+		defer close(connDone)
+		_ = tunnelConn.Serve(ctx)
+	}()
+
+	<-serverDone
+	cancel()
+	<-connDone
+}
+
+// TestHTTPProxy_MalformedHostPort tests that a Dest with a non-numeric port (as would be forwarded from a
+// client's malformed Host header) results in a 400 response to the eyeball instead of the default 502.
+func TestHTTPProxy_MalformedHostPort(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+
+	// Start a UDP Listener for QUIC.
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
+	require.NoError(t, err)
+	defer func() { _ = udpListener.Close() }()
+
+	quicTransport := &quic.Transport{Conn: udpListener, ConnectionIDLength: 16}
+	quicListener, err := quicTransport.Listen(testTLSServerConfig, testQUICConfig)
+	require.NoError(t, err)
+
+	serverDone := make(chan struct{})
+	go func() {
+		defer close(serverDone)
+
+		session, err := quicListener.Accept(ctx)
+		assert.NoError(t, err)
+
+		quicStream, err := session.OpenStreamSync(t.Context())
+		assert.NoError(t, err)
+		stream := cfdquic.NewSafeStreamCloser(quicStream, defaultQUICTimeout, &log)
+
+		reqClientStream := rpcquic.RequestClientStream{ReadWriteCloser: stream}
+		err = reqClientStream.WriteConnectRequestData(
+			"http://test.com:aaaa/foo",
+			pogs.ConnectionTypeHTTP,
+			pogs.Metadata{Key: HTTPHostKey, Val: "test.com:aaaa"},
+			pogs.Metadata{Key: HTTPMethodKey, Val: "GET"},
+		)
+		assert.NoError(t, err)
+
+		response, err := reqClientStream.ReadConnectResponseData()
+		assert.NoError(t, err)
+
+		assert.NotEmpty(t, response.Error)
+		assert.Contains(t, response.Metadata, pogs.Metadata{Key: HTTPStatus, Val: strconv.Itoa(http.StatusBadRequest)})
 	}()
 
 	tunnelConn, _ := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), uint8(0))
