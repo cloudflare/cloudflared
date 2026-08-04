@@ -3,6 +3,7 @@ package connection
 import (
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -23,6 +24,8 @@ type Observer struct {
 	metrics         *tunnelMetrics
 	tunnelEventChan chan Event
 	addSinkChan     chan EventSink
+	closeChan       chan struct{}
+	closeOnce       sync.Once
 }
 
 type EventSink interface {
@@ -35,13 +38,27 @@ func NewObserver(log *zerolog.Logger) *Observer {
 		metrics:         newTunnelMetrics(),
 		tunnelEventChan: make(chan Event, observerChannelBufferSize),
 		addSinkChan:     make(chan EventSink, observerChannelBufferSize),
+		closeChan:       make(chan struct{}),
 	}
 	go o.dispatchEvents()
 	return o
 }
 
+// Close stops the observer's event dispatch and releases every sink registered
+// against it. Events sent afterwards are discarded, and further calls are
+// no-ops. A caller that builds an observer per connection attempt needs this to
+// avoid holding every attempt's sinks for the life of the process.
+func (o *Observer) Close() {
+	o.closeOnce.Do(func() {
+		close(o.closeChan)
+	})
+}
+
 func (o *Observer) RegisterSink(sink EventSink) {
-	o.addSinkChan <- sink
+	select {
+	case o.addSinkChan <- sink:
+	case <-o.closeChan:
+	}
 }
 
 func (o *Observer) logConnecting(connIndex uint8, address net.IP, protocol Protocol) {
@@ -109,6 +126,10 @@ func (o *Observer) dispatchEvents() {
 	var sinks []EventSink
 	for {
 		select {
+		case <-o.closeChan:
+			// Returning drops the sink slice, which is the only reference this
+			// observer holds to its sinks.
+			return
 		case sink := <-o.addSinkChan:
 			sinks = append(sinks, sink)
 		case evt := <-o.tunnelEventChan:
