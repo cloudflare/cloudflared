@@ -1,7 +1,7 @@
 # Cloudflare Tunnel client
 
 Contains the command-line client for Cloudflare Tunnel, a tunneling daemon that proxies traffic from the Cloudflare network to your origins.
-This daemon sits between Cloudflare network and your origin (e.g. a webserver). Cloudflare attracts client requests and sends them to you
+This daemon sits between the Cloudflare network and your origin (e.g. a webserver). Cloudflare attracts client requests and sends them to you
 via this daemon, without requiring you to poke holes on your firewall --- your origin can remain as closed as possible.
 Extensive documentation can be found in the [Cloudflare Tunnel section](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel) of the Cloudflare Docs.
 All usages related with proxying to your origins are available under `cloudflared tunnel help`.
