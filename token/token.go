@@ -164,6 +164,32 @@ func acquireLockFile(tokenPath string, log *zerolog.Logger) error {
 	}
 }
 
+// releaseLockFile removes the lock file for the given token path if it is
+// still owned by this process. Locks are held for the duration of a single
+// token acquisition; releasing them lets a later re-fetch in the same
+// process (e.g. after an invalid token was removed by the caller) acquire
+// the lock again instead of deadlocking on its own lock.
+func releaseLockFile(tokenPath string, log *zerolog.Logger) {
+	lockPath := tokenPath + ".lock"
+	_, content, err := isLockFileStale(lockPath)
+	if err != nil {
+		return
+	}
+	self, err := newSelfLockContent()
+	if err != nil {
+		return
+	}
+	if content.PID != self.PID || content.StartTime != self.StartTime {
+		// Another process reclaimed the lock; leave it alone.
+		return
+	}
+	if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
+		log.Debug().Err(err).Str("path", lockPath).Msg("failed to release lock file")
+		return
+	}
+	log.Debug().Str("path", lockPath).Msg("lock file released")
+}
+
 // readAuthURL reads the auth URL companion file for the given token path.
 // Returns the URL string, or empty string if the file doesn't exist or
 // can't be read.
@@ -290,6 +316,10 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 	if err = acquireLockFile(appTokenPath, log); err != nil {
 		return "", errors.Wrap(err, "failed to acquire app token lock")
 	}
+	// Release the lock when this fetch completes: holding it for the whole
+	// process lifetime makes a same-process re-fetch (after an invalid token
+	// was removed) deadlock on its own lock (issue #1692).
+	defer releaseLockFile(appTokenPath, log)
 
 	// check to see if another process has gotten a token while we waited for the lock
 	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
@@ -308,6 +338,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 		if err = acquireLockFile(orgTokenPath, log); err != nil {
 			return "", errors.Wrap(err, "failed to acquire org token lock")
 		}
+		defer releaseLockFile(orgTokenPath, log)
 		// check if an org token has been created since the lock was acquired
 		orgToken, err = GetOrgTokenIfExists(appInfo.AuthDomain)
 	}
