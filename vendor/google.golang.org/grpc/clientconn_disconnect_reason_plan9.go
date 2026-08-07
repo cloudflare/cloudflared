@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2021 gRPC authors.
+ * Copyright 2026 gRPC authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,24 @@
  *
  */
 
-package grpcutil
+package grpc
 
-import "regexp"
+import (
+	"context"
+	"errors"
+	"os"
+)
 
-// FullMatchWithRegex returns whether the full text matches the regex provided.
-func FullMatchWithRegex(re *regexp.Regexp, text string) bool {
-	if len(text) == 0 {
-		return re.MatchString(text)
+// disconnectErrorLabel returns the grpc.disconnect_error metric label for a
+// transport error, as specified by gRFC A94. syscall.Errno does not exist on
+// plan9, so only the portable classifications are available.
+func disconnectErrorLabel(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "subchannel shutdown"
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, os.ErrDeadlineExceeded):
+		return "connection timed out"
+	default:
+		return "unknown"
 	}
-	re.Longest()
-	rem := re.FindString(text)
-	return len(rem) == len(text)
 }
