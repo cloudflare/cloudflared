@@ -151,6 +151,7 @@ func (e *Encrypter) fetchKey(filename string) (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
 	buf := new(bytes.Buffer)
 	io.Copy(buf, f)
 
