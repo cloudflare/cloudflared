@@ -23,7 +23,22 @@ const (
 	appAUDHeader               = "CF-Access-Aud"
 	AccessLoginWorkerPath      = "/cdn-cgi/access/login"
 	AccessAuthorizedWorkerPath = "/cdn-cgi/access/authorized"
+	cloudflareAccessSuffix     = ".cloudflareaccess.com"
 )
+
+// isCloudflareAccessHost reports whether host is a Cloudflare Access team
+// hostname (*.cloudflareaccess.com). Used by GetAppInfo to verify that a
+// response carrying CF-Access-Domain / CF-Access-Aud values actually came
+// from the Cloudflare Access edge rather than from whatever host the user
+// originally invoked cloudflared against.
+func isCloudflareAccessHost(host string) bool {
+	// Drop a trailing port if present.
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	host = strings.ToLower(host)
+	return strings.HasSuffix(host, cloudflareAccessSuffix) && len(host) > len(cloudflareAccessSuffix)
+}
 
 var (
 	userAgent     = "DEV"
@@ -385,6 +400,15 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 	var aud string
 	location := resp.Request.URL
 	if strings.Contains(location.Path, AccessLoginWorkerPath) {
+		// The redirect chain stopped at a URL whose path matches the
+		// AccessLoginWorkerPath substring. That predicate alone does not
+		// guarantee the response actually came from Cloudflare — any host can
+		// expose a /cdn-cgi/access/login path. Verify the host belongs to the
+		// Cloudflare Access edge (*.cloudflareaccess.com) before treating
+		// CF-Access-Domain and the ?kid= query parameter as authoritative.
+		if !isCloudflareAccessHost(location.Hostname()) {
+			return nil, fmt.Errorf("AppInfo redirect endpoint served by non-Cloudflare host %q; refusing to trust response headers", location.Hostname())
+		}
 		aud = resp.Request.URL.Query().Get("kid")
 		if aud == "" {
 			return nil, errors.New("Empty app aud")
