@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,21 +20,23 @@ const (
 	keyName                    = "token"
 	tokenCookie                = "CF_Authorization"
 	appSessionCookie           = "CF_AppSession"
-	appDomainHeader            = "CF-Access-Domain"
-	appAUDHeader               = "CF-Access-Aud"
+	accessMetadataReqHeader    = "cf-access-metadata-request"
+	accessMetadataReqValue     = "true"
+	accessMetadataRespHeader   = "cf-access-metadata"
+	userAgentHeader            = "User-Agent"
 	AccessLoginWorkerPath      = "/cdn-cgi/access/login"
 	AccessAuthorizedWorkerPath = "/cdn-cgi/access/authorized"
+	metadataMatchType          = "match"
+	metadataMaxAge             = 24 * time.Hour
+	metadataAllowedClockSkew   = 5 * time.Minute
 )
 
-var (
-	userAgent     = "DEV"
-	signatureAlgs = []jose.SignatureAlgorithm{jose.RS256}
-)
+var userAgent = "DEV"
 
 type AppInfo struct {
-	AuthDomain string
-	AppAUD     string
-	AppDomain  string
+	AuthDomain  string
+	AppAUD      string
+	AppHostname string
 }
 
 // lockContent is the JSON structure written into lock files.
@@ -282,7 +285,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 		return token, nil
 	}
 
-	appTokenPath, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
+	appTokenPath, err := GenerateAppTokenFilePathFromURL(appInfo.AppHostname, appInfo.AppAUD, keyName)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to generate app token file path")
 	}
@@ -356,52 +359,106 @@ func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath strin
 	return resp.AppToken, nil
 }
 
-// GetAppInfo makes a request to the appURL and stops at the first redirect. The 302 location header will contain the
-// auth domain
+// GetAppInfo discovers the Access application protecting reqURL by requesting
+// a signed metadata JWT from the Cloudflare edge. The JWT signature is verified
+// against the account's public keys (fetched from the auth domain's JWKS
+// endpoint) to prevent an attacker-controlled server from spoofing app identity.
 func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
+	// Fetch the metadata JWT from the edge (no redirects followed).
+	rawJWT, err := fetchMetadataJWT(reqURL.String())
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode without verification to extract auth_domain for JWKS lookup.
+	unverified, err := decodeMetadataUnverified(rawJWT)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse auth_domain into the canonical hostname used for JWKS lookup.
+	authDomain, err := parseAuthDomain(unverified.AuthDomain)
+	if err != nil {
+		return nil, fmt.Errorf("metadata JWT auth_domain validation failed: %w", err)
+	}
+
+	// Verify the JWT signature against the JWKS (with disk cache + retry).
+	claims, err := verifyMetadataWithRetry(rawJWT, authDomain)
+	if err != nil {
+		return nil, fmt.Errorf("metadata JWT verification failed: %w", err)
+	}
+
+	// Verify the hostname in the JWT matches the URL we actually requested.
+	if !strings.EqualFold(claims.Hostname, reqURL.Hostname()) {
+		return nil, fmt.Errorf("metadata JWT hostname %q does not match request host %q", claims.Hostname, reqURL.Hostname())
+	}
+	if claims.Type != metadataMatchType {
+		return nil, fmt.Errorf("metadata JWT type %q is not match", claims.Type)
+	}
+	if claims.AUD == "" {
+		return nil, errors.New("metadata JWT aud is empty")
+	}
+	if err := validateMetadataIssuedAt(claims.IAT, time.Now()); err != nil {
+		return nil, err
+	}
+
+	appHostname := claims.AppHostname
+	if appHostname == "" {
+		// For retro-compatibility with CF access older releases, this will cause wildcard apps to store one local token
+		// per requested hostname, which is less optimized but also works.
+		appHostname = claims.Hostname
+	}
+
+	return &AppInfo{
+		AuthDomain:  authDomain.Hostname(),
+		AppAUD:      claims.AUD,
+		AppHostname: appHostname,
+	}, nil
+}
+
+// fetchMetadataJWT sends a HEAD request to reqURL with the metadata request
+// header and returns the raw JWT string from the response. No redirects are
+// followed.
+func fetchMetadataJWT(reqURL string) (string, error) {
 	client := &http.Client{
-		// do not follow redirects
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// stop after hitting login endpoint since it will contain app path
-			if strings.Contains(via[len(via)-1].URL.Path, AccessLoginWorkerPath) {
-				return http.ErrUseLastResponse
-			}
-			return nil
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 		Timeout: time.Second * 7,
 	}
 
-	appInfoReq, err := http.NewRequest("HEAD", reqURL.String(), nil)
+	req, err := http.NewRequest("HEAD", reqURL, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create app info request")
+		return "", errors.Wrap(err, "failed to create app info request")
 	}
-	appInfoReq.Header.Add("User-Agent", userAgent)
-	resp, err := client.Do(appInfoReq) // nolint: gosec
+	req.Header.Set(accessMetadataReqHeader, accessMetadataReqValue)
+	req.Header.Set(userAgentHeader, userAgent)
+
+	resp, err := client.Do(req) // nolint: gosec
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get app info")
+		return "", errors.Wrap(err, "failed to get app info")
 	}
 	_ = resp.Body.Close()
 
-	var aud string
-	location := resp.Request.URL
-	if strings.Contains(location.Path, AccessLoginWorkerPath) {
-		aud = resp.Request.URL.Query().Get("kid")
-		if aud == "" {
-			return nil, errors.New("Empty app aud")
-		}
-	} else if audHeader := resp.Header.Get(appAUDHeader); audHeader != "" {
-		// 403/401 from the edge will have aud in a header
-		aud = audHeader
-	} else {
-		return nil, fmt.Errorf("failed to find Access application at %s", reqURL.String())
+	rawJWT := resp.Header.Get(accessMetadataRespHeader)
+	if rawJWT == "" {
+		return "", fmt.Errorf("failed to find Access application at %s", reqURL)
 	}
+	return rawJWT, nil
+}
 
-	domain := resp.Header.Get(appDomainHeader)
-	if domain == "" {
-		return nil, errors.New("Empty app domain")
+func validateMetadataIssuedAt(iat int64, now time.Time) error {
+	if iat <= 0 {
+		return errors.New("metadata JWT iat is missing or invalid")
 	}
-
-	return &AppInfo{location.Hostname(), aud, domain}, nil
+	issuedAt := time.Unix(iat, 0)
+	if issuedAt.Before(now.Add(-metadataMaxAge)) {
+		return fmt.Errorf("metadata JWT is older than %s", metadataMaxAge)
+	}
+	if issuedAt.After(now.Add(metadataAllowedClockSkew)) {
+		return fmt.Errorf("metadata JWT is more than %s in the future", metadataAllowedClockSkew)
+	}
+	return nil
 }
 
 func handleRedirects(req *http.Request, via []*http.Request, orgToken string) error {
@@ -446,7 +503,7 @@ func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create app token request")
 	}
-	appTokenRequest.Header.Add("User-Agent", userAgent)
+	appTokenRequest.Header.Add(userAgentHeader, userAgent)
 	resp, err := client.Do(appTokenRequest) // nolint: gosec
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get app token")
@@ -491,7 +548,7 @@ func GetOrgTokenIfExists(authDomain string) (string, error) {
 }
 
 func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
-	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
+	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppHostname, appInfo.AppAUD, keyName)
 	if err != nil {
 		return "", err
 	}
@@ -509,6 +566,13 @@ func GetAppTokenIfExists(appInfo *AppInfo) (string, error) {
 		err := os.Remove(path)
 		return "", err
 	}
+	if !slices.Contains(payload.Aud, appInfo.AppAUD) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("failed to remove cached token with unexpected audience: %w", err)
+		}
+		return "", fmt.Errorf("cached token audience does not include expected application audience %q", appInfo.AppAUD)
+	}
+
 	return token.CompactSerialize()
 }
 
@@ -527,7 +591,7 @@ func getTokenIfExists(path string) (*jose.JSONWebSignature, error) {
 
 // RemoveTokenIfExists removes the a token from local storage if it exists
 func RemoveTokenIfExists(appInfo *AppInfo) error {
-	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppDomain, appInfo.AppAUD, keyName)
+	path, err := GenerateAppTokenFilePathFromURL(appInfo.AppHostname, appInfo.AppAUD, keyName)
 	if err != nil {
 		return err
 	}

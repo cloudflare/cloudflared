@@ -136,7 +136,7 @@ func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, 
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set(userAgentHeader, userAgent)
 	resp, err := client.Do(req) // nolint: gosec
 	if err != nil {
 		return nil, "", err
