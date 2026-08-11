@@ -6,3 +6,10 @@ images:
     architectures:
     - amd64
     - arm64
+  - name: cloudflared-fips
+    dockerfile: Dockerfile.fips.$ARCH
+    context: .
+    version_file: versions-internal
+    architectures:
+    - amd64
+    - arm64
