@@ -851,6 +851,13 @@ func (s *connection) handleHandshakeComplete(now time.Time) error {
 }
 
 func (s *connection) handleHandshakeConfirmed(now time.Time) error {
+	// Drop initial keys.
+	// On the client side, this should have happened when sending the first Handshake packet,
+	// but this is not guaranteed if the server misbehaves.
+	// See CVE-2025-59530 for more details.
+	if err := s.dropEncryptionLevel(protocol.EncryptionInitial, now); err != nil {
+		return err
+	}
 	if err := s.dropEncryptionLevel(protocol.EncryptionHandshake, now); err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,4 +112,36 @@ func TestNewSelfLockContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(os.Getpid()), content.PID) // nolint: gosec
 	assert.Positive(t, content.StartTime)
+}
+
+func TestReleaseLockFileAllowsReacquire(t *testing.T) {
+	// Regression test for the `access login` self-deadlock (issue #1692):
+	// the token lock was held for the whole process lifetime, so a second
+	// fetch in the same process (after an invalid token was removed) waited
+	// forever on its own lock. After release, the same process can acquire
+	// the lock again.
+	log := zerolog.Nop()
+	path := filepath.Join(t.TempDir(), "token")
+
+	require.NoError(t, acquireLockFile(path, &log))
+	releaseLockFile(path, &log)
+	require.NoError(t, acquireLockFile(path, &log), "must be able to re-acquire after release")
+	releaseLockFile(path, &log)
+}
+
+func TestReleaseLockFileDoesNotRemoveOtherProcessLock(t *testing.T) {
+	// Releasing must not remove a lock owned by another process.
+	log := zerolog.Nop()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "token")
+	lockPath := path + ".lock"
+
+	other := lockContent{PID: 2147483647, StartTime: 1000000000000}
+	data, err := json.Marshal(other)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(lockPath, data, 0600))
+
+	releaseLockFile(path, &log)
+	_, err = os.Stat(lockPath)
+	require.NoError(t, err, "another process's lock must not be removed")
 }
