@@ -22,6 +22,7 @@ func TestCanonicalizeRequestPath(t *testing.T) {
 		{name: "encoded slash traversal collapsed", rawURL: "http://h/public/..%2fadmin", wantPath: "/admin"},
 		{name: "duplicate slashes collapsed", rawURL: "http://h/public//admin", wantPath: "/public/admin"},
 		{name: "current-dir segment collapsed", rawURL: "http://h/public/./admin", wantPath: "/public/admin"},
+		{name: "trailing slash preserved", rawURL: "http://h/public/../admin/", wantPath: "/admin/"},
 		{name: "root preserved", rawURL: "http://h/", wantPath: "/"},
 		// RFC 3986 remove_dot_segments absorbs excess ".." on absolute paths
 		// rather than escaping root, so these resolve safely to an in-root path.
