@@ -1,3 +1,6 @@
+2026.8.1
+- 2026-08-13 VULN-141859: Fix missing trailing slash
+
 2026.8.0
 - 2026-08-12 AUTH-9041 Generate ephemeral keypair for login token transfer
 - 2026-08-12 VULN-141859: Normalize request path
