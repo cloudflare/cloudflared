@@ -530,7 +530,7 @@ func TestServeUDPSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 
 	// Establish QUIC connection with edge
-	edgeQUICSessionChan := make(chan quic.Connection)
+	edgeQUICSessionChan := make(chan *quic.Conn)
 	go func() {
 		earlyListener, err := quic.Listen(udpListener, testTLSServerConfig, testQUICConfig)
 		assert.NoError(t, err)
@@ -779,7 +779,7 @@ func TestDialQuicWithSkipPortReuse(t *testing.T) {
 	<-serverDone
 }
 
-func serveSession(ctx context.Context, datagramConn *datagramV2Connection, edgeQUICSession quic.Connection, closeType closeReason, expectedReason string, t *testing.T) {
+func serveSession(ctx context.Context, datagramConn *datagramV2Connection, edgeQUICSession cfdquic.QUICConnection, closeType closeReason, expectedReason string, t *testing.T) {
 	payload := []byte(t.Name())
 	sessionID := uuid.New()
 	cfdConn, originConn := net.Pipe()
@@ -843,7 +843,7 @@ const (
 	closedByTimeout
 )
 
-func runRPCServer(ctx context.Context, session quic.Connection, sessionRPCServer pogs.SessionManager, configRPCServer pogs.ConfigurationManager, t *testing.T) {
+func runRPCServer(ctx context.Context, session cfdquic.QUICConnection, sessionRPCServer pogs.SessionManager, configRPCServer pogs.ConfigurationManager, t *testing.T) {
 	stream, err := session.AcceptStream(ctx)
 	require.NoError(t, err)
 

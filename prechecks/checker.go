@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/features"
 )
 
 const (
@@ -59,7 +60,10 @@ func (tr TransportResults) Collect() []CheckResult {
 //
 // Each failed probe is retried up to maxRetries times with exponential backoff.
 // The suite is bounded by cfg.Timeout (defaultTimeout if zero).
-func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, runDialers RunDialers) Report {
+//
+// pqMode controls the TLS curve preferences advertised during probe handshakes,
+// matching the key-exchange algorithms used by the real tunnel connections.
+func Run(ctx context.Context, caCert string, cfg Config, pqMode features.PostQuantumMode, log *zerolog.Logger, runDialers RunDialers) Report {
 	runID := uuid.New()
 
 	if cfg.Timeout <= 0 {
@@ -68,9 +72,10 @@ func Run(ctx context.Context, caCert string, cfg Config, log *zerolog.Logger, ru
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	// Build TLS configs once per protocol.
-	quicTLSConfig, quicTLSErr := probeTLSConfig(caCert, connection.QUIC)
-	http2TLSConfig, http2TLSErr := probeTLSConfig(caCert, connection.HTTP2)
+	// Build TLS configs once per protocol, applying the same curve preferences
+	// (including post-quantum curves) used by production tunnel connections.
+	quicTLSConfig, quicTLSErr := probeTLSConfig(caCert, connection.QUIC, pqMode)
+	http2TLSConfig, http2TLSErr := probeTLSConfig(caCert, connection.HTTP2, pqMode)
 
 	// 1) Resolve edge addresses. Each ResolvedTarget bundles its addr group
 	//    with the DNS CheckResult that labels it, keeping the two in sync.

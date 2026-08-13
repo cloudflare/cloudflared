@@ -22,7 +22,7 @@ func parseMaxDataFrame(b []byte, _ protocol.Version) (*MaxDataFrame, int, error)
 }
 
 func (f *MaxDataFrame) Append(b []byte, _ protocol.Version) ([]byte, error) {
-	b = append(b, maxDataFrameType)
+	b = append(b, byte(FrameTypeMaxData))
 	b = quicvarint.Append(b, uint64(f.MaximumData))
 	return b, nil
 }

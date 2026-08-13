@@ -15,8 +15,10 @@ import (
 	"github.com/cloudflare/cloudflared/connection/dialopts"
 
 	"github.com/cloudflare/cloudflared/connection"
+	cfdcrypto "github.com/cloudflare/cloudflared/crypto"
 	edgedial "github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/features"
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tlsconfig"
 )
@@ -110,10 +112,13 @@ func (d *NetManagementDialer) DialContext(ctx context.Context, network, addr str
 }
 
 // probeTLSConfig builds a *tls.Config for a pre-check probe using the same
-// certificate pool as the production tunnel. The SNI and NextProtos are taken from
-// p.ProbeTLSSettings() so that the probe SNI is used instead of the production SNI,
-// which avoids noisy logs in origintunneld.
-func probeTLSConfig(caCert string, p connection.Protocol) (*tls.Config, error) {
+// certificate pool and curve preferences as the production tunnel. The SNI and
+// NextProtos are taken from p.ProbeTLSSettings() so that the probe SNI is used
+// instead of the production SNI, which avoids noisy logs in origintunneld.
+// Curve preferences are set via cfdcrypto.TLSConfigWithCurvePreferences so that
+// prechecks advertise the same key-exchange algorithms (including post-quantum
+// curves) as the real QUIC/H2 connections.
+func probeTLSConfig(caCert string, p connection.Protocol, pqMode features.PostQuantumMode) (*tls.Config, error) {
 	settings := p.ProbeTLSSettings()
 	if settings == nil {
 		return nil, fmt.Errorf("no probe TLS settings for protocol %s", p)
@@ -124,6 +129,10 @@ func probeTLSConfig(caCert string, p connection.Protocol) (*tls.Config, error) {
 	}
 	if len(settings.NextProtos) > 0 {
 		cfg.NextProtos = settings.NextProtos
+	}
+	cfg, err = cfdcrypto.TLSConfigWithCurvePreferences(cfg, pqMode)
+	if err != nil {
+		return nil, fmt.Errorf("apply curve preferences: %w", err)
 	}
 	return cfg, nil
 }

@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 )
 
@@ -42,7 +43,7 @@ type Cubic struct {
 	numConnections int
 
 	// Time when this cycle started, after last loss event.
-	epoch time.Time
+	epoch monotime.Time
 
 	// Max congestion window used just before last loss event.
 	// Note: to improve fairness to other streams an additional back off is
@@ -77,7 +78,7 @@ func NewCubic(clock Clock) *Cubic {
 
 // Reset is called after a timeout to reset the cubic state
 func (c *Cubic) Reset() {
-	c.epoch = time.Time{}
+	c.epoch = 0
 	c.lastMaxCongestionWindow = 0
 	c.ackedBytesCount = 0
 	c.estimatedTCPcongestionWindow = 0
@@ -121,7 +122,7 @@ func (c *Cubic) OnApplicationLimited() {
 	// in such a period. This reset effectively freezes congestion window growth
 	// through application-limited periods and allows Cubic growth to continue
 	// when the entire window is being used.
-	c.epoch = time.Time{}
+	c.epoch = 0
 }
 
 // CongestionWindowAfterPacketLoss computes a new congestion window to use after
@@ -135,7 +136,7 @@ func (c *Cubic) CongestionWindowAfterPacketLoss(currentCongestionWindow protocol
 	} else {
 		c.lastMaxCongestionWindow = currentCongestionWindow
 	}
-	c.epoch = time.Time{} // Reset time.
+	c.epoch = 0 // Reset time.
 	return protocol.ByteCount(float32(currentCongestionWindow) * c.beta())
 }
 
@@ -147,7 +148,7 @@ func (c *Cubic) CongestionWindowAfterAck(
 	ackedBytes protocol.ByteCount,
 	currentCongestionWindow protocol.ByteCount,
 	delayMin time.Duration,
-	eventTime time.Time,
+	eventTime monotime.Time,
 ) protocol.ByteCount {
 	c.ackedBytesCount += ackedBytes
 

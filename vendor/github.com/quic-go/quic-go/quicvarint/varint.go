@@ -1,6 +1,7 @@
 package quicvarint
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 )
@@ -18,6 +19,14 @@ const (
 	maxVarInt4 = 1073741823
 	maxVarInt8 = 4611686018427387903
 )
+
+type varintLengthError struct {
+	Num uint64
+}
+
+func (e *varintLengthError) Error() string {
+	return fmt.Sprintf("value doesn't fit into 62 bits: %d", e.Num)
+}
 
 // Read reads a number in the QUIC varint format from r.
 func Read(r io.ByteReader) (uint64, error) {
@@ -74,23 +83,30 @@ func Parse(b []byte) (uint64 /* value */, int /* bytes consumed */, error) {
 	if len(b) == 0 {
 		return 0, 0, io.EOF
 	}
-	firstByte := b[0]
-	// the first two bits of the first byte encode the length
-	l := 1 << ((firstByte & 0xc0) >> 6)
-	if len(b) < l {
-		return 0, 0, io.ErrUnexpectedEOF
+
+	first := b[0]
+	switch first >> 6 {
+	case 0: // 1-byte encoding: 00xxxxxx
+		return uint64(first & 0b00111111), 1, nil
+	case 1: // 2-byte encoding: 01xxxxxx
+		if len(b) < 2 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		return uint64(b[1]) | uint64(first&0b00111111)<<8, 2, nil
+	case 2: // 4-byte encoding: 10xxxxxx
+		if len(b) < 4 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		return uint64(b[3]) | uint64(b[2])<<8 | uint64(b[1])<<16 | uint64(first&0b00111111)<<24, 4, nil
+	case 3: // 8-byte encoding: 00xxxxxx
+		if len(b) < 8 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+		// binary.BigEndian.Uint64 only reads the first 8 bytes. Passing the full slice avoids slicing overhead.
+		return binary.BigEndian.Uint64(b) & 0x3fffffffffffffff, 8, nil
 	}
-	b0 := firstByte & (0xff - 0xc0)
-	if l == 1 {
-		return uint64(b0), 1, nil
-	}
-	if l == 2 {
-		return uint64(b[1]) + uint64(b0)<<8, 2, nil
-	}
-	if l == 4 {
-		return uint64(b[3]) + uint64(b[2])<<8 + uint64(b[1])<<16 + uint64(b0)<<24, 4, nil
-	}
-	return uint64(b[7]) + uint64(b[6])<<8 + uint64(b[5])<<16 + uint64(b[4])<<24 + uint64(b[3])<<32 + uint64(b[2])<<40 + uint64(b[1])<<48 + uint64(b0)<<56, 8, nil
+
+	panic("unreachable")
 }
 
 // Append appends i in the QUIC varint format.
@@ -110,7 +126,7 @@ func Append(b []byte, i uint64) []byte {
 			uint8(i >> 24), uint8(i >> 16), uint8(i >> 8), uint8(i),
 		}...)
 	}
-	panic(fmt.Sprintf("%#x doesn't fit into 62 bits", i))
+	panic(&varintLengthError{Num: i})
 }
 
 // AppendWithLen append i in the QUIC varint format with the desired length.
@@ -143,6 +159,8 @@ func AppendWithLen(b []byte, i uint64, length int) []byte {
 }
 
 // Len determines the number of bytes that will be needed to write the number i.
+//
+//gcassert:inline
 func Len(i uint64) int {
 	if i <= maxVarInt1 {
 		return 1
@@ -158,8 +176,5 @@ func Len(i uint64) int {
 	}
 	// Don't use a fmt.Sprintf here to format the error message.
 	// The function would then exceed the inlining budget.
-	panic(struct {
-		message string
-		num     uint64
-	}{"value doesn't fit into 62 bits: ", i})
+	panic(&varintLengthError{Num: i})
 }

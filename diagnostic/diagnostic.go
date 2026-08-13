@@ -18,6 +18,7 @@ import (
 
 	network "github.com/cloudflare/cloudflared/diagnostic/network"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
+	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/prechecks"
 )
 
@@ -470,7 +471,7 @@ func collectPrechecks(region string) collectFunc {
 		}
 
 		emptyCert := ""
-		report := prechecks.Run(ctx, emptyCert, cfg, &log, dialers)
+		report := prechecks.Run(ctx, emptyCert, cfg, features.PostQuantumPrefer, &log, dialers)
 
 		// Write the report to a JSON file
 		// nolint: gosec

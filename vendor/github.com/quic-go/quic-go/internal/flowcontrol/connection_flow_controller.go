@@ -3,8 +3,8 @@ package flowcontrol
 import (
 	"errors"
 	"fmt"
-	"time"
 
+	"github.com/quic-go/quic-go/internal/monotime"
 	"github.com/quic-go/quic-go/internal/protocol"
 	"github.com/quic-go/quic-go/internal/qerr"
 	"github.com/quic-go/quic-go/internal/utils"
@@ -38,7 +38,7 @@ func NewConnectionFlowController(
 }
 
 // IncrementHighestReceived adds an increment to the highestReceived value
-func (c *connectionFlowController) IncrementHighestReceived(increment protocol.ByteCount, now time.Time) error {
+func (c *connectionFlowController) IncrementHighestReceived(increment protocol.ByteCount, now monotime.Time) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -65,7 +65,7 @@ func (c *connectionFlowController) AddBytesRead(n protocol.ByteCount) (hasWindow
 	return c.hasWindowUpdate()
 }
 
-func (c *connectionFlowController) GetWindowUpdate(now time.Time) protocol.ByteCount {
+func (c *connectionFlowController) GetWindowUpdate(now monotime.Time) protocol.ByteCount {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -79,7 +79,7 @@ func (c *connectionFlowController) GetWindowUpdate(now time.Time) protocol.ByteC
 
 // EnsureMinimumWindowSize sets a minimum window size
 // it should make sure that the connection-level window is increased when a stream-level window grows
-func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCount, now time.Time) {
+func (c *connectionFlowController) EnsureMinimumWindowSize(inc protocol.ByteCount, now monotime.Time) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 

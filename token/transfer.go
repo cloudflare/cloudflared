@@ -30,7 +30,7 @@ const (
 // If urlFilePath is non-empty, the generated auth URL is written to that path so
 // other waiting processes can display it to the user. Pass "" to skip.
 func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, shouldEncrypt bool, useHostOnly bool, autoClose bool, fedramp bool, log *zerolog.Logger, urlFilePath string) ([]byte, error) {
-	encrypterClient, err := NewEncrypter("cloudflared_priv.pem", "cloudflared_pub.pem")
+	encrypterClient, err := NewEncrypter()
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func poll(client *http.Client, requestURL string, log *zerolog.Logger) ([]byte, 
 	if err != nil {
 		return nil, "", err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set(userAgentHeader, userAgent)
 	resp, err := client.Do(req) // nolint: gosec
 	if err != nil {
 		return nil, "", err

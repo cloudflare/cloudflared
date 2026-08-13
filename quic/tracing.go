@@ -2,19 +2,20 @@ package quic
 
 import (
 	"context"
-	"net"
+	"time"
 
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 	"github.com/rs/zerolog"
 )
 
-// QUICTracer is a wrapper to create new quicConnTracer
+// tracer builds a connTracer for each new QUIC connection.
 type tracer struct {
 	index  string
 	logger *zerolog.Logger
 }
 
-func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, logging.Perspective, logging.ConnectionID) *logging.ConnectionTracer {
+func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, bool, qlog.ConnectionID) qlogwriter.Trace {
 	t := &tracer{
 		index:  uint8ToString(index),
 		logger: logger,
@@ -22,85 +23,111 @@ func NewClientTracer(logger *zerolog.Logger, index uint8) func(context.Context, 
 	return t.TracerForConnection
 }
 
-func (t *tracer) TracerForConnection(_ctx context.Context, _p logging.Perspective, _odcid logging.ConnectionID) *logging.ConnectionTracer {
+// TracerForConnection returns a qlogwriter.Trace for a new connection.
+func (t *tracer) TracerForConnection(_ context.Context, _ bool, _ qlog.ConnectionID) qlogwriter.Trace {
 	return newConnTracer(newClientCollector(t.index, t.logger))
 }
 
-// connTracer collects connection level metrics
+// connTracer collects connection level metrics. It implements
+// qlogwriter.Trace + qlogwriter.Recorder and dispatches qlog events to the
+// metric-collection methods via RecordEvent.
 type connTracer struct {
 	metricsCollector *clientCollector
 }
 
-func newConnTracer(metricsCollector *clientCollector) *logging.ConnectionTracer {
-	tracer := connTracer{
+func newConnTracer(metricsCollector *clientCollector) *connTracer {
+	return &connTracer{
 		metricsCollector: metricsCollector,
-	}
-	return &logging.ConnectionTracer{
-		StartedConnection:           tracer.StartedConnection,
-		ClosedConnection:            tracer.ClosedConnection,
-		ReceivedTransportParameters: tracer.ReceivedTransportParameters,
-		SentLongHeaderPacket:        tracer.SentLongHeaderPacket,
-		SentShortHeaderPacket:       tracer.SentShortHeaderPacket,
-		ReceivedLongHeaderPacket:    tracer.ReceivedLongHeaderPacket,
-		ReceivedShortHeaderPacket:   tracer.ReceivedShortHeaderPacket,
-		BufferedPacket:              tracer.BufferedPacket,
-		DroppedPacket:               tracer.DroppedPacket,
-		UpdatedMetrics:              tracer.UpdatedMetrics,
-		LostPacket:                  tracer.LostPacket,
-		UpdatedMTU:                  tracer.UpdatedMTU,
-		UpdatedCongestionState:      tracer.UpdatedCongestionState,
 	}
 }
 
-func (ct *connTracer) StartedConnection(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
+func (ct *connTracer) AddProducer() qlogwriter.Recorder {
+	// connTracer is both the Trace and the Recorder: each connection gets
+	// exactly one producer that routes events to the collector methods below.
+	return ct
+}
+
+func (ct *connTracer) SupportsSchemas(_ string) bool {
+	return true
+}
+
+// RecordEvent dispatches qlog events to the collector methods.
+func (ct *connTracer) RecordEvent(ev qlogwriter.Event) {
+	switch e := ev.(type) {
+	case qlog.StartedConnection:
+		ct.StartedConnection()
+	case qlog.ConnectionClosed:
+		ct.ClosedConnection()
+	case qlog.ParametersSet:
+		// ParametersSet fires for both local and remote; filter to remote only
+		// via the Initiator field.
+		if e.Initiator == qlog.InitiatorRemote {
+			ct.ReceivedTransportParameters(int64(e.MaxUDPPayloadSize), e.MaxIdleTimeout, int64(e.MaxDatagramFrameSize))
+		}
+	case qlog.PacketSent:
+		ct.SentPacket(int64(e.Raw.Length), e.Frames)
+	case qlog.PacketReceived:
+		ct.ReceivedPacket(int64(e.Raw.Length), e.Frames)
+	case qlog.PacketBuffered:
+		ct.BufferedPacket(e.Header.PacketType)
+	case qlog.PacketDropped:
+		ct.DroppedPacket(e.Header.PacketType, int64(e.Raw.Length), e.Trigger)
+	case qlog.PacketLost:
+		ct.LostPacket(e.Trigger)
+	case qlog.MetricsUpdated:
+		ct.UpdatedMetrics(e)
+	case qlog.MTUUpdated:
+		ct.UpdatedMTU(int64(e.Value))
+	case qlog.CongestionStateUpdated:
+		ct.UpdatedCongestionState(e.State)
+	}
+}
+
+func (ct *connTracer) Close() error {
+	return nil
+}
+
+func (ct *connTracer) StartedConnection() {
 	ct.metricsCollector.startedConnection()
 }
 
-func (ct *connTracer) ClosedConnection(err error) {
-	ct.metricsCollector.closedConnection(err)
+func (ct *connTracer) ClosedConnection() {
+	ct.metricsCollector.closedConnection()
 }
 
-func (ct *connTracer) ReceivedTransportParameters(params *logging.TransportParameters) {
-	ct.metricsCollector.receivedTransportParameters(params)
+func (ct *connTracer) ReceivedTransportParameters(maxUDPPayloadSize int64, maxIdleTimeout time.Duration, maxDatagramFrameSize int64) {
+	ct.metricsCollector.receivedTransportParameters(maxUDPPayloadSize, maxIdleTimeout, maxDatagramFrameSize)
 }
 
-func (ct *connTracer) BufferedPacket(pt logging.PacketType, size logging.ByteCount) {
+func (ct *connTracer) SentPacket(size int64, frames []qlog.Frame) {
+	ct.metricsCollector.sentPackets(size, frames)
+}
+
+func (ct *connTracer) ReceivedPacket(size int64, frames []qlog.Frame) {
+	ct.metricsCollector.receivedPackets(size, frames)
+}
+
+func (ct *connTracer) BufferedPacket(pt qlog.PacketType) {
 	ct.metricsCollector.bufferedPackets(pt)
 }
 
-func (ct *connTracer) DroppedPacket(pt logging.PacketType, number logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
+func (ct *connTracer) DroppedPacket(pt qlog.PacketType, size int64, reason qlog.PacketDropReason) {
 	ct.metricsCollector.droppedPackets(pt, size, reason)
 }
 
-func (ct *connTracer) LostPacket(level logging.EncryptionLevel, number logging.PacketNumber, reason logging.PacketLossReason) {
+func (ct *connTracer) LostPacket(reason qlog.PacketLossReason) {
 	ct.metricsCollector.lostPackets(reason)
 }
 
-func (ct *connTracer) UpdatedMetrics(rttStats *logging.RTTStats, cwnd, bytesInFlight logging.ByteCount, packetsInFlight int) {
-	ct.metricsCollector.updatedRTT(rttStats)
-	ct.metricsCollector.updateCongestionWindow(cwnd)
+func (ct *connTracer) UpdatedMetrics(m qlog.MetricsUpdated) {
+	ct.metricsCollector.updatedRTT(m)
+	ct.metricsCollector.updateCongestionWindow(int64(m.CongestionWindow))
 }
 
-func (ct *connTracer) SentLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
-	ct.metricsCollector.sentPackets(size, frames)
-}
-
-func (ct *connTracer) SentShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, ack *logging.AckFrame, frames []logging.Frame) {
-	ct.metricsCollector.sentPackets(size, frames)
-}
-
-func (ct *connTracer) ReceivedLongHeaderPacket(hdr *logging.ExtendedHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
-	ct.metricsCollector.receivedPackets(size, frames)
-}
-
-func (ct *connTracer) ReceivedShortHeaderPacket(hdr *logging.ShortHeader, size logging.ByteCount, ecn logging.ECN, frames []logging.Frame) {
-	ct.metricsCollector.receivedPackets(size, frames)
-}
-
-func (ct *connTracer) UpdatedMTU(mtu logging.ByteCount, done bool) {
+func (ct *connTracer) UpdatedMTU(mtu int64) {
 	ct.metricsCollector.updateMTU(mtu)
 }
 
-func (ct *connTracer) UpdatedCongestionState(state logging.CongestionState) {
+func (ct *connTracer) UpdatedCongestionState(state qlog.CongestionState) {
 	ct.metricsCollector.updatedCongestionState(state)
 }

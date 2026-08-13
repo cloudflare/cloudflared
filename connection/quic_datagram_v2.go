@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pkgerrors "github.com/pkg/errors"
+	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -22,7 +22,7 @@ import (
 	"github.com/cloudflare/cloudflared/packet"
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	rpcquic "github.com/cloudflare/cloudflared/tunnelrpc/quic"
 )
 
@@ -31,14 +31,14 @@ const (
 	demuxChanCapacity = 16
 )
 
-var errInvalidDestinationIP = pkgerrors.New("unable to parse destination IP")
+var errInvalidDestinationIP = errors.New("unable to parse destination IP")
 
 // DatagramSessionHandler is a service that can serve datagrams for a connection and handle sessions from incoming
 // connection streams.
 type DatagramSessionHandler interface {
 	Serve(context.Context) error
 
-	tunnelpogs.SessionManager
+	pogs.SessionManager
 }
 
 type datagramV2Connection struct {
@@ -111,7 +111,7 @@ func (d *datagramV2Connection) Serve(ctx context.Context) error {
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
-func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*tunnelpogs.RegisterUdpSessionResponse, error) {
+func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*pogs.RegisterUdpSessionResponse, error) {
 	traceCtx := tracing.NewTracedContext(ctx, traceContext, q.logger)
 	ctx, registerSpan := traceCtx.Tracer().Start(traceCtx, "register-session", trace.WithAttributes(
 		attribute.String("session-id", sessionID.String()),
@@ -123,7 +123,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 	if err := q.flowLimiter.Acquire(management.UDP.String()); err != nil {
 		log.Warn().Msgf("Too many concurrent sessions being handled, rejecting udp proxy to %s:%d", dstIP, dstPort)
 
-		err := pkgerrors.Wrap(err, "failed to start udp session due to rate limiting")
+		err := errors.Wrap(err, "failed to start udp session due to rate limiting")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 		Msgf("Registered session")
 	tracing.End(registerSpan)
 
-	resp := tunnelpogs.RegisterUdpSessionResponse{
+	resp := pogs.RegisterUdpSessionResponse{
 		Spans: traceCtx.GetProtoSpans(),
 	}
 

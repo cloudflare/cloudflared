@@ -158,6 +158,10 @@ endif
 container:
 	docker build --build-arg=TARGET_ARCH=$(TARGET_ARCH) --build-arg=TARGET_OS=$(TARGET_OS) -t cloudflare/cloudflared-$(TARGET_OS)-$(TARGET_ARCH):"$(VERSION)" .
 
+.PHONY: container-fips
+container-fips:
+	docker build -f Dockerfile.fips.$(TARGET_ARCH) -t cloudflare/cloudflared-fips-linux-$(TARGET_ARCH):"$(VERSION)" .
+
 .PHONY: generate-docker-version
 generate-docker-version:
 	echo latest $(VERSION) > versions

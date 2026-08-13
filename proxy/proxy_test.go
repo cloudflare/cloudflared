@@ -223,9 +223,9 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 			}
 			if ctx.Err() == context.DeadlineExceeded {
 				t.Errorf("Test timed out")
-				readPipe.Close()
-				writePipe.Close()
-				responseWriter.Close()
+				_ = readPipe.Close()
+				_ = writePipe.Close()
+				_ = responseWriter.Close()
 			}
 			return nil
 		})
@@ -647,7 +647,7 @@ func TestConnections(t *testing.T) {
 				ingressServiceScheme: "tcp://",
 				originService: func(t *testing.T, ln net.Listener) {
 					// closing the listener created by the test.
-					ln.Close()
+					_ = ln.Close()
 				},
 				eyeballResponseWriter: newTCPRespWriter(replayer),
 				eyeballRequestBody:    newTCPRequestBody([]byte("test2")),
@@ -801,8 +801,8 @@ func (p *pipedRequestBody) roundtrip(addr string) []byte {
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
-	defer resp.Body.Close()
+	defer func() { _ = conn.Close() }()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		panic(fmt.Errorf("resp returned status code: %d", resp.StatusCode))
@@ -949,7 +949,7 @@ func runEchoTCPService(t *testing.T, l net.Listener) {
 			if err != nil {
 				panic(err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			for {
 				buf := make([]byte, 1024)
@@ -987,7 +987,7 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			t.Log(err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			messageType, p, err := conn.ReadMessage()
@@ -1013,4 +1013,67 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			panic(err)
 		}
 	}()
+}
+
+// TestProxyPathTraversalBypassesAccessRule ensures a traversal path resolves to
+// its canonical resource before rule selection. ^/public proxies to the origin;
+// the catch-all models an Access-protected rule as http_status:403. After
+// canonicalization GET /public/../admin becomes /admin, so the protected rule
+// fires and the origin is never reached.
+func TestProxyPathTraversalBypassesAccessRule(t *testing.T) {
+	var originHit bool
+	var originPath string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originHit = true
+		originPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("admin-data"))
+	}))
+	defer origin.Close()
+
+	unvalidatedIngress := []config.UnvalidatedIngressRule{
+		{Hostname: "app.example.com", Path: "^/public", Service: origin.URL},
+		{Hostname: "app.example.com", Service: "http_status:403"},
+		{Hostname: "*", Service: "http_status:404"},
+	}
+
+	ingressRule, err := ingress.ParseIngress(&config.Configuration{
+		TunnelID: t.Name(),
+		Ingress:  unvalidatedIngress,
+	})
+	require.NoError(t, err)
+
+	log := zerolog.Nop()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	require.NoError(t, ingressRule.StartOrigins(&log, ctx.Done()))
+
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &log)
+	proxy := NewOriginProxy(ingressRule, originDialer, testTags, cfdflow.NewLimiter(0), &log)
+
+	traversalVariants := []string{
+		"http://app.example.com/public/../admin",
+		"http://app.example.com/public/%2e%2e/admin",
+		"http://app.example.com/public/..%2fadmin",
+	}
+
+	for _, target := range traversalVariants {
+		t.Run(target, func(t *testing.T) {
+			originHit = false
+			originPath = ""
+
+			responseWriter := newMockHTTPRespWriter()
+			req, err := http.NewRequest(http.MethodGet, target, nil)
+			require.NoError(t, err)
+
+			require.NoError(t, proxy.ProxyHTTP(responseWriter, tracing.NewTracedHTTPRequest(req, 0, &log), false))
+
+			assert.Equal(t, http.StatusForbidden, responseWriter.Code)
+			assert.False(t, originHit)
+			assert.Empty(t, originPath)
+		})
+	}
 }
