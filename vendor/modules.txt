@@ -497,6 +497,11 @@ nhooyr.io/websocket/internal/bpool
 nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
+# rsc.io/qr v0.2.0
+## explicit
+rsc.io/qr
+rsc.io/qr/coding
+rsc.io/qr/gf256
 # zombiezen.com/go/capnproto2 v2.18.0+incompatible
 ## explicit
 zombiezen.com/go/capnproto2
