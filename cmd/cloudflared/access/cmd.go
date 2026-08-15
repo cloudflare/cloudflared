@@ -340,7 +340,7 @@ func curl(c *cli.Context) error {
 			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), log)
+		tok, err = token.FetchToken(appURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), c.Duration(accessTimeoutFlag), log)
 		if err != nil {
 			log.Err(err).Msg("Failed to refresh token")
 			return err
@@ -460,7 +460,7 @@ func sshGen(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), log)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), c.Duration(accessTimeoutFlag), log)
 	if err != nil {
 		return err
 	}
@@ -593,10 +593,7 @@ func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, err
 	query.Set("cloudflared_token_check", "true")
 	req.URL.RawQuery = query.Encode()
 
-	timeout := options.Timeout
-	if timeout <= 0 {
-		timeout = token.DefaultAccessTimeout
-	}
+	timeout := token.ResolveAccessTimeout(options.Timeout)
 
 	// Do not follow redirects
 	client := &http.Client{

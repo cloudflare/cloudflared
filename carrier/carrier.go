@@ -145,7 +145,7 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 		return nil, err
 	}
 
-	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, options.IsFedramp, log)
+	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, options.IsFedramp, options.Timeout, log)
 	if err != nil {
 		return nil, err
 	}
