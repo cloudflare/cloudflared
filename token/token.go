@@ -425,6 +425,10 @@ func GetAppInfo(reqURL *url.URL, timeout time.Duration) (*AppInfo, error) {
 // header and returns the raw JWT string from the response. No redirects are
 // followed.
 func fetchMetadataJWT(reqURL string, timeout time.Duration) (string, error) {
+	if timeout <= 0 {
+		timeout = DefaultAccessTimeout
+	}
+
 	client := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse

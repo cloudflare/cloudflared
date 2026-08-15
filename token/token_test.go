@@ -306,6 +306,22 @@ func TestFetchMetadataJWT_DefaultTimeoutPreservesCurrentBehavior(t *testing.T) {
 	assert.Equal(t, rawJWT, got)
 }
 
+func TestFetchMetadataJWT_ZeroTimeoutFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	// A 0 timeout must not disable the client's timeout (net/http treats 0 as
+	// "no timeout"); it should fall back to DefaultAccessTimeout instead.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.Header().Set(accessMetadataRespHeader, "irrelevant")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	_, err := fetchMetadataJWT(server.URL, 0)
+	require.NoError(t, err)
+}
+
 func TestValidateMetadataIssuedAt(t *testing.T) {
 	t.Parallel()
 
