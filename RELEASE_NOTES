@@ -1,3 +1,6 @@
+2026.8.2
+- 2026-08-14 VULN-141859: Revert path normalization
+
 2026.8.1
 - 2026-08-13 VULN-141859: Fix missing trailing slash
 

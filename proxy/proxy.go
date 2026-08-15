@@ -87,12 +87,6 @@ func (p *Proxy) ProxyHTTP(
 
 	req := tr.Request
 	p.appendTagHeaders(req)
-
-	// Canonicalize the path so rule selection and origin forwarding agree on
-	// the same resource, preventing dot-segment traversal from bypassing a
-	// rule's Access middleware.
-	canonicalizeRequestPath(req)
-
 	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
 		trace.WithAttributes(attribute.String("req-host", req.Host)))
 	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
