@@ -31,6 +31,11 @@ const (
 	metadataAllowedClockSkew   = 5 * time.Minute
 )
 
+// DefaultAccessTimeout is the default HTTP timeout used for Access login/token
+// requests (fetching app metadata from the edge, and verifying a cached token
+// against the origin) when no timeout is explicitly configured.
+const DefaultAccessTimeout = 7 * time.Second
+
 var userAgent = "DEV"
 
 type AppInfo struct {
@@ -363,9 +368,9 @@ func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath strin
 // a signed metadata JWT from the Cloudflare edge. The JWT signature is verified
 // against the account's public keys (fetched from the auth domain's JWKS
 // endpoint) to prevent an attacker-controlled server from spoofing app identity.
-func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
+func GetAppInfo(reqURL *url.URL, timeout time.Duration) (*AppInfo, error) {
 	// Fetch the metadata JWT from the edge (no redirects followed).
-	rawJWT, err := fetchMetadataJWT(reqURL.String())
+	rawJWT, err := fetchMetadataJWT(reqURL.String(), timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -419,12 +424,12 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 // fetchMetadataJWT sends a HEAD request to reqURL with the metadata request
 // header and returns the raw JWT string from the response. No redirects are
 // followed.
-func fetchMetadataJWT(reqURL string) (string, error) {
+func fetchMetadataJWT(reqURL string, timeout time.Duration) (string, error) {
 	client := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Timeout: time.Second * 7,
+		Timeout: timeout,
 	}
 
 	req, err := http.NewRequest("HEAD", reqURL, nil)

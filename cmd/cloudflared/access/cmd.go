@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
@@ -52,6 +51,8 @@ Host {{.Hostname}}
 {{end}}
 `
 	fedrampFlag = "fedramp"
+
+	accessTimeoutFlag = "access-timeout"
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
@@ -80,10 +81,18 @@ func Commands() []*cli.Command {
 			Aliases:  []string{"forward"},
 			Category: "Access",
 			Usage:    "access <subcommand>",
-			Flags: []cli.Flag{&cli.BoolFlag{
-				Name:  fedrampFlag,
-				Usage: "use when performing operations in fedramp account",
-			}},
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  fedrampFlag,
+					Usage: "use when performing operations in fedramp account",
+				},
+				&cli.DurationFlag{
+					Name:    accessTimeoutFlag,
+					Usage:   "HTTP timeout for requests made while logging in to or verifying tokens for an Access application: fetching application metadata from the Cloudflare edge, and checking a cached token against the origin. Increase this if you see timeout errors on slow or high-latency connections.",
+					EnvVars: []string{"TUNNEL_ACCESS_TIMEOUT"},
+					Value:   token.DefaultAccessTimeout,
+				},
+			},
 			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected
@@ -257,7 +266,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	appInfo, err := token.GetAppInfo(appURL)
+	appInfo, err := token.GetAppInfo(appURL, c.Duration(accessTimeoutFlag))
 	if err != nil {
 		return err
 	}
@@ -314,7 +323,7 @@ func curl(c *cli.Context) error {
 		return err
 	}
 
-	appInfo, err := token.GetAppInfo(appURL)
+	appInfo, err := token.GetAppInfo(appURL, c.Duration(accessTimeoutFlag))
 	if err != nil {
 		return err
 	}
@@ -391,7 +400,7 @@ func generateToken(c *cli.Context) error {
 		return err
 	}
 
-	appInfo, err := token.GetAppInfo(appURL)
+	appInfo, err := token.GetAppInfo(appURL, c.Duration(accessTimeoutFlag))
 	if err != nil {
 		return err
 	}
@@ -447,7 +456,7 @@ func sshGen(c *cli.Context) error {
 	fetchTokenURL := &url.URL{}
 	*fetchTokenURL = *originURL
 
-	appInfo, err := token.GetAppInfo(fetchTokenURL)
+	appInfo, err := token.GetAppInfo(fetchTokenURL, c.Duration(accessTimeoutFlag))
 	if err != nil {
 		return err
 	}
@@ -551,7 +560,7 @@ func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, 
 	if c.IsSet(sshTokenSecretFlag) {
 		headers.Add(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
-	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers, AutoCloseInterstitial: c.Bool(cfdflags.AutoCloseInterstitial), IsFedramp: c.Bool(fedrampFlag)}
+	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers, AutoCloseInterstitial: c.Bool(cfdflags.AutoCloseInterstitial), IsFedramp: c.Bool(fedrampFlag), Timeout: c.Duration(accessTimeoutFlag)}
 
 	if valid, err := isTokenValid(options, log); err != nil {
 		return err
@@ -584,12 +593,17 @@ func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, err
 	query.Set("cloudflared_token_check", "true")
 	req.URL.RawQuery = query.Encode()
 
+	timeout := options.Timeout
+	if timeout <= 0 {
+		timeout = token.DefaultAccessTimeout
+	}
+
 	// Do not follow redirects
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Timeout: time.Second * 5,
+		Timeout: timeout,
 	}
 	resp, err := client.Do(req)
 	if err != nil {

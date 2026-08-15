@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -33,6 +34,10 @@ type StartOptions struct {
 	TLSClientConfig       *tls.Config
 	AutoCloseInterstitial bool
 	IsFedramp             bool
+	// Timeout is the HTTP timeout used for Access login/token requests, such as
+	// fetching app metadata from the edge and verifying a cached token against
+	// the origin. If zero, callers fall back to token.DefaultAccessTimeout.
+	Timeout time.Duration
 }
 
 // Connection wraps up all the needed functions to forward over the tunnel
