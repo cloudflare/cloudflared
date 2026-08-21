@@ -74,7 +74,7 @@ func createWebsocketStream(options *StartOptions, log *zerolog.Logger) (*cfwebso
 			return nil, err
 		}
 
-		appInfo, err := token.GetAppInfo(originReq.URL)
+		appInfo, err := token.GetAppInfo(originReq.URL, token.ResolveAccessTimeout(options.Timeout))
 		if err != nil {
 			return nil, err
 		}

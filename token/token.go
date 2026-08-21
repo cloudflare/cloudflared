@@ -31,6 +31,22 @@ const (
 	metadataAllowedClockSkew   = 5 * time.Minute
 )
 
+// DefaultAccessTimeout is the default HTTP timeout used for Access login/token
+// requests (fetching app metadata from the edge, and verifying a cached token
+// against the origin) when no timeout is explicitly configured.
+const DefaultAccessTimeout = 7 * time.Second
+
+// ResolveAccessTimeout returns timeout if it is positive, and DefaultAccessTimeout
+// otherwise. It is used to clamp user-configured Access timeouts (e.g. from
+// --access-timeout) since a zero or negative time.Duration disables the
+// timeout entirely on an http.Client.
+func ResolveAccessTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return DefaultAccessTimeout
+	}
+	return timeout
+}
+
 var userAgent = "DEV"
 
 type AppInfo struct {
@@ -269,18 +285,18 @@ func Init(version string) {
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
 // it appends the full url as the redirect URL to the access cli request if opening the browser
-func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, autoClose bool, isFedramp bool, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, appInfo, false, autoClose, isFedramp, log)
+func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, autoClose bool, isFedramp bool, timeout time.Duration, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, false, autoClose, isFedramp, timeout, log)
 }
 
 // FetchToken will either load a stored token or generate a new one
 // it appends the host of the appURL as the redirect URL to the access cli request if opening the browser
-func FetchToken(appURL *url.URL, appInfo *AppInfo, autoClose bool, isFedramp bool, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, appInfo, true, autoClose, isFedramp, log)
+func FetchToken(appURL *url.URL, appInfo *AppInfo, autoClose bool, isFedramp bool, timeout time.Duration, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, true, autoClose, isFedramp, timeout, log)
 }
 
 // getToken will either load a stored token or generate a new one
-func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose bool, isFedramp bool, log *zerolog.Logger) (string, error) {
+func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose bool, isFedramp bool, timeout time.Duration, log *zerolog.Logger) (string, error) {
 	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
 		return token, nil
 	}
@@ -315,7 +331,7 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 		orgToken, err = GetOrgTokenIfExists(appInfo.AuthDomain)
 	}
 	if err == nil {
-		if appToken, err := exchangeOrgToken(appURL, orgToken); err != nil {
+		if appToken, err := exchangeOrgToken(appURL, orgToken, timeout); err != nil {
 			log.Debug().Msgf("failed to exchange org token for app token: %s", err)
 		} else {
 			// generate app path
@@ -363,9 +379,9 @@ func getTokensFromEdge(appURL *url.URL, appAUD, appTokenPath, orgTokenPath strin
 // a signed metadata JWT from the Cloudflare edge. The JWT signature is verified
 // against the account's public keys (fetched from the auth domain's JWKS
 // endpoint) to prevent an attacker-controlled server from spoofing app identity.
-func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
+func GetAppInfo(reqURL *url.URL, timeout time.Duration) (*AppInfo, error) {
 	// Fetch the metadata JWT from the edge (no redirects followed).
-	rawJWT, err := fetchMetadataJWT(reqURL.String())
+	rawJWT, err := fetchMetadataJWT(reqURL.String(), timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -419,12 +435,12 @@ func GetAppInfo(reqURL *url.URL) (*AppInfo, error) {
 // fetchMetadataJWT sends a HEAD request to reqURL with the metadata request
 // header and returns the raw JWT string from the response. No redirects are
 // followed.
-func fetchMetadataJWT(reqURL string) (string, error) {
+func fetchMetadataJWT(reqURL string, timeout time.Duration) (string, error) {
 	client := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Timeout: time.Second * 7,
+		Timeout: ResolveAccessTimeout(timeout),
 	}
 
 	req, err := http.NewRequest("HEAD", reqURL, nil)
@@ -491,12 +507,12 @@ func handleRedirects(req *http.Request, via []*http.Request, orgToken string) er
 
 // exchangeOrgToken attaches an org token to a request to the appURL and returns an app token. This uses the Access SSO
 // flow to automatically generate and return an app token without the login page.
-func exchangeOrgToken(appURL *url.URL, orgToken string) (string, error) {
+func exchangeOrgToken(appURL *url.URL, orgToken string, timeout time.Duration) (string, error) {
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return handleRedirects(req, via, orgToken)
 		},
-		Timeout: time.Second * 7,
+		Timeout: ResolveAccessTimeout(timeout),
 	}
 
 	appTokenRequest, err := http.NewRequest("HEAD", appURL.String(), nil)
