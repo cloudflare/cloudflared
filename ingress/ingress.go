@@ -312,7 +312,8 @@ func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginReq
 		}
 
 		var handlers []middleware.Handler
-		if access := r.OriginRequest.Access; access != nil {
+		access := &cfg.Access
+		if access.Required || access.TeamName != "" || len(access.AudTag) > 0 {
 			if err := validateAccessConfiguration(access); err != nil {
 				return Ingress{}, err
 			}
