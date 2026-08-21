@@ -119,3 +119,14 @@ func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string,
 func (o *socksProxyOverWSService) EstablishConnection(_ context.Context, _ string, _ *zerolog.Logger) (OriginConnection, error) {
 	return o.conn, nil
 }
+
+func (o *unixSocketTCPService) EstablishConnection(ctx context.Context, _ string, _ *zerolog.Logger) (OriginConnection, error) {
+	conn, err := o.dialer.DialContext(ctx, "unix", o.path)
+	if err != nil {
+		return nil, err
+	}
+	return &tcpOverWSConnection{
+		conn:          conn,
+		streamHandler: o.streamHandler,
+	}, nil
+}
