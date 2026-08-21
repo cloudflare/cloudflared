@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -593,6 +594,44 @@ func TestNopCloserReadWriterCloseAfterEOF(t *testing.T) {
 	require.Equal(t, err, io.EOF)
 }
 
+func TestNopCloserReadWriterCloseUnblocksPendingRead(t *testing.T) {
+	t.Parallel()
+
+	stream := newBlockingReadWriteCloser()
+	t.Cleanup(stream.closeRead)
+
+	readerWriter := nopCloserReadWriter{ReadWriteCloser: stream}
+	readResult := make(chan error, 1)
+	go func() {
+		buffer := make([]byte, 1)
+		n, err := readerWriter.Read(buffer)
+		if n != 0 {
+			readResult <- fmt.Errorf("expected no bytes from unblocked read, got %d", n)
+			return
+		}
+		readResult <- err
+	}()
+
+	select {
+	case <-stream.readStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Read to block")
+	}
+
+	require.NoError(t, readerWriter.Close())
+
+	select {
+	case err := <-readResult:
+		require.ErrorIs(t, err, errBlockingReadClosed)
+	case <-time.After(time.Second):
+		t.Fatal("nopCloserReadWriter.Close did not unblock the pending Read")
+	}
+
+	n, err := readerWriter.Write([]byte("response"))
+	require.NoError(t, err)
+	require.Equal(t, len("response"), n)
+}
+
 func TestCreateUDPConnReuseSourcePort(t *testing.T) {
 	edgeIPv4 := netip.MustParseAddrPort("0.0.0.0:0")
 	edgeIPv6 := netip.MustParseAddrPort("[::]:0")
@@ -964,6 +1003,46 @@ func (m *mockReaderNoopWriter) Write(p []byte) (n int, err error) {
 
 func (m *mockReaderNoopWriter) Close() error {
 	return nil
+}
+
+var errBlockingReadClosed = errors.New("read side closed")
+
+type blockingReadWriteCloser struct {
+	readStarted chan struct{}
+	readClosed  chan struct{}
+	closeOnce   sync.Once
+}
+
+func newBlockingReadWriteCloser() *blockingReadWriteCloser {
+	return &blockingReadWriteCloser{
+		readStarted: make(chan struct{}),
+		readClosed:  make(chan struct{}),
+	}
+}
+
+func (b *blockingReadWriteCloser) Read(p []byte) (int, error) {
+	close(b.readStarted)
+	<-b.readClosed
+	return 0, errBlockingReadClosed
+}
+
+func (b *blockingReadWriteCloser) Write(p []byte) (int, error) {
+	return len(p), nil
+}
+
+func (b *blockingReadWriteCloser) Close() error {
+	return nil
+}
+
+func (b *blockingReadWriteCloser) CloseRead() error {
+	b.closeRead()
+	return nil
+}
+
+func (b *blockingReadWriteCloser) closeRead() {
+	b.closeOnce.Do(func() {
+		close(b.readClosed)
+	})
 }
 
 // GenerateTLSConfig sets up a bare-bones TLS config for a QUIC server
