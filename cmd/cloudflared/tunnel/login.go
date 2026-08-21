@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -149,7 +148,7 @@ func checkForExistingCert() (string, bool, error) {
 	if err == nil && fileInfo.Size() > 0 {
 		return path, true, nil
 	}
-	if err != nil && err.(*os.PathError).Err != syscall.ENOENT {
+	if err != nil && !os.IsNotExist(err) {
 		return path, false, err
 	}
 
