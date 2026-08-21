@@ -1066,8 +1066,9 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    ingress.Http2OriginFlag,
-			Usage:   "Enables HTTP/2 origin servers.",
+			Name: ingress.Http2OriginFlag,
+			Usage: "Use HTTP/2 to connect to the origin. TLS origins negotiate HTTP/2. " +
+				"Cleartext HTTP and Unix origins use prior-knowledge h2c, which requires HTTP/2 support with no HTTP/1.1 fallback.",
 			EnvVars: []string{"TUNNEL_ORIGIN_ENABLE_HTTP2"},
 			Hidden:  shouldHide,
 			Value:   false,
