@@ -23,8 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testFilePath = filepath.Join(os.TempDir(), "test")
-
 func respondWithJSON(w http.ResponseWriter, v interface{}, status int) {
 	data, _ := json.Marshal(v)
 
@@ -201,19 +199,20 @@ func createServer() *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-func createTestFile(t *testing.T, path string) {
+func createTestFile(t *testing.T) string {
+	path := filepath.Join(t.TempDir(), "cloudflared")
 	f, err := os.Create(path)
 	require.NoError(t, err)
 	fmt.Fprint(f, "2020.08.04")
-	f.Close()
+	require.NoError(t, f.Close())
+	return path
 }
 
 func TestUpdateService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 	log.Println("server url: ", ts.URL)
 
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
@@ -232,8 +231,7 @@ func TestBetaUpdateService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{IsBeta: true})
 	v, err := s.Check()
@@ -251,8 +249,7 @@ func TestFailUpdateService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/fail", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
@@ -264,8 +261,7 @@ func TestNoUpdateService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 
 	s := NewWorkersService(mostRecentVersion, fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
@@ -278,8 +274,7 @@ func TestForcedUpdateService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 
 	s := NewWorkersService("2020.8.5", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{IsForced: true})
 	v, err := s.Check()
@@ -297,8 +292,7 @@ func TestUpdateSpecificVersionService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 	reqVersion := "2020.9.1"
 
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{RequestedVersion: reqVersion})
@@ -317,8 +311,7 @@ func TestCompressedUpdateService(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 
 	s := NewWorkersService("2020.8.2", fmt.Sprintf("%s/compressed", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
@@ -336,8 +329,7 @@ func TestUpdateWhenRunningKnownBuggyVersion(t *testing.T) {
 	ts := createServer()
 	defer ts.Close()
 
-	createTestFile(t, testFilePath)
-	defer os.Remove(testFilePath)
+	testFilePath := createTestFile(t)
 
 	s := NewWorkersService(knownBuggyVersion, fmt.Sprintf("%s/updater", ts.URL), testFilePath, Options{})
 	v, err := s.Check()
