@@ -240,9 +240,14 @@ func (p *Proxy) proxyHTTPRequest(
 	disableChunkedEncoding bool,
 	logger *zerolog.Logger,
 ) error {
-	roundTripReq := tr.Request
+	// Give the origin request an independently cancellable context. The HTTP/2
+	// transport can otherwise wait for stream cleanup while closing a response
+	// whose request body is still being uploaded.
+	ctx, cancel := context.WithCancel(tr.Context())
+	defer cancel()
+
+	roundTripReq := tr.Clone(ctx)
 	if isWebsocket {
-		roundTripReq = tr.Clone(tr.Context())
 		roundTripReq.Header.Set("Connection", "Upgrade")
 		roundTripReq.Header.Set("Upgrade", "websocket")
 		roundTripReq.Header.Set("Sec-Websocket-Version", "13")
@@ -277,7 +282,14 @@ func (p *Proxy) proxyHTTPRequest(
 	}
 
 	tracing.EndWithStatusCode(ttfbSpan, resp.StatusCode)
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		// Cancel before closing the response body so HTTP/2 Response.Body.Close
+		// cannot wait indefinitely for request-stream cleanup. Request.Body.Close
+		// must still interrupt a pending body read; cancellation is a final escape
+		// path rather than a substitute for that requirement.
+		cancel()
+		_ = resp.Body.Close()
+	}()
 
 	headers := resp.Header.Clone()
 	// Protected-response headers set before origin selection take precedence

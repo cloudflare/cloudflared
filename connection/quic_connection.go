@@ -185,11 +185,11 @@ func (q *quicConnection) runStream(quicStream *quic.Stream) {
 	stream := cfdquic.NewSafeStreamCloser(quicStream, q.streamWriteTimeout, q.logger)
 	defer func() { _ = stream.Close() }()
 
-	// we are going to fuse readers/writers from stream <- cloudflared -> origin, and we want to guarantee that
-	// code executed in the code path of handleStream don't trigger an earlier close to the downstream write stream.
-	// So, we wrap the stream with a no-op write closer and only this method can actually close write side of the stream.
-	// A call to close will simulate a close to the read-side, which will fail subsequent reads.
-	noCloseStream := &nopCloserReadWriter{ReadWriteCloser: stream}
+	// The request and response share this bidirectional stream. Request-body
+	// cleanup must be able to interrupt a pending read without closing the write
+	// side, which is still needed for the response. runStream remains responsible
+	// for closing the complete stream after request handling finishes.
+	noCloseStream := &nopCloserReadWriter{readWriteCloser: stream}
 	ss := rpcquic.NewCloudflaredServer(q.handleDataStream, q.datagramHandler, q, q.rpcTimeout)
 	if err := ss.Serve(ctx, noCloseStream); err != nil {
 		q.logger.Debug().Err(err).Msg("Failed to handle QUIC stream")
@@ -392,8 +392,16 @@ func buildHTTPRequest(
 	//   * the content length is not set (or set to -1)
 	//   * the method doesn't usually have a body (GET, HEAD, DELETE, ...)
 	//   * there is no transfer-encoding=chunked already set.
-	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
+	// So, if transfer cannot be chunked and content length is 0, we don't set a request body.
+	// Close the original body before replacing it so a QUIC peer cannot remain
+	// blocked sending data that this request will never consume. The QUIC body
+	// implementation closes only the read side, leaving the response writable.
 	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
+		if req.Body != nil {
+			if err := req.Body.Close(); err != nil {
+				return nil, fmt.Errorf("failed to close bodyless request stream: %w", err)
+			}
+		}
 		req.Body = http.NoBody
 	}
 	stripWebsocketUpgradeHeader(req)
@@ -418,9 +426,19 @@ func isTransferEncodingChunked(req *http.Request) bool {
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
 }
 
-// A helper struct that guarantees a call to close only affects read side, but not write side.
-type nopCloserReadWriter struct {
+// readWriteCloser is a bidirectional stream whose receive side can be closed
+// independently. HTTP request bodies require Close to unblock a concurrent
+// Read, while QUIC responses still need the stream's send side afterwards.
+type readWriteCloser interface {
 	io.ReadWriteCloser
+	CloseRead() error
+}
+
+// nopCloserReadWriter adapts a bidirectional QUIC stream for use as an HTTP
+// request body. Despite its historical name, Close is not a no-op: it cancels
+// only the read side and deliberately keeps the write side available.
+type nopCloserReadWriter struct {
+	readWriteCloser
 
 	// for use by Read only
 	// we don't need a memory barrier here because there is an implicit assumption that
@@ -441,7 +459,7 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("closed by handler")
 	}
 
-	n, err = np.ReadWriteCloser.Read(p)
+	n, err = np.readWriteCloser.Read(p)
 	if err == io.EOF {
 		np.sawEOF = true
 	}
@@ -450,7 +468,12 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 }
 
 func (np *nopCloserReadWriter) Close() error {
-	atomic.StoreUint32(&np.closed, 1)
+	if !atomic.CompareAndSwapUint32(&np.closed, 0, 1) {
+		return nil
+	}
 
-	return nil
+	// net/http requires Request.Body.Close to interrupt a concurrent Read.
+	// Closing only the receive side satisfies that contract without preventing
+	// the response from being written on this bidirectional QUIC stream.
+	return np.CloseRead()
 }

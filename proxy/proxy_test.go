@@ -52,6 +52,40 @@ type mockHTTPRespWriter struct {
 	writtenHeaders http.Header
 }
 
+// nonInterruptingRequestBody intentionally violates http.Request.Body's Close
+// contract. It isolates the HTTP/2 response-close fallback: proxy cancellation
+// must keep response cleanup from waiting forever even when a body wrapper
+// fails to unblock its pending Read.
+type nonInterruptingRequestBody struct {
+	readStarted chan struct{}
+	readDone    chan struct{}
+	releaseRead chan struct{}
+	closeCalled chan struct{}
+	readOnce    sync.Once
+	closeOnce   sync.Once
+}
+
+func newNonInterruptingRequestBody() *nonInterruptingRequestBody {
+	return &nonInterruptingRequestBody{
+		readStarted: make(chan struct{}),
+		readDone:    make(chan struct{}),
+		releaseRead: make(chan struct{}),
+		closeCalled: make(chan struct{}),
+	}
+}
+
+func (b *nonInterruptingRequestBody) Read([]byte) (int, error) {
+	b.readOnce.Do(func() { close(b.readStarted) })
+	<-b.releaseRead
+	close(b.readDone)
+	return 0, io.EOF
+}
+
+func (b *nonInterruptingRequestBody) Close() error {
+	b.closeOnce.Do(func() { close(b.closeCalled) })
+	return nil
+}
+
 func newMockHTTPRespWriter() *mockHTTPRespWriter {
 	return &mockHTTPRespWriter{
 		ResponseRecorder: httptest.NewRecorder(),
@@ -429,6 +463,67 @@ func TestProxySingleOrigin(t *testing.T) {
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
 	cancel()
+}
+
+func TestProxyHTTPRequestCancelsBeforeClosingHTTP2Response(t *testing.T) {
+	t.Parallel()
+
+	body := newNonInterruptingRequestBody()
+	origin := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Do not respond until the HTTP/2 request writer is blocked in Body.Read.
+		<-body.readStarted
+		w.WriteHeader(http.StatusOK)
+	}))
+	origin.EnableHTTP2 = true
+	origin.StartTLS()
+	t.Cleanup(origin.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, origin.URL, body)
+	require.NoError(t, err)
+
+	responseWriter := newMockHTTPRespWriter()
+	log := zerolog.Nop()
+	proxy := &Proxy{}
+	proxyResult := make(chan error, 1)
+	go func() {
+		proxyResult <- proxy.proxyHTTPRequest(
+			responseWriter,
+			tracing.NewTracedHTTPRequest(req, 0, &log),
+			origin.Client().Transport,
+			false,
+			false,
+			&log,
+		)
+	}()
+
+	select {
+	case err := <-proxyResult:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("proxy remained blocked while closing the HTTP/2 response body")
+	}
+	require.Equal(t, http.StatusOK, responseWriter.Code)
+
+	select {
+	case <-body.closeCalled:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP/2 transport did not close the request body")
+	}
+
+	select {
+	case <-body.readDone:
+		t.Fatal("non-interrupting request body unexpectedly stopped reading")
+	default:
+		// The proxy returned through the canceled context rather than waiting
+		// for this deliberately broken request body.
+	}
+
+	close(body.releaseRead)
+	select {
+	case <-body.readDone:
+	case <-time.After(time.Second):
+		t.Fatal("request body read did not finish after test cleanup")
+	}
 }
 
 func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
