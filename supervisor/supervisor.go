@@ -45,7 +45,6 @@ type Supervisor struct {
 	log          *ConnAwareLogger
 	logTransport *zerolog.Logger
 
-	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
 }
 
@@ -56,7 +55,7 @@ type tunnelError struct {
 	err   error
 }
 
-func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrator, reconnectCh chan ReconnectSignal, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
+func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrator, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
 	isStaticEdge := len(config.EdgeAddrs) > 0
 
 	var err error
@@ -89,7 +88,6 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		edgeAddrHandler:   edgeAddrHandler,
 		edgeBindAddr:      edgeBindAddr,
 		tracker:           tracker,
-		reconnectCh:       reconnectCh,
 		gracefulShutdownC: gracefulShutdownC,
 		connAwareLogger:   log,
 	}
@@ -104,7 +102,6 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		tunnelsProtocolFallback: map[int]*protocolFallback{},
 		log:                     log,
 		logTransport:            config.LogTransport,
-		reconnectCh:             reconnectCh,
 		gracefulShutdownC:       gracefulShutdownC,
 	}, nil
 }
@@ -157,13 +154,6 @@ func (s *Supervisor) Run(
 			tunnelsActive--
 			s.log.ConnAwareLogger().Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 			if tunnelError.err != nil && !shuttingDown {
-				switch tunnelError.err.(type) {
-				case ReconnectSignal:
-					// For tunnels that closed with reconnect signal, we reconnect immediately
-					go s.startTunnel(ctx, tunnelError.index, s.newConnectedTunnelSignal(tunnelError.index))
-					tunnelsActive++
-					continue
-				}
 				// Make sure we don't continue if there is no more fallback allowed
 				if _, retry := s.tunnelsProtocolFallback[tunnelError.index].GetMaxBackoffDuration(ctx); !retry {
 					continue

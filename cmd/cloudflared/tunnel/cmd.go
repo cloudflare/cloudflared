@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/trace"
-	"strings"
 	"sync"
 	"time"
 
@@ -51,7 +49,6 @@ const (
 	//nolint:gosec // This is the Sentry DSN for cloudflared which is safe to be public
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
 
-	LogFieldCommand             = "command"
 	LogFieldExpandedPath        = "expandedPath"
 	LogFieldPIDPathname         = "pidPathname"
 	LogFieldTmpTraceFilename    = "tmpTraceFilename"
@@ -147,7 +144,6 @@ var (
 		"compression-quality",
 		"use-reconnect-token",
 		"dial-edge-timeout",
-		"stdin-control",
 		cfdflags.Name,
 		cfdflags.Ui,
 		"quick-service",
@@ -502,19 +498,13 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx, metricsConfig, log)
 	}()
 
-	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int(cfdflags.HaConnections))
-	if c.IsSet("stdin-control") {
-		log.Info().Msg("Enabling control through stdin")
-		go stdinControl(reconnectCh, log)
-	}
-
 	wg.Add(1)
 	go func() {
 		defer func() {
 			wg.Done()
 			log.Info().Msg("Tunnel server stopped")
 		}()
-		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, reconnectCh, graceShutdownC)
+		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, graceShutdownC)
 	}()
 
 	gracePeriod, err := gracePeriod(c)
@@ -848,13 +838,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:   time.Second * 15,
 			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
 			Hidden:  true,
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "stdin-control",
-			Usage:   "Control the process using commands sent through stdin",
-			EnvVars: []string{"STDIN_CONTROL"},
-			Hidden:  true,
-			Value:   false,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    cfdflags.Name,
@@ -1191,43 +1174,6 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_PROXY_PORT"},
 			Hidden:  shouldHide,
 		}),
-	}
-}
-
-func stdinControl(reconnectCh chan supervisor.ReconnectSignal, log *zerolog.Logger) {
-	helpStr := strings.Join([]string{
-		"Supported command:",
-		"reconnect [delay]",
-		"- restarts one randomly chosen connection with optional delay before reconnect\n",
-	}, "\n")
-
-	for {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			command := scanner.Text()
-			parts := strings.SplitN(command, " ", 2)
-
-			switch parts[0] {
-			case "":
-				continue
-			case "reconnect":
-				var reconnect supervisor.ReconnectSignal
-				if len(parts) > 1 {
-					var err error
-					if reconnect.Delay, err = time.ParseDuration(parts[1]); err != nil {
-						log.Error().Msg(err.Error())
-						continue
-					}
-				}
-				log.Info().Msgf("Sending %+v", reconnect)
-				reconnectCh <- reconnect
-			case "help":
-				log.Info().Msg(helpStr)
-			default:
-				log.Info().Str(LogFieldCommand, command).Msg("Unknown command")
-				log.Info().Msg(helpStr)
-			}
-		}
 	}
 }
 
