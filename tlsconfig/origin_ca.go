@@ -1,3 +1,4 @@
+// Package tlsconfig builds base TLS configuration for edge and origin connections.
 package tlsconfig
 
 import (
@@ -6,9 +7,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"sync"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
@@ -16,59 +15,6 @@ import (
 const (
 	OriginCAPoolFlag = "origin-ca-pool"
 )
-
-// CertReloader can load and reload a TLS certificate from a particular filepath.
-// Hooks into tls.Config's GetCertificate to allow a TLS server to update its certificate without restarting.
-type CertReloader struct {
-	sync.Mutex
-	certificate *tls.Certificate
-	certPath    string
-	keyPath     string
-}
-
-// NewCertReloader makes a CertReloader. It loads the cert during initialization to make sure certPath and keyPath are valid
-func NewCertReloader(certPath, keyPath string) (*CertReloader, error) {
-	cr := new(CertReloader)
-	cr.certPath = certPath
-	cr.keyPath = keyPath
-	if err := cr.LoadCert(); err != nil {
-		return nil, err
-	}
-	return cr, nil
-}
-
-// Cert returns the TLS certificate most recently read by the CertReloader.
-// This method works as a direct utility method for tls.Config#Cert.
-func (cr *CertReloader) Cert(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	cr.Lock()
-	defer cr.Unlock()
-	return cr.certificate, nil
-}
-
-// ClientCert returns the TLS certificate most recently read by the CertReloader.
-// This method works as a direct utility method for tls.Config#ClientCert.
-func (cr *CertReloader) ClientCert(certRequestInfo *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-	cr.Lock()
-	defer cr.Unlock()
-	return cr.certificate, nil
-}
-
-// LoadCert loads a TLS certificate from the CertReloader's specified filepath.
-// Call this after writing a new certificate to the disk (e.g. after renewing a certificate)
-func (cr *CertReloader) LoadCert() error {
-	cr.Lock()
-	defer cr.Unlock()
-
-	cert, err := tls.LoadX509KeyPair(cr.certPath, cr.keyPath)
-
-	// Keep the old certificate if there's a problem reading the new one.
-	if err != nil {
-		sentry.CaptureException(fmt.Errorf("error parsing X509 key pair: %v", err))
-		return err
-	}
-	cr.certificate = &cert
-	return nil
-}
 
 func LoadOriginCA(originCAPoolFilename string, log *zerolog.Logger) (*x509.CertPool, error) {
 	var originCustomCAPool []byte
@@ -128,15 +74,18 @@ func LoadCustomOriginCA(originCAFilename string) (*x509.CertPool, error) {
 }
 
 func CreateTunnelConfig(caCert string, serverName string) (*tls.Config, error) {
-	var rootCAs []string
+	tlsConfig := &tls.Config{ServerName: serverName}
 	if caCert != "" {
-		rootCAs = append(rootCAs, caCert)
-	}
+		caCertPEM, err := os.ReadFile(caCert) //nolint:gosec
+		if err != nil {
+			return nil, fmt.Errorf("read CA certificate %s: %w", caCert, err)
+		}
 
-	userConfig := &TLSParameters{RootCAs: rootCAs, ServerName: serverName}
-	tlsConfig, err := GetConfig(userConfig)
-	if err != nil {
-		return nil, err
+		rootCAPool := x509.NewCertPool()
+		if !rootCAPool.AppendCertsFromPEM(caCertPEM) {
+			return nil, fmt.Errorf("parse CA certificate %s", caCert)
+		}
+		tlsConfig.RootCAs = rootCAPool
 	}
 
 	if tlsConfig.RootCAs == nil {
