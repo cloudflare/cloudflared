@@ -51,10 +51,10 @@ include:
       vault: gitlab/cloudflare/tun/cloudflared/_dev/cfd_github_api_key/data@kv
       file: false
     R2_CLIENT_ID:
-      vault: gitlab/cloudflare/tun/cloudflared/_dev/_terraform_atlantis/r2_api_token/client_id@kv
+      vault: gitlab/cloudflare/tun/cloudflared/_protected/true/_terraform_atlantis/r2_api_token/client_id@kv
       file: false
     R2_CLIENT_SECRET:
-      vault: gitlab/cloudflare/tun/cloudflared/_dev/_terraform_atlantis/r2_api_token/client_secret@kv
+      vault: gitlab/cloudflare/tun/cloudflared/_protected/true/_terraform_atlantis/r2_api_token/client_secret@kv
       file: false
     LINUX_SIGNING_PUBLIC_KEY:
       vault: gitlab/cloudflare/tun/cloudflared/_dev/gpg_v1/public_key@kv
