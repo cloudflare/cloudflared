@@ -15,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/connection"
@@ -97,10 +96,9 @@ func StartTunnelDaemon(
 	config *TunnelConfig,
 	orchestrator *orchestration.Orchestrator,
 	connectedSignal *signal.Signal,
-	reconnectCh chan ReconnectSignal,
 	graceShutdownC <-chan struct{},
 ) error {
-	s, err := NewSupervisor(config, orchestrator, reconnectCh, graceShutdownC)
+	s, err := NewSupervisor(config, orchestrator, graceShutdownC)
 	if err != nil {
 		return err
 	}
@@ -183,7 +181,6 @@ type EdgeTunnelServer struct {
 	edgeAddrHandler   EdgeAddrHandler
 	edgeAddrs         *edgediscovery.Edge
 	edgeBindAddr      net.IP
-	reconnectCh       chan ReconnectSignal
 	gracefulShutdownC <-chan struct{}
 	tracker           *tunnelstate.ConnTracker
 
@@ -415,13 +412,6 @@ func (e *EdgeTunnelServer) serveTunnel(
 			return err.Cause, !err.Permanent
 		case *connection.EdgeQuicDialError:
 			return err, false
-		case ReconnectSignal:
-			connLog.Logger().Info().
-				IPAddr(connection.LogFieldIPAddress, addr.UDP.IP).
-				Uint8(connection.LogFieldConnIndex, connIndex).
-				Msgf("Restarting connection due to reconnect signal in %s", err.Delay)
-			err.DelayBeforeReconnect()
-			return err, true
 		default:
 			if err == context.Canceled {
 				connLog.Logger().Debug().Err(err).Msgf("Serve tunnel error")
@@ -541,22 +531,7 @@ func (e *EdgeTunnelServer) serveHTTP2(
 		e.config.Log,
 	)
 
-	errGroup, serveCtx := errgroup.WithContext(ctx)
-	errGroup.Go(func() error {
-		return h2conn.Serve(serveCtx)
-	})
-
-	errGroup.Go(func() error {
-		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
-		if err != nil {
-			// forcefully break the connection (this is only used for testing)
-			// errgroup will return context canceled for the h2conn.Serve
-			connLog.Logger().Debug().Msg("Forcefully breaking http2 connection")
-		}
-		return err
-	})
-
-	return errGroup.Wait()
+	return h2conn.Serve(ctx)
 }
 
 func (e *EdgeTunnelServer) serveQUIC(
@@ -654,26 +629,11 @@ func (e *EdgeTunnelServer) serveQUIC(
 	)
 
 	// Serve the TunnelConnection
-	errGroup, serveCtx := errgroup.WithContext(ctx)
-	errGroup.Go(func() error {
-		err := tunnelConn.Serve(serveCtx)
-		if err != nil {
-			connLogger.ConnAwareLogger().Err(err).Msg("failed to serve tunnel connection")
-		}
-		return err
-	})
-
-	errGroup.Go(func() error {
-		err := listenReconnect(serveCtx, e.reconnectCh, e.gracefulShutdownC)
-		if err != nil {
-			// forcefully break the connection (this is only used for testing)
-			// errgroup will return context canceled for the tunnelConn.Serve
-			connLogger.Logger().Debug().Msg("Forcefully breaking tunnel connection")
-		}
-		return err
-	})
-
-	return errGroup.Wait(), false
+	err = tunnelConn.Serve(ctx)
+	if err != nil {
+		connLogger.ConnAwareLogger().Err(err).Msg("failed to serve tunnel connection")
+	}
+	return err, false
 }
 
 // The reportErrorToSentry is an helper function that handles
@@ -693,17 +653,6 @@ func (e *EdgeTunnelServer) reportErrorToSentry(err error, pqMode features.PostQu
 			// an EdgeQuicDialError
 			sentry.CaptureException(err)
 		}
-	}
-}
-
-func listenReconnect(ctx context.Context, reconnectCh <-chan ReconnectSignal, gracefulShutdownCh <-chan struct{}) error {
-	select {
-	case reconnect := <-reconnectCh:
-		return reconnect
-	case <-gracefulShutdownCh:
-		return nil
-	case <-ctx.Done():
-		return nil
 	}
 }
 
