@@ -9,7 +9,6 @@ import (
 const (
 	MetricsNamespace = "cloudflared"
 	TunnelSubsystem  = "tunnel"
-	muxerSubsystem   = "muxer"
 	configSubsystem  = "config"
 )
 
@@ -27,16 +26,14 @@ type tunnelMetrics struct {
 
 	regSuccess *prometheus.CounterVec
 	regFail    *prometheus.CounterVec
-	rpcFail    *prometheus.CounterVec
 
-	tunnelsHA           tunnelsForHA
 	userHostnamesCounts *prometheus.CounterVec
 
 	localConfigMetrics *localConfigMetrics
 }
 
+//nolint:promlinter // Preserve existing metric names for compatibility.
 func newLocalConfigMetrics() *localConfigMetrics {
-
 	pushesMetric := prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: MetricsNamespace,
@@ -67,18 +64,9 @@ func newLocalConfigMetrics() *localConfigMetrics {
 }
 
 // Metrics that can be collected without asking the edge
+//
+//nolint:promlinter // Preserve existing metric names for compatibility.
 func initTunnelMetrics() *tunnelMetrics {
-	maxConcurrentRequestsPerTunnel := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: MetricsNamespace,
-			Subsystem: TunnelSubsystem,
-			Name:      "max_concurrent_requests_per_tunnel",
-			Help:      "Largest number of concurrent requests proxied through each tunnel so far",
-		},
-		[]string{"connection_id"},
-	)
-	prometheus.MustRegister(maxConcurrentRequestsPerTunnel)
-
 	serverLocations := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: MetricsNamespace,
@@ -89,17 +77,6 @@ func initTunnelMetrics() *tunnelMetrics {
 		[]string{"connection_id", "edge_location"},
 	)
 	prometheus.MustRegister(serverLocations)
-
-	rpcFail := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: MetricsNamespace,
-			Subsystem: TunnelSubsystem,
-			Name:      "tunnel_rpc_fail",
-			Help:      "Count of RPC connection errors by type",
-		},
-		[]string{"error", "rpcName"},
-	)
-	prometheus.MustRegister(rpcFail)
 
 	registerFail := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -137,10 +114,8 @@ func initTunnelMetrics() *tunnelMetrics {
 	return &tunnelMetrics{
 		serverLocations:     serverLocations,
 		oldServerLocations:  make(map[string]string),
-		tunnelsHA:           newTunnelsForHA(),
 		regSuccess:          registerSuccess,
 		regFail:             registerFail,
-		rpcFail:             rpcFail,
 		userHostnamesCounts: userHostnamesCounts,
 		localConfigMetrics:  newLocalConfigMetrics(),
 	}
