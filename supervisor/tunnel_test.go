@@ -10,20 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/retry"
 )
-
-type dynamicMockFetcher struct {
-	protocolPercents edgediscovery.ProtocolPercents
-	err              error
-}
-
-func (dmf *dynamicMockFetcher) fetch() edgediscovery.PercentageFetcher {
-	return func() (edgediscovery.ProtocolPercents, error) {
-		return dmf.protocolPercents, dmf.err
-	}
-}
 
 func immediateTimeAfter(time.Duration) <-chan time.Time {
 	c := make(chan time.Time, 1)
@@ -36,18 +24,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	backoff := retry.NewBackoff(maxRetries, 40*time.Millisecond, false)
 	backoff.Clock.After = immediateTimeAfter
 	log := zerolog.Nop()
-	resolveTTL := 10 * time.Second
-	mockFetcher := dynamicMockFetcher{
-		protocolPercents: edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}},
-	}
-	protocolSelector, err := connection.NewProtocolSelector(
-		"auto",
-		"",
-		false,
-		mockFetcher.fetch(),
-		resolveTTL,
-		&log,
-	)
+	protocolSelector, err := connection.NewProtocolSelector("auto", &log)
 	require.NoError(t, err)
 
 	initProtocol := protocolSelector.Current()
@@ -102,14 +79,7 @@ func TestWaitForBackoffFallback(t *testing.T) {
 
 	// But if there is no fallback available, then we exhaust the retries despite the type of error.
 	// The reason why there's no fallback available is because we pick a specific protocol instead of letting it be auto.
-	protocolSelector, err = connection.NewProtocolSelector(
-		"quic",
-		"",
-		false,
-		mockFetcher.fetch(),
-		resolveTTL,
-		&log,
-	)
+	protocolSelector, err = connection.NewProtocolSelector("quic", &log)
 	require.NoError(t, err)
 	protoFallback = &protocolFallback{backoff, protocolSelector.Current(), false}
 	for i := 0; i < int(maxRetries-1); i++ {
