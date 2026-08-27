@@ -59,6 +59,8 @@ type Config struct {
 	Orchestrator        orchestrator
 
 	ShutdownTimeout time.Duration
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
 }
 
 type orchestrator interface {
@@ -149,12 +151,18 @@ func ServeMetrics(
 	var wg sync.WaitGroup
 	// Metrics port is privileged, so no need for further access control
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
-	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
-	// profile CPU usage depends on WriteTimeout
 	h := newMetricsHandler(config, log)
+	readTimeout := config.ReadTimeout
+	if readTimeout == 0 {
+		readTimeout = 10 * time.Second
+	}
+	writeTimeout := config.WriteTimeout
+	if writeTimeout == 0 {
+		writeTimeout = 10 * time.Second
+	}
 	server := &http.Server{
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
 		Handler:      h,
 	}
 
