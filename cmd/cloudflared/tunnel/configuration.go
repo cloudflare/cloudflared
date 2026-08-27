@@ -22,7 +22,6 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -146,7 +145,7 @@ func prepareTunnelConfig(
 		return nil, nil, err
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, log)
 	if err != nil {
 		return nil, nil, err
 	}
