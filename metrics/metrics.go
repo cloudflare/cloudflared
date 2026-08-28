@@ -149,8 +149,6 @@ func ServeMetrics(
 	var wg sync.WaitGroup
 	// Metrics port is privileged, so no need for further access control
 	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
-	// TODO: parameterize ReadTimeout and WriteTimeout. The maximum time we can
-	// profile CPU usage depends on WriteTimeout
 	h := newMetricsHandler(config, log)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,
