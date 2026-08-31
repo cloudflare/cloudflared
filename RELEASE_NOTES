@@ -1,3 +1,14 @@
+2026.8.3
+- 2026-08-28 chore: Remove stale metrics timeout TODO
+- 2026-08-28 TUN-10798: Parse Quick Tunnel allowed mail rules
+- 2026-08-27 chore: Clean up unused code
+- 2026-08-26 chore: bump gorilla/websocket for GO-2026-6278
+- 2026-08-26 VULN-142146: Update GitLab R2 token path (cloudflared-pkgs) to protected branches
+- 2026-08-26 TUN-10820: Remove test-only stdin reconnect control
+- 2026-08-26 TUN-10822: Remove fetching protocol percentage from remote
+- 2026-08-25 TUN-10725: Remove unused certificate configuration
+- 2026-08-20 chore: Update distrolesss images in amd64
+
 2026.8.2
 - 2026-08-14 VULN-141859: Revert path normalization
 
