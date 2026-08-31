@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -33,6 +34,10 @@ type StartOptions struct {
 	TLSClientConfig       *tls.Config
 	AutoCloseInterstitial bool
 	IsFedramp             bool
+	// Timeout is the HTTP timeout used for Access login/token requests, such as
+	// fetching app metadata from the edge and verifying a cached token against
+	// the origin. If zero, callers fall back to token.DefaultAccessTimeout.
+	Timeout time.Duration
 }
 
 // Connection wraps up all the needed functions to forward over the tunnel
@@ -140,7 +145,7 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 		return nil, err
 	}
 
-	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, options.IsFedramp, log)
+	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, options.IsFedramp, options.Timeout, log)
 	if err != nil {
 		return nil, err
 	}

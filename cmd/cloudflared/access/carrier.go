@@ -94,6 +94,7 @@ func ssh(c *cli.Context) error {
 		Headers:   headers,
 		Host:      url.Host,
 		IsFedramp: c.Bool(fedrampFlag),
+		Timeout:   c.Duration(accessTimeoutFlag),
 	}
 
 	if connectTo := c.String(sshConnectTo); connectTo != "" {

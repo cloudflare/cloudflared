@@ -256,15 +256,70 @@ func TestParseAuthDomain(t *testing.T) {
 func TestFetchMetadataJWT_ReturnsAppInfoErrorOnError(t *testing.T) {
 	t.Parallel()
 
-	_, err := fetchMetadataJWT("://invalid")
+	_, err := fetchMetadataJWT("://invalid", DefaultAccessTimeout)
 	require.ErrorContains(t, err, "failed to create app info request")
 
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	serverURL := server.URL
 	server.Close()
 
-	_, err = fetchMetadataJWT(serverURL)
+	_, err = fetchMetadataJWT(serverURL, DefaultAccessTimeout)
 	require.ErrorContains(t, err, "failed to get app info")
+}
+
+func TestFetchMetadataJWT_HonorsConfiguredTimeout(t *testing.T) {
+	t.Parallel()
+
+	// Handler sleeps well past the configured timeout below, so the request
+	// should fail at roughly the configured timeout rather than hanging or
+	// falling back to the old hardcoded 7s.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.Header().Set(accessMetadataRespHeader, "irrelevant")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	configuredTimeout := 100 * time.Millisecond
+	start := time.Now()
+	_, err := fetchMetadataJWT(server.URL, configuredTimeout)
+	elapsed := time.Since(start)
+
+	require.ErrorContains(t, err, "failed to get app info")
+	assert.Less(t, elapsed, 400*time.Millisecond, "expected the configured timeout to fire well before the handler's 500ms sleep")
+}
+
+func TestFetchMetadataJWT_DefaultTimeoutPreservesCurrentBehavior(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 7*time.Second, DefaultAccessTimeout, "default must match today's larger hardcoded value so nobody's timeout gets shorter by default")
+
+	rawJWT := "test-jwt"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(accessMetadataRespHeader, rawJWT)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	got, err := fetchMetadataJWT(server.URL, DefaultAccessTimeout)
+	require.NoError(t, err)
+	assert.Equal(t, rawJWT, got)
+}
+
+func TestFetchMetadataJWT_ZeroTimeoutFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	// A 0 timeout must not disable the client's timeout (net/http treats 0 as
+	// "no timeout"); it should fall back to DefaultAccessTimeout instead.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.Header().Set(accessMetadataRespHeader, "irrelevant")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	_, err := fetchMetadataJWT(server.URL, 0)
+	require.NoError(t, err)
 }
 
 func TestValidateMetadataIssuedAt(t *testing.T) {
@@ -373,7 +428,7 @@ func TestGetAppInfo_RejectsNoMetadataHeader(t *testing.T) {
 	reqURL, err := url.Parse(server.URL)
 	require.NoError(t, err)
 
-	appInfo, err := GetAppInfo(reqURL)
+	appInfo, err := GetAppInfo(reqURL, DefaultAccessTimeout)
 	assert.Nil(t, appInfo)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to find Access application")
@@ -402,7 +457,7 @@ func TestGetAppInfo_RejectsNonCloudflareAuthDomain(t *testing.T) {
 	reqURL, err := url.Parse(server.URL)
 	require.NoError(t, err)
 
-	appInfo, err := GetAppInfo(reqURL)
+	appInfo, err := GetAppInfo(reqURL, DefaultAccessTimeout)
 	assert.Nil(t, appInfo)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auth_domain validation failed")
@@ -436,7 +491,7 @@ func TestGetAppInfo_RejectsHostnameMismatch(t *testing.T) {
 	reqURL, err := url.Parse(metadataServer.URL)
 	require.NoError(t, err)
 
-	appInfo, err := GetAppInfo(reqURL)
+	appInfo, err := GetAppInfo(reqURL, DefaultAccessTimeout)
 	assert.Nil(t, appInfo)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not match request host")
@@ -475,7 +530,7 @@ func TestGetAppInfo_AcceptsValidMetadata(t *testing.T) {
 	}
 	rawJWT = signTestMetadataJWT(t, claims, key, kid)
 
-	appInfo, err := GetAppInfo(reqURL)
+	appInfo, err := GetAppInfo(reqURL, DefaultAccessTimeout)
 	require.NoError(t, err)
 	assert.Equal(t, authDomain, appInfo.AuthDomain)
 	assert.Equal(t, "test-aud", appInfo.AppAUD)
@@ -483,7 +538,7 @@ func TestGetAppInfo_AcceptsValidMetadata(t *testing.T) {
 
 	claims.AppHostname = ""
 	rawJWT = signTestMetadataJWT(t, claims, key, kid)
-	appInfo, err = GetAppInfo(reqURL)
+	appInfo, err = GetAppInfo(reqURL, DefaultAccessTimeout)
 	require.NoError(t, err)
 	assert.Equal(t, claims.Hostname, appInfo.AppHostname)
 	tokenPath, err := GenerateAppTokenFilePathFromURL(appInfo.AppHostname, appInfo.AppAUD, keyName)
@@ -547,7 +602,7 @@ func TestGetAppInfo_RejectsInvalidClaims(t *testing.T) {
 			tc.mutate(claims)
 			rawJWT = signTestMetadataJWT(t, claims, key, kid)
 
-			appInfo, err := GetAppInfo(reqURL)
+			appInfo, err := GetAppInfo(reqURL, DefaultAccessTimeout)
 			assert.Nil(t, appInfo)
 			assert.Error(t, err)
 		})
