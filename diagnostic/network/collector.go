@@ -8,7 +8,10 @@ import (
 
 const MicrosecondsFactor = 1000.0
 
-var ErrEmptyDomain = errors.New("domain must not be empty")
+var (
+	ErrEmptyDomain  = errors.New("domain must not be empty")
+	ErrEmptyHopLine = errors.New("hop line must not be empty")
+)
 
 // For now only support ICMP is provided.
 type IPVersion int
