@@ -379,7 +379,7 @@ func buildHTTPRequest(
 	//   * the method doesn't usually have a body (GET, HEAD, DELETE, ...)
 	//   * there is no transfer-encoding=chunked already set.
 	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
-	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
+	if !isWebsocket && !isEncodingChunked(req) && req.ContentLength == 0 {
 		req.Body = http.NoBody
 	}
 	stripWebsocketUpgradeHeader(req)
@@ -397,11 +397,12 @@ func setContentLength(req *http.Request) error {
 	return err
 }
 
-func isTransferEncodingChunked(req *http.Request) bool {
+func isEncodingChunked(req *http.Request) bool {
+	contentEncodingVal := req.Header.Get("Content-Encoding") // AWS S3 uses Content-Encoding: aws-chunked
 	transferEncodingVal := req.Header.Get("Transfer-Encoding")
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
-	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
+	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked") || strings.Contains(strings.ToLower(contentEncodingVal), "chunked")
 }
 
 // A helper struct that guarantees a call to close only affects read side, but not write side.
