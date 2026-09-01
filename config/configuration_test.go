@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -65,7 +66,7 @@ counters:
 `
 	var config configFileSettings
 	err := yaml.Unmarshal([]byte(rawYAML), &config)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.Equal(t, "config-file-test", config.TunnelID)
 	assert.Equal(t, firstIngress, config.Ingress[0])
@@ -88,31 +89,30 @@ counters:
 	assert.Equal(t, ipRules, config.OriginRequest.IPRules)
 
 	retries, err := config.Int("retries")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 5, retries)
 
 	gracePeriod, err := config.Duration("grace-period")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, time.Second*30, gracePeriod)
 
 	percentage, err := config.Float64("percentage")
-	assert.NoError(t, err)
-	assert.Equal(t, 3.14, percentage)
+	require.NoError(t, err)
+	assert.InDelta(t, 3.14, percentage, 0.0001)
 
 	hostname, err := config.String("hostname")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "example.com", hostname)
 
 	tags, err := config.StringSlice("tag")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "test", tags[0])
 	assert.Equal(t, "central-1", tags[1])
 
 	counters, err := config.IntSlice("counters")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 123, counters[0])
 	assert.Equal(t, 456, counters[1])
-
 }
 
 var rawJsonConfig = []byte(`
@@ -148,6 +148,25 @@ var rawJsonConfig = []byte(`
 }
 `)
 
+func TestCustomDurationUnmarshalJSONOverflow(t *testing.T) {
+	var d CustomDuration
+
+	// A caller mistakenly supplying nanoseconds (as documented for time.Duration
+	// generally) instead of the seconds this type actually expects overflows
+	// int64 when multiplied by time.Second. This must be a clear error, not a
+	// silently wrapped negative duration that causes dials to fail instantly.
+	err := json.Unmarshal([]byte("10000000000"), &d)
+	require.Error(t, err)
+
+	require.NoError(t, json.Unmarshal([]byte("10"), &d))
+	assert.Equal(t, 10*time.Second, d.Duration)
+
+	require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf("%d", maxDurationSeconds)), &d))
+	assert.Equal(t, time.Duration(maxDurationSeconds)*time.Second, d.Duration)
+
+	require.Error(t, json.Unmarshal([]byte(fmt.Sprintf("%d", maxDurationSeconds+1)), &d))
+}
+
 func TestMarshalUnmarshalOriginRequest(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -173,25 +192,25 @@ func assertConfig(
 	var config OriginRequestConfig
 	var config2 OriginRequestConfig
 
-	assert.NoError(t, json.Unmarshal(rawJsonConfig, &config))
+	require.NoError(t, json.Unmarshal(rawJsonConfig, &config))
 
 	assert.Equal(t, time.Second*10, config.ConnectTimeout.Duration)
 	assert.Equal(t, time.Second*30, config.TLSTimeout.Duration)
 	assert.Equal(t, time.Second*30, config.TCPKeepAlive.Duration)
-	assert.Equal(t, true, *config.NoHappyEyeballs)
+	assert.True(t, *config.NoHappyEyeballs)
 	assert.Equal(t, time.Second*60, config.KeepAliveTimeout.Duration)
 	assert.Equal(t, 10, *config.KeepAliveConnections)
 	assert.Equal(t, "app.tunnel.com", *config.HTTPHostHeader)
 	assert.Equal(t, "app.tunnel.com", *config.OriginServerName)
 	assert.Equal(t, "/etc/capool", *config.CAPool)
-	assert.Equal(t, true, *config.NoTLSVerify)
-	assert.Equal(t, true, *config.DisableChunkedEncoding)
-	assert.Equal(t, true, *config.BastionMode)
+	assert.True(t, *config.NoTLSVerify)
+	assert.True(t, *config.DisableChunkedEncoding)
+	assert.True(t, *config.BastionMode)
 	assert.Equal(t, "127.0.0.3", *config.ProxyAddress)
-	assert.Equal(t, true, *config.NoTLSVerify)
+	assert.True(t, *config.NoTLSVerify)
 	assert.Equal(t, uint(9000), *config.ProxyPort)
 	assert.Equal(t, "socks", *config.ProxyType)
-	assert.Equal(t, true, *config.Http2Origin)
+	assert.True(t, *config.Http2Origin)
 
 	privateV4 := "10.0.0.0/8"
 	privateV6 := "fc00::/7"
