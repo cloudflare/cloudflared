@@ -5,6 +5,11 @@ include:
 ### Defaults for Windows Builds ###
 ###################################
 .windows-build-defaults: &windows-build-defaults
+  variables:
+    # Windows runners often leave read-only files in the Go module cache,
+    # causing GitLab's default fetch-and-clean strategy to fail with
+    # "Permission denied" during get_sources. Use a fresh clone instead.
+    GIT_STRATEGY: clone
   rules:
     - !reference [.default-rules, run-always]
   tags:
