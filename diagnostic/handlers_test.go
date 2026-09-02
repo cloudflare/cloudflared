@@ -25,11 +25,6 @@ type SystemCollectorMock struct {
 	err        error
 }
 
-const (
-	systemInformationKey = "sikey"
-	errorKey             = "errkey"
-)
-
 func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnectionInfo) *tunnelstate.ConnTracker {
 	t.Helper()
 
@@ -163,6 +158,82 @@ func TestTunnelStateHandler(t *testing.T) {
 			assert.Equal(t, tCase.clientID, response.ConnectorID)
 			assert.Equal(t, tCase.connections, response.Connections)
 			assert.Equal(t, tCase.icmpSources, response.ICMPSources)
+		})
+	}
+}
+
+type recordingFailingWriter struct {
+	header          http.Header
+	wroteBody       bool
+	headerAfterBody bool
+}
+
+func newRecordingFailingWriter() *recordingFailingWriter {
+	return &recordingFailingWriter{header: make(http.Header)}
+}
+
+func (writer *recordingFailingWriter) Header() http.Header { return writer.header }
+
+func (writer *recordingFailingWriter) Write([]byte) (int, error) {
+	writer.wroteBody = true
+	return 0, errors.New("write error")
+}
+
+func (writer *recordingFailingWriter) WriteHeader(int) {
+	if writer.wroteBody {
+		writer.headerAfterBody = true
+	}
+}
+
+func TestHandlersDoNotWriteHeaderAfterBody(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	handler := diagnostic.NewDiagnosticHandler(&log, 0, &SystemCollectorMock{
+		systemInfo: nil,
+		err:        nil,
+	}, uuid.New(), uuid.New(), newTrackerFromConns(t, nil), map[string]string{}, nil)
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, writer http.ResponseWriter)
+	}{
+		{
+			name: "system handler",
+			run: func(t *testing.T, writer http.ResponseWriter) {
+				t.Helper()
+				ctx := context.Background()
+				request, err := http.NewRequestWithContext(ctx, http.MethodGet, "/diag/system", nil)
+				require.NoError(t, err)
+				handler.SystemHandler(writer, request)
+			},
+		},
+		{
+			name: "tunnel state handler",
+			run: func(t *testing.T, writer http.ResponseWriter) {
+				t.Helper()
+				handler.TunnelStateHandler(writer, nil)
+			},
+		},
+		{
+			name: "configuration handler",
+			run: func(t *testing.T, writer http.ResponseWriter) {
+				t.Helper()
+				handler.ConfigurationHandler(writer, nil)
+			},
+		},
+	}
+
+	for _, tCase := range tests {
+		t.Run(tCase.name, func(t *testing.T) {
+			t.Parallel()
+			writer := newRecordingFailingWriter()
+			tCase.run(t, writer)
+			assert.False(
+				t,
+				writer.headerAfterBody,
+				"handler must not call WriteHeader after the response body has been written",
+			)
 		})
 	}
 }

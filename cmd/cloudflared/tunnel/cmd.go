@@ -1077,7 +1077,7 @@ func legacyTunnelFlag(msg string) string {
 	return fmt.Sprintf(
 		"%s This flag only takes effect if you define your origin with `--url` and if you do not use ingress rules."+
 			" The recommended way is to rely on ingress rules and define this property under `originRequest` as per"+
-			" https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/configuration-file/ingress",
+			" https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/configuration-file/",
 		msg,
 	)
 }
