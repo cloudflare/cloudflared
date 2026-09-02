@@ -1,0 +1,16 @@
+/tmp
+/bin
+/.build
+/cloudflared
+/cloudflared.pkg
+/cloudflared.exe
+/cloudflared.msi
+/cloudflared-x86-64*
+/cloudflared.1
+/packaging
+/.cover
+/built_artifacts
+/component-tests/.venv
+/component-tests/env
+/artifacts
+/vendor

@@ -15,7 +15,13 @@
   rules:
     - !reference [.default-rules, run-on-master]
   image: $BUILD_IMAGE
-  cache: {}
+  cache:
+    key:
+      prefix: "$CI_COMMIT_REF_PROTECTED-$GO_VERSION-$CI_RUNNER_EXECUTABLE_ARCH"
+      files:
+        - go.sum
+    paths:
+      - .cache/go/
   artifacts:
     paths:
       - artifacts/*

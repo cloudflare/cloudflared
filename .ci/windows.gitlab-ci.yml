@@ -10,11 +10,19 @@ include:
     # causing GitLab's default fetch-and-clean strategy to fail with
     # "Permission denied" during get_sources. Use a fresh clone instead.
     GIT_STRATEGY: clone
+    # Athens is not reachable from Windows runners.
+    GOPROXY: "https://proxy.golang.org,direct"
+  cache:
+    key:
+      prefix: "$CI_COMMIT_REF_PROTECTED-$GO_VERSION-$CI_RUNNER_EXECUTABLE_ARCH"
+      files:
+        - go.sum
+    paths:
+      - .cache/go/
   rules:
     - !reference [.default-rules, run-always]
   tags:
     - canary-windows-x86
-  cache: {}
 
 ##########################################
 ### Build Cloudflared Windows Binaries ###
@@ -109,6 +117,7 @@ windows-package-sign:
   rules:
     - !reference [.default-rules, run-on-master]
   stage: package
+  cache: {}
   needs:
     - windows-package
     - windows-load-env-variables

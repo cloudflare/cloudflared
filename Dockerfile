@@ -4,6 +4,7 @@ ARG TARGET_GOARCH
 FROM golang:1.26.4 AS builder
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
+  GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct \
   TARGET_GOOS=${TARGET_GOOS} \
   TARGET_GOARCH=${TARGET_GOARCH} \
   # the CONTAINER_BUILD envvar is used set github.com/cloudflare/cloudflared/metrics.Runtime=virtual
@@ -13,7 +14,10 @@ ENV GO111MODULE=on \
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
-# copy our sources into the builder image
+# Download dependencies in their own layer so source-only changes reuse it.
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 
 # compile cloudflared

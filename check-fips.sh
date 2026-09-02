@@ -1,3 +1,5 @@
+#!/bin/sh
+
 # Pass the path to the executable to check for FIPS compliance
 exe=$1
 

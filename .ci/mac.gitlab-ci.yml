@@ -5,6 +5,16 @@ include:
 ### Defaults for Mac Builds ###
 ###############################
 .mac-build-defaults: &mac-build-defaults
+  variables:
+    # Athens is not reachable from macOS runners.
+    GOPROXY: "https://proxy.golang.org,direct"
+  cache:
+    key:
+      prefix: "$CI_COMMIT_REF_PROTECTED-$GO_VERSION-$CI_RUNNER_EXECUTABLE_ARCH"
+      files:
+        - go.sum
+    paths:
+      - .cache/go/
   rules:
     - !reference [.default-rules, run-on-mr]
   tags:
@@ -12,7 +22,6 @@ include:
   parallel:
     matrix:
       - RUNNER_ARCH: [arm, intel]
-  cache: {}
 
 ######################################
 ### Build Cloudflared Mac Binaries ###
