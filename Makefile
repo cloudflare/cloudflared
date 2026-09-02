@@ -146,7 +146,7 @@ cloudflared:
 ifeq ($(FIPS), true)
 	$(info Building cloudflared with go-fips)
 endif
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -mod=vendor $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(ARM_COMMAND) go build -mod=readonly $(GO_BUILD_TAGS) $(LDFLAGS) $(IMPORT_PATH)/cmd/cloudflared
 ifeq ($(FIPS), true)
 	./check-fips.sh cloudflared
 endif
@@ -170,7 +170,7 @@ generate-internal-image-version:
 
 .PHONY: test
 test: vet
-	$Q go test -json -v -mod=vendor -race $(LDFLAGS) ./... 2>&1 | tee $(GO_TEST_LOG_OUTPUT)
+	$Q go test -json -v -mod=readonly -race $(LDFLAGS) ./... 2>&1 | tee $(GO_TEST_LOG_OUTPUT)
 ifneq ($(FIPS), true)
 	@go run -mod=readonly github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest -input $(GO_TEST_LOG_OUTPUT)
 endif
@@ -259,12 +259,12 @@ capnp:
 
 .PHONY: vet
 vet:
-	$Q go vet -mod=vendor github.com/cloudflare/cloudflared/...
+	$Q go vet -mod=readonly github.com/cloudflare/cloudflared/...
 
 .PHONY: fmt
 fmt:
-	@goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
-	@go fmt $$(go list -mod=vendor -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
+	@goimports -l -w -local github.com/cloudflare/cloudflared $$(go list -mod=readonly -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
+	@go fmt $$(go list -mod=readonly -f '{{.Dir}}' -a ./... | fgrep -v tunnelrpc/proto)
 
 .PHONY: fmt-check
 fmt-check:

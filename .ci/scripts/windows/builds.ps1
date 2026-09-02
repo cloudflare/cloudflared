@@ -8,6 +8,13 @@ $TIMESTAMP_RFC3161 = "http://timestamp.digicert.com"
 
 New-Item -Path ".\artifacts" -ItemType Directory
 
+Write-Output "Downloading Go modules"
+go mod download
+if ($LASTEXITCODE -ne 0) { throw "Failed to download Go modules" }
+# Module downloads must not change the committed dependency lockfiles.
+git diff --exit-code -- go.mod go.sum
+if ($LASTEXITCODE -ne 0) { throw "Go module download changed module metadata" }
+
 Write-Output "Building for amd64"
 $env:TARGET_ARCH = "amd64"
 $env:LOCAL_ARCH = "amd64"

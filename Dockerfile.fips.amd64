@@ -3,13 +3,17 @@ ARG CLOUDFLARE_DOCKER_REGISTRY_HOST
 FROM ${CLOUDFLARE_DOCKER_REGISTRY_HOST:-registry.cfdata.org}/stash/plat/dockerfiles/debian-trixie-golang-boring/master:1.26.4-1@sha256:6306b83f8fcec303db94ebb69ad2f1f0aea5c09115f845839757afca4699925c AS builder
 ENV GO111MODULE=on \
   CGO_ENABLED=1 \
+  GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct \
   # the CONTAINER_BUILD envvar is used set github.com/cloudflare/cloudflared/metrics.Runtime=virtual
   # which changes how cloudflared binds the metrics server
   CONTAINER_BUILD=1
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
 
-# copy our sources into the builder image
+# Download dependencies in their own layer so source-only changes reuse it.
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 
 # compile cloudflared

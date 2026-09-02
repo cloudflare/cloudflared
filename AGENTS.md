@@ -265,7 +265,6 @@ type TunnelProperties struct {
 - Use generic package names (`util`, `helper`, `common`)
 - Commit code that fails `make test lint`
 - Use `fmt.Print*` instead of structured logging
-- Modify vendor dependencies directly
 - Commit secrets, credentials, or sensitive data
 - Use deprecated or unsafe Go patterns
 - Skip testing for new functionality
@@ -274,7 +273,10 @@ type TunnelProperties struct {
 ## Dependencies Management
 
 - Use Go modules (`go.mod`) exclusively
-- Vendor dependencies for reproducible builds
+- Resolve dependencies from the locked module graph with `go mod download`; do not vendor dependencies.
+- Builds, tests, vet, and lint use `-mod=readonly`; `go.mod` and `go.sum` must not drift in CI.
+- Linux CI uses Athens before public and direct module sources; macOS and Windows use the public proxy directly.
+- CI caches modules in `$GOMODCACHE` and compiled packages in `$GOCACHE` under `.cache/go/` for Go-running jobs.
 - Keep dependencies up-to-date and secure
 - Prefer standard library when possible
 - Cloudflared uses a fork of quic-go always check release notes before bumping
