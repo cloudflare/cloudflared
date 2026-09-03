@@ -1,54 +1,45 @@
 package validation
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"io"
+	"net/http/httptest"
 	"testing"
 
-	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"strings"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateHostname(t *testing.T) {
 	var inputHostname string
 	hostname, err := ValidateHostname(inputHostname)
-	assert.Equal(t, err, nil)
+	require.NoError(t, err)
 	assert.Empty(t, hostname)
 
 	inputHostname = "hello.example.com"
 	hostname, err = ValidateHostname(inputHostname)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "hello.example.com", hostname)
 
 	inputHostname = "http://hello.example.com"
 	hostname, err = ValidateHostname(inputHostname)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "hello.example.com", hostname)
 
 	inputHostname = "bücher.example.com"
 	hostname, err = ValidateHostname(inputHostname)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "xn--bcher-kva.example.com", hostname)
 
 	inputHostname = "http://bücher.example.com"
 	hostname, err = ValidateHostname(inputHostname)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "xn--bcher-kva.example.com", hostname)
 
 	inputHostname = "http%3A%2F%2Fhello.example.com"
 	hostname, err = ValidateHostname(inputHostname)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "hello.example.com", hostname)
-
 }
 
 func TestValidateUrl(t *testing.T) {
@@ -99,7 +90,7 @@ func TestValidateUrl(t *testing.T) {
 	}
 	for i, testCase := range testCases {
 		validUrl, err := ValidateUrl(testCase.input)
-		assert.NoError(t, err, "test case %v", i)
+		require.NoError(t, err, "test case %v", i)
 		assert.Equal(t, testCase.expectedOutput, validUrl.String(), "test case %v", i)
 	}
 
@@ -111,6 +102,16 @@ func TestValidateUrl(t *testing.T) {
 	assert.Equal(t, "Currently Cloudflare Tunnel does not support ftp protocol.", err.Error())
 	assert.Empty(t, validUrl)
 
+	for _, input := range []string{
+		"http://::1/",
+		"http://localhost:80:80/",
+	} {
+		t.Run("reject malformed host "+input, func(t *testing.T) {
+			validURL, err := ValidateUrl(input)
+			require.Error(t, err)
+			assert.Nil(t, validURL)
+		})
+	}
 }
 
 func TestNewAccessValidatorOk(t *testing.T) {
@@ -118,11 +119,11 @@ func TestNewAccessValidatorOk(t *testing.T) {
 	url := "test.cloudflareaccess.com"
 	access, err := NewAccessValidator(ctx, url, url, "")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, access)
 
-	assert.Error(t, access.Validate(ctx, ""))
-	assert.Error(t, access.Validate(ctx, "invalid"))
+	require.Error(t, access.Validate(ctx, ""))
+	require.Error(t, access.Validate(ctx, "invalid"))
 
 	req := httptest.NewRequest("GET", "https://test.cloudflareaccess.com", nil)
 	req.Header.Set(accessJwtHeader, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
@@ -141,61 +142,9 @@ func TestNewAccessValidatorErr(t *testing.T) {
 	for _, url := range urls {
 		access, err := NewAccessValidator(ctx, url, url, "")
 
-		assert.Error(t, err, url)
+		require.Error(t, err, url)
 		assert.Nil(t, access)
 	}
-}
-
-type testRoundTripper func(req *http.Request) (*http.Response, error)
-
-func (f testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
-}
-
-func emptyResponse(statusCode int) *http.Response {
-	return &http.Response{
-		StatusCode: statusCode,
-		Body:       io.NopCloser(bytes.NewReader(nil)),
-		Header:     make(http.Header),
-	}
-}
-
-func createMockServerAndClient(handler http.Handler) (*httptest.Server, *http.Client, error) {
-	client := http.DefaultClient
-	server := httptest.NewServer(handler)
-
-	client.Transport = &http.Transport{
-		Proxy: func(req *http.Request) (*url.URL, error) {
-			return url.Parse(server.URL)
-		},
-	}
-
-	return server, client, nil
-}
-
-func createSecureMockServerAndClient(handler http.Handler) (*httptest.Server, *http.Client, error) {
-	client := http.DefaultClient
-	server := httptest.NewTLSServer(handler)
-
-	cert, err := x509.ParseCertificate(server.TLS.Certificates[0].Certificate[0])
-	if err != nil {
-		server.Close()
-		return nil, nil, err
-	}
-
-	certpool := x509.NewCertPool()
-	certpool.AddCert(cert)
-
-	client.Transport = &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return net.Dial("tcp", server.URL[strings.LastIndex(server.URL, "/")+1:])
-		},
-		TLSClientConfig: &tls.Config{
-			RootCAs: certpool,
-		},
-	}
-
-	return server, client, nil
 }
 
 func FuzzNewAccessValidator(f *testing.F) {

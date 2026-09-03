@@ -1,7 +1,7 @@
 # use a builder image for building cloudflare
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
-FROM golang:1.26.4 AS builder
+FROM golang:1.26.8 AS builder
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
   GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct \
