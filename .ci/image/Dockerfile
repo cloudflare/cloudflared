@@ -6,7 +6,7 @@ RUN apt-get update && \
   apt-get install --no-install-recommends --allow-downgrades -y \
   build-essential \
   git \
-  go-boring=1.26.4-1 \
+  go-boring=1.26.8-1 \
   libffi-dev \
   procps \
   python3-dev \
