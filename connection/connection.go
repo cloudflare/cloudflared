@@ -58,6 +58,7 @@ type Orchestrator interface {
 type TunnelProperties struct {
 	Credentials    Credentials
 	QuickTunnelUrl string
+	IsProtected    bool
 }
 
 // Credentials are stored in the credentials file and contain all info needed to run a tunnel.
