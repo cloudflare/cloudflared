@@ -555,7 +555,7 @@ func TestSingleOriginServices(t *testing.T) {
 		flagSet.String("unix-socket", "", "")
 		cliCtx := cli.NewContext(cli.NewApp(), flagSet, nil)
 		for i := 0; i < len(params); i += 2 {
-			cliCtx.Set(params[i], params[i+1])
+			require.NoError(t, cliCtx.Set(params[i], params[i+1]))
 		}
 
 		return cliCtx
@@ -605,7 +605,7 @@ func TestSingleOriginServices(t *testing.T) {
 			if test.err != nil {
 				return
 			}
-			require.Equal(t, 1, len(ingress.Rules))
+			require.Len(t, ingress.Rules, 1)
 			rule := ingress.Rules[0]
 			require.Equal(t, test.expectedService, rule.Service)
 		})
@@ -626,7 +626,7 @@ func TestSingleOriginServices_URL(t *testing.T) {
 		flagSet := flag.NewFlagSet(t.Name(), flag.PanicOnError)
 		flagSet.String("url", "", "")
 		cliCtx := cli.NewContext(cli.NewApp(), flagSet, nil)
-		cliCtx.Set(param, value)
+		require.NoError(t, cliCtx.Set(param, value))
 		return cliCtx
 	}
 
@@ -636,7 +636,7 @@ func TestSingleOriginServices_URL(t *testing.T) {
 			url := urlMustParse(test + host)
 			ingress, err := parseCLIIngress(newCli("url", url.String()), false)
 			require.NoError(t, err)
-			require.Equal(t, 1, len(ingress.Rules))
+			require.Len(t, ingress.Rules, 1)
 			rule := ingress.Rules[0]
 			require.Equal(t, &httpService{url: url}, rule.Service)
 		})
@@ -648,7 +648,7 @@ func TestSingleOriginServices_URL(t *testing.T) {
 			url := urlMustParse(test + host)
 			ingress, err := parseCLIIngress(newCli("url", url.String()), false)
 			require.NoError(t, err)
-			require.Equal(t, 1, len(ingress.Rules))
+			require.Len(t, ingress.Rules, 1)
 			rule := ingress.Rules[0]
 			require.Equal(t, newTCPOverWSService(url), rule.Service)
 		})
@@ -712,7 +712,7 @@ func TestFindMatchingRule(t *testing.T) {
 
 	for _, test := range tests {
 		_, ruleIndex := ingress.FindMatchingRule(test.host, test.path)
-		assert.Equal(t, test.wantRuleIndex, ruleIndex, fmt.Sprintf("Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, ruleIndex))
+		assert.Equal(t, test.wantRuleIndex, ruleIndex, "Expect host=%s, path=%s to match rule %d, got %d", test.host, test.path, test.wantRuleIndex, ruleIndex)
 	}
 }
 
@@ -828,6 +828,103 @@ func TestParseAccessConfig(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			err := validateAccessConfiguration(&test.cfg)
 			require.Equal(t, err != nil, test.expectError)
+		})
+	}
+}
+
+func TestParseIngressAccessConfig(t *testing.T) {
+	t.Parallel()
+
+	globalAccess := config.AccessConfig{
+		Required:    true,
+		TeamName:    "global-team",
+		AudTag:      []string{"global-aud"},
+		Environment: "global-environment",
+	}
+	ruleAccess := config.AccessConfig{
+		Required:    true,
+		TeamName:    "rule-team",
+		AudTag:      []string{"rule-aud"},
+		Environment: "rule-environment",
+	}
+
+	tests := []struct {
+		name             string
+		globalAccess     *config.AccessConfig
+		ruleAccess       *config.AccessConfig
+		expectedHandlers []int
+		expectedAccess   []config.AccessConfig
+		expectedError    string
+	}{
+		{
+			name:             "global access applies to every rule",
+			globalAccess:     &globalAccess,
+			expectedHandlers: []int{1, 1},
+			expectedAccess:   []config.AccessConfig{globalAccess, globalAccess},
+		},
+		{
+			name:             "rule access overrides global access",
+			globalAccess:     &globalAccess,
+			ruleAccess:       &ruleAccess,
+			expectedHandlers: []int{1, 1},
+			expectedAccess:   []config.AccessConfig{ruleAccess, globalAccess},
+		},
+		{
+			name:             "rule access applies only to its rule",
+			ruleAccess:       &ruleAccess,
+			expectedHandlers: []int{1, 0},
+			expectedAccess:   []config.AccessConfig{ruleAccess, {}},
+		},
+		{
+			name:             "no access adds no handlers",
+			expectedHandlers: []int{0, 0},
+			expectedAccess:   []config.AccessConfig{{}, {}},
+		},
+		{
+			name: "invalid global access returns an error",
+			globalAccess: &config.AccessConfig{
+				Required: true,
+				AudTag:   []string{"global-aud"},
+			},
+			expectedError: "access.TeamName cannot be blank",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			conf := &config.Configuration{
+				OriginRequest: config.OriginRequestConfig{Access: test.globalAccess},
+				Ingress: []config.UnvalidatedIngressRule{
+					{
+						Hostname: "example.com",
+						Service:  "https://localhost:8000",
+						OriginRequest: config.OriginRequestConfig{
+							Access: test.ruleAccess,
+						},
+					},
+					{
+						Service: "http_status:404",
+					},
+				},
+			}
+
+			ing, err := ParseIngress(conf)
+			if test.expectedError != "" {
+				require.ErrorContains(t, err, test.expectedError)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, ing.Rules, len(test.expectedHandlers))
+
+			for i, expectedHandlerCount := range test.expectedHandlers {
+				require.Len(t, ing.Rules[i].Handlers, expectedHandlerCount)
+				assert.Equal(t, test.expectedAccess[i], ing.Rules[i].Config.Access)
+				for _, handler := range ing.Rules[i].Handlers {
+					assert.Equal(t, "AccessJWTValidator", handler.Name())
+				}
+			}
 		})
 	}
 }
