@@ -85,7 +85,7 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	bdy, err := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.NoError(t, err)
 	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
 	cancel()
@@ -286,7 +286,7 @@ func TestServeWS(t *testing.T) {
 
 	cancel()
 	resp := respWriter.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// http2RespWriter should rewrite status 101 to 200
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(ResponseMetaHeader))
@@ -412,7 +412,7 @@ func TestFailRegistration(t *testing.T) {
 	http2Conn, edgeConn := newTestHTTP2Connection()
 
 	rpcClientFactory := mockRPCClientFactory{
-		shouldFail:   errDuplicationConnection,
+		shouldFail:   errors.New(DuplicateConnectionError),
 		registered:   make(chan struct{}),
 		unregistered: make(chan struct{}),
 	}
@@ -448,10 +448,10 @@ func TestFailRegistration(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := edgeHTTP2Conn.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 
-	require.Error(t, http2Conn.controlStreamErr)
+	require.ErrorIs(t, http2Conn.controlStreamErr, ErrDuplicateConnection)
 	cancel()
 	wg.Wait()
 }
@@ -553,7 +553,7 @@ func TestServeTCP_RateLimited(t *testing.T) {
 
 	resp, err := edgeHTTP2Conn.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 	require.Equal(t, responseMetaHeaderCfdFlowRateLimited, resp.Header.Get(ResponseMetaHeader))
@@ -592,7 +592,7 @@ func benchmarkServeHTTP(b *testing.B, test testRequest) {
 			require.NoError(b, err)
 			require.Equal(b, test.expectedBody, respBody)
 		}
-		resp.Body.Close()
+		require.NoError(b, resp.Body.Close())
 	}
 
 	cancel()

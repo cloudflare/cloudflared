@@ -3,7 +3,6 @@ package supervisor
 import (
 	"context"
 	"errors"
-	"net"
 	"strings"
 	"time"
 
@@ -112,12 +111,8 @@ func (s *Supervisor) Run(
 ) error {
 	if s.config.ICMPRouterServer != nil {
 		go func() {
-			if err := s.config.ICMPRouterServer.Serve(ctx); err != nil {
-				if errors.Is(err, net.ErrClosed) {
-					s.log.Logger().Info().Err(err).Msg("icmp router terminated")
-				} else {
-					s.log.Logger().Err(err).Msg("icmp router terminated")
-				}
+			if err := s.config.ICMPRouterServer.Serve(ctx); err != nil && ctx.Err() == nil {
+				s.log.Logger().Err(err).Msg("icmp router terminated")
 			}
 		}()
 	}
@@ -266,26 +261,54 @@ func (s *Supervisor) startFirstTunnel(
 		if strings.Contains(err.Error(), "Unauthorized") {
 			continue
 		}
-		switch err.(type) {
-		case edgediscovery.ErrNoAddressesLeft:
+		if registrationErr, ok := errors.AsType[connection.ServerRegisterTunnelError](err); ok {
+			if registrationErr.Permanent {
+				return
+			}
+			continue
+		}
+		if _, ok := errors.AsType[edgediscovery.ErrNoAddressesLeft](err); ok {
 			// If your provided addresses are not available, we will keep trying regardless.
 			if !isStaticEdge {
 				return
 			}
-		case connection.DupConnRegisterTunnelError,
-			*quic.IdleTimeoutError,
-			*quic.ApplicationError,
-			edgediscovery.DialError,
-			*connection.EdgeQuicDialError,
-			*connection.ControlStreamError,
-			*connection.StreamListenerError,
-			*connection.DatagramManagerError:
-			// Try again for these types of errors
-		default:
-			// Uncaught errors should bail startup
+			continue
+		}
+		if !isRetryableStartupError(err) {
+			// Non-retryable errors should bail startup
 			return
 		}
 	}
+}
+
+// isRetryableStartupError reports whether the first tunnel connection should keep
+// retrying for the given error. Wrapped connection errors are classified by their inner type.
+func isRetryableStartupError(err error) bool {
+	if errors.Is(err, connection.ErrDuplicateConnection) {
+		return true
+	}
+	if _, ok := errors.AsType[*quic.IdleTimeoutError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*quic.ApplicationError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[edgediscovery.DialError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*connection.EdgeQuicDialError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*connection.ControlStreamError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*connection.StreamListenerError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*connection.DatagramManagerError](err); ok {
+		return true
+	}
+	return false
 }
 
 // startTunnel starts a new tunnel connection. The resulting error will be sent on

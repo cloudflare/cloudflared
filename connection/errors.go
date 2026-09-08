@@ -1,6 +1,9 @@
 package connection
 
 import (
+	"errors"
+	"fmt"
+
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -8,13 +11,7 @@ const (
 	DuplicateConnectionError = "EDUPCONN"
 )
 
-type DupConnRegisterTunnelError struct{}
-
-var errDuplicationConnection = DupConnRegisterTunnelError{}
-
-func (e DupConnRegisterTunnelError) Error() string {
-	return "already connected to this server, trying another address"
-}
+var ErrDuplicateConnection = errors.New("already connected to this server, trying another address")
 
 // Dial to edge server with quic failed
 type EdgeQuicDialError struct {
@@ -39,6 +36,10 @@ func (e ServerRegisterTunnelError) Error() string {
 	return e.Cause.Error()
 }
 
+func (e ServerRegisterTunnelError) Unwrap() error {
+	return e.Cause
+}
+
 func serverRegistrationErrorFromRPC(err error) ServerRegisterTunnelError {
 	if retryable, ok := err.(*tunnelpogs.RetryableError); ok {
 		return ServerRegisterTunnelError{
@@ -52,26 +53,44 @@ func serverRegistrationErrorFromRPC(err error) ServerRegisterTunnelError {
 	}
 }
 
-type ControlStreamError struct{}
+type ControlStreamError struct {
+	Cause error
+}
 
 var _ error = &ControlStreamError{}
 
 func (e *ControlStreamError) Error() string {
-	return "control stream encountered a failure while serving"
+	return fmt.Sprintf("control stream error: %s", e.Cause)
 }
 
-type StreamListenerError struct{}
+func (e *ControlStreamError) Unwrap() error {
+	return e.Cause
+}
+
+type StreamListenerError struct {
+	Cause error
+}
 
 var _ error = &StreamListenerError{}
 
 func (e *StreamListenerError) Error() string {
-	return "accept stream listener encountered a failure while serving"
+	return fmt.Sprintf("accept stream listener error: %s", e.Cause)
 }
 
-type DatagramManagerError struct{}
+func (e *StreamListenerError) Unwrap() error {
+	return e.Cause
+}
+
+type DatagramManagerError struct {
+	Cause error
+}
 
 var _ error = &DatagramManagerError{}
 
 func (e *DatagramManagerError) Error() string {
-	return "datagram manager encountered a failure while serving"
+	return fmt.Sprintf("datagram manager error: %s", e.Cause)
+}
+
+func (e *DatagramManagerError) Unwrap() error {
+	return e.Cause
 }

@@ -39,6 +39,8 @@ const (
 	QUICMetadataFlowID = "FlowID"
 )
 
+var errControlStreamComplete = errors.New("control stream completed")
+
 // quicConnection represents the type that facilitates Proxying via QUIC streams.
 type quicConnection struct {
 	conn                 cfdquic.QUICConnection
@@ -88,13 +90,13 @@ func (q *quicConnection) Serve(ctx context.Context) error {
 	// The edge assumes the first stream is used for the control plane
 	controlStream, err := q.conn.OpenStream()
 	if err != nil {
-		return fmt.Errorf("failed to open a registration control stream: %w", err)
+		return &ControlStreamError{
+			Cause: fmt.Errorf("failed to open a registration control stream: %w", err),
+		}
 	}
 
-	// If either goroutine returns a non nil error, then the error group cancels the context, thus also canceling the
-	// other goroutines. We enforce returning a not-nil error for each function started in the errgroup by logging
-	// the error returned and returning a custom error type instead.
-	errGroup, ctx := errgroup.WithContext(ctx)
+	// If any goroutine returns a non-nil error, the error group cancels the context and the other goroutines.
+	errGroup, groupCtx := errgroup.WithContext(ctx)
 
 	// Close the quic connection if any of the following routines return from the errgroup (regardless of their error)
 	// because they are no longer processing requests for the connection.
@@ -105,41 +107,54 @@ func (q *quicConnection) Serve(ctx context.Context) error {
 		// err is equal to nil if we exit due to unregistration. If that happens we want to wait the full
 		// amount of the grace period, allowing requests to finish before we cancel the context, which will
 		// make cloudflared exit.
-		if err := q.serveControlStream(ctx, controlStream); err == nil {
-			if q.gracePeriod > 0 {
-				// In Go1.23 this can be removed and replaced with time.Ticker
-				// see https://pkg.go.dev/time#Tick
-				ticker := time.NewTicker(q.gracePeriod)
-				defer ticker.Stop()
-				select {
-				case <-ctx.Done():
-				case <-ticker.C:
-				}
+		controlStreamErr := q.serveControlStream(groupCtx, controlStream)
+		if controlStreamErr != nil {
+			return &ControlStreamError{Cause: controlStreamErr}
+		}
+		if q.gracePeriod > 0 {
+			select {
+			case <-groupCtx.Done():
+			case <-time.Tick(q.gracePeriod):
 			}
 		}
-		if err != nil {
-			q.logger.Error().Err(err).Msg("failed to serve the control stream")
-		}
-		return &ControlStreamError{}
+		return errControlStreamComplete
 	})
 	// Start the accept stream loop routine
 	errGroup.Go(func() error {
-		err := q.acceptStream(ctx)
-		if err != nil {
-			q.logger.Error().Err(err).Msg("failed to accept incoming stream requests")
+		err := q.acceptStream(groupCtx)
+		// The stream listener loops until it encounters an error, so a nil return
+		// is unexpected and must still terminate the other connection services.
+		if err == nil {
+			err = errors.New("stream listener exited unexpectedly")
 		}
-		return &StreamListenerError{}
+		return &StreamListenerError{Cause: err}
 	})
 	// Start the datagram handler routine
 	errGroup.Go(func() error {
-		err := q.datagramHandler.Serve(ctx)
-		if err != nil {
-			q.logger.Error().Err(err).Msg("failed to run the datagram handler")
+		err := q.datagramHandler.Serve(groupCtx)
+		// The datagram manager serves until it encounters an error, so a nil return
+		// is unexpected and must still terminate the other connection services.
+		if err == nil {
+			err = errors.New("datagram manager exited unexpectedly")
 		}
-		return &DatagramManagerError{}
+		return &DatagramManagerError{Cause: err}
 	})
 
-	return errGroup.Wait()
+	err = errGroup.Wait()
+	// A completed control stream returns a private error to make errgroup cancel
+	// the stream listener and datagram manager. We do not expose that coordination
+	// error outside Serve and inspect it here before returning.
+	if err == errControlStreamComplete {
+		if ctx.Err() != nil {
+			// Parent cancellation won the shutdown path, so retain the control-stream
+			// phase while leaving the context error reachable through Unwrap.
+			return &ControlStreamError{Cause: ctx.Err()}
+		}
+		// The control stream unregistered cleanly and its sibling services have
+		// stopped, so the connection requires no retry.
+		return nil
+	}
+	return err
 }
 
 // serveControlStream will serve the RPC; blocking until the control plane is done.
@@ -156,9 +171,8 @@ func (q *quicConnection) acceptStream(ctx context.Context) error {
 	for {
 		quicStream, err := q.conn.AcceptStream(ctx)
 		if err != nil {
-			// context.Canceled is usually a user ctrl+c. We don't want to log an error here as it's intentional.
 			if errors.Is(err, context.Canceled) || q.controlStreamHandler.IsStopped() {
-				return nil
+				return context.Canceled
 			}
 			return fmt.Errorf("failed to accept QUIC stream: %w", err)
 		}

@@ -190,15 +190,257 @@ func TestQUICServer(t *testing.T) {
 
 type fakeControlStream struct {
 	ControlStreamHandler
+	serveError error
+	complete   bool
 }
 
-func (fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *pogs.ConnectionOptions, tunnelConfigGetter TunnelConfigJSONGetter) error {
+func (f fakeControlStream) ServeControlStream(ctx context.Context, rw io.ReadWriteCloser, connOptions *pogs.ConnectionOptions, tunnelConfigGetter TunnelConfigJSONGetter) error {
+	if f.serveError != nil {
+		return f.serveError
+	}
+	if f.complete {
+		return nil
+	}
 	<-ctx.Done()
 	return nil
 }
 
 func (fakeControlStream) IsStopped() bool {
-	return true
+	return false
+}
+
+type fakeDatagramHandler struct {
+	pogs.SessionManager
+	serveError error
+}
+
+func (f fakeDatagramHandler) Serve(context.Context) error {
+	return f.serveError
+}
+
+func TestControlStreamClassifiesDuplicateRegistration(t *testing.T) {
+	t.Parallel()
+
+	rpcClientFactory := mockRPCClientFactory{
+		shouldFail: errors.New(DuplicateConnectionError),
+	}
+	controlStream := NewControlStream(
+		NewObserver(&log, &log),
+		mockConnectedFuse{},
+		&TunnelProperties{},
+		0,
+		nil,
+		rpcClientFactory.newMockRPCClient,
+		time.Second,
+		nil,
+		0,
+		QUIC,
+	)
+
+	err := controlStream.ServeControlStream(t.Context(), &mockReaderNoopWriter{}, &pogs.ConnectionOptions{}, nil)
+	require.ErrorIs(t, err, ErrDuplicateConnection)
+}
+
+type openStreamErrorQUICConnection struct {
+	cfdquic.QUICConnection
+	err error
+}
+
+func (c *openStreamErrorQUICConnection) OpenStream() (*quic.Stream, error) {
+	return nil, c.err
+}
+
+func TestQUICConnectionOpenControlStreamError(t *testing.T) {
+	t.Parallel()
+
+	streamLimitErr := &quic.StreamLimitReachedError{}
+	tests := []struct {
+		name             string
+		openStreamErr    error
+		target           error
+		cancelContext    bool
+		wantControlError bool
+	}{
+		{
+			name:             "stream limit reached",
+			openStreamErr:    streamLimitErr,
+			target:           streamLimitErr,
+			wantControlError: true,
+		},
+		{
+			name:             "connection canceled while context remains active",
+			openStreamErr:    fmt.Errorf("open stream: %w", context.Canceled),
+			target:           context.Canceled,
+			wantControlError: true,
+		},
+		{
+			name:             "serving context canceled remains wrapped",
+			openStreamErr:    fmt.Errorf("open stream: %w", context.Canceled),
+			target:           context.Canceled,
+			cancelContext:    true,
+			wantControlError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			if tc.cancelContext {
+				canceledCtx, cancel := context.WithCancel(ctx)
+				cancel()
+				ctx = canceledCtx
+			}
+			quicConn := &quicConnection{
+				conn: &openStreamErrorQUICConnection{err: tc.openStreamErr},
+			}
+			err := quicConn.Serve(ctx)
+
+			require.ErrorIs(t, err, tc.target)
+			_, isControlError := errors.AsType[*ControlStreamError](err)
+			assert.Equal(t, tc.wantControlError, isControlError)
+		})
+	}
+}
+
+func TestQUICConnectionReturnsRegistrationError(t *testing.T) {
+	t.Parallel()
+
+	quicConn, ctx, cancel := newTestQUICConnection(t)
+	defer cancel()
+
+	expectedCause := errors.New("Unauthorized: Invalid tunnel secret")
+	expectedErr := ServerRegisterTunnelError{Cause: expectedCause, Permanent: true}
+	quicConn.controlStreamHandler = fakeControlStream{serveError: expectedErr}
+	logBuffer := &bytes.Buffer{}
+	logger := zerolog.New(logBuffer)
+	quicConn.logger = &logger
+
+	err := quicConn.Serve(ctx)
+
+	// The failure is wrapped in a ControlStreamError so the supervisor can classify
+	// it, while the underlying registration error remains reachable and printable.
+	var controlStreamErr *ControlStreamError
+	require.ErrorAs(t, err, &controlStreamErr, "expected *ControlStreamError, got %T", err)
+
+	var registrationErr ServerRegisterTunnelError
+	require.ErrorAs(t, err, &registrationErr)
+	assert.Same(t, expectedCause, registrationErr.Cause)
+	assert.True(t, registrationErr.Permanent)
+	require.ErrorIs(t, err, expectedCause)
+
+	require.EqualError(t, err, "control stream error: "+expectedCause.Error())
+	assert.Empty(t, logBuffer.String())
+}
+
+func TestQUICConnectionCancellation(t *testing.T) {
+	t.Parallel()
+
+	quicConn, ctx, cancel := newTestQUICConnection(t)
+	logBuffer := &bytes.Buffer{}
+	logger := zerolog.New(logBuffer)
+	quicConn.logger = &logger
+
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- quicConn.Serve(ctx)
+	}()
+	cancel()
+
+	err := <-serveDone
+	require.ErrorIs(t, err, context.Canceled)
+	var controlStreamErr *ControlStreamError
+	var streamListenerErr *StreamListenerError
+	var datagramManagerErr *DatagramManagerError
+	assert.True(t,
+		errors.As(err, &controlStreamErr) ||
+			errors.As(err, &streamListenerErr) ||
+			errors.As(err, &datagramManagerErr),
+		"expected a typed connection error, got %T", err,
+	)
+	assert.Empty(t, logBuffer.String())
+}
+
+func TestQUICConnectionCleanControlStreamCompletion(t *testing.T) {
+	t.Parallel()
+
+	quicConn, ctx, cancel := newTestQUICConnection(t)
+	defer cancel()
+	quicConn.controlStreamHandler = fakeControlStream{complete: true}
+
+	require.NoError(t, quicConn.Serve(ctx))
+}
+
+func TestQUICConnectionUnexpectedDatagramExit(t *testing.T) {
+	t.Parallel()
+
+	quicConn, ctx, cancel := newTestQUICConnection(t)
+	defer cancel()
+	quicConn.datagramHandler = fakeDatagramHandler{}
+
+	err := quicConn.Serve(ctx)
+
+	var datagramErr *DatagramManagerError
+	require.ErrorAs(t, err, &datagramErr)
+	require.EqualError(t, err, "datagram manager error: datagram manager exited unexpectedly")
+}
+
+func TestConnectionErrorTypesUnwrap(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("inner")
+	tests := []struct {
+		name   string
+		err    error
+		prefix string
+	}{
+		{"server registration", ServerRegisterTunnelError{Cause: cause}, "inner"},
+		{"control stream", &ControlStreamError{Cause: cause}, "control stream error: inner"},
+		{"stream listener", &StreamListenerError{Cause: cause}, "accept stream listener error: inner"},
+		{"datagram manager", &DatagramManagerError{Cause: cause}, "datagram manager error: inner"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.EqualError(t, tc.err, tc.prefix)
+			assert.ErrorIs(t, tc.err, cause)
+		})
+	}
+}
+
+func newTestQUICConnection(t *testing.T) (*quicConnection, context.Context, context.CancelFunc) {
+	t.Helper()
+
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	udpListener, err := net.ListenUDP(udpAddr.Network(), udpAddr)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = udpListener.Close() })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	quicListener, err := quic.Listen(udpListener, testTLSServerConfig, testQUICConfig)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = quicListener.Close() })
+
+	type acceptResult struct {
+		conn *quic.Conn
+		err  error
+	}
+	accepted := make(chan acceptResult, 1)
+	go func() {
+		conn, err := quicListener.Accept(ctx)
+		accepted <- acceptResult{conn: conn, err: err}
+	}()
+
+	tunnelConn, _ := testTunnelConnection(t, netip.MustParseAddrPort(udpListener.LocalAddr().String()), 0)
+	result := <-accepted
+	require.NoError(t, result.err)
+	t.Cleanup(func() { _ = result.conn.CloseWithError(0, "") })
+	quicConn, ok := tunnelConn.(*quicConnection)
+	require.True(t, ok)
+	return quicConn, ctx, cancel
 }
 
 func quicServer(
