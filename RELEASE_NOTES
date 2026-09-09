@@ -1,3 +1,14 @@
+2026.9.0
+- 2026-09-08 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to 1411d9a
+- 2026-09-08 Update gcr.io/distroless/base-debian13:nonroot Docker digest to d199d20
+- 2026-09-08 TUN-10738: Propagate edge registration errors over QUIC and fix supervisor error classification
+- 2026-09-08 chore: Cleanup unused transport log level
+- 2026-09-03 TUN-10799: Negotiate protected mode during Quick Tunnel provisioning
+- 2026-09-03 TUN-10834: Bump Go toolchains to 1.26.8
+- 2026-09-02 AUTH-8883 Fix Access token lock self-deadlock during same-process reauth
+- 2026-09-02 TUN-10829: Remove vendoring
+- 2026-09-01 fix(ci): use fresh clone for Windows jobs
+
 2026.8.3
 - 2026-08-28 chore: Remove stale metrics timeout TODO
 - 2026-08-28 TUN-10798: Parse Quick Tunnel allowed mail rules
