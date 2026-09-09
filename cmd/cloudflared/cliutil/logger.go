@@ -32,14 +32,6 @@ func ConfigureLoggingFlags(shouldHide bool) []cli.Flag {
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    flags.TransportLogLevel,
-			Aliases: []string{"proto-loglevel"}, // This flag used to be called proto-loglevel
-			Value:   "info",
-			Usage:   "Transport logging level(previously called protocol logging level) {debug, info, warn, error, fatal}",
-			EnvVars: []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"},
-			Hidden:  shouldHide,
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    flags.LogFile,
 			Usage:   "Save application log to this file for reporting issues.",
 			EnvVars: []string{"TUNNEL_LOGFILE"},
