@@ -51,6 +51,12 @@ Once installed, you can authenticate `cloudflared` into your Cloudflare account 
 
 Want to test Cloudflare Tunnel before adding a website to Cloudflare? You can do so with TryCloudflare using the documentation [available here](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/).
 
+## Breaking Changes
+
+Removal of CLI flags, environment variables, configuration keys, or commands is a breaking
+change. Such removals must be announced in the [Cloudflare Tunnel changelog](https://developers.cloudflare.com/changelog/product/tunnel/)
+before the release that removes them.
+
 ## Deprecated versions
 
 Cloudflare currently supports versions of cloudflared that are **within one year** of the most recent release. Breaking changes unrelated to feature availability may be introduced that will impact versions released more than one year ago. You can read more about upgrading cloudflared in our [developer documentation](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/update-cloudflared/).

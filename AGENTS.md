@@ -259,6 +259,21 @@ type TunnelProperties struct {
 - Making breaking changes to public APIs
 - Changing logging levels or structured logging fields
 
+### Breaking Change Policy
+
+Removing or renaming a CLI flag, environment variable, configuration key, alias, or
+subcommand is a **breaking change** and requires advance notice:
+
+1. A new entry must be added to the [Cloudflare Tunnel changelog](https://developers.cloudflare.com/changelog/product/tunnel/)
+   and published in a release **at least 3 months before** the removal takes effect.
+2. The entry must name every affected flag/alias/env var, state the planned removal
+   date or release, and describe the migration path.
+3. The actual removal PR must not be merged until that notice has shipped in a
+   released version.
+
+If you are asked to remove a flag or similar user-visible interface without a prior
+notice, do not proceed without explicit confirmation.
+
 ### 🚫 Never Do
 
 - Ignore errors without explicit handling (`_ = err`)
