@@ -46,6 +46,14 @@ type unixSocketPath struct {
 	transport *http.Transport
 }
 
+// unixSocketTCPService is an OriginService that streams raw bytes (e.g. SSH, RDP) directly into a
+// unix socket, bypassing HTTP entirely. It is the unix-socket analogue of tcpOverWSService.
+type unixSocketTCPService struct {
+	path          string
+	streamHandler streamHandlerFunc
+	dialer        net.Dialer
+}
+
 func (o *unixSocketPath) String() string {
 	scheme := ""
 	if o.scheme == "https" {
@@ -64,6 +72,21 @@ func (o *unixSocketPath) start(log *zerolog.Logger, _ <-chan struct{}, cfg Origi
 }
 
 func (o unixSocketPath) MarshalJSON() ([]byte, error) {
+	return json.Marshal(o.String())
+}
+
+func (o *unixSocketTCPService) String() string {
+	return "unix+tcp:" + o.path
+}
+
+func (o *unixSocketTCPService) start(_ *zerolog.Logger, _ <-chan struct{}, cfg OriginRequestConfig) error {
+	o.streamHandler = DefaultStreamHandler
+	o.dialer.Timeout = cfg.ConnectTimeout.Duration
+	o.dialer.KeepAlive = cfg.TCPKeepAlive.Duration
+	return nil
+}
+
+func (o unixSocketTCPService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(o.String())
 }
 
