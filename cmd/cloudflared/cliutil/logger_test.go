@@ -8,7 +8,29 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2/altsrc"
+
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 )
+
+func TestTransportLogLevelFlagIsDeprecatedAndHidden(t *testing.T) {
+	t.Parallel()
+
+	var transportLogLevelFlag *altsrc.StringFlag
+	for _, configuredFlag := range ConfigureLoggingFlags(false) {
+		stringFlag, ok := configuredFlag.(*altsrc.StringFlag)
+		if ok && stringFlag.Name == flags.TransportLogLevel {
+			transportLogLevelFlag = stringFlag
+			break
+		}
+	}
+
+	require.NotNil(t, transportLogLevelFlag)
+	assert.True(t, transportLogLevelFlag.Hidden)
+	assert.Equal(t, "DEPRECATED. No longer has any effect.", transportLogLevelFlag.Usage)
+	assert.Equal(t, []string{"proto-loglevel"}, transportLogLevelFlag.Aliases)
+	assert.Equal(t, []string{"TUNNEL_PROTO_LOGLEVEL", "TUNNEL_TRANSPORT_LOGLEVEL"}, transportLogLevelFlag.EnvVars)
+}
 
 func TestLogTableWithoutTitle(t *testing.T) {
 	t.Parallel()

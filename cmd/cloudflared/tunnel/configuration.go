@@ -46,7 +46,6 @@ var (
 		flags.Retries,
 		flags.Protocol,
 		flags.LogLevel,
-		flags.TransportLogLevel,
 		flags.OriginCert,
 		flags.Metrics,
 		flags.MetricsUpdateFreq,
@@ -114,7 +113,7 @@ func prepareTunnelConfig(
 	ctx context.Context,
 	c *cli.Context,
 	info *cliutil.BuildInfo,
-	log, logTransport *zerolog.Logger,
+	log *zerolog.Logger,
 	observer *connection.Observer,
 	namedTunnel *connection.TunnelProperties,
 ) (*supervisor.TunnelConfig, *orchestration.Config, error) {
@@ -235,7 +234,6 @@ func prepareTunnelConfig(
 		LBPool:          c.String(flags.LBPool),
 		Tags:            tags,
 		Log:             log,
-		LogTransport:    logTransport,
 		Observer:        observer,
 		ReportedVersion: info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc

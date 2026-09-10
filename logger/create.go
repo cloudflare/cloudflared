@@ -128,10 +128,6 @@ func newZerolog(loggerConfig *Config) *zerolog.Logger {
 	return &log
 }
 
-func CreateTransportLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
-	return createFromContext(c, cfdflags.TransportLogLevel, cfdflags.LogDirectory, disableTerminal)
-}
-
 func CreateLoggerFromContext(c *cli.Context, disableTerminal bool) *zerolog.Logger {
 	return createFromContext(c, cfdflags.LogLevel, cfdflags.LogDirectory, disableTerminal)
 }

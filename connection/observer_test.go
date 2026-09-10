@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -9,22 +10,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSendUrl(t *testing.T) {
-	observer := NewObserver(&log, &log)
+	observer := NewObserver(&log)
 
 	observer.SendURL("my-url.com")
-	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://my-url.com"))
+	assert.InEpsilon(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://my-url.com"), 0.001)
 
 	observer.SendURL("https://another-long-one.com")
-	assert.Equal(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://another-long-one.com"))
+	assert.InEpsilon(t, 1.0, getCounterValue(t, observer.metrics.userHostnamesCounts, "https://another-long-one.com"), 0.001)
 }
 
 func getCounterValue(t *testing.T, metric *prometheus.CounterVec, val string) float64 {
 	var m = &dto.Metric{}
 	err := metric.WithLabelValues(val).Write(m)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	return m.Counter.GetValue()
 }
 
@@ -59,16 +61,16 @@ func TestRegisterServerLocation(t *testing.T) {
 		id := strconv.Itoa(i)
 		assert.Equal(t, "AUS", m.oldServerLocations[id])
 	}
-
 }
 
 func TestObserverEventsDontBlock(t *testing.T) {
-	observer := NewObserver(&log, &log)
+	observer := NewObserver(&log)
 	var mu sync.Mutex
 	observer.RegisterSink(EventSinkFunc(func(_ Event) {
 		// callback will block if lock is already held
 		mu.Lock()
-		mu.Unlock()
+		defer mu.Unlock()
+		runtime.Gosched()
 	}))
 
 	timeout := time.AfterFunc(5*time.Second, func() {
