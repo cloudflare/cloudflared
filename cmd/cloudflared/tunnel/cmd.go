@@ -113,6 +113,7 @@ var (
 		"proxy-address",
 		"proxy-port",
 		cfdflags.LogLevel,
+		cfdflags.TransportLogLevel,
 		cfdflags.LogFile,
 		cfdflags.LogDirectory,
 		cfdflags.TraceOutput,
@@ -396,7 +397,9 @@ func StartServer(
 		return fmt.Errorf("namedTunnel is nil")
 	}
 
-	observer := connection.NewObserver(log)
+	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
+
+	observer := connection.NewObserver(log, logTransport)
 
 	// Send Quick Tunnel URL to UI if applicable
 	quickTunnelURL := namedTunnel.QuickTunnelUrl
@@ -404,7 +407,7 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(ctx, c, info, log, observer, namedTunnel)
+	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(ctx, c, info, log, logTransport, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
