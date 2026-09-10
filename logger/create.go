@@ -194,7 +194,7 @@ func createConsoleLogger(config ConsoleConfig) io.Writer {
 	consoleOut := os.Stderr
 	return zerolog.ConsoleWriter{
 		Out:        colorable.NewColorable(consoleOut),
-		NoColor:    config.noColor || !term.IsTerminal(int(consoleOut.Fd())),
+		NoColor:    config.noColor || !term.IsTerminal(int(consoleOut.Fd())), // nolint:gosec
 		TimeFormat: consoleTimeFormat,
 	}
 }
@@ -216,7 +216,7 @@ func createFileWriter(config FileConfig) (io.Writer, error) {
 		fullpath := config.Fullpath()
 
 		// Try to open the existing file
-		logFile, err := os.OpenFile(fullpath, os.O_APPEND|os.O_WRONLY, filePermMode)
+		logFile, err := os.OpenFile(fullpath, os.O_APPEND|os.O_WRONLY, filePermMode) //nolint:gosec // Log file path is provided by the configured FileConfig.
 		if err != nil {
 			// If the existing file wasn't found, or couldn't be opened, just ignore
 			// it and recreate a new one.
@@ -246,7 +246,7 @@ func createDirFile(config FileConfig) (io.Writer, error) {
 	mode := os.FileMode(filePermMode)
 
 	fullPath := filepath.Join(config.Dirname, config.Filename)
-	logFile, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, mode)
+	logFile, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, mode) //nolint:gosec // Log file path is constructed from the configured FileConfig.
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a new logfile: %s", err)
 	}
