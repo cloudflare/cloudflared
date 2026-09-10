@@ -225,7 +225,7 @@ func TestControlStreamClassifiesDuplicateRegistration(t *testing.T) {
 		shouldFail: errors.New(DuplicateConnectionError),
 	}
 	controlStream := NewControlStream(
-		NewObserver(&log, &log),
+		NewObserver(&log),
 		mockConnectedFuse{},
 		&TunnelProperties{},
 		0,

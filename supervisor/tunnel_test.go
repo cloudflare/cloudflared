@@ -280,7 +280,7 @@ func (s *scriptedTunnelServer) Serve(_ context.Context, _ uint8, _ *protocolFall
 func newTestSupervisor(t *testing.T, server TunnelServer) *Supervisor {
 	t.Helper()
 	log := zerolog.Nop()
-	observer := connection.NewObserver(&log, &log)
+	observer := connection.NewObserver(&log)
 	tracker := tunnelstate.NewConnTracker(&log)
 	connAwareLogger := NewConnAwareLogger(&log, tracker, observer)
 
