@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/quic-go/quic-go"
+	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
@@ -40,7 +41,8 @@ type Supervisor struct {
 	nextConnectedIndex  int
 	nextConnectedSignal chan struct{}
 
-	log *ConnAwareLogger
+	log          *ConnAwareLogger
+	logTransport *zerolog.Logger
 
 	gracefulShutdownC <-chan struct{}
 }
@@ -98,6 +100,7 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		tunnelsConnecting:       map[int]chan struct{}{},
 		tunnelsProtocolFallback: map[int]*protocolFallback{},
 		log:                     log,
+		logTransport:            config.LogTransport,
 		gracefulShutdownC:       gracefulShutdownC,
 	}, nil
 }
