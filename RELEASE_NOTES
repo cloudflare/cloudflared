@@ -1,3 +1,8 @@
+2026.9.1
+- 2026-09-10 Revert "chore: Cleanup unused transport log level"
+- 2026-09-10 chore: Add notes on breaking changes
+- 2026-09-10 chore: Mark transport-loglevel deprecated
+
 2026.9.0
 - 2026-09-08 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to 1411d9a
 - 2026-09-08 Update gcr.io/distroless/base-debian13:nonroot Docker digest to d199d20
