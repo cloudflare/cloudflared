@@ -88,6 +88,11 @@ func (s *SafeStreamCloser) Close() error {
 	return s.stream.Close()
 }
 
+func (s *SafeStreamCloser) CloseRead() error {
+	s.stream.CancelRead(0)
+	return nil
+}
+
 func (s *SafeStreamCloser) CloseWrite() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
