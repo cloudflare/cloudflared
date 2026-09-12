@@ -190,7 +190,7 @@ func createConsoleLogger(config ConsoleConfig) io.Writer {
 	consoleOut := os.Stderr
 	return zerolog.ConsoleWriter{
 		Out:        colorable.NewColorable(consoleOut),
-		NoColor:    config.noColor || !term.IsTerminal(int(consoleOut.Fd())),
+		NoColor:    config.noColor || !term.IsTerminal(int(consoleOut.Fd())), // nolint:gosec
 		TimeFormat: consoleTimeFormat,
 	}
 }

@@ -135,6 +135,9 @@ const (
 	// LogLevelSSH is the command line flag for the cloudflared ssh logging level
 	LogLevelSSH = "log-level"
 
+	// TransportLogLevel is retained as a deprecated no-op for backwards compatibility.
+	TransportLogLevel = "transport-loglevel"
+
 	// LogFile is the command line flag to define the file where application logs will be stored
 	LogFile = "logfile"
 
