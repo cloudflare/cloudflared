@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"slices"
 	"testing"
 
@@ -113,14 +112,15 @@ func TestSupportedCurvesNegotiation(t *testing.T) {
 		curves, err := getCurvePreferences(tcase)
 		require.NoError(t, err)
 		advertisedCurves := runClientServerHandshake(t, curves)
-		require.True(t, slices.Contains(advertisedCurves, tls.CurveP256))
-		require.True(t, slices.Contains(advertisedCurves, tls.X25519MLKEM768))
-		expectedLength := 2
-		if runtime.GOOS == "linux" {
-			// P256Kyber768Draft00 only exists in linux
-			require.True(t, slices.Contains(advertisedCurves, P256Kyber768Draft00))
-			expectedLength = 3
+
+		// P256Kyber768Draft00 is a private curve ID implemented by
+		// Cloudflare's Go fork. Standard Go's crypto/tls filters it out of
+		// the ClientHello, so its presence -- not the OS -- determines which
+		// toolchain produced the handshake.
+		expectedCurves := []tls.CurveID{tls.X25519MLKEM768, tls.CurveP256}
+		if slices.Contains(advertisedCurves, P256Kyber768Draft00) {
+			expectedCurves = curves
 		}
-		require.Len(t, advertisedCurves, expectedLength)
+		require.Equal(t, expectedCurves, advertisedCurves)
 	}
 }
