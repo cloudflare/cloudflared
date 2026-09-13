@@ -265,7 +265,6 @@ func (me *mockEyeballSession) serve(ctx context.Context, requestChan chan *packe
 		if !bytes.Equal(resp, me.expectedResponse) {
 			return fmt.Errorf("Expect %v, read %v", me.expectedResponse, resp)
 		}
-		fmt.Println("Resp", resp)
 	}
 	return nil
 }
