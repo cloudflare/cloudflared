@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	cli "github.com/urfave/cli/v2"
 
@@ -28,7 +27,7 @@ func runApp(app *cli.App, graceShutdownC chan struct{}) {
 			},
 		},
 	})
-	app.Run(os.Args)
+	runAppAndExit(app)
 }
 
 func installGenericService(c *cli.Context) error {

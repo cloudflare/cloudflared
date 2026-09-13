@@ -94,7 +94,7 @@ causing it to look for credentials in a configuration file upon startup.`,
 		log.Fatal().Err(err).Msg("failed to determine if we are running in an interactive session")
 	}
 	if isIntSess {
-		app.Run(os.Args)
+		runAppAndExit(app)
 		return
 	}
 
@@ -106,7 +106,7 @@ causing it to look for credentials in a configuration file upon startup.`,
 		if errno, ok := err.(syscall.Errno); ok && int(errno) == serviceControllerConnectionFailure {
 			// Hack: assume this is a false negative from the IsAnInteractiveSession() check above.
 			// Run the app in "interactive" mode anyway.
-			app.Run(os.Args)
+			runAppAndExit(app)
 			return
 		}
 		log.Fatal().Err(err).Msgf("%s service failed", windowsServiceName)
