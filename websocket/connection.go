@@ -81,6 +81,9 @@ func (c *GorillaConn) SetDeadline(t time.Time) error {
 type Conn struct {
 	rw  io.ReadWriter
 	log *zerolog.Logger
+	// readBuf holds the unread remainder of the last message when it was larger than the buffer passed to Read.
+	// Without it, everything past len(reader) of a message would be silently dropped.
+	readBuf bytes.Buffer
 	// writeLock makes sure
 	// 1. Only one write at a time. The pinger and Stream function can both call write.
 	// 2. Close only returns after in progress Write is finished, and no more Write will succeed after calling Close.
@@ -99,11 +102,22 @@ func NewConn(ctx context.Context, rw io.ReadWriter, log *zerolog.Logger) *Conn {
 
 // Read will read messages from the websocket connection
 func (c *Conn) Read(reader []byte) (int, error) {
+	// Intermediate buffer may contain unread bytes from the last read, start there before blocking on a new frame
+	if c.readBuf.Len() > 0 {
+		return c.readBuf.Read(reader)
+	}
+
 	data, err := wsutil.ReadClientBinary(c.rw)
 	if err != nil {
 		return 0, err
 	}
-	return copy(reader, data), nil
+
+	copied := copy(reader, data)
+
+	// Write unread bytes to readBuf; if everything was read this is a no-op
+	c.readBuf.Write(data[copied:])
+
+	return copied, nil
 }
 
 // Write will write messages to the websocket connection.
