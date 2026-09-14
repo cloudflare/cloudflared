@@ -29,6 +29,9 @@ include:
 macos-build-cloudflared: &mac-build
   <<: *mac-build-defaults
   stage: build
+  # Temporarily disabled while macOS runners are unavailable.
+  rules:
+    - when: never
   artifacts:
     paths:
       - artifacts/*
@@ -49,8 +52,9 @@ macos-build-cloudflared: &mac-build
 ###############################################
 macos-build-and-sign-cloudflared:
   <<: *mac-build
+  # Temporarily disabled while macOS runners are unavailable.
   rules:
-    - !reference [.default-rules, run-on-master]
+    - when: never
   secrets:
     APPLE_DEV_CA_CERT:
       vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert_v2/data@kv

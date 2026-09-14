@@ -80,7 +80,8 @@ release-cloudflared-to-github:
     - ci-image-get-image-ref
     - linux-packaging
     - linux-packaging-fips
-    - macos-build-and-sign-cloudflared
+    - job: macos-build-and-sign-cloudflared
+      optional: true
     - windows-package-sign
   script:
     - ./.ci/scripts/release-target.sh github-release
