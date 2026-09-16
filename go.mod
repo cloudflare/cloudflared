@@ -45,6 +45,7 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	nhooyr.io/websocket v1.8.7
+	rsc.io/qr v0.2.0
 	zombiezen.com/go/capnproto2 v2.18.0+incompatible
 )
 
