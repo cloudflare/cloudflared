@@ -56,9 +56,9 @@ type Orchestrator interface {
 }
 
 type TunnelProperties struct {
-	Credentials    Credentials
-	QuickTunnelUrl string
-	IsProtected    bool
+	Credentials     Credentials
+	QuickTunnelUrl  string
+	QuickTunnelAuth HTTPRequestInterceptor
 }
 
 // Credentials are stored in the credentials file and contain all info needed to run a tunnel.
@@ -146,6 +146,12 @@ func (t Type) String() string {
 	default:
 		return fmt.Sprintf("Unknown Type %d", t)
 	}
+}
+
+// HTTPRequestInterceptor handles an HTTP request before ingress selection.
+// When configured, it owns the response and the request does not reach the origin.
+type HTTPRequestInterceptor interface {
+	HandleHTTP(w http.ResponseWriter, r *http.Request) error
 }
 
 // OriginProxy is how data flows from cloudflared to the origin services running behind it.

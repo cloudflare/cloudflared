@@ -40,7 +40,9 @@ type Orchestrator struct {
 	flowLimiter cfdflow.Limiter
 	// Origin dialer service to manage egress socket dialing.
 	originDialerService *ingress.OriginDialerService
-	log                 *zerolog.Logger
+	// httpRequestInterceptor is process-local and persists across configuration updates.
+	httpRequestInterceptor connection.HTTPRequestInterceptor
+	log                    *zerolog.Logger
 
 	// orchestrator must not handle any more updates after shutdownC is closed
 	shutdownC <-chan struct{}
@@ -54,18 +56,42 @@ func NewOrchestrator(ctx context.Context,
 	internalRules []ingress.Rule,
 	log *zerolog.Logger,
 ) (*Orchestrator, error) {
+	return newOrchestrator(ctx, config, tags, internalRules, nil, log)
+}
+
+// NewOrchestratorWithHTTPRequestInterceptor creates an Orchestrator with a process-local HTTP request interceptor.
+func NewOrchestratorWithHTTPRequestInterceptor(
+	ctx context.Context,
+	config *Config,
+	tags []pogs.Tag,
+	internalRules []ingress.Rule,
+	httpRequestInterceptor connection.HTTPRequestInterceptor,
+	log *zerolog.Logger,
+) (*Orchestrator, error) {
+	return newOrchestrator(ctx, config, tags, internalRules, httpRequestInterceptor, log)
+}
+
+func newOrchestrator(
+	ctx context.Context,
+	config *Config,
+	tags []pogs.Tag,
+	internalRules []ingress.Rule,
+	httpRequestInterceptor connection.HTTPRequestInterceptor,
+	log *zerolog.Logger,
+) (*Orchestrator, error) {
 	o := &Orchestrator{
 		// Lowest possible version, any remote configuration will have version higher than this
 		// Starting at -1 allows a configuration migration (local to remote) to override the current configuration as it
 		// will start at version 0.
-		currentVersion:      -1,
-		internalRules:       internalRules,
-		config:              config,
-		tags:                tags,
-		flowLimiter:         cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
-		originDialerService: config.OriginDialerService,
-		log:                 log,
-		shutdownC:           ctx.Done(),
+		currentVersion:         -1,
+		internalRules:          internalRules,
+		config:                 config,
+		tags:                   tags,
+		flowLimiter:            cfdflow.NewLimiter(config.WarpRouting.MaxActiveFlows),
+		originDialerService:    config.OriginDialerService,
+		httpRequestInterceptor: httpRequestInterceptor,
+		log:                    log,
+		shutdownC:              ctx.Done(),
 	}
 	if err := o.updateIngress(*config.Ingress, config.WarpRouting); err != nil {
 		return nil, err
@@ -186,8 +212,16 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 	// runtime in response to a configuration push except when starting a tunnel connection.
 	o.originDialerService.UpdateDefaultDialer(ingress.NewDialer(warpRouting))
 
-	// Create and replace the origin proxy with a new instance
-	proxy := proxy.NewOriginProxy(ingressRules, o.originDialerService, o.tags, o.flowLimiter, o.log)
+	// Create and replace the origin proxy with a new instance. The request
+	// interceptor is process-local and remains installed across remote ingress updates.
+	proxy := proxy.NewOriginProxyWithHTTPRequestInterceptor(
+		ingressRules,
+		o.originDialerService,
+		o.tags,
+		o.flowLimiter,
+		o.httpRequestInterceptor,
+		o.log,
+	)
 	o.proxy.Store(proxy)
 	o.config.Ingress = &ingressRules
 	o.config.WarpRouting = warpRouting

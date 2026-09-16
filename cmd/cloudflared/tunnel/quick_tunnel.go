@@ -15,6 +15,7 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/quicktunnelauth"
 )
 
 const httpTimeout = 15 * time.Second
@@ -116,14 +117,26 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		TunnelID:     tunnelID,
 	}
 
-	url := data.Result.Hostname
-	if !strings.HasPrefix(url, "https://") {
-		url = "https://" + url
+	var quickTunnelAuth connection.HTTPRequestInterceptor
+	if isProtected {
+		stateManager, err := quicktunnelauth.NewQuickTunnelAuthStateManager(data.Result.Hostname)
+		if err != nil {
+			return fmt.Errorf("initialize Quick Tunnel authentication state: %w", err)
+		}
+		quickTunnelAuth, err = quicktunnelauth.NewQuickTunnelAuthHandler(stateManager)
+		if err != nil {
+			return fmt.Errorf("initialize Quick Tunnel authentication handler: %w", err)
+		}
+	}
+
+	quickTunnelURL := data.Result.Hostname
+	if !strings.HasPrefix(quickTunnelURL, "https://") {
+		quickTunnelURL = "https://" + quickTunnelURL
 	}
 
 	cliutil.LogTable(sc.log, []string{
 		"Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):",
-		url,
+		quickTunnelURL,
 	})
 
 	if !sc.c.IsSet(flags.Protocol) {
@@ -136,7 +149,11 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	return StartServer(
 		sc.c,
 		buildInfo,
-		&connection.TunnelProperties{Credentials: credentials, QuickTunnelUrl: data.Result.Hostname, IsProtected: isProtected},
+		&connection.TunnelProperties{
+			Credentials:     credentials,
+			QuickTunnelUrl:  data.Result.Hostname,
+			QuickTunnelAuth: quickTunnelAuth,
+		},
 		sc.log,
 	)
 }

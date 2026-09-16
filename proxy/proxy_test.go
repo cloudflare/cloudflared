@@ -80,6 +80,16 @@ func (m *mockHTTPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	panic("Hijack not implemented")
 }
 
+type mockHTTPRequestInterceptor struct {
+	called bool
+}
+
+func (h *mockHTTPRequestInterceptor) HandleHTTP(w http.ResponseWriter, _ *http.Request) error {
+	h.called = true
+	w.WriteHeader(http.StatusTeapot)
+	return nil
+}
+
 type mockWSRespWriter struct {
 	*mockHTTPRespWriter
 	writeNotification chan []byte
@@ -143,6 +153,36 @@ func (w *mockSSERespWriter) WriteString(str string) (int, error) {
 
 func (w *mockSSERespWriter) ReadBytes() []byte {
 	return <-w.writeNotification
+}
+
+func TestHTTPRequestInterceptorRunsBeforeIngressSelection(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	interceptor := &mockHTTPRequestInterceptor{}
+	originProxy := NewOriginProxyWithHTTPRequestInterceptor(
+		ingress.Ingress{},
+		nil,
+		testTags,
+		cfdflow.NewLimiter(0),
+		interceptor,
+		&log,
+	)
+	responseWriter := newMockHTTPRespWriter()
+	request, err := http.NewRequest(http.MethodGet, "https://test-tunnel.trycloudflare.com/", nil)
+	require.NoError(t, err)
+
+	err = originProxy.ProxyHTTP(
+		responseWriter,
+		tracing.NewTracedHTTPRequest(request, 0, &log),
+		false,
+	)
+	require.NoError(t, err)
+	assert.True(t, interceptor.called)
+	assert.Equal(t, http.StatusTeapot, responseWriter.Code)
+	for _, tag := range testTags {
+		assert.Empty(t, request.Header.Get(TagHeaderNamePrefix+tag.Name))
+	}
 }
 
 func TestProxySingleOrigin(t *testing.T) {

@@ -48,6 +48,13 @@ var (
 	})
 )
 
+type testHTTPRequestInterceptor struct{}
+
+func (*testHTTPRequestInterceptor) HandleHTTP(w http.ResponseWriter, _ *http.Request) error {
+	w.WriteHeader(http.StatusTeapot)
+	return nil
+}
+
 // TestUpdateConfiguration tests that
 // - configurations can be deserialized
 // - proxy can be updated
@@ -186,6 +193,38 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.NotEqual(t, originProxyV10, originProxyV2)
 }
 
+func TestHTTPRequestInterceptorPersistsAcrossConfigurationUpdates(t *testing.T) {
+	t.Parallel()
+
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: time.Second,
+	}, &testLogger)
+	orchestrator, err := NewOrchestratorWithHTTPRequestInterceptor(
+		t.Context(),
+		&Config{
+			Ingress:             &ingress.Ingress{},
+			OriginDialerService: originDialer,
+		},
+		testTags,
+		nil,
+		&testHTTPRequestInterceptor{},
+		&testLogger,
+	)
+	require.NoError(t, err)
+
+	updateWithValidation(t, orchestrator, 1, []byte(`{
+		"ingress": [{"service": "http_status:404"}],
+		"warp-routing": {}
+	}`))
+	originProxy, err := orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+	response, err := proxyHTTP(originProxy, "test-tunnel.trycloudflare.com")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusTeapot, response.StatusCode)
+	require.NoError(t, response.Body.Close())
+}
+
 // Validates that a new version 0 will be applied if the configuration is loaded locally.
 // This will happen when a locally managed tunnel is migrated to remote configuration and receives its first configuration.
 func TestUpdateConfiguration_FromMigration(t *testing.T) {
@@ -262,7 +301,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 
 	tcpOrigin, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer tcpOrigin.Close()
+	defer func() { _ = tcpOrigin.Close() }()
 
 	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
 		DefaultDialer:   testDefaultDialer,
@@ -347,7 +386,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 			defer wg.Done()
 			resp, err := proxyHTTP(originProxy, hostname)
 			assert.NoError(t, err, "proxyHTTP %d failed %v", i, err)
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			// The response can be from initOrigin, http_status:204 or http_status:418
 			switch resp.StatusCode {
@@ -374,7 +413,7 @@ func TestConcurrentUpdateAndRead(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				defer pw.Close()
+				defer func() { _ = pw.Close() }()
 				tcpEyeball(t, pw, tcpBody, w)
 			}()
 
@@ -528,7 +567,7 @@ func serveTCPOrigin(t *testing.T, tcpOrigin net.Listener, wg *sync.WaitGroup) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			echoTCP(t, conn)
 		}()
@@ -682,7 +721,7 @@ func TestPersistentConnection(t *testing.T) {
 
 	tcpOrigin, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer tcpOrigin.Close()
+	defer func() { _ = tcpOrigin.Close() }()
 
 	configWithWSAndWarp := []byte(fmt.Sprintf(`
 {
@@ -717,7 +756,7 @@ func TestPersistentConnection(t *testing.T) {
 		defer wg.Done()
 		conn, err := tcpOrigin.Accept()
 		assert.NoError(t, err)
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Expect 3 TCP messages
 		for i := 0; i < 3; i++ {
@@ -772,8 +811,8 @@ func TestPersistentConnection(t *testing.T) {
 	validateWsEcho(t, msg, wsReqWriter, wsRespReadWriter)
 	tcpEyeball(t, tcpReqWriter, msg, tcpRespReadWriter)
 
-	wsReqWriter.Close()
-	tcpReqWriter.Close()
+	require.NoError(t, wsReqWriter.Close())
+	require.NoError(t, tcpReqWriter.Close())
 	wg.Wait()
 }
 
@@ -797,7 +836,7 @@ func wsEcho(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	for {
 		mt, message, err := conn.ReadMessage()
 		if err != nil {

@@ -34,11 +34,12 @@ const (
 
 // Proxy represents a means to Proxy between cloudflared and the origin services.
 type Proxy struct {
-	ingressRules ingress.Ingress
-	originDialer ingress.OriginTCPDialer
-	tags         []pogs.Tag
-	flowLimiter  cfdflow.Limiter
-	log          *zerolog.Logger
+	ingressRules           ingress.Ingress
+	originDialer           ingress.OriginTCPDialer
+	tags                   []pogs.Tag
+	flowLimiter            cfdflow.Limiter
+	httpRequestInterceptor connection.HTTPRequestInterceptor
+	log                    *zerolog.Logger
 }
 
 // NewOriginProxy returns a new instance of the Proxy struct.
@@ -49,15 +50,35 @@ func NewOriginProxy(
 	flowLimiter cfdflow.Limiter,
 	log *zerolog.Logger,
 ) *Proxy {
-	proxy := &Proxy{
-		ingressRules: ingressRules,
-		originDialer: originDialer,
-		tags:         tags,
-		flowLimiter:  flowLimiter,
-		log:          log,
-	}
+	return NewOriginProxyWithHTTPRequestInterceptor(
+		ingressRules,
+		originDialer,
+		tags,
+		flowLimiter,
+		nil,
+		log,
+	)
+}
 
-	return proxy
+// NewOriginProxyWithHTTPRequestInterceptor returns a new Proxy that can intercept
+// HTTP requests before ingress selection. A nil interceptor allows requests to
+// continue to ingress selection.
+func NewOriginProxyWithHTTPRequestInterceptor(
+	ingressRules ingress.Ingress,
+	originDialer ingress.OriginDialer,
+	tags []pogs.Tag,
+	flowLimiter cfdflow.Limiter,
+	httpRequestInterceptor connection.HTTPRequestInterceptor,
+	log *zerolog.Logger,
+) *Proxy {
+	return &Proxy{
+		ingressRules:           ingressRules,
+		originDialer:           originDialer,
+		tags:                   tags,
+		flowLimiter:            flowLimiter,
+		httpRequestInterceptor: httpRequestInterceptor,
+		log:                    log,
+	}
 }
 
 func (p *Proxy) applyIngressMiddleware(rule *ingress.Rule, r *http.Request, w connection.ResponseWriter) (error, bool) {
@@ -86,6 +107,13 @@ func (p *Proxy) ProxyHTTP(
 	defer decrementConcurrentRequests()
 
 	req := tr.Request
+	if p.httpRequestInterceptor != nil {
+		if err := p.httpRequestInterceptor.HandleHTTP(w, req); err != nil {
+			p.log.Warn().Err(err).Msg("HTTP request handler failed before origin selection")
+		}
+		return nil
+	}
+
 	p.appendTagHeaders(req)
 	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
 		trace.WithAttributes(attribute.String("req-host", req.Host)))

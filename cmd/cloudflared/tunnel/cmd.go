@@ -448,7 +448,14 @@ func StartServer(
 		logger.ManagementLogger,
 	)
 	internalRules := []ingress.Rule{ingress.NewManagementRule(mgmt)}
-	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, internalRules, tunnelConfig.Log)
+	orchestrator, err := orchestration.NewOrchestratorWithHTTPRequestInterceptor(
+		ctx,
+		orchestratorConfig,
+		tunnelConfig.Tags,
+		internalRules,
+		namedTunnel.QuickTunnelAuth,
+		tunnelConfig.Log,
+	)
 	if err != nil {
 		return err
 	}
