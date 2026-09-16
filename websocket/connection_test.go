@@ -58,6 +58,7 @@ func newTestConn(t *testing.T) (*Conn, net.Conn) {
 // than the buffer passed to Read is delivered whole across multiple Read calls,
 // rather than truncated to the first len(buffer) bytes.
 func TestConnReadMessageLargerThanBuffer(t *testing.T) {
+	t.Parallel()
 	const bufSize = 16 * 1024
 	const msgSize = 100 * 1024
 
@@ -75,6 +76,7 @@ func TestConnReadMessageLargerThanBuffer(t *testing.T) {
 // TestConnReadMixedMessageSizes sends several messages around the buffer boundary
 // and verifies all bytes arrive in order.
 func TestConnReadMixedMessageSizes(t *testing.T) {
+	t.Parallel()
 	const bufSize = 16 * 1024
 	sizes := []int{1, bufSize - 1, bufSize, bufSize + 1, 40000, 3 * bufSize, 100 * 1024, 7, bufSize}
 
