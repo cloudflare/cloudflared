@@ -41,7 +41,9 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 
 	// write auth URL to companion file so other waiting processes can display it
 	if urlFilePath != "" {
-		_ = os.WriteFile(urlFilePath, []byte(requestURL), 0600) // nolint: gosec
+		if err := os.WriteFile(urlFilePath, []byte(requestURL), 0600); err != nil { //nolint:gosec
+			log.Warn().Err(err).Msgf("Failed to write request URL to %s", urlFilePath)
+		}
 	}
 
 	// See AUTH-1423 for why we use stderr (the way git wraps ssh)
