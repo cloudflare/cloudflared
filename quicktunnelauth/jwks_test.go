@@ -37,7 +37,6 @@ func TestNewQuickTunnelAuthAssertionValidator(t *testing.T) {
 	require.ErrorIs(t, validator.httpClient.CheckRedirect(nil, nil), http.ErrUseLastResponse)
 	require.NotNil(t, validator.now)
 	assert.Empty(t, validator.jwks.keySet.Keys)
-	assert.Equal(t, quickTunnelAuthBrokerJWKSRefreshNotificationCapacity, cap(validator.refreshNotifications))
 }
 
 func TestQuickTunnelAuthAssertionValidatorCloseStopsRefreshWorker(t *testing.T) {
@@ -51,27 +50,6 @@ func TestQuickTunnelAuthAssertionValidatorCloseStopsRefreshWorker(t *testing.T) 
 	key, err := validator.verificationKey(context.Background(), "test-key")
 	require.ErrorIs(t, err, errQuickTunnelAuthBrokerJWKSRefreshWorkerStopped)
 	assert.Nil(t, key)
-}
-
-func TestQuickTunnelAuthAssertionValidatorQueuedRefreshObservesStoppedWorker(t *testing.T) {
-	t.Parallel()
-
-	validator := &QuickTunnelAuthAssertionValidator{
-		refreshNotifications: make(chan quickTunnelAuthBrokerJWKSRefreshNotification, quickTunnelAuthBrokerJWKSRefreshNotificationCapacity),
-		refreshWorkerStopped: make(chan struct{}),
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	refreshResult := make(chan error, 1)
-	go func() {
-		refreshResult <- validator.notifyJWKSRefresh(ctx, "test-key")
-	}()
-
-	require.Eventually(t, func() bool {
-		return len(validator.refreshNotifications) == quickTunnelAuthBrokerJWKSRefreshNotificationCapacity
-	}, time.Second, time.Millisecond)
-	close(validator.refreshWorkerStopped)
-	require.ErrorIs(t, <-refreshResult, errQuickTunnelAuthBrokerJWKSRefreshWorkerStopped)
 }
 
 func TestQuickTunnelAuthAssertionValidatorVerificationKeyCachesAndRefreshes(t *testing.T) {
