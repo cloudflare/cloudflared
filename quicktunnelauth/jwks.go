@@ -27,6 +27,9 @@ const (
 	quickTunnelAuthBrokerJWKSRefreshCooldown = time.Minute
 	// Three attempts allow one initial request and two transient-failure retries.
 	quickTunnelAuthBrokerJWKSMaxFetchAttempts = 3
+	// One pending notification is sufficient because the worker serializes
+	// refreshes and rechecks the cache before fetching.
+	quickTunnelAuthBrokerJWKSRefreshNotificationCapacity = 1
 	// Backoffs of 100ms and 200ms add at most 300ms within the five-second
 	// refresh budget while giving brief transient failures time to clear.
 	quickTunnelAuthBrokerJWKSInitialRetryBackoff = 100 * time.Millisecond
@@ -83,7 +86,7 @@ func NewQuickTunnelAuthAssertionValidator() (*QuickTunnelAuthAssertionValidator,
 		return nil, fmt.Errorf("parse Quick Tunnel authentication broker JWKS URL: %w", err)
 	}
 
-	workerCtx, cancelRefreshWorker := context.WithCancel(context.Background())
+	workerCtx, cancelRefreshWorker := context.WithCancel(context.Background()) //nolint:gosec
 	validator := &QuickTunnelAuthAssertionValidator{
 		jwksURL: *jwksURL,
 		httpClient: &http.Client{
@@ -93,7 +96,7 @@ func NewQuickTunnelAuthAssertionValidator() (*QuickTunnelAuthAssertionValidator,
 			},
 		},
 		now:                  time.Now,
-		refreshNotifications: make(chan quickTunnelAuthBrokerJWKSRefreshNotification),
+		refreshNotifications: make(chan quickTunnelAuthBrokerJWKSRefreshNotification, quickTunnelAuthBrokerJWKSRefreshNotificationCapacity),
 		cancelRefreshWorker:  cancelRefreshWorker,
 		refreshWorkerStopped: make(chan struct{}),
 	}
@@ -162,6 +165,8 @@ func (v *QuickTunnelAuthAssertionValidator) notifyJWKSRefresh(ctx context.Contex
 	select {
 	case err := <-notification.result:
 		return err
+	case <-v.refreshWorkerStopped:
+		return errQuickTunnelAuthBrokerJWKSRefreshWorkerStopped
 	case <-ctx.Done():
 		return ctx.Err()
 	}
