@@ -40,5 +40,6 @@ func (f *Forwarder) Hash() string {
 	_, _ = io.WriteString(h, f.TokenClientID)
 	_, _ = io.WriteString(h, f.TokenSecret)
 	_, _ = io.WriteString(h, f.Destination)
+	_, _ = io.WriteString(h, fmt.Sprintf("%v", f.IsFedramp))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
