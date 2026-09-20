@@ -380,6 +380,16 @@ func isQuicBroken(cause error) bool {
 		return true
 	}
 
+	// A CRYPTO_ERROR raised by the peer means the TLS handshake was rejected,
+	// for example with no_application_protocol (0x178) when something on the
+	// path intercepts QUIC without supporting the protocols cloudflared offers.
+	// Retrying QUIC cannot recover from that, so treat it like a broken
+	// transport and let the connection fall back.
+	if transportErr, ok := errors.AsType[*quic.TransportError](cause); ok &&
+		transportErr.Remote && transportErr.ErrorCode.IsCryptoError() {
+		return true
+	}
+
 	return false
 }
 
