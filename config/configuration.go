@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -35,7 +36,7 @@ var (
 	defaultUserConfigDirs = []string{"~/.cloudflared", "~/.cloudflare-warp", "~/cloudflare-warp"}
 	defaultNixConfigDirs  = []string{"/etc/cloudflared", DefaultUnixConfigLocation}
 
-	ErrNoConfigFile = fmt.Errorf("Cannot determine default configuration path. No file %v in %v", DefaultConfigFiles, DefaultConfigSearchDirectories())
+	ErrNoConfigFile = fmt.Errorf("Cannot determine default configuration path. No file %v in %v", DefaultConfigFiles, DefaultConfigSearchDirectories()) //nolint:staticcheck // Preserving the existing user-facing error text.
 )
 
 const (
@@ -49,7 +50,7 @@ func DefaultConfigDirectory() string {
 		path := os.Getenv("CFDPATH")
 		if path == "" {
 			path = filepath.Join(os.Getenv("ProgramFiles(x86)"), "cloudflared")
-			if _, err := os.Stat(path); os.IsNotExist(err) { // doesn't exist, so return an empty failure string
+			if _, err := os.Stat(path); os.IsNotExist(err) { //nolint:gosec // Installation path comes from the local process environment.
 				return ""
 			}
 		}
@@ -87,7 +88,7 @@ func DefaultConfigSearchDirectories() []string {
 
 // FileExists checks to see if a file exist at the provided path.
 func FileExists(path string) (bool, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // Checking a caller-supplied configuration path.
 	if err != nil {
 		if os.IsNotExist(err) {
 			// ignore missing files
@@ -126,19 +127,19 @@ func FindOrCreateConfigPath() string {
 	if path == "" {
 		// create the default directory if it doesn't exist
 		path = DefaultConfigPath()
-		if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil { //nolint:gosec // Preserving existing umask-controlled directory permissions.
 			return ""
 		}
 
 		// write a new config file out
-		file, err := os.Create(path)
+		file, err := os.Create(path) //nolint:gosec // The path is selected by FindDefaultConfigPath or DefaultConfigPath.
 		if err != nil {
 			return ""
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		logDir := DefaultLogDirectory()
-		_ = os.MkdirAll(logDir, os.ModePerm) // try and create it. Doesn't matter if it succeed or not, only byproduct will be no logs
+		_ = os.MkdirAll(logDir, os.ModePerm) //nolint:gosec // Best-effort log directory creation with existing umask-controlled permissions.
 
 		c := Root{
 			LogDirectory: logDir,
@@ -187,10 +188,12 @@ type UnvalidatedIngressRule struct {
 // config.
 // Note:
 // - To specify a time.Duration in go-yaml, use e.g. "3s" or "24h".
-// - To specify a time.Duration in json, use int64 of the nanoseconds
+// - To specify a time.Duration in JSON, use seconds (e.g. 0.5 or 3).
 type OriginRequestConfig struct {
 	// HTTP proxy timeout for establishing a new connection
 	ConnectTimeout *CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
+	// Total time to retry refused HTTP origin connections or missing Unix sockets. Zero disables retries.
+	ConnectRetryTimeout *CustomDuration `yaml:"connectRetryTimeout" json:"connectRetryTimeout,omitempty"`
 	// HTTP proxy timeout for completing a TLS handshake
 	TLSTimeout *CustomDuration `yaml:"tlsTimeout" json:"tlsTimeout,omitempty"`
 	// HTTP proxy TCP keepalive duration
@@ -391,7 +394,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	}
 
 	log.Debug().Msgf("Loading configuration from %s", configFile)
-	file, err := os.Open(configFile)
+	file, err := os.Open(configFile) //nolint:gosec // Config path is explicitly selected by the local operator.
 	if err != nil {
 		// If does not exist and config file was not specificly specified then return ErrNoConfigFile found.
 		if os.IsNotExist(err) && !c.IsSet("config") {
@@ -399,7 +402,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 		}
 		return nil, "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if err := yaml.NewDecoder(file).Decode(&configuration); err != nil {
 		if err == io.EOF {
 			log.Error().Msgf("Configuration file %s was empty", configFile)
@@ -410,7 +413,8 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	configuration.sourceFile = configFile
 
 	// Parse it again, with strict mode, to find warnings.
-	if file, err := os.Open(configFile); err == nil {
+	if file, err := os.Open(configFile); err == nil { //nolint:gosec // Re-reading the same operator-selected configuration file.
+		defer func() { _ = file.Close() }()
 		decoder := yaml.NewDecoder(file)
 		decoder.KnownFields(true)
 		var unusedConfig configFileSettings
@@ -422,31 +426,31 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	return &configuration, warnings, nil
 }
 
-// A CustomDuration is a Duration that has custom serialization for JSON.
-// JSON in Javascript assumes that int fields are 32 bits and Duration fields are deserialized assuming that numbers
-// are in nanoseconds, which in 32bit integers limits to just 2 seconds.
-// This type assumes that when serializing/deserializing from JSON, that the number is in seconds, while it maintains
-// the YAML serde assumptions.
+// A duration encoded as seconds in JSON and as a Go duration string in YAML.
 type CustomDuration struct {
 	time.Duration
 }
 
 func (s CustomDuration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.Duration.Seconds())
+	return json.Marshal(s.Seconds())
 }
 
 func (s *CustomDuration) UnmarshalJSON(data []byte) error {
-	seconds, err := strconv.ParseInt(string(data), 10, 64)
+	seconds, err := strconv.ParseFloat(string(data), 64)
 	if err != nil {
 		return err
 	}
 
-	s.Duration = time.Duration(seconds * int64(time.Second))
+	nanoseconds := math.Round(seconds * float64(time.Second))
+	if math.IsNaN(nanoseconds) || nanoseconds >= float64(math.MaxInt64) || nanoseconds < float64(math.MinInt64) {
+		return fmt.Errorf("duration %s seconds is out of range", data)
+	}
+	s.Duration = time.Duration(nanoseconds)
 	return nil
 }
 
 func (s *CustomDuration) MarshalYAML() (interface{}, error) {
-	return s.Duration.String(), nil
+	return s.String(), nil
 }
 
 func (s *CustomDuration) UnmarshalYAML(unmarshal func(interface{}) error) error {
