@@ -24,7 +24,7 @@ const (
 
 var errQuickTunnelAuthStateExpired = errors.New("authentication state expired")
 
-// QuickTunnelAuthCallback contains the state consumed from a broker callback.
+// QuickTunnelAuthCallback contains the state validated from a broker callback.
 type QuickTunnelAuthCallback struct {
 	State       string
 	Assertion   string
@@ -35,11 +35,10 @@ type QuickTunnelAuthCallback struct {
 // ConsumeCallback validates the browser state attached to a broker callback
 // and returns the authenticated result.
 //
-// The design is stateless: authentication state is signed into the browser
-// cookie rather than tracked server-side, so a callback is validated by
-// verifying the cookie rather than by looking up a pending state. This means
-// a callback whose cookie has not yet expired can be replayed; the broker
-// assertion itself is expected to guard against replay across requests.
+// Callback state is intentionally stateless. A captured callback can be
+// replayed only while both its signed state cookie and short-lived broker
+// assertion remain valid. The handler clears the state cookie after processing
+// to prevent ordinary browser resubmission.
 func (m *QuickTunnelAuthStateManager) ConsumeCallback(r *http.Request) (*QuickTunnelAuthCallback, error) {
 	if err := m.validateCallbackRequest(r); err != nil {
 		return nil, fmt.Errorf("validate callback request: %w", err)

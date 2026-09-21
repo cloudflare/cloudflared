@@ -84,11 +84,10 @@ func TestConsumeQuickTunnelAuthCallbackAcceptsExplicitHTTPSPort(t *testing.T) {
 	require.NotNil(t, callback)
 }
 
-// TestConsumeQuickTunnelAuthCallbackAllowsReplayWithinTTL documents an
-// intentional tradeoff of the stateless design: because authentication
-// state is verified from the signed cookie rather than looked up in
-// server-side storage, a callback can be consumed more than once while its
-// cookie remains valid.
+// TestConsumeQuickTunnelAuthCallbackAllowsReplayWithinTTL documents the
+// intentional stateless trade-off. Normal browsers delete the state cookie
+// after the first response, while a client retaining the callback artifacts can
+// replay them until the short-lived broker assertion expires.
 func TestConsumeQuickTunnelAuthCallbackAllowsReplayWithinTTL(t *testing.T) {
 	t.Parallel()
 
