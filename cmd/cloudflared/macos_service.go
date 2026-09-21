@@ -50,7 +50,7 @@ causing it to look for credentials in a configuration file upon startup.`,
 			},
 		},
 	})
-	_ = app.Run(os.Args)
+	runAppAndExit(app)
 }
 
 func newLaunchdTemplate(installPath, stdoutPath, stderrPath string) *ServiceTemplate {
