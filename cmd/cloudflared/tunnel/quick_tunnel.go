@@ -47,7 +47,14 @@ func RunQuickTunnel(sc *subcommandContext) error {
 
 	// TODO(TUN-10798): register the --allowed-mail flag so this path becomes reachable.
 	allowedMail := sc.c.StringSlice(flags.AllowedMail)
-	isProtected := len(allowedMail) > 0
+	var recipientPolicy *quicktunnelauth.QuickTunnelAuthRecipientPolicy
+	if len(allowedMail) > 0 {
+		var err error
+		recipientPolicy, err = quicktunnelauth.NewQuickTunnelAuthRecipientPolicy(allowedMail)
+		if err != nil {
+			return fmt.Errorf("validate Quick Tunnel recipient policy: %w", err)
+		}
+	}
 
 	client := http.Client{
 		Transport: &http.Transport{
@@ -57,7 +64,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		Timeout: httpTimeout,
 	}
 
-	reqBody, err := buildQuickTunnelRequestBody(isProtected)
+	reqBody, err := buildQuickTunnelRequestBody(recipientPolicy != nil)
 	if err != nil {
 		return errors.Wrap(err, "failed to build quick tunnel request body")
 	}
@@ -118,12 +125,26 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 
 	var quickTunnelAuth connection.HTTPRequestInterceptor
-	if isProtected {
+	if recipientPolicy != nil {
 		stateManager, err := quicktunnelauth.NewQuickTunnelAuthStateManager(data.Result.Hostname)
 		if err != nil {
 			return fmt.Errorf("initialize Quick Tunnel authentication state: %w", err)
 		}
-		quickTunnelAuth, err = quicktunnelauth.NewQuickTunnelAuthHandler(stateManager)
+		assertionValidator, err := quicktunnelauth.NewQuickTunnelAuthAssertionValidator()
+		if err != nil {
+			return fmt.Errorf("initialize Quick Tunnel assertion validator: %w", err)
+		}
+		defer assertionValidator.Close()
+		sessionManager, err := quicktunnelauth.NewQuickTunnelAuthSessionManager()
+		if err != nil {
+			return fmt.Errorf("initialize Quick Tunnel session manager: %w", err)
+		}
+		quickTunnelAuth, err = quicktunnelauth.NewQuickTunnelAuthHandlerWithAuthorization(
+			stateManager,
+			assertionValidator,
+			sessionManager,
+			recipientPolicy,
+		)
 		if err != nil {
 			return fmt.Errorf("initialize Quick Tunnel authentication handler: %w", err)
 		}
