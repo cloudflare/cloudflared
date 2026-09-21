@@ -33,6 +33,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/quicktunnelauth"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -48,11 +49,12 @@ var (
 
 type mockHTTPRespWriter struct {
 	*httptest.ResponseRecorder
+	writtenHeaders http.Header
 }
 
 func newMockHTTPRespWriter() *mockHTTPRespWriter {
 	return &mockHTTPRespWriter{
-		httptest.NewRecorder(),
+		ResponseRecorder: httptest.NewRecorder(),
 	}
 }
 
@@ -61,6 +63,7 @@ func (w *mockHTTPRespWriter) WriteResponse() error {
 }
 
 func (w *mockHTTPRespWriter) WriteRespHeaders(status int, header http.Header) error {
+	w.writtenHeaders = header.Clone()
 	w.WriteHeader(status)
 	for header, val := range header {
 		w.Header()[header] = val
@@ -80,14 +83,14 @@ func (m *mockHTTPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	panic("Hijack not implemented")
 }
 
-type mockHTTPRequestInterceptor struct {
+type mockHTTPRequestAuthorizer struct {
 	called bool
 }
 
-func (h *mockHTTPRequestInterceptor) HandleHTTP(w http.ResponseWriter, _ *http.Request) error {
+func (h *mockHTTPRequestAuthorizer) AuthorizeHTTP(w http.ResponseWriter, _ *http.Request) (connection.HTTPRequestAuthorizationDecision, string, error) {
 	h.called = true
 	w.WriteHeader(http.StatusTeapot)
-	return nil
+	return connection.HTTPRequestAuthorizationHandled, "test_handled", nil
 }
 
 type mockWSRespWriter struct {
@@ -155,17 +158,17 @@ func (w *mockSSERespWriter) ReadBytes() []byte {
 	return <-w.writeNotification
 }
 
-func TestHTTPRequestInterceptorRunsBeforeIngressSelection(t *testing.T) {
+func TestHTTPRequestAuthorizerRunsBeforeIngressSelection(t *testing.T) {
 	t.Parallel()
 
 	log := zerolog.Nop()
-	interceptor := &mockHTTPRequestInterceptor{}
-	originProxy := NewOriginProxyWithHTTPRequestInterceptor(
+	authorizer := &mockHTTPRequestAuthorizer{}
+	originProxy := NewOriginProxyWithHTTPRequestAuthorizer(
 		ingress.Ingress{},
 		nil,
 		testTags,
 		cfdflow.NewLimiter(0),
-		interceptor,
+		authorizer,
 		&log,
 	)
 	responseWriter := newMockHTTPRespWriter()
@@ -178,11 +181,207 @@ func TestHTTPRequestInterceptorRunsBeforeIngressSelection(t *testing.T) {
 		false,
 	)
 	require.NoError(t, err)
-	assert.True(t, interceptor.called)
+	assert.True(t, authorizer.called)
 	assert.Equal(t, http.StatusTeapot, responseWriter.Code)
 	for _, tag := range testTags {
 		assert.Empty(t, request.Header.Get(TagHeaderNamePrefix+tag.Name))
 	}
+}
+
+// HTTP/2 ServeHTTP and QUIC dispatchRequest both route HTTP and WebSocket
+// traffic through ProxyHTTP, so this table exercises their shared boundary.
+func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		protected      bool
+		authenticated  bool
+		method         string
+		isWebsocket    bool
+		expectedOrigin bool
+		expectedStatus int
+	}{
+		{
+			name:           "public HTTP request",
+			method:         http.MethodGet,
+			expectedOrigin: true,
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "authenticated HTTP request",
+			protected:      true,
+			authenticated:  true,
+			method:         http.MethodPost,
+			expectedOrigin: true,
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "authenticated WebSocket request",
+			protected:      true,
+			authenticated:  true,
+			method:         http.MethodGet,
+			isWebsocket:    true,
+			expectedOrigin: true,
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "unauthenticated GET request",
+			protected:      true,
+			method:         http.MethodGet,
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:           "unauthenticated HEAD request",
+			protected:      true,
+			method:         http.MethodHead,
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:           "unauthenticated WebSocket request",
+			protected:      true,
+			method:         http.MethodGet,
+			isWebsocket:    true,
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:           "unauthenticated unsafe method",
+			protected:      true,
+			method:         http.MethodPost,
+			expectedStatus: http.StatusUnauthorized,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			originRequestHeaders := make(chan http.Header, 1)
+			originServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				originRequestHeaders <- r.Header.Clone()
+				w.Header().Set("Cache-Control", "public")
+				w.Header().Set("Referrer-Policy", "unsafe-url")
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(originServer.Close)
+
+			log := zerolog.Nop()
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			ingressRules := createSingleIngressConfig(t, originServer.URL)
+			require.NoError(t, ingressRules.StartOrigins(&log, ctx.Done()))
+
+			var authorizer connection.HTTPRequestAuthorizer
+			var sessionCookie *http.Cookie
+			if test.protected {
+				authorizer, sessionCookie = newTestQuickTunnelAuthorization(t, test.authenticated)
+			}
+			originProxy := NewOriginProxyWithHTTPRequestAuthorizer(
+				ingressRules,
+				nil,
+				testTags,
+				cfdflow.NewLimiter(0),
+				authorizer,
+				&log,
+			)
+			responseWriter := newMockHTTPRespWriter()
+			request := httptest.NewRequest(
+				test.method,
+				"https://test-tunnel.trycloudflare.com/dashboard",
+				nil,
+			)
+			if sessionCookie != nil {
+				request.AddCookie(sessionCookie)
+			}
+
+			err := originProxy.ProxyHTTP(
+				responseWriter,
+				tracing.NewTracedHTTPRequest(request, 0, &log),
+				test.isWebsocket,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, test.expectedStatus, responseWriter.Code)
+
+			select {
+			case headers := <-originRequestHeaders:
+				assert.True(t, test.expectedOrigin)
+				for _, tag := range testTags {
+					assert.Equal(t, tag.Value, headers.Get(TagHeaderNamePrefix+tag.Name))
+				}
+				if sessionCookie != nil {
+					assert.NotContains(t, headers.Get("Cookie"), sessionCookie.Name)
+				}
+				if test.isWebsocket {
+					assert.Equal(t, "websocket", headers.Get("Upgrade"))
+				}
+			default:
+				assert.False(t, test.expectedOrigin)
+			}
+
+			responseHeaders := responseWriter.Header()
+			if test.expectedOrigin {
+				responseHeaders = responseWriter.writtenHeaders
+			}
+			if test.protected {
+				assert.Equal(t, "private, no-store", responseHeaders.Get("Cache-Control"))
+				assert.Equal(t, "no-referrer", responseHeaders.Get("Referrer-Policy"))
+			} else {
+				assert.Equal(t, "public", responseHeaders.Get("Cache-Control"))
+				assert.Equal(t, "unsafe-url", responseHeaders.Get("Referrer-Policy"))
+			}
+		})
+	}
+}
+
+// Both HTTP/2 and QUIC route TCP requests through ProxyTCP.
+func TestQuickTunnelAuthorizationRejectsTCPTransport(t *testing.T) {
+	t.Parallel()
+
+	authorizer, _ := newTestQuickTunnelAuthorization(t, false)
+	var logOutput bytes.Buffer
+	log := zerolog.New(&logOutput)
+	originProxy := NewOriginProxyWithHTTPRequestAuthorizer(
+		ingress.Ingress{},
+		nil,
+		nil,
+		nil,
+		authorizer,
+		&log,
+	)
+
+	err := originProxy.ProxyTCP(t.Context(), nil, &connection.TCPRequest{})
+	require.ErrorIs(t, err, errHTTPAuthorizationUnsupportedTransport)
+	assert.Contains(t, logOutput.String(), `"authOutcome":"unsupported_tcp_transport"`)
+}
+
+func newTestQuickTunnelAuthorization(
+	t *testing.T,
+	authenticated bool,
+) (connection.HTTPRequestAuthorizer, *http.Cookie) {
+	t.Helper()
+
+	stateManager, err := quicktunnelauth.NewQuickTunnelAuthStateManager("test-tunnel.trycloudflare.com")
+	require.NoError(t, err)
+	assertionValidator, err := quicktunnelauth.NewQuickTunnelAuthAssertionValidator()
+	require.NoError(t, err)
+	t.Cleanup(assertionValidator.Close)
+	sessionManager, err := quicktunnelauth.NewQuickTunnelAuthSessionManager()
+	require.NoError(t, err)
+	recipientPolicy, err := quicktunnelauth.NewQuickTunnelAuthRecipientPolicy([]string{"visitor@example.com"})
+	require.NoError(t, err)
+	handler, err := quicktunnelauth.NewQuickTunnelAuthHandlerWithAuthorization(
+		stateManager,
+		assertionValidator,
+		sessionManager,
+		recipientPolicy,
+	)
+	require.NoError(t, err)
+
+	if !authenticated {
+		return handler, nil
+	}
+	sessionCookie, err := sessionManager.IssueSession(time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	return handler, sessionCookie
 }
 
 func TestProxySingleOrigin(t *testing.T) {

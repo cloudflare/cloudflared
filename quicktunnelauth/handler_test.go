@@ -5,9 +5,12 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudflare/cloudflared/connection"
 )
 
 func TestNewQuickTunnelAuthHandlerRejectsNilStateManager(t *testing.T) {
@@ -26,8 +29,10 @@ func TestQuickTunnelAuthHandlerRejectsInvalidRequest(t *testing.T) {
 	require.NoError(t, err)
 	response := httptest.NewRecorder()
 
-	err = handler.HandleHTTP(response, nil)
+	decision, outcome, err := handler.AuthorizeHTTP(response, nil)
 	require.ErrorContains(t, err, "invalid protected Quick Tunnel request")
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeInvalidRequest, outcome)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 	assert.Equal(t, http.StatusText(http.StatusBadRequest)+"\n", response.Body.String())
 }
@@ -45,8 +50,10 @@ func TestQuickTunnelAuthHandlerRedirectsLoginBeforeOrigin(t *testing.T) {
 	)
 	response := httptest.NewRecorder()
 
-	err = handler.HandleHTTP(response, request)
+	decision, outcome, err := handler.AuthorizeHTTP(response, request)
 	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeLoginRedirect, outcome)
 	assert.Equal(t, http.StatusFound, response.Code)
 	assert.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
 	assert.Equal(t, "no-referrer", response.Header().Get("Referrer-Policy"))
@@ -59,6 +66,85 @@ func TestQuickTunnelAuthHandlerRedirectsLoginBeforeOrigin(t *testing.T) {
 	assert.Equal(t, "test-tunnel.trycloudflare.com", location.Query().Get("hostname"))
 	assert.NotEmpty(t, location.Query().Get("state"))
 	assert.Len(t, response.Result().Cookies(), 1)
+}
+
+func TestQuickTunnelAuthHandlerAllowsValidSessionToReachOrigin(t *testing.T) {
+	t.Parallel()
+
+	harness := newTestQuickTunnelAuthHandlerHarness(t, []string{"visitor@example.com"})
+	sessionCookie, err := harness.sessionManager.IssueSession(harness.now.Add(time.Hour))
+	require.NoError(t, err)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"https://test-tunnel.trycloudflare.com/dashboard",
+		nil,
+	)
+	request.AddCookie(sessionCookie)
+	request.AddCookie(&http.Cookie{
+		Name:     "origin-session",
+		Value:    "preserved",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	response := httptest.NewRecorder()
+
+	decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
+	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationAllowed, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeSessionValid, outcome)
+	assert.Empty(t, request.CookiesNamed(quickTunnelAuthSessionCookieName))
+	originCookie, err := request.Cookie("origin-session")
+	require.NoError(t, err)
+	assert.Equal(t, "preserved", originCookie.Value)
+	assert.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
+}
+
+func TestQuickTunnelAuthHandlerRedirectsInvalidSession(t *testing.T) {
+	t.Parallel()
+
+	harness := newTestQuickTunnelAuthHandlerHarness(t, []string{"visitor@example.com"})
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"https://test-tunnel.trycloudflare.com/dashboard",
+		nil,
+	)
+	request.AddCookie(&http.Cookie{
+		Name:     quickTunnelAuthSessionCookieName,
+		Value:    "invalid",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	response := httptest.NewRecorder()
+
+	decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
+	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeLoginRedirect, outcome)
+	assert.Equal(t, http.StatusFound, response.Code)
+}
+
+func TestQuickTunnelAuthHandlerFailsClosedOnSessionValidationError(t *testing.T) {
+	t.Parallel()
+
+	harness := newTestQuickTunnelAuthHandlerHarness(t, []string{"visitor@example.com"})
+	sessionCookie, err := harness.sessionManager.IssueSession(harness.now.Add(time.Hour))
+	require.NoError(t, err)
+	harness.sessionManager.sessionCookieSigningKey = nil
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"https://test-tunnel.trycloudflare.com/dashboard",
+		nil,
+	)
+	request.AddCookie(sessionCookie)
+	response := httptest.NewRecorder()
+
+	decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
+	require.ErrorContains(t, err, "validate authentication session")
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeSessionValidationError, outcome)
+	assert.Equal(t, http.StatusInternalServerError, response.Code)
 }
 
 func TestQuickTunnelAuthHandlerRejectsUnsafeMethodBeforeOrigin(t *testing.T) {
@@ -74,8 +160,10 @@ func TestQuickTunnelAuthHandlerRejectsUnsafeMethodBeforeOrigin(t *testing.T) {
 	)
 	response := httptest.NewRecorder()
 
-	err = handler.HandleHTTP(response, request)
+	decision, outcome, err := handler.AuthorizeHTTP(response, request)
 	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeUnauthenticatedMethod, outcome)
 	assert.Equal(t, http.StatusUnauthorized, response.Code)
 	assert.Equal(t, http.StatusText(http.StatusUnauthorized)+"\n", response.Body.String())
 }
@@ -89,8 +177,10 @@ func TestQuickTunnelAuthHandlerHandlesInvalidCallbackLocally(t *testing.T) {
 	request := newTestQuickTunnelAuthCallbackRequest(nil, "missing-state", "broker.assertion")
 	response := httptest.NewRecorder()
 
-	err = handler.HandleHTTP(response, request)
+	decision, outcome, err := handler.AuthorizeHTTP(response, request)
 	require.ErrorContains(t, err, "verify authentication-state cookie")
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackRejected, outcome)
 	assert.Equal(t, http.StatusBadRequest, response.Code)
 	assert.Equal(t, http.StatusText(http.StatusBadRequest)+"\n", response.Body.String())
 }
@@ -105,8 +195,10 @@ func TestQuickTunnelAuthHandlerFailsClosedWithoutValidation(t *testing.T) {
 	request := newTestQuickTunnelAuthCallbackRequest(login.Cookie, login.State, "broker.assertion")
 	response := httptest.NewRecorder()
 
-	err = handler.HandleHTTP(response, request)
+	decision, outcome, err := handler.AuthorizeHTTP(response, request)
 	require.ErrorIs(t, err, errQuickTunnelAuthCallbackValidationUnavailable)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackRejected, outcome)
 	assert.Equal(t, http.StatusForbidden, response.Code)
 	assert.Equal(t, http.StatusText(http.StatusForbidden)+"\n", response.Body.String())
 	assert.Len(t, response.Result().Cookies(), 1)
@@ -132,8 +224,10 @@ func TestQuickTunnelAuthHandlerCompletesAuthorizedCallback(t *testing.T) {
 			request, _ := harness.newCallbackRequest(t, "/dashboard?tab=logs", test.email)
 			response := httptest.NewRecorder()
 
-			err := harness.handler.HandleHTTP(response, request)
+			decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
 			require.NoError(t, err)
+			assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+			assert.Equal(t, quickTunnelAuthOutcomeCallbackAuthorized, outcome)
 			assert.Equal(t, http.StatusSeeOther, response.Code)
 			assert.Equal(t, "/dashboard?tab=logs", response.Header().Get("Location"))
 			assert.Empty(t, response.Body.String())
@@ -162,8 +256,10 @@ func TestQuickTunnelAuthHandlerRejectsUnauthorizedRecipient(t *testing.T) {
 	request, _ := harness.newCallbackRequest(t, "/dashboard", "visitor@example.com")
 	response := httptest.NewRecorder()
 
-	err := harness.handler.HandleHTTP(response, request)
+	decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
 	require.ErrorIs(t, err, errQuickTunnelAuthRecipientNotAllowed)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackRejected, outcome)
 	assert.NotContains(t, err.Error(), "visitor@example.com")
 	assert.NotContains(t, err.Error(), "allowed@example.com")
 	assert.Equal(t, http.StatusForbidden, response.Code)
@@ -183,8 +279,10 @@ func TestQuickTunnelAuthHandlerRejectsInvalidBrokerAssertion(t *testing.T) {
 	request := newTestQuickTunnelAuthCallbackRequest(login.Cookie, login.State, "not-a-jwt")
 	response := httptest.NewRecorder()
 
-	err := harness.handler.HandleHTTP(response, request)
+	decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
 	require.ErrorContains(t, err, "parse broker assertion")
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackRejected, outcome)
 	assert.NotContains(t, err.Error(), "not-a-jwt")
 	assert.Equal(t, http.StatusForbidden, response.Code)
 	assert.Equal(t, http.StatusText(http.StatusForbidden)+"\n", response.Body.String())
@@ -198,7 +296,10 @@ func TestQuickTunnelAuthHandlerRejectsInvalidBrokerAssertion(t *testing.T) {
 		login.State,
 		harness.signAssertion(t, login.State, "visitor@example.com"),
 	)
-	require.NoError(t, harness.handler.HandleHTTP(retryResponse, retryRequest))
+	decision, outcome, err = harness.handler.AuthorizeHTTP(retryResponse, retryRequest)
+	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackAuthorized, outcome)
 	assert.Equal(t, http.StatusSeeOther, retryResponse.Code)
 }
 
@@ -215,12 +316,18 @@ func TestQuickTunnelAuthHandlerAllowsCallbackReplayWithinAssertionTTL(t *testing
 
 	firstResponse := httptest.NewRecorder()
 	firstRequest := newTestQuickTunnelAuthCallbackRequest(login.Cookie, login.State, assertion)
-	require.NoError(t, harness.handler.HandleHTTP(firstResponse, firstRequest))
+	decision, outcome, err := harness.handler.AuthorizeHTTP(firstResponse, firstRequest)
+	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackAuthorized, outcome)
 	assert.Equal(t, http.StatusSeeOther, firstResponse.Code)
 
 	secondResponse := httptest.NewRecorder()
 	secondRequest := newTestQuickTunnelAuthCallbackRequest(login.Cookie, login.State, assertion)
-	require.NoError(t, harness.handler.HandleHTTP(secondResponse, secondRequest))
+	decision, outcome, err = harness.handler.AuthorizeHTTP(secondResponse, secondRequest)
+	require.NoError(t, err)
+	assert.Equal(t, connection.HTTPRequestAuthorizationHandled, decision)
+	assert.Equal(t, quickTunnelAuthOutcomeCallbackAuthorized, outcome)
 	assert.Equal(t, http.StatusSeeOther, secondResponse.Code)
 	cookies := secondResponse.Result().Cookies()
 	require.Len(t, cookies, 2)

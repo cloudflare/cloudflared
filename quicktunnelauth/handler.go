@@ -2,7 +2,21 @@ package quicktunnelauth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+
+	"github.com/cloudflare/cloudflared/connection"
+)
+
+const (
+	quickTunnelAuthOutcomeInvalidRequest         = "invalid_request"
+	quickTunnelAuthOutcomeCallbackRejected       = "callback_rejected"
+	quickTunnelAuthOutcomeCallbackAuthorized     = "callback_authorized"
+	quickTunnelAuthOutcomeSessionValidationError = "session_validation_error"
+	quickTunnelAuthOutcomeSessionValid           = "session_valid"
+	quickTunnelAuthOutcomeUnauthenticatedMethod  = "unauthenticated_unsafe_method"
+	quickTunnelAuthOutcomeLoginStartError        = "login_start_error"
+	quickTunnelAuthOutcomeLoginRedirect          = "login_redirect"
 )
 
 var errQuickTunnelAuthCallbackValidationUnavailable = errors.New("broker assertion validation is not configured")
@@ -53,9 +67,14 @@ func NewQuickTunnelAuthHandlerWithAuthorization(
 	return handler, nil
 }
 
-// HandleHTTP redirects new browser logins and handles the reserved broker
-// callback without allowing either request to reach the origin.
-func (h *QuickTunnelAuthHandler) HandleHTTP(w http.ResponseWriter, r *http.Request) error {
+// AuthorizeHTTP handles unauthenticated requests locally and allows requests
+// with a valid session to continue to the origin. An allowed decision is
+// returned only after the session cookie has been removed. Outcome is a fixed
+// reason code suitable for structured logging.
+func (h *QuickTunnelAuthHandler) AuthorizeHTTP(
+	w http.ResponseWriter,
+	r *http.Request,
+) (decision connection.HTTPRequestAuthorizationDecision, outcome string, err error) {
 	// private: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#private
 	// no-store: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-store
 	w.Header().Set("Cache-Control", "private, no-store")
@@ -64,31 +83,42 @@ func (h *QuickTunnelAuthHandler) HandleHTTP(w http.ResponseWriter, r *http.Reque
 
 	if r == nil || r.URL == nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return errors.New("invalid protected Quick Tunnel request")
+		return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeInvalidRequest, errors.New("invalid protected Quick Tunnel request")
 	}
 
 	if r.URL.EscapedPath() == QuickTunnelAuthCallbackPath {
-		return h.handleCallback(w, r)
+		if err := h.handleCallback(w, r); err != nil {
+			return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeCallbackRejected, err
+		}
+		return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeCallbackAuthorized, nil
 	}
 
-	// TODO(TUN-10803): Validate the process-local session cookie and allow
-	// authenticated requests to reach the origin. Valid sessions must have the
-	// internal cookie removed before proxying.
+	if h.sessionManager != nil {
+		valid, err := h.sessionManager.ValidateSession(r)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeSessionValidationError, fmt.Errorf("validate authentication session: %w", err)
+		}
+		if valid {
+			return connection.HTTPRequestAuthorizationAllowed, quickTunnelAuthOutcomeSessionValid, nil
+		}
+	}
+
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return nil
+		return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeUnauthenticatedMethod, nil
 	}
 
 	login, err := h.stateManager.BeginLogin(r)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return err
+		return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeLoginStartError, err
 	}
 
 	http.SetCookie(w, login.Cookie)
 	w.Header().Set("Location", login.RedirectURL.String())
 	w.WriteHeader(http.StatusFound)
-	return nil
+	return connection.HTTPRequestAuthorizationHandled, quickTunnelAuthOutcomeLoginRedirect, nil
 }
 
 func (h *QuickTunnelAuthHandler) handleCallback(w http.ResponseWriter, r *http.Request) error {

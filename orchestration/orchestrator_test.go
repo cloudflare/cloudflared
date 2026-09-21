@@ -48,11 +48,11 @@ var (
 	})
 )
 
-type testHTTPRequestInterceptor struct{}
+type testHTTPRequestAuthorizer struct{}
 
-func (*testHTTPRequestInterceptor) HandleHTTP(w http.ResponseWriter, _ *http.Request) error {
+func (*testHTTPRequestAuthorizer) AuthorizeHTTP(w http.ResponseWriter, _ *http.Request) (connection.HTTPRequestAuthorizationDecision, string, error) {
 	w.WriteHeader(http.StatusTeapot)
-	return nil
+	return connection.HTTPRequestAuthorizationHandled, "test_handled", nil
 }
 
 // TestUpdateConfiguration tests that
@@ -193,14 +193,14 @@ func TestUpdateConfiguration(t *testing.T) {
 	require.NotEqual(t, originProxyV10, originProxyV2)
 }
 
-func TestHTTPRequestInterceptorPersistsAcrossConfigurationUpdates(t *testing.T) {
+func TestHTTPRequestAuthorizerPersistsAcrossConfigurationUpdates(t *testing.T) {
 	t.Parallel()
 
 	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: time.Second,
 	}, &testLogger)
-	orchestrator, err := NewOrchestratorWithHTTPRequestInterceptor(
+	orchestrator, err := NewOrchestratorWithHTTPRequestAuthorizer(
 		t.Context(),
 		&Config{
 			Ingress:             &ingress.Ingress{},
@@ -208,7 +208,7 @@ func TestHTTPRequestInterceptorPersistsAcrossConfigurationUpdates(t *testing.T) 
 		},
 		testTags,
 		nil,
-		&testHTTPRequestInterceptor{},
+		&testHTTPRequestAuthorizer{},
 		&testLogger,
 	)
 	require.NoError(t, err)

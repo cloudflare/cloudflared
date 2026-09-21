@@ -83,7 +83,7 @@ func NewQuickTunnelAuthAssertionValidator() (*QuickTunnelAuthAssertionValidator,
 		return nil, fmt.Errorf("parse Quick Tunnel authentication broker JWKS URL: %w", err)
 	}
 
-	workerCtx, cancelRefreshWorker := context.WithCancel(context.Background())
+	workerCtx, cancelRefreshWorker := context.WithCancel(context.Background()) //nolint:gosec
 	validator := &QuickTunnelAuthAssertionValidator{
 		jwksURL: *jwksURL,
 		httpClient: &http.Client{

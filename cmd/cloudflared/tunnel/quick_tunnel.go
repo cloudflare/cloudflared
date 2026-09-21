@@ -124,7 +124,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		TunnelID:     tunnelID,
 	}
 
-	var quickTunnelAuth connection.HTTPRequestInterceptor
+	var quickTunnelAuthorizer connection.HTTPRequestAuthorizer
 	if recipientPolicy != nil {
 		stateManager, err := quicktunnelauth.NewQuickTunnelAuthStateManager(data.Result.Hostname)
 		if err != nil {
@@ -139,7 +139,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		if err != nil {
 			return fmt.Errorf("initialize Quick Tunnel session manager: %w", err)
 		}
-		quickTunnelAuth, err = quicktunnelauth.NewQuickTunnelAuthHandlerWithAuthorization(
+		quickTunnelAuthorizer, err = quicktunnelauth.NewQuickTunnelAuthHandlerWithAuthorization(
 			stateManager,
 			assertionValidator,
 			sessionManager,
@@ -171,9 +171,9 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		sc.c,
 		buildInfo,
 		&connection.TunnelProperties{
-			Credentials:     credentials,
-			QuickTunnelUrl:  data.Result.Hostname,
-			QuickTunnelAuth: quickTunnelAuth,
+			Credentials:           credentials,
+			QuickTunnelUrl:        data.Result.Hostname,
+			QuickTunnelAuthorizer: quickTunnelAuthorizer,
 		},
 		sc.log,
 	)
