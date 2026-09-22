@@ -247,7 +247,7 @@ func TestQuickTunnelAuthSessionManagerValidateSessionRejectsDuplicateCookies(t *
 	assert.False(t, valid)
 }
 
-func TestQuickTunnelAuthSessionManagerValidateSessionRemovesSessionCookie(t *testing.T) {
+func TestQuickTunnelAuthSessionManagerValidateSessionRemovesAuthenticationCookies(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.September, 2, 10, 0, 0, 0, time.UTC)
@@ -261,6 +261,14 @@ func TestQuickTunnelAuthSessionManagerValidateSessionRemovesSessionCookie(t *tes
 
 	request := requestWithQuickTunnelAuthSession(cookie.Value)
 	request.AddCookie(&http.Cookie{
+		Name:     quickTunnelAuthStateCookieName,
+		Value:    "state-value",
+		Path:     "/",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	request.AddCookie(&http.Cookie{
 		Name:     "origin-session",
 		Value:    "origin-value",
 		Path:     "/",
@@ -273,6 +281,7 @@ func TestQuickTunnelAuthSessionManagerValidateSessionRemovesSessionCookie(t *tes
 	require.NoError(t, err)
 	assert.True(t, valid)
 	assert.Empty(t, request.CookiesNamed(quickTunnelAuthSessionCookieName))
+	assert.Empty(t, request.CookiesNamed(quickTunnelAuthStateCookieName))
 
 	originCookies := request.CookiesNamed("origin-session")
 	require.Len(t, originCookies, 1)

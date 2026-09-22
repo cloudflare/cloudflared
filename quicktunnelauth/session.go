@@ -139,18 +139,6 @@ func (m *QuickTunnelAuthSessionManager) IssueSession(identityExpiresAt time.Time
 	}, nil
 }
 
-// removeQuickTunnelAuthSessionCookie removes the process-local session cookie
-// before the request is proxied while preserving unrelated origin cookies.
-func removeQuickTunnelAuthSessionCookie(request *http.Request) {
-	cookies := request.Cookies()
-	request.Header.Del("Cookie")
-	for _, cookie := range cookies {
-		if cookie.Name != quickTunnelAuthSessionCookieName {
-			request.AddCookie(cookie)
-		}
-	}
-}
-
 // ValidateSession validates the authentication session attached to request and
 // removes a valid session cookie before the request is proxied to the origin.
 func (m *QuickTunnelAuthSessionManager) ValidateSession(request *http.Request) (bool, error) {
@@ -204,6 +192,6 @@ func (m *QuickTunnelAuthSessionManager) ValidateSession(request *http.Request) (
 		return false, nil
 	}
 
-	removeQuickTunnelAuthSessionCookie(request)
+	removeQuickTunnelAuthCookies(request)
 	return true, nil
 }

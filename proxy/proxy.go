@@ -22,6 +22,7 @@ import (
 	"github.com/cloudflare/cloudflared/cfio"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/quicktunnelauth"
 	"github.com/cloudflare/cloudflared/stream"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
@@ -124,6 +125,8 @@ func (p *Proxy) ProxyHTTP(
 		if decision != connection.HTTPRequestAuthorizationAllowed {
 			return nil
 		}
+
+		w = newResponseWriterWithHeaderFilter(w, quicktunnelauth.FilterQuickTunnelsAuthHeaders)
 	}
 
 	p.appendTagHeaders(req)

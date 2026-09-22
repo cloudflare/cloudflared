@@ -193,6 +193,7 @@ func TestHTTPRequestAuthorizerRunsBeforeIngressSelection(t *testing.T) {
 func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 	t.Parallel()
 
+	const stateCookieName = "__Secure-cloudflared-qt-auth-state"
 	tests := []struct {
 		name           string
 		protected      bool
@@ -260,6 +261,9 @@ func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 				originRequestHeaders <- r.Header.Clone()
 				w.Header().Set("Cache-Control", "public")
 				w.Header().Set("Referrer-Policy", "unsafe-url")
+				w.Header().Add("Set-Cookie", "__Host-cloudflared-qt-auth-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
+				w.Header().Add("Set-Cookie", "__Secure-cloudflared-qt-auth-state=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
+				w.Header().Add("Set-Cookie", "origin-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
 				w.WriteHeader(http.StatusNoContent)
 			}))
 			t.Cleanup(originServer.Close)
@@ -291,6 +295,13 @@ func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 			)
 			if sessionCookie != nil {
 				request.AddCookie(sessionCookie)
+				request.AddCookie(&http.Cookie{
+					Name:     stateCookieName,
+					Value:    "state-value",
+					Secure:   true,
+					HttpOnly: true,
+					SameSite: http.SameSiteLaxMode,
+				})
 			}
 
 			err := originProxy.ProxyHTTP(
@@ -309,6 +320,7 @@ func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 				}
 				if sessionCookie != nil {
 					assert.NotContains(t, headers.Get("Cookie"), sessionCookie.Name)
+					assert.NotContains(t, headers.Get("Cookie"), stateCookieName)
 				}
 				if test.isWebsocket {
 					assert.Equal(t, "websocket", headers.Get("Upgrade"))
@@ -324,9 +336,15 @@ func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 			if test.protected {
 				assert.Equal(t, "private, no-store", responseHeaders.Get("Cache-Control"))
 				assert.Equal(t, "no-referrer", responseHeaders.Get("Referrer-Policy"))
+				if test.expectedOrigin {
+					assert.Equal(t, []string{
+						"origin-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax",
+					}, responseHeaders.Values("Set-Cookie"))
+				}
 			} else {
 				assert.Equal(t, "public", responseHeaders.Get("Cache-Control"))
 				assert.Equal(t, "unsafe-url", responseHeaders.Get("Referrer-Policy"))
+				assert.Len(t, responseHeaders.Values("Set-Cookie"), 3)
 			}
 		})
 	}

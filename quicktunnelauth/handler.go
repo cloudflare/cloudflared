@@ -77,9 +77,9 @@ func (h *QuickTunnelAuthHandler) AuthorizeHTTP(
 ) (decision connection.HTTPRequestAuthorizationDecision, outcome string, err error) {
 	// private: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#private
 	// no-store: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-store
-	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Cache-Control", quickTunnelAuthCacheControlValue)
 	// no-referrer: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy#no-referrer_2
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Referrer-Policy", quickTunnelAuthReferrerPolicyValue)
 
 	if r == nil || r.URL == nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
