@@ -82,26 +82,14 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// This will read the entire response into memory so we can print it in case of error
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "failed to read quick-tunnel response")
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var data QuickTunnelResponse
-		if err := json.Unmarshal(respBody, &data); err == nil && len(data.Errors) > 0 {
-			return fmt.Errorf("quick tunnel provisioning failed with status %d: %s", resp.StatusCode, formatQuickTunnelErrors(data.Errors))
-		}
-		return fmt.Errorf("quick tunnel provisioning failed with status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var data QuickTunnelResponse
-	if err := json.Unmarshal(respBody, &data); err != nil {
-		respString := string(respBody)
-		fields := map[string]interface{}{"status_code": resp.Status}
-		sc.log.Err(err).Fields(fields).Msgf("Error unmarshaling QuickTunnel response: %s", respString)
-		return errors.Wrap(err, "failed to unmarshal quick Tunnel")
+	data, err := decodeQuickTunnelProvisioningResponse(resp.StatusCode, respBody)
+	if err != nil {
+		return err
 	}
 
 	// TODO(TUN-10791): Add CLI-level coverage that provisioning errors are logged to users.
@@ -177,6 +165,21 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		},
 		sc.log,
 	)
+}
+
+func decodeQuickTunnelProvisioningResponse(statusCode int, response []byte) (QuickTunnelResponse, error) {
+	var data QuickTunnelResponse
+	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		if err := json.Unmarshal(response, &data); err == nil && len(data.Errors) > 0 {
+			return QuickTunnelResponse{}, fmt.Errorf("quick tunnel provisioning failed with status %d: %s", statusCode, formatQuickTunnelErrors(data.Errors))
+		}
+		return QuickTunnelResponse{}, fmt.Errorf("quick tunnel provisioning failed with status %d", statusCode)
+	}
+
+	if err := json.Unmarshal(response, &data); err != nil {
+		return QuickTunnelResponse{}, errors.Wrap(err, "failed to unmarshal quick Tunnel")
+	}
+	return data, nil
 }
 
 type QuickTunnelResponse struct {

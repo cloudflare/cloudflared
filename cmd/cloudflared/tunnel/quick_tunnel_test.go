@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,20 @@ func TestBuildQuickTunnelRequestBody_ProtectedMode(t *testing.T) {
 	var result map[string]string
 	require.NoError(t, json.Unmarshal(body, &result))
 	assert.Equal(t, quickTunnelAuthModeOTP, result[quickTunnelAuthModeField])
+}
+
+func TestDecodeQuickTunnelProvisioningResponseDoesNotExposeBody(t *testing.T) {
+	t.Parallel()
+
+	const credential = "sensitive-tunnel-credential"
+	malformedSuccess := []byte(`{"success":true,"result":{"secret":"` + credential + `"}} trailing`)
+	_, err := decodeQuickTunnelProvisioningResponse(http.StatusOK, malformedSuccess)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), credential)
+
+	_, err = decodeQuickTunnelProvisioningResponse(http.StatusBadGateway, []byte(credential))
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), credential)
 }
 
 func TestFormatQuickTunnelErrors(t *testing.T) {
