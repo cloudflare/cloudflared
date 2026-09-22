@@ -862,6 +862,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Value:  "https://api.trycloudflare.com",
 			Hidden: true,
 		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:   cfdflags.AllowedMail,
+			Usage:  "Email addresses or wildcard domains allowed to access a protected Quick Tunnel. May be repeated or comma-separated.",
+			Hidden: shouldHide,
+		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "max-fetch-size",
 			Usage:   `The maximum number of results that cloudflared can fetch from Cloudflare API for any listing operations needed`,

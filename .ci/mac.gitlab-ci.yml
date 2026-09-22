@@ -10,18 +10,19 @@ include:
     GOPROXY: "https://proxy.golang.org,direct"
   cache:
     key:
-      prefix: "$CI_COMMIT_REF_PROTECTED-$GO_VERSION-$CI_RUNNER_EXECUTABLE_ARCH"
+      prefix: "$CI_COMMIT_REF_PROTECTED-$GO_VERSION-$TARGET_ARCH"
       files:
         - go.sum
     paths:
       - .cache/go/
   rules:
     - !reference [.default-rules, run-on-mr]
+  # Only arm runners are used; amd64 binaries are cross-compiled.
   tags:
-    - "macstadium-${RUNNER_ARCH}"
+    - "macos-mesh-arm"
   parallel:
     matrix:
-      - RUNNER_ARCH: [arm, intel]
+      - TARGET_ARCH: [arm64, amd64]
 
 ######################################
 ### Build Cloudflared Mac Binaries ###
@@ -29,15 +30,10 @@ include:
 macos-build-cloudflared: &mac-build
   <<: *mac-build-defaults
   stage: build
-  # Temporarily disabled while macOS runners are unavailable.
-  rules:
-    - when: never
   artifacts:
     paths:
       - artifacts/*
   script:
-    - '[ "${RUNNER_ARCH}" = "arm" ] && export TARGET_ARCH=arm64'
-    - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
     - ARCH=$(uname -m)
     - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
     - ./.ci/scripts/mac/install-go.sh "$MAC_GO_VERSION"
@@ -52,9 +48,8 @@ macos-build-cloudflared: &mac-build
 ###############################################
 macos-build-and-sign-cloudflared:
   <<: *mac-build
-  # Temporarily disabled while macOS runners are unavailable.
   rules:
-    - when: never
+    - !reference [.default-rules, run-on-master]
   secrets:
     APPLE_DEV_CA_CERT:
       vault: gitlab/cloudflare/tun/cloudflared/_branch/master/apple_dev_ca_cert_v2/data@kv

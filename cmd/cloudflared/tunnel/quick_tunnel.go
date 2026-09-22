@@ -46,7 +46,6 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	sc.log.Info().Msg(disclaimer)
 	sc.log.Info().Msg("Requesting new quick Tunnel on trycloudflare.com...")
 
-	// TODO(TUN-10798): register the --allowed-mail flag so this path becomes reachable.
 	allowedMail := sc.c.StringSlice(flags.AllowedMail)
 	var recipientPolicy *quicktunnelauth.QuickTunnelAuthRecipientPolicy
 	if len(allowedMail) > 0 {
@@ -77,7 +76,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("User-Agent", buildInfo.UserAgent())
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // The quick-service endpoint is an explicit configuration value, and this request intentionally provisions the tunnel there.
 	if err != nil {
 		return errors.Wrap(err, "failed to request quick Tunnel")
 	}
@@ -218,5 +217,5 @@ type QuickTunnel struct {
 	Name       string `json:"name"`
 	Hostname   string `json:"hostname"`
 	AccountTag string `json:"account_tag"`
-	Secret     []byte `json:"secret"`
+	Secret     []byte `json:"secret"` //nolint:gosec // The provisioning API returns this tunnel credential, which is required to start the newly created tunnel.
 }
