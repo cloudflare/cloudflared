@@ -23,8 +23,9 @@ const httpTimeout = 15 * time.Second
 const disclaimer = "Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps"
 
 const (
-	quickTunnelAuthModeField = "auth_mode"
-	quickTunnelAuthModeOTP   = "otp"
+	quickTunnelAuthModeField           = "auth_mode"
+	quickTunnelAuthModeOTP             = "otp"
+	quickTunnelMaxProvisioningResponse = 1 << 20 // 1 MiB
 )
 
 // buildQuickTunnelRequestBody returns the provisioning request body.
@@ -82,9 +83,9 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := readQuickTunnelProvisioningResponse(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "failed to read quick-tunnel response")
+		return err
 	}
 
 	data, err := decodeQuickTunnelProvisioningResponse(resp.StatusCode, respBody)
@@ -165,6 +166,17 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		},
 		sc.log,
 	)
+}
+
+func readQuickTunnelProvisioningResponse(body io.Reader) ([]byte, error) {
+	response, err := io.ReadAll(io.LimitReader(body, quickTunnelMaxProvisioningResponse+1))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read quick-tunnel response")
+	}
+	if len(response) > quickTunnelMaxProvisioningResponse {
+		return nil, errors.New("quick tunnel provisioning response exceeds maximum size")
+	}
+	return response, nil
 }
 
 func decodeQuickTunnelProvisioningResponse(statusCode int, response []byte) (QuickTunnelResponse, error) {

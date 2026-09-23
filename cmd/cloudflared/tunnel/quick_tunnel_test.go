@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -40,6 +41,17 @@ func TestDecodeQuickTunnelProvisioningResponseDoesNotExposeBody(t *testing.T) {
 	_, err = decodeQuickTunnelProvisioningResponse(http.StatusBadGateway, []byte(credential))
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), credential)
+}
+
+func TestReadQuickTunnelProvisioningResponseBoundsBody(t *testing.T) {
+	t.Parallel()
+
+	response, err := readQuickTunnelProvisioningResponse(bytes.NewReader(bytes.Repeat([]byte("x"), quickTunnelMaxProvisioningResponse)))
+	require.NoError(t, err)
+	assert.Len(t, response, quickTunnelMaxProvisioningResponse)
+
+	_, err = readQuickTunnelProvisioningResponse(bytes.NewReader(bytes.Repeat([]byte("x"), quickTunnelMaxProvisioningResponse+1)))
+	require.ErrorContains(t, err, "response exceeds maximum size")
 }
 
 func TestFormatQuickTunnelErrors(t *testing.T) {
