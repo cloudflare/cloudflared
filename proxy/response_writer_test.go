@@ -41,6 +41,22 @@ func TestResponseWriterFiltersDirectHeadersOnce(t *testing.T) {
 	assert.Equal(t, "private, no-store", responseWriter.Header().Get("Cache-Control"))
 }
 
+func TestResponseWriterFiltersDirectHeadersBeforeFlush(t *testing.T) {
+	t.Parallel()
+
+	responseWriter := newMockHTTPRespWriter()
+	responseWriter.Header().Set("Cache-Control", "public")
+	filteredWriter := newResponseWriterWithHeaderFilter(responseWriter, func(headers http.Header) {
+		headers.Set("Cache-Control", "private, no-store")
+	})
+
+	flusher, ok := filteredWriter.(http.Flusher)
+	require.True(t, ok)
+	flusher.Flush()
+
+	assert.Equal(t, "private, no-store", responseWriter.Result().Header.Get("Cache-Control"))
+}
+
 func TestResponseWriterFiltersTrailers(t *testing.T) {
 	t.Parallel()
 

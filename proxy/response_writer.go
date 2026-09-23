@@ -64,6 +64,7 @@ func (w *responseWriterWithHeaderFilter) filterDirectResponseHeaders() {
 }
 
 func (w *responseWriterWithHeaderFilter) Flush() {
+	w.filterDirectResponseHeaders()
 	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
 		flusher.Flush()
 	}
