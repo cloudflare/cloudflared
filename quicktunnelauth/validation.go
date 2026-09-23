@@ -1,6 +1,7 @@
 package quicktunnelauth
 
 import (
+	"errors"
 	"fmt"
 	"net/mail"
 	"strings"
@@ -8,33 +9,48 @@ import (
 	"golang.org/x/net/idna"
 )
 
+const (
+	quickTunnelAuthMaxAllowedMailRules     = 100
+	quickTunnelAuthMaxAllowedMailRuleBytes = 320
+)
+
 // validateQuickTunnelAllowedMail validates and normalizes exact email addresses and
 // wildcard domains from one or more comma-separated values.
 func validateQuickTunnelAllowedMail(values []string) (emails, wildcardDomains map[string]struct{}, err error) {
+	if len(values) == 0 {
+		return nil, nil, errors.New("allowed mail rule 1 is empty")
+	}
+
 	emails, wildcardDomains = make(map[string]struct{}), make(map[string]struct{})
-	for i, rawEntry := range strings.Split(strings.Join(values, ","), ",") {
+	for ruleIndex, rawEntry := range strings.Split(strings.Join(values, ","), ",") {
+		rulePosition := ruleIndex + 1
+		if rulePosition > quickTunnelAuthMaxAllowedMailRules {
+			return nil, nil, fmt.Errorf("allowed mail rules exceed the %d-entry limit", quickTunnelAuthMaxAllowedMailRules)
+		}
+		if len(rawEntry) > quickTunnelAuthMaxAllowedMailRuleBytes {
+			return nil, nil, fmt.Errorf(
+				"allowed mail rule %d exceeds the %d-byte limit",
+				rulePosition,
+				quickTunnelAuthMaxAllowedMailRuleBytes,
+			)
+		}
+
 		entry := normalizeQuickTunnelEmail(rawEntry)
 		domain, isWildcard := strings.CutPrefix(entry, "*@")
 
 		switch {
 		case entry == "":
-			return nil, nil, fmt.Errorf("allowed mail rule %d is empty", i+1)
+			return nil, nil, fmt.Errorf("allowed mail rule %d is empty", rulePosition)
 
 		case isWildcard:
 			if !isValidQuickTunnelEmailDomain(domain) {
-				return nil, nil, fmt.Errorf(
-					"allowed mail rule %q has an invalid wildcard domain",
-					rawEntry,
-				)
+				return nil, nil, fmt.Errorf("allowed mail rule %d has an invalid wildcard domain", rulePosition)
 			}
 			wildcardDomains[domain] = struct{}{}
 
 		default:
 			if !isValidQuickTunnelEmail(entry) {
-				return nil, nil, fmt.Errorf(
-					"allowed mail rule %q is not a valid email address",
-					rawEntry,
-				)
+				return nil, nil, fmt.Errorf("allowed mail rule %d is not a valid email address", rulePosition)
 			}
 			emails[entry] = struct{}{}
 		}

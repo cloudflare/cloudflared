@@ -1,6 +1,7 @@
 package quicktunnelauth
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -96,10 +97,45 @@ func TestValidateQuickTunnelAllowedMailReportsInvalidRule(t *testing.T) {
 		values        []string
 		expectedError string
 	}{
-		{name: "email", values: []string{"first@example.com", "private@example.com/path"}, expectedError: `allowed mail rule "private@example.com/path" is not a valid email address`},
-		{name: "wildcard", values: []string{"first@example.com", "*@example.com/path"}, expectedError: `allowed mail rule "*@example.com/path" has an invalid wildcard domain`},
+		{name: "email", values: []string{"first@example.com", "private@example.com/path"}, expectedError: "allowed mail rule 2 is not a valid email address"},
+		{name: "wildcard", values: []string{"first@example.com", "*@example.com/path"}, expectedError: "allowed mail rule 2 has an invalid wildcard domain"},
 	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := validateQuickTunnelAllowedMail(test.values)
+			require.EqualError(t, err, test.expectedError)
+			for _, value := range test.values {
+				assert.NotContains(t, err.Error(), value)
+			}
+		})
+	}
+}
+
+func TestValidateQuickTunnelAllowedMailBoundsInput(t *testing.T) {
+	t.Parallel()
+
+	tooManyRules := make([]string, quickTunnelAuthMaxAllowedMailRules+1)
+	for index := range tooManyRules {
+		tooManyRules[index] = "user@example.com"
+	}
+	tests := []struct {
+		name          string
+		values        []string
+		expectedError string
+	}{
+		{
+			name:          "too many rules",
+			values:        tooManyRules,
+			expectedError: fmt.Sprintf("allowed mail rules exceed the %d-entry limit", quickTunnelAuthMaxAllowedMailRules),
+		},
+		{
+			name:          "rule too long before trimming",
+			values:        []string{strings.Repeat(" ", quickTunnelAuthMaxAllowedMailRuleBytes) + "a"},
+			expectedError: fmt.Sprintf("allowed mail rule 1 exceeds the %d-byte limit", quickTunnelAuthMaxAllowedMailRuleBytes),
+		},
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
