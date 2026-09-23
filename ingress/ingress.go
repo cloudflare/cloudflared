@@ -19,12 +19,13 @@ import (
 )
 
 var (
-	ErrNoIngressRules             = errors.New("The config file doesn't contain any ingress rules")
-	ErrNoIngressRulesCLI          = errors.New("No ingress rules were defined in provided config (if any) nor from the cli, cloudflared will return 503 for all incoming HTTP requests")
-	errLastRuleNotCatchAll        = errors.New("The last ingress rule must match all URLs (i.e. it should not have a hostname or path filter)")
-	errBadWildcard                = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
-	errHostnameContainsPort       = errors.New("Hostname cannot contain a port")
-	ErrURLIncompatibleWithIngress = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
+	ErrNoIngressRules              = errors.New("The config file doesn't contain any ingress rules")
+	ErrNoIngressRulesCLI           = errors.New("No ingress rules were defined in provided config (if any) nor from the cli, cloudflared will return 503 for all incoming HTTP requests")
+	errLastRuleNotCatchAll         = errors.New("The last ingress rule must match all URLs (i.e. it should not have a hostname or path filter)")
+	errBadWildcard                 = errors.New("Hostname patterns can have at most one wildcard character (\"*\") and it can only be used for subdomains, e.g. \"*.example.com\"")
+	errHostnameContainsPort        = errors.New("Hostname cannot contain a port")
+	errNegativeConnectRetryTimeout = errors.New("connectRetryTimeout must not be negative")
+	ErrURLIncompatibleWithIngress  = errors.New("You can't set the --url flag (or $TUNNEL_URL) when using multiple-origin ingress rules")
 )
 
 const (
@@ -135,6 +136,9 @@ func parseCLIIngress(c *cli.Context, allowURLFromArgs bool) (Ingress, error) {
 
 	// Construct an Ingress with the single rule.
 	defaults := originRequestFromSingleRule(c)
+	if defaults.ConnectRetryTimeout.Duration < 0 {
+		return Ingress{}, errNegativeConnectRetryTimeout
+	}
 	ing := Ingress{
 		Rules: []Rule{
 			{
@@ -243,9 +247,15 @@ func validateAccessConfiguration(cfg *config.AccessConfig) error {
 }
 
 func validateIngress(ingress []config.UnvalidatedIngressRule, defaults OriginRequestConfig) (Ingress, error) {
+	if defaults.ConnectRetryTimeout.Duration < 0 {
+		return Ingress{}, errNegativeConnectRetryTimeout
+	}
 	rules := make([]Rule, len(ingress))
 	for i, r := range ingress {
 		cfg := setConfig(defaults, r.OriginRequest)
+		if cfg.ConnectRetryTimeout.Duration < 0 {
+			return Ingress{}, fmt.Errorf("ingress rule %d: %w", i+1, errNegativeConnectRetryTimeout)
+		}
 		var service OriginService
 
 		if prefix := "unix:"; strings.HasPrefix(r.Service, prefix) {

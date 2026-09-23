@@ -976,6 +976,12 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Hidden: shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Name:    ingress.ProxyConnectRetryTimeoutFlag,
+			Usage:   "Total time to retry refused HTTP origin connections or missing Unix sockets (0 disables retries). Applies to --url or --unix-socket; for ingress rules, set originRequest.connectRetryTimeout.",
+			EnvVars: []string{"TUNNEL_PROXY_CONNECT_RETRY_TIMEOUT"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   ingress.ProxyTLSTimeoutFlag,
 			Usage:  legacyTunnelFlag("HTTP proxy timeout for completing a TLS handshake"),
 			Value:  time.Second * 10,
