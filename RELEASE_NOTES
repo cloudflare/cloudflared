@@ -1,3 +1,6 @@
+2026.9.3
+- 2026-09-24 chore: Update dependencies
+
 2026.9.2
 - 2026-09-24 TUN-10926: Broker JWKS cache expiration
 - 2026-09-24 TUN-10798: Harden protected Quick Tunnel CLI behavior
