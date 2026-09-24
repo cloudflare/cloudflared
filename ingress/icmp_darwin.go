@@ -210,7 +210,7 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		reply, err := parseReply(from, buf[:n])
+		reply, err := parseReply(from, buf[:n], receivedTTL{})
 		if err != nil {
 			ip.logger.Debug().Err(err).Str("dst", from.String()).Msg("Failed to parse ICMP reply, continue to parse as full packet")
 			// In unit test, we found out when the listener listens on 0.0.0.0, the socket reads the full packet after
@@ -231,24 +231,36 @@ func (ip *icmpProxy) Serve(ctx context.Context) error {
 	}
 }
 
+func enableReceiveTTL(conn *icmp.PacketConn, listenIP netip.Addr) error {
+	return nil
+}
+
 func (ip *icmpProxy) handleFullPacket(ctx context.Context, decoder *packet.ICMPDecoder, rawPacket []byte) error {
-	icmpPacket, err := decoder.Decode(packet.RawPacket{Data: rawPacket})
+	reply, err := parseFullPacketReply(decoder, rawPacket)
 	if err != nil {
 		return err
 	}
-	echo, err := getICMPEcho(icmpPacket.Message)
-	if err != nil {
-		return err
-	}
-	reply := echoReply{
-		from: icmpPacket.Src,
-		msg:  icmpPacket.Message,
-		echo: echo,
-	}
-	if ip.sendReply(ctx, &reply); err != nil {
+	if err := ip.sendReply(ctx, reply); err != nil {
 		return err
 	}
 	return nil
+}
+
+func parseFullPacketReply(decoder *packet.ICMPDecoder, rawPacket []byte) (*echoReply, error) {
+	icmpPacket, err := decoder.Decode(packet.RawPacket{Data: rawPacket})
+	if err != nil {
+		return nil, err
+	}
+	echo, err := getICMPEcho(icmpPacket.Message)
+	if err != nil {
+		return nil, err
+	}
+	return &echoReply{
+		from: icmpPacket.Src,
+		msg:  icmpPacket.Message,
+		echo: echo,
+		ttl:  receivedTTLFromIPHeader(icmpPacket.TTL),
+	}, nil
 }
 
 func (ip *icmpProxy) sendReply(ctx context.Context, reply *echoReply) error {
@@ -265,9 +277,15 @@ func (ip *icmpProxy) sendReply(ctx context.Context, reply *echoReply) error {
 	_, span := icmpFlow.responder.ReplySpan(ctx, ip.logger)
 	defer icmpFlow.responder.ExportSpan()
 
-	if err := icmpFlow.returnToSrc(reply); err != nil {
+	sent, err := icmpFlow.returnToSrc(reply)
+	if err != nil {
 		tracing.EndWithErrorStatus(span, err)
 		return err
+	}
+	if !sent {
+		ip.logger.Debug().Str("dst", reply.from.String()).Msg("Drop ICMP echo reply because TTL expired")
+		tracing.End(span)
+		return nil
 	}
 	observeICMPReply(ip.logger, span, reply.from.String(), reply.echo.ID, reply.echo.Seq)
 	span.SetAttributes(attribute.Int("originalEchoID", icmpFlow.originalEchoID))

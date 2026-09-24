@@ -18,6 +18,75 @@ import (
 	"github.com/cloudflare/cloudflared/packet"
 )
 
+func TestReturnToSrcUsesReplyTTL(t *testing.T) {
+	t.Parallel()
+
+	const originalEchoID = 42573
+	muxer := newMockMuxer(1)
+	responder := newPacketResponder(muxer, 0, packet.NewEncoder())
+	flow := newICMPEchoFlow(localhostIP, func() error { return nil }, nil, responder, 0, originalEchoID)
+
+	sent, err := flow.returnToSrc(&echoReply{
+		from: localhostIP,
+		msg: &icmp.Message{
+			Type: ipv4.ICMPTypeEchoReply,
+			Code: 0,
+		},
+		echo: &icmp.Echo{
+			ID:   12345,
+			Seq:  6789,
+			Data: []byte(t.Name()),
+		},
+		ttl: receivedTTLFromIPHeader(42),
+	})
+	require.NoError(t, err)
+	require.True(t, sent)
+
+	resp := <-muxer.cfdToEdge
+	decoder := packet.NewICMPDecoder()
+	decoded, err := decoder.Decode(packet.RawPacket{Data: resp.Payload()})
+	require.NoError(t, err)
+	require.Equal(t, uint8(41), decoded.TTL)
+	require.Equal(t, localhostIP, decoded.Src)
+	require.Equal(t, localhostIP, decoded.Dst)
+	require.Equal(t, ipv4.ICMPTypeEchoReply, decoded.Type)
+	require.Equal(t, &icmp.Echo{
+		ID:   originalEchoID,
+		Seq:  6789,
+		Data: []byte(t.Name()),
+	}, decoded.Body)
+}
+
+func TestReturnToSrcDropsExpiredReplyTTL(t *testing.T) {
+	t.Parallel()
+
+	muxer := newMockMuxer(1)
+	responder := newPacketResponder(muxer, 0, packet.NewEncoder())
+	flow := newICMPEchoFlow(localhostIP, func() error { return nil }, nil, responder, 0, 42573)
+
+	sent, err := flow.returnToSrc(&echoReply{
+		from: localhostIP,
+		msg: &icmp.Message{
+			Type: ipv4.ICMPTypeEchoReply,
+			Code: 0,
+		},
+		echo: &icmp.Echo{
+			ID:   12345,
+			Seq:  6789,
+			Data: []byte(t.Name()),
+		},
+		ttl: receivedTTLFromIPHeader(1),
+	})
+	require.NoError(t, err)
+	require.False(t, sent)
+
+	select {
+	case pk := <-muxer.cfdToEdge:
+		t.Fatalf("received unexpected ICMP reply: %+v", pk)
+	default:
+	}
+}
+
 func TestFunnelIdleTimeout(t *testing.T) {
 	defer leaktest.Check(t)()
 
