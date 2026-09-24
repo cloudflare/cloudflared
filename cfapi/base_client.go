@@ -40,6 +40,7 @@ type baseEndpoints struct {
 	zoneLevel     url.URL
 	accountRoutes url.URL
 	accountVnets  url.URL
+	zones         url.URL
 }
 
 var _ Client = (*RESTClient)(nil)
@@ -60,7 +61,11 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 	}
 	zoneLevelEndpoint, err := url.Parse(fmt.Sprintf("%s/zones/%s/tunnels", baseURL, zoneTag))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create account level endpoint")
+		return nil, errors.Wrap(err, "failed to create zone level endpoint")
+	}
+	zonesEndpoint, err := url.Parse(fmt.Sprintf("%s/zones", baseURL))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create zones endpoint")
 	}
 	httpTransport := http.Transport{
 		TLSHandshakeTimeout:   defaultTimeout,
@@ -73,6 +78,7 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 			zoneLevel:     *zoneLevelEndpoint,
 			accountRoutes: *accountRoutesEndpoint,
 			accountVnets:  *accountVnetsEndpoint,
+			zones:         *zonesEndpoint,
 		},
 		authToken: authToken,
 		userAgent: userAgent,
@@ -240,4 +246,17 @@ func (r *RESTClient) statusCodeToError(op string, resp *http.Response) error {
 	}
 	return errors.Errorf("API call to %s failed with status %d: %s", op,
 		resp.StatusCode, http.StatusText(resp.StatusCode))
+}
+
+func (r *RESTClient) ListZones() ([]*Zone, error) {
+	endpoint := r.baseEndpoints.zones
+	return fetchExhaustively[Zone](func(page int) (*http.Response, error) {
+		reqURL := endpoint
+		query := reqURL.Query()
+		query.Set("page", fmt.Sprintf("%d", page))
+		query.Set("per_page", "50")
+		// Required to get basic zone info instead of just IDs
+		reqURL.RawQuery = query.Encode()
+		return r.sendRequest("GET", reqURL, nil)
+	})
 }
