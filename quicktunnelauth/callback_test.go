@@ -32,7 +32,7 @@ func TestConsumeQuickTunnelAuthCallback(t *testing.T) {
 	assert.Equal(t, "/dashboard?tab=logs", callback.ReturnPath)
 
 	require.NotNil(t, callback.ClearCookie)
-	assert.Equal(t, quickTunnelAuthStateCookieName, callback.ClearCookie.Name)
+	assert.Equal(t, quickTunnelAuthStateCookieName(login.State), callback.ClearCookie.Name)
 	assert.Empty(t, callback.ClearCookie.Value)
 	assert.Equal(t, QuickTunnelAuthCallbackPath, callback.ClearCookie.Path)
 	assert.Equal(t, -1, callback.ClearCookie.MaxAge)
@@ -69,6 +69,34 @@ func TestConsumeQuickTunnelAuthCallbackSendsCookieOnCrossSiteBrokerPost(t *testi
 	assert.Equal(t, login.State, callback.State)
 	assert.Equal(t, "broker.assertion", callback.Assertion)
 	assert.Equal(t, "/dashboard", callback.ReturnPath)
+}
+
+func TestConsumeQuickTunnelAuthCallbackSelectsMatchingConcurrentLogin(t *testing.T) {
+	t.Parallel()
+
+	manager := newTestQuickTunnelAuthStateManager(t)
+	manager.random = bytes.NewReader(append(
+		bytes.Repeat([]byte{1}, quickTunnelAuthStateSize),
+		bytes.Repeat([]byte{2}, quickTunnelAuthStateSize)...,
+	))
+	firstLogin := beginTestQuickTunnelLogin(t, manager, "/dashboard")
+	secondLogin := beginTestQuickTunnelLogin(t, manager, "/favicon.ico")
+	require.NotEqual(t, firstLogin.Cookie.Name, secondLogin.Cookie.Name)
+
+	firstRequest := newTestQuickTunnelAuthCallbackRequest(firstLogin.Cookie, firstLogin.State, "first.assertion")
+	firstRequest.AddCookie(secondLogin.Cookie)
+	firstCallback, err := manager.ConsumeCallback(firstRequest)
+	require.NoError(t, err)
+	assert.Equal(t, "/dashboard", firstCallback.ReturnPath)
+	assert.Equal(t, firstLogin.Cookie.Name, firstCallback.ClearCookie.Name)
+	assert.NotEqual(t, secondLogin.Cookie.Name, firstCallback.ClearCookie.Name)
+
+	secondRequest := newTestQuickTunnelAuthCallbackRequest(secondLogin.Cookie, secondLogin.State, "second.assertion")
+	secondRequest.AddCookie(firstLogin.Cookie)
+	secondCallback, err := manager.ConsumeCallback(secondRequest)
+	require.NoError(t, err)
+	assert.Equal(t, "/favicon.ico", secondCallback.ReturnPath)
+	assert.Equal(t, secondLogin.Cookie.Name, secondCallback.ClearCookie.Name)
 }
 
 func TestConsumeQuickTunnelAuthCallbackAcceptsExplicitHTTPSPort(t *testing.T) {
@@ -222,7 +250,7 @@ func TestConsumeQuickTunnelAuthCallbackRejectsMismatchedState(t *testing.T) {
 
 	callback, err := manager.ConsumeCallback(request)
 	assert.Nil(t, callback)
-	require.EqualError(t, err, "browser state does not match callback state")
+	require.ErrorContains(t, err, "request contains 0 authentication-state cookies, expected one")
 }
 
 func TestConsumeQuickTunnelAuthCallbackRejectsInvalidRequest(t *testing.T) {
@@ -408,7 +436,7 @@ func newTestQuickTunnelAuthStateCookie(
 
 	// #nosec G124 -- valid signed test cookies must model the cross-site callback cookie.
 	return &http.Cookie{
-		Name:     quickTunnelAuthStateCookieName,
+		Name:     quickTunnelAuthStateCookieName(payload.State),
 		Value:    encodedPayload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)),
 		Path:     QuickTunnelAuthCallbackPath,
 		Secure:   true,

@@ -193,7 +193,7 @@ func TestHTTPRequestAuthorizerRunsBeforeIngressSelection(t *testing.T) {
 func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 	t.Parallel()
 
-	const stateCookieName = "__Secure-cloudflared-qt-auth-state"
+	const stateCookieName = "__Secure-cloudflared-qt-auth-state-test"
 	tests := []struct {
 		name           string
 		protected      bool
@@ -262,7 +262,7 @@ func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
 				w.Header().Set("Cache-Control", "public")
 				w.Header().Set("Referrer-Policy", "unsafe-url")
 				w.Header().Add("Set-Cookie", "__Host-cloudflared-qt-auth-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
-				w.Header().Add("Set-Cookie", "__Secure-cloudflared-qt-auth-state=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
+				w.Header().Add("Set-Cookie", stateCookieName+"=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
 				w.Header().Add("Set-Cookie", "origin-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
 				w.WriteHeader(http.StatusNoContent)
 			}))

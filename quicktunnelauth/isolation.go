@@ -54,5 +54,5 @@ func isQuickTunnelAuthSetCookie(value string) bool {
 }
 
 func isQuickTunnelAuthCookieName(name string) bool {
-	return name == quickTunnelAuthStateCookieName || name == quickTunnelAuthSessionCookieName
+	return strings.HasPrefix(name, quickTunnelAuthStateCookiePrefix) || name == quickTunnelAuthSessionCookieName
 }

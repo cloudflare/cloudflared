@@ -90,7 +90,7 @@ func TestBeginQuickTunnelLogin(t *testing.T) {
 	}, map[string][]string(login.RedirectURL.Query()))
 
 	require.NotNil(t, login.Cookie)
-	assert.Equal(t, quickTunnelAuthStateCookieName, login.Cookie.Name)
+	assert.Equal(t, quickTunnelAuthStateCookieName(login.State), login.Cookie.Name)
 	assert.Equal(t, QuickTunnelAuthCallbackPath, login.Cookie.Path)
 	assert.Equal(t, testQuickTunnelAuthNow.Add(QuickTunnelAuthStateTTL), login.Cookie.Expires)
 	assert.Equal(t, int(QuickTunnelAuthStateTTL/time.Second), login.Cookie.MaxAge)

@@ -174,7 +174,8 @@ func TestQuickTunnelAuthHandlerHandlesInvalidCallbackLocally(t *testing.T) {
 	manager := newTestQuickTunnelAuthStateManager(t)
 	handler, err := NewQuickTunnelAuthHandler(manager)
 	require.NoError(t, err)
-	request := newTestQuickTunnelAuthCallbackRequest(nil, "missing-state", "broker.assertion")
+	login := beginTestQuickTunnelLogin(t, manager, "/dashboard")
+	request := newTestQuickTunnelAuthCallbackRequest(nil, login.State, "broker.assertion")
 	response := httptest.NewRecorder()
 
 	decision, outcome, err := handler.AuthorizeHTTP(response, request)
@@ -221,7 +222,7 @@ func TestQuickTunnelAuthHandlerCompletesAuthorizedCallback(t *testing.T) {
 			t.Parallel()
 
 			harness := newTestQuickTunnelAuthHandlerHarness(t, test.allowedMail)
-			request, _ := harness.newCallbackRequest(t, "/dashboard?tab=logs", test.email)
+			request, login := harness.newCallbackRequest(t, "/dashboard?tab=logs", test.email)
 			response := httptest.NewRecorder()
 
 			decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
@@ -236,7 +237,7 @@ func TestQuickTunnelAuthHandlerCompletesAuthorizedCallback(t *testing.T) {
 
 			cookies := response.Result().Cookies()
 			require.Len(t, cookies, 2)
-			assert.Equal(t, quickTunnelAuthStateCookieName, cookies[0].Name)
+			assert.Equal(t, login.Cookie.Name, cookies[0].Name)
 			assert.Equal(t, -1, cookies[0].MaxAge)
 			assert.Equal(t, quickTunnelAuthSessionCookieName, cookies[1].Name)
 
@@ -253,7 +254,7 @@ func TestQuickTunnelAuthHandlerRejectsUnauthorizedRecipient(t *testing.T) {
 	t.Parallel()
 
 	harness := newTestQuickTunnelAuthHandlerHarness(t, []string{"allowed@example.com"})
-	request, _ := harness.newCallbackRequest(t, "/dashboard", "visitor@example.com")
+	request, login := harness.newCallbackRequest(t, "/dashboard", "visitor@example.com")
 	response := httptest.NewRecorder()
 
 	decision, outcome, err := harness.handler.AuthorizeHTTP(response, request)
@@ -267,7 +268,7 @@ func TestQuickTunnelAuthHandlerRejectsUnauthorizedRecipient(t *testing.T) {
 
 	cookies := response.Result().Cookies()
 	require.Len(t, cookies, 1)
-	assert.Equal(t, quickTunnelAuthStateCookieName, cookies[0].Name)
+	assert.Equal(t, login.Cookie.Name, cookies[0].Name)
 	assert.Equal(t, -1, cookies[0].MaxAge)
 }
 

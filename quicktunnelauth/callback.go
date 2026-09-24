@@ -48,13 +48,15 @@ func (m *QuickTunnelAuthStateManager) ConsumeCallback(r *http.Request) (*QuickTu
 	if err != nil {
 		return nil, fmt.Errorf("parse callback form: %w", err)
 	}
+	if !isCanonicalQuickTunnelAuthState(state) {
+		return nil, errors.New("callback state is not canonical")
+	}
 
-	cookiePayload, err := m.verifyStateCookie(r)
+	cookiePayload, err := m.verifyStateCookie(r, state)
 	if err != nil {
 		return nil, fmt.Errorf("verify authentication-state cookie: %w", err)
 	}
-	if !isCanonicalQuickTunnelAuthState(state) ||
-		!constantTimeStateEqual(state, cookiePayload.State) {
+	if !constantTimeStateEqual(state, cookiePayload.State) {
 		return nil, errors.New("browser state does not match callback state")
 	}
 
@@ -68,7 +70,7 @@ func (m *QuickTunnelAuthStateManager) ConsumeCallback(r *http.Request) (*QuickTu
 		State:       state,
 		Assertion:   assertion,
 		ReturnPath:  cookiePayload.ReturnPath,
-		ClearCookie: newQuickTunnelAuthClearStateCookie(),
+		ClearCookie: newQuickTunnelAuthClearStateCookie(state),
 	}, nil
 }
 
@@ -162,8 +164,8 @@ func parseQuickTunnelAuthCallbackForm(r *http.Request) (state, assertion string,
 	return states[0], assertions[0], nil
 }
 
-func (m *QuickTunnelAuthStateManager) verifyStateCookie(r *http.Request) (*quickTunnelAuthStateCookiePayload, error) {
-	stateCookies := r.CookiesNamed(quickTunnelAuthStateCookieName)
+func (m *QuickTunnelAuthStateManager) verifyStateCookie(r *http.Request, state string) (*quickTunnelAuthStateCookiePayload, error) {
+	stateCookies := r.CookiesNamed(quickTunnelAuthStateCookieName(state))
 	if len(stateCookies) != 1 {
 		return nil, fmt.Errorf(
 			"request contains %d authentication-state cookies, expected one",
@@ -223,9 +225,9 @@ func isCanonicalQuickTunnelAuthState(state string) bool {
 	return err == nil && len(decodedState) == quickTunnelAuthStateSize
 }
 
-func newQuickTunnelAuthClearStateCookie() *http.Cookie {
+func newQuickTunnelAuthClearStateCookie(state string) *http.Cookie {
 	return &http.Cookie{
-		Name:     quickTunnelAuthStateCookieName,
+		Name:     quickTunnelAuthStateCookieName(state),
 		Value:    "",
 		Path:     QuickTunnelAuthCallbackPath,
 		Expires:  time.Unix(1, 0).UTC(),

@@ -28,8 +28,8 @@ const (
 	// __Secure- enforces HTTPS and the Secure attribute. __Host- cannot be used
 	// because it requires Path=/, while this cookie is scoped to the callback path.
 	// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies#cookie_prefixes.
-	quickTunnelAuthStateCookieName = "__Secure-cloudflared-qt-auth-state"
-	quickTunnelAuthHTTPSPort       = 443
+	quickTunnelAuthStateCookiePrefix = "__Secure-cloudflared-qt-auth-state-"
+	quickTunnelAuthHTTPSPort         = 443
 
 	// quickTunnelAuthMaxLabelLength is the maximum length of a DNS label.
 	// Quick Tunnel labels are restricted to ASCII alphanumeric characters
@@ -250,6 +250,10 @@ func generateQuickTunnelAuthState(random io.Reader) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(state), nil
 }
 
+func quickTunnelAuthStateCookieName(state string) string {
+	return quickTunnelAuthStateCookiePrefix + state
+}
+
 // newStateCookie returns the signed, host-only cookie that binds the browser
 // to one stateless authentication flow.
 func (m *QuickTunnelAuthStateManager) newStateCookie(state, returnPath string, expiresAt time.Time) (*http.Cookie, error) {
@@ -277,7 +281,7 @@ func (m *QuickTunnelAuthStateManager) newStateCookie(state, returnPath string, e
 	// here, while Secure and HttpOnly remain enabled.
 	// #nosec G124 -- cross-site callback requires SameSite=None
 	cookie := &http.Cookie{
-		Name:     quickTunnelAuthStateCookieName,
+		Name:     quickTunnelAuthStateCookieName(state),
 		Value:    encodedPayload + "." + encodedSignature,
 		Path:     QuickTunnelAuthCallbackPath,
 		Expires:  expiresAt,

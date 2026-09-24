@@ -15,9 +15,9 @@ func TestFilterQuickTunnelsAuthHeaders(t *testing.T) {
 		"Referrer-Policy": {"unsafe-url"},
 		"Set-Cookie": {
 			quickTunnelAuthSessionCookieName + "=session-value; Path=/; Secure; HttpOnly; SameSite=Lax",
-			quickTunnelAuthStateCookieName + "=state-value; Path=/; Secure; HttpOnly; SameSite=Lax",
+			quickTunnelAuthStateCookiePrefix + "state=state-value; Path=/; Secure; HttpOnly; SameSite=Lax",
 			quickTunnelAuthSessionCookieName + "; Path=/; Secure; Max-Age=0",
-			quickTunnelAuthStateCookieName + "; Path=/; Secure; Max-Age=0",
+			quickTunnelAuthStateCookiePrefix + "state; Path=/; Secure; Max-Age=0",
 			"origin-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax",
 		},
 	}

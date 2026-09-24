@@ -30,6 +30,15 @@ func NewQuickTunnelAuthRecipientPolicy(values []string) (*QuickTunnelAuthRecipie
 	}, nil
 }
 
+// AllowedRecipientCounts returns the number of exact email addresses and
+// wildcard-domain rules without exposing the configured recipients.
+func (p *QuickTunnelAuthRecipientPolicy) AllowedRecipientCounts() (emailAddresses, emailDomains int) {
+	if p == nil {
+		return 0, 0
+	}
+	return len(p.emails), len(p.wildcardDomains)
+}
+
 func (p *QuickTunnelAuthRecipientPolicy) allows(email string) bool {
 	if p == nil {
 		return false

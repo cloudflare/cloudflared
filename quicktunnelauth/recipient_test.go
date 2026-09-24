@@ -37,6 +37,27 @@ func TestNewQuickTunnelAuthRecipientPolicy(t *testing.T) {
 	}
 }
 
+func TestQuickTunnelAuthRecipientPolicyAllowedRecipientCounts(t *testing.T) {
+	t.Parallel()
+
+	policy, err := NewQuickTunnelAuthRecipientPolicy([]string{
+		"visitor@example.com",
+		"Visitor@Example.com",
+		"other@example.com",
+		"*@allowed.example",
+	})
+	require.NoError(t, err)
+
+	emailAddresses, emailDomains := policy.AllowedRecipientCounts()
+	assert.Equal(t, 2, emailAddresses)
+	assert.Equal(t, 1, emailDomains)
+
+	var nilPolicy *QuickTunnelAuthRecipientPolicy
+	emailAddresses, emailDomains = nilPolicy.AllowedRecipientCounts()
+	assert.Zero(t, emailAddresses)
+	assert.Zero(t, emailDomains)
+}
+
 func TestNewQuickTunnelAuthRecipientPolicyRejectsInvalidRules(t *testing.T) {
 	t.Parallel()
 

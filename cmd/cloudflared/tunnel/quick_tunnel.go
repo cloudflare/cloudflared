@@ -11,10 +11,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/quicktunnelauth"
 )
 
@@ -23,20 +26,89 @@ const httpTimeout = 15 * time.Second
 const disclaimer = "Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps"
 
 const (
-	quickTunnelAuthModeField           = "auth_mode"
-	quickTunnelAuthModeOTP             = "otp"
+	quickTunnelProtectedRequestBody    = `{"auth_mode":"otp"}`
+	quickTunnelHelloWorldOrigin        = "built-in Hello World server (managed by cloudflared)"
+	quickTunnelConfiguredOrigin        = "configured ingress"
 	quickTunnelMaxProvisioningResponse = 1 << 20 // 1 MiB
 )
 
 // buildQuickTunnelRequestBody returns the provisioning request body.
 // It returns a non-empty JSON body with auth_mode: otp when protected mode
 // is requested, otherwise an empty body for public mode.
-func buildQuickTunnelRequestBody(isProtected bool) ([]byte, error) {
+func buildQuickTunnelRequestBody(isProtected bool) []byte {
 	if !isProtected {
-		return nil, nil
+		return nil
 	}
 
-	return json.Marshal(map[string]string{quickTunnelAuthModeField: quickTunnelAuthModeOTP})
+	return []byte(quickTunnelProtectedRequestBody)
+}
+
+func describeQuickTunnelLocalOrigin(c *cli.Context, hasConfiguredIngress bool) (string, error) {
+	if hasConfiguredIngress {
+		return quickTunnelConfiguredOrigin, nil
+	}
+	if c.IsSet(ingress.HelloWorldFlag) {
+		return quickTunnelHelloWorldOrigin, nil
+	}
+
+	originURL, err := config.ValidateUrl(c, false)
+	if err != nil {
+		return "", fmt.Errorf("validate Quick Tunnel local origin URL: %w", err)
+	}
+	return originURL.String(), nil
+}
+
+func formatQuickTunnelAllowedRecipientCounts(emailAddresses, emailDomains int) string {
+	if emailAddresses == 0 && emailDomains == 0 {
+		return "none"
+	}
+
+	counts := make([]string, 0, 2)
+	if emailAddresses > 0 {
+		label := "addresses"
+		if emailAddresses == 1 {
+			label = "address"
+		}
+		counts = append(counts, fmt.Sprintf("%d %s", emailAddresses, label))
+	}
+	if emailDomains > 0 {
+		label := "domain rules"
+		if emailDomains == 1 {
+			label = "domain rule"
+		}
+		counts = append(counts, fmt.Sprintf("%d %s", emailDomains, label))
+	}
+	return strings.Join(counts, ", ")
+}
+
+func normalizeQuickTunnelURL(hostname string) string {
+	if strings.HasPrefix(hostname, "https://") {
+		return hostname
+	}
+	return "https://" + hostname
+}
+
+func quickTunnelStartupLines(
+	isProtected bool,
+	quickTunnelURL string,
+	localOrigin string,
+	recipientPolicy *quicktunnelauth.QuickTunnelAuthRecipientPolicy,
+) []string {
+	if !isProtected {
+		return []string{
+			"Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):",
+			quickTunnelURL,
+		}
+	}
+
+	emailAddresses, emailDomains := recipientPolicy.AllowedRecipientCounts()
+	return []string{
+		"Your protected quick Tunnel has been created! Visit it at (it may take some time to be reachable):",
+		quickTunnelURL,
+		"Authentication: One-Time PIN (using Cloudflare Access)",
+		"Allowed recipients: " + formatQuickTunnelAllowedRecipientCounts(emailAddresses, emailDomains),
+		"Local origin: " + localOrigin,
+	}
 }
 
 // RunQuickTunnel requests a tunnel from the specified service.
@@ -47,12 +119,18 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	sc.log.Info().Msg("Requesting new quick Tunnel on trycloudflare.com...")
 
 	allowedMail := sc.c.StringSlice(flags.AllowedMail)
+	isProtected := len(allowedMail) > 0
 	var recipientPolicy *quicktunnelauth.QuickTunnelAuthRecipientPolicy
-	if len(allowedMail) > 0 {
+	var localOrigin string
+	if isProtected {
 		var err error
 		recipientPolicy, err = quicktunnelauth.NewQuickTunnelAuthRecipientPolicy(allowedMail)
 		if err != nil {
 			return fmt.Errorf("validate Quick Tunnel recipient policy: %w", err)
+		}
+		localOrigin, err = describeQuickTunnelLocalOrigin(sc.c, len(config.GetConfiguration().Ingress) > 0)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -63,12 +141,7 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		},
 		Timeout: httpTimeout,
 	}
-
-	reqBody, err := buildQuickTunnelRequestBody(recipientPolicy != nil)
-	if err != nil {
-		return errors.Wrap(err, "failed to build quick tunnel request body")
-	}
-
+	reqBody := buildQuickTunnelRequestBody(isProtected)
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/tunnel", sc.c.String("quick-service")), bytes.NewReader(reqBody))
 	if err != nil {
 		return errors.Wrap(err, "failed to build quick tunnel request")
@@ -138,15 +211,8 @@ func RunQuickTunnel(sc *subcommandContext) error {
 		}
 	}
 
-	quickTunnelURL := data.Result.Hostname
-	if !strings.HasPrefix(quickTunnelURL, "https://") {
-		quickTunnelURL = "https://" + quickTunnelURL
-	}
-
-	cliutil.LogTable(sc.log, []string{
-		"Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):",
-		quickTunnelURL,
-	})
+	quickTunnelURL := normalizeQuickTunnelURL(data.Result.Hostname)
+	cliutil.LogTable(sc.log, quickTunnelStartupLines(isProtected, quickTunnelURL, localOrigin, recipientPolicy))
 
 	if !sc.c.IsSet(flags.Protocol) {
 		_ = sc.c.Set(flags.Protocol, "quic")

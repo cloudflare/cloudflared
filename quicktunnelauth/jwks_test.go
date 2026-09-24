@@ -162,6 +162,25 @@ func TestQuickTunnelAuthAssertionValidatorVerificationKeyRejectsRetiredKeyAfterC
 	assert.Equal(t, int32(2), requestCount.Load())
 }
 
+func TestQuickTunnelAuthAssertionValidatorVerificationKeyDoesNotRefreshForCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requestCount.Add(1)
+	}))
+	t.Cleanup(server.Close)
+
+	validator := newTestQuickTunnelAuthAssertionValidator(t, server)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	key, err := validator.verificationKey(ctx, "unknown-key")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, key)
+	assert.Zero(t, requestCount.Load())
+}
+
 func TestQuickTunnelAuthAssertionValidatorVerificationKeyRateLimitsUnknownKeyRefresh(t *testing.T) {
 	t.Parallel()
 
