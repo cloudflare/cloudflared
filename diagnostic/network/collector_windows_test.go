@@ -196,6 +196,32 @@ someletters abc ms 0.456 ms 0.789 ms 8.8.8.8 8.8.8.9`,
 				),
 			},
 		},
+		{
+			"line without a hop index is skipped",
+			`1  12.874 ms  15.517 ms  15.311 ms 172.68.101.121
+* * *
+2  12.874 ms  15.517 ms  15.311 ms 172.68.101.121`,
+			[]*diagnostic.Hop{
+				diagnostic.NewHop(
+					uint8(1),
+					"172.68.101.121",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+				diagnostic.NewHop(
+					uint8(2),
+					"172.68.101.121",
+					[]time.Duration{
+						time.Duration(12874),
+						time.Duration(15517),
+						time.Duration(15311),
+					},
+				),
+			},
+		},
 	}
 
 	for _, test := range tests {

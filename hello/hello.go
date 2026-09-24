@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	UptimeRoute    = "/uptime"
-	WSRoute        = "/ws"
-	SSERoute       = "/sse"
-	HealthRoute    = "/_health"
-	defaultSSEFreq = time.Second * 10
+	UptimeRoute              = "/uptime"
+	WSRoute                  = "/ws"
+	SSERoute                 = "/sse"
+	HealthRoute              = "/_health"
+	defaultSSEFreq           = time.Second * 10
+	defaultReadHeaderTimeout = time.Second * 10
 )
 
 type templateData struct {
@@ -117,7 +118,11 @@ func StartHelloWorldServer(log *zerolog.Logger, listener net.Listener, shutdownC
 	muxer.HandleFunc(SSERoute, sseHandler(log))
 	muxer.HandleFunc(HealthRoute, healthHandler())
 	muxer.HandleFunc("/", rootHandler(serverName))
-	httpServer := &http.Server{Addr: listener.Addr().String(), Handler: muxer}
+	httpServer := &http.Server{
+		Addr:              listener.Addr().String(),
+		Handler:           muxer,
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+	}
 	go func() {
 		<-shutdownC
 		_ = httpServer.Close()
@@ -200,7 +205,7 @@ func sseHandler(log *zerolog.Logger) http.HandlerFunc {
 		freq := defaultSSEFreq
 		if requestedFreq := r.URL.Query()["freq"]; len(requestedFreq) > 0 {
 			parsedFreq, err := time.ParseDuration(requestedFreq[0])
-			if err == nil {
+			if err == nil && parsedFreq > 0 {
 				freq = parsedFreq
 			}
 		}
