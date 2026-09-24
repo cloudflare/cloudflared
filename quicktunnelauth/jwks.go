@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -22,6 +23,9 @@ const (
 	// Five seconds bounds the complete refresh sequence, including retries, so
 	// one refresh cannot stall the serialized worker indefinitely.
 	quickTunnelAuthBrokerJWKSTimeout = 5 * time.Second
+	// Cached keys expire so broker key retirement and revocation take effect for
+	// long-running cloudflared processes.
+	quickTunnelAuthBrokerJWKSCacheTTL = 24 * time.Hour
 	// One refresh sequence per minute bounds broker traffic caused by
 	// attacker-controlled unknown key IDs.
 	quickTunnelAuthBrokerJWKSRefreshCooldown = time.Minute
@@ -59,8 +63,9 @@ type quickTunnelAuthBrokerJWKSRefreshNotification struct {
 }
 
 type quickTunnelAuthBrokerJWKSCache struct {
-	mu     sync.RWMutex
-	keySet jose.JSONWebKeySet
+	mu        sync.RWMutex
+	keySet    jose.JSONWebKeySet
+	expiresAt time.Time
 }
 
 // QuickTunnelAuthAssertionValidator caches broker verification keys used to
@@ -140,6 +145,12 @@ func (v *QuickTunnelAuthAssertionValidator) verificationKey(ctx context.Context,
 func (v *QuickTunnelAuthAssertionValidator) cachedVerificationKey(keyID string) (*jose.JSONWebKey, error) {
 	v.jwks.mu.RLock()
 	defer v.jwks.mu.RUnlock()
+	if !v.now().Before(v.jwks.expiresAt) {
+		if !v.jwks.expiresAt.IsZero() {
+			log.Debug().Msg("Quick Tunnel authentication broker JWKS cache expired")
+		}
+		return nil, nil
+	}
 	return findQuickTunnelAuthBrokerVerificationKey(v.jwks.keySet, keyID)
 }
 
@@ -207,6 +218,7 @@ func (v *QuickTunnelAuthAssertionValidator) refreshJWKS(ctx context.Context, key
 
 	v.jwks.mu.Lock()
 	v.jwks.keySet = *keySet
+	v.jwks.expiresAt = v.now().Add(quickTunnelAuthBrokerJWKSCacheTTL)
 	v.jwks.mu.Unlock()
 
 	key, err = findQuickTunnelAuthBrokerVerificationKey(*keySet, keyID)

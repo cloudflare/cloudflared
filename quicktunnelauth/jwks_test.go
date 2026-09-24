@@ -94,6 +94,74 @@ func TestQuickTunnelAuthAssertionValidatorVerificationKeyCachesAndRefreshes(t *t
 	assert.Equal(t, int32(2), requestCount.Load())
 }
 
+func TestQuickTunnelAuthAssertionValidatorVerificationKeyRefreshesExpiredCache(t *testing.T) {
+	t.Parallel()
+
+	firstKey := newTestQuickTunnelAuthBrokerVerificationKey(t, "test-key")
+	replacementKey := newTestQuickTunnelAuthBrokerVerificationKey(t, firstKey.KeyID)
+	responses := [][]byte{
+		marshalTestQuickTunnelAuthBrokerJWKS(t, firstKey),
+		marshalTestQuickTunnelAuthBrokerJWKS(t, replacementKey),
+	}
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		index := int(requestCount.Add(1)) - 1
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(responses[index]); err != nil {
+			t.Errorf("write broker JWKS response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	validator := newTestQuickTunnelAuthAssertionValidator(t, server)
+	now := time.Date(2026, time.September, 11, 12, 0, 0, 0, time.UTC)
+	validator.now = func() time.Time { return now }
+
+	key, err := validator.verificationKey(context.Background(), firstKey.KeyID)
+	require.NoError(t, err)
+	assert.Equal(t, firstKey.Key, key.Key)
+	assert.Equal(t, int32(1), requestCount.Load())
+
+	now = now.Add(quickTunnelAuthBrokerJWKSCacheTTL)
+	key, err = validator.verificationKey(context.Background(), firstKey.KeyID)
+	require.NoError(t, err)
+	assert.Equal(t, replacementKey.Key, key.Key)
+	assert.Equal(t, int32(2), requestCount.Load())
+}
+
+func TestQuickTunnelAuthAssertionValidatorVerificationKeyRejectsRetiredKeyAfterCacheExpiry(t *testing.T) {
+	t.Parallel()
+
+	retiredKey := newTestQuickTunnelAuthBrokerVerificationKey(t, "retired-key")
+	activeKey := newTestQuickTunnelAuthBrokerVerificationKey(t, "active-key")
+	responses := [][]byte{
+		marshalTestQuickTunnelAuthBrokerJWKS(t, retiredKey),
+		marshalTestQuickTunnelAuthBrokerJWKS(t, activeKey),
+	}
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		index := int(requestCount.Add(1)) - 1
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(responses[index]); err != nil {
+			t.Errorf("write broker JWKS response: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	validator := newTestQuickTunnelAuthAssertionValidator(t, server)
+	now := time.Date(2026, time.September, 11, 12, 0, 0, 0, time.UTC)
+	validator.now = func() time.Time { return now }
+
+	_, err := validator.verificationKey(context.Background(), retiredKey.KeyID)
+	require.NoError(t, err)
+
+	now = now.Add(quickTunnelAuthBrokerJWKSCacheTTL)
+	key, err := validator.verificationKey(context.Background(), retiredKey.KeyID)
+	require.EqualError(t, err, "broker assertion verification key is unavailable after JWKS refresh")
+	assert.Nil(t, key)
+	assert.Equal(t, int32(2), requestCount.Load())
+}
+
 func TestQuickTunnelAuthAssertionValidatorVerificationKeyRateLimitsUnknownKeyRefresh(t *testing.T) {
 	t.Parallel()
 
@@ -280,6 +348,7 @@ func TestQuickTunnelAuthAssertionValidatorVerificationKeyDeduplicatesConcurrentR
 	secondKey := newTestQuickTunnelAuthBrokerVerificationKey(t, "second-key")
 	validator, requestCount := newConcurrentFetchTestValidator(t, firstKey, secondKey)
 	validator.jwks.keySet = jose.JSONWebKeySet{Keys: []jose.JSONWebKey{firstKey}}
+	validator.jwks.expiresAt = time.Now().Add(quickTunnelAuthBrokerJWKSCacheTTL)
 	runConcurrentVerificationKeyRequests(t, validator, secondKey.KeyID)
 	assert.Equal(t, int32(1), requestCount.Load())
 }
@@ -309,6 +378,7 @@ func TestQuickTunnelAuthAssertionValidatorVerificationKeyReadsCacheDuringRefresh
 
 	validator := newTestQuickTunnelAuthAssertionValidator(t, server)
 	validator.jwks.keySet = jose.JSONWebKeySet{Keys: []jose.JSONWebKey{knownKey}}
+	validator.jwks.expiresAt = time.Now().Add(quickTunnelAuthBrokerJWKSCacheTTL)
 	refreshResult := make(chan error, 1)
 	go func() {
 		_, err := validator.verificationKey(context.Background(), "unknown-key")

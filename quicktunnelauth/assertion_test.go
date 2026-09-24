@@ -233,6 +233,7 @@ func newTestQuickTunnelAuthAssertionValidatorWithKey(
 	require.NoError(t, err)
 	validator.now = func() time.Time { return now }
 	validator.jwks.keySet = jose.JSONWebKeySet{Keys: []jose.JSONWebKey{key}}
+	validator.jwks.expiresAt = now.Add(quickTunnelAuthBrokerJWKSCacheTTL)
 	return validator
 }
 
