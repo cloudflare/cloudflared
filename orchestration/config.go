@@ -46,7 +46,7 @@ func (rc *newLocalConfig) MarshalJSON() ([]byte, error) {
 }
 
 func convertToUnvalidatedIngressRules(i ingress.Ingress) []config.UnvalidatedIngressRule {
-	result := make([]config.UnvalidatedIngressRule, 0)
+	result := make([]config.UnvalidatedIngressRule, 0, len(i.Rules))
 	for _, rule := range i.Rules {
 		var path string
 		if rule.Path != nil {

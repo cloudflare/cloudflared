@@ -23,25 +23,34 @@ class TestQuickTunnels:
             url = get_quicktunnel_url()
             send_requests(url+"/ready", 3, True)
 
-    def test_quick_tunnel_with_allowed_mail_flag_is_rejected(self, tmp_path, component_tests_config):
-        """
-        Protected quick tunnels are intentionally dead code in this MR: the
-        --allowed-mail flag is not registered yet, so passing it must be
-        rejected by the CLI and must not create a quick tunnel. This test
-        documents that behavior until TUN-10798 registers the flag.
-        """
+    def test_allowed_mail_flag_is_public(self, tmp_path, component_tests_config):
+        config = component_tests_config(cfd_mode=CfdModes.QUICK)
+        LOGGER.debug(config)
+        result = start_cloudflared(
+            tmp_path,
+            config,
+            cfd_pre_args=["tunnel"],
+            cfd_args=["--help"],
+        )
+        output = result.stdout.decode("utf-8", errors="replace")
+        LOGGER.debug(output)
+        assert "--allowed-mail" in output, \
+            f"Expected --allowed-mail in tunnel help, got output:\n{output}"
+
+    def test_quick_tunnel_validates_allowed_mail(self, tmp_path, component_tests_config):
         config = component_tests_config(cfd_mode=CfdModes.QUICK)
         LOGGER.debug(config)
         result = start_cloudflared(
             tmp_path,
             config,
             cfd_pre_args=["tunnel", "--ha-connections", "1"],
-            cfd_args=["--hello-world", "--allowed-mail", "test@example.com"],
+            cfd_args=["--hello-world", "--allowed-mail", "invalid"],
             new_process=False,
             expect_success=False,
         )
-        output = result.stdout.decode("utf-8", errors="replace")
-        LOGGER.debug(output)
-        assert "flag provided but not defined: -allowed-mail" in output, \
-            f"Expected --allowed-mail to be rejected, got output:\n{output}"
-
+        stderr = result.stderr.decode("utf-8", errors="replace")
+        LOGGER.debug(stderr)
+        assert result.returncode != 0, \
+            "Expected invalid --allowed-mail to fail, but cloudflared exited successfully"
+        assert "is not a valid email address" in stderr, \
+            f"Expected --allowed-mail to be validated, got stderr:\n{stderr}"

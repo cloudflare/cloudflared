@@ -56,9 +56,9 @@ type Orchestrator interface {
 }
 
 type TunnelProperties struct {
-	Credentials    Credentials
-	QuickTunnelUrl string
-	IsProtected    bool
+	Credentials           Credentials
+	QuickTunnelUrl        string
+	QuickTunnelAuthorizer HTTPRequestAuthorizer
 }
 
 // Credentials are stored in the credentials file and contain all info needed to run a tunnel.
@@ -146,6 +146,23 @@ func (t Type) String() string {
 	default:
 		return fmt.Sprintf("Unknown Type %d", t)
 	}
+}
+
+// HTTPRequestAuthorizationDecision determines whether an authorized HTTP
+// request may continue to ingress selection. The zero value fails closed.
+type HTTPRequestAuthorizationDecision uint8
+
+const (
+	// HTTPRequestAuthorizationHandled stops processing because the authorizer owns the response.
+	HTTPRequestAuthorizationHandled HTTPRequestAuthorizationDecision = iota
+	// HTTPRequestAuthorizationAllowed permits the request to continue to ingress selection.
+	HTTPRequestAuthorizationAllowed
+)
+
+// HTTPRequestAuthorizer authorizes an HTTP request before ingress selection.
+// A handled decision or error means the authorizer owns the response.
+type HTTPRequestAuthorizer interface {
+	AuthorizeHTTP(w http.ResponseWriter, r *http.Request) (decision HTTPRequestAuthorizationDecision, outcome string, err error)
 }
 
 // OriginProxy is how data flows from cloudflared to the origin services running behind it.

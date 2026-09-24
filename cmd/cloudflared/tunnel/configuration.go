@@ -38,7 +38,12 @@ const (
 )
 
 var (
-	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
+	secretFlags = [...]string{
+		credentialsContentsFlag.Name,
+		tunnelTokenFlag.Name,
+		flags.AllowedMail,
+	}
+	secretEnvFlags = [...](*altsrc.StringFlag){credentialsContentsFlag, tunnelTokenFlag}
 
 	configFlags = []string{
 		flags.AutoUpdateFreq,
@@ -91,7 +96,7 @@ func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 
 func isSecretFlag(key string) bool {
 	for _, flag := range secretFlags {
-		if flag.Name == key {
+		if flag == key {
 			return true
 		}
 	}
@@ -99,7 +104,7 @@ func isSecretFlag(key string) bool {
 }
 
 func isSecretEnvVar(key string) bool {
-	for _, flag := range secretFlags {
+	for _, flag := range secretEnvFlags {
 		for _, secretEnvVar := range flag.EnvVars {
 			if secretEnvVar == key {
 				return true

@@ -749,6 +749,10 @@ func buildRunCommand() *cli.Command {
 }
 
 func runCommand(c *cli.Context) error {
+	if err := rejectAllowedMailForNamedTunnel(c); err != nil {
+		return err
+	}
+
 	sc, err := newSubcommandContext(c)
 	if err != nil {
 		return err

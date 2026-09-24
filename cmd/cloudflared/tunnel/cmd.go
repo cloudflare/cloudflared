@@ -237,6 +237,9 @@ func TunnelCommand(c *cli.Context) error {
 	// --url or --hello-world required
 	// --hostname optional
 	if name := c.String(cfdflags.Name); name != "" {
+		if err := rejectAllowedMailForNamedTunnel(c); err != nil {
+			return err
+		}
 		hostname, err := validation.ValidateHostname(c.String("hostname"))
 		if err != nil {
 			return errors.Wrap(err, "Invalid hostname provided")
@@ -267,6 +270,13 @@ func TunnelCommand(c *cli.Context) error {
 	}
 
 	return errors.New(tunnelCmdErrorMessage)
+}
+
+func rejectAllowedMailForNamedTunnel(c *cli.Context) error {
+	if len(c.StringSlice(cfdflags.AllowedMail)) > 0 {
+		return cliutil.UsageError("--allowed-mail is only supported for Quick Tunnels")
+	}
+	return nil
 }
 
 func Init(info *cliutil.BuildInfo, gracefulShutdown chan struct{}) {
@@ -448,7 +458,14 @@ func StartServer(
 		logger.ManagementLogger,
 	)
 	internalRules := []ingress.Rule{ingress.NewManagementRule(mgmt)}
-	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, internalRules, tunnelConfig.Log)
+	orchestrator, err := orchestration.NewOrchestratorWithHTTPRequestAuthorizer(
+		ctx,
+		orchestratorConfig,
+		tunnelConfig.Tags,
+		internalRules,
+		namedTunnel.QuickTunnelAuthorizer,
+		tunnelConfig.Log,
+	)
 	if err != nil {
 		return err
 	}
@@ -854,6 +871,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:  "URL for a service which manages unauthenticated 'quick' tunnels.",
 			Value:  "https://api.trycloudflare.com",
 			Hidden: true,
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:   cfdflags.AllowedMail,
+			Usage:  "Email addresses or wildcard domains allowed to access a protected Quick Tunnel. May be repeated or comma-separated.",
+			Hidden: shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "max-fetch-size",
