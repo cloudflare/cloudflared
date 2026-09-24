@@ -1,3 +1,32 @@
+2026.9.3
+- 2026-09-24 chore: Update dependencies
+
+2026.9.2
+- 2026-09-24 TUN-10926: Broker JWKS cache expiration
+- 2026-09-24 TUN-10798: Harden protected Quick Tunnel CLI behavior
+- 2026-09-23 chore: Limit response size
+- 2026-09-23 chore: Protect headers before flush
+- 2026-09-23 chore: Add upper bounds to supplied emails
+- 2026-09-22 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to 65795e7
+- 2026-09-22 Update gcr.io/distroless/base-debian13:nonroot Docker digest to 0896741
+- 2026-09-22 TUN-10805: Strip authentication data before forwarding requests
+- 2026-09-22 chore: Avoid logging request body
+- 2026-09-22 chore: Enable --allowed-mail flag and mac runners
+- 2026-09-21 TUN-10803: Add Quick Tunnel recipient policy
+- 2026-09-21 TUN-10803: Authorize Quick Tunnel callbacks
+- 2026-09-21 TUN-10803: Wire Quick Tunnel callback authorization
+- 2026-09-21 TUN-10804: Enforce authentication before origin access
+- 2026-09-17 chore: Fix unbounded channel
+- 2026-09-17 Revert "chore: Fix unbounded channel"
+- 2026-09-17 TUN-10802: Manage process-local authentication sessions
+- 2026-09-16 chore: Update gRPC to v1.83.1
+- 2026-09-16 TUN-10800: Wire Quick Tunnel authentication redirects
+- 2026-09-16 TUN-10801: Cache quick tunnel broker JWKS
+- 2026-09-16 TUN-10801: Validate quick tunnel broker assertions
+- 2026-09-15 TUN-10800: Add browser-bound login state
+- 2026-09-15 TUN-10800: Consume authentication callback state
+- 2026-09-14 ci: Disable macOS builds while runners are unavailable
+
 2026.9.1
 - 2026-09-10 Revert "chore: Cleanup unused transport log level"
 - 2026-09-10 chore: Add notes on breaking changes
