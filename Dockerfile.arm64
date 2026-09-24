@@ -26,6 +26,12 @@ LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared
 # copy our compiled binary
 COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
 
+# Healthcheck
+ENV TUNNEL_METRICS=0.0.0.0:2000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
+
 # run as nonroot user
 # We need to use numeric user id's because Kubernetes doesn't support strings:
 # https://github.com/kubernetes/kubernetes/blob/v1.33.2/pkg/kubelet/kuberuntime/security_context_others.go#L49
