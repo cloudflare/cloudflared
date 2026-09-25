@@ -1,15 +1,15 @@
 # use a builder image for building cloudflare
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
-FROM golang:1.26.8 AS builder
+FROM golang:1.27.1 AS builder
 ENV GO111MODULE=on \
-  CGO_ENABLED=0 \
-  GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct \
-  TARGET_GOOS=${TARGET_GOOS} \
-  TARGET_GOARCH=${TARGET_GOARCH} \
-  # the CONTAINER_BUILD envvar is used set github.com/cloudflare/cloudflared/metrics.Runtime=virtual
-  # which changes how cloudflared binds the metrics server
-  CONTAINER_BUILD=1
+    CGO_ENABLED=0 \
+    GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct \
+    TARGET_GOOS=${TARGET_GOOS} \
+    TARGET_GOARCH=${TARGET_GOARCH} \
+    # the CONTAINER_BUILD envvar is used set github.com/cloudflare/cloudflared/metrics.Runtime=virtual
+    # which changes how cloudflared binds the metrics server
+    CONTAINER_BUILD=1
 
 
 WORKDIR /go/src/github.com/cloudflare/cloudflared/
@@ -23,19 +23,22 @@ COPY . .
 # compile cloudflared
 RUN make cloudflared
 
-# use a distroless base image with glibc
-FROM gcr.io/distroless/base-debian13:nonroot@sha256:0896741ba5bafd3ac87ea025a5f578952f2d238ddc3614cb368acc983a687aa2
+FROM alpine:3.24
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
+RUN apk add --no-cache ca-certificates && \
+    addgroup -g 65532 nonroot && \
+    adduser -D -H -u 65532 -G nonroot nonroot
+
 # copy our compiled binary
-COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
+COPY --from=builder --chown=65532:65532 /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
 
 # Healthcheck
 ENV TUNNEL_METRICS=0.0.0.0:2000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
+    CMD ["cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
 
 # run as nonroot user
 # We need to use numeric user id's because Kubernetes doesn't support strings:
