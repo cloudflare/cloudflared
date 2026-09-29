@@ -43,7 +43,7 @@ func (r Rule) MultiLineString() string {
 	}
 	if r.Path != nil && r.Path.Regexp != nil {
 		out.WriteString("\tpath: ")
-		out.WriteString(r.Path.Regexp.String())
+		out.WriteString(r.Path.String())
 		out.WriteRune('\n')
 	}
 	out.WriteString("\tservice: ")
@@ -53,17 +53,12 @@ func (r Rule) MultiLineString() string {
 
 // Matches checks if the rule matches a given hostname/path combination.
 func (r *Rule) Matches(hostname, path string) bool {
-	hostMatch := false
-	if r.Hostname == "" || r.Hostname == "*" {
-		hostMatch = true
-	} else {
-		hostMatch = matchHost(r.Hostname, hostname)
-	}
+	hostMatch := r.Hostname == "" || r.Hostname == "*" || matchHost(r.Hostname, hostname)
 	punycodeHostMatch := false
 	if r.punycodeHostname != "" {
 		punycodeHostMatch = matchHost(r.punycodeHostname, hostname)
 	}
-	pathMatch := r.Path == nil || r.Path.Regexp == nil || r.Path.Regexp.MatchString(path)
+	pathMatch := r.Path == nil || r.Path.Regexp == nil || r.Path.MatchString(path)
 	return (hostMatch || punycodeHostMatch) && pathMatch
 }
 
@@ -76,5 +71,5 @@ func (r *Regexp) MarshalJSON() ([]byte, error) {
 	if r.Regexp == nil {
 		return json.Marshal(nil)
 	}
-	return json.Marshal(r.Regexp.String())
+	return json.Marshal(r.String())
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -44,9 +45,14 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 	if err == nil {
 		hostname = host
 	}
+	// Canonicalize before first-match evaluation so an earlier non-Access rule
+	// cannot capture a traversal targeting a protected rule.
+	if !ing.DisablePathNormalization && (rulesRequireAccess(ing.InternalRules) || rulesRequireAccess(ing.Rules)) {
+		path = canonicalPathForMatching(path)
+	}
 	for i, rule := range ing.InternalRules {
 		if rule.Matches(hostname, path) {
-			// Local rule matches return a negative rule index to distiguish local rules from user-defined rules in logs
+			// Local rule matches return a negative rule index to distinguish local rules from user-defined rules in logs
 			// Full range would be [-1 .. )
 			return &rule, -1 - i
 		}
@@ -59,6 +65,40 @@ func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
 
 	i := len(ing.Rules) - 1
 	return &ing.Rules[i], i
+}
+
+func rulesRequireAccess(rules []Rule) bool {
+	for _, rule := range rules {
+		if rule.Config.Access.Required {
+			return true
+		}
+	}
+	return false
+}
+
+// canonicalPathForMatching resolves dot-segments in URL.Path for ingress rule
+// matching only; the request forwarded to the origin is never modified.
+// net/url decodes percent-encoded separators and dot-segments into URL.Path
+// before this is called. Backslashes are then converted to forward slashes to
+// match edge normalization before path.Clean resolves repeated separators and
+// dot-segments. Trailing slashes are preserved, including the RFC 3986 implied
+// slash after a trailing "." or ".." segment.
+func canonicalPathForMatching(p string) string {
+	if p == "" {
+		return "/"
+	}
+	p = strings.ReplaceAll(p, `\`, "/")
+	// In RFC 3986, a trailing "." or ".." segment implies a directory, so the
+	// cleaned result should end with "/". path.Clean removes the dot-segment
+	// but also strips the slash, so we detect it up front.
+	trailingSlash := strings.HasSuffix(p, "/") ||
+		strings.HasSuffix(p, "/.") ||
+		strings.HasSuffix(p, "/..")
+	cleaned := path.Clean(p)
+	if trailingSlash && cleaned != "/" {
+		cleaned += "/"
+	}
+	return cleaned
 }
 
 func matchHost(ruleHost, reqHost string) bool {
@@ -81,6 +121,9 @@ type Ingress struct {
 	// Rules that are provided by the user from remote or local configuration
 	Rules    []Rule              `json:"ingress"`
 	Defaults OriginRequestConfig `json:"originRequest"`
+	// DisablePathNormalization is a process-local override applied by the orchestrator.
+	// Enabling it restores the Access bypass described by VULN-141859.
+	DisablePathNormalization bool `json:"-" yaml:"-"`
 }
 
 // ParseIngress parses ingress rules, but does not send HTTP requests to the origins.

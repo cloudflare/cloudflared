@@ -129,6 +129,9 @@ const (
 	// NoPrechecks is the command line flag to skip connectivity pre-checks at startup.
 	NoPrechecks = "no-prechecks"
 
+	// DisablePathNormalization disables URL path normalization before matching ingress rules.
+	DisablePathNormalization = "disable-path-normalization"
+
 	// LogLevel is the command line flag for the cloudflared logging level
 	LogLevel = "loglevel"
 

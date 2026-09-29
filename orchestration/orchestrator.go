@@ -187,6 +187,8 @@ func (o *Orchestrator) updateIngress(ingressRules ingress.Ingress, warpRouting i
 
 	// Assign the internal ingress rules to the parsed ingress
 	ingressRules.InternalRules = o.internalRules
+	// Path normalization is a process-local CLI setting and must survive remote updates.
+	ingressRules.DisablePathNormalization = o.config.DisablePathNormalization
 
 	// Check if ingress rules are empty, and add the default route if so.
 	if ingressRules.IsEmpty() {

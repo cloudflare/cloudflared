@@ -22,6 +22,8 @@ type Config struct {
 	Ingress             *ingress.Ingress
 	WarpRouting         ingress.WarpRoutingConfig
 	OriginDialerService *ingress.OriginDialerService
+	// DisablePathNormalization is a process-local override for ingress matching.
+	DisablePathNormalization bool
 
 	// Extra settings used to configure this instance but that are not eligible for remotely management
 	// ie. (--protocol, --loglevel, ...)

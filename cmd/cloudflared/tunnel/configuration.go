@@ -264,10 +264,11 @@ func prepareTunnelConfig(
 		tunnelConfig.ICMPRouterServer = icmpRouter
 	}
 	orchestratorConfig := &orchestration.Config{
-		Ingress:             &ingressRules,
-		WarpRouting:         warpRoutingConfig,
-		OriginDialerService: originDialerService,
-		ConfigurationFlags:  parseConfigFlags(c),
+		Ingress:                  &ingressRules,
+		WarpRouting:              warpRoutingConfig,
+		OriginDialerService:      originDialerService,
+		DisablePathNormalization: c.Bool(flags.DisablePathNormalization),
+		ConfigurationFlags:       parseConfigFlags(c),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }

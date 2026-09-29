@@ -67,8 +67,9 @@ func TestUpdateConfiguration(t *testing.T) {
 		TCPWriteTimeout: 1 * time.Second,
 	}, &testLogger)
 	initConfig := &Config{
-		Ingress:             &ingress.Ingress{},
-		OriginDialerService: originDialer,
+		Ingress:                  &ingress.Ingress{},
+		OriginDialerService:      originDialer,
+		DisablePathNormalization: true,
 	}
 	orchestrator, err := NewOrchestrator(t.Context(), initConfig, testTags, []ingress.Rule{ingress.NewManagementRule(management.New("management.argotunnel.com", false, "1.1.1.1:80", uuid.Nil, "", &testLogger, nil))}, &testLogger)
 	require.NoError(t, err)
@@ -113,6 +114,7 @@ func TestUpdateConfiguration(t *testing.T) {
 
 	updateWithValidation(t, orchestrator, 2, configJSONV2)
 	configV2 := orchestrator.config
+	require.True(t, configV2.Ingress.DisablePathNormalization)
 	// Validate internal ingress rules
 	require.Equal(t, "management.argotunnel.com", configV2.Ingress.InternalRules[0].Hostname)
 	require.True(t, configV2.Ingress.InternalRules[0].Matches("management.argotunnel.com", "/ping"))

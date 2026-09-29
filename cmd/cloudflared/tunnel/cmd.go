@@ -984,6 +984,14 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Value:   false,
 			Hidden:  shouldHide,
 		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name: cfdflags.DisablePathNormalization,
+			Usage: "Disable URL path normalization before matching ingress rules. Use this setting at your own risk." +
+				"An unnormalized request path could bypass Cloudflare Access rules and reach a protected origin.",
+			EnvVars: []string{"TUNNEL_DISABLE_PATH_NORMALIZATION"},
+			Value:   true,
+			Hidden:  shouldHide,
+		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
 			Name:   ingress.ProxyConnectTimeoutFlag,
 			Usage:  legacyTunnelFlag("HTTP proxy timeout for establishing a new connection"),
