@@ -99,6 +99,36 @@ func TestWaitForBackoffFallback(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// A QUIC handshake the peer rejects with a CRYPTO_ERROR (e.g. TLS alert 120,
+// no_application_protocol, from a middlebox intercepting QUIC) cannot be
+// recovered by retrying QUIC, so it must switch to the fallback protocol
+// straight away instead of retrying until the backoff is exhausted.
+func TestFallbackOnRemoteCryptoError(t *testing.T) {
+	maxRetries := uint(3)
+	backoff := retry.NewBackoff(maxRetries, 40*time.Millisecond, false)
+	backoff.Clock.After = immediateTimeAfter
+	log := zerolog.Nop()
+	protocolSelector, err := connection.NewProtocolSelector("auto", &log)
+	require.NoError(t, err)
+
+	protoFallback := &protocolFallback{backoff, protocolSelector.Current(), false}
+	assert.Equal(t, connection.QUIC, protoFallback.protocol)
+
+	// 0x178 is CRYPTO_ERROR for TLS alert 120 (no_application_protocol).
+	cause := &connection.EdgeQuicDialError{
+		Cause: &quic.TransportError{
+			Remote:       true,
+			ErrorCode:    quic.TransportErrorCode(0x178),
+			ErrorMessage: "tls: no application protocol",
+		},
+	}
+
+	protoFallback.BackoffTimer() // simulate retry
+	ok := selectNextProtocol(&log, protoFallback, protocolSelector, cause)
+	assert.True(t, ok)
+	assert.Equal(t, connection.HTTP2, protoFallback.protocol)
+}
+
 func TestIsRetryableStartupError(t *testing.T) {
 	t.Parallel()
 
