@@ -75,7 +75,13 @@ func logOriginHTTPResponse(logger *zerolog.Logger, resp *http.Response) {
 }
 
 // logRequestError logs an error for the proxied request.
+// Benign remote stream cancellations (QUIC NO_ERROR) are logged at Debug and
+// do not increment the request-error metric — see connection.IsBenignRemoteStreamCancel.
 func logRequestError(logger *zerolog.Logger, err error) {
+	if connection.IsBenignRemoteStreamCancel(err) {
+		logger.Debug().Err(err).Msg("request stream canceled by remote with NO_ERROR")
+		return
+	}
 	requestErrors.Inc()
 	logger.Error().Err(err).Send()
 }
