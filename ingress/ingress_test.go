@@ -43,6 +43,19 @@ ingress:
 	require.Equal(t, "https", s.scheme)
 }
 
+func TestParseUnixSocketTCP(t *testing.T) {
+	rawYAML := `
+ingress:
+- service: unix+tcp:/run/sshd.sock
+`
+	ing, err := ParseIngress(MustReadIngress(rawYAML))
+	require.NoError(t, err)
+	s, ok := ing.Rules[0].Service.(*unixSocketTCPService)
+	require.True(t, ok)
+	require.Equal(t, "/run/sshd.sock", s.path)
+	require.Equal(t, "unix+tcp:/run/sshd.sock", s.String())
+}
+
 func TestParseIngressNilConfig(t *testing.T) {
 	_, err := ParseIngress(nil)
 	require.Error(t, err)
@@ -318,6 +331,19 @@ ingress:
 			want: []Rule{
 				{
 					Service: newTCPOverWSService(MustParseURL(t, "ssh://127.0.0.1:22")),
+					Config:  defaultConfig,
+				},
+			},
+		},
+		{
+			name: "Unix+TCP service",
+			args: args{rawYAML: `
+ingress:
+- service: unix+tcp:/run/sshd.sock
+`},
+			want: []Rule{
+				{
+					Service: &unixSocketTCPService{path: "/run/sshd.sock"},
 					Config:  defaultConfig,
 				},
 			},
