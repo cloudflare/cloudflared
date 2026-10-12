@@ -42,7 +42,7 @@ cloudflared-amd64-stable:
     GOARCH: amd64
     FIPS: true
     ORIGINAL_NAME: true
-    CGO_ENABLED: 1
+    CGO_ENABLED: 0
 
 cloudflared-arm64-stable:
   <<: *cloudflared_apt_build
@@ -53,7 +53,7 @@ cloudflared-arm64-stable:
     GOARCH: arm64
     FIPS: false # TUN-7595
     ORIGINAL_NAME: true
-    CGO_ENABLED: 1
+    CGO_ENABLED: 0
 
 # Jobs names
 .amd64-stable: &amd64-stable ["cloudflared-amd64-stable"]
