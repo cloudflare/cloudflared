@@ -102,6 +102,12 @@ func canonicalPathForMatching(p string) string {
 }
 
 func matchHost(ruleHost, reqHost string) bool {
+	// Hostnames are case-insensitive (RFC 4343, RFC 3986 §3.2.2), so compare
+	// them case-insensitively. cloudflared accepts mixed-case hostnames in
+	// ingress config, and the request Host header can also be mixed-case.
+	ruleHost = strings.ToLower(ruleHost)
+	reqHost = strings.ToLower(reqHost)
+
 	if ruleHost == reqHost {
 		return true
 	}
