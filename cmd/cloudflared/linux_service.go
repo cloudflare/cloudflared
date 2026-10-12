@@ -107,6 +107,8 @@ Description=Update cloudflared
 
 [Timer]
 OnCalendar=daily
+RandomizedDelaySec=12h
+Persistent=true
 
 [Install]
 WantedBy=timers.target
