@@ -182,12 +182,15 @@ func (handler *Handler) SystemHandler(writer http.ResponseWriter, request *http.
 		Err:  err,
 	}
 
-	encoder := json.NewEncoder(writer)
-	err = encoder.Encode(response)
+	body, err := json.Marshal(response)
 	if err != nil {
 		logger.Error().Err(err).Msgf("error occurred whilst serializing information")
 		writer.WriteHeader(http.StatusInternalServerError)
+
+		return
 	}
+
+	writeResponse(writer, body, &logger)
 }
 
 type TunnelState struct {
@@ -209,13 +212,15 @@ func (handler *Handler) TunnelStateHandler(writer http.ResponseWriter, _ *http.R
 		handler.tracker.GetActiveConnections(),
 		handler.icmpSources,
 	}
-	encoder := json.NewEncoder(writer)
-
-	err := encoder.Encode(body)
+	response, err := json.Marshal(body)
 	if err != nil {
-		handler.log.Error().Err(err).Msgf("error occurred whilst serializing information")
+		log.Error().Err(err).Msgf("error occurred whilst serializing information")
 		writer.WriteHeader(http.StatusInternalServerError)
+
+		return
 	}
+
+	writeResponse(writer, response, &log)
 }
 
 func (handler *Handler) ConfigurationHandler(writer http.ResponseWriter, _ *http.Request) {
@@ -226,11 +231,13 @@ func (handler *Handler) ConfigurationHandler(writer http.ResponseWriter, _ *http
 		log.Info().Msg("Collection finished")
 	}()
 
-	encoder := json.NewEncoder(writer)
-
-	err := encoder.Encode(handler.cliFlags)
+	body, err := json.Marshal(handler.cliFlags)
 	if err != nil {
-		handler.log.Error().Err(err).Msgf("error occurred whilst serializing response")
+		log.Error().Err(err).Msgf("error occurred whilst serializing response")
 		writer.WriteHeader(http.StatusInternalServerError)
+
+		return
 	}
+
+	writeResponse(writer, body, &log)
 }
