@@ -51,7 +51,7 @@ out if no configuration file with credentials was found).`,
 			},
 		},
 	})
-	_ = app.Run(os.Args)
+	runAppAndExit(app)
 }
 
 // The directory and files that are used by the service.
