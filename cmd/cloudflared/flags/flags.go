@@ -175,4 +175,7 @@ const (
 
 	// Automatically close the login interstitial browser window after the user makes a decision.
 	AutoCloseInterstitial = "auto-close"
+
+	// Pidfile writes the application's process ID to a file.
+	Pidfile = "pidfile"
 )

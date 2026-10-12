@@ -12,6 +12,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/carrier"
+	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/stream"
@@ -125,6 +127,9 @@ func ssh(c *cli.Context) error {
 			return errors.Wrap(err, "error validating origin URL")
 		}
 		log.Info().Str(LogFieldHost, forwarder.Host).Msg("Start Websocket listener")
+		if pidfile := c.String(cfdflags.Pidfile); pidfile != "" {
+			_ = cliutil.WritePidFile(pidfile, log)
+		}
 		err = carrier.StartForwarder(wsConn, forwarder.Host, shutdownC, options)
 		if err != nil {
 			log.Err(err).Msg("Error on Websocket listener")
@@ -142,6 +147,9 @@ func ssh(c *cli.Context) error {
 		}
 		logger := log.With().Str("host", url.Host).Logger()
 		s = stream.NewDebugStream(s, &logger, maxMessages)
+	}
+	if pidfile := c.String(cfdflags.Pidfile); pidfile != "" {
+		_ = cliutil.WritePidFile(pidfile, log)
 	}
 	return carrier.StartClient(wsConn, s, options)
 }

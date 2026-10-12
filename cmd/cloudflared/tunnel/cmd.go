@@ -14,7 +14,6 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/facebookgo/grace/gracenet"
 	"github.com/getsentry/sentry-go"
-	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -615,19 +614,7 @@ func notifySystemd(waitForSignal *signal.Signal) {
 
 func writePidFile(waitForSignal *signal.Signal, pidPathname string, log *zerolog.Logger) {
 	<-waitForSignal.Wait()
-	expandedPath, err := homedir.Expand(pidPathname)
-	if err != nil {
-		log.Err(err).Str(LogFieldPIDPathname, pidPathname).Msg("Unable to expand the path, try to use absolute path in --pidfile")
-		return
-	}
-	cleanPath := filepath.Clean(expandedPath)
-	file, err := os.Create(cleanPath)
-	if err != nil {
-		log.Err(err).Str(LogFieldExpandedPath, expandedPath).Msg("Unable to write pid")
-		return
-	}
-	defer func() { _ = file.Close() }()
-	_, _ = fmt.Fprintf(file, "%d", os.Getpid())
+	_ = cliutil.WritePidFile(pidPathname, log)
 }
 
 func hostnameFromURI(uri string) string {

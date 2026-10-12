@@ -80,10 +80,17 @@ func Commands() []*cli.Command {
 			Aliases:  []string{"forward"},
 			Category: "Access",
 			Usage:    "access <subcommand>",
-			Flags: []cli.Flag{&cli.BoolFlag{
-				Name:  fedrampFlag,
-				Usage: "use when performing operations in fedramp account",
-			}},
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  fedrampFlag,
+					Usage: "use when performing operations in fedramp account",
+				},
+				&cli.StringFlag{
+					Name:    cfdflags.Pidfile,
+					Usage:   "Write the application's PID to this file after first successful connection.",
+					EnvVars: []string{"TUNNEL_PIDFILE"},
+				},
+			},
 			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected
@@ -203,6 +210,11 @@ func Commands() []*cli.Command {
 							Name:   sshDebugStream,
 							Hidden: true,
 							Usage:  "Writes up-to the max provided stream payloads to the logger as debug statements.",
+						},
+						&cli.StringFlag{
+							Name:    cfdflags.Pidfile,
+							Usage:   "Write the application's PID to this file after first successful connection.",
+							EnvVars: []string{"TUNNEL_PIDFILE"},
 						},
 					},
 				},
