@@ -7,10 +7,42 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/google/gopacket/layers"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 
 	"github.com/cloudflare/cloudflared/packet"
 )
+
+func TestParseFullPacketReplyUsesIPTTL(t *testing.T) {
+	t.Parallel()
+
+	pk := &packet.ICMP{
+		IP: &packet.IP{
+			Src:      localhostIP,
+			Dst:      localhostIP,
+			Protocol: layers.IPProtocolICMPv4,
+			TTL:      37,
+		},
+		Message: &icmp.Message{
+			Type: ipv4.ICMPTypeEchoReply,
+			Code: 0,
+			Body: &icmp.Echo{
+				ID:   12345,
+				Seq:  6789,
+				Data: []byte(t.Name()),
+			},
+		},
+	}
+	rawPacket, err := packet.NewEncoder().Encode(pk)
+	require.NoError(t, err)
+
+	reply, err := parseFullPacketReply(packet.NewICMPDecoder(), rawPacket.Data)
+	require.NoError(t, err)
+	require.True(t, reply.ttl.ok)
+	require.Equal(t, uint8(37), reply.ttl.value)
+}
 
 func TestSingleEchoIDTracker(t *testing.T) {
 	tracker := newEchoIDTracker()
