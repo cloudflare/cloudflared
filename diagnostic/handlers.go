@@ -6,11 +6,14 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/cloudflare/cloudflared/prechecks"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
@@ -23,6 +26,51 @@ type Handler struct {
 	tracker         *tunnelstate.ConnTracker
 	cliFlags        map[string]string
 	icmpSources     []string
+	precheckReports *PrecheckReportStore
+}
+
+// HandlerOption configures a diagnostic Handler.
+type HandlerOption func(*Handler)
+
+// PrecheckReportStore safely shares a completed precheck report between the
+// startup precheck and diagnostic HTTP goroutines.
+type PrecheckReportStore struct {
+	mu     sync.RWMutex
+	report *prechecks.Report
+}
+
+// NewPrecheckReportStore creates an empty precheck report store.
+func NewPrecheckReportStore() *PrecheckReportStore {
+	return &PrecheckReportStore{}
+}
+
+// WithPrecheckReportStore configures the report store used by /diag/precheck.
+func WithPrecheckReportStore(store *PrecheckReportStore) HandlerOption {
+	return func(handler *Handler) {
+		if store != nil {
+			handler.precheckReports = store
+		}
+	}
+}
+
+// Set publishes a completed startup precheck report.
+func (store *PrecheckReportStore) Set(report prechecks.Report) {
+	report.Results = append([]prechecks.CheckResult(nil), report.Results...)
+	store.mu.Lock()
+	store.report = &report
+	store.mu.Unlock()
+}
+
+func (store *PrecheckReportStore) get() (prechecks.Report, bool) {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	if store.report == nil {
+		return prechecks.Report{}, false
+	}
+
+	report := *store.report
+	report.Results = append([]prechecks.CheckResult(nil), report.Results...)
+	return report, true
 }
 
 func NewDiagnosticHandler(
@@ -34,6 +82,7 @@ func NewDiagnosticHandler(
 	tracker *tunnelstate.ConnTracker,
 	cliFlags map[string]string,
 	icmpSources []string,
+	options ...HandlerOption,
 ) *Handler {
 	logger := log.With().Logger()
 	if timeout == 0 {
@@ -41,7 +90,7 @@ func NewDiagnosticHandler(
 	}
 
 	cliFlags[configurationKeyUID] = strconv.Itoa(os.Getuid())
-	return &Handler{
+	handler := &Handler{
 		log:             &logger,
 		timeout:         timeout,
 		systemCollector: systemCollector,
@@ -50,13 +99,65 @@ func NewDiagnosticHandler(
 		tracker:         tracker,
 		cliFlags:        cliFlags,
 		icmpSources:     icmpSources,
+		precheckReports: NewPrecheckReportStore(),
 	}
+	for _, option := range options {
+		option(handler)
+	}
+	return handler
 }
 
 func (handler *Handler) InstallEndpoints(router *http.ServeMux) {
 	router.HandleFunc(cliConfigurationEndpoint, handler.ConfigurationHandler)
 	router.HandleFunc(tunnelStateEndpoint, handler.TunnelStateHandler)
 	router.HandleFunc(systemInformationEndpoint, handler.SystemHandler)
+	router.HandleFunc(precheckEndpoint, handler.PrecheckHandler)
+}
+
+type PrecheckResult struct {
+	Component string `json:"component"`
+	Target    string `json:"target"`
+	Status    string `json:"status"`
+	Details   string `json:"details"`
+	Action    string `json:"action,omitempty"`
+}
+
+type PrecheckResponse struct {
+	RunID             uuid.UUID        `json:"run_id"`
+	Results           []PrecheckResult `json:"results"`
+	HardFail          bool             `json:"hard_fail"`
+	SuggestedProtocol string           `json:"suggested_protocol,omitempty"`
+}
+
+func (handler *Handler) PrecheckHandler(writer http.ResponseWriter, _ *http.Request) {
+	report, ok := handler.precheckReports.get()
+	if !ok {
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	response := PrecheckResponse{
+		RunID:    report.RunID,
+		Results:  make([]PrecheckResult, 0, len(report.Results)),
+		HardFail: report.HasHardFail(),
+	}
+	if report.SuggestedProtocol != nil {
+		response.SuggestedProtocol = report.SuggestedProtocol.String()
+	}
+	for _, result := range report.Results {
+		response.Results = append(response.Results, PrecheckResult{
+			Component: result.Component,
+			Target:    result.Target,
+			Status:    strings.ToLower(result.ProbeStatus.String()),
+			Details:   result.Details,
+			Action:    result.Action,
+		})
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(writer).Encode(response); err != nil {
+		handler.log.Error().Err(err).Msg("error occurred whilst serializing precheck report")
+	}
 }
 
 type SystemInformationResponse struct {
@@ -131,14 +232,5 @@ func (handler *Handler) ConfigurationHandler(writer http.ResponseWriter, _ *http
 	if err != nil {
 		handler.log.Error().Err(err).Msgf("error occurred whilst serializing response")
 		writer.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-func writeResponse(w http.ResponseWriter, bytes []byte, logger *zerolog.Logger) {
-	bytesWritten, err := w.Write(bytes)
-	if err != nil {
-		logger.Error().Err(err).Msg("error occurred writing response")
-	} else if bytesWritten != len(bytes) {
-		logger.Error().Msgf("error incomplete write response %d/%d", bytesWritten, len(bytes))
 	}
 }

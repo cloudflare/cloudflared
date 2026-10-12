@@ -420,12 +420,16 @@ func StartServer(
 		return err
 	}
 	connectorID := tunnelConfig.ClientConfig.ConnectorID
+	precheckReports := diagnostic.NewPrecheckReportStore()
 
 	// Run connectivity pre-checks for cloudflared. This runs in a separate
 	// goroutine, as we want to keep initializing cloudflared while prechecks
 	// are running. Prechecks are controlled via DNS flag for remote kill-switch capability.
 	if !tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().SkipPrechecks && !c.Bool(cfdflags.NoPrechecks) {
-		go runPrechecks(c, log, tunnelConfig.Region, tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().PostQuantum)
+		go func() {
+			report := runPrechecks(c, log, tunnelConfig.Region, tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().PostQuantum)
+			precheckReports.Set(report)
+		}()
 	}
 
 	// Disable ICMP packet routing for quick tunnels
@@ -502,6 +506,7 @@ func StartServer(
 			tracker,
 			cliFlags,
 			sources,
+			diagnostic.WithPrecheckReportStore(precheckReports),
 		)
 		metricsConfig := metrics.Config{
 			ReadyServer:         readinessServer,
@@ -530,7 +535,7 @@ func StartServer(
 
 // runPrechecks executes connectivity pre-checks and logs the results.
 // Pre-checks are diagnostic only and do not gate tunnel startup.
-func runPrechecks(c *cli.Context, log *zerolog.Logger, region string, pqMode features.PostQuantumMode) {
+func runPrechecks(c *cli.Context, log *zerolog.Logger, region string, pqMode features.PostQuantumMode) prechecks.Report {
 	ipVersion := allregions.Auto
 	if ipVersionStr := c.String(cfdflags.EdgeIpVersion); ipVersionStr != "" {
 		parsedVersion, err := parseConfigIPVersion(ipVersionStr)
@@ -562,6 +567,7 @@ func runPrechecks(c *cli.Context, log *zerolog.Logger, region string, pqMode fea
 
 	// Also log structured results for log aggregation
 	report.LogEvent(log)
+	return report
 }
 
 func waitToShutdown(wg *sync.WaitGroup,

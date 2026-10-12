@@ -17,6 +17,7 @@ import (
 
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/diagnostic"
+	"github.com/cloudflare/cloudflared/prechecks"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
@@ -24,11 +25,6 @@ type SystemCollectorMock struct {
 	systemInfo *diagnostic.SystemInformation
 	err        error
 }
-
-const (
-	systemInformationKey = "sikey"
-	errorKey             = "errkey"
-)
 
 func newTrackerFromConns(t *testing.T, connections []tunnelstate.IndexedConnectionInfo) *tunnelstate.ConnTracker {
 	t.Helper()
@@ -221,4 +217,50 @@ func TestConfigurationHandler(t *testing.T) {
 			assert.Equal(t, tCase.expected, response)
 		})
 	}
+}
+
+func TestPrecheckHandler(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	store := diagnostic.NewPrecheckReportStore()
+	handler := diagnostic.NewDiagnosticHandler(
+		&log, 0, nil, uuid.Nil, uuid.Nil, nil, map[string]string{}, nil,
+		diagnostic.WithPrecheckReportStore(store),
+	)
+	router := http.NewServeMux()
+	handler.InstallEndpoints(router)
+
+	pending := httptest.NewRecorder()
+	router.ServeHTTP(pending, httptest.NewRequest(http.MethodGet, "/diag/precheck", nil))
+	assert.Equal(t, http.StatusNoContent, pending.Code)
+
+	protocol := connection.QUIC
+	report := prechecks.Report{
+		RunID: uuid.New(),
+		Results: []prechecks.CheckResult{
+			{
+				Type:        prechecks.ProbeTypeDNS,
+				Component:   "DNS Resolution",
+				Target:      "region1.v2.argotunnel.com",
+				ProbeStatus: prechecks.Pass,
+				Details:     "DNS resolved successfully",
+			},
+		},
+		SuggestedProtocol: &protocol,
+	}
+	store.Set(report)
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/diag/precheck", nil))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+
+	var response diagnostic.PrecheckResponse
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
+	assert.Equal(t, report.RunID, response.RunID)
+	assert.False(t, response.HardFail)
+	assert.Equal(t, "quic", response.SuggestedProtocol)
+	require.Len(t, response.Results, 1)
+	assert.Equal(t, "pass", response.Results[0].Status)
 }
