@@ -358,18 +358,21 @@ func (sc *subcommandContext) findID(input string) (uuid.UUID, error) {
 		return u, nil
 	}
 
-	// Look up name in the credentials file.
-	credFinder := newStaticPath(sc.c.String(CredFileFlag), sc.fs)
-	if credentials, err := sc.readTunnelCredentials(credFinder); err == nil {
-		if credentials.TunnelID != uuid.Nil {
-			return credentials.TunnelID, nil
+	// Look up name in Tunnelstore first.
+	tunnel, found, err := sc.tunnelActive(input)
+	if err != nil {
+		// If Tunnelstore cannot be queried (e.g. running in credentials-file-only
+		// mode without an origin certificate), fall back to looking up the tunnel ID
+		// in the credentials file.
+		credFinder := newStaticPath(sc.c.String(CredFileFlag), sc.fs)
+		if credentials, credErr := sc.readTunnelCredentials(credFinder); credErr == nil {
+			if credentials.TunnelID != uuid.Nil {
+				return credentials.TunnelID, nil
+			}
 		}
-	}
-
-	// Fall back to querying Tunnelstore.
-	if tunnel, found, err := sc.tunnelActive(input); err != nil {
 		return uuid.Nil, err
-	} else if found {
+	}
+	if found {
 		return tunnel.ID, nil
 	}
 
