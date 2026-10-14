@@ -448,8 +448,8 @@ func Test_subcommandContext_findID(t *testing.T) {
 			wantErrMsg: "non-existent-tunnel is neither the ID nor the name of any of your tunnels",
 		},
 		{
-			name:  "When Tunnelstore is unavailable, falls back to reading configured credentials file",
-			input: "tunnel-a",
+			name:  "When API credentials are available but Tunnelstore returns error, returns error without falling back to credentials file",
+			input: "tunnel-b",
 			c:     makeContextWithCred(credFileA),
 			fs:    fsWithCredA,
 			tunnelstoreClient: &findIDMockTunnelStore{
@@ -457,23 +457,26 @@ func Test_subcommandContext_findID(t *testing.T) {
 					return nil, errors.New("cannot reach tunnelstore")
 				},
 			},
-			want: tunnelIDA,
+			wantErr:    true,
+			wantErrMsg: "cannot reach tunnelstore",
 		},
 		{
-			name:  "When Tunnelstore is unavailable and credentials file is missing, returns error",
+			name:  "When API credentials are unavailable, falls back to reading configured credentials file",
+			input: "tunnel-a",
+			c:     makeContextWithCred(credFileA),
+			fs:    fsWithCredA,
+			want:  tunnelIDA,
+		},
+		{
+			name:  "When API credentials are unavailable and credentials file is missing, returns error",
 			input: "tunnel-a",
 			c:     makeContextWithCred("missing.json"),
 			fs: mockFileSystem{
 				rf:  func(string) ([]byte, error) { return nil, errors.New("file not found") },
 				vfp: func(string) bool { return false },
 			},
-			tunnelstoreClient: &findIDMockTunnelStore{
-				listTunnelsFunc: func(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
-					return nil, errors.New("cannot reach tunnelstore")
-				},
-			},
 			wantErr:    true,
-			wantErrMsg: "cannot reach tunnelstore",
+			wantErrMsg: "Error locating origin cert",
 		},
 	}
 

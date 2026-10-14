@@ -358,18 +358,35 @@ func (sc *subcommandContext) findID(input string) (uuid.UUID, error) {
 		return u, nil
 	}
 
-	// Look up name in Tunnelstore first.
-	tunnel, found, err := sc.tunnelActive(input)
-	if err != nil {
-		// If Tunnelstore cannot be queried (e.g. running in credentials-file-only
-		// mode without an origin certificate), fall back to looking up the tunnel ID
-		// in the credentials file.
-		credFinder := newStaticPath(sc.c.String(CredFileFlag), sc.fs)
+	// If no API credentials are available (e.g. running in credentials-file-only
+	// mode without an origin certificate), fall back to looking up the tunnel ID
+	// in the credentials file.
+	if _, err := sc.client(); err != nil {
+		var credPath string
+		if sc.c != nil {
+			credPath = sc.c.String(CredFileFlag)
+		}
+		if absPath, expandErr := homedir.Expand(credPath); expandErr == nil && absPath != "" {
+			credPath = absPath
+		}
+		credFinder := newStaticPath(credPath, sc.fs)
 		if credentials, credErr := sc.readTunnelCredentials(credFinder); credErr == nil {
 			if credentials.TunnelID != uuid.Nil {
+				if sc.log != nil {
+					sc.log.Warn().
+						Str(LogFieldTunnelID, credentials.TunnelID.String()).
+						Str("name", input).
+						Msgf("Cannot query Tunnelstore without API credentials; falling back to tunnel %s from credentials file", credentials.TunnelID)
+				}
 				return credentials.TunnelID, nil
 			}
 		}
+		return uuid.Nil, err
+	}
+
+	// Look up name in Tunnelstore.
+	tunnel, found, err := sc.tunnelActive(input)
+	if err != nil {
 		return uuid.Nil, err
 	}
 	if found {
