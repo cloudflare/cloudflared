@@ -32,6 +32,12 @@ func (c *consoleWriter) Write(p []byte) (n int, err error) {
 	if err != nil {
 		return n, fmt.Errorf("cannot decode event: %s", err)
 	}
-	e := json.NewEncoder(c.out)
-	return len(p), e.Encode(evt)
+	// buffer each log in-memory to prevent
+	// concurrent logs from interleaving
+	var buf bytes.Buffer
+	if err = json.NewEncoder(&buf).Encode(evt); err != nil {
+		return n, err
+	}
+	_, err = c.out.Write(buf.Bytes())
+	return len(p), err
 }
