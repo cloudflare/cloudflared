@@ -1,3 +1,10 @@
+2026.10.1
+- 2026-10-13 Update gcr.io/distroless/base-debian13:nonroot-arm64 Docker digest to 538c4d6
+- 2026-10-12 TUN-10962: Add precheck diag endpoint
+- 2026-10-12 chore: Bump go to 1.27.2 to fix GO-2026-6600
+- 2026-10-12 TUN-10933: Disable CGO for Linux CI builds and add ARM64 builds
+- 2026-10-08 TUN-10933: Bump go to 1.27
+
 2026.10.0
 - 2026-09-29 VULN-141859: Normalize request path when using access rules
 - 2026-09-28 chore: Retry DNS resolution

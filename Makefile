@@ -172,9 +172,13 @@ generate-internal-image-version:
 	echo $(VERSION) > versions-internal
 
 
+# Race detector flag for `make test`. It is cleared for arm64 CI runs because
+# ThreadSanitizer does not support the 47-bit address space on those runners.
+RACE_FLAG ?= -race
+
 .PHONY: test
 test: vet
-	$Q go test -json -v -mod=readonly -race $(LDFLAGS) ./... 2>&1 | tee $(GO_TEST_LOG_OUTPUT)
+	$Q go test -json -v -mod=readonly $(RACE_FLAG) $(LDFLAGS) ./... 2>&1 | tee $(GO_TEST_LOG_OUTPUT)
 ifneq ($(FIPS), true)
 	@go run -mod=readonly github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest -input $(GO_TEST_LOG_OUTPUT)
 endif
@@ -288,6 +292,12 @@ ci-build:
 	@mkdir -p artifacts
 	@mv cloudflared artifacts/cloudflared
 
+.PHONY: ci-build-arm64
+ci-build-arm64:
+	@GOOS=linux GOARCH=arm64 $(MAKE) cloudflared
+	@mkdir -p artifacts
+	@mv cloudflared artifacts/cloudflared-linux-arm64
+
 .PHONY: ci-fips-build
 ci-fips-build:
 	@FIPS=true GOOS=linux GOARCH=amd64 $(MAKE) cloudflared
@@ -296,6 +306,11 @@ ci-fips-build:
 
 .PHONY: ci-test
 ci-test: fmt-check lint test
+	@go run -mod=readonly github.com/jstemmer/go-junit-report/v2@latest -in $(GO_TEST_LOG_OUTPUT) -parser gojson -out report.xml -set-exit-code
+
+.PHONY: ci-test-arm64
+ci-test-arm64:
+	@RACE_FLAG= $(MAKE) test
 	@go run -mod=readonly github.com/jstemmer/go-junit-report/v2@latest -in $(GO_TEST_LOG_OUTPUT) -parser gojson -out report.xml -set-exit-code
 
 .PHONY: ci-fips-test

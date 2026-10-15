@@ -5,7 +5,9 @@
   runner: linux-x86-8cpu-16gb
   stage: build
   golangVersion: "1.27"
-  imageVersion: "3703-2fe662ebe6c7@sha256:60e4b3aac0f3558bfa85afc65b36b7cd09dd44aef71daaee65a6afd41c6e9458"
+  imageVersion: "3734-d33fce68ee03@sha256:c42e28de523766b042588659b22f5539fecd8d3a0207cdb64acac8522613d465"
+  # The race detector used by `make test` requires cgo. Build jobs below
+  # explicitly disable it.
   CGO_ENABLED: 1
 
 .default-packaging-job: &packaging-job-defaults
@@ -27,14 +29,29 @@
       - artifacts/*
 
 include:
-  ###################
-  ### Linux Build ###
-  ###################
+  ###########################
+  #### Linux AMD64 Build ####
+  ###########################
   - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       <<: *golang_inputs
       jobPrefix: linux-build
       GOLANG_MAKE_TARGET: ci-build
+      CGO_ENABLED: 0
+
+  ###########################
+  #### Linux ARM64 Build ####
+  ###########################
+  # Builds the arm64 binary natively on an arm64 runner on MRs so that arm64
+  # build breakages are caught before merge. Only the binary is built; no
+  # packages are produced.
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
+    inputs:
+      <<: *golang_inputs
+      runner: linux-arm64-8cpu-16gb
+      jobPrefix: linux-build-arm64
+      GOLANG_MAKE_TARGET: ci-build-arm64
+      CGO_ENABLED: 0
 
   ########################
   ### Linux FIPS Build ###
@@ -44,6 +61,7 @@ include:
       <<: *golang_inputs
       jobPrefix: linux-fips-build
       GOLANG_MAKE_TARGET: ci-fips-build
+      CGO_ENABLED: 0
 
   #################
   ### Unit Tests ##
@@ -54,6 +72,19 @@ include:
       stage: test
       jobPrefix: test
       GOLANG_MAKE_TARGET: ci-test
+
+  ###########################
+  ### Unit Tests (ARM64) ###
+  ###########################
+  # Runs the unit tests natively on an arm64 runner. Lint and format checks
+  # are architecture independent and already run in the amd64 job above.
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
+    inputs:
+      <<: *golang_inputs
+      runner: linux-arm64-8cpu-16gb
+      stage: test
+      jobPrefix: test-arm64
+      GOLANG_MAKE_TARGET: ci-test-arm64
 
   ######################
   ### Unit Tests FIPS ##

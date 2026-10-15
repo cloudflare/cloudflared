@@ -131,6 +131,11 @@ func (r Report) hasHardFail() bool {
 	return quicFail && http2Fail
 }
 
+// HasHardFail reports whether the environment cannot establish a tunnel.
+func (r Report) HasHardFail() bool {
+	return r.hasHardFail()
+}
+
 // hasWarn returns true when the environment is degraded but functional:
 //   - Exactly one transport (QUIC or HTTP/2) failed, OR
 //   - The Management API is unreachable (auto-updates unavailable).
