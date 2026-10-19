@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -33,6 +34,13 @@ const (
 
 var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
 
+const (
+	// Without a ping health check, an edge connection that dies silently (e.g. across laptop sleep, or behind a
+	// proxy that keeps the local socket open) blocks forever in a read and is never redialed.
+	http2SendPingTimeout = 30 * time.Second
+	http2PingTimeout     = 15 * time.Second
+)
+
 // HTTP2Connection represents a net.Conn that uses HTTP2 frames to proxy traffic from the edge to cloudflared on the
 // origin.
 type HTTP2Connection struct {
@@ -48,6 +56,8 @@ type HTTP2Connection struct {
 	controlStreamHandler ControlStreamHandler
 	stoppedGracefully    bool
 	controlStreamErr     error // result of running control stream handler
+	sendPingTimeout      time.Duration
+	pingTimeout          time.Duration
 }
 
 // NewHTTP2Connection returns a new instance of HTTP2Connection.
@@ -71,6 +81,8 @@ func NewHTTP2Connection(
 		connIndex:            connIndex,
 		controlStreamHandler: controlStreamHandler,
 		log:                  log,
+		sendPingTimeout:      http2SendPingTimeout,
+		pingTimeout:          http2PingTimeout,
 	}
 }
 
@@ -83,6 +95,12 @@ func (c *HTTP2Connection) Serve(ctx context.Context) error {
 	c.server.ServeConn(c.conn, &http2.ServeConnOpts{
 		Context: ctx,
 		Handler: c,
+		BaseConfig: &http.Server{
+			HTTP2: &http.HTTP2Config{
+				SendPingTimeout: c.sendPingTimeout,
+				PingTimeout:     c.pingTimeout,
+			},
+		},
 	})
 
 	switch {
