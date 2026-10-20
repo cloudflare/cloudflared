@@ -1,3 +1,9 @@
+2026.10.2
+- 2026-10-20 Bump go to 1.27.3 and bump distroless image
+- 2026-10-19 TUN-10994: Fix dropping the tail of messages larger than the buffer
+- 2026-10-19 Update gcr.io/distroless/base-debian13:nonroot Docker digest to a0d70d6
+- 2026-10-19 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to c9dd21c
+
 2026.10.1
 - 2026-10-13 Update gcr.io/distroless/base-debian13:nonroot-arm64 Docker digest to 538c4d6
 - 2026-10-12 TUN-10962: Add precheck diag endpoint
