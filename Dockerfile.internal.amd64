@@ -1,6 +1,6 @@
 # use the internal builder image for building cloudflared
 ARG CLOUDFLARE_DOCKER_REGISTRY_HOST
-FROM ${CLOUDFLARE_DOCKER_REGISTRY_HOST:-registry.cfdata.org}/stash/plat/dockerfiles/debian-trixie-golang/master:1.27.2-1@sha256:9e676881aba9cb360db99767e70308a5ddd7ab75b30056f2a59a80b0336937d6 AS builder
+FROM ${CLOUDFLARE_DOCKER_REGISTRY_HOST:-registry.cfdata.org}/stash/plat/dockerfiles/debian-trixie-golang/master:1.27.3-1@sha256:521137a205e8e2efcbbc933d2f28d9ef05e14be4a75d16e34dbb73939f0f653f AS builder
 ARG GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
@@ -21,7 +21,7 @@ COPY . .
 RUN FIPS=true GOOS=linux GOARCH=amd64 make cloudflared
 
 # use a distroless base image with glibc
-FROM gcr.io/distroless/base-debian13:nonroot-amd64@sha256:c9dd21cb03021acc907d8de290705c42c207351ef8be3480565ab18ec5820f53
+FROM gcr.io/distroless/base-debian13:nonroot-amd64@sha256:51a86e8dc226e4f18723cbc2c9730374075f22a237fcd9517b89970e2523ca01
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 

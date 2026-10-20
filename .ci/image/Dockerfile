@@ -6,7 +6,7 @@ RUN apt-get update && \
   apt-get install --no-install-recommends --allow-downgrades -y \
   build-essential \
   git \
-  go=1.27.2-1 \
+  go=1.27.3-1 \
   libffi-dev \
   procps \
   python3-dev \
