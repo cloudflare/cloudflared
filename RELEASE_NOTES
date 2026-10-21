@@ -1,3 +1,7 @@
+2026.10.3
+- 2026-10-21 chore: bump debian-images base image to 2026.10.1
+- 2026-10-21 chore: Bump go version
+
 2026.10.2
 - 2026-10-20 Bump go to 1.27.3 and bump distroless image
 - 2026-10-19 TUN-10994: Fix dropping the tail of messages larger than the buffer
