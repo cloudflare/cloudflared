@@ -5,7 +5,7 @@
   runner: linux-x86-8cpu-16gb
   stage: build
   golangVersion: "1.27"
-  imageVersion: "3734-d33fce68ee03@sha256:c42e28de523766b042588659b22f5539fecd8d3a0207cdb64acac8522613d465"
+  imageVersion: "3736-b3c52d6a358c@sha256:d34346e3ebac395e8b9c4bff9130955cd99c6936b6c13460c86131ffc1d1536d"
   # The race detector used by `make test` requires cgo. Build jobs below
   # explicitly disable it.
   CGO_ENABLED: 1
