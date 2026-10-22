@@ -19,6 +19,7 @@ import (
 const (
 	accessCertPath         = "/cdn-cgi/access/certs"
 	accessDomainSuffix     = ".cloudflareaccess.com"
+	fedAccessDomainSuffix  = ".fed" + accessDomainSuffix
 	httpsScheme            = "https"
 	jwksCacheSuffix        = "-jwks"
 	maxJWKSResponseSize    = 1 << 20
@@ -88,6 +89,18 @@ func parseAuthDomain(authDomain string) (url.URL, error) {
 		return url.URL{}, fmt.Errorf("auth_domain %q does not end with %q", authDomain, accessDomainSuffix)
 	}
 	return url.URL{Scheme: httpsScheme, Host: hostname}, nil
+}
+
+// isFedAuthDomain reports whether authDomain is a FedRAMP Access auth domain.
+// authDomain is expected to be the verified AppInfo.AuthDomain; it is
+// re-normalized here so only an exact ".fed.cloudflareaccess.com" hostname
+// suffix matches.
+func isFedAuthDomain(authDomain string) bool {
+	parsed, err := parseAuthDomain(authDomain)
+	if err != nil {
+		return false
+	}
+	return strings.HasSuffix(parsed.Hostname(), fedAccessDomainSuffix)
 }
 
 // fetchJWKS fetches the JWKS from the auth domain's certs endpoint over HTTPS.

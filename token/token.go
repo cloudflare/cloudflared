@@ -321,19 +321,21 @@ func Init(version string) {
 }
 
 // FetchTokenWithRedirect will either load a stored token or generate a new one
-// it appends the full url as the redirect URL to the access cli request if opening the browser
-func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, autoClose bool, isFedramp bool, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, appInfo, false, autoClose, isFedramp, log)
+// it appends the full url as the redirect URL to the access cli request if opening the browser.
+// The FedRAMP token transfer relay is used when forceFedramp is set or appInfo.AuthDomain is a FedRAMP auth domain.
+func FetchTokenWithRedirect(appURL *url.URL, appInfo *AppInfo, autoClose bool, forceFedramp bool, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, false, autoClose, forceFedramp, log)
 }
 
 // FetchToken will either load a stored token or generate a new one
-// it appends the host of the appURL as the redirect URL to the access cli request if opening the browser
-func FetchToken(appURL *url.URL, appInfo *AppInfo, autoClose bool, isFedramp bool, log *zerolog.Logger) (string, error) {
-	return getToken(appURL, appInfo, true, autoClose, isFedramp, log)
+// it appends the host of the appURL as the redirect URL to the access cli request if opening the browser.
+// The FedRAMP token transfer relay is used when forceFedramp is set or appInfo.AuthDomain is a FedRAMP auth domain.
+func FetchToken(appURL *url.URL, appInfo *AppInfo, autoClose bool, forceFedramp bool, log *zerolog.Logger) (string, error) {
+	return getToken(appURL, appInfo, true, autoClose, forceFedramp, log)
 }
 
 // getToken will either load a stored token or generate a new one
-func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose bool, isFedramp bool, log *zerolog.Logger) (string, error) {
+func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose bool, forceFedramp bool, log *zerolog.Logger) (string, error) {
 	if token, err := GetAppTokenIfExists(appInfo); token != "" && err == nil {
 		return token, nil
 	}
@@ -381,6 +383,11 @@ func getToken(appURL *url.URL, appInfo *AppInfo, useHostOnly bool, autoClose boo
 			}
 			return appToken, nil
 		}
+	}
+	isFedramp := forceFedramp
+	if !isFedramp && isFedAuthDomain(appInfo.AuthDomain) {
+		log.Debug().Msg("Detected FedRAMP Access auth domain; using FedRAMP token transfer relay")
+		isFedramp = true
 	}
 	return getTokensFromEdge(appURL, appInfo.AppAUD, appTokenPath, orgTokenPath, useHostOnly, autoClose, isFedramp, log)
 }

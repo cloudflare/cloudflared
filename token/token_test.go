@@ -253,6 +253,39 @@ func TestParseAuthDomain(t *testing.T) {
 	}
 }
 
+func TestIsFedAuthDomain(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		authDomain string
+		want       bool
+	}{
+		{name: "fed", authDomain: "myteam.fed.cloudflareaccess.com", want: true},
+		{name: "fed nested subdomain", authDomain: "a.myteam.fed.cloudflareaccess.com", want: true},
+		{name: "fed uppercase normalized", authDomain: "MyTeam.FED.CloudflareAccess.com", want: true},
+		{name: "fed port discarded", authDomain: "myteam.fed.cloudflareaccess.com:443", want: true},
+		{name: "retail", authDomain: "myteam.cloudflareaccess.com"},
+		{name: "retail team named fed", authDomain: "fed.cloudflareaccess.com"},
+		{name: "fed label without dot", authDomain: "myteamfed.cloudflareaccess.com"},
+		{name: "fed label prefix", authDomain: "myteam.fedx.cloudflareaccess.com"},
+		{name: "fed label in middle", authDomain: "fed.myteam.cloudflareaccess.com"},
+		{name: "fed suffix on foreign domain", authDomain: "myteam.fed.cloudflareaccess.com.evil.example"},
+		{name: "fed in path", authDomain: "evil.example/x.fed.cloudflareaccess.com"},
+		{name: "fed in fragment", authDomain: "evil.example#.fed.cloudflareaccess.com"},
+		{name: "fed in userinfo", authDomain: "myteam.fed.cloudflareaccess.com@evil.example"},
+		{name: "non access domain", authDomain: "myteam.fed.example.com"},
+		{name: "empty", authDomain: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, isFedAuthDomain(tc.authDomain))
+		})
+	}
+}
+
 func TestFetchMetadataJWT_ReturnsAppInfoErrorOnError(t *testing.T) {
 	t.Parallel()
 

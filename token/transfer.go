@@ -20,6 +20,12 @@ const (
 	clientTimeout = time.Second * 60
 )
 
+// Test seams; production code always uses OpenBrowser and the default HTTP transport.
+var (
+	openBrowser       = OpenBrowser
+	transferTransport http.RoundTripper
+)
+
 // RunTransfer does the transfer "dance" with the end result downloading the supported resource.
 // The expanded description is run is encapsulation of shared business logic needed
 // to request a resource (token/cert/etc) from the transfer service (loginhelper).
@@ -45,7 +51,7 @@ func RunTransfer(transferURL *url.URL, appAUD, resourceName, key, value string, 
 	}
 
 	// See AUTH-1423 for why we use stderr (the way git wraps ssh)
-	err = OpenBrowser(requestURL)
+	err = openBrowser(requestURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Please open the following URL and log in with your Cloudflare account:\n\n%s\n\nLeave cloudflared running to download the %s automatically.\n", requestURL, resourceName)
 	} else {
@@ -116,7 +122,7 @@ func buildRequestURL(baseURL *url.URL, appAUD string, key, value string, cli, us
 
 // transferRequest downloads the requested resource from the request URL
 func transferRequest(requestURL string, log *zerolog.Logger) ([]byte, string, error) {
-	client := &http.Client{Timeout: clientTimeout}
+	client := &http.Client{Timeout: clientTimeout, Transport: transferTransport}
 	const pollAttempts = 10
 	// we do "long polling" on the endpoint to get the resource.
 	for i := 0; i < pollAttempts; i++ {
