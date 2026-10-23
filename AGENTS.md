@@ -289,6 +289,13 @@ notice, do not proceed without explicit confirmation.
 ## Dependencies Management
 
 - Use Go modules (`go.mod`) exclusively
+- The `go` directive in `go.mod` must include the patch version (`major.minor.patch`).
+  It is the exact Go version for builds and tests: the Makefile exports
+  `GOTOOLCHAIN=go<version>` from it unless Go is configured with `GOTOOLCHAIN=local`.
+  Cloudflare's internal Go package sets that so its patches are never replaced by an
+  upstream toolchain (RFC-028); never override it. Do not add a `toolchain` directive.
+  When bumping Go, align all CI, Docker image, and documentation version references,
+  including the Linux CI builder image and digest; see README's "Updating Go" section.
 - Resolve dependencies from the locked module graph with `go mod download`; do not vendor dependencies.
 - Builds, tests, vet, and lint use `-mod=readonly`; `go.mod` and `go.sum` must not drift in CI.
 - Linux CI uses Athens before public and direct module sources; macOS and Windows use the public proxy directly.

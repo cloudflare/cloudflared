@@ -1,5 +1,5 @@
 # use a builder image for building cloudflare
-FROM golang:1.27.2 AS builder
+FROM golang:1.27.3 AS builder
 ARG GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
@@ -20,7 +20,7 @@ COPY . .
 RUN GOOS=linux GOARCH=arm64 make cloudflared
 
 # use a distroless base image with glibc
-FROM gcr.io/distroless/base-debian13:nonroot-arm64@sha256:538c4d631883b52e6379c6a8e26ccaa33a1387b2153f37430b87d267f0298db0
+FROM gcr.io/distroless/base-debian13:nonroot-arm64@sha256:d1cf224443672e1832dceb1d4d7ca11bc5a669ef9c0efea04721dbc7346df10b
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 

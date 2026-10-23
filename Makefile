@@ -40,6 +40,16 @@ ifdef CONTAINER_BUILD
 	VERSION_FLAGS := $(VERSION_FLAGS) -X "github.com/cloudflare/cloudflared/metrics.Runtime=virtual"
 endif
 
+# Build and test with exactly the Go version in go.mod. The default GOTOOLCHAIN=auto
+# only upgrades an older local Go and never downgrades a newer one.
+# Leave GOTOOLCHAIN=local alone if an environment sets it in go.env.
+ifneq ($(shell go env GOTOOLCHAIN),local)
+    GO_MOD_VERSION := $(shell go list -m -f "{{.GoVersion}}")
+    ifneq ($(GO_MOD_VERSION),)
+        export GOTOOLCHAIN := go$(GO_MOD_VERSION)
+    endif
+endif
+
 LINK_FLAGS :=
 ifeq ($(FIPS), true)
 	export GOFIPS140 := latest
