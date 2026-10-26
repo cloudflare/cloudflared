@@ -5,15 +5,14 @@ from time import sleep
 import pytest
 import yaml
 
-from config import NamedTunnelConfig, ProxyDnsConfig, QuickTunnelConfig
-from constants import BACKOFF_SECS, PROXY_DNS_PORT
+from config import NamedTunnelConfig, QuickTunnelConfig
+from constants import BACKOFF_SECS
 from util import LOGGER
 
 
 class CfdModes(Enum):
     NAMED = auto()
     QUICK = auto()
-    PROXY_DNS = auto()
 
 
 @pytest.fixture(scope="session")
@@ -26,16 +25,7 @@ def component_tests_config():
         config = yaml.safe_load(stream)
         LOGGER.info(f"component tests base config {config}")
 
-        def _component_tests_config(additional_config={}, cfd_mode=CfdModes.NAMED, run_proxy_dns=True, provide_ingress=True):
-            if run_proxy_dns:
-                # Regression test for TUN-4177, running with proxy-dns should not prevent tunnels from running.
-                # So we run all tests with it.
-                additional_config["proxy-dns"] = True
-                additional_config["proxy-dns-port"] = PROXY_DNS_PORT
-            else:
-                additional_config.pop("proxy-dns", None)
-                additional_config.pop("proxy-dns-port", None)
-
+        def _component_tests_config(additional_config={}, cfd_mode=CfdModes.NAMED, provide_ingress=True):
             # Allows the ingress rules to be omitted from the provided config
             ingress = []
             if provide_ingress:
@@ -51,8 +41,6 @@ def component_tests_config():
                                          credentials_file=config['credentials_file'],
                                          ingress=ingress,
                                          hostname=hostname)
-            elif cfd_mode is CfdModes.PROXY_DNS:
-                return ProxyDnsConfig(cloudflared_binary=config['cloudflared_binary'])
             elif cfd_mode is CfdModes.QUICK:
                 return QuickTunnelConfig(additional_config=additional_config, cloudflared_binary=config['cloudflared_binary'])
             else:

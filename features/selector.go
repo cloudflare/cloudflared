@@ -23,9 +23,11 @@ const (
 // If the TXT record is missing a key, the field will unmarshal to the default Go value
 
 type featuresRecord struct {
-	DatagramV3Percentage uint32 `json:"dv3_1"`
+	DatagramV3Percentage uint32 `json:"dv3_2"`
+	SkipPrechecks        bool   `json:"skip_prechecks"`
 
 	// DatagramV3Percentage int32 `json:"dv3"` // Removed in TUN-9291
+	// DatagramV3Percentage uint32 `json:"dv3_1"` // Removed in TUN-9883
 	// PostQuantumPercentage int32 `json:"pq"` // Removed in TUN-7970
 }
 
@@ -88,6 +90,7 @@ func (fs *featureSelector) Snapshot() FeatureSnapshot {
 		PostQuantum:     fs.postQuantumMode(),
 		DatagramVersion: fs.datagramVersion(),
 		FeaturesList:    fs.clientFeatures(),
+		SkipPrechecks:   fs.prechecksSkip(),
 	}
 }
 
@@ -105,7 +108,7 @@ func (fs *featureSelector) postQuantumMode() PostQuantumMode {
 
 func (fs *featureSelector) datagramVersion() DatagramVersion {
 	// If user provides the feature via the cli, we take it as priority over remote feature evaluation
-	if slices.Contains(fs.cliFeatures, FeatureDatagramV3_1) {
+	if slices.Contains(fs.cliFeatures, FeatureDatagramV3_2) {
 		return DatagramV3
 	}
 	// If the user specifies DatagramV2, we also take that over remote
@@ -118,6 +121,12 @@ func (fs *featureSelector) datagramVersion() DatagramVersion {
 	}
 
 	return DatagramV2
+}
+
+// prechecksSkip returns whether prechecks are enabled via DNS flag.
+// Defaults to false if not set in the DNS TXT record.
+func (fs *featureSelector) prechecksSkip() bool {
+	return fs.remoteFeatures.SkipPrechecks
 }
 
 // clientFeatures will return the list of currently available features that cloudflared should provide to the edge.
@@ -185,7 +194,7 @@ func (dr *dnsResolver) lookupRecord(ctx context.Context) ([]byte, error) {
 	}
 
 	if len(records) == 0 {
-		return nil, fmt.Errorf("No TXT record found for %s to determine which features to opt-in", featureSelectorHostname)
+		return nil, fmt.Errorf("no TXT record found for %s to determine which features to opt-in", featureSelectorHostname)
 	}
 
 	return []byte(records[0]), nil

@@ -1,18 +1,17 @@
 package connection
 
 import (
-	"fmt"
 	"net/http"
 	"reflect"
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSerializeHeaders(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	mockHeaders := http.Header{
 		"Mock-Header-One":        {"Mock header one value", "three"},
@@ -39,22 +38,22 @@ func TestSerializeHeaders(t *testing.T) {
 	serializedHeaders := SerializeHeaders(request.Header)
 
 	// Sanity check: the headers serialized to something that's not an empty string
-	assert.NotEqual(t, "", serializedHeaders)
+	require.NotEqual(t, "", serializedHeaders)
 
 	// Deserialize back, and ensure we get the same set of headers
 	deserializedHeaders, err := DeserializeHeaders(serializedHeaders)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	assert.Equal(t, 13, len(deserializedHeaders))
+	require.Len(t, deserializedHeaders, 13)
 	expectedHeaders := headerToReqHeader(mockHeaders)
 
 	sort.Sort(ByName(deserializedHeaders))
 	sort.Sort(ByName(expectedHeaders))
 
-	assert.True(
+	require.True(
 		t,
 		reflect.DeepEqual(expectedHeaders, deserializedHeaders),
-		fmt.Sprintf("got = %#v, want = %#v\n", deserializedHeaders, expectedHeaders),
+		"got = %#v, want = %#v\n", deserializedHeaders, expectedHeaders,
 	)
 }
 
@@ -82,12 +81,12 @@ func headerToReqHeader(headers http.Header) (reqHeaders []HTTPHeader) {
 
 func TestSerializeNoHeaders(t *testing.T) {
 	request, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	serializedHeaders := SerializeHeaders(request.Header)
 	deserializedHeaders, err := DeserializeHeaders(serializedHeaders)
-	assert.NoError(t, err)
-	assert.Equal(t, 0, len(deserializedHeaders))
+	require.NoError(t, err)
+	require.Empty(t, deserializedHeaders)
 }
 
 func TestDeserializeMalformed(t *testing.T) {
@@ -102,21 +101,22 @@ func TestDeserializeMalformed(t *testing.T) {
 
 	for _, malformedValue := range malformedData {
 		_, err = DeserializeHeaders(malformedValue)
-		assert.Error(t, err)
+		require.Error(t, err)
 	}
 }
 
 func TestIsControlResponseHeader(t *testing.T) {
 	controlResponseHeaders := []string{
-		// Anything that begins with cf-int- or cf-cloudflared-
+		// Anything that begins with cf-int-, cf-cloudflared- or cf-proxy-
 		"cf-int-sample-header",
 		"cf-cloudflared-sample-header",
+		"cf-proxy-sample-header",
 		// Any http2 pseudoheader
 		":sample-pseudo-header",
 	}
 
 	for _, header := range controlResponseHeaders {
-		assert.True(t, IsControlResponseHeader(header))
+		require.True(t, IsControlResponseHeader(header))
 	}
 }
 
@@ -130,6 +130,6 @@ func TestIsNotControlResponseHeader(t *testing.T) {
 	}
 
 	for _, header := range notControlResponseHeaders {
-		assert.False(t, IsControlResponseHeader(header))
+		require.False(t, IsControlResponseHeader(header))
 	}
 }

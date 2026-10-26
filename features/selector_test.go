@@ -22,15 +22,15 @@ func TestUnmarshalFeaturesRecord(t *testing.T) {
 		expectedPercentage uint32
 	}{
 		{
-			record:             []byte(`{"dv3_1":0}`),
+			record:             []byte(`{"dv3_2":0}`),
 			expectedPercentage: 0,
 		},
 		{
-			record:             []byte(`{"dv3_1":39}`),
+			record:             []byte(`{"dv3_2":39}`),
 			expectedPercentage: 39,
 		},
 		{
-			record:             []byte(`{"dv3_1":100}`),
+			record:             []byte(`{"dv3_2":100}`),
 			expectedPercentage: 100,
 		},
 		{
@@ -40,7 +40,7 @@ func TestUnmarshalFeaturesRecord(t *testing.T) {
 			record: []byte(`{"kyber":768}`), // Unmarshal to default struct if key is not present
 		},
 		{
-			record: []byte(`{"pq": 101,"dv3":100}`), // Expired keys don't unmarshal to anything
+			record: []byte(`{"pq": 101,"dv3":100,"dv3_1":100}`), // Expired keys don't unmarshal to anything
 		},
 	}
 
@@ -111,10 +111,10 @@ func TestFeaturePrecedenceEvaluationDatagramVersion(t *testing.T) {
 		},
 		{
 			name:             "user_specified_v3",
-			cli:              []string{FeatureDatagramV3_1},
+			cli:              []string{FeatureDatagramV3_2},
 			remote:           featuresRecord{},
-			expectedFeatures: dedupAndRemoveFeatures(append(defaultFeatures, FeatureDatagramV3_1)),
-			expectedVersion:  FeatureDatagramV3_1,
+			expectedFeatures: dedupAndRemoveFeatures(append(defaultFeatures, FeatureDatagramV3_2)),
+			expectedVersion:  FeatureDatagramV3_2,
 		},
 	}
 
@@ -147,6 +147,12 @@ func TestDeprecatedFeaturesRemoved(t *testing.T) {
 		{
 			name:             "support_datagram_v3",
 			cli:              []string{DeprecatedFeatureDatagramV3},
+			remote:           featuresRecord{},
+			expectedFeatures: defaultFeatures,
+		},
+		{
+			name:             "support_datagram_v3_1",
+			cli:              []string{DeprecatedFeatureDatagramV3_1},
 			remote:           featuresRecord{},
 			expectedFeatures: defaultFeatures,
 		},

@@ -11,23 +11,16 @@ import (
 	"github.com/cloudflare/cloudflared/internal/test"
 )
 
-var (
-	debugLevel *LogLevel
-	infoLevel  *LogLevel
-	warnLevel  *LogLevel
-	errorLevel *LogLevel
-)
+var infoLevel = func() *LogLevel {
+	level := Info
+	return &level
+}()
 
-func init() {
-	// created here because we can't do a reference to a const enum, i.e. &Info
-	debugLevel := new(LogLevel)
-	*debugLevel = Debug
-	infoLevel := new(LogLevel)
-	*infoLevel = Info
-	warnLevel := new(LogLevel)
-	*warnLevel = Warn
-	errorLevel := new(LogLevel)
-	*errorLevel = Error
+func closeWebSocket(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	if err := conn.Close(websocket.StatusInternalError, ""); err != nil {
+		t.Logf("failed to close test WebSocket: %v", err)
+	}
 }
 
 func TestIntoClientEvent_StartStreaming(t *testing.T) {
@@ -153,31 +146,33 @@ func TestReadServerEvent(t *testing.T) {
 	client, server := test.WSPipe(nil, nil)
 	server.CloseRead(context.Background())
 	defer func() {
-		server.Close(websocket.StatusInternalError, "")
+		closeWebSocket(t, server)
 	}()
+	writeDone := make(chan error, 1)
 	go func() {
-		err := WriteEvent(server, context.Background(), &sentEvent)
-		require.NoError(t, err)
+		writeDone <- WriteEvent(server, context.Background(), &sentEvent)
 	}()
 	event, err := ReadServerEvent(client, context.Background())
 	require.NoError(t, err)
 	require.Equal(t, sentEvent.Type, event.Type)
-	client.Close(websocket.StatusInternalError, "")
+	require.NoError(t, <-writeDone)
+	closeWebSocket(t, client)
 }
 
 func TestReadServerEvent_InvalidWebSocketMessageType(t *testing.T) {
 	client, server := test.WSPipe(nil, nil)
 	server.CloseRead(context.Background())
 	defer func() {
-		server.Close(websocket.StatusInternalError, "")
+		closeWebSocket(t, server)
 	}()
+	writeDone := make(chan error, 1)
 	go func() {
-		err := server.Write(context.Background(), websocket.MessageBinary, []byte("test1234"))
-		require.NoError(t, err)
+		writeDone <- server.Write(t.Context(), websocket.MessageBinary, nil)
 	}()
 	_, err := ReadServerEvent(client, context.Background())
 	require.Error(t, err)
-	client.Close(websocket.StatusInternalError, "")
+	require.NoError(t, <-writeDone)
+	closeWebSocket(t, client)
 }
 
 func TestReadServerEvent_InvalidMessageType(t *testing.T) {
@@ -185,15 +180,16 @@ func TestReadServerEvent_InvalidMessageType(t *testing.T) {
 	client, server := test.WSPipe(nil, nil)
 	server.CloseRead(context.Background())
 	defer func() {
-		server.Close(websocket.StatusInternalError, "")
+		closeWebSocket(t, server)
 	}()
+	writeDone := make(chan error, 1)
 	go func() {
-		err := WriteEvent(server, context.Background(), &sentEvent)
-		require.NoError(t, err)
+		writeDone <- WriteEvent(server, context.Background(), &sentEvent)
 	}()
 	_, err := ReadServerEvent(client, context.Background())
 	require.ErrorIs(t, err, errInvalidMessageType)
-	client.Close(websocket.StatusInternalError, "")
+	require.NoError(t, <-writeDone)
+	closeWebSocket(t, client)
 }
 
 func TestReadClientEvent(t *testing.T) {
@@ -203,31 +199,33 @@ func TestReadClientEvent(t *testing.T) {
 	client, server := test.WSPipe(nil, nil)
 	client.CloseRead(context.Background())
 	defer func() {
-		client.Close(websocket.StatusInternalError, "")
+		closeWebSocket(t, client)
 	}()
+	writeDone := make(chan error, 1)
 	go func() {
-		err := WriteEvent(client, context.Background(), &sentEvent)
-		require.NoError(t, err)
+		writeDone <- WriteEvent(client, context.Background(), &sentEvent)
 	}()
 	event, err := ReadClientEvent(server, context.Background())
 	require.NoError(t, err)
 	require.Equal(t, sentEvent.Type, event.Type)
-	server.Close(websocket.StatusInternalError, "")
+	require.NoError(t, <-writeDone)
+	closeWebSocket(t, server)
 }
 
 func TestReadClientEvent_InvalidWebSocketMessageType(t *testing.T) {
 	client, server := test.WSPipe(nil, nil)
 	client.CloseRead(context.Background())
 	defer func() {
-		client.Close(websocket.StatusInternalError, "")
+		closeWebSocket(t, client)
 	}()
+	writeDone := make(chan error, 1)
 	go func() {
-		err := client.Write(context.Background(), websocket.MessageBinary, []byte("test1234"))
-		require.NoError(t, err)
+		writeDone <- client.Write(t.Context(), websocket.MessageBinary, nil)
 	}()
 	_, err := ReadClientEvent(server, context.Background())
 	require.Error(t, err)
-	server.Close(websocket.StatusInternalError, "")
+	require.NoError(t, <-writeDone)
+	closeWebSocket(t, server)
 }
 
 func TestReadClientEvent_InvalidMessageType(t *testing.T) {
@@ -235,13 +233,14 @@ func TestReadClientEvent_InvalidMessageType(t *testing.T) {
 	client, server := test.WSPipe(nil, nil)
 	client.CloseRead(context.Background())
 	defer func() {
-		client.Close(websocket.StatusInternalError, "")
+		closeWebSocket(t, client)
 	}()
+	writeDone := make(chan error, 1)
 	go func() {
-		err := WriteEvent(client, context.Background(), &sentEvent)
-		require.NoError(t, err)
+		writeDone <- WriteEvent(client, context.Background(), &sentEvent)
 	}()
 	_, err := ReadClientEvent(server, context.Background())
 	require.ErrorIs(t, err, errInvalidMessageType)
-	server.Close(websocket.StatusInternalError, "")
+	require.NoError(t, <-writeDone)
+	closeWebSocket(t, server)
 }

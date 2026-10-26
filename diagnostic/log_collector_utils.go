@@ -67,6 +67,8 @@ func PipeCommandOutputToFile(command *exec.Cmd, outputHandle *os.File) (*LogInfo
 }
 
 func CopyFilesFromDirectory(path string) (string, error) {
+	const defaultLogFilename = "cloudflared.log"
+
 	// rolling logs have as suffix the current date thus
 	// when iterating the path files they are already in
 	// chronological order
@@ -75,30 +77,32 @@ func CopyFilesFromDirectory(path string) (string, error) {
 		return "", fmt.Errorf("error reading directory %s: %w", path, err)
 	}
 
+	// nolint: gosec
 	outputHandle, err := os.Create(filepath.Join(os.TempDir(), logFilename))
 	if err != nil {
-		return "", fmt.Errorf("creating file %s: %w", outputHandle.Name(), err)
+		return "", fmt.Errorf("creating temporary log file %s: %w", logFilename, err)
 	}
-	defer outputHandle.Close()
+	defer func() { _ = outputHandle.Close() }()
 
 	for _, file := range files {
+		// nolint: gosec
 		logHandle, err := os.Open(filepath.Join(path, file.Name()))
 		if err != nil {
-			return "", fmt.Errorf("error opening file %s:%w", file.Name(), err)
+			return "", fmt.Errorf("error opening file %s: %w", file.Name(), err)
 		}
-		defer logHandle.Close()
-
 		_, err = io.Copy(outputHandle, logHandle)
+		_ = logHandle.Close()
 		if err != nil {
-			return "", fmt.Errorf("error copying file %s:%w", logHandle.Name(), err)
+			return "", fmt.Errorf("error copying file %s: %w", file.Name(), err)
 		}
 	}
 
-	logHandle, err := os.Open(filepath.Join(path, "cloudflared.log"))
+	// nolint: gosec
+	logHandle, err := os.Open(filepath.Join(path, defaultLogFilename))
 	if err != nil {
-		return "", fmt.Errorf("error opening file %s:%w", logHandle.Name(), err)
+		return "", fmt.Errorf("error opening file %s:%w", defaultLogFilename, err)
 	}
-	defer logHandle.Close()
+	defer func() { _ = logHandle.Close() }()
 
 	_, err = io.Copy(outputHandle, logHandle)
 	if err != nil {

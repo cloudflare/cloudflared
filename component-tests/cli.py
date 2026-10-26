@@ -1,10 +1,9 @@
 import json
 import subprocess
-from time import sleep
 
 from constants import MANAGEMENT_HOST_NAME
 from setup import get_config_from_file
-from util import get_tunnel_connector_id
+from util import get_tunnel_connector_id, CloudflaredProcess
 
 SINGLE_CASE_TIMEOUT = 600
 
@@ -30,7 +29,7 @@ class CloudflaredCli:
         listed = self._run_command(cmd_args, "list")
         return json.loads(listed.stdout)
 
-    def get_management_token(self, config, config_path):
+    def get_management_token(self, config, config_path, resource):
         basecmd = [config.cloudflared_binary]
         if config_path is not None:
             basecmd += ["--config", str(config_path)]
@@ -38,18 +37,35 @@ class CloudflaredCli:
         if origincert:
             basecmd += ["--origincert", origincert]
 
-        cmd_args = ["tail", "token", config.get_tunnel_id()]
+        cmd_args = ["management", "token", "--resource", resource, config.get_tunnel_id()]
         cmd = basecmd + cmd_args
         result = run_subprocess(cmd, "token", self.logger, check=True, capture_output=True, timeout=15)
         return json.loads(result.stdout.decode("utf-8").strip())["token"]
     
-    def get_management_url(self, path, config, config_path):
-        access_jwt = self.get_management_token(config, config_path)
+    def get_tail_token(self, config, config_path):
+        """
+        Get management token using the 'tail token' command.
+        Returns a token scoped for 'logs' resource.
+        """
+        basecmd = [config.cloudflared_binary]
+        if config_path is not None:
+            basecmd += ["--config", str(config_path)]
+        origincert = get_config_from_file()["origincert"]
+        if origincert:
+            basecmd += ["--origincert", origincert]
+        
+        cmd_args = ["tail", "token", config.get_tunnel_id()]
+        cmd = basecmd + cmd_args
+        result = run_subprocess(cmd, "tail-token", self.logger, check=True, capture_output=True, timeout=15)
+        return json.loads(result.stdout.decode("utf-8").strip())["token"]
+    
+    def get_management_url(self, path, config, config_path, resource):
+        access_jwt = self.get_management_token(config, config_path, resource)
         connector_id = get_tunnel_connector_id()
         return f"https://{MANAGEMENT_HOST_NAME}/{path}?connector_id={connector_id}&access_token={access_jwt}"
     
-    def get_management_wsurl(self, path, config, config_path):
-        access_jwt = self.get_management_token(config, config_path)
+    def get_management_wsurl(self, path, config, config_path, resource):
+        access_jwt = self.get_management_token(config, config_path, resource)
         connector_id = get_tunnel_connector_id()
         return f"wss://{MANAGEMENT_HOST_NAME}/{path}?connector_id={connector_id}&access_token={access_jwt}"
 
@@ -66,38 +82,12 @@ class CloudflaredCli:
 
     def __enter__(self):
         self.basecmd += ["run"]
-        self.process = subprocess.Popen(self.basecmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.logger.info(f"Run cmd {self.basecmd}")
-        return self.process
+        self.cfd = CloudflaredProcess(self.basecmd, allow_input=False, capture_output=True)
+        return self.cfd
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        terminate_gracefully(self.process, self.logger, self.basecmd)
-        self.logger.debug(f"{self.basecmd} logs: {self.process.stderr.read()}")
-
-
-def terminate_gracefully(process, logger, cmd):
-    process.terminate()
-    process_terminated = wait_for_terminate(process)
-    if not process_terminated:
-        process.kill()
-        logger.warning(f"{cmd}: cloudflared did not terminate within wait period. Killing process. logs: \
-                stdout: {process.stdout.read()}, stderr: {process.stderr.read()}")
-
-
-def wait_for_terminate(opened_subprocess, attempts=10, poll_interval=1):
-    """
-        wait_for_terminate polls the opened_subprocess every x seconds for a given number of attempts.
-        It returns true if the subprocess was terminated and false if it didn't.
-    """
-    for _ in range(attempts):
-        if _is_process_stopped(opened_subprocess):
-            return True
-        sleep(poll_interval)
-    return False
-
-
-def _is_process_stopped(process):
-    return process.poll() is not None
+        self.cfd.cleanup()
 
 
 def cert_path():

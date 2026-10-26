@@ -45,9 +45,7 @@ type baseEndpoints struct {
 var _ Client = (*RESTClient)(nil)
 
 func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, log *zerolog.Logger) (*RESTClient, error) {
-	if strings.HasSuffix(baseURL, "/") {
-		baseURL = baseURL[:len(baseURL)-1]
-	}
+	baseURL = strings.TrimSuffix(baseURL, "/")
 	accountLevelEndpoint, err := url.Parse(fmt.Sprintf("%s/accounts/%s/cfd_tunnel", baseURL, accountTag))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create account level endpoint")
@@ -68,7 +66,7 @@ func NewRESTClient(baseURL, accountTag, zoneTag, authToken, userAgent string, lo
 		TLSHandshakeTimeout:   defaultTimeout,
 		ResponseHeaderTimeout: defaultTimeout,
 	}
-	http2.ConfigureTransport(&httpTransport)
+	_ = http2.ConfigureTransport(&httpTransport)
 	return &RESTClient{
 		baseEndpoints: &baseEndpoints{
 			accountLevel:  *accountLevelEndpoint,
@@ -161,7 +159,6 @@ func fetchExhaustively[T any](requestFn func(int) (*http.Response, error)) ([]*T
 		if envelope.Pagination.Count < envelope.Pagination.PerPage || len(fullResponse) >= envelope.Pagination.TotalCount {
 			break
 		}
-
 	}
 	return fullResponse, nil
 }
@@ -179,14 +176,13 @@ func fetchPage[T any](requestFn func(int) (*http.Response, error), page int) (*r
 		}
 		var parsedRspBody []*T
 		return envelope, parsedRspBody, parseResponseBody(envelope, &parsedRspBody)
-
 	}
 	return nil, nil, errors.New(fmt.Sprintf("Failed to fetch page. Server returned: %d", pageResp.StatusCode))
 }
 
 type response struct {
 	Success    bool            `json:"success,omitempty"`
-	Errors     []apiErr        `json:"errors,omitempty"`
+	Errors     []apiError      `json:"errors,omitempty"`
 	Messages   []string        `json:"messages,omitempty"`
 	Result     json.RawMessage `json:"result,omitempty"`
 	Pagination Pagination      `json:"result_info,omitempty"`
@@ -206,19 +202,19 @@ func (r *response) checkErrors() error {
 	if len(r.Errors) == 1 {
 		return r.Errors[0]
 	}
-	var messages string
+	var messagesBuilder strings.Builder
 	for _, e := range r.Errors {
-		messages += fmt.Sprintf("%s; ", e)
+		messagesBuilder.WriteString(fmt.Sprintf("%s; ", e))
 	}
-	return fmt.Errorf("API errors: %s", messages)
+	return fmt.Errorf("API errors: %s", messagesBuilder.String())
 }
 
-type apiErr struct {
+type apiError struct {
 	Code    json.Number `json:"code,omitempty"`
 	Message string      `json:"message,omitempty"`
 }
 
-func (e apiErr) Error() string {
+func (e apiError) Error() string {
 	return fmt.Sprintf("code: %v, reason: %s", e.Code, e.Message)
 }
 

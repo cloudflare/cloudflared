@@ -2,6 +2,7 @@ import logging
 import os
 import platform
 import subprocess
+import threading
 from contextlib import contextmanager
 from time import sleep
 import sys
@@ -10,10 +11,67 @@ import pytest
 
 import requests
 import yaml
-import json
 from retrying import retry
 
-from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS
+from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS, DNS_BACKOFF_SECS, GRACEFUL_SHUTDOWN_TIMEOUT, READER_THREAD_JOIN_TIMEOUT
+
+class CloudflaredProcess:
+    """
+    Wrapper around a Popen process that continuously drains stdout and stderr
+    in background threads to prevent OS pipe buffers from filling up and
+    blocking the child process. Captured output is logged when the process
+    is cleaned up.
+    """
+
+    def __init__(self, cmd, allow_input, capture_output):
+        output = subprocess.PIPE if capture_output else subprocess.DEVNULL
+        stdin = subprocess.PIPE if allow_input else None
+        self.process = subprocess.Popen(cmd, stdin=stdin, stdout=output, stderr=subprocess.STDOUT)
+
+        self._capture_output = capture_output
+        self._stdout_lines = []
+        self._threads = []
+        if capture_output:
+            self._threads.append(self._start_reader(self.process.stdout, self._stdout_lines))
+
+    @staticmethod
+    def _start_reader(pipe, sink):
+        def _drain():
+            for line in pipe:
+                sink.append(line)
+            pipe.close()
+        t = threading.Thread(target=_drain, daemon=True)
+        t.start()
+        return t
+
+    def terminate(self):
+        """Terminate the process if it is still running."""
+        if self.process.poll() is None:
+            self.process.terminate()
+
+    def cleanup(self):
+        """Terminate, wait for exit, join reader threads, and log output."""
+        self.terminate()
+        try:
+            self.process.wait(timeout=GRACEFUL_SHUTDOWN_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait()
+        for t in self._threads:
+            t.join(timeout=READER_THREAD_JOIN_TIMEOUT)
+        if self._capture_output:
+            stdout = b"".join(self._stdout_lines).decode("utf-8", errors="replace")
+            if stdout:
+                LOGGER.info(f"cloudflared stdout:\n{stdout}")
+
+    @property
+    def stdout_lines(self):
+        return self._stdout_lines
+
+    # Proxy common Popen attributes so callers can still use the wrapper
+    # as if it were a Popen (e.g. send_signal, stdin, pid, returncode).
+    def __getattr__(self, name):
+        return getattr(self.process, name)
 
 def configure_logger():
     logger = logging.getLogger(__name__)
@@ -34,6 +92,12 @@ def fips_enabled():
 
 nofips = pytest.mark.skipif(
         fips_enabled(), reason=f"Only runs without FIPS (COMPONENT_TESTS_FIPS=0)")
+
+def skip_on_ci(reason):
+    env_ci = os.getenv("CI")
+    running_in_ci = env_ci is not None and env_ci != "0"
+    return pytest.mark.skipif(
+        running_in_ci, reason=f"This test can't run on CI due to: {reason}")
 
 def write_config(directory, config):
     config_path = directory / "config.yml"
@@ -70,20 +134,15 @@ def cloudflared_cmd(config, config_path, cfd_args, cfd_pre_args, root):
     LOGGER.info(f"Run cmd {cmd} with config {config}")
     return cmd
 
-
 @contextmanager
 def run_cloudflared_background(cmd, allow_input, capture_output):
-    output = subprocess.PIPE if capture_output else subprocess.DEVNULL
-    stdin = subprocess.PIPE if allow_input else None
     cfd = None
     try:
-        cfd = subprocess.Popen(cmd, stdin=stdin, stdout=output, stderr=output)
+        cfd = CloudflaredProcess(cmd, allow_input, capture_output)
         yield cfd
     finally:
         if cfd:
-            cfd.terminate()
-            if capture_output:
-                LOGGER.info(f"cloudflared log: {cfd.stderr.read()}")
+            cfd.cleanup()
     
 
 def get_quicktunnel_url():
@@ -96,6 +155,19 @@ def get_quicktunnel_url():
             f"Quicktunnel endpoint returned {hostname} but we expected a url"
 
         return f"https://{hostname}"
+
+
+def wait_quicktunnel_ready(url):
+    LOGGER.debug(f"Waiting {DNS_BACKOFF_SECS} seconds for quick tunnel DNS propagation...")
+    sleep(DNS_BACKOFF_SECS)
+    _wait_quicktunnel_ready(url)
+
+@retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
+def _wait_quicktunnel_ready(url):
+    with requests.Session() as s:
+        LOGGER.debug(f"Waiting for quick tunnel {url} to be reachable...")
+        resp = s.get(url, timeout=DNS_BACKOFF_SECS)
+        assert resp.status_code == 200, f"{url} returned {resp}"
 
 def wait_tunnel_ready(tunnel_url=None, require_min_connections=1, cfd_logs=None):
     try:
@@ -111,6 +183,7 @@ def inner_wait_tunnel_ready(tunnel_url=None, require_min_connections=1):
     metrics_url = f'http://localhost:{METRICS_PORT}/ready'
 
     with requests.Session() as s:
+        LOGGER.debug("Waiting for tunnel to be ready...")
         resp = send_request(s, metrics_url, True)
 
         ready_connections = resp.json()["readyConnections"]
@@ -179,3 +252,49 @@ def send_request(session, url, require_ok):
     if require_ok:
         assert resp.status_code == 200, f"{url} returned {resp}"
     return resp if resp.status_code == 200 else None
+
+
+def decode_jwt_payload(token):
+    """
+    Decode the payload section of a JWT token without signature verification.
+    
+    JWT Structure:
+    ==============
+    A JWT consists of three Base64URL-encoded parts separated by dots:
+        HEADER.PAYLOAD.SIGNATURE
+    
+    The payload contains the JWT claims (the actual data/permissions).
+    
+    Args:
+        token (str): The complete JWT token string
+        
+    Returns:
+        dict: The decoded payload as a dictionary containing JWT claims
+        
+    Raises:
+        ValueError: If the token doesn't have exactly 3 parts
+        
+    Note:
+        This function does NOT verify the signature - it only decodes the payload.
+        Use this only when you trust the token source (e.g., tokens you just generated).
+    """
+    import base64
+    import json
+    
+    # Split JWT into its three components
+    parts = token.split('.')
+    if len(parts) != 3:
+        raise ValueError(f"Invalid JWT format: expected 3 parts, got {len(parts)}")
+    
+    # Extract and decode the payload (middle section)
+    # Base64 requires padding to be a multiple of 4 characters
+    payload_encoded = parts[1]
+    remainder = len(payload_encoded) % 4
+    if remainder != 0:
+        payload_padded = payload_encoded + '=' * (4 - remainder)
+    else:
+        payload_padded = payload_encoded
+    
+    # Decode from Base64URL format and parse JSON
+    decoded_payload = base64.urlsafe_b64decode(payload_padded)
+    return json.loads(decoded_payload)

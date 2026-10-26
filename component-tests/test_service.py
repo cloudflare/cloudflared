@@ -9,7 +9,7 @@ import pytest
 
 import test_logging
 from conftest import CfdModes
-from util import select_platform, start_cloudflared, wait_tunnel_ready, write_config
+from util import select_platform, skip_on_ci, start_cloudflared, wait_tunnel_ready, write_config
 
 
 def default_config_dir():
@@ -82,6 +82,7 @@ class TestServiceMode:
         os.remove(default_config_file())
         self.launchctl_cmd("list", success=False)
 
+    @skip_on_ci("we can't run sudo command on CI")
     @select_platform("Linux")
     @pytest.mark.skipif(os.path.exists("/etc/cloudflared/config.yml"),
                         reason=f"There is already a config file in default path")
@@ -98,6 +99,7 @@ class TestServiceMode:
 
         self.sysv_service_scenario(config, tmp_path, assert_log_file)
 
+    @skip_on_ci("we can't run sudo command on CI")
     @select_platform("Linux")
     @pytest.mark.skipif(os.path.exists("/etc/cloudflared/config.yml"),
                         reason=f"There is already a config file in default path")
@@ -116,6 +118,7 @@ class TestServiceMode:
 
         self.sysv_service_scenario(config, tmp_path, assert_rotating_log)
 
+    @skip_on_ci("we can't run sudo command on CI")
     @select_platform("Linux")
     @pytest.mark.skipif(os.path.exists("/etc/cloudflared/config.yml"),
                         reason=f"There is already a config file in default path")

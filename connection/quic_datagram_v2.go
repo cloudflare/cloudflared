@@ -9,8 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	pkgerrors "github.com/pkg/errors"
-	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -25,7 +23,6 @@ import (
 	cfdquic "github.com/cloudflare/cloudflared/quic"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
-	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	rpcquic "github.com/cloudflare/cloudflared/tunnelrpc/quic"
 )
 
@@ -34,9 +31,7 @@ const (
 	demuxChanCapacity = 16
 )
 
-var (
-	errInvalidDestinationIP = errors.New("unable to parse destination IP")
-)
+var errInvalidDestinationIP = errors.New("unable to parse destination IP")
 
 // DatagramSessionHandler is a service that can serve datagrams for a connection and handle sessions from incoming
 // connection streams.
@@ -47,7 +42,7 @@ type DatagramSessionHandler interface {
 }
 
 type datagramV2Connection struct {
-	conn  quic.Connection
+	conn  cfdquic.QUICConnection
 	index uint8
 
 	// sessionManager tracks active sessions. It receives datagrams from quic connection via datagramMuxer
@@ -69,7 +64,7 @@ type datagramV2Connection struct {
 }
 
 func NewDatagramV2Connection(ctx context.Context,
-	conn quic.Connection,
+	conn cfdquic.QUICConnection,
 	originDialer ingress.OriginUDPDialer,
 	icmpRouter ingress.ICMPRouter,
 	index uint8,
@@ -98,24 +93,17 @@ func NewDatagramV2Connection(ctx context.Context,
 }
 
 func (d *datagramV2Connection) Serve(ctx context.Context) error {
-	// If either goroutine returns nil error, we rely on this cancellation to make sure the other goroutine exits
-	// as fast as possible as well. Nil error means we want to exit for good (caller code won't retry serving this
-	// connection).
-	// If either goroutine returns a non nil error, then the error group cancels the context, thus also canceling the
-	// other goroutine as fast as possible.
-	ctx, cancel := context.WithCancel(ctx)
+	// If either goroutine from the errgroup returns at all (error or nil), we rely on its cancellation to make sure
+	// the other goroutines as well.
 	errGroup, ctx := errgroup.WithContext(ctx)
 
 	errGroup.Go(func() error {
-		defer cancel()
 		return d.sessionManager.Serve(ctx)
 	})
 	errGroup.Go(func() error {
-		defer cancel()
 		return d.datagramMuxer.ServeReceive(ctx)
 	})
 	errGroup.Go(func() error {
-		defer cancel()
 		return d.packetRouter.Serve(ctx)
 	})
 
@@ -123,7 +111,7 @@ func (d *datagramV2Connection) Serve(ctx context.Context) error {
 }
 
 // RegisterUdpSession is the RPC method invoked by edge to register and run a session
-func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*tunnelpogs.RegisterUdpSessionResponse, error) {
+func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID uuid.UUID, dstIP net.IP, dstPort uint16, closeAfterIdleHint time.Duration, traceContext string) (*pogs.RegisterUdpSessionResponse, error) {
 	traceCtx := tracing.NewTracedContext(ctx, traceContext, q.logger)
 	ctx, registerSpan := traceCtx.Tracer().Start(traceCtx, "register-session", trace.WithAttributes(
 		attribute.String("session-id", sessionID.String()),
@@ -135,7 +123,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 	if err := q.flowLimiter.Acquire(management.UDP.String()); err != nil {
 		log.Warn().Msgf("Too many concurrent sessions being handled, rejecting udp proxy to %s:%d", dstIP, dstPort)
 
-		err := pkgerrors.Wrap(err, "failed to start udp session due to rate limiting")
+		err := errors.Wrap(err, "failed to start udp session due to rate limiting")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		return nil, err
 	}
@@ -173,7 +161,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 
 	session, err := q.sessionManager.RegisterSession(ctx, sessionID, originProxy)
 	if err != nil {
-		originProxy.Close()
+		_ = originProxy.Close()
 		log.Err(err).Str(datagramsession.LogFieldSessionID, datagramsession.FormatSessionID(sessionID)).Msgf("Failed to register udp session")
 		tracing.EndWithErrorStatus(registerSpan, err)
 		q.flowLimiter.Release()
@@ -192,7 +180,7 @@ func (q *datagramV2Connection) RegisterUdpSession(ctx context.Context, sessionID
 		Msgf("Registered session")
 	tracing.End(registerSpan)
 
-	resp := tunnelpogs.RegisterUdpSessionResponse{
+	resp := pogs.RegisterUdpSessionResponse{
 		Spans: traceCtx.GetProtoSpans(),
 	}
 
@@ -236,7 +224,7 @@ func (q *datagramV2Connection) closeUDPSession(ctx context.Context, sessionID uu
 	}
 
 	stream := cfdquic.NewSafeStreamCloser(quicStream, q.streamWriteTimeout, q.logger)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	rpcClientStream, err := rpcquic.NewSessionClient(ctx, stream, q.rpcTimeout)
 	if err != nil {
 		// Log this at debug because this is not an error if session was closed due to lost connection

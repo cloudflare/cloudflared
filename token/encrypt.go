@@ -1,24 +1,27 @@
-// Package encrypter is suitable for encrypting messages you would like to securely share between two points.
-// Useful for providing end to end encryption (E2EE). It uses Box (NaCl) for encrypting the messages.
+// Package token contains the Encrypter, a small helper for end-to-end encrypting (E2EE)
+// messages exchanged between two points. It uses Box (NaCl) for encrypting the messages.
 // tldr is it uses Elliptic Curves (Curve25519) for the keys, XSalsa20 and Poly1305 for encryption.
 // You can read more here https://godoc.org/golang.org/x/crypto/nacl/box.
 //
-//	msg := []byte("super safe message.")
-//	alice, err := NewEncrypter("alice_priv_key.pem", "alice_pub_key.pem")
+// The keypair is always ephemeral: it is generated from crypto/rand on every call to
+// NewEncrypter and is never read from or written to disk. In the login flow the base64url
+// public key doubles as the sole capability identifier for retrieving credentials from the
+// transfer service, so a predictable or reusable keypair would let anyone who knows it steal
+// the credential. Do not add a disk-backed or caller-supplied key path.
+//
+//	alice, err := NewEncrypter()
 //	if err != nil {
 //		log.Fatal(err)
 //	}
 //
-//	bob, err := NewEncrypter("bob_priv_key.pem", "bob_pub_key.pem")
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//	encrypted, err := alice.Encrypt(msg, bob.PublicKey())
+//	bob, err := NewEncrypter()
 //	if err != nil {
 //		log.Fatal(err)
 //	}
 //
-//	data, err := bob.Decrypt(encrypted, alice.PublicKey())
+//	encrypted := box.Seal(...) // sealed by the remote peer to alice.PublicKey()
+//
+//	data, err := alice.Decrypt(encrypted, bob.PublicKey())
 //	if err != nil {
 //		log.Fatal(err)
 //	}
@@ -26,13 +29,9 @@
 package token
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/pem"
 	"errors"
-	"io"
-	"os"
 
 	"golang.org/x/crypto/nacl/box"
 )
@@ -44,15 +43,18 @@ type Encrypter struct {
 	publicKey  *[32]byte
 }
 
-// NewEncrypter returns a new encrypter with initialized keypair
-func NewEncrypter(privateKey, publicKey string) (*Encrypter, error) {
-	e := &Encrypter{}
-	pubKey, key, err := e.fetchOrGenerateKeys(privateKey, publicKey)
+// NewEncrypter returns a new encrypter with a freshly generated ephemeral keypair.
+//
+// The keypair is always generated from crypto/rand. It is deliberately not loadable from
+// disk or supplied by the caller: the public key is used as an unguessable capability in
+// the login transfer flow, so any reusable or attacker-plantable key would allow credential
+// theft. See newEncrypterFromKeys for the test-only escape hatch.
+func NewEncrypter() (*Encrypter, error) {
+	pubKey, key, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	e.privateKey, e.publicKey = key, pubKey
-	return e, nil
+	return &Encrypter{privateKey: key, publicKey: pubKey}, nil
 }
 
 // PublicKey returns a base64 encoded public key. Useful for transport (like in HTTP requests)
@@ -66,6 +68,9 @@ func (e *Encrypter) PublicKey() string {
 // senderPublicKey is a base64 encoded version of the sender's public key (most likely from the PublicKey function).
 // The return value is the decrypted buffer or an error.
 func (e *Encrypter) Decrypt(data []byte, senderPublicKey string) ([]byte, error) {
+	if len(data) < 24 {
+		return nil, errors.New("message is too short to contain a nonce")
+	}
 	var decryptNonce [24]byte
 	copy(decryptNonce[:], data[:24]) // we pull the nonce from the front of the actual message.
 	pubKey, err := e.decodePublicKey(senderPublicKey)
@@ -77,91 +82,6 @@ func (e *Encrypter) Decrypt(data []byte, senderPublicKey string) ([]byte, error)
 		return nil, errors.New("failed to decrypt message")
 	}
 	return decrypted, nil
-}
-
-// Encrypt data using our privateKey and the recipient publicKey
-// data is a buffer of data that we would like to encrypt. Messages will have the nonce added to front
-// as they have to unique for each message shared.
-// recipientPublicKey is a base64 encoded version of the sender's public key (most likely from the PublicKey function).
-// The return value is the encrypted buffer or an error.
-func (e *Encrypter) Encrypt(data []byte, recipientPublicKey string) ([]byte, error) {
-	var nonce [24]byte
-	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-		return nil, err
-	}
-
-	pubKey, err := e.decodePublicKey(recipientPublicKey)
-	if err != nil {
-		return nil, err
-	}
-	// This encrypts msg and adds the nonce to the front of the message, since the nonce has to be
-	// the same for encrypting and decrypting
-	return box.Seal(nonce[:], data, &nonce, pubKey, e.privateKey), nil
-}
-
-// WriteKeys keys will take the currently initialized keypair and write them to provided filenames
-func (e *Encrypter) WriteKeys(privateKey, publicKey string) error {
-	if err := e.writeKey(e.privateKey[:], "BOX PRIVATE KEY", privateKey); err != nil {
-		return err
-	}
-	return e.writeKey(e.publicKey[:], "PUBLIC KEY", publicKey)
-}
-
-// fetchOrGenerateKeys will either load or create a keypair if it doesn't exist
-func (e *Encrypter) fetchOrGenerateKeys(privateKey, publicKey string) (*[32]byte, *[32]byte, error) {
-	key, err := e.fetchKey(privateKey)
-	if os.IsNotExist(err) {
-		return box.GenerateKey(rand.Reader)
-	} else if err != nil {
-		return nil, nil, err
-	}
-
-	pub, err := e.fetchKey(publicKey)
-	if os.IsNotExist(err) {
-		return box.GenerateKey(rand.Reader)
-	} else if err != nil {
-		return nil, nil, err
-	}
-	return pub, key, nil
-}
-
-// writeKey will write a key to disk in DER format (it's a standard pem key)
-func (e *Encrypter) writeKey(key []byte, pemType, filename string) error {
-	data := pem.EncodeToMemory(&pem.Block{
-		Type:  pemType,
-		Bytes: key,
-	})
-
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	_, err = f.Write(data)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// fetchKey will load a a DER formatted key from disk
-func (e *Encrypter) fetchKey(filename string) (*[32]byte, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	buf := new(bytes.Buffer)
-	io.Copy(buf, f)
-
-	p, _ := pem.Decode(buf.Bytes())
-	if p == nil {
-		return nil, errors.New("Failed to decode key")
-	}
-	var newKey [32]byte
-	copy(newKey[:], p.Bytes)
-
-	return &newKey, nil
 }
 
 // decodePublicKey will base64 decode the provided key to the box representation

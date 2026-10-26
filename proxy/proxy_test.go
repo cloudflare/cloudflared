@@ -33,6 +33,7 @@ import (
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ingress"
+	"github.com/cloudflare/cloudflared/quicktunnelauth"
 	"github.com/cloudflare/cloudflared/tracing"
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
@@ -48,11 +49,46 @@ var (
 
 type mockHTTPRespWriter struct {
 	*httptest.ResponseRecorder
+	writtenHeaders http.Header
+}
+
+// nonInterruptingRequestBody intentionally violates http.Request.Body's Close
+// contract. It isolates the HTTP/2 response-close fallback: proxy cancellation
+// must keep response cleanup from waiting forever even when a body wrapper
+// fails to unblock its pending Read.
+type nonInterruptingRequestBody struct {
+	readStarted chan struct{}
+	readDone    chan struct{}
+	releaseRead chan struct{}
+	closeCalled chan struct{}
+	readOnce    sync.Once
+	closeOnce   sync.Once
+}
+
+func newNonInterruptingRequestBody() *nonInterruptingRequestBody {
+	return &nonInterruptingRequestBody{
+		readStarted: make(chan struct{}),
+		readDone:    make(chan struct{}),
+		releaseRead: make(chan struct{}),
+		closeCalled: make(chan struct{}),
+	}
+}
+
+func (b *nonInterruptingRequestBody) Read([]byte) (int, error) {
+	b.readOnce.Do(func() { close(b.readStarted) })
+	<-b.releaseRead
+	close(b.readDone)
+	return 0, io.EOF
+}
+
+func (b *nonInterruptingRequestBody) Close() error {
+	b.closeOnce.Do(func() { close(b.closeCalled) })
+	return nil
 }
 
 func newMockHTTPRespWriter() *mockHTTPRespWriter {
 	return &mockHTTPRespWriter{
-		httptest.NewRecorder(),
+		ResponseRecorder: httptest.NewRecorder(),
 	}
 }
 
@@ -61,6 +97,7 @@ func (w *mockHTTPRespWriter) WriteResponse() error {
 }
 
 func (w *mockHTTPRespWriter) WriteRespHeaders(status int, header http.Header) error {
+	w.writtenHeaders = header.Clone()
 	w.WriteHeader(status)
 	for header, val := range header {
 		w.Header()[header] = val
@@ -78,6 +115,16 @@ func (w *mockHTTPRespWriter) Read(data []byte) (int, error) {
 
 func (m *mockHTTPRespWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	panic("Hijack not implemented")
+}
+
+type mockHTTPRequestAuthorizer struct {
+	called bool
+}
+
+func (h *mockHTTPRequestAuthorizer) AuthorizeHTTP(w http.ResponseWriter, _ *http.Request) (connection.HTTPRequestAuthorizationDecision, string, error) {
+	h.called = true
+	w.WriteHeader(http.StatusTeapot)
+	return connection.HTTPRequestAuthorizationHandled, "test_handled", nil
 }
 
 type mockWSRespWriter struct {
@@ -145,6 +192,250 @@ func (w *mockSSERespWriter) ReadBytes() []byte {
 	return <-w.writeNotification
 }
 
+func TestHTTPRequestAuthorizerRunsBeforeIngressSelection(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	authorizer := &mockHTTPRequestAuthorizer{}
+	originProxy := NewOriginProxyWithHTTPRequestAuthorizer(
+		ingress.Ingress{},
+		nil,
+		testTags,
+		cfdflow.NewLimiter(0),
+		authorizer,
+		&log,
+	)
+	responseWriter := newMockHTTPRespWriter()
+	request, err := http.NewRequest(http.MethodGet, "https://test-tunnel.trycloudflare.com/", nil)
+	require.NoError(t, err)
+
+	err = originProxy.ProxyHTTP(
+		responseWriter,
+		tracing.NewTracedHTTPRequest(request, 0, &log),
+		false,
+	)
+	require.NoError(t, err)
+	assert.True(t, authorizer.called)
+	assert.Equal(t, http.StatusTeapot, responseWriter.Code)
+	for _, tag := range testTags {
+		assert.Empty(t, request.Header.Get(TagHeaderNamePrefix+tag.Name))
+	}
+}
+
+// HTTP/2 ServeHTTP and QUIC dispatchRequest both route HTTP and WebSocket
+// traffic through ProxyHTTP, so this table exercises their shared boundary.
+func TestQuickTunnelAuthorizationBeforeOriginSelection(t *testing.T) {
+	t.Parallel()
+
+	const stateCookieName = "__Secure-cloudflared-qt-auth-state-test"
+	tests := []struct {
+		name           string
+		protected      bool
+		authenticated  bool
+		method         string
+		isWebsocket    bool
+		expectedOrigin bool
+		expectedStatus int
+	}{
+		{
+			name:           "public HTTP request",
+			method:         http.MethodGet,
+			expectedOrigin: true,
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "authenticated HTTP request",
+			protected:      true,
+			authenticated:  true,
+			method:         http.MethodPost,
+			expectedOrigin: true,
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "authenticated WebSocket request",
+			protected:      true,
+			authenticated:  true,
+			method:         http.MethodGet,
+			isWebsocket:    true,
+			expectedOrigin: true,
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:           "unauthenticated GET request",
+			protected:      true,
+			method:         http.MethodGet,
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:           "unauthenticated HEAD request",
+			protected:      true,
+			method:         http.MethodHead,
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:           "unauthenticated WebSocket request",
+			protected:      true,
+			method:         http.MethodGet,
+			isWebsocket:    true,
+			expectedStatus: http.StatusFound,
+		},
+		{
+			name:           "unauthenticated unsafe method",
+			protected:      true,
+			method:         http.MethodPost,
+			expectedStatus: http.StatusUnauthorized,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			originRequestHeaders := make(chan http.Header, 1)
+			originServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				originRequestHeaders <- r.Header.Clone()
+				w.Header().Set("Cache-Control", "public")
+				w.Header().Set("Referrer-Policy", "unsafe-url")
+				w.Header().Add("Set-Cookie", "__Host-cloudflared-qt-auth-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
+				w.Header().Add("Set-Cookie", stateCookieName+"=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
+				w.Header().Add("Set-Cookie", "origin-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax")
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(originServer.Close)
+
+			log := zerolog.Nop()
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			ingressRules := createSingleIngressConfig(t, originServer.URL)
+			require.NoError(t, ingressRules.StartOrigins(&log, ctx.Done()))
+
+			var authorizer connection.HTTPRequestAuthorizer
+			var sessionCookie *http.Cookie
+			if test.protected {
+				authorizer, sessionCookie = newTestQuickTunnelAuthorization(t, test.authenticated)
+			}
+			originProxy := NewOriginProxyWithHTTPRequestAuthorizer(
+				ingressRules,
+				nil,
+				testTags,
+				cfdflow.NewLimiter(0),
+				authorizer,
+				&log,
+			)
+			responseWriter := newMockHTTPRespWriter()
+			request := httptest.NewRequest(
+				test.method,
+				"https://test-tunnel.trycloudflare.com/dashboard",
+				nil,
+			)
+			if sessionCookie != nil {
+				request.AddCookie(sessionCookie)
+				request.AddCookie(&http.Cookie{
+					Name:     stateCookieName,
+					Value:    "state-value",
+					Secure:   true,
+					HttpOnly: true,
+					SameSite: http.SameSiteLaxMode,
+				})
+			}
+
+			err := originProxy.ProxyHTTP(
+				responseWriter,
+				tracing.NewTracedHTTPRequest(request, 0, &log),
+				test.isWebsocket,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, test.expectedStatus, responseWriter.Code)
+
+			select {
+			case headers := <-originRequestHeaders:
+				assert.True(t, test.expectedOrigin)
+				for _, tag := range testTags {
+					assert.Equal(t, tag.Value, headers.Get(TagHeaderNamePrefix+tag.Name))
+				}
+				if sessionCookie != nil {
+					assert.NotContains(t, headers.Get("Cookie"), sessionCookie.Name)
+					assert.NotContains(t, headers.Get("Cookie"), stateCookieName)
+				}
+				if test.isWebsocket {
+					assert.Equal(t, "websocket", headers.Get("Upgrade"))
+				}
+			default:
+				assert.False(t, test.expectedOrigin)
+			}
+
+			responseHeaders := responseWriter.Header()
+			if test.expectedOrigin {
+				responseHeaders = responseWriter.writtenHeaders
+			}
+			if test.protected {
+				assert.Equal(t, "private, no-store", responseHeaders.Get("Cache-Control"))
+				assert.Equal(t, "no-referrer", responseHeaders.Get("Referrer-Policy"))
+				if test.expectedOrigin {
+					assert.Equal(t, []string{
+						"origin-session=origin-value; Path=/; Secure; HttpOnly; SameSite=Lax",
+					}, responseHeaders.Values("Set-Cookie"))
+				}
+			} else {
+				assert.Equal(t, "public", responseHeaders.Get("Cache-Control"))
+				assert.Equal(t, "unsafe-url", responseHeaders.Get("Referrer-Policy"))
+				assert.Len(t, responseHeaders.Values("Set-Cookie"), 3)
+			}
+		})
+	}
+}
+
+// Both HTTP/2 and QUIC route TCP requests through ProxyTCP.
+func TestQuickTunnelAuthorizationRejectsTCPTransport(t *testing.T) {
+	t.Parallel()
+
+	authorizer, _ := newTestQuickTunnelAuthorization(t, false)
+	var logOutput bytes.Buffer
+	log := zerolog.New(&logOutput)
+	originProxy := NewOriginProxyWithHTTPRequestAuthorizer(
+		ingress.Ingress{},
+		nil,
+		nil,
+		nil,
+		authorizer,
+		&log,
+	)
+
+	err := originProxy.ProxyTCP(t.Context(), nil, &connection.TCPRequest{})
+	require.ErrorIs(t, err, errHTTPAuthorizationUnsupportedTransport)
+	assert.Contains(t, logOutput.String(), `"authOutcome":"unsupported_tcp_transport"`)
+}
+
+func newTestQuickTunnelAuthorization(
+	t *testing.T,
+	authenticated bool,
+) (connection.HTTPRequestAuthorizer, *http.Cookie) {
+	t.Helper()
+
+	stateManager, err := quicktunnelauth.NewQuickTunnelAuthStateManager("test-tunnel.trycloudflare.com")
+	require.NoError(t, err)
+	assertionValidator, err := quicktunnelauth.NewQuickTunnelAuthAssertionValidator()
+	require.NoError(t, err)
+	t.Cleanup(assertionValidator.Close)
+	sessionManager, err := quicktunnelauth.NewQuickTunnelAuthSessionManager()
+	require.NoError(t, err)
+	recipientPolicy, err := quicktunnelauth.NewQuickTunnelAuthRecipientPolicy([]string{"visitor@example.com"})
+	require.NoError(t, err)
+	handler, err := quicktunnelauth.NewQuickTunnelAuthHandlerWithAuthorization(
+		stateManager,
+		assertionValidator,
+		sessionManager,
+		recipientPolicy,
+	)
+	require.NoError(t, err)
+
+	if !authenticated {
+		return handler, nil
+	}
+	sessionCookie, err := sessionManager.IssueSession(time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	return handler, sessionCookie
+}
+
 func TestProxySingleOrigin(t *testing.T) {
 	log := zerolog.Nop()
 
@@ -172,6 +463,67 @@ func TestProxySingleOrigin(t *testing.T) {
 	t.Run("testProxyWebsocket", testProxyWebsocket(proxy))
 	t.Run("testProxySSE", testProxySSE(proxy))
 	cancel()
+}
+
+func TestProxyHTTPRequestCancelsBeforeClosingHTTP2Response(t *testing.T) {
+	t.Parallel()
+
+	body := newNonInterruptingRequestBody()
+	origin := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Do not respond until the HTTP/2 request writer is blocked in Body.Read.
+		<-body.readStarted
+		w.WriteHeader(http.StatusOK)
+	}))
+	origin.EnableHTTP2 = true
+	origin.StartTLS()
+	t.Cleanup(origin.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, origin.URL, body)
+	require.NoError(t, err)
+
+	responseWriter := newMockHTTPRespWriter()
+	log := zerolog.Nop()
+	proxy := &Proxy{}
+	proxyResult := make(chan error, 1)
+	go func() {
+		proxyResult <- proxy.proxyHTTPRequest(
+			responseWriter,
+			tracing.NewTracedHTTPRequest(req, 0, &log),
+			origin.Client().Transport,
+			false,
+			false,
+			&log,
+		)
+	}()
+
+	select {
+	case err := <-proxyResult:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("proxy remained blocked while closing the HTTP/2 response body")
+	}
+	require.Equal(t, http.StatusOK, responseWriter.Code)
+
+	select {
+	case <-body.closeCalled:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP/2 transport did not close the request body")
+	}
+
+	select {
+	case <-body.readDone:
+		t.Fatal("non-interrupting request body unexpectedly stopped reading")
+	default:
+		// The proxy returned through the canceled context rather than waiting
+		// for this deliberately broken request body.
+	}
+
+	close(body.releaseRead)
+	select {
+	case <-body.readDone:
+	case <-time.After(time.Second):
+		t.Fatal("request body read did not finish after test cleanup")
+	}
 }
 
 func testProxyHTTP(proxy connection.OriginProxy) func(t *testing.T) {
@@ -223,9 +575,9 @@ func testProxyWebsocket(proxy connection.OriginProxy) func(t *testing.T) {
 			}
 			if ctx.Err() == context.DeadlineExceeded {
 				t.Errorf("Test timed out")
-				readPipe.Close()
-				writePipe.Close()
-				responseWriter.Close()
+				_ = readPipe.Close()
+				_ = writePipe.Close()
+				_ = responseWriter.Close()
 			}
 			return nil
 		})
@@ -647,7 +999,7 @@ func TestConnections(t *testing.T) {
 				ingressServiceScheme: "tcp://",
 				originService: func(t *testing.T, ln net.Listener) {
 					// closing the listener created by the test.
-					ln.Close()
+					_ = ln.Close()
 				},
 				eyeballResponseWriter: newTCPRespWriter(replayer),
 				eyeballRequestBody:    newTCPRequestBody([]byte("test2")),
@@ -801,8 +1153,8 @@ func (p *pipedRequestBody) roundtrip(addr string) []byte {
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
-	defer resp.Body.Close()
+	defer func() { _ = conn.Close() }()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		panic(fmt.Errorf("resp returned status code: %d", resp.StatusCode))
@@ -949,7 +1301,7 @@ func runEchoTCPService(t *testing.T, l net.Listener) {
 			if err != nil {
 				panic(err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			for {
 				buf := make([]byte, 1024)
@@ -987,7 +1339,7 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			t.Log(err)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		for {
 			messageType, p, err := conn.ReadMessage()

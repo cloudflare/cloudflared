@@ -1,7 +1,9 @@
 package connection
 
 import (
-	"github.com/cloudflare/cloudflared/edgediscovery"
+	"errors"
+	"fmt"
+
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
@@ -9,13 +11,7 @@ const (
 	DuplicateConnectionError = "EDUPCONN"
 )
 
-type DupConnRegisterTunnelError struct{}
-
-var errDuplicationConnection = DupConnRegisterTunnelError{}
-
-func (e DupConnRegisterTunnelError) Error() string {
-	return "already connected to this server, trying another address"
-}
+var ErrDuplicateConnection = errors.New("already connected to this server, trying another address")
 
 // Dial to edge server with quic failed
 type EdgeQuicDialError struct {
@@ -40,6 +36,10 @@ func (e ServerRegisterTunnelError) Error() string {
 	return e.Cause.Error()
 }
 
+func (e ServerRegisterTunnelError) Unwrap() error {
+	return e.Cause
+}
+
 func serverRegistrationErrorFromRPC(err error) ServerRegisterTunnelError {
 	if retryable, ok := err.(*tunnelpogs.RetryableError); ok {
 		return ServerRegisterTunnelError{
@@ -53,26 +53,44 @@ func serverRegistrationErrorFromRPC(err error) ServerRegisterTunnelError {
 	}
 }
 
-type muxerShutdownError struct{}
-
-func (e muxerShutdownError) Error() string {
-	return "muxer shutdown"
+type ControlStreamError struct {
+	Cause error
 }
 
-var errMuxerStopped = muxerShutdownError{}
+var _ error = &ControlStreamError{}
 
-func isHandshakeErrRecoverable(err error, connIndex uint8, observer *Observer) bool {
-	log := observer.log.With().
-		Uint8(LogFieldConnIndex, connIndex).
-		Err(err).
-		Logger()
+func (e *ControlStreamError) Error() string {
+	return fmt.Sprintf("control stream error: %s", e.Cause)
+}
 
-	switch err.(type) {
-	case edgediscovery.DialError:
-		log.Error().Msg("Connection unable to dial edge")
-	default:
-		log.Error().Msg("Connection failed")
-		return false
-	}
-	return true
+func (e *ControlStreamError) Unwrap() error {
+	return e.Cause
+}
+
+type StreamListenerError struct {
+	Cause error
+}
+
+var _ error = &StreamListenerError{}
+
+func (e *StreamListenerError) Error() string {
+	return fmt.Sprintf("accept stream listener error: %s", e.Cause)
+}
+
+func (e *StreamListenerError) Unwrap() error {
+	return e.Cause
+}
+
+type DatagramManagerError struct {
+	Cause error
+}
+
+var _ error = &DatagramManagerError{}
+
+func (e *DatagramManagerError) Error() string {
+	return fmt.Sprintf("datagram manager error: %s", e.Cause)
+}
+
+func (e *DatagramManagerError) Unwrap() error {
+	return e.Cause
 }

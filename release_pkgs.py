@@ -50,7 +50,7 @@ class PkgUploader:
             config=config,
         )
 
-        print(f"uploading asset: {filename} to {upload_file_path} in bucket{self.bucket_name}...")
+        print(f"uploading asset: {filename} to {upload_file_path} in bucket {self.bucket_name}...")
         try:
             r2.upload_file(filename, self.bucket_name, upload_file_path)
         except ClientError as e:
@@ -133,16 +133,19 @@ class PkgCreator:
     """
 
     def create_repo_file(self, file_path, binary_name, baseurl, gpgkey_url):
-        with open(os.path.join(file_path, binary_name + '.repo'), "w+") as repo_file:
-            repo_file.write(f"[{binary_name}-stable]")
-            repo_file.write(f"{binary_name}-stable")
-            repo_file.write(f"baseurl={baseurl}/rpm")
-            repo_file.write("enabled=1")
-            repo_file.write("type=rpm")
-            repo_file.write("gpgcheck=1")
-            repo_file.write(f"gpgkey={gpgkey_url}")
+        repo_file_path = os.path.join(file_path, binary_name + '.repo')
+        with open(repo_file_path, "w+") as repo_file:
+            repo_file.write(f"[{binary_name}-stable]\n")
+            repo_file.write(f"name={binary_name}-stable\n")
+            repo_file.write(f"baseurl={baseurl}/rpm\n")
+            repo_file.write("enabled=1\n")
+            repo_file.write("type=rpm\n")
+            repo_file.write("gpgcheck=1\n")
+            repo_file.write(f"gpgkey={gpgkey_url}\n")
+        return repo_file_path
 
-    def _sign_rpms(self, file_path):
+
+    def _sign_rpms(self, file_path, gpg_key_name):
         p = Popen(["rpm", "--define", f"_gpg_name {gpg_key_name}", "--addsign", file_path], stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if p.returncode != 0:
@@ -150,7 +153,7 @@ class PkgCreator:
             raise
 
     def _sign_repomd(self):
-        p = Popen(["gpg", "--batch", "--detach-sign", "--armor", "./rpm/repodata/repomd.xml"], stdout=PIPE, stderr=PIPE)
+        p = Popen(["gpg", "--batch", "--yes", "--detach-sign", "--armor", "./rpm/repodata/repomd.xml"], stdout=PIPE, stderr=PIPE)
         out, err = p.communicate()
         if p.returncode != 0:
             print(f"sign repomd result => {out}, {err}")
@@ -176,7 +179,7 @@ class PkgCreator:
                         old_path = os.path.join(root, file)
                         new_path = os.path.join(new_dir, file)
                         shutil.copyfile(old_path, new_path)
-                        self._sign_rpms(new_path)
+                        self._sign_rpms(new_path, gpg_key_name)
 
     """
         imports gpg keys into the system so reprepro and createrepo can use it to sign packages.
@@ -186,11 +189,34 @@ class PkgCreator:
     def import_gpg_keys(self, private_key, public_key):
         gpg = gnupg.GPG()
         private_key = base64.b64decode(private_key)
-        gpg.import_keys(private_key)
+        import_result = gpg.import_keys(private_key)
+        if not import_result.fingerprints:
+            raise Exception("Failed to import private key")
+
         public_key = base64.b64decode(public_key)
         gpg.import_keys(public_key)
+
+        imported_fingerprint = import_result.fingerprints[0]
         data = gpg.list_keys(secret=True)
-        return (data[0]["fingerprint"], data[0]["uids"][0])
+
+        # Find the specific key we just imported by comparing fingerprints
+        for key in data:
+            if key["fingerprint"] == imported_fingerprint:
+                return (key["fingerprint"], key["uids"][0])
+
+        raise Exception(f"Could not find imported key with fingerprint {imported_fingerprint}")
+
+    def import_multiple_gpg_keys(self, primary_private_key, primary_public_key, secondary_private_key=None, secondary_public_key=None):
+        """
+        Import one or two GPG keypairs. Returns a list of (fingerprint, uid) with the primary first.
+        """
+        results = []
+        if primary_private_key and primary_public_key:
+            results.append(self.import_gpg_keys(primary_private_key, primary_public_key))
+        if secondary_private_key and secondary_public_key:
+            # Ensure secondary is imported and appended
+            results.append(self.import_gpg_keys(secondary_private_key, secondary_public_key))
+        return results
 
     """
         basically rpm --import <key_file>
@@ -234,7 +260,7 @@ def upload_from_directories(pkg_uploader, directory, release, binary):
 
 
 """ 
-    1. looks into a built_artifacts folder for cloudflared debs
+    1. looks into a artifacts folder for cloudflared debs
     2. creates Packages.gz, InRelease (signed) files
     3. uploads them to Cloudflare R2 
 
@@ -247,11 +273,13 @@ def upload_from_directories(pkg_uploader, directory, release, binary):
 """
 
 
-def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary_name, archs, package_component,
+def create_deb_packaging(pkg_creator, pkg_uploader, releases, primary_gpg_key_id, secondary_gpg_key_id, binary_name, archs, package_component,
                          release_version):
     # set configuration for package creation.
     print(f"initialising configuration for {binary_name} , {archs}")
     Path("./conf").mkdir(parents=True, exist_ok=True)
+    # If in rollover mode (secondary provided), tell reprepro to sign with both keys.
+    sign_with_ids = primary_gpg_key_id if not secondary_gpg_key_id else f"{primary_gpg_key_id} {secondary_gpg_key_id}"
     pkg_creator.create_distribution_conf(
         "./conf/distributions",
         binary_name,
@@ -260,13 +288,13 @@ def create_deb_packaging(pkg_creator, pkg_uploader, releases, gpg_key_id, binary
         archs,
         package_component,
         f"apt repository for {binary_name}",
-        gpg_key_id)
+        sign_with_ids)
 
     # create deb pkgs
     for release in releases:
         for arch in archs:
             print(f"creating deb pkgs for {release} and {arch}...")
-            pkg_creator.create_deb_pkgs(release, f"./built_artifacts/cloudflared-linux-{arch}.deb")
+            pkg_creator.create_deb_pkgs(release, f"./artifacts/cloudflared-linux-{arch}.deb")
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "dists", None, binary_name)
@@ -287,15 +315,19 @@ def create_rpm_packaging(
         gpg_key_name,
         base_url,
         gpg_key_url,
+        upload_repo_file=False,
 ):
     print(f"creating rpm pkgs...")
     pkg_creator.create_rpm_pkgs(artifacts_path, gpg_key_name)
-    pkg_creator.create_repo_file(artifacts_path, binary_name, base_url, gpg_key_url)
+    repo_file = pkg_creator.create_repo_file(artifacts_path, binary_name, base_url, gpg_key_url)
+
+    print("Uploading repo file")
+    pkg_uploader.upload_pkg_to_r2(repo_file, binary_name + ".repo")
 
     print("uploading latest to r2...")
     upload_from_directories(pkg_uploader, "rpm", None, binary_name)
 
-    if release_version:
+    if upload_repo_file:
         print(f"uploading versioned release {release_version} to r2...")
         upload_from_directories(pkg_uploader, "rpm", release_version, binary_name)
 
@@ -336,6 +368,14 @@ def parse_args():
             signing packages"
     )
 
+    # Optional secondary keypair for key rollover
+    parser.add_argument(
+        "--gpg-private-key-2", default=os.environ.get("LINUX_SIGNING_PRIVATE_KEY_2"), help="Secondary GPG private key for rollover"
+    )
+    parser.add_argument(
+        "--gpg-public-key-2", default=os.environ.get("LINUX_SIGNING_PUBLIC_KEY_2"), help="Secondary GPG public key for rollover"
+    )
+
     parser.add_argument(
         "--gpg-public-key-url", default=os.environ.get("GPG_PUBLIC_KEY_URL"), help="GPG public key url that\
             downloaders can use to verify signing"
@@ -355,6 +395,10 @@ def parse_args():
             it is the caller's responsiblity to ensure that these debs are already present in a directory. This script\
             will not build binaries or create their debs."
     )
+
+    parser.add_argument(
+        "--upload-repo-file", action='store_true', help="Upload RPM repo file to R2"
+    )
     args = parser.parse_args()
 
     return args
@@ -368,21 +412,51 @@ if __name__ == "__main__":
         exit(1)
 
     pkg_creator = PkgCreator()
-    (gpg_key_id, gpg_key_name) = pkg_creator.import_gpg_keys(args.gpg_private_key, args.gpg_public_key)
-    pkg_creator.import_rpm_key(args.gpg_public_key)
+    # Import one or two keypairs; primary first
+    key_results = pkg_creator.import_multiple_gpg_keys(
+        args.gpg_private_key,
+        args.gpg_public_key,
+        args.gpg_private_key_2,
+        args.gpg_public_key_2,
+    )
+    if not key_results or len(key_results) == 0:
+        raise SystemExit("No GPG keys were provided for signing")
+    primary_gpg_key_id, primary_gpg_key_name = key_results[0]
+    secondary_gpg_key_id = None
+    secondary_gpg_key_name = None
+    if len(key_results) > 1:
+        secondary_gpg_key_id, secondary_gpg_key_name = key_results[1]
+
+    if args.gpg_private_key_2:
+        print(f"signing RPM with secondary gpg_key: {secondary_gpg_key_id}")
+        pkg_creator.import_rpm_key(args.gpg_public_key_2)
+    else:
+        print(f"signing RPM with primary gpg_key: {primary_gpg_key_name}")
+        pkg_creator.import_rpm_key(args.gpg_public_key)
+
 
     pkg_uploader = PkgUploader(args.account, args.bucket, args.id, args.secret)
-    print(f"signing with gpg_key: {gpg_key_id}")
-    create_deb_packaging(pkg_creator, pkg_uploader, args.deb_based_releases, gpg_key_id, args.binary, args.archs,
-                         "main", args.release_tag)
+    print(f"signing deb with primary gpg_key: {primary_gpg_key_id} and secondary gpg_key: {secondary_gpg_key_id}")
+    create_deb_packaging(
+        pkg_creator,
+        pkg_uploader,
+        args.deb_based_releases,
+        primary_gpg_key_id,
+        secondary_gpg_key_id,
+        args.binary,
+        args.archs,
+        "main",
+        args.release_tag,
+    )
 
     create_rpm_packaging(
         pkg_creator,
         pkg_uploader,
-        "./built_artifacts",
+        "./artifacts",
         args.release_tag,
         args.binary,
-        gpg_key_name,
-        args.gpg_public_key_url,
+        secondary_gpg_key_name,
         args.pkg_upload_url,
+        args.gpg_public_key_url,
+        args.upload_repo_file,
     )

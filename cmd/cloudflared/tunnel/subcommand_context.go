@@ -155,10 +155,12 @@ func (sc *subcommandContext) create(name string, credentialsFilePath string, sec
 	if err != nil {
 		return nil, err
 	}
+
 	tunnelCredentials := connection.Credentials{
 		AccountTag:   credential.AccountID(),
 		TunnelSecret: tunnelSecret,
 		TunnelID:     tunnel.ID,
+		Endpoint:     credential.Endpoint(),
 	}
 	usedCertPath := false
 	if credentialsFilePath == "" {

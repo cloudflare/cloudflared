@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func (ea *EdgeAddr) String() string {
@@ -25,8 +26,8 @@ func TestEdgeDiscovery(t *testing.T) {
 	}
 
 	l := zerolog.Nop()
-	addrLists, err := edgeDiscovery(&l, "")
-	assert.NoError(t, err)
+	addrLists, err := EdgeDiscovery(&l, "")
+	require.NoError(t, err)
 	actualAddrSet := map[string]bool{}
 	for _, addrs := range addrLists {
 		for _, addr := range addrs {

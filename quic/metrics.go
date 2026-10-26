@@ -4,9 +4,10 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/quic-go/quic-go/logging"
+	"github.com/quic-go/quic-go/qlog"
 	"github.com/rs/zerolog"
 )
 
@@ -175,7 +176,7 @@ var (
 				Namespace: namespace,
 				Subsystem: "client",
 				Name:      "congestion_state",
-				Help:      "Current congestion control state. See https://pkg.go.dev/github.com/quic-go/quic-go@v0.45.0/logging#CongestionState for what each value maps to",
+				Help:      "Current congestion control state (0=slow_start, 1=congestion_avoidance, 2=application_limited, 3=recovery, -1=unknown)",
 			},
 			[]string{ConnectionIndexMetricLabel},
 		),
@@ -229,28 +230,37 @@ func (cc *clientCollector) startedConnection() {
 	clientMetrics.totalConnections.Inc()
 }
 
-func (cc *clientCollector) closedConnection(error) {
+func (cc *clientCollector) closedConnection() {
 	clientMetrics.closedConnections.Inc()
 }
 
-func (cc *clientCollector) receivedTransportParameters(params *logging.TransportParameters) {
-	clientMetrics.maxUDPPayloadSize.WithLabelValues(cc.index).Set(float64(params.MaxUDPPayloadSize))
-	cc.logger.Debug().Msgf("Received transport parameters: MaxUDPPayloadSize=%d, MaxIdleTimeout=%v, MaxDatagramFrameSize=%d", params.MaxUDPPayloadSize, params.MaxIdleTimeout, params.MaxDatagramFrameSize)
+// receivedTransportParameters records metrics from the peer's transport parameters.
+func (cc *clientCollector) receivedTransportParameters(maxUDPPayloadSize int64, maxIdleTimeout time.Duration, maxDatagramFrameSize int64) {
+	clientMetrics.maxUDPPayloadSize.WithLabelValues(cc.index).Set(float64(maxUDPPayloadSize))
+	cc.logger.
+		Debug().
+		Int64("MaxUDPPayloadSize", maxUDPPayloadSize).
+		Dur("MaxIdleTimeout", maxIdleTimeout).
+		Int64("MaxDatagramFrameSize", maxDatagramFrameSize).Msgf("Received transport parameters")
 }
 
-func (cc *clientCollector) sentPackets(size logging.ByteCount, frames []logging.Frame) {
+// sentPackets records metrics for sent packets.
+func (cc *clientCollector) sentPackets(size int64, frames []qlog.Frame) {
 	cc.collectPackets(size, frames, clientMetrics.sentFrames, clientMetrics.sentBytes, sent)
 }
 
-func (cc *clientCollector) receivedPackets(size logging.ByteCount, frames []logging.Frame) {
+// receivedPackets records metrics for received packets.
+func (cc *clientCollector) receivedPackets(size int64, frames []qlog.Frame) {
 	cc.collectPackets(size, frames, clientMetrics.receivedFrames, clientMetrics.receivedBytes, received)
 }
 
-func (cc *clientCollector) bufferedPackets(packetType logging.PacketType) {
+// bufferedPackets records metrics for buffered packets.
+func (cc *clientCollector) bufferedPackets(packetType qlog.PacketType) {
 	clientMetrics.bufferedPackets.WithLabelValues(cc.index, packetTypeString(packetType)).Inc()
 }
 
-func (cc *clientCollector) droppedPackets(packetType logging.PacketType, size logging.ByteCount, reason logging.PacketDropReason) {
+// droppedPackets records metrics for dropped packets.
+func (cc *clientCollector) droppedPackets(packetType qlog.PacketType, size int64, reason qlog.PacketDropReason) {
 	clientMetrics.droppedPackets.WithLabelValues(
 		cc.index,
 		packetTypeString(packetType),
@@ -258,35 +268,43 @@ func (cc *clientCollector) droppedPackets(packetType logging.PacketType, size lo
 	).Add(byteCountToPromCount(size))
 }
 
-func (cc *clientCollector) lostPackets(reason logging.PacketLossReason) {
+// lostPackets records metrics for lost packets.
+func (cc *clientCollector) lostPackets(reason qlog.PacketLossReason) {
 	clientMetrics.lostPackets.WithLabelValues(cc.index, packetLossReasonString(reason)).Inc()
 }
 
-func (cc *clientCollector) updatedRTT(rtt *logging.RTTStats) {
-	clientMetrics.minRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.MinRTT()))
-	clientMetrics.latestRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.LatestRTT()))
-	clientMetrics.smoothedRTT.WithLabelValues(cc.index).Set(durationToPromGauge(rtt.SmoothedRTT()))
+// updatedRTT records RTT metrics.
+func (cc *clientCollector) updatedRTT(m qlog.MetricsUpdated) {
+	clientMetrics.minRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.MinRTT))
+	clientMetrics.latestRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.LatestRTT))
+	clientMetrics.smoothedRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.SmoothedRTT))
 }
 
-func (cc *clientCollector) updateCongestionWindow(size logging.ByteCount) {
+// updateCongestionWindow records the congestion window size.
+func (cc *clientCollector) updateCongestionWindow(size int64) {
 	clientMetrics.congestionWindow.WithLabelValues(cc.index).Set(float64(size))
 }
 
-func (cc *clientCollector) updatedCongestionState(state logging.CongestionState) {
-	clientMetrics.congestionState.WithLabelValues(cc.index).Set(float64(state))
+// updatedCongestionState records the congestion control state.
+func (cc *clientCollector) updatedCongestionState(state qlog.CongestionState) {
+	clientMetrics.congestionState.WithLabelValues(cc.index).Set(congestionStateToFloat(state))
 }
 
-func (cc *clientCollector) updateMTU(mtu logging.ByteCount) {
+// updateMTU records the MTU value.
+func (cc *clientCollector) updateMTU(mtu int64) {
 	clientMetrics.mtu.WithLabelValues(cc.index).Set(float64(mtu))
 	cc.logger.Debug().Msgf("QUIC MTU updated to %d", mtu)
 }
 
-func (cc *clientCollector) collectPackets(size logging.ByteCount, frames []logging.Frame, counter, bandwidth *prometheus.CounterVec, direction direction) {
+// collectPackets is the shared implementation for sentPackets and receivedPackets.
+func (cc *clientCollector) collectPackets(size int64, frames []qlog.Frame, counter, bandwidth *prometheus.CounterVec, direction direction) {
 	for _, frame := range frames {
-		switch f := frame.(type) {
-		case logging.DataBlockedFrame:
-			cc.logger.Debug().Msgf("%s data_blocked frame", direction)
-		case logging.StreamDataBlockedFrame:
+		// qlog.Frame.Frame holds the concrete wire frame type as any.
+		// The quic-go encoder always stores pointers (*wire.XxxFrame).
+		switch f := frame.Frame.(type) {
+		case *qlog.DataBlockedFrame:
+			cc.logger.Debug().Int64("limit", int64(f.MaximumData)).Msgf("%s data_blocked frame", direction)
+		case *qlog.StreamDataBlockedFrame:
 			cc.logger.Debug().Int64("streamID", int64(f.StreamID)).Msgf("%s stream_data_blocked frame", direction)
 		}
 		counter.WithLabelValues(cc.index, frameName(frame)).Inc()
@@ -294,13 +312,16 @@ func (cc *clientCollector) collectPackets(size logging.ByteCount, frames []loggi
 	bandwidth.WithLabelValues(cc.index).Add(byteCountToPromCount(size))
 }
 
-func frameName(frame logging.Frame) string {
-	if frame == nil {
+// frameName extracts the type name from a qlog.Frame for use as a Prometheus label.
+func frameName(frame qlog.Frame) string {
+	if frame.Frame == nil {
 		return "nil"
-	} else {
-		name := reflect.TypeOf(frame).Elem().Name()
-		return strings.TrimSuffix(name, "Frame")
 	}
+	t := reflect.TypeOf(frame.Frame)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return strings.TrimSuffix(t.Name(), "Frame")
 }
 
 type direction uint8

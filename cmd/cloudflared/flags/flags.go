@@ -72,6 +72,9 @@ const (
 	// PostQuantum is the command line flag to force the connection to Cloudflare Edge to use Post Quantum cryptography
 	PostQuantum = "post-quantum"
 
+	// AllowedMail is the command line flag to set allowed email addresses or domains for protected quick tunnels
+	AllowedMail = "allowed-mail"
+
 	// Features is the command line flag to opt into various features that are still being developed or tested
 	Features = "features"
 
@@ -80,6 +83,9 @@ const (
 
 	// EdgeBindAddress is the command line flag to bind to IP address for outgoing connections to Cloudflare Edge
 	EdgeBindAddress = "edge-bind-address"
+
+	// CACert Certificate Authority authenticating connections with Cloudflare's edge network.
+	CACert = "cacert"
 
 	// Force is the command line flag to specify if you wish to force an action
 	Force = "force"
@@ -111,9 +117,6 @@ const (
 	// ICMPV6Src is the command line flag to set the source address and the interface name to send/receive ICMPv6 messages
 	ICMPV6Src = "icmpv6-src"
 
-	// ProxyDns is the command line flag to run DNS server over HTTPS
-	ProxyDns = "proxy-dns"
-
 	// Name is the command line to set the name of the tunnel
 	Name = "name"
 
@@ -123,13 +126,19 @@ const (
 	// NoAutoUpdate is the command line flag to disable cloudflared from checking for updates
 	NoAutoUpdate = "no-autoupdate"
 
+	// NoPrechecks is the command line flag to skip connectivity pre-checks at startup.
+	NoPrechecks = "no-prechecks"
+
+	// DisablePathNormalization disables URL path normalization before matching ingress rules.
+	DisablePathNormalization = "disable-path-normalization"
+
 	// LogLevel is the command line flag for the cloudflared logging level
 	LogLevel = "loglevel"
 
 	// LogLevelSSH is the command line flag for the cloudflared ssh logging level
 	LogLevelSSH = "log-level"
 
-	// TransportLogLevel is the command line flag for the transport logging level
+	// TransportLogLevel is retained as a deprecated no-op for backwards compatibility.
 	TransportLogLevel = "transport-loglevel"
 
 	// LogFile is the command line flag to define the file where application logs will be stored
@@ -163,4 +172,7 @@ const (
 
 	// Management hostname to signify incoming management requests
 	ManagementHostname = "management-hostname"
+
+	// Automatically close the login interstitial browser window after the user makes a decision.
+	AutoCloseInterstitial = "auto-close"
 )

@@ -17,8 +17,7 @@ import (
 // Websocket is used to carry data via WS binary frames over the tunnel from client to the origin
 // This implements the functions for glider proxy (sock5) and the carrier interface
 type Websocket struct {
-	log     *zerolog.Logger
-	isSocks bool
+	log *zerolog.Logger
 }
 
 // NewWSConnection returns a new connection object
@@ -36,7 +35,7 @@ func (ws *Websocket) ServeStream(options *StartOptions, conn io.ReadWriter) erro
 		ws.log.Err(err).Str(LogFieldOriginURL, options.OriginURL).Msg("failed to connect to origin")
 		return err
 	}
-	defer wsConn.Close()
+	defer func() { _ = wsConn.Close() }()
 
 	stream.Pipe(wsConn, conn, ws.log)
 	return nil

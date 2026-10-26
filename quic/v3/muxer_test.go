@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/google/gopacket/layers"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -92,7 +93,7 @@ func TestDatagramConn_New(t *testing.T) {
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: 0,
 	}, &log)
-	conn := v3.NewDatagramConn(newMockQuicConn(), v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	conn := v3.NewDatagramConn(newMockQuicConn(t.Context()), v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 	if conn == nil {
 		t.Fatal("expected valid connection")
 	}
@@ -104,7 +105,9 @@ func TestDatagramConn_SendUDPSessionDatagram(t *testing.T) {
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: 0,
 	}, &log)
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	payload := []byte{0xef, 0xef}
@@ -123,7 +126,9 @@ func TestDatagramConn_SendUDPSessionResponse(t *testing.T) {
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: 0,
 	}, &log)
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	err := conn.SendUDPSessionResponse(testRequestID, v3.ResponseDestinationUnreachable)
@@ -149,7 +154,9 @@ func TestDatagramConnServe_ApplicationClosed(t *testing.T) {
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: 0,
 	}, &log)
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	conn := v3.NewDatagramConn(quic, v3.NewSessionManager(&noopMetrics{}, &log, originDialerService, cfdflow.NewLimiter(0)), &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
@@ -166,7 +173,9 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: 0,
 	}, &log)
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 	quic.ctx = ctx
@@ -195,15 +204,17 @@ func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 
 func TestDatagramConnServe_SessionRegistrationRateLimit(t *testing.T) {
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	sessionManager := &mockSessionManager{
 		expectedRegErr: v3.ErrSessionRegistrationRateLimited,
 	}
 	conn := v3.NewDatagramConn(quic, sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
 	// Setup the muxer
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(context.Canceled)
 	done := make(chan error, 1)
 	go func() {
 		done <- conn.Serve(ctx)
@@ -223,9 +234,12 @@ func TestDatagramConnServe_SessionRegistrationRateLimit(t *testing.T) {
 
 	require.EqualValues(t, testRequestID, resp.RequestID)
 	require.EqualValues(t, v3.ResponseTooManyActiveFlows, resp.ResponseType)
+
+	assertContextClosed(t, ctx, done, cancel)
 }
 
 func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {
+	defer leaktest.Check(t)()
 	for _, test := range []struct {
 		name     string
 		input    []byte
@@ -250,7 +264,9 @@ func TestDatagramConnServe_ErrorDatagramTypes(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			logOutput := new(LockedBuffer)
 			log := zerolog.New(logOutput)
-			quic := newMockQuicConn()
+			connCtx, connCancel := context.WithCancelCause(t.Context())
+			defer connCancel(context.Canceled)
+			quic := newMockQuicConn(connCtx)
 			quic.send <- test.input
 			conn := v3.NewDatagramConn(quic, &mockSessionManager{}, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
 
@@ -289,8 +305,11 @@ func (b *LockedBuffer) String() string {
 }
 
 func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	expectedErr := errors.New("unable to register session")
 	sessionManager := mockSessionManager{expectedRegErr: expectedErr}
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
@@ -324,8 +343,11 @@ func TestDatagramConnServe_RegisterSession_SessionManagerError(t *testing.T) {
 }
 
 func TestDatagramConnServe(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
@@ -372,8 +394,11 @@ func TestDatagramConnServe(t *testing.T) {
 // instances causes inteference resulting in multiple different raw packets being decoded
 // as the same decoded packet.
 func TestDatagramConnServeDecodeMultipleICMPInParallel(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
 	router := newMockICMPRouter()
@@ -413,10 +438,14 @@ func TestDatagramConnServeDecodeMultipleICMPInParallel(t *testing.T) {
 	wg := sync.WaitGroup{}
 	var receivedPackets []*packet.ICMP
 	go func() {
-		for ctx.Err() == nil {
-			icmpPacket := <-router.recv
-			receivedPackets = append(receivedPackets, icmpPacket)
-			wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case icmpPacket := <-router.recv:
+				receivedPackets = append(receivedPackets, icmpPacket)
+				wg.Done()
+			}
 		}
 	}()
 
@@ -452,8 +481,11 @@ func TestDatagramConnServeDecodeMultipleICMPInParallel(t *testing.T) {
 }
 
 func TestDatagramConnServe_RegisterTwice(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
@@ -514,12 +546,17 @@ func TestDatagramConnServe_RegisterTwice(t *testing.T) {
 }
 
 func TestDatagramConnServe_MigrateConnection(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
-	quic2 := newMockQuicConn()
+	conn2Ctx, conn2Cancel := context.WithCancelCause(t.Context())
+	defer conn2Cancel(context.Canceled)
+	quic2 := newMockQuicConn(conn2Ctx)
 	conn2 := v3.NewDatagramConn(quic2, &sessionManager, &noopICMPRouter{}, 1, &noopMetrics{}, &log)
 
 	// Setup the muxer
@@ -597,8 +634,11 @@ func TestDatagramConnServe_MigrateConnection(t *testing.T) {
 }
 
 func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	// mockSessionManager will return the ErrSessionNotFound for any session attempting to be queried by the muxer
 	sessionManager := mockSessionManager{session: nil, expectedGetErr: v3.ErrSessionNotFound}
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
@@ -624,9 +664,12 @@ func TestDatagramConnServe_Payload_GetSessionError(t *testing.T) {
 	assertContextClosed(t, ctx, done, cancel)
 }
 
-func TestDatagramConnServe_Payload(t *testing.T) {
+func TestDatagramConnServe_Payloads(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	session := newMockSession()
 	sessionManager := mockSessionManager{session: &session}
 	conn := v3.NewDatagramConn(quic, &sessionManager, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
@@ -639,15 +682,26 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 		done <- conn.Serve(ctx)
 	}()
 
-	// Send new session registration
-	expectedPayload := []byte{0xef, 0xef}
-	datagram := newSessionPayloadDatagram(testRequestID, expectedPayload)
-	quic.send <- datagram
+	// Send session payloads
+	expectedPayloads := makePayloads(256, 16)
+	go func() {
+		for _, payload := range expectedPayloads {
+			datagram := newSessionPayloadDatagram(testRequestID, payload)
+			quic.send <- datagram
+		}
+	}()
 
-	// Session should receive the payload
-	payload := <-session.recv
-	if !slices.Equal(expectedPayload, payload) {
-		t.Fatalf("expected session receieve the payload sent via the muxer")
+	// Session should receive the payloads (in-order)
+	for i, payload := range expectedPayloads {
+		select {
+		case recv := <-session.recv:
+			if !slices.Equal(recv, payload) {
+				t.Fatalf("expected session receieve the payload[%d] sent via the muxer: (%x) (%x)", i, recv[:16], payload[:16])
+			}
+		case err := <-ctx.Done():
+			// we expect the payload to return before the context to cancel on the session
+			t.Fatal(err)
+		}
 	}
 
 	// Cancel the muxer Serve context and make sure it closes with the expected error
@@ -655,8 +709,11 @@ func TestDatagramConnServe_Payload(t *testing.T) {
 }
 
 func TestDatagramConnServe_ICMPDatagram_TTLDecremented(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	router := newMockICMPRouter()
 	conn := v3.NewDatagramConn(quic, &mockSessionManager{}, router, 0, &noopMetrics{}, &log)
 
@@ -701,8 +758,11 @@ func TestDatagramConnServe_ICMPDatagram_TTLDecremented(t *testing.T) {
 }
 
 func TestDatagramConnServe_ICMPDatagram_TTLExceeded(t *testing.T) {
+	defer leaktest.Check(t)()
 	log := zerolog.Nop()
-	quic := newMockQuicConn()
+	connCtx, connCancel := context.WithCancelCause(t.Context())
+	defer connCancel(context.Canceled)
+	quic := newMockQuicConn(connCtx)
 	router := newMockICMPRouter()
 	conn := v3.NewDatagramConn(quic, &mockSessionManager{}, router, 0, &noopMetrics{}, &log)
 
@@ -821,9 +881,9 @@ type mockQuicConn struct {
 	recv chan []byte
 }
 
-func newMockQuicConn() *mockQuicConn {
+func newMockQuicConn(ctx context.Context) *mockQuicConn {
 	return &mockQuicConn{
-		ctx:  context.Background(),
+		ctx:  ctx,
 		send: make(chan []byte, 1),
 		recv: make(chan []byte, 1),
 	}
@@ -841,7 +901,12 @@ func (m *mockQuicConn) SendDatagram(payload []byte) error {
 }
 
 func (m *mockQuicConn) ReceiveDatagram(_ context.Context) ([]byte, error) {
-	return <-m.send, nil
+	select {
+	case <-m.ctx.Done():
+		return nil, m.ctx.Err()
+	case b := <-m.send:
+		return b, nil
+	}
 }
 
 type mockQuicConnReadError struct {
@@ -905,11 +970,10 @@ func (m *mockSession) Serve(ctx context.Context) error {
 	return v3.SessionCloseErr
 }
 
-func (m *mockSession) Write(payload []byte) (n int, err error) {
+func (m *mockSession) Write(payload []byte) {
 	b := make([]byte, len(payload))
 	copy(b, payload)
 	m.recv <- b
-	return len(b), nil
 }
 
 func (m *mockSession) Close() error {

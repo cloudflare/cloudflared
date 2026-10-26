@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
+	cfdflags "github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/logger"
@@ -19,11 +20,10 @@ import (
 )
 
 const (
-	baseLoginURL = "https://dash.cloudflare.com/argotunnel"
-	callbackURL  = "https://login.cloudflareaccess.org/"
-	// For now these are the same but will change in the future once we know which URLs to use (TUN-8872)
-	fedBaseLoginURL      = "https://dash.cloudflare.com/argotunnel"
-	fedCallbackStoreURL  = "https://login.cloudflareaccess.org/"
+	baseLoginURL         = "https://dash.cloudflare.com/argotunnel"
+	callbackURL          = "https://login.cloudflareaccess.org/"
+	fedBaseLoginURL      = "https://dash.fed.cloudflare.com/argotunnel"
+	fedCallbackStoreURL  = "https://login.fed.cloudflareaccess.org/"
 	fedRAMPParamName     = "fedramp"
 	loginURLParamName    = "loginURL"
 	callbackURLParamName = "callbackURL"
@@ -97,7 +97,10 @@ func login(c *cli.Context) error {
 		callbackStoreURL,
 		false,
 		false,
+		c.Bool(cfdflags.AutoCloseInterstitial),
+		isFEDRamp,
 		log,
+		"",
 	)
 	if err != nil {
 		log.Error().Err(err).Msgf("Failed to write the certificate.\n\nYour browser will download the certificate instead. You will have to manually\ncopy it to the following path:\n\n%s\n", path)
@@ -120,7 +123,7 @@ func login(c *cli.Context) error {
 		return err
 	}
 
-	if err := os.WriteFile(path, resourceData, 0600); err != nil {
+	if err := os.WriteFile(path, resourceData, 0600); err != nil { // nolint: gosec
 		return errors.Wrap(err, fmt.Sprintf("error writing cert to %s", path))
 	}
 

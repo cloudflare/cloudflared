@@ -109,7 +109,7 @@ var friendlyDNSErrorLines = []string{
 }
 
 // EdgeDiscovery implements HA service discovery lookup.
-func edgeDiscovery(log *zerolog.Logger, srvService string) ([][]*EdgeAddr, error) {
+func EdgeDiscovery(log *zerolog.Logger, srvService string) ([][]*EdgeAddr, error) {
 	logger := log.With().Int(management.EventTypeKey, int(management.Cloudflared)).Logger()
 	logger.Debug().
 		Int(management.EventTypeKey, int(management.Cloudflared)).

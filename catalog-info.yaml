@@ -14,4 +14,7 @@ spec:
   lifecycle: "Active"
   owner: "teams/tunnel-teams-routing"
   cf:
+    compliance:
+      fedramp-high: "pending"
+      fedramp-moderate: "yes"
     FIPS: "required"

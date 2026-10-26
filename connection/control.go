@@ -82,7 +82,7 @@ func (c *controlStream) ServeControlStream(
 	tunnelConfigGetter TunnelConfigJSONGetter,
 ) error {
 	registrationClient := c.registerClientFunc(ctx, rw, c.registerTimeout)
-
+	c.observer.logConnecting(c.connIndex, c.edgeAddress, c.protocol)
 	registrationDetails, err := registrationClient.RegisterConnection(
 		ctx,
 		c.tunnelProperties.Credentials.Auth(),
@@ -94,7 +94,7 @@ func (c *controlStream) ServeControlStream(
 		defer registrationClient.Close()
 		if err.Error() == DuplicateConnectionError {
 			c.observer.metrics.regFail.WithLabelValues("dup_edge_conn", "registerConnection").Inc()
-			return errDuplicationConnection
+			return ErrDuplicateConnection
 		}
 		c.observer.metrics.regFail.WithLabelValues("server_error", "registerConnection").Inc()
 		return serverRegistrationErrorFromRPC(err)

@@ -28,7 +28,7 @@ func FindProtocol(p []byte) (layers.IPProtocol, error) {
 		// Next header is in the 7th byte of IPv6 header
 		return layers.IPProtocol(p[6]), nil
 	default:
-		return 0, fmt.Errorf("unknow ip version %d", version)
+		return 0, fmt.Errorf("unknown ip version %d", version)
 	}
 }
 
@@ -105,7 +105,7 @@ func (pd *IPDecoder) decodeByVersion(packet []byte) ([]gopacket.LayerType, error
 	case 6:
 		err = pd.v6parser.DecodeLayers(packet, &decoded)
 	default:
-		err = fmt.Errorf("unknow ip version %d", version)
+		err = fmt.Errorf("unknown ip version %d", version)
 	}
 	if err != nil {
 		return nil, err

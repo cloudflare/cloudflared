@@ -20,7 +20,6 @@ const (
 
 type Observer struct {
 	log             *zerolog.Logger
-	logTransport    *zerolog.Logger
 	metrics         *tunnelMetrics
 	tunnelEventChan chan Event
 	addSinkChan     chan EventSink
@@ -30,10 +29,9 @@ type EventSink interface {
 	OnTunnelEvent(event Event)
 }
 
-func NewObserver(log, logTransport *zerolog.Logger) *Observer {
+func NewObserver(log *zerolog.Logger) *Observer {
 	o := &Observer{
 		log:             log,
-		logTransport:    logTransport,
 		metrics:         newTunnelMetrics(),
 		tunnelEventChan: make(chan Event, observerChannelBufferSize),
 		addSinkChan:     make(chan EventSink, observerChannelBufferSize),
@@ -44,6 +42,15 @@ func NewObserver(log, logTransport *zerolog.Logger) *Observer {
 
 func (o *Observer) RegisterSink(sink EventSink) {
 	o.addSinkChan <- sink
+}
+
+func (o *Observer) logConnecting(connIndex uint8, address net.IP, protocol Protocol) {
+	o.log.Debug().
+		Int(management.EventTypeKey, int(management.Cloudflared)).
+		Uint8(LogFieldConnIndex, connIndex).
+		IPAddr(LogFieldIPAddress, address).
+		Str(LogFieldProtocol, protocol.String()).
+		Msg("Registering tunnel connection")
 }
 
 func (o *Observer) logConnected(connectionID uuid.UUID, connIndex uint8, location string, address net.IP, protocol Protocol) {

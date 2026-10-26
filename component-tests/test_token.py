@@ -1,7 +1,7 @@
 import base64
 import json
 
-from setup import get_config_from_file, persist_origin_cert
+from setup import get_config_from_file
 from util import start_cloudflared
 
 

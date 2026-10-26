@@ -51,6 +51,7 @@ Host {{.Hostname}}
   ProxyCommand {{.Cloudflared}} access ssh --hostname %h
 {{end}}
 `
+	fedrampFlag = "fedramp"
 )
 
 const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
@@ -79,6 +80,10 @@ func Commands() []*cli.Command {
 			Aliases:  []string{"forward"},
 			Category: "Access",
 			Usage:    "access <subcommand>",
+			Flags: []cli.Flag{&cli.BoolFlag{
+				Name:  fedrampFlag,
+				Usage: "Force the FedRAMP token transfer relay for Access authentication. Not usually needed: cloudflared selects it automatically when the application's verified auth domain is a FedRAMP domain (*.fed.cloudflareaccess.com).",
+			}},
 			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are
 			able to reach sensitive resources. The commands provided here allow you to interact with Access protected
@@ -103,6 +108,10 @@ func Commands() []*cli.Command {
 						&cli.BoolFlag{
 							Name:  "no-verbose",
 							Usage: "print only the jwt to stdout",
+						},
+						&cli.BoolFlag{
+							Name:  "auto-close",
+							Usage: "automatically close the auth interstitial after action",
 						},
 						&cli.StringFlag{
 							Name: appURLFlag,
@@ -274,9 +283,13 @@ func login(c *cli.Context) error {
 	// Chatty by default for backward compat. The new --app flag
 	// is an implicit opt-out of the backwards-compatible chatty output.
 	if c.Bool("no-verbose") || c.IsSet(appURLFlag) {
-		fmt.Fprint(os.Stdout, cfdToken)
+		if _, err := fmt.Fprint(os.Stdout, cfdToken); err != nil {
+			return fmt.Errorf("failed to write token to stdout: %w", err)
+		}
 	} else {
-		fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
+		if _, err := fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken); err != nil {
+			return fmt.Errorf("failed to write token to stdout: %w", err)
+		}
 	}
 
 	return nil
@@ -322,7 +335,7 @@ func curl(c *cli.Context) error {
 			log.Info().Msg("You don't have an Access token set. Please run access token <access application> to fetch one.")
 			return run("curl", cmdArgs...)
 		}
-		tok, err = token.FetchToken(appURL, appInfo, log)
+		tok, err = token.FetchToken(appURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), log)
 		if err != nil {
 			log.Err(err).Msg("Failed to refresh token")
 			return err
@@ -336,7 +349,7 @@ func curl(c *cli.Context) error {
 
 // run kicks off a shell task and pipe the results to the respective std pipes
 func run(cmd string, args ...string) error {
-	c := exec.Command(cmd, args...)
+	c := exec.Command(cmd, args...) // nolint: gosec // access curl intentionally runs curl with user-supplied arguments
 	c.Stdin = os.Stdin
 	stderr, err := c.StderrPipe()
 	if err != nil {
@@ -442,7 +455,7 @@ func sshGen(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, log)
+	cfdToken, err := token.FetchTokenWithRedirect(fetchTokenURL, appInfo, c.Bool(cfdflags.AutoCloseInterstitial), c.Bool(fedrampFlag), log)
 	if err != nil {
 		return err
 	}
@@ -524,7 +537,7 @@ func cloudflaredPath() string {
 
 // isFileThere will check for the presence of candidate path
 func isFileThere(candidate string) bool {
-	fi, err := os.Stat(candidate)
+	fi, err := os.Stat(candidate) // nolint: gosec // read-only stat of the cloudflared executable or PATH candidates
 	if err != nil || fi.IsDir() || !fi.Mode().IsRegular() {
 		return false
 	}
@@ -542,7 +555,7 @@ func verifyTokenAtEdge(appUrl *url.URL, appInfo *token.AppInfo, c *cli.Context, 
 	if c.IsSet(sshTokenSecretFlag) {
 		headers.Add(cfAccessClientSecretHeader, c.String(sshTokenSecretFlag))
 	}
-	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers}
+	options := &carrier.StartOptions{AppInfo: appInfo, OriginURL: appUrl.String(), Headers: headers, AutoCloseInterstitial: c.Bool(cfdflags.AutoCloseInterstitial), IsFedramp: c.Bool(fedrampFlag)}
 
 	if valid, err := isTokenValid(options, log); err != nil {
 		return err
@@ -586,7 +599,7 @@ func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, err
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// A redirect to login means the token was invalid.
 	return !carrier.IsAccessResponse(resp), nil

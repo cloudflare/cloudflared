@@ -63,12 +63,14 @@ func (s searchByID) Path() (string, error) {
 		Str("originCertPath", originCertPath).
 		Logger()
 
-	// Fallback to look for tunnel credentials in the origin cert directory
-	if originCertPath, err := credentials.FindOriginCert(originCertPath, &originCertLog); err == nil {
-		originCertDir := filepath.Dir(originCertPath)
-		if filePath, err := tunnelFilePath(s.id, originCertDir); err == nil {
-			if s.fs.validFilePath(filePath) {
-				return filePath, nil
+	if originCertPath != "" {
+		// Look for tunnel credentials in the origin cert directory if the flag is provided
+		if originCertPath, err := credentials.FindOriginCert(originCertPath, &originCertLog); err == nil {
+			originCertDir := filepath.Dir(originCertPath)
+			if filePath, err := tunnelFilePath(s.id, originCertDir); err == nil {
+				if s.fs.validFilePath(filePath) {
+					return filePath, nil
+				}
 			}
 		}
 	}

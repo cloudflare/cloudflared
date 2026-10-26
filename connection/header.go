@@ -53,7 +53,8 @@ var headerEncoding = base64.RawStdEncoding
 func IsControlResponseHeader(headerName string) bool {
 	return strings.HasPrefix(headerName, ":") ||
 		strings.HasPrefix(headerName, "cf-int-") ||
-		strings.HasPrefix(headerName, "cf-cloudflared-")
+		strings.HasPrefix(headerName, "cf-cloudflared-") ||
+		strings.HasPrefix(headerName, "cf-proxy-")
 }
 
 // isWebsocketClientHeader returns true if the header name is required by the client to upgrade properly

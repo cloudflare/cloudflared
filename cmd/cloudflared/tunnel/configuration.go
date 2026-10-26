@@ -22,7 +22,6 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -36,11 +35,15 @@ import (
 const (
 	secretValue       = "*****"
 	icmpFunnelTimeout = time.Second * 10
-	fedRampRegion     = "fed" // const string denoting the region used to connect to FEDRamp servers
 )
 
 var (
-	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
+	secretFlags = [...]string{
+		credentialsContentsFlag.Name,
+		tunnelTokenFlag.Name,
+		flags.AllowedMail,
+	}
+	secretEnvFlags = [...](*altsrc.StringFlag){credentialsContentsFlag, tunnelTokenFlag}
 
 	configFlags = []string{
 		flags.AutoUpdateFreq,
@@ -48,7 +51,6 @@ var (
 		flags.Retries,
 		flags.Protocol,
 		flags.LogLevel,
-		flags.TransportLogLevel,
 		flags.OriginCert,
 		flags.Metrics,
 		flags.MetricsUpdateFreq,
@@ -94,7 +96,7 @@ func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 
 func isSecretFlag(key string) bool {
 	for _, flag := range secretFlags {
-		if flag.Name == key {
+		if flag == key {
 			return true
 		}
 	}
@@ -102,7 +104,7 @@ func isSecretFlag(key string) bool {
 }
 
 func isSecretEnvVar(key string) bool {
-	for _, flag := range secretFlags {
+	for _, flag := range secretEnvFlags {
 		for _, secretEnvVar := range flag.EnvVars {
 			if secretEnvVar == key {
 				return true
@@ -112,18 +114,11 @@ func isSecretEnvVar(key string) bool {
 	return false
 }
 
-func dnsProxyStandAlone(c *cli.Context, namedTunnel *connection.TunnelProperties) bool {
-	return c.IsSet(flags.ProxyDns) &&
-		!(c.IsSet(flags.Name) || // adhoc-named tunnel
-			c.IsSet(ingress.HelloWorldFlag) || // quick or named tunnel
-			namedTunnel != nil) // named tunnel
-}
-
 func prepareTunnelConfig(
 	ctx context.Context,
 	c *cli.Context,
 	info *cliutil.BuildInfo,
-	log, logTransport *zerolog.Logger,
+	log *zerolog.Logger,
 	observer *connection.Observer,
 	namedTunnel *connection.TunnelProperties,
 ) (*supervisor.TunnelConfig, *orchestration.Config, error) {
@@ -148,23 +143,13 @@ func prepareTunnelConfig(
 	}
 	tags = append(tags, pogs.Tag{Name: "ID", Value: clientConfig.ConnectorID.String()})
 
-	clientFeatures := featureSelector.Snapshot()
-	pqMode := clientFeatures.PostQuantum
-	if pqMode == features.PostQuantumStrict {
-		// Error if the user tries to force a non-quic transport protocol
-		if transportProtocol != connection.AutoSelectFlag && transportProtocol != connection.QUIC.String() {
-			return nil, nil, fmt.Errorf("post-quantum is only supported with the quic transport")
-		}
-		transportProtocol = connection.QUIC.String()
-	}
-
 	cfg := config.GetConfiguration()
 	ingressRules, err := ingress.ParseIngressFromConfigAndCLI(cfg, c, log)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), isPostQuantumEnforced, edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, log)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,7 +161,7 @@ func prepareTunnelConfig(
 		if tlsSettings == nil {
 			return nil, nil, fmt.Errorf("%s has unknown TLS settings", p)
 		}
-		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c, tlsSettings.ServerName)
+		edgeTLSConfig, err := tlsconfig.CreateTunnelConfig(c.String(flags.CACert), tlsSettings.ServerName)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "unable to create TLS config to connect with edge")
 		}
@@ -254,7 +239,6 @@ func prepareTunnelConfig(
 		LBPool:          c.String(flags.LBPool),
 		Tags:            tags,
 		Log:             log,
-		LogTransport:    logTransport,
 		Observer:        observer,
 		ReportedVersion: info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
@@ -269,6 +253,7 @@ func prepareTunnelConfig(
 		DisableQUICPathMTUDiscovery:         c.Bool(flags.QuicDisablePathMTUDiscovery),
 		QUICConnectionLevelFlowControlLimit: c.Uint64(flags.QuicConnLevelFlowControlLimit),
 		QUICStreamLevelFlowControlLimit:     c.Uint64(flags.QuicStreamLevelFlowControlLimit),
+		NoPrechecks:                         c.Bool(flags.NoPrechecks),
 		OriginDNSService:                    dnsService,
 		OriginDialerService:                 originDialerService,
 	}
@@ -279,10 +264,11 @@ func prepareTunnelConfig(
 		tunnelConfig.ICMPRouterServer = icmpRouter
 	}
 	orchestratorConfig := &orchestration.Config{
-		Ingress:             &ingressRules,
-		WarpRouting:         warpRoutingConfig,
-		OriginDialerService: originDialerService,
-		ConfigurationFlags:  parseConfigFlags(c),
+		Ingress:                  &ingressRules,
+		WarpRouting:              warpRoutingConfig,
+		OriginDialerService:      originDialerService,
+		DisablePathNormalization: c.Bool(flags.DisablePathNormalization),
+		ConfigurationFlags:       parseConfigFlags(c),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }
@@ -308,7 +294,7 @@ func gracePeriod(c *cli.Context) (time.Duration, error) {
 }
 
 func isRunningFromTerminal() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) // nolint:gosec
 }
 
 // ParseConfigIPVersion returns the IP version from possible expected values from config
@@ -349,7 +335,7 @@ func testIPBindable(ip net.IP) error {
 	if err != nil {
 		return err
 	}
-	listener.Close()
+	_ = listener.Close()
 	return nil
 }
 
@@ -511,7 +497,7 @@ func findLocalAddr(dst net.IP, port int) (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	defer udpConn.Close()
+	defer func() { _ = udpConn.Close() }()
 	localAddrPort, err := netip.ParseAddrPort(udpConn.LocalAddr().String())
 	if err != nil {
 		return netip.Addr{}, err

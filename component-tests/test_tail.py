@@ -19,13 +19,13 @@ class TestTail:
         with the access token and start and stop streaming on-demand.
         """
         print("test_start_stop_streaming")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=3) as websocket:
                 await websocket.send('{"type": "start_streaming"}')
                 await websocket.send('{"type": "stop_streaming"}')
@@ -38,13 +38,13 @@ class TestTail:
         Validates that a streaming logs connection will stream logs
         """
         print("test_streaming_logs")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming
                 await websocket.send(json.dumps({
@@ -65,13 +65,13 @@ class TestTail:
         but not http when filters applied.
         """
         print("test_streaming_logs_filters")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming with tcp logs only
                 await websocket.send(json.dumps({
@@ -92,13 +92,13 @@ class TestTail:
         Validates that a streaming logs connection will stream logs with sampling.
         """
         print("test_streaming_logs_sampling")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             async with connect(url, open_timeout=5, close_timeout=5) as websocket:
                 # send start_streaming with info logs only
                 await websocket.send(json.dumps({
@@ -120,13 +120,13 @@ class TestTail:
         Validates that a streaming logs session can be overriden by the same actor 
         """
         print("test_streaming_logs_actor_override")
-        config = component_tests_config(cfd_mode=CfdModes.NAMED, run_proxy_dns=False, provide_ingress=False)
+        config = component_tests_config(cfd_mode=CfdModes.NAMED, provide_ingress=False)
         LOGGER.debug(config)
         config_path = write_config(tmp_path, config.full_config)
         with start_cloudflared(tmp_path, config, cfd_args=["run", "--hello-world"], new_process=True):
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
             cfd_cli = CloudflaredCli(config, config_path, LOGGER)
-            url = cfd_cli.get_management_wsurl("logs", config, config_path)
+            url = cfd_cli.get_management_wsurl("logs", config, config_path, resource="logs")
             task = asyncio.ensure_future(start_streaming_to_be_remotely_closed(url))
             override_task = asyncio.ensure_future(start_streaming_override(url))
             await asyncio.wait([task, override_task])

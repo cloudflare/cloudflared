@@ -3,6 +3,7 @@ package connection
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
@@ -33,13 +33,17 @@ const (
 	HTTPMethodKey = "HttpMethod"
 	// HTTPHostKey is used to get or set http host in QUIC ALPN if the underlying proxy connection type is HTTP.
 	HTTPHostKey = "HttpHost"
+	// HTTPStatus is used to return http status code in QUIC ALPN if the underlying proxy connection type is HTTP.
+	HTTPStatus = "HttpStatus"
 
 	QUICMetadataFlowID = "FlowID"
 )
 
+var errControlStreamComplete = errors.New("control stream completed")
+
 // quicConnection represents the type that facilitates Proxying via QUIC streams.
 type quicConnection struct {
-	conn                 quic.Connection
+	conn                 cfdquic.QUICConnection
 	logger               *zerolog.Logger
 	orchestrator         Orchestrator
 	datagramHandler      DatagramSessionHandler
@@ -52,10 +56,10 @@ type quicConnection struct {
 	gracePeriod        time.Duration
 }
 
-// NewTunnelConnection takes a [quic.Connection] to wrap it for use with cloudflared application logic.
+// NewTunnelConnection takes a [cfdquic.QUICConnection] to wrap it for use with cloudflared application logic.
 func NewTunnelConnection(
 	ctx context.Context,
-	conn quic.Connection,
+	conn cfdquic.QUICConnection,
 	connIndex uint8,
 	orchestrator Orchestrator,
 	datagramSessionHandler DatagramSessionHandler,
@@ -65,7 +69,7 @@ func NewTunnelConnection(
 	streamWriteTimeout time.Duration,
 	gracePeriod time.Duration,
 	logger *zerolog.Logger,
-) (TunnelConnection, error) {
+) TunnelConnection {
 	return &quicConnection{
 		conn:                 conn,
 		logger:               logger,
@@ -77,60 +81,84 @@ func NewTunnelConnection(
 		rpcTimeout:           rpcTimeout,
 		streamWriteTimeout:   streamWriteTimeout,
 		gracePeriod:          gracePeriod,
-	}, nil
+	}
 }
 
 // Serve starts a QUIC connection that begins accepting streams.
+// Returning a nil error means cloudflared will exit for good and will not attempt to reconnect.
 func (q *quicConnection) Serve(ctx context.Context) error {
 	// The edge assumes the first stream is used for the control plane
 	controlStream, err := q.conn.OpenStream()
 	if err != nil {
-		return fmt.Errorf("failed to open a registration control stream: %w", err)
+		return &ControlStreamError{
+			Cause: fmt.Errorf("failed to open a registration control stream: %w", err),
+		}
 	}
 
-	// If either goroutine returns nil error, we rely on this cancellation to make sure the other goroutine exits
-	// as fast as possible as well. Nil error means we want to exit for good (caller code won't retry serving this
-	// connection).
-	// If either goroutine returns a non nil error, then the error group cancels the context, thus also canceling the
-	// other goroutine as fast as possible.
-	ctx, cancel := context.WithCancel(ctx)
-	errGroup, ctx := errgroup.WithContext(ctx)
+	// If any goroutine returns a non-nil error, the error group cancels the context and the other goroutines.
+	errGroup, groupCtx := errgroup.WithContext(ctx)
 
-	// In the future, if cloudflared can autonomously push traffic to the edge, we have to make sure the control
-	// stream is already fully registered before the other goroutines can proceed.
+	// Close the quic connection if any of the following routines return from the errgroup (regardless of their error)
+	// because they are no longer processing requests for the connection.
+	defer q.Close()
+
+	// Start the control stream routine
 	errGroup.Go(func() error {
 		// err is equal to nil if we exit due to unregistration. If that happens we want to wait the full
 		// amount of the grace period, allowing requests to finish before we cancel the context, which will
 		// make cloudflared exit.
-		if err := q.serveControlStream(ctx, controlStream); err == nil {
-			if q.gracePeriod > 0 {
-				// In Go1.23 this can be removed and replaced with time.Ticker
-				// see https://pkg.go.dev/time#Tick
-				ticker := time.NewTicker(q.gracePeriod)
-				defer ticker.Stop()
-				select {
-				case <-ctx.Done():
-				case <-ticker.C:
-				}
+		controlStreamErr := q.serveControlStream(groupCtx, controlStream)
+		if controlStreamErr != nil {
+			return &ControlStreamError{Cause: controlStreamErr}
+		}
+		if q.gracePeriod > 0 {
+			select {
+			case <-groupCtx.Done():
+			case <-time.Tick(q.gracePeriod):
 			}
 		}
-		cancel()
-		return err
+		return errControlStreamComplete
 	})
+	// Start the accept stream loop routine
 	errGroup.Go(func() error {
-		defer cancel()
-		return q.acceptStream(ctx)
+		err := q.acceptStream(groupCtx)
+		// The stream listener loops until it encounters an error, so a nil return
+		// is unexpected and must still terminate the other connection services.
+		if err == nil {
+			err = errors.New("stream listener exited unexpectedly")
+		}
+		return &StreamListenerError{Cause: err}
 	})
+	// Start the datagram handler routine
 	errGroup.Go(func() error {
-		defer cancel()
-		return q.datagramHandler.Serve(ctx)
+		err := q.datagramHandler.Serve(groupCtx)
+		// The datagram manager serves until it encounters an error, so a nil return
+		// is unexpected and must still terminate the other connection services.
+		if err == nil {
+			err = errors.New("datagram manager exited unexpectedly")
+		}
+		return &DatagramManagerError{Cause: err}
 	})
 
-	return errGroup.Wait()
+	err = errGroup.Wait()
+	// A completed control stream returns a private error to make errgroup cancel
+	// the stream listener and datagram manager. We do not expose that coordination
+	// error outside Serve and inspect it here before returning.
+	if err == errControlStreamComplete {
+		if ctx.Err() != nil {
+			// Parent cancellation won the shutdown path, so retain the control-stream
+			// phase while leaving the context error reachable through Unwrap.
+			return &ControlStreamError{Cause: ctx.Err()}
+		}
+		// The control stream unregistered cleanly and its sibling services have
+		// stopped, so the connection requires no retry.
+		return nil
+	}
+	return err
 }
 
 // serveControlStream will serve the RPC; blocking until the control plane is done.
-func (q *quicConnection) serveControlStream(ctx context.Context, controlStream quic.Stream) error {
+func (q *quicConnection) serveControlStream(ctx context.Context, controlStream *quic.Stream) error {
 	return q.controlStreamHandler.ServeControlStream(ctx, controlStream, q.connOptions.ConnectionOptions(), q.orchestrator)
 }
 
@@ -140,13 +168,11 @@ func (q *quicConnection) Close() {
 }
 
 func (q *quicConnection) acceptStream(ctx context.Context) error {
-	defer q.Close()
 	for {
 		quicStream, err := q.conn.AcceptStream(ctx)
 		if err != nil {
-			// context.Canceled is usually a user ctrl+c. We don't want to log an error here as it's intentional.
 			if errors.Is(err, context.Canceled) || q.controlStreamHandler.IsStopped() {
-				return nil
+				return context.Canceled
 			}
 			return fmt.Errorf("failed to accept QUIC stream: %w", err)
 		}
@@ -154,16 +180,16 @@ func (q *quicConnection) acceptStream(ctx context.Context) error {
 	}
 }
 
-func (q *quicConnection) runStream(quicStream quic.Stream) {
+func (q *quicConnection) runStream(quicStream *quic.Stream) {
 	ctx := quicStream.Context()
 	stream := cfdquic.NewSafeStreamCloser(quicStream, q.streamWriteTimeout, q.logger)
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
-	// we are going to fuse readers/writers from stream <- cloudflared -> origin, and we want to guarantee that
-	// code executed in the code path of handleStream don't trigger an earlier close to the downstream write stream.
-	// So, we wrap the stream with a no-op write closer and only this method can actually close write side of the stream.
-	// A call to close will simulate a close to the read-side, which will fail subsequent reads.
-	noCloseStream := &nopCloserReadWriter{ReadWriteCloser: stream}
+	// The request and response share this bidirectional stream. Request-body
+	// cleanup must be able to interrupt a pending read without closing the write
+	// side, which is still needed for the response. runStream remains responsible
+	// for closing the complete stream after request handling finishes.
+	noCloseStream := &nopCloserReadWriter{readWriteCloser: stream}
 	ss := rpcquic.NewCloudflaredServer(q.handleDataStream, q.datagramHandler, q, q.rpcTimeout)
 	if err := ss.Serve(ctx, noCloseStream); err != nil {
 		q.logger.Debug().Err(err).Msg("Failed to handle QUIC stream")
@@ -230,7 +256,7 @@ func (q *quicConnection) dispatchRequest(ctx context.Context, stream *rpcquic.Re
 			ConnIndex: q.connIndex,
 		}), rwa.connectResponseSent
 	default:
-		return errors.Errorf("unsupported error type: %s", request.Type), false
+		return fmt.Errorf("unsupported error type: %s", request.Type), false
 	}
 }
 
@@ -277,7 +303,7 @@ func (hrw *httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
 
 func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header) error {
 	metadata := make([]pogs.Metadata, 0)
-	metadata = append(metadata, pogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(status)})
+	metadata = append(metadata, pogs.Metadata{Key: HTTPStatus, Val: strconv.Itoa(status)})
 	for k, vv := range header {
 		for _, v := range vv {
 			httpHeaderKey := fmt.Sprintf("%s:%s", HTTPHeaderKey, k)
@@ -317,7 +343,7 @@ func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func (hrw *httpResponseAdapter) WriteErrorResponse(err error) {
-	_ = hrw.WriteConnectResponseData(err, pogs.Metadata{Key: "HttpStatus", Val: strconv.Itoa(http.StatusBadGateway)})
+	_ = hrw.WriteConnectResponseData(err, pogs.Metadata{Key: HTTPStatus, Val: strconv.Itoa(http.StatusBadGateway)})
 }
 
 func (hrw *httpResponseAdapter) WriteConnectResponseData(respErr error, metadata ...pogs.Metadata) error {
@@ -366,8 +392,16 @@ func buildHTTPRequest(
 	//   * the content length is not set (or set to -1)
 	//   * the method doesn't usually have a body (GET, HEAD, DELETE, ...)
 	//   * there is no transfer-encoding=chunked already set.
-	// So, if transfer cannot be chunked and content length is 0, we dont set a request body.
+	// So, if transfer cannot be chunked and content length is 0, we don't set a request body.
+	// Close the original body before replacing it so a QUIC peer cannot remain
+	// blocked sending data that this request will never consume. The QUIC body
+	// implementation closes only the read side, leaving the response writable.
 	if !isWebsocket && !isEncodingChunked(req) && req.ContentLength == 0 {
+		if req.Body != nil {
+			if err := req.Body.Close(); err != nil {
+				return nil, fmt.Errorf("failed to close bodyless request stream: %w", err)
+			}
+		}
 		req.Body = http.NoBody
 	}
 	stripWebsocketUpgradeHeader(req)
@@ -393,9 +427,19 @@ func isEncodingChunked(req *http.Request) bool {
 	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked") || strings.Contains(strings.ToLower(contentEncodingVal), "chunked")
 }
 
-// A helper struct that guarantees a call to close only affects read side, but not write side.
-type nopCloserReadWriter struct {
+// readWriteCloser is a bidirectional stream whose receive side can be closed
+// independently. HTTP request bodies require Close to unblock a concurrent
+// Read, while QUIC responses still need the stream's send side afterwards.
+type readWriteCloser interface {
 	io.ReadWriteCloser
+	CloseRead() error
+}
+
+// nopCloserReadWriter adapts a bidirectional QUIC stream for use as an HTTP
+// request body. Despite its historical name, Close is not a no-op: it cancels
+// only the read side and deliberately keeps the write side available.
+type nopCloserReadWriter struct {
+	readWriteCloser
 
 	// for use by Read only
 	// we don't need a memory barrier here because there is an implicit assumption that
@@ -416,7 +460,7 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 		return 0, fmt.Errorf("closed by handler")
 	}
 
-	n, err = np.ReadWriteCloser.Read(p)
+	n, err = np.readWriteCloser.Read(p)
 	if err == io.EOF {
 		np.sawEOF = true
 	}
@@ -425,7 +469,12 @@ func (np *nopCloserReadWriter) Read(p []byte) (n int, err error) {
 }
 
 func (np *nopCloserReadWriter) Close() error {
-	atomic.StoreUint32(&np.closed, 1)
+	if !atomic.CompareAndSwapUint32(&np.closed, 0, 1) {
+		return nil
+	}
 
-	return nil
+	// net/http requires Request.Body.Close to interrupt a concurrent Read.
+	// Closing only the receive side satisfies that contract without preventing
+	// the response from being written on this bidirectional QUIC stream.
+	return np.CloseRead()
 }

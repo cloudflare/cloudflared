@@ -10,9 +10,10 @@ const (
 	FeaturePostQuantum       = "postquantum"
 	FeatureQUICSupportEOF    = "support_quic_eof"
 	FeatureManagementLogs    = "management_logs"
-	FeatureDatagramV3_1      = "support_datagram_v3_1"
+	FeatureDatagramV3_2      = "support_datagram_v3_2"
 
-	DeprecatedFeatureDatagramV3 = "support_datagram_v3" // Deprecated: TUN-9291
+	DeprecatedFeatureDatagramV3   = "support_datagram_v3"   // Deprecated: TUN-9291
+	DeprecatedFeatureDatagramV3_1 = "support_datagram_v3_1" // Deprecated: TUN-9883
 )
 
 var defaultFeatures = []string{
@@ -26,6 +27,7 @@ var defaultFeatures = []string{
 // List of features that are no longer in-use.
 var deprecatedFeatures = []string{
 	DeprecatedFeatureDatagramV3,
+	DeprecatedFeatureDatagramV3_1,
 }
 
 // Features set by user provided flags
@@ -40,6 +42,10 @@ type FeatureSnapshot struct {
 	// We provide the list of features since we need it to send in the ConnectionOptions during connection
 	// registrations.
 	FeaturesList []string
+
+	// SkipPrechecks indicates when to skip connectivity pre-checks at startup.
+	// Controlled via DNS TXT record to allow remote kill-switch in case of issues.
+	SkipPrechecks bool
 }
 
 type PostQuantumMode uint8
@@ -58,7 +64,7 @@ const (
 	// DatagramV2 is the currently supported datagram protocol for UDP and ICMP packets
 	DatagramV2 DatagramVersion = FeatureDatagramV2
 	// DatagramV3 is a new datagram protocol for UDP and ICMP packets. It is not backwards compatible with datagram v2.
-	DatagramV3 DatagramVersion = FeatureDatagramV3_1
+	DatagramV3 DatagramVersion = FeatureDatagramV3_2
 )
 
 // Remove any duplicate features from the list and remove deprecated features

@@ -1,0 +1,34 @@
+include:
+  - local: .ci/commons.gitlab-ci.yml
+
+  ###########################################################################
+  ### Build and Push Internal Image (commit SHA on master, version on tag) ###
+  ###########################################################################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/docker-image/build-push-image@~latest
+    inputs:
+      stage: release-internal
+      jobPrefix: internal-image
+      runOnMR: false
+      runOnBranches: '^master$'
+      needs:
+        - generate-internal-image-version
+      commentImageRefs: false
+      runner: vm-linux-x86-4cpu-8gb
+      EXTRA_DIB_ARGS: "--manifest=.docker-images-internal"
+
+###############################################################################
+### Generate Internal Image Version File                                     ###
+### Uses `git describe`: version tag on tagged commits, SHA-based on master  ###
+###############################################################################
+generate-internal-image-version:
+  stage: release-internal
+  image: $BUILD_IMAGE
+  rules:
+    - !reference [.default-rules, run-on-master]
+  needs:
+    - ci-image-get-image-ref
+  script:
+    - make generate-internal-image-version
+  artifacts:
+    paths:
+      - versions-internal

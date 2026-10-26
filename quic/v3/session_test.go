@@ -31,60 +31,61 @@ func TestSessionNew(t *testing.T) {
 	}
 }
 
-func testSessionWrite(t *testing.T, payload []byte) {
+func testSessionWrite(t *testing.T, payloads [][]byte) {
 	log := zerolog.Nop()
 	origin, server := net.Pipe()
 	defer origin.Close()
 	defer server.Close()
-	// Start origin server read
-	serverRead := make(chan []byte, 1)
+	// Start origin server reads
+	serverRead := make(chan []byte, len(payloads))
 	go func() {
-		read := make([]byte, 1500)
-		_, _ = server.Read(read[:])
-		serverRead <- read
+		for range len(payloads) {
+			buf := make([]byte, 1500)
+			_, _ = server.Read(buf[:])
+			serverRead <- buf
+		}
+		close(serverRead)
 	}()
-	// Create session and write to origin
+
+	// Create a session
 	session := v3.NewSession(testRequestID, 5*time.Second, origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
-	n, err := session.Write(payload)
 	defer session.Close()
-	if err != nil {
-		t.Fatal(err)
+	// Start the Serve to begin the writeLoop
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(context.Canceled)
+	done := make(chan error)
+	go func() {
+		done <- session.Serve(ctx)
+	}()
+	// Write the payloads to the session
+	for _, payload := range payloads {
+		session.Write(payload)
 	}
-	if n != len(payload) {
-		t.Fatal("unable to write the whole payload")
+
+	// Read from the origin to ensure the payloads were received (in-order)
+	for i, payload := range payloads {
+		read := <-serverRead
+		if !slices.Equal(payload, read[:len(payload)]) {
+			t.Fatalf("payload[%d] provided from origin and read value are not the same (%x) and (%x)", i, payload[:16], read[:16])
+		}
+	}
+	_, more := <-serverRead
+	if more {
+		t.Fatalf("expected the session to have all of the origin payloads received: %d", len(serverRead))
 	}
 
-	read := <-serverRead
-	if !slices.Equal(payload, read[:len(payload)]) {
-		t.Fatal("payload provided from origin and read value are not the same")
+	assertContextClosed(t, ctx, done, cancel)
+}
+
+func TestSessionWrite(t *testing.T) {
+	defer leaktest.Check(t)()
+	for i := range 1280 {
+		payloads := makePayloads(i, 16)
+		testSessionWrite(t, payloads)
 	}
 }
 
-func TestSessionWrite_Max(t *testing.T) {
-	defer leaktest.Check(t)()
-	payload := makePayload(1280)
-	testSessionWrite(t, payload)
-}
-
-func TestSessionWrite_Min(t *testing.T) {
-	defer leaktest.Check(t)()
-	payload := makePayload(0)
-	testSessionWrite(t, payload)
-}
-
-func TestSessionServe_OriginMax(t *testing.T) {
-	defer leaktest.Check(t)()
-	payload := makePayload(1280)
-	testSessionServe_Origin(t, payload)
-}
-
-func TestSessionServe_OriginMin(t *testing.T) {
-	defer leaktest.Check(t)()
-	payload := makePayload(0)
-	testSessionServe_Origin(t, payload)
-}
-
-func testSessionServe_Origin(t *testing.T, payload []byte) {
+func testSessionRead(t *testing.T, payloads [][]byte) {
 	log := zerolog.Nop()
 	origin, server := net.Pipe()
 	defer origin.Close()
@@ -100,37 +101,42 @@ func testSessionServe_Origin(t *testing.T, payload []byte) {
 		done <- session.Serve(ctx)
 	}()
 
-	// Write from the origin server
-	_, err := server.Write(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	select {
-	case data := <-eyeball.recvData:
-		// check received data matches provided from origin
-		expectedData := makePayload(1500)
-		_ = v3.MarshalPayloadHeaderTo(testRequestID, expectedData[:])
-		copy(expectedData[17:], payload)
-		if !slices.Equal(expectedData[:v3.DatagramPayloadHeaderLen+len(payload)], data) {
-			t.Fatal("expected datagram did not equal expected")
+	// Write from the origin server to the eyeball
+	go func() {
+		for _, payload := range payloads {
+			_, _ = server.Write(payload)
 		}
-		cancel(errExpectedContextCanceled)
-	case err := <-ctx.Done():
-		// we expect the payload to return before the context to cancel on the session
-		t.Fatal(err)
+	}()
+
+	// Read from the eyeball to ensure the payloads were received (in-order)
+	for i, payload := range payloads {
+		select {
+		case data := <-eyeball.recvData:
+			// check received data matches provided from origin
+			expectedData := makePayload(1500)
+			_ = v3.MarshalPayloadHeaderTo(testRequestID, expectedData[:])
+			copy(expectedData[17:], payload)
+			if !slices.Equal(expectedData[:v3.DatagramPayloadHeaderLen+len(payload)], data) {
+				t.Fatalf("expected datagram[%d] did not equal expected", i)
+			}
+		case err := <-ctx.Done():
+			// we expect the payload to return before the context to cancel on the session
+			t.Fatal(err)
+		}
 	}
 
-	err = <-done
-	if !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
-	if !errors.Is(context.Cause(ctx), errExpectedContextCanceled) {
-		t.Fatal(err)
+	assertContextClosed(t, ctx, done, cancel)
+}
+
+func TestSessionRead(t *testing.T) {
+	defer leaktest.Check(t)()
+	for i := range 1280 {
+		payloads := makePayloads(i, 16)
+		testSessionRead(t, payloads)
 	}
 }
 
-func TestSessionServe_OriginTooLarge(t *testing.T) {
+func TestSessionRead_OriginTooLarge(t *testing.T) {
 	defer leaktest.Check(t)()
 	log := zerolog.Nop()
 	eyeball := newMockEyeball()
@@ -317,6 +323,8 @@ func TestSessionServe_IdleTimeout(t *testing.T) {
 	closeAfterIdle := 2 * time.Second
 	session := v3.NewSession(testRequestID, closeAfterIdle, origin, testOriginAddr, testLocalAddr, &noopEyeball{}, &noopMetrics{}, &log)
 	err := session.Serve(t.Context())
+
+	// Session should idle timeout if no reads or writes occur
 	if !errors.Is(err, v3.SessionIdleErr{}) {
 		t.Fatal(err)
 	}

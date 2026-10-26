@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 
 	"github.com/cloudflare/cloudflared/packet"
@@ -51,14 +50,14 @@ func (dm *DatagramMuxerV2) mtu() int {
 }
 
 type DatagramMuxerV2 struct {
-	session          quic.Connection
+	session          QUICConnection
 	logger           *zerolog.Logger
 	sessionDemuxChan chan<- *packet.Session
 	packetDemuxChan  chan Packet
 }
 
 func NewDatagramMuxerV2(
-	quicSession quic.Connection,
+	quicSession QUICConnection,
 	log *zerolog.Logger,
 	sessionDemuxChan chan<- *packet.Session,
 ) *DatagramMuxerV2 {
@@ -110,7 +109,8 @@ func (dm *DatagramMuxerV2) SendPacket(pk Packet) error {
 	return nil
 }
 
-// Demux reads datagrams from the QUIC connection and demuxes depending on whether it's a session or packet
+// ServeReceive reads datagrams from the QUIC connection and demuxes them
+// depending on whether it's a session or packet
 func (dm *DatagramMuxerV2) ServeReceive(ctx context.Context) error {
 	for {
 		msg, err := dm.session.ReceiveDatagram(ctx)
@@ -141,11 +141,13 @@ func (dm *DatagramMuxerV2) demux(ctx context.Context, msgWithType []byte) error 
 	}
 	msgType := DatagramV2Type(msgWithType[len(msgWithType)-typeIDLen])
 	msg := msgWithType[0 : len(msgWithType)-typeIDLen]
-	switch msgType {
+	switch msgType { //nolint:exhaustive // default handles all non-UDP types via handlePacket
 	case DatagramTypeUDP:
 		return dm.handleSession(ctx, msg)
-	default:
+	case DatagramTypeIP, DatagramTypeIPWithTrace, DatagramTypeTracingSpan:
 		return dm.handlePacket(ctx, msg, msgType)
+	default:
+		return fmt.Errorf("unexpected datagram type %d", msgType)
 	}
 }
 
@@ -168,7 +170,7 @@ func (dm *DatagramMuxerV2) handleSession(ctx context.Context, session []byte) er
 
 func (dm *DatagramMuxerV2) handlePacket(ctx context.Context, pk []byte, msgType DatagramV2Type) error {
 	var demuxedPacket Packet
-	switch msgType {
+	switch msgType { //nolint:exhaustive // DatagramTypeUDP is handled by the caller (demux)
 	case DatagramTypeIP:
 		demuxedPacket = RawPacket(packet.RawPacket{Data: pk})
 	case DatagramTypeIPWithTrace:
@@ -189,8 +191,10 @@ func (dm *DatagramMuxerV2) handlePacket(ctx context.Context, pk []byte, msgType 
 			Spans:           spans,
 			TracingIdentity: tracingIdentity,
 		}
+	case DatagramTypeUDP:
+		return fmt.Errorf("unexpected datagram type %d in handlePacket", msgType)
 	default:
-		return fmt.Errorf("Unexpected datagram type %d", msgType)
+		return fmt.Errorf("unexpected datagram type %d", msgType)
 	}
 	select {
 	case <-ctx.Done():

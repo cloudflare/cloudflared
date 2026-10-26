@@ -146,8 +146,8 @@ func wsEchoEndpoint(w ResponseWriter, r *http.Request) error {
 		case <-wsCtx.Done():
 		case <-r.Context().Done():
 		}
-		readPipe.Close()
-		writePipe.Close()
+		_ = readPipe.Close()
+		_ = writePipe.Close()
 	}()
 
 	originConn := &echoPipe{reader: readPipe, writer: writePipe}

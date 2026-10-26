@@ -1,3 +1,272 @@
+2026.10.4
+- 2026-10-23 VULN-176088: Allowlist debug endpoints on the metrics server
+- 2026-10-22 chore: Bump github.com/klauspost/compress to v1.20.3
+- 2026-10-22 AUTH-9347 do not require the --fedramp flag in access commands
+- 2026-10-21 TUN-11024: Build with the exact Go version from go.mod
+
+2026.10.3
+- 2026-10-21 chore: bump debian-images base image to 2026.10.1
+- 2026-10-21 chore: Bump go version
+
+2026.10.2
+- 2026-10-20 Bump go to 1.27.3 and bump distroless image
+- 2026-10-19 TUN-10994: Fix dropping the tail of messages larger than the buffer
+- 2026-10-19 Update gcr.io/distroless/base-debian13:nonroot Docker digest to a0d70d6
+- 2026-10-19 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to c9dd21c
+
+2026.10.1
+- 2026-10-13 Update gcr.io/distroless/base-debian13:nonroot-arm64 Docker digest to 538c4d6
+- 2026-10-12 TUN-10962: Add precheck diag endpoint
+- 2026-10-12 chore: Bump go to 1.27.2 to fix GO-2026-6600
+- 2026-10-12 TUN-10933: Disable CGO for Linux CI builds and add ARM64 builds
+- 2026-10-08 TUN-10933: Bump go to 1.27
+
+2026.10.0
+- 2026-09-29 VULN-141859: Normalize request path when using access rules
+- 2026-09-28 chore: Retry DNS resolution
+- 2026-09-25 chore: stabilize websocket event tests
+- 2026-08-24 TUN-10808: Cancel QUIC reads when request bodies close
+
+2026.9.3
+- 2026-09-24 chore: Update dependencies
+
+2026.9.2
+- 2026-09-24 TUN-10926: Broker JWKS cache expiration
+- 2026-09-24 TUN-10798: Harden protected Quick Tunnel CLI behavior
+- 2026-09-23 chore: Limit response size
+- 2026-09-23 chore: Protect headers before flush
+- 2026-09-23 chore: Add upper bounds to supplied emails
+- 2026-09-22 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to 65795e7
+- 2026-09-22 Update gcr.io/distroless/base-debian13:nonroot Docker digest to 0896741
+- 2026-09-22 TUN-10805: Strip authentication data before forwarding requests
+- 2026-09-22 chore: Avoid logging request body
+- 2026-09-22 chore: Enable --allowed-mail flag and mac runners
+- 2026-09-21 TUN-10803: Add Quick Tunnel recipient policy
+- 2026-09-21 TUN-10803: Authorize Quick Tunnel callbacks
+- 2026-09-21 TUN-10803: Wire Quick Tunnel callback authorization
+- 2026-09-21 TUN-10804: Enforce authentication before origin access
+- 2026-09-17 chore: Fix unbounded channel
+- 2026-09-17 Revert "chore: Fix unbounded channel"
+- 2026-09-17 TUN-10802: Manage process-local authentication sessions
+- 2026-09-16 chore: Update gRPC to v1.83.1
+- 2026-09-16 TUN-10800: Wire Quick Tunnel authentication redirects
+- 2026-09-16 TUN-10801: Cache quick tunnel broker JWKS
+- 2026-09-16 TUN-10801: Validate quick tunnel broker assertions
+- 2026-09-15 TUN-10800: Add browser-bound login state
+- 2026-09-15 TUN-10800: Consume authentication callback state
+- 2026-09-14 ci: Disable macOS builds while runners are unavailable
+
+2026.9.1
+- 2026-09-10 Revert "chore: Cleanup unused transport log level"
+- 2026-09-10 chore: Add notes on breaking changes
+- 2026-09-10 chore: Mark transport-loglevel deprecated
+
+2026.9.0
+- 2026-09-08 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to 1411d9a
+- 2026-09-08 Update gcr.io/distroless/base-debian13:nonroot Docker digest to d199d20
+- 2026-09-08 TUN-10738: Propagate edge registration errors over QUIC and fix supervisor error classification
+- 2026-09-08 chore: Cleanup unused transport log level
+- 2026-09-03 TUN-10799: Negotiate protected mode during Quick Tunnel provisioning
+- 2026-09-03 TUN-10834: Bump Go toolchains to 1.26.8
+- 2026-09-02 AUTH-8883 Fix Access token lock self-deadlock during same-process reauth
+- 2026-09-02 TUN-10829: Remove vendoring
+- 2026-09-01 fix(ci): use fresh clone for Windows jobs
+
+2026.8.3
+- 2026-08-28 chore: Remove stale metrics timeout TODO
+- 2026-08-28 TUN-10798: Parse Quick Tunnel allowed mail rules
+- 2026-08-27 chore: Clean up unused code
+- 2026-08-26 chore: bump gorilla/websocket for GO-2026-6278
+- 2026-08-26 VULN-142146: Update GitLab R2 token path (cloudflared-pkgs) to protected branches
+- 2026-08-26 TUN-10820: Remove test-only stdin reconnect control
+- 2026-08-26 TUN-10822: Remove fetching protocol percentage from remote
+- 2026-08-25 TUN-10725: Remove unused certificate configuration
+- 2026-08-20 chore: Update distrolesss images in amd64
+
+2026.8.2
+- 2026-08-14 VULN-141859: Revert path normalization
+
+2026.8.1
+- 2026-08-13 VULN-141859: Fix missing trailing slash
+
+2026.8.0
+- 2026-08-12 AUTH-9041 Generate ephemeral keypair for login token transfer
+- 2026-08-12 VULN-141859: Normalize request path
+- 2026-08-11 TUN-10748: Add FIPS image variant for Cloudflared tunnel
+- 2026-08-10 AUTH-9012 Verify Access app identity with signed metadata
+- 2026-08-07 chore: Bump grpc to v.1.83.0 to fix vulnerability
+- 2026-07-08 TUN-10557: Bump quic-go v0.59.1
+
+2026.7.3
+- 2026-07-22 VULN-143514: Windows svc: use --token-file instead of --token
+- 2026-07-22 fix: Bump golang.org/x/text and its dependencies to fix CVE
+- 2026-07-20 TUN-10701: Use curves for prechecks
+
+2026.7.2
+- 2026-07-15 VULN-118896: MacOS service: use --token-file instead of --token
+- 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot Docker digest to b78832f
+- 2026-07-14 chore: Change internal image name
+- 2026-07-14 Update gcr.io/distroless/base-debian13:nonroot-arm Docker digest to 7a4876f88
+- 2026-07-13 VULN-118896: Linux service: Use --token-file instead of --token
+- 2026-07-13 chore: Remove bookworm internal register publish
+- 2026-07-13 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to ce2a20e
+
+2026.7.1
+- 2026-07-09 Revert "TUN-10621: Propagate max wait timeout"
+
+2026.7.0
+- 2026-07-08 chore: Bump go-chi to version 5.3.1
+- 2026-07-08 Revert "TUN-10557: Bump quic-go v0.59.1"
+- 2026-07-01 TUN-10621: Test websocket path
+- 2026-06-30 ci: add Semgrep OSS scanning workflow
+- 2026-06-29 TUN-10621: Propagate max wait timeout
+- 2026-06-29 Migrate config renovate.json
+- 2026-06-25 chore: Fix renovate
+- 2026-06-25 Pin dependencies
+- 2026-06-25 Consolidate init-system detection into shared inits package
+- 2026-06-24 Fix lint issues
+- 2026-06-22 Add OpenRC support
+- 2026-06-22 Fix broken installed-service detection in systemd uninstall
+- 2026-06-18 TUN-10557: Bump quic-go v0.59.1
+
+2026.6.1
+- 2026-06-18 TUN-10630: Fix precheck protocol override
+- 2026-06-18 Revert "TUN-10557: Bump quic-go v0.59.1"
+- 2026-06-16 chore: Fix warnings
+- 2026-06-15 TUN-10612: Add renovate to cloudflared to update distroless images explicitely
+- 2026-06-11 TUN-9251: Publish internal image
+- 2026-05-26 TUN-10557: Bump quic-go v0.59.1
+
+2026.6.0
+- 2026-06-08 TUN-10558: Bump go to v1.24.4, x/crypto to v0.52.0 and google.golang.org/grpc to v1.81.1
+- 2026-06-01 TUN-10563: introduce QUICConnection interface
+
+2026.5.2
+- 2026-05-26 TUN-10391: Avoid using fmt.Println
+
+2026.5.1
+- 2026-05-22 fix: Bump go to 1.26.3 and go.opentelemetry.io/otel and go-jose/v4 to fix CVE's
+- 2026-05-22 TUN-10391: Avoid blocking cloudflared due to logging
+- 2026-05-22 TUN-10391: Add precheck integration tests
+- 2026-05-14 TUN-10511: Revise --edge support for pre-checks
+- 2026-05-13 fix: Update golang.org/x/net to v0.54.0
+- 2026-05-13 TUN-10525: Add prechecks kill switch
+
+2026.5.0
+- 2026-05-08 Bump golang.org/x/net from v0.40.0 to v0.53.0
+- 2026-05-07 TUN-10507: Bump go and go-boring to 1.26.2
+- 2026-05-07 TUN-10511: Add Static DNS Resolvers
+- 2026-05-07 TUN-10390: Call prechecks
+- 2026-05-07 TUN-10513: Disable /debug/pprof/cmdline endpoint
+- 2026-05-06 TUN-10390: Fix missing TLS settings
+- 2026-05-05 chore: Fix warnings
+- 2026-05-04 TUN-10389: Implement main run method
+- 2026-04-30 TUN-10388: Adding probe check
+- 2026-04-30 TUN-10388 Implement dialers for connectivity checks
+- 2026-04-30 TUN-10389: Improve probe functions
+- 2026-04-29 SECENG-13496 update pkg docs for gokeyless to support multiple builds
+- 2026-04-29 chore: Add pre-push hooks
+- 2026-04-29 TUN-10388: Use pointer for suggested protocol
+- 2026-04-27 TUN-10387: Add no-prechecks flag
+- 2026-04-23 TUN-10386: Add Table Renderer
+- 2026-04-21 AUTH-4699, AUTH-8460, TUN-10179: Vendor gopsutil/v4 for cross-platform process identification
+- 2026-04-21 AUTH-4699, AUTH-8460, TUN-10179: Fix .lock file deletion race condition
+- 2026-04-20 TUN-10413: Centralize TLS curve configuration in crypto/ and adopt X25519MLKEM768 for QUIC/H2
+- 2026-04-15 TUN-10385: Add connectivity checks foundation
+- 2026-04-14 chore: Fix errors in cmd
+- 2026-04-14 TUN-10384: Probe TLS Helper
+- 2026-04-14 TUN-10383: Set edge-ip-version to auto
+- 2026-04-10 SECENG-13056 update gokeyless install instructions on pkg.cloudflare.com/index.html
+- 2026-04-02 TUN-9952: Bump go to 1.26
+
+2026.3.0
+- 2026-03-05 TUN-10292: Add cloudflared management token command
+- 2026-03-03 chore: Addressing small fixes and typos
+- 2026-03-03 fix: Update go-sentry and go-oidc to address CVE's
+- 2026-02-24 TUN-10258: add agents.md
+- 2026-02-23 TUN-10267: Update mods to fix CVE GO-2026-4394
+- 2026-02-20 TUN-10247: Update tail command to use /management/logs endpoint
+- 2026-02-11 TUN-9858: Add more information to proxy-dns removal message
+
+2026.2.0
+- 2026-02-06 TUN-10216: TUN fix cloudflare vulnerabilities GO-2026-4340 and GO-2026-4341
+- 2026-02-02 TUN-9858: Remove proxy-dns feature from cloudflared
+
+2026.1.2
+- 2026-01-23 Revert "TUN-9863: Update pipelines to use cloudflared EV Certificate"
+- 2026-01-21 Revert "TUN-9886 notarize cloudflared"
+- 2025-12-12 TUN-9886 notarize cloudflared
+
+2026.1.1
+- 2026-01-19 fix: Update boto3 to run on trixie
+- 2026-01-19 fix: Fix wixl bundling tool for windows msi packages
+- 2026-01-19 fix: rpm bundling and rpm key import
+
+2026.1.0
+- 2026-01-13 TUN-10162: Update go to 1.24.11 and Debian distroless to debian13
+- 2025-11-21 Replace jira.cfops.it with jira.cfdata.org in connection/http2_test.go
+- 2025-11-19 TUN-9863: Update pipelines to use cloudflared EV Certificate
+- 2025-11-07 TUN-9800: Migrate apt internal builds to Gitlab
+- 2025-11-04 TUN-9998: Don't need to read origin cert to determine if the endpoint is fedramp
+- 2025-10-13 TUN-9910: Make the metadata key to carry HTTP status over QUIC transport a constant
+
+2025.11.1
+- 2025-11-07 TUN-9800: Fix docker hub push step
+
+2025.11.0
+- 2025-11-06 TUN-9863: Introduce Code Signing for Windows Builds
+- 2025-11-06 TUN-9800: Prefix gitlab steps with operating system
+- 2025-11-04 chore: Update cloudflared signing key name in index.html
+- 2025-10-31 chore: add claude review
+- 2025-10-31 Chore: Update documentation links in README
+- 2025-10-31 TUN-9800: Add pipelines for linux packaging
+
+2025.10.1
+- 2025-10-30 chore: Update ci image to use goboring 1.24.9
+- 2025-10-28 TUN-9849: Add cf-proxy-* to control response headers
+- 2025-10-24 TUN-9961: Add pkg.cloudflared.com index.html to git repo
+- 2025-10-23 TUN-9954: Update from go1.24.6 to go1.24.9
+- 2025-10-23 Fix systemd service installation hanging
+- 2025-10-21 TUN-9941: Use new GPG key for RPM builds
+- 2025-10-21 TUN-9941: Fix typo causing r2-release-next deployment to fail
+- 2025-10-21 TUN-9941: Lookup correct key for RPM signature
+- 2025-10-15 TUN-9919: Make RPM postinstall scriplet idempotent
+- 2025-10-14 TUN-9916: Fix the cloudflared binary path used in the component test
+
+2025.10.0
+- 2025-10-14 chore: Fix upload of RPM repo file during double signing
+- 2025-10-13 TUN-9882: Bump datagram v3 write channel capacity
+- 2025-10-10 chore: Fix import of GPG keys when two keys are provided
+- 2025-10-10 chore: Fix parameter order when uploading RPM .repo file to R2
+- 2025-10-10 TUN-9883: Add new datagram v3 feature flag
+- 2025-10-09 chore: Force usage of go-boring 1.24
+- 2025-10-08 TUN-9882: Improve metrics for datagram v3
+- 2025-10-07 GRC-16749: Add fedramp tags to catalog
+- 2025-10-07 TUN-9882: Add buffers for UDP and ICMP datagrams in datagram v3
+- 2025-10-07 TUN-9882: Add write deadline for UDP origin writes
+- 2025-09-29 TUN-9776: Support signing Debian packages with two keys for rollover
+- 2025-09-22 TUN-9800: Add pipeline to sync between gitlab and github repos
+
+2025.9.1
+- 2025-09-22 TUN-9855: Create script to ignore vulnerabilities from govuln check
+- 2025-09-19 TUN-9852: Remove fmt.Println from cloudflared access command
+
+2025.9.0
+- 2025-09-15 TUN-9820: Add support for FedRAMP in originRequest Access config
+- 2025-09-11 TUN-9800: Migrate cloudflared-ci pipelines to Gitlab CI
+- 2025-09-04 TUN-9803: Add windows builds to gitlab-ci
+- 2025-08-27 TUN-9755: Set endpoint in tunnel credentials when generating locally managed tunnel with a Fed token
+
+2025.8.1
+- 2025-08-19 AUTH-7480 update fed callback url for login helper
+- 2025-08-19 CUSTESC-53681: Correct QUIC connection management for datagram handlers
+- 2025-08-12 AUTH-7260: Add support for login interstitial auto closure
+
+2025.8.0
+- 2025-08-07 vuln: Fix GO-2025-3770 vulnerability
+- 2025-07-23 TUN-9583: set proper url and hostname for cloudflared tail command
+- 2025-07-07 TUN-9542: Remove unsupported Debian-based releases
+
 2025.7.0
 - 2025-07-03 TUN-9540: Use numeric user id for Dockerfiles
 - 2025-07-01 TUN-9161: Remove P256Kyber768Draft00PQKex curve from nonFips curve preferences

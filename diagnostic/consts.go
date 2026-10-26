@@ -18,6 +18,7 @@ const (
 	cliConfigurationEndpoint    = "/diag/configuration"
 	tunnelStateEndpoint         = "/diag/tunnel"
 	systemInformationEndpoint   = "/diag/system"
+	precheckEndpoint            = "/diag/precheck"
 	memoryDumpEndpoint          = "debug/pprof/heap"
 	goroutineDumpEndpoint       = "debug/pprof/goroutine"
 	metricsEndpoint             = "metrics"
@@ -34,4 +35,5 @@ const (
 	cliConfigurationBaseName  = "cli-configuration.json"
 	configurationBaseName     = "configuration.json"
 	taskResultBaseName        = "task-result.json"
+	prechecksBaseName         = "prechecks.json"
 )

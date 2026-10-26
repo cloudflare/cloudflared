@@ -26,11 +26,13 @@ const (
 )
 
 type StartOptions struct {
-	AppInfo         *token.AppInfo
-	OriginURL       string
-	Headers         http.Header
-	Host            string
-	TLSClientConfig *tls.Config
+	AppInfo               *token.AppInfo
+	OriginURL             string
+	Headers               http.Header
+	Host                  string
+	TLSClientConfig       *tls.Config
+	AutoCloseInterstitial bool
+	IsFedramp             bool
 }
 
 // Connection wraps up all the needed functions to forward over the tunnel
@@ -46,7 +48,6 @@ type StdinoutStream struct{}
 // Read will read from Stdin
 func (c *StdinoutStream) Read(p []byte) (int, error) {
 	return os.Stdin.Read(p)
-
 }
 
 // Write will write to Stdout
@@ -139,7 +140,7 @@ func BuildAccessRequest(options *StartOptions, log *zerolog.Logger) (*http.Reque
 		return nil, err
 	}
 
-	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, log)
+	token, err := token.FetchTokenWithRedirect(req.URL, options.AppInfo, options.AutoCloseInterstitial, options.IsFedramp, log)
 	if err != nil {
 		return nil, err
 	}

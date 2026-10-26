@@ -23,6 +23,10 @@ func (c User) AccountID() string {
 	return c.cert.AccountID
 }
 
+func (c User) Endpoint() string {
+	return c.cert.Endpoint
+}
+
 func (c User) ZoneID() string {
 	return c.cert.ZoneID
 }

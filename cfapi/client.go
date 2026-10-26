@@ -8,7 +8,7 @@ type TunnelClient interface {
 	CreateTunnel(name string, tunnelSecret []byte) (*TunnelWithToken, error)
 	GetTunnel(tunnelID uuid.UUID) (*Tunnel, error)
 	GetTunnelToken(tunnelID uuid.UUID) (string, error)
-	GetManagementToken(tunnelID uuid.UUID) (string, error)
+	GetManagementToken(tunnelID uuid.UUID, resource ManagementResource) (string, error)
 	DeleteTunnel(tunnelID uuid.UUID, cascade bool) error
 	ListTunnels(filter *TunnelFilter) ([]*Tunnel, error)
 	ListActiveClients(tunnelID uuid.UUID) ([]*ActiveClient, error)

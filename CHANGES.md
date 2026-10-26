@@ -1,3 +1,18 @@
+## 2026.4.0
+### Breaking Change
+- The default value of `--edge-ip-version` has changed from `4` to `auto`. This means cloudflared will now use whichever address family (IPv4 or IPv6) the system resolver returns first, instead of always preferring IPv4. Users who require IPv4-only connections should explicitly set `--edge-ip-version 4`.
+
+## 2026.2.0
+### Breaking Change
+- Removes the `proxy-dns` feature from cloudflared. This feature allowed running a local DNS over HTTPS (DoH) proxy.
+  Users who relied on this functionality should migrate to alternative solutions.
+  
+  Removed commands and flags:
+  - `cloudflared proxy-dns`
+  - `cloudflared tunnel proxy-dns` 
+  - `--proxy-dns`, `--proxy-dns-port`, `--proxy-dns-address`, `--proxy-dns-upstream`, `--proxy-dns-max-upstream-conns`, `--proxy-dns-bootstrap`
+  - `resolver` section in configuration file
+
 ## 2025.7.1
 ### Notices
 - `cloudflared` will no longer officially support Debian and Ubuntu distros that reached end-of-life: `buster`, `bullseye`, `impish`, `trusty`.
@@ -281,7 +296,7 @@ of uptime. Previous cloudflared versions will soon be unable to run legacy tempo
 ### Bug Fixes
 
 - Tunnel create and delete commands no longer use path to credentials from the configuration file.
-  If you need ot place tunnel credentials file at a specific location, you must use `--credentials-file` flag.
+  If you need to place tunnel credentials file at a specific location, you must use `--credentials-file` flag.
 - Access ssh-gen creates properly named keys for SSH short lived certs.
 
 
