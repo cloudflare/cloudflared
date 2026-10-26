@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -191,10 +192,12 @@ type UnvalidatedIngressRule struct {
 // config.
 // Note:
 // - To specify a time.Duration in go-yaml, use e.g. "3s" or "24h".
-// - To specify a time.Duration in json, use int64 of the nanoseconds
+// - To specify a time.Duration in JSON, use seconds (e.g. 0.5 or 3).
 type OriginRequestConfig struct {
 	// HTTP proxy timeout for establishing a new connection
 	ConnectTimeout *CustomDuration `yaml:"connectTimeout" json:"connectTimeout,omitempty"`
+	// Total time to retry refused HTTP origin connections or missing Unix sockets. Zero disables retries.
+	ConnectRetryTimeout *CustomDuration `yaml:"connectRetryTimeout" json:"connectRetryTimeout,omitempty"`
 	// HTTP proxy timeout for completing a TLS handshake
 	TLSTimeout *CustomDuration `yaml:"tlsTimeout" json:"tlsTimeout,omitempty"`
 	// HTTP proxy TCP keepalive duration
@@ -428,11 +431,7 @@ func ReadConfigFile(c *cli.Context, log *zerolog.Logger) (settings *configFileSe
 	return &configuration, warnings, nil
 }
 
-// A CustomDuration is a Duration that has custom serialization for JSON.
-// JSON in Javascript assumes that int fields are 32 bits and Duration fields are deserialized assuming that numbers
-// are in nanoseconds, which in 32bit integers limits to just 2 seconds.
-// This type assumes that when serializing/deserializing from JSON, that the number is in seconds, while it maintains
-// the YAML serde assumptions.
+// A duration encoded as seconds in JSON and as a Go duration string in YAML.
 type CustomDuration struct {
 	time.Duration
 }
@@ -442,12 +441,16 @@ func (s CustomDuration) MarshalJSON() ([]byte, error) {
 }
 
 func (s *CustomDuration) UnmarshalJSON(data []byte) error {
-	seconds, err := strconv.ParseInt(string(data), 10, 64)
+	seconds, err := strconv.ParseFloat(string(data), 64)
 	if err != nil {
 		return err
 	}
 
-	s.Duration = time.Duration(seconds * int64(time.Second))
+	nanoseconds := math.Round(seconds * float64(time.Second))
+	if math.IsNaN(nanoseconds) || nanoseconds >= float64(math.MaxInt64) || nanoseconds < float64(math.MinInt64) {
+		return fmt.Errorf("duration %s seconds is out of range", data)
+	}
+	s.Duration = time.Duration(nanoseconds)
 	return nil
 }
 
