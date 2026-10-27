@@ -134,7 +134,7 @@ func Run(ctx context.Context, caCert string, cfg Config, pqMode features.PostQua
 			quicCh <- probeAllTargets(ctx, ProbeTypeQUIC, componentUDPConnectivity,
 				filteredAddrs, targetLabels,
 				func(addr *allregions.EdgeAddr) CheckResult {
-					return probeQUIC(ctx, quicTLSConfig, runDialers.QUICDialer, addr, log)
+					return probeQUIC(ctx, quicTLSConfig, runDialers.QUICDialer, addr, log, cfg)
 				})
 		}()
 
@@ -148,7 +148,7 @@ func Run(ctx context.Context, caCert string, cfg Config, pqMode features.PostQua
 			http2Ch <- probeAllTargets(ctx, ProbeTypeHTTP2, componentTCPConnectivity,
 				filteredAddrs, targetLabels,
 				func(addr *allregions.EdgeAddr) CheckResult {
-					return probeHTTP2(ctx, http2TLSConfig, runDialers.TCPDialer, addr)
+					return probeHTTP2(ctx, http2TLSConfig, runDialers.TCPDialer, addr, cfg.EdgeBindAddr)
 				})
 		}()
 

@@ -196,19 +196,19 @@ func probeQUIC(
 	dialer QUICDialer,
 	addr *allregions.EdgeAddr,
 	logger *zerolog.Logger,
+	cfg Config,
 ) CheckResult {
 	dialCtx, cancel := context.WithTimeout(ctx, perProbeDialTimeout)
 	defer cancel()
 
-	// We call dialer.DialQuic with isProbe = true, which bypasses connIndex check.
-	// Therefore, whatever we add to connIndex will not be relevant.
+	// Probes use their own ephemeral ports, so connIndex is not used for port reuse.
 	edgeAddrPort := addr.UDP.AddrPort()
 	conn, err := dialer.DialQuic(
 		dialCtx,
-		&quic.Config{},
+		connection.NewQUICConfig(edgeAddrPort, cfg.QUICConfig),
 		tlsConfig,
 		edgeAddrPort,
-		nil,
+		cfg.EdgeBindAddr,
 		math.MaxUint8,
 		logger,
 		dialopts.DialOpts{SkipPortReuse: true},
@@ -245,8 +245,8 @@ func probeQUIC(
 //
 // The dial timeout is capped at perProbeDialTimeout so that a single blocked
 // dial cannot exhaust the entire suite budget.
-func probeHTTP2(ctx context.Context, tlsConfig *tls.Config, dialer TCPDialer, addr *allregions.EdgeAddr) CheckResult {
-	conn, err := dialer.DialEdge(ctx, perProbeDialTimeout, tlsConfig, addr.TCP, nil)
+func probeHTTP2(ctx context.Context, tlsConfig *tls.Config, dialer TCPDialer, addr *allregions.EdgeAddr, localIP net.IP) CheckResult {
+	conn, err := dialer.DialEdge(ctx, perProbeDialTimeout, tlsConfig, addr.TCP, localIP)
 	if err != nil {
 		return CheckResult{
 			Type:        ProbeTypeHTTP2,
