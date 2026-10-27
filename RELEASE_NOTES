@@ -1,3 +1,8 @@
+2026.10.5
+- 2026-10-27 TUN-11015: Ignore unchanged fields in QUIC MetricsUpdated events
+- 2026-10-27 TUN-10996: Allow for validating config from stdin
+- 2026-10-26 VULN-183456: Bump github.com/go-chi/chi/v5 to v5.5.0
+
 2026.10.4
 - 2026-10-23 VULN-176088: Allowlist debug endpoints on the metrics server
 - 2026-10-22 chore: Bump github.com/klauspost/compress to v1.20.3
