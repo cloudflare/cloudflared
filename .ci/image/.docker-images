@@ -1,3 +1,2 @@
 images:
   - name: ci-image
-# Added by LSC enable-inbuild-container-scanning-v5 so this MR builds and scans the image once. Safe to remove.
