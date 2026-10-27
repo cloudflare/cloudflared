@@ -1,3 +1,9 @@
+2026.10.4
+- 2026-10-23 VULN-176088: Allowlist debug endpoints on the metrics server
+- 2026-10-22 chore: Bump github.com/klauspost/compress to v1.20.3
+- 2026-10-22 AUTH-9347 do not require the --fedramp flag in access commands
+- 2026-10-21 TUN-11024: Build with the exact Go version from go.mod
+
 2026.10.3
 - 2026-10-21 chore: bump debian-images base image to 2026.10.1
 - 2026-10-21 chore: Bump go version

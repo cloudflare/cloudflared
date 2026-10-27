@@ -2,10 +2,12 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
+	"expvar"
 	"fmt"
 	"net"
 	"net/http"
-	_ "net/http/pprof" //nolint:gosec // G108: the sensitive /debug/pprof/cmdline endpoint is explicitly blocked in newMetricsHandler
+	"net/http/pprof" //nolint:gosec // G108: http.DefaultServeMux is not served; only allowlisted handlers are mounted in installDebugEndpoints
 	"runtime"
 	"sync"
 	"time"
@@ -14,7 +16,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
-	"golang.org/x/net/trace"
 
 	"github.com/cloudflare/cloudflared/diagnostic"
 )
@@ -70,12 +71,7 @@ func newMetricsHandler(
 	log *zerolog.Logger,
 ) *http.ServeMux {
 	router := http.NewServeMux()
-	// Block /debug/pprof/cmdline to prevent leaking secret command-line arguments
-	// (e.g. tunnel tokens) that are exposed via os.Args.
-	router.HandleFunc("/debug/pprof/cmdline", func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "forbidden", http.StatusForbidden)
-	})
-	router.Handle("/debug/", http.DefaultServeMux)
+	installDebugEndpoints(router)
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/healthcheck", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "OK\n")
@@ -102,6 +98,47 @@ func newMetricsHandler(
 	config.DiagnosticHandler.InstallEndpoints(router)
 
 	return router
+}
+
+// allowedExpvars lists the expvar variables served on /debug/vars. The default
+// "cmdline" variable is intentionally excluded because it publishes os.Args.
+var allowedExpvars = []string{"memstats"}
+
+// installDebugEndpoints registers an explicit allowlist of debug endpoints.
+//
+// http.DefaultServeMux must never be mounted on the metrics server: any imported
+// package may register handlers on it, some of which expose os.Args and thus
+// secrets such as tunnel tokens (e.g. /debug/pprof/cmdline from net/http/pprof
+// and the "cmdline" variable on /debug/vars from expvar).
+func installDebugEndpoints(router *http.ServeMux) {
+	// pprof.Index serves the index page and the runtime profiles
+	// (heap, goroutine, goroutineleak, allocs, block, mutex, threadcreate).
+	router.HandleFunc("/debug/pprof/", pprof.Index)
+	router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// Unlike the pprof handlers above, which must accept any method (`go tool pprof`
+	// POSTs to /debug/pprof/symbol), this mirrors the standard expvar registration
+	// and only accepts GET (and HEAD).
+	router.HandleFunc("GET /debug/vars", expvarHandler)
+}
+
+// expvarHandler serves only the allowlisted expvar variables, in the same JSON
+// object format as the standard expvar handler.
+func expvarHandler(w http.ResponseWriter, _ *http.Request) {
+	vars := make(map[string]json.RawMessage, len(allowedExpvars))
+	for _, name := range allowedExpvars {
+		if v := expvar.Get(name); v != nil {
+			vars[name] = json.RawMessage(v.String())
+		}
+	}
+	body, err := json.MarshalIndent(vars, "", "  ")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to encode expvars: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // CreateMetricsListener will create a new [net.Listener] by using an
@@ -147,8 +184,6 @@ func ServeMetrics(
 	log *zerolog.Logger,
 ) (err error) {
 	var wg sync.WaitGroup
-	// Metrics port is privileged, so no need for further access control
-	trace.AuthRequest = func(*http.Request) (bool, bool) { return true, true }
 	h := newMetricsHandler(config, log)
 	server := &http.Server{
 		ReadTimeout:  10 * time.Second,

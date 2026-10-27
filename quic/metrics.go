@@ -275,13 +275,23 @@ func (cc *clientCollector) lostPackets(reason qlog.PacketLossReason) {
 
 // updatedRTT records RTT metrics.
 func (cc *clientCollector) updatedRTT(m qlog.MetricsUpdated) {
-	clientMetrics.minRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.MinRTT))
-	clientMetrics.latestRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.LatestRTT))
-	clientMetrics.smoothedRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.SmoothedRTT))
+	// qlog.MetricsUpdated only sets the fields that changed since the previous event.
+	if m.MinRTT != 0 {
+		clientMetrics.minRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.MinRTT))
+	}
+	if m.LatestRTT != 0 {
+		clientMetrics.latestRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.LatestRTT))
+	}
+	if m.SmoothedRTT != 0 {
+		clientMetrics.smoothedRTT.WithLabelValues(cc.index).Set(durationToPromGauge(m.SmoothedRTT))
+	}
 }
 
 // updateCongestionWindow records the congestion window size.
 func (cc *clientCollector) updateCongestionWindow(size int64) {
+	if size == 0 {
+		return
+	}
 	clientMetrics.congestionWindow.WithLabelValues(cc.index).Set(float64(size))
 }
 
