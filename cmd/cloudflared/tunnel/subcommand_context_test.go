@@ -4,8 +4,11 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"io"
 	"reflect"
+	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +18,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/cloudflare/cloudflared/cfapi"
+	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/credentials"
 )
@@ -247,7 +251,6 @@ func Test_subcommandContext_Delete(t *testing.T) {
 	type fields struct {
 		c                 *cli.Context
 		log               *zerolog.Logger
-		isUIEnabled       bool
 		fs                fileSystem
 		tunnelstoreClient *deleteMockTunnelStore
 		userCredential    *credentials.User
@@ -325,45 +328,113 @@ func Test_subcommandContext_Delete(t *testing.T) {
 }
 
 func Test_subcommandContext_ValidateIngressCommand(t *testing.T) {
+	testValidConfig := `{ "warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}`
+	testInvalidConfig := `{ "ingress" : [ {"hostname": "test", "service": "localhost:8000" } , {"service": "http_status:invalid_status"} ]}`
+	invalidConfigErr := errors.New("Validation failed: localhost:8000 is an invalid address, please make sure it has a scheme and a hostname")
+
+	newGlobalConf := func(rules ...config.UnvalidatedIngressRule) *config.Configuration {
+		conf := &config.Configuration{Ingress: rules}
+		conf.SetSource("/etc/cloudflared/config.yml")
+		return conf
+	}
+
 	var tests = []struct {
 		name        string
+		stdin       io.Reader
+		globalConf  *config.Configuration
 		c           *cli.Context
-		wantErr     bool
 		expectedErr error
 	}{
 		{
-			name: "read a valid configuration from data",
+			name:  "read a valid configuration from the command line",
+			stdin: strings.NewReader(""),
 			c: func() *cli.Context {
-				data := `{ "warp-routing": {"enabled": true},  "originRequest" : {"connectTimeout": 10}, "ingress" : [ {"hostname": "test", "service": "https://localhost:8000" } , {"service": "http_status:404"} ]}`
 				flagSet := flag.NewFlagSet("json", flag.PanicOnError)
-				flagSet.String(ingressDataJSONFlagName, data, "")
+				flagSet.String(ingressDataJSONArgvFlagName, testValidConfig, "")
 				c := cli.NewContext(cli.NewApp(), flagSet, nil)
-				_ = c.Set(ingressDataJSONFlagName, data)
+				_ = c.Set(ingressDataJSONArgvFlagName, testValidConfig)
 				return c
 			}(),
 		},
 		{
-			name: "read an invalid configuration with multiple mistakes",
+			name:  "read a valid configuration from stdin when no flags are provided",
+			stdin: strings.NewReader(testValidConfig),
 			c: func() *cli.Context {
-				data := `{ "ingress" : [ {"hostname": "test", "service": "localhost:8000" } , {"service": "http_status:invalid_status"} ]}`
-				flagSet := flag.NewFlagSet("json", flag.PanicOnError)
-				flagSet.String(ingressDataJSONFlagName, data, "")
+				flagSet := flag.NewFlagSet("no-flags", flag.PanicOnError)
 				c := cli.NewContext(cli.NewApp(), flagSet, nil)
-				_ = c.Set(ingressDataJSONFlagName, data)
 				return c
 			}(),
-			wantErr:     true,
-			expectedErr: errors.New("Validation failed: localhost:8000 is an invalid address, please make sure it has a scheme and a hostname"),
+		},
+		{
+			name:  "read an invalid configuration with multiple mistakes from the command line",
+			stdin: strings.NewReader(""),
+			c: func() *cli.Context {
+				flagSet := flag.NewFlagSet("json", flag.PanicOnError)
+				flagSet.String(ingressDataJSONArgvFlagName, testInvalidConfig, "")
+				c := cli.NewContext(cli.NewApp(), flagSet, nil)
+				_ = c.Set(ingressDataJSONArgvFlagName, testInvalidConfig)
+				return c
+			}(),
+			expectedErr: invalidConfigErr,
+		},
+		{
+			name:  "read an invalid configuration with multiple mistakes from stdin when no flags are provided",
+			stdin: strings.NewReader(testInvalidConfig),
+			c: func() *cli.Context {
+				flagSet := flag.NewFlagSet("no-flags", flag.PanicOnError)
+				c := cli.NewContext(cli.NewApp(), flagSet, nil)
+				return c
+			}(),
+			expectedErr: invalidConfigErr,
+		},
+		{
+			name:  "stdin read error",
+			stdin: iotest.ErrReader(errors.New("stdin error")),
+			c: func() *cli.Context {
+				flagSet := flag.NewFlagSet("no-flags", flag.PanicOnError)
+				return cli.NewContext(cli.NewApp(), flagSet, nil)
+			}(),
+			expectedErr: errors.New("read stdin: stdin error"),
+		},
+		{
+			name:  "read a valid configuration from the global config without reading stdin",
+			stdin: iotest.ErrReader(errors.New("stdin must not be read")),
+			globalConf: newGlobalConf(
+				config.UnvalidatedIngressRule{Hostname: "test", Service: "https://localhost:8000"},
+				config.UnvalidatedIngressRule{Service: "http_status:404"},
+			),
+			c: func() *cli.Context {
+				flagSet := flag.NewFlagSet("no-flags", flag.PanicOnError)
+				return cli.NewContext(cli.NewApp(), flagSet, nil)
+			}(),
+		},
+		{
+			name:  "read an invalid configuration from the global config without reading stdin",
+			stdin: iotest.ErrReader(errors.New("stdin must not be read")),
+			globalConf: newGlobalConf(
+				config.UnvalidatedIngressRule{Hostname: "test", Service: "localhost:8000"},
+				config.UnvalidatedIngressRule{Service: "http_status:404"},
+			),
+			c: func() *cli.Context {
+				flagSet := flag.NewFlagSet("no-flags", flag.PanicOnError)
+				return cli.NewContext(cli.NewApp(), flagSet, nil)
+			}(),
+			expectedErr: invalidConfigErr,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateIngressCommand(tt.c, "")
-			if tt.wantErr {
+			globalConf := tt.globalConf
+			if globalConf == nil {
+				globalConf = &config.Configuration{}
+			}
+
+			err := validateIngress(tt.c, "", globalConf, tt.stdin)
+			if tt.expectedErr != nil {
 				assert.Equal(t, tt.expectedErr.Error(), err.Error())
 			} else {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 			}
 		})
 	}

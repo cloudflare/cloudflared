@@ -280,6 +280,10 @@ func (c *Configuration) Source() string {
 	return c.sourceFile
 }
 
+func (c *Configuration) SetSource(file string) {
+	c.sourceFile = file
+}
+
 func (c *configFileSettings) Int(name string) (int, error) {
 	if raw, ok := c.Settings[name]; ok {
 		if v, ok := raw.(int); ok {
