@@ -236,6 +236,7 @@ type TunnelProperties struct {
 - Instrument code with Prometheus metrics
 - Use OpenTelemetry for distributed tracing
 - Include structured logging with relevant context
+- Check if metrics are emitted as deltas to confirm need to guard for zero values, such as when importing or updating dependencies, e.g. quic-go
 
 ## Boundaries
 
