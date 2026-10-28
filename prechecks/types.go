@@ -1,6 +1,7 @@
 package prechecks
 
 import (
+	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -117,9 +118,16 @@ type Config struct {
 	Timeout time.Duration
 
 	// IPVersion controls which address families are probed for transport
-	// checks. It mirrors the --edge-ip-version CLI flag so that the pre-check
-	// exercises the same code paths the tunnel itself will use.
+	// checks. Startup uses the tunnel's effective family after accounting for
+	// --edge-bind-address.
 	IPVersion allregions.ConfigIPVersion
+
+	// EdgeBindAddr is the source address used by both edge transport probes.
+	// Nil lets the OS choose, matching the tunnel's default behaviour.
+	EdgeBindAddr net.IP
+
+	// QUICConfig contains the same transport settings used by the tunnel.
+	QUICConfig connection.QUICConfigOptions
 
 	// EdgeAddrs, when non-empty, contains the --edge flag values (explicit
 	// edge addresses). When set, DNS probing is skipped entirely — there are

@@ -14,6 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/connection/dialopts"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/mocks"
@@ -128,6 +129,60 @@ func TestRun_AllPass(t *testing.T) {
 	assert.Equal(t, connection.QUIC, *report.SuggestedProtocol)
 	assert.False(t, report.hasHardFail())
 	assert.False(t, report.hasWarn())
+}
+
+func TestRun_EdgeTransportSettings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		bindAddr  net.IP
+		ipVersion allregions.ConfigIPVersion
+	}{
+		{name: "unbound", ipVersion: allregions.Auto},
+		{name: "IPv4 source", bindAddr: net.ParseIP("192.0.2.10"), ipVersion: allregions.IPv4Only},
+		{name: "IPv6 source", bindAddr: net.ParseIP("2001:db8::10"), ipVersion: allregions.IPv6Only},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			dns := mocks.NewMockDNSResolver(ctrl)
+			tcp := mocks.NewMockTCPDialer(ctrl)
+			quicD := mocks.NewMockQUICDialer(ctrl)
+			mgmt := mocks.NewMockManagementDialer(ctrl)
+			quicConn := newFakeQUICConn(ctrl)
+			cfg := Config{
+				IPVersion:    tc.ipVersion,
+				EdgeBindAddr: tc.bindAddr,
+				QUICConfig: connection.QUICConfigOptions{
+					DisablePathMTUDiscovery:    true,
+					MaxConnectionReceiveWindow: 16 * 1024 * 1024,
+					MaxStreamReceiveWindow:     8 * 1024 * 1024,
+				},
+			}
+			groups := twoRegionAddrsBothFamilies()
+			dns.EXPECT().Resolve("").Return(groups, nil)
+			for _, group := range groups {
+				for _, addr := range group {
+					if tc.ipVersion == allregions.IPv4Only && addr.IPVersion != allregions.V4 ||
+						tc.ipVersion == allregions.IPv6Only && addr.IPVersion != allregions.V6 {
+						continue
+					}
+					tcp.EXPECT().DialEdge(gomock.Any(), perProbeDialTimeout, gomock.Any(), addr.TCP, tc.bindAddr).
+						Return(nopConn{}, nil)
+					quicD.EXPECT().DialQuic(gomock.Any(), connection.NewQUICConfig(addr.UDP.AddrPort(), cfg.QUICConfig),
+						gomock.Any(), addr.UDP.AddrPort(), tc.bindAddr, uint8(math.MaxUint8), gomock.Any(),
+						dialopts.DialOpts{SkipPortReuse: true}).Return(quicConn, nil)
+				}
+			}
+			mgmt.EXPECT().DialContext(gomock.Any(), "tcp", targetAPI).Return(nopConn{}, nil)
+
+			report := Run(t.Context(), emptyCert, cfg, features.PostQuantumPrefer, nopLogger(), RunDialers{
+				DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt,
+			})
+			requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
+		})
+	}
 }
 
 // TestRun_QUICBlocked verifies that when QUIC is blocked on all regions,

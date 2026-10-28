@@ -10,6 +10,7 @@ include:
       jobPrefix: ci-image
       runOnChangesTo: [".ci/image/**"]
       runOnMR: true
+      CS_INBUILD_SCAN: true
       runOnBranches: '^master$'
       commentImageRefs: false
       runner: vm-linux-x86-4cpu-8gb

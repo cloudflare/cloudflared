@@ -30,8 +30,6 @@ import (
 	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/diagnostic"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
-	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
@@ -427,7 +425,7 @@ func StartServer(
 	// are running. Prechecks are controlled via DNS flag for remote kill-switch capability.
 	if !tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().SkipPrechecks && !c.Bool(cfdflags.NoPrechecks) {
 		go func() {
-			report := runPrechecks(c, log, tunnelConfig.Region, tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().PostQuantum)
+			report := runPrechecks(c, log, tunnelConfig)
 			precheckReports.Set(report)
 		}()
 	}
@@ -535,21 +533,13 @@ func StartServer(
 
 // runPrechecks executes connectivity pre-checks and logs the results.
 // Pre-checks are diagnostic only and do not gate tunnel startup.
-func runPrechecks(c *cli.Context, log *zerolog.Logger, region string, pqMode features.PostQuantumMode) prechecks.Report {
-	ipVersion := allregions.Auto
-	if ipVersionStr := c.String(cfdflags.EdgeIpVersion); ipVersionStr != "" {
-		parsedVersion, err := parseConfigIPVersion(ipVersionStr)
-		if err == nil {
-			ipVersion = parsedVersion
-		} else {
-			log.Warn().Str("edgeIpVersion", ipVersionStr).Err(err).Msg("Invalid edge-ip-version value, using auto")
-		}
-	}
-
+func runPrechecks(c *cli.Context, log *zerolog.Logger, tunnelConfig *supervisor.TunnelConfig) prechecks.Report {
 	cfg := prechecks.Config{
-		Region:           region,
-		IPVersion:        ipVersion,
-		EdgeAddrs:        c.StringSlice(cfdflags.Edge),
+		Region:           tunnelConfig.Region,
+		IPVersion:        tunnelConfig.EdgeIPVersion,
+		EdgeBindAddr:     tunnelConfig.EdgeBindAddr,
+		QUICConfig:       tunnelConfig.QUICConfigOptions(),
+		EdgeAddrs:        tunnelConfig.EdgeAddrs,
 		ProtocolOverride: c.String(cfdflags.Protocol),
 	}
 
@@ -560,6 +550,7 @@ func runPrechecks(c *cli.Context, log *zerolog.Logger, region string, pqMode fea
 		ManagementDialer: &prechecks.NetManagementDialer{Dialer: net.Dialer{}},
 	}
 
+	pqMode := tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().PostQuantum
 	report := prechecks.Run(c.Context, c.String(cfdflags.CACert), cfg, pqMode, log, dialers)
 
 	// Output the human-readable table

@@ -89,6 +89,15 @@ func (c *TunnelConfig) connectionFeatures() features.FeatureSnapshot {
 	return c.ClientConfig.ConnectionFeaturesSnapshot()
 }
 
+// QUICConfigOptions returns the edge transport settings shared with prechecks.
+func (c *TunnelConfig) QUICConfigOptions() connection.QUICConfigOptions {
+	return connection.QUICConfigOptions{
+		DisablePathMTUDiscovery:    c.DisableQUICPathMTUDiscovery,
+		MaxConnectionReceiveWindow: c.QUICConnectionLevelFlowControlLimit,
+		MaxStreamReceiveWindow:     c.QUICStreamLevelFlowControlLimit,
+	}
+}
+
 func StartTunnelDaemon(
 	ctx context.Context,
 	config *TunnelConfig,
@@ -577,26 +586,8 @@ func (e *EdgeTunnelServer) serveQUIC(
 
 	connLogger.Logger().Info().Msgf("Tunnel connection curve preferences: %v", config.CurvePreferences)
 
-	// quic-go 0.44 increases the initial packet size to 1280 by default. That breaks anyone running tunnel through WARP
-	// because WARP MTU is 1280.
-	var initialPacketSize uint16 = 1252
-	if edgeAddr.Addr().Is4() {
-		initialPacketSize = 1232
-	}
-
-	quicConfig := &quic.Config{
-		HandshakeIdleTimeout:       quicpogs.HandshakeIdleTimeout,
-		MaxIdleTimeout:             quicpogs.MaxIdleTimeout,
-		KeepAlivePeriod:            quicpogs.MaxIdlePingPeriod,
-		MaxIncomingStreams:         quicpogs.MaxIncomingStreams,
-		MaxIncomingUniStreams:      quicpogs.MaxIncomingStreams,
-		EnableDatagrams:            true,
-		Tracer:                     quicpogs.NewClientTracer(connLogger.Logger(), connIndex),
-		DisablePathMTUDiscovery:    e.config.DisableQUICPathMTUDiscovery,
-		MaxConnectionReceiveWindow: e.config.QUICConnectionLevelFlowControlLimit,
-		MaxStreamReceiveWindow:     e.config.QUICStreamLevelFlowControlLimit,
-		InitialPacketSize:          initialPacketSize,
-	}
+	quicConfig := connection.NewQUICConfig(edgeAddr, e.config.QUICConfigOptions())
+	quicConfig.Tracer = quicpogs.NewClientTracer(connLogger.Logger(), connIndex)
 
 	// Dial the QUIC connection to the edge
 	conn, err := connection.DialQuic(
