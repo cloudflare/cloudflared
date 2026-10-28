@@ -5,14 +5,25 @@ include:
 ### Defaults for Mac Builds ###
 ###############################
 .mac-build-defaults: &mac-build-defaults
+  variables:
+    # Athens is not reachable from macOS runners.
+    GOPROXY: "https://proxy.golang.org,direct"
+  cache:
+    key:
+      prefix: "$CI_COMMIT_REF_PROTECTED-$TARGET_ARCH"
+      files:
+        - go.mod
+        - go.sum
+    paths:
+      - .cache/go/
   rules:
     - !reference [.default-rules, run-on-mr]
+  # Only arm runners are used; amd64 binaries are cross-compiled.
   tags:
-    - "macstadium-${RUNNER_ARCH}"
+    - "macos-mesh-arm"
   parallel:
     matrix:
-      - RUNNER_ARCH: [arm, intel]
-  cache: {}
+      - TARGET_ARCH: [arm64, amd64]
 
 ######################################
 ### Build Cloudflared Mac Binaries ###
@@ -24,16 +35,10 @@ macos-build-cloudflared: &mac-build
     paths:
       - artifacts/*
   script:
-    - '[ "${RUNNER_ARCH}" = "arm" ] && export TARGET_ARCH=arm64'
-    - '[ "${RUNNER_ARCH}" = "intel" ] && export TARGET_ARCH=amd64'
+    - set -euo pipefail
     - ARCH=$(uname -m)
     - echo ARCH=$ARCH - TARGET_ARCH=$TARGET_ARCH
-    - ./.ci/scripts/mac/install-go.sh "$MAC_GO_VERSION"
-    - BUILD_SCRIPT=.ci/scripts/mac/build.sh
-    - if [[ ! -x ${BUILD_SCRIPT} ]] ; then exit ; fi
-    - set -euo pipefail
-    - echo "Executing ${BUILD_SCRIPT}"
-    - exec ${BUILD_SCRIPT}
+    - ./.ci/scripts/mac/build.sh
 
 ###############################################
 ### Build and Sign Cloudflared Mac Binaries ###

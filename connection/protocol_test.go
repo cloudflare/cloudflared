@@ -1,40 +1,22 @@
 package connection
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudflare/cloudflared/edgediscovery"
 )
-
-const (
-	testNoTTL      = 0
-	testAccountTag = "testAccountTag"
-)
-
-type dynamicMockFetcher struct {
-	protocolPercents edgediscovery.ProtocolPercents
-	err              error
-}
-
-func (dmf *dynamicMockFetcher) fetch() edgediscovery.PercentageFetcher {
-	return func() (edgediscovery.ProtocolPercents, error) {
-		return dmf.protocolPercents, dmf.err
-	}
-}
 
 func TestNewProtocolSelector(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name                string
-		protocol            string
-		tunnelTokenProvided bool
-		expectedProtocol    Protocol
-		hasFallback         bool
-		expectedFallback    Protocol
-		wantErr             bool
+		name             string
+		protocol         string
+		expectedProtocol Protocol
+		hasFallback      bool
+		expectedFallback Protocol
+		wantErr          bool
 	}{
 		{
 			name:     "named tunnel with unknown protocol",
@@ -52,6 +34,11 @@ func TestNewProtocolSelector(t *testing.T) {
 			expectedProtocol: HTTP2,
 		},
 		{
+			name:             "named tunnel with quic: no fallback",
+			protocol:         "quic",
+			expectedProtocol: QUIC,
+		},
+		{
 			name:             "named tunnel with auto: quic",
 			protocol:         AutoSelectFlag,
 			expectedProtocol: QUIC,
@@ -60,13 +47,10 @@ func TestNewProtocolSelector(t *testing.T) {
 		},
 	}
 
-	fetcher := dynamicMockFetcher{
-		protocolPercents: edgediscovery.ProtocolPercents{},
-	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			selector, err := NewProtocolSelector(test.protocol, testAccountTag, test.tunnelTokenProvided, fetcher.fetch(), ResolveTTL, &log)
+			t.Parallel()
+			selector, err := NewProtocolSelector(test.protocol, &log)
 			if test.wantErr {
 				assert.Error(t, err, "test %s failed", test.name)
 			} else {
@@ -80,75 +64,6 @@ func TestNewProtocolSelector(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAutoProtocolSelectorRefresh(t *testing.T) {
-	fetcher := dynamicMockFetcher{}
-	selector, err := NewProtocolSelector(AutoSelectFlag, testAccountTag, false, fetcher.fetch(), testNoTTL, &log)
-	require.NoError(t, err)
-	assert.Equal(t, QUIC, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
-	assert.Equal(t, QUIC, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.err = fmt.Errorf("failed to fetch")
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
-	fetcher.err = nil
-	assert.Equal(t, QUIC, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
-	assert.Equal(t, QUIC, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "quic", Percentage: 100}}
-	assert.Equal(t, QUIC, selector.Current())
-}
-
-func TestHTTP2ProtocolSelectorRefresh(t *testing.T) {
-	fetcher := dynamicMockFetcher{}
-	// Since the user chooses http2 on purpose, we always stick to it.
-	selector, err := NewProtocolSelector(HTTP2.String(), testAccountTag, false, fetcher.fetch(), testNoTTL, &log)
-	require.NoError(t, err)
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.err = fmt.Errorf("failed to fetch")
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
-	fetcher.err = nil
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 0}}
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
-	assert.Equal(t, HTTP2, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: -1}}
-	assert.Equal(t, HTTP2, selector.Current())
-}
-
-func TestAutoProtocolSelectorNoRefreshWithToken(t *testing.T) {
-	fetcher := dynamicMockFetcher{}
-	selector, err := NewProtocolSelector(AutoSelectFlag, testAccountTag, true, fetcher.fetch(), testNoTTL, &log)
-	require.NoError(t, err)
-	assert.Equal(t, QUIC, selector.Current())
-
-	fetcher.protocolPercents = edgediscovery.ProtocolPercents{edgediscovery.ProtocolPercent{Protocol: "http2", Percentage: 100}}
-	assert.Equal(t, QUIC, selector.Current())
 }
 
 func TestProbeTLSSettings(t *testing.T) {

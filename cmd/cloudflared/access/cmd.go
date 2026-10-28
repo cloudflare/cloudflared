@@ -82,7 +82,7 @@ func Commands() []*cli.Command {
 			Usage:    "access <subcommand>",
 			Flags: []cli.Flag{&cli.BoolFlag{
 				Name:  fedrampFlag,
-				Usage: "use when performing operations in fedramp account",
+				Usage: "Force the FedRAMP token transfer relay for Access authentication. Not usually needed: cloudflared selects it automatically when the application's verified auth domain is a FedRAMP domain (*.fed.cloudflareaccess.com).",
 			}},
 			Description: `Cloudflare Access protects internal resources by securing, authenticating and monitoring access
 			per-user and by application. With Cloudflare Access, only authenticated users with the required permissions are
@@ -283,9 +283,13 @@ func login(c *cli.Context) error {
 	// Chatty by default for backward compat. The new --app flag
 	// is an implicit opt-out of the backwards-compatible chatty output.
 	if c.Bool("no-verbose") || c.IsSet(appURLFlag) {
-		fmt.Fprint(os.Stdout, cfdToken)
+		if _, err := fmt.Fprint(os.Stdout, cfdToken); err != nil {
+			return fmt.Errorf("failed to write token to stdout: %w", err)
+		}
 	} else {
-		fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken)
+		if _, err := fmt.Fprintf(os.Stdout, "Successfully fetched your token:\n\n%s\n\n", cfdToken); err != nil {
+			return fmt.Errorf("failed to write token to stdout: %w", err)
+		}
 	}
 
 	return nil
@@ -345,7 +349,7 @@ func curl(c *cli.Context) error {
 
 // run kicks off a shell task and pipe the results to the respective std pipes
 func run(cmd string, args ...string) error {
-	c := exec.Command(cmd, args...)
+	c := exec.Command(cmd, args...) // nolint: gosec // access curl intentionally runs curl with user-supplied arguments
 	c.Stdin = os.Stdin
 	stderr, err := c.StderrPipe()
 	if err != nil {
@@ -533,7 +537,7 @@ func cloudflaredPath() string {
 
 // isFileThere will check for the presence of candidate path
 func isFileThere(candidate string) bool {
-	fi, err := os.Stat(candidate)
+	fi, err := os.Stat(candidate) // nolint: gosec // read-only stat of the cloudflared executable or PATH candidates
 	if err != nil || fi.IsDir() || !fi.Mode().IsRegular() {
 		return false
 	}
@@ -595,7 +599,7 @@ func isTokenValid(options *carrier.StartOptions, log *zerolog.Logger) (bool, err
 	if err != nil {
 		return false, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// A redirect to login means the token was invalid.
 	return !carrier.IsAccessResponse(resp), nil

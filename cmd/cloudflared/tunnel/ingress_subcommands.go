@@ -3,6 +3,7 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/cliutil"
@@ -13,12 +14,12 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const ingressDataJSONFlagName = "json"
+const ingressDataJSONArgvFlagName = "json"
 
-var ingressDataJSON = &cli.StringFlag{
-	Name:    ingressDataJSONFlagName,
+var ingressDataJSONArgv = &cli.StringFlag{
+	Name:    ingressDataJSONArgvFlagName,
 	Aliases: []string{"j"},
-	Usage:   `Accepts data in the form of json as an input rather than read from a file`,
+	Usage:   `Accepts a config in the form of json (as a command line argument) rather than read from a file`,
 	EnvVars: []string{"TUNNEL_INGRESS_VALIDATE_JSON"},
 }
 
@@ -59,7 +60,7 @@ func buildValidateIngressCommand() *cli.Command {
 		Usage:       "Validate the ingress configuration ",
 		UsageText:   "cloudflared tunnel [--config FILEPATH] ingress validate",
 		Description: "Validates the configuration file, ensuring your ingress rules are OK.",
-		Flags:       []cli.Flag{ingressDataJSON},
+		Flags:       []cli.Flag{ingressDataJSONArgv},
 	}
 }
 
@@ -78,9 +79,15 @@ func buildTestURLCommand() *cli.Command {
 	}
 }
 
-// validateIngressCommand check the syntax of the ingress rules in the cloudflared config file
+// validateIngressCommand check the syntax of the ingress rules in the cloudflared config
 func validateIngressCommand(c *cli.Context, warnings string) error {
-	conf, err := getConfiguration(c)
+	return validateIngress(c, warnings, config.GetConfiguration(), c.App.Reader)
+}
+
+// validateIngress calls validateIngressCommand with its sources of
+// configuration (the process-wide config file settings and stdin) injected.
+func validateIngress(c *cli.Context, warnings string, globalConf *config.Configuration, configStdin io.Reader) error {
+	conf, err := getConfiguration(c, globalConf, configStdin)
 	if err != nil {
 		return err
 	}
@@ -100,20 +107,38 @@ func validateIngressCommand(c *cli.Context, warnings string) error {
 	return nil
 }
 
-func getConfiguration(c *cli.Context) (*config.Configuration, error) {
+// Gets the cloudflared configuration from the correct source depending on CLI
+// flags. This function will use:
+//
+// - A config provided via the CLI if invoked as "tunnel ingress validate --json <config literal>"
+// - The passed in globalConf, if non-nil (this is present if cloudflared is invoked with "tunnel --config <file> subcommand")
+// - A config provided via stdin otherwise
+func getConfiguration(c *cli.Context, globalConf *config.Configuration, configStdin io.Reader) (*config.Configuration, error) {
 	var conf *config.Configuration
-	if c.IsSet(ingressDataJSONFlagName) {
-		ingressJSON := c.String(ingressDataJSONFlagName)
+
+	// Option 1) --json <config literal>
+	if c.IsSet(ingressDataJSONArgvFlagName) {
+		ingressJSON := c.String(ingressDataJSONArgvFlagName)
 		fmt.Println("Validating rules from cmdline flag --json")
 		err := json.Unmarshal([]byte(ingressJSON), &conf)
 		return conf, err
 	}
-	conf = config.GetConfiguration()
-	if conf.Source() == "" {
-		return nil, errors.New("No configuration file was found. Please create one, or use the --config flag to specify its filepath. You can use the help command to learn more about configuration files")
+
+	// Option 2) Global configuration (Normally injected as the --config passed to "cloudflared tunnel")
+	if globalConf.Source() != "" {
+		fmt.Println("Validating rules from ", globalConf.Source())
+		return globalConf, nil
 	}
-	fmt.Println("Validating rules from", conf.Source())
-	return conf, nil
+
+	// Option 3) Read from standard input
+	fmt.Println("Configuration not provided via a file or CLI, reading config as JSON from standard input")
+	ingressJSON, err := io.ReadAll(configStdin)
+	if err != nil {
+		return nil, fmt.Errorf("read stdin: %w", err)
+	}
+
+	err = json.Unmarshal(ingressJSON, &conf)
+	return conf, err
 }
 
 // testURLCommand checks which ingress rule matches the given URL.

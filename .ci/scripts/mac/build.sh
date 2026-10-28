@@ -36,6 +36,10 @@ mkdir -p ../src/github.com/cloudflare/
 cp -r . ../src/github.com/cloudflare/cloudflared
 cd ../src/github.com/cloudflare/cloudflared 
 
+go mod download
+# Module downloads must not change the committed dependency lockfiles.
+git diff --exit-code -- go.mod go.sum
+
 # Imports certificates to the Apple KeyChain
 import_certificate() {
     local CERTIFICATE_NAME=$1
@@ -165,7 +169,7 @@ fi
 # cleanup the build directory because the previous execution might have failed without cleaning up.
 rm -rf "${TARGET_DIRECTORY}"
 export TARGET_OS="darwin"
-GOCACHE="$PWD/../../../../" GOPATH="$PWD/../../../../" CGO_ENABLED=1 make cloudflared
+CGO_ENABLED=1 make cloudflared
 
 
 # This allows apple tools to use the certificates in the keychain without requiring password input.

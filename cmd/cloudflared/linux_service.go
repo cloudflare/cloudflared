@@ -24,8 +24,21 @@ func runApp(app *cli.App, _ chan struct{}) {
 		Usage: "Manages the cloudflared system service",
 		Subcommands: []*cli.Command{
 			{
-				Name:   "install",
-				Usage:  "Install cloudflared as a system service",
+				Name:      "install",
+				Usage:     "Install cloudflared as a system service",
+				ArgsUsage: "[TOKEN]",
+				Description: `
+Installs cloudflared as a service using the detected init system (e.g., sysv,
+systemd, openrc).
+
+A token may optionally be provided. If a token is provided, it will be written
+to disk in the service configuration directory and the cloudflared service
+configured to use it via the --token-file argument.
+
+If no token is provided, cloudflared will attempt to find a configuration file
+with tunnel credentials from a predetermined list of configuration directory
+paths. If found, it will use that configuration file and credentials (or error
+out if no configuration file with credentials was found).`,
 				Action: cliutil.ConfiguredAction(installLinuxService),
 				Flags: []cli.Flag{
 					noUpdateServiceFlag,
@@ -53,6 +66,9 @@ const (
 	cloudflaredUpdateTimer   = "cloudflared-update.timer"
 	cloudflaredOpenRCService = "cloudflared"
 )
+
+// OS-specific function for token file creation
+var createTokenFile = createTokenFileUnix
 
 var systemdAllTemplates = map[string]ServiceTemplate{
 	cloudflaredService: {
@@ -246,22 +262,38 @@ func installLinuxService(c *cli.Context) error {
 		Path: etPath,
 	}
 
-	// Check if the "no update flag" is set
-	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
-
-	var extraArgsFunc func(c *cli.Context, log *zerolog.Logger) ([]string, error)
+	var extraArgs []string
 	if c.NArg() == 0 {
-		extraArgsFunc = buildArgsForConfig
+		// If passed no arguments e.g., "$ cloudflared service install",
+		// install the service using the detected config file (or error-out if
+		// no config exists).
+		if extraArgs, err = buildArgsForConfig(c, log); err != nil {
+			return err
+		}
 	} else {
-		extraArgsFunc = buildArgsForToken
-	}
+		// If passed one argument e.g., "$ cloudflared service install <token>"
+		// write the token to the config directory and install the service
+		// using --token-file pointing to that file. This is the quick setup
+		// the tunnel UI suggests.
 
-	extraArgs, err := extraArgsFunc(c, log)
-	if err != nil {
-		return err
+		// Ensure token file is removed if install fails
+		defer func() {
+			if err != nil {
+				removeTokenFile(serviceConfigDir, log)
+			}
+		}()
+
+		if err = writeTokenToConfigDir(c, serviceConfigDir); err != nil {
+			return fmt.Errorf("could not write token to configuration directory: %w", err)
+		}
+
+		extraArgs = buildArgsForTokenFile(serviceConfigDir)
 	}
 
 	templateArgs.ExtraArgs = extraArgs
+
+	// Check if the "no update flag" is set
+	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
 
 	switch {
 	case inits.IsSystemd():
@@ -423,9 +455,12 @@ func uninstallLinuxService(c *cli.Context) error {
 		err = uninstallSysv(log)
 	}
 
+	removeTokenFile(serviceConfigDir, log)
+
 	if err == nil {
 		log.Info().Msg("Linux service for cloudflared uninstalled successfully")
 	}
+
 	return err
 }
 
@@ -514,14 +549,6 @@ func uninstallOpenRC(log *zerolog.Logger) error {
 		}
 	}
 	return nil
-}
-
-func ensureConfigDirExists(configDir string) error {
-	ok, err := config.FileExists(configDir)
-	if !ok && err == nil {
-		err = os.Mkdir(configDir, 0o755) //nolint:gosec // config dir must be traversable by a non-root service user
-	}
-	return err
 }
 
 func copyFile(src, dest string) error {

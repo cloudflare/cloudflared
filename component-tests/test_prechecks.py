@@ -7,7 +7,7 @@ Scope
 These tests verify the end-to-end behavior of cloudflared pre-checks:
 - that the human-readable table written to the log output has the correct
   structure and content,
-- that structured JSON log lines are emitted with the expected fields, and
+- that the diagnostic endpoint exposes the completed report, and
 - that running the `diag` subcommand against a live tunnel instance produces a
   zip archive that contains prechecks.json.
 
@@ -30,11 +30,10 @@ stdout/stderr design
 The pre-checks table is emitted via cliutil.LogTable, which wraps the content
 in an ASCII box and logs each line at Info level through zerolog.  zerolog
 writes to stderr, which the test harness merges into stdout (stderr=STDOUT in
-Popen).  We poll a --logfile for the "precheck complete" sentinel before
-leaving the `with` block, ensuring the goroutine has finished.  We then call
-cfd.terminate().  After the `with` block exits, the process is dead and all
-output has been captured by CloudflaredProcess's background reader thread.  We
-read the accumulated lines from cfd.stdout_lines.
+Popen). We poll /diag/precheck before leaving the `with` block, ensuring the
+goroutine has finished. We then call cfd.terminate(). After the `with` block
+exits, the process is dead and all output has been captured by
+CloudflaredProcess's background reader thread.
 
 Box format (cliutil.asciiBox with padding=2, title="CONNECTIVITY PRE-CHECKS"):
   +----...----+
@@ -51,6 +50,8 @@ import re
 import subprocess
 import time
 import zipfile as zipfilemod
+
+import requests
 
 from constants import METRICS_PORT
 from util import LOGGER, start_cloudflared, wait_tunnel_ready
@@ -106,10 +107,6 @@ ACTION_HTTP2_BLOCKED = "Allow outbound TCP on port 7844."
 SUMMARY_HEALTHY  = "SUMMARY: Environment is healthy. cloudflared will use 'quic' as primary protocol."
 SUMMARY_CRITICAL = "SUMMARY: Environment has critical failures. cloudflared may not be able to establish a tunnel."
 
-# structured log constants (result.go)
-
-LOG_MSG_PRECHECK          = "precheck"
-LOG_MSG_PRECHECK_COMPLETE = "precheck complete"
 STATUS_PASS_LOG           = "pass"
 
 UNREACHABLE_EDGE = "192.0.2.1:7844"
@@ -120,46 +117,21 @@ PRECHECK_POLL_INTERVAL_SECS = 1
 
 # ---------- helpers ----------
 
-def _poll_log_file_for_precheck_complete(log_file: str, timeout: float) -> list[dict]:
-    """
-    Poll a JSON log file until a 'precheck complete' line appears or timeout
-    expires.  Returns all precheck-related log lines found.
-
-    cloudflared's --logfile writes one JSON object per line.  Polling keeps
-    the test fast on healthy networks and still tolerates slow CI hosts.
-
-    We re-read from the beginning of the file on every poll because the file
-    is append-only, small, and tracking a byte offset would add complexity with
-    no meaningful performance benefit for a ~15 s total window.
-    """
+def _poll_precheck_endpoint(timeout: float) -> dict:
+    """Poll /diag/precheck until a completed report is available."""
+    url = f"http://localhost:{METRICS_PORT}/diag/precheck"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        lines = _read_precheck_log_lines_from_file(log_file)
-        if any(l.get("message") == LOG_MSG_PRECHECK_COMPLETE for l in lines):
-            return lines
+        try:
+            response = requests.get(url, timeout=1)
+            if response.status_code == 200:
+                return response.json()
+            assert response.status_code == 204, \
+                f"Expected {url} to return 200 or 204, got {response.status_code}"
+        except requests.exceptions.RequestException:
+            pass
         time.sleep(PRECHECK_POLL_INTERVAL_SECS)
-    return _read_precheck_log_lines_from_file(log_file)
-
-
-def _read_precheck_log_lines_from_file(log_file: str) -> list[dict]:
-    """Parse all precheck-related JSON log lines from a --logfile path."""
-    result = []
-    try:
-        with open(log_file, "r") as f:
-            for raw_line in f:
-                raw_line = raw_line.strip()
-                if not raw_line:
-                    continue
-                try:
-                    obj = json.loads(raw_line)
-                except json.JSONDecodeError:
-                    continue
-                msg = obj.get("message") or obj.get("msg", "")
-                if msg in (LOG_MSG_PRECHECK, LOG_MSG_PRECHECK_COMPLETE):
-                    result.append(obj)
-    except FileNotFoundError:
-        pass
-    return result
+    raise AssertionError(f"Timed out waiting for a completed precheck report from {url}")
 
 
 # stdout table parse
@@ -235,25 +207,21 @@ def _rows_for(rows: list[TableRow], component: str) -> list[TableRow]:
 
 # log assertions
 
-def _assert_precheck_summary_log(
-    log_lines: list[dict],
+def _assert_precheck_report(
+    report: dict,
     *,
     hard_fail: bool,
     suggested_protocol: str | None = None,
 ):
-    """Assert the 'precheck complete' summary log line has the expected fields."""
-    summary_lines = [l for l in log_lines if l.get("message") == LOG_MSG_PRECHECK_COMPLETE]
-    assert len(summary_lines) == 1, \
-        f"Expected exactly one '{LOG_MSG_PRECHECK_COMPLETE}' log line; got {summary_lines}"
-    summary = summary_lines[0]
-
-    assert summary.get("hard_fail") is hard_fail, \
-        f"Expected hard_fail={hard_fail} in summary log: {summary}"
+    """Assert the diagnostic report has the expected summary fields."""
+    assert report.get("run_id"), f"Expected a run_id in precheck report: {report}"
+    assert report.get("hard_fail") is hard_fail, \
+        f"Expected hard_fail={hard_fail} in precheck report: {report}"
 
     if suggested_protocol is not None:
-        assert summary.get("suggested_protocol") == suggested_protocol, \
+        assert report.get("suggested_protocol") == suggested_protocol, \
             (f"Expected suggested_protocol={suggested_protocol!r}; "
-             f"got {summary.get('suggested_protocol')!r}")
+             f"got {report.get('suggested_protocol')!r}")
 
 
 # ---------- Tests ----------
@@ -265,12 +233,11 @@ class TestPrechecksHappyPath:
       - every row's component, target, status, and details
       - no ERROR/WARNING action lines
       - the exact summary line
-      - the structured log summary (hard_fail=false, suggested_protocol=quic)
+      - the diagnostic report summary (hard_fail=false, suggested_protocol=quic)
     """
 
     def test_prechecks_pass_on_healthy_connection(self, tmp_path, component_tests_config):
-        log_file = str(tmp_path / "cloudflared.log")
-        config = component_tests_config({"logfile": log_file})
+        config = component_tests_config({})
 
         with start_cloudflared(
             tmp_path,
@@ -281,10 +248,7 @@ class TestPrechecksHappyPath:
             capture_output=True,
         ) as cfd:
             wait_tunnel_ready(tunnel_url=config.get_url(), require_min_connections=1)
-            # Poll the log file for the sentinel before signalling the process.
-            log_lines = _poll_log_file_for_precheck_complete(
-                log_file, timeout=PRECHECK_POLL_TIMEOUT_SECS
-            )
+            report = _poll_precheck_endpoint(timeout=PRECHECK_POLL_TIMEOUT_SECS)
             # Signal shutdown.
             cfd.terminate()
 
@@ -293,7 +257,7 @@ class TestPrechecksHappyPath:
         stdout = b"".join(cfd.stdout_lines).decode(errors="replace")
 
         LOGGER.debug(f"[happy-path] stdout:\n{stdout}")
-        LOGGER.debug(f"[happy-path] log_lines:\n{log_lines}")
+        LOGGER.debug(f"[happy-path] precheck report:\n{report}")
 
         # Strip zerolog console prefixes so pattern matching works on raw messages.
         messages = "\n".join(_strip_log_prefix(l) for l in stdout.splitlines())
@@ -351,14 +315,12 @@ class TestPrechecksHappyPath:
         assert SUMMARY_HEALTHY in messages, \
             f"Expected healthy summary;\ngot:\n{stdout}"
 
-        # ── structured log ───────────────────────────────────────────────────
-        assert len(log_lines) > 0, \
-            "Expected at least one structured precheck log line in log file"
-        for line in log_lines:
-            if line.get("message") == LOG_MSG_PRECHECK:
-                assert line.get("status") == STATUS_PASS_LOG, \
-                    f"Expected status=pass in precheck log line: {line}"
-        _assert_precheck_summary_log(log_lines, hard_fail=False, suggested_protocol="quic")
+        # ── diagnostic report ────────────────────────────────────────────────
+        assert len(report["results"]) == 7
+        for result in report["results"]:
+            assert result["status"] == STATUS_PASS_LOG, \
+                f"Expected status=pass in precheck report: {result}"
+        _assert_precheck_report(report, hard_fail=False, suggested_protocol="quic")
 
 
 class TestPrechecksHardFail:
@@ -372,15 +334,14 @@ class TestPrechecksHardFail:
       - HTTP/2 row: FAIL with correct details + ERROR action
       - API row: PASS (api.cloudflare.com:443 is independently reachable)
       - the exact critical summary line
-      - the structured log summary (hard_fail=true)
+      - the diagnostic report summary (hard_fail=true)
 
     This test does NOT call wait_tunnel_ready because the tunnel will not
     connect to the unreachable address.
     """
 
     def test_prechecks_hard_fail_when_edge_unreachable(self, tmp_path, component_tests_config):
-        log_file = str(tmp_path / "cloudflared.log")
-        config = component_tests_config({"logfile": log_file})
+        config = component_tests_config({})
 
         with start_cloudflared(
             tmp_path,
@@ -394,15 +355,13 @@ class TestPrechecksHardFail:
             new_process=True,
             capture_output=True,
         ) as cfd:
-            log_lines = _poll_log_file_for_precheck_complete(
-                log_file, timeout=PRECHECK_POLL_TIMEOUT_SECS
-            )
+            report = _poll_precheck_endpoint(timeout=PRECHECK_POLL_TIMEOUT_SECS)
             cfd.terminate()
 
         stdout = b"".join(cfd.stdout_lines).decode(errors="replace")
 
         LOGGER.debug(f"[hard-fail] stdout:\n{stdout}")
-        LOGGER.debug(f"[hard-fail] log_lines:\n{log_lines}")
+        LOGGER.debug(f"[hard-fail] precheck report:\n{report}")
 
         # Strip zerolog console prefixes so pattern matching works on raw messages.
         messages = "\n".join(_strip_log_prefix(l) for l in stdout.splitlines())
@@ -454,7 +413,7 @@ class TestPrechecksHardFail:
         assert SUMMARY_CRITICAL in messages, \
             f"Expected critical summary;\ngot:\n{stdout}"
 
-        _assert_precheck_summary_log(log_lines, hard_fail=True, suggested_protocol=None)
+        _assert_precheck_report(report, hard_fail=True, suggested_protocol=None)
 
 
 class TestPreChecksDiag:

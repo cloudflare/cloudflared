@@ -4,8 +4,10 @@
   outputDir: artifacts
   runner: linux-x86-8cpu-16gb
   stage: build
-  golangVersion: "boring-1.26"
-  imageVersion: "3625-1801d52@sha256:9261597bc2d229c997522848260de758567643d58ae1097196ae368db89a1d0f"
+  golangVersion: "1.27"
+  imageVersion: "3736-b3c52d6a358c@sha256:d34346e3ebac395e8b9c4bff9130955cd99c6936b6c13460c86131ffc1d1536d"
+  # The race detector used by `make test` requires cgo. Build jobs below
+  # explicitly disable it.
   CGO_ENABLED: 1
 
 .default-packaging-job: &packaging-job-defaults
@@ -15,44 +17,79 @@
   rules:
     - !reference [.default-rules, run-on-master]
   image: $BUILD_IMAGE
-  cache: {}
+  cache:
+    key:
+      prefix: "$CI_COMMIT_REF_PROTECTED-$GO_VERSION-$CI_RUNNER_EXECUTABLE_ARCH"
+      files:
+        - go.sum
+    paths:
+      - .cache/go/
   artifacts:
     paths:
       - artifacts/*
 
 include:
-  ###################
-  ### Linux Build ###
-  ###################
-  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+  ###########################
+  #### Linux AMD64 Build ####
+  ###########################
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       <<: *golang_inputs
       jobPrefix: linux-build
       GOLANG_MAKE_TARGET: ci-build
+      CGO_ENABLED: 0
+
+  ###########################
+  #### Linux ARM64 Build ####
+  ###########################
+  # Builds the arm64 binary natively on an arm64 runner on MRs so that arm64
+  # build breakages are caught before merge. Only the binary is built; no
+  # packages are produced.
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
+    inputs:
+      <<: *golang_inputs
+      runner: linux-arm64-8cpu-16gb
+      jobPrefix: linux-build-arm64
+      GOLANG_MAKE_TARGET: ci-build-arm64
+      CGO_ENABLED: 0
 
   ########################
   ### Linux FIPS Build ###
   ########################
-  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       <<: *golang_inputs
       jobPrefix: linux-fips-build
       GOLANG_MAKE_TARGET: ci-fips-build
+      CGO_ENABLED: 0
 
   #################
   ### Unit Tests ##
   #################
-  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       <<: *golang_inputs
       stage: test
       jobPrefix: test
       GOLANG_MAKE_TARGET: ci-test
 
+  ###########################
+  ### Unit Tests (ARM64) ###
+  ###########################
+  # Runs the unit tests natively on an arm64 runner. Lint and format checks
+  # are architecture independent and already run in the amd64 job above.
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
+    inputs:
+      <<: *golang_inputs
+      runner: linux-arm64-8cpu-16gb
+      stage: test
+      jobPrefix: test-arm64
+      GOLANG_MAKE_TARGET: ci-test-arm64
+
   ######################
   ### Unit Tests FIPS ##
   ######################
-  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       <<: *golang_inputs
       stage: test
@@ -62,7 +99,7 @@ include:
   #################
   ### Vuln Check ##
   #################
-  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/boring-make@~latest
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       <<: *golang_inputs
       runOnBranches: "^$"
@@ -78,7 +115,7 @@ linux-component-tests: &linux-component-tests
   extends: .component-tests
   needs:
     - ci-image-get-image-ref
-    - linux-build-boring-make
+    - linux-build-make
   script:
     - ./.ci/scripts/component-tests.sh
   variables: &component-tests-variables
@@ -97,7 +134,7 @@ linux-component-tests-fips:
   <<: *linux-component-tests
   needs:
     - ci-image-get-image-ref
-    - linux-fips-build-boring-make
+    - linux-fips-build-make
   variables:
     <<: *component-tests-variables
     COMPONENT_TESTS_FIPS: 1

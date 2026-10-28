@@ -15,8 +15,6 @@ arch=$1
 VERSION=$(git describe --tags --always --match "[0-9][0-9][0-9][0-9].*.*")
 echo $VERSION
 
-# Disable FIPS module in go-boring
-export GOEXPERIMENT=noboringcrypto
 export CGO_ENABLED=0
 
 # This controls the directory the built artifacts go into
@@ -57,4 +55,3 @@ mv cloudflared-$RPMVERSION-1.$RPMARCH.rpm $ARTIFACT_DIR/cloudflared-linux-$RPMAR
 
 # finally move the linux binary as well.
 mv ./cloudflared $ARTIFACT_DIR/cloudflared-linux-$arch
-

@@ -1,8 +1,11 @@
 variables:
-  GO_VERSION: "1.26.4"
-  MAC_GO_VERSION: "go@$GO_VERSION"
+  GO_VERSION: "1.27.3"
   WIN_GO_VERSION: "go$GO_VERSION"
   GIT_DEPTH: "0"
+  # Athens caches public modules for faster CI downloads; direct preserves public fallback.
+  GOPROXY: "https://athens.cfdata.org|https://proxy.golang.org|direct"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go/pkg/mod"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go/build"
 
 default:
   id_tokens:

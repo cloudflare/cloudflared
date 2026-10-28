@@ -72,6 +72,9 @@ const (
 	// PostQuantum is the command line flag to force the connection to Cloudflare Edge to use Post Quantum cryptography
 	PostQuantum = "post-quantum"
 
+	// AllowedMail is the command line flag to set allowed email addresses or domains for protected quick tunnels
+	AllowedMail = "allowed-mail"
+
 	// Features is the command line flag to opt into various features that are still being developed or tested
 	Features = "features"
 
@@ -126,13 +129,16 @@ const (
 	// NoPrechecks is the command line flag to skip connectivity pre-checks at startup.
 	NoPrechecks = "no-prechecks"
 
+	// DisablePathNormalization disables URL path normalization before matching ingress rules.
+	DisablePathNormalization = "disable-path-normalization"
+
 	// LogLevel is the command line flag for the cloudflared logging level
 	LogLevel = "loglevel"
 
 	// LogLevelSSH is the command line flag for the cloudflared ssh logging level
 	LogLevelSSH = "log-level"
 
-	// TransportLogLevel is the command line flag for the transport logging level
+	// TransportLogLevel is retained as a deprecated no-op for backwards compatibility.
 	TransportLogLevel = "transport-loglevel"
 
 	// LogFile is the command line flag to define the file where application logs will be stored

@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/trace"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +30,6 @@ import (
 	"github.com/cloudflare/cloudflared/credentials"
 	"github.com/cloudflare/cloudflared/diagnostic"
 	"github.com/cloudflare/cloudflared/edgediscovery"
-	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/ingress"
 	"github.com/cloudflare/cloudflared/logger"
 	"github.com/cloudflare/cloudflared/management"
@@ -50,7 +47,6 @@ const (
 	//nolint:gosec // This is the Sentry DSN for cloudflared which is safe to be public
 	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
 
-	LogFieldCommand             = "command"
 	LogFieldExpandedPath        = "expandedPath"
 	LogFieldPIDPathname         = "pidPathname"
 	LogFieldTmpTraceFilename    = "tmpTraceFilename"
@@ -115,7 +111,6 @@ var (
 		"proxy-address",
 		"proxy-port",
 		cfdflags.LogLevel,
-		cfdflags.TransportLogLevel,
 		cfdflags.LogFile,
 		cfdflags.LogDirectory,
 		cfdflags.TraceOutput,
@@ -146,7 +141,6 @@ var (
 		"compression-quality",
 		"use-reconnect-token",
 		"dial-edge-timeout",
-		"stdin-control",
 		cfdflags.Name,
 		cfdflags.Ui,
 		"quick-service",
@@ -241,6 +235,9 @@ func TunnelCommand(c *cli.Context) error {
 	// --url or --hello-world required
 	// --hostname optional
 	if name := c.String(cfdflags.Name); name != "" {
+		if err := rejectAllowedMailForNamedTunnel(c); err != nil {
+			return err
+		}
 		hostname, err := validation.ValidateHostname(c.String("hostname"))
 		if err != nil {
 			return errors.Wrap(err, "Invalid hostname provided")
@@ -271,6 +268,13 @@ func TunnelCommand(c *cli.Context) error {
 	}
 
 	return errors.New(tunnelCmdErrorMessage)
+}
+
+func rejectAllowedMailForNamedTunnel(c *cli.Context) error {
+	if len(c.StringSlice(cfdflags.AllowedMail)) > 0 {
+		return cliutil.UsageError("--allowed-mail is only supported for Quick Tunnels")
+	}
+	return nil
 }
 
 func Init(info *cliutil.BuildInfo, gracefulShutdown chan struct{}) {
@@ -400,9 +404,7 @@ func StartServer(
 		return fmt.Errorf("namedTunnel is nil")
 	}
 
-	logTransport := logger.CreateTransportLoggerFromContext(c, logger.EnableTerminalLog)
-
-	observer := connection.NewObserver(log, logTransport)
+	observer := connection.NewObserver(log)
 
 	// Send Quick Tunnel URL to UI if applicable
 	quickTunnelURL := namedTunnel.QuickTunnelUrl
@@ -410,18 +412,22 @@ func StartServer(
 		observer.SendURL(quickTunnelURL)
 	}
 
-	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(ctx, c, info, log, logTransport, observer, namedTunnel)
+	tunnelConfig, orchestratorConfig, err := prepareTunnelConfig(ctx, c, info, log, observer, namedTunnel)
 	if err != nil {
 		log.Err(err).Msg("Couldn't start tunnel")
 		return err
 	}
 	connectorID := tunnelConfig.ClientConfig.ConnectorID
+	precheckReports := diagnostic.NewPrecheckReportStore()
 
 	// Run connectivity pre-checks for cloudflared. This runs in a separate
 	// goroutine, as we want to keep initializing cloudflared while prechecks
 	// are running. Prechecks are controlled via DNS flag for remote kill-switch capability.
 	if !tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().SkipPrechecks && !c.Bool(cfdflags.NoPrechecks) {
-		go runPrechecks(c, log, tunnelConfig.Region)
+		go func() {
+			report := runPrechecks(c, log, tunnelConfig)
+			precheckReports.Set(report)
+		}()
 	}
 
 	// Disable ICMP packet routing for quick tunnels
@@ -454,7 +460,14 @@ func StartServer(
 		logger.ManagementLogger,
 	)
 	internalRules := []ingress.Rule{ingress.NewManagementRule(mgmt)}
-	orchestrator, err := orchestration.NewOrchestrator(ctx, orchestratorConfig, tunnelConfig.Tags, internalRules, tunnelConfig.Log)
+	orchestrator, err := orchestration.NewOrchestratorWithHTTPRequestAuthorizer(
+		ctx,
+		orchestratorConfig,
+		tunnelConfig.Tags,
+		internalRules,
+		namedTunnel.QuickTunnelAuthorizer,
+		tunnelConfig.Log,
+	)
 	if err != nil {
 		return err
 	}
@@ -491,6 +504,7 @@ func StartServer(
 			tracker,
 			cliFlags,
 			sources,
+			diagnostic.WithPrecheckReportStore(precheckReports),
 		)
 		metricsConfig := metrics.Config{
 			ReadyServer:         readinessServer,
@@ -501,19 +515,13 @@ func StartServer(
 		errC <- metrics.ServeMetrics(metricsListener, ctx, metricsConfig, log)
 	}()
 
-	reconnectCh := make(chan supervisor.ReconnectSignal, c.Int(cfdflags.HaConnections))
-	if c.IsSet("stdin-control") {
-		log.Info().Msg("Enabling control through stdin")
-		go stdinControl(reconnectCh, log)
-	}
-
 	wg.Add(1)
 	go func() {
 		defer func() {
 			wg.Done()
 			log.Info().Msg("Tunnel server stopped")
 		}()
-		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, reconnectCh, graceShutdownC)
+		errC <- supervisor.StartTunnelDaemon(ctx, tunnelConfig, orchestrator, connectedSignal, graceShutdownC)
 	}()
 
 	gracePeriod, err := gracePeriod(c)
@@ -525,21 +533,13 @@ func StartServer(
 
 // runPrechecks executes connectivity pre-checks and logs the results.
 // Pre-checks are diagnostic only and do not gate tunnel startup.
-func runPrechecks(c *cli.Context, log *zerolog.Logger, region string) {
-	ipVersion := allregions.Auto
-	if ipVersionStr := c.String(cfdflags.EdgeIpVersion); ipVersionStr != "" {
-		parsedVersion, err := parseConfigIPVersion(ipVersionStr)
-		if err == nil {
-			ipVersion = parsedVersion
-		} else {
-			log.Warn().Str("edgeIpVersion", ipVersionStr).Err(err).Msg("Invalid edge-ip-version value, using auto")
-		}
-	}
-
+func runPrechecks(c *cli.Context, log *zerolog.Logger, tunnelConfig *supervisor.TunnelConfig) prechecks.Report {
 	cfg := prechecks.Config{
-		Region:           region,
-		IPVersion:        ipVersion,
-		EdgeAddrs:        c.StringSlice(cfdflags.Edge),
+		Region:           tunnelConfig.Region,
+		IPVersion:        tunnelConfig.EdgeIPVersion,
+		EdgeBindAddr:     tunnelConfig.EdgeBindAddr,
+		QUICConfig:       tunnelConfig.QUICConfigOptions(),
+		EdgeAddrs:        tunnelConfig.EdgeAddrs,
 		ProtocolOverride: c.String(cfdflags.Protocol),
 	}
 
@@ -550,13 +550,15 @@ func runPrechecks(c *cli.Context, log *zerolog.Logger, region string) {
 		ManagementDialer: &prechecks.NetManagementDialer{Dialer: net.Dialer{}},
 	}
 
-	report := prechecks.Run(c.Context, c.String(cfdflags.CACert), cfg, log, dialers)
+	pqMode := tunnelConfig.ClientConfig.ConnectionFeaturesSnapshot().PostQuantum
+	report := prechecks.Run(c.Context, c.String(cfdflags.CACert), cfg, pqMode, log, dialers)
 
 	// Output the human-readable table
 	cliutil.LogTable(log, report.String(), "CONNECTIVITY PRE-CHECKS")
 
 	// Also log structured results for log aggregation
 	report.LogEvent(log)
+	return report
 }
 
 func waitToShutdown(wg *sync.WaitGroup,
@@ -578,7 +580,7 @@ func waitToShutdown(wg *sync.WaitGroup,
 			defer ticker.Stop()
 			select {
 			case <-ticker.C:
-			case <-errC:
+			case <-errC: //nolint:errcheck // Only wait for service termination during graceful shutdown.
 			}
 		}
 	}
@@ -591,7 +593,7 @@ func waitToShutdown(wg *sync.WaitGroup,
 	go func() {
 		for {
 			select {
-			case <-errC: // ignore
+			case <-errC: //nolint:errcheck // Discard errors while waiting for clean exit.
 			case <-stopDiscarding:
 				return
 			}
@@ -848,13 +850,6 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"DIAL_EDGE_TIMEOUT"},
 			Hidden:  true,
 		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
-			Name:    "stdin-control",
-			Usage:   "Control the process using commands sent through stdin",
-			EnvVars: []string{"STDIN_CONTROL"},
-			Hidden:  true,
-			Value:   false,
-		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    cfdflags.Name,
 			Aliases: []string{"n"},
@@ -873,6 +868,11 @@ func tunnelFlags(shouldHide bool) []cli.Flag {
 			Usage:  "URL for a service which manages unauthenticated 'quick' tunnels.",
 			Value:  "https://api.trycloudflare.com",
 			Hidden: true,
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:   cfdflags.AllowedMail,
+			Usage:  "Email addresses or wildcard domains allowed to access a protected Quick Tunnel. May be repeated or comma-separated.",
+			Hidden: shouldHide,
 		}),
 		altsrc.NewIntFlag(&cli.IntFlag{
 			Name:    "max-fetch-size",
@@ -979,6 +979,14 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Usage:   legacyTunnelFlag("specify if this tunnel is running as a SOCK5 Server"),
 			EnvVars: []string{"TUNNEL_SOCKS"},
 			Value:   false,
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Name: cfdflags.DisablePathNormalization,
+			Usage: "Disable URL path normalization before matching ingress rules. Use this setting at your own risk." +
+				"An unnormalized request path could bypass Cloudflare Access rules and reach a protected origin.",
+			EnvVars: []string{"TUNNEL_DISABLE_PATH_NORMALIZATION"},
+			Value:   true,
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewDurationFlag(&cli.DurationFlag{
@@ -1190,43 +1198,6 @@ func sshFlags(shouldHide bool) []cli.Flag {
 			EnvVars: []string{"TUNNEL_PROXY_PORT"},
 			Hidden:  shouldHide,
 		}),
-	}
-}
-
-func stdinControl(reconnectCh chan supervisor.ReconnectSignal, log *zerolog.Logger) {
-	helpStr := strings.Join([]string{
-		"Supported command:",
-		"reconnect [delay]",
-		"- restarts one randomly chosen connection with optional delay before reconnect\n",
-	}, "\n")
-
-	for {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			command := scanner.Text()
-			parts := strings.SplitN(command, " ", 2)
-
-			switch parts[0] {
-			case "":
-				continue
-			case "reconnect":
-				var reconnect supervisor.ReconnectSignal
-				if len(parts) > 1 {
-					var err error
-					if reconnect.Delay, err = time.ParseDuration(parts[1]); err != nil {
-						log.Error().Msg(err.Error())
-						continue
-					}
-				}
-				log.Info().Msgf("Sending %+v", reconnect)
-				reconnectCh <- reconnect
-			case "help":
-				log.Info().Msg(helpStr)
-			default:
-				log.Info().Str(LogFieldCommand, command).Msg("Unknown command")
-				log.Info().Msg(helpStr)
-			}
-		}
 	}
 }
 

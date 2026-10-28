@@ -51,6 +51,12 @@ Once installed, you can authenticate `cloudflared` into your Cloudflare account 
 
 Want to test Cloudflare Tunnel before adding a website to Cloudflare? You can do so with TryCloudflare using the documentation [available here](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/).
 
+## Breaking Changes
+
+Removal of CLI flags, environment variables, configuration keys, or commands is a breaking
+change. Such removals must be announced in the [Cloudflare Tunnel changelog](https://developers.cloudflare.com/changelog/product/tunnel/)
+before the release that removes them.
+
 ## Deprecated versions
 
 Cloudflare currently supports versions of cloudflared that are **within one year** of the most recent release. Breaking changes unrelated to feature availability may be introduced that will impact versions released more than one year ago. You can read more about upgrading cloudflared in our [developer documentation](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/update-cloudflared/).
@@ -62,12 +68,29 @@ For example, as of January 2023 Cloudflare will support cloudflared version 2023
 ### Requirements
 - [GNU Make](https://www.gnu.org/software/make/)
 - [capnp](https://capnproto.org/install.html)
-- [go >= 1.26](https://go.dev/doc/install)
+- [go >= 1.27.3](https://go.dev/doc/install)
 - Optional tools:
   - [capnpc-go](https://pkg.go.dev/zombiezen.com/go/capnproto2/capnpc-go)
   - [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports)
   - [golangci-lint](https://github.com/golangci/golangci-lint)
   - [gomocks](https://pkg.go.dev/go.uber.org/mock)
+
+### Updating Go
+
+The `go` directive in `go.mod` must specify the full `major.minor.patch` version
+(for example, `go 1.27.3`). Do not omit the patch version, including `.0` releases.
+This is the exact Go version used to build and test cloudflared: the Makefile exports
+`GOTOOLCHAIN=go<version>` from it, so `make` downloads that toolchain whenever the
+installed Go is older or newer. Tools that `make` runs with `go run pkg@version` also
+use this toolchain. A `toolchain` directive in `go.mod` is ignored; do not add one.
+To use the installed Go instead, run `make <target> GOTOOLCHAIN=local`.
+
+When upgrading Go, update the `go` directive and all corresponding version references
+in `.gitlab-ci.yml`, `.ci/image/Dockerfile`, `.github/workflows/check.yaml`, and the
+Dockerfiles. Update the Linux CI builder image and digest in `.ci/linux.gitlab-ci.yml`
+to match; its `golangVersion` selects the major/minor image family. On macOS and
+Windows a mismatch only costs a toolchain download. Builds that use `GOTOOLCHAIN=local`
+fail if their Go is older than `go.mod` and use their own Go if it is newer.
 
 ### Build
 To build cloudflared locally run `make cloudflared`

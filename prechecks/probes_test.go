@@ -7,7 +7,6 @@ import (
 	"net"
 	"testing"
 
-	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,67 +31,6 @@ const (
 // testTLSConfig is a minimal *tls.Config for tests. Mock dialers never
 // perform a real TLS handshake, so an empty config is sufficient.
 var testTLSConfig = &tls.Config{} //nolint:gosec
-
-// mockQuicConnection is a minimal test double for quic.Connection.
-type mockQuicConnection struct {
-	closeErr error
-}
-
-func (m *mockQuicConnection) AcceptStream(_ context.Context) (quic.Stream, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) AcceptUniStream(_ context.Context) (quic.ReceiveStream, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) OpenStream() (quic.Stream, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) OpenStreamSync(_ context.Context) (quic.Stream, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) OpenUniStream() (quic.SendStream, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) OpenUniStreamSync(_ context.Context) (quic.SendStream, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) LocalAddr() net.Addr {
-	return nil
-}
-
-func (m *mockQuicConnection) RemoteAddr() net.Addr {
-	return nil
-}
-
-func (m *mockQuicConnection) CloseWithError(_ quic.ApplicationErrorCode, _ string) error {
-	return m.closeErr
-}
-
-func (m *mockQuicConnection) Context() context.Context {
-	return context.Background()
-}
-
-func (m *mockQuicConnection) ConnectionState() quic.ConnectionState {
-	return quic.ConnectionState{}
-}
-
-func (m *mockQuicConnection) SendDatagram(_ []byte) error {
-	return nil
-}
-
-func (m *mockQuicConnection) ReceiveDatagram(_ context.Context) ([]byte, error) {
-	return nil, nil
-}
-
-func (m *mockQuicConnection) AddPath(*quic.Transport) (*quic.Path, error) {
-	return nil, nil
-}
 
 // Helper to create test edge addresses.
 func createTestEdgeAddr(ip string, port int, version allregions.EdgeIPVersion) *allregions.EdgeAddr {
@@ -225,14 +163,15 @@ func TestProbeQUIC_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockConn := &mockQuicConnection{}
+	successfulQUICConn := mocks.NewMockQUICConnection(ctrl)
+	successfulQUICConn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Return(nil)
 	dialer := mocks.NewMockQUICDialer(ctrl)
-	dialer.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockConn, nil)
+	dialer.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(successfulQUICConn, nil)
 
 	addr := createTestEdgeAddr("192.0.2.1", testEdgePort, allregions.V4)
 	logger := zerolog.New(nil)
 
-	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
+	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger, Config{})
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
@@ -250,7 +189,7 @@ func TestProbeQUIC_DialError(t *testing.T) {
 	addr := createTestEdgeAddr("192.0.2.1", testEdgePort, allregions.V4)
 	logger := zerolog.New(nil)
 
-	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
+	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger, Config{})
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
@@ -263,14 +202,17 @@ func TestProbeQUIC_CloseErrorDoesNotAffectResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockConn := &mockQuicConnection{closeErr: errors.New("close failed")}
+	// Return a mock whose CloseWithError returns an error — probeQUIC must still
+	// report Pass because the handshake itself succeeded.
+	fakeQUICConn := mocks.NewMockQUICConnection(ctrl)
+	fakeQUICConn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Return(errors.New("close failed"))
 	dialer := mocks.NewMockQUICDialer(ctrl)
-	dialer.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockConn, nil)
+	dialer.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(fakeQUICConn, nil)
 
 	addr := createTestEdgeAddr("192.0.2.1", testEdgePort, allregions.V4)
 	logger := zerolog.New(nil)
 
-	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
+	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger, Config{})
 
 	assert.Equal(t, ProbeTypeQUIC, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
@@ -288,7 +230,7 @@ func TestProbeQUIC_ContextTimeout(t *testing.T) {
 	addr := createTestEdgeAddr("192.0.2.1", testEdgePort, allregions.V4)
 	logger := zerolog.New(nil)
 
-	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
+	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger, Config{})
 
 	assert.Equal(t, Fail, result.ProbeStatus)
 	assert.Equal(t, detailsQUICHandshakeFailed, result.Details)
@@ -306,7 +248,7 @@ func TestProbeHTTP2_Success(t *testing.T) {
 
 	addr := createTestEdgeAddr("192.0.2.1", testEdgePort, allregions.V4)
 
-	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr)
+	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr, nil)
 
 	assert.Equal(t, ProbeTypeHTTP2, result.Type)
 	assert.Equal(t, Pass, result.ProbeStatus)
@@ -323,7 +265,7 @@ func TestProbeHTTP2_DialError(t *testing.T) {
 
 	addr := createTestEdgeAddr("192.0.2.1", testEdgePort, allregions.V4)
 
-	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr)
+	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr, nil)
 
 	assert.Equal(t, ProbeTypeHTTP2, result.Type)
 	assert.Equal(t, Fail, result.ProbeStatus)
@@ -505,15 +447,16 @@ func TestProbeQUIC_IPv6Address(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+	successfulQUICConn := mocks.NewMockQUICConnection(ctrl)
+	successfulQUICConn.EXPECT().CloseWithError(gomock.Any(), gomock.Any()).Return(nil)
 
-	mockConn := &mockQuicConnection{}
 	dialer := mocks.NewMockQUICDialer(ctrl)
-	dialer.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockConn, nil)
+	dialer.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(successfulQUICConn, nil)
 
 	addr := createTestEdgeAddr("2001:db8::1", testEdgePort, allregions.V6)
 	logger := zerolog.New(nil)
 
-	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger)
+	result := probeQUIC(context.Background(), testTLSConfig, dialer, addr, &logger, Config{})
 
 	assert.Equal(t, Pass, result.ProbeStatus)
 	assert.Equal(t, detailsQUICHandshakeSuccessful, result.Details)
@@ -531,7 +474,7 @@ func TestProbeHTTP2_IPv6Address(t *testing.T) {
 
 	addr := createTestEdgeAddr("2001:db8::1", testEdgePort, allregions.V6)
 
-	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr)
+	result := probeHTTP2(context.Background(), testTLSConfig, dialer, addr, nil)
 
 	assert.Equal(t, Pass, result.ProbeStatus)
 }

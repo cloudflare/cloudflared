@@ -119,7 +119,7 @@ func Test_rule_matches(t *testing.T) {
 			name: "Hostname and path",
 			rule: Rule{
 				Hostname: "*.example.com",
-				Path:     &Regexp{Regexp: regexp.MustCompile("/static/.*\\.html")},
+				Path:     &Regexp{Regexp: regexp.MustCompile(`/static/.*\.html`)},
 			},
 			args: args{
 				requestURL: MustParseURL(t, "https://www.example.com/static/index.html"),
@@ -158,6 +158,16 @@ func Test_rule_matches(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "Rule matches original path",
+			rule: Rule{
+				Path: &Regexp{Regexp: regexp.MustCompile("^/admin")},
+			},
+			args: args{
+				requestURL: MustParseURL(t, "https://example.com/public/../admin"),
+			},
+			want: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -186,6 +196,7 @@ func TestStaticHTTPStatus(t *testing.T) {
 		w := httptest.NewRecorder()
 		n, err := io.Copy(w, resp.Body)
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		require.Equal(t, int64(0), n)
 	}
 	sendReq()

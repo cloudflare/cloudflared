@@ -163,9 +163,11 @@ func TestSocksStreamWSOverTCPConnection(t *testing.T) {
 
 		eyeballDialer, err := proxy.SOCKS5("tcp", wsForwarderListener.Addr().String(), nil, proxy.Direct)
 		require.NoError(t, err)
+		eyeballContextDialer, ok := eyeballDialer.(proxy.ContextDialer)
+		require.True(t, ok)
 
 		transport := &http.Transport{
-			Dial: eyeballDialer.Dial,
+			DialContext: eyeballContextDialer.DialContext,
 		}
 
 		// Request URL doesn't matter because the transport is using eyeballDialer to connectq

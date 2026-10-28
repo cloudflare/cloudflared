@@ -22,6 +22,8 @@ type Config struct {
 	Ingress             *ingress.Ingress
 	WarpRouting         ingress.WarpRoutingConfig
 	OriginDialerService *ingress.OriginDialerService
+	// DisablePathNormalization is a process-local override for ingress matching.
+	DisablePathNormalization bool
 
 	// Extra settings used to configure this instance but that are not eligible for remotely management
 	// ie. (--protocol, --loglevel, ...)
@@ -46,7 +48,7 @@ func (rc *newLocalConfig) MarshalJSON() ([]byte, error) {
 }
 
 func convertToUnvalidatedIngressRules(i ingress.Ingress) []config.UnvalidatedIngressRule {
-	result := make([]config.UnvalidatedIngressRule, 0)
+	result := make([]config.UnvalidatedIngressRule, 0, len(i.Rules))
 	for _, rule := range i.Rules {
 		var path string
 		if rule.Path != nil {

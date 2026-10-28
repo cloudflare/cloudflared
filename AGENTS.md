@@ -92,9 +92,6 @@ Notes on linting:
   protocols.
 - `features/`: Runtime feature flags including `PostQuantumMode`
   (`PostQuantumPrefer` = default, `PostQuantumStrict` = `--post-quantum`).
-- `fips/`: Build-tag driven FIPS detection. Only `fips.IsFipsEnabled()` is
-  exposed; never branch on `fipsEnabled` inside a function if the two
-  branches return the same value.
 
 ### Function and Method Guidelines
 
@@ -220,6 +217,10 @@ type TunnelProperties struct {
   `fipsEnabled` branch in curve-selection code; if the two modes ever
   diverge, express the divergence inside `crypto/` so call sites remain
   untouched.
+- FIPS and non-FIPS artifacts remain separate. Ordinary builds use
+  `GOFIPS140=off`; `FIPS=true` builds and internal container images use
+  `GOFIPS140=latest`. This runtime-level distinction enforces FIPS algorithms
+  for origin connections without changing the explicit edge curve list above.
 - HTTP/2 supports post-quantum handshakes. Never re-add a
   `PostQuantumStrict`-based rejection to H2 code paths, and never force
   `--post-quantum` to select QUIC-only in protocol selection.
@@ -235,6 +236,7 @@ type TunnelProperties struct {
 - Instrument code with Prometheus metrics
 - Use OpenTelemetry for distributed tracing
 - Include structured logging with relevant context
+- Check if metrics are emitted as deltas to confirm need to guard for zero values, such as when importing or updating dependencies, e.g. quic-go
 
 ## Boundaries
 
@@ -259,13 +261,27 @@ type TunnelProperties struct {
 - Making breaking changes to public APIs
 - Changing logging levels or structured logging fields
 
+### Breaking Change Policy
+
+Removing or renaming a CLI flag, environment variable, configuration key, alias, or
+subcommand is a **breaking change** and requires advance notice:
+
+1. A new entry must be added to the [Cloudflare Tunnel changelog](https://developers.cloudflare.com/changelog/product/tunnel/)
+   and published in a release **at least 3 months before** the removal takes effect.
+2. The entry must name every affected flag/alias/env var, state the planned removal
+   date or release, and describe the migration path.
+3. The actual removal PR must not be merged until that notice has shipped in a
+   released version.
+
+If you are asked to remove a flag or similar user-visible interface without a prior
+notice, do not proceed without explicit confirmation.
+
 ### 🚫 Never Do
 
 - Ignore errors without explicit handling (`_ = err`)
 - Use generic package names (`util`, `helper`, `common`)
 - Commit code that fails `make test lint`
 - Use `fmt.Print*` instead of structured logging
-- Modify vendor dependencies directly
 - Commit secrets, credentials, or sensitive data
 - Use deprecated or unsafe Go patterns
 - Skip testing for new functionality
@@ -274,7 +290,17 @@ type TunnelProperties struct {
 ## Dependencies Management
 
 - Use Go modules (`go.mod`) exclusively
-- Vendor dependencies for reproducible builds
+- The `go` directive in `go.mod` must include the patch version (`major.minor.patch`).
+  It is the exact Go version for builds and tests: the Makefile exports
+  `GOTOOLCHAIN=go<version>` from it unless Go is configured with `GOTOOLCHAIN=local`.
+  Cloudflare's internal Go package sets that so its patches are never replaced by an
+  upstream toolchain (RFC-028); never override it. Do not add a `toolchain` directive.
+  When bumping Go, align all CI, Docker image, and documentation version references,
+  including the Linux CI builder image and digest; see README's "Updating Go" section.
+- Resolve dependencies from the locked module graph with `go mod download`; do not vendor dependencies.
+- Builds, tests, vet, and lint use `-mod=readonly`; `go.mod` and `go.sum` must not drift in CI.
+- Linux CI uses Athens before public and direct module sources; macOS and Windows use the public proxy directly.
+- CI caches modules in `$GOMODCACHE` and compiled packages in `$GOCACHE` under `.cache/go/` for Go-running jobs.
 - Keep dependencies up-to-date and secure
 - Prefer standard library when possible
 - Cloudflared uses a fork of quic-go always check release notes before bumping

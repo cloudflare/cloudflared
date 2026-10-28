@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,11 +79,11 @@ func TestReadAuthURL_NotExists(t *testing.T) {
 	assert.Empty(t, readAuthURL(tokenPath))
 }
 
-func TestTryCreateLockFile_Success(t *testing.T) {
+func TestCreateLockFile_Success(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.lock")
 
-	err := tryCreateLockFile(path)
+	_, err := createLockFile(path)
 	require.NoError(t, err)
 
 	// verify the file contains valid JSON with our PID
@@ -92,16 +93,41 @@ func TestTryCreateLockFile_Success(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &content))
 	assert.Equal(t, int32(os.Getpid()), content.PID) // nolint: gosec
 	assert.Positive(t, content.StartTime)
+	assert.NotEmpty(t, content.ID)
 }
 
-func TestTryCreateLockFile_AlreadyExists(t *testing.T) {
+func TestLockFileReleaseDoesNotRemoveDifferentAcquisition(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "test-token")
+	log := zerolog.Nop()
+
+	firstLock, err := acquireLockFile(tokenPath, &log)
+	require.NoError(t, err)
+
+	// Simulate a stale reclaim where another acquirer creates a new lock at the
+	// same path before the original holder returns and runs its deferred release.
+	require.NoError(t, os.Remove(tokenPath+".lock"))
+	secondLock, err := acquireLockFile(tokenPath, &log)
+	require.NoError(t, err)
+
+	firstLock.release()
+	assert.FileExists(t, tokenPath+".lock")
+
+	secondLock.release()
+	assert.NoFileExists(t, tokenPath+".lock")
+}
+
+func TestCreateLockFile_AlreadyExists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.lock")
 
-	require.NoError(t, tryCreateLockFile(path))
+	_, err := createLockFile(path)
+	require.NoError(t, err)
 
 	// second create should fail with "already exists"
-	err := tryCreateLockFile(path)
+	_, err = createLockFile(path)
 	require.Error(t, err)
 	assert.True(t, os.IsExist(err))
 }

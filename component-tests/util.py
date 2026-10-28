@@ -13,7 +13,7 @@ import requests
 import yaml
 from retrying import retry
 
-from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS, GRACEFUL_SHUTDOWN_TIMEOUT, READER_THREAD_JOIN_TIMEOUT
+from constants import METRICS_PORT, MAX_RETRIES, BACKOFF_SECS, DNS_BACKOFF_SECS, GRACEFUL_SHUTDOWN_TIMEOUT, READER_THREAD_JOIN_TIMEOUT
 
 class CloudflaredProcess:
     """
@@ -155,6 +155,19 @@ def get_quicktunnel_url():
             f"Quicktunnel endpoint returned {hostname} but we expected a url"
 
         return f"https://{hostname}"
+
+
+def wait_quicktunnel_ready(url):
+    LOGGER.debug(f"Waiting {DNS_BACKOFF_SECS} seconds for quick tunnel DNS propagation...")
+    sleep(DNS_BACKOFF_SECS)
+    _wait_quicktunnel_ready(url)
+
+@retry(stop_max_attempt_number=MAX_RETRIES, wait_fixed=BACKOFF_SECS * 1000)
+def _wait_quicktunnel_ready(url):
+    with requests.Session() as s:
+        LOGGER.debug(f"Waiting for quick tunnel {url} to be reachable...")
+        resp = s.get(url, timeout=DNS_BACKOFF_SECS)
+        assert resp.status_code == 200, f"{url} returned {resp}"
 
 def wait_tunnel_ready(tunnel_url=None, require_min_connections=1, cfd_logs=None):
     try:

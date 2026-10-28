@@ -22,7 +22,6 @@ import (
 	"github.com/cloudflare/cloudflared/cmd/cloudflared/flags"
 	"github.com/cloudflare/cloudflared/config"
 	"github.com/cloudflare/cloudflared/connection"
-	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/ingress"
@@ -39,7 +38,12 @@ const (
 )
 
 var (
-	secretFlags = [2]*altsrc.StringFlag{credentialsContentsFlag, tunnelTokenFlag}
+	secretFlags = [...]string{
+		credentialsContentsFlag.Name,
+		tunnelTokenFlag.Name,
+		flags.AllowedMail,
+	}
+	secretEnvFlags = [...](*altsrc.StringFlag){credentialsContentsFlag, tunnelTokenFlag}
 
 	configFlags = []string{
 		flags.AutoUpdateFreq,
@@ -47,7 +51,6 @@ var (
 		flags.Retries,
 		flags.Protocol,
 		flags.LogLevel,
-		flags.TransportLogLevel,
 		flags.OriginCert,
 		flags.Metrics,
 		flags.MetricsUpdateFreq,
@@ -93,7 +96,7 @@ func logClientOptions(c *cli.Context, log *zerolog.Logger) {
 
 func isSecretFlag(key string) bool {
 	for _, flag := range secretFlags {
-		if flag.Name == key {
+		if flag == key {
 			return true
 		}
 	}
@@ -101,7 +104,7 @@ func isSecretFlag(key string) bool {
 }
 
 func isSecretEnvVar(key string) bool {
-	for _, flag := range secretFlags {
+	for _, flag := range secretEnvFlags {
 		for _, secretEnvVar := range flag.EnvVars {
 			if secretEnvVar == key {
 				return true
@@ -115,7 +118,7 @@ func prepareTunnelConfig(
 	ctx context.Context,
 	c *cli.Context,
 	info *cliutil.BuildInfo,
-	log, logTransport *zerolog.Logger,
+	log *zerolog.Logger,
 	observer *connection.Observer,
 	namedTunnel *connection.TunnelProperties,
 ) (*supervisor.TunnelConfig, *orchestration.Config, error) {
@@ -146,7 +149,7 @@ func prepareTunnelConfig(
 		return nil, nil, err
 	}
 
-	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, namedTunnel.Credentials.AccountTag, c.IsSet(TunnelTokenFlag), edgediscovery.ProtocolPercentage, connection.ResolveTTL, log)
+	protocolSelector, err := connection.NewProtocolSelector(transportProtocol, log)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -236,7 +239,6 @@ func prepareTunnelConfig(
 		LBPool:          c.String(flags.LBPool),
 		Tags:            tags,
 		Log:             log,
-		LogTransport:    logTransport,
 		Observer:        observer,
 		ReportedVersion: info.Version(),
 		// Note TUN-3758 , we use Int because UInt is not supported with altsrc
@@ -262,10 +264,11 @@ func prepareTunnelConfig(
 		tunnelConfig.ICMPRouterServer = icmpRouter
 	}
 	orchestratorConfig := &orchestration.Config{
-		Ingress:             &ingressRules,
-		WarpRouting:         warpRoutingConfig,
-		OriginDialerService: originDialerService,
-		ConfigurationFlags:  parseConfigFlags(c),
+		Ingress:                  &ingressRules,
+		WarpRouting:              warpRoutingConfig,
+		OriginDialerService:      originDialerService,
+		DisablePathNormalization: c.Bool(flags.DisablePathNormalization),
+		ConfigurationFlags:       parseConfigFlags(c),
 	}
 	return tunnelConfig, orchestratorConfig, nil
 }

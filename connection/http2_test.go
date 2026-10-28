@@ -18,7 +18,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
 
 	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -27,13 +26,23 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
-var testTransport = http2.Transport{}
+func newTestHTTP2ClientConn(ctx context.Context, conn net.Conn) (*http.ClientConn, error) {
+	protocols := new(http.Protocols)
+	protocols.SetUnencryptedHTTP2(true)
+	transport := &http.Transport{
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			return conn, nil
+		},
+		Protocols: protocols,
+	}
+	return transport.NewClientConn(ctx, "http", "localhost:8080")
+}
 
 func newTestHTTP2Connection() (*HTTP2Connection, net.Conn) {
 	edgeConn, cfdConn := net.Pipe()
 	connIndex := uint8(0)
 	log := zerolog.Nop()
-	obs := NewObserver(&log, &log)
+	obs := NewObserver(&log)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
@@ -69,7 +78,7 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 		_ = http2Conn.Serve(ctx)
 	}()
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeConn)
 	require.NoError(t, err)
 
 	reqBody := []byte(`{
@@ -85,7 +94,7 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	bdy, err := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.NoError(t, err)
 	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
 	cancel()
@@ -137,7 +146,7 @@ func TestServeHTTP(t *testing.T) {
 		_ = http2Conn.Serve(ctx)
 	}()
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeConn)
 	require.NoError(t, err)
 
 	for _, test := range tests {
@@ -286,7 +295,7 @@ func TestServeWS(t *testing.T) {
 
 	cancel()
 	resp := respWriter.Result()
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// http2RespWriter should rewrite status 101 to 200
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, responseMetaHeaderOrigin, resp.Header.Get(ResponseMetaHeader))
@@ -309,8 +318,7 @@ func TestNoWriteAfterServeHTTPReturns(t *testing.T) {
 		_ = cfdHTTP2Conn.Serve(ctx)
 	}()
 
-	edgeTransport := http2.Transport{}
-	edgeHTTP2Conn, err := edgeTransport.NewClientConn(edgeTCPConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeTCPConn)
 	require.NoError(t, err)
 	message := []byte(t.Name())
 
@@ -363,7 +371,7 @@ func TestServeControlStream(t *testing.T) {
 		unregistered: make(chan struct{}),
 	}
 
-	obs := NewObserver(&log, &log)
+	obs := NewObserver(&log)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
@@ -390,7 +398,7 @@ func TestServeControlStream(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set(InternalUpgradeHeader, ControlStreamUpgrade)
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeConn)
 	require.NoError(t, err)
 
 	wg.Add(1)
@@ -412,12 +420,12 @@ func TestFailRegistration(t *testing.T) {
 	http2Conn, edgeConn := newTestHTTP2Connection()
 
 	rpcClientFactory := mockRPCClientFactory{
-		shouldFail:   errDuplicationConnection,
+		shouldFail:   errors.New(DuplicateConnectionError),
 		registered:   make(chan struct{}),
 		unregistered: make(chan struct{}),
 	}
 
-	obs := NewObserver(&log, &log)
+	obs := NewObserver(&log)
 	controlStream := NewControlStream(
 		obs,
 		mockConnectedFuse{},
@@ -444,14 +452,14 @@ func TestFailRegistration(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set(InternalUpgradeHeader, ControlStreamUpgrade)
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeConn)
 	require.NoError(t, err)
 	resp, err := edgeHTTP2Conn.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 
-	require.Error(t, http2Conn.controlStreamErr)
+	require.ErrorIs(t, http2Conn.controlStreamErr, ErrDuplicateConnection)
 	cancel()
 	wg.Wait()
 }
@@ -466,7 +474,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	events := &eventCollectorSink{}
 
 	shutdownC := make(chan struct{})
-	obs := NewObserver(&log, &log)
+	obs := NewObserver(&log)
 	obs.RegisterSink(events)
 	controlStream := NewControlStream(
 		obs,
@@ -495,7 +503,7 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set(InternalUpgradeHeader, ControlStreamUpgrade)
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeConn)
 	require.NoError(t, err)
 
 	wg.Add(1)
@@ -543,7 +551,7 @@ func TestServeTCP_RateLimited(t *testing.T) {
 		_ = http2Conn.Serve(ctx)
 	}()
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(t.Context(), edgeConn)
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:8080", nil)
@@ -553,7 +561,7 @@ func TestServeTCP_RateLimited(t *testing.T) {
 
 	resp, err := edgeHTTP2Conn.RoundTrip(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 	require.Equal(t, responseMetaHeaderCfdFlowRateLimited, resp.Header.Get(ResponseMetaHeader))
@@ -577,7 +585,7 @@ func benchmarkServeHTTP(b *testing.B, test testRequest) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	require.NoError(b, err)
 
-	edgeHTTP2Conn, err := testTransport.NewClientConn(edgeConn)
+	edgeHTTP2Conn, err := newTestHTTP2ClientConn(b.Context(), edgeConn)
 	require.NoError(b, err)
 
 	b.ResetTimer()
@@ -592,7 +600,7 @@ func benchmarkServeHTTP(b *testing.B, test testRequest) {
 			require.NoError(b, err)
 			require.Equal(b, test.expectedBody, respBody)
 		}
-		resp.Body.Close()
+		require.NoError(b, resp.Body.Close())
 	}
 
 	cancel()

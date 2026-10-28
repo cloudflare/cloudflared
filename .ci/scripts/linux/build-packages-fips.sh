@@ -11,8 +11,8 @@ arch=("amd64")
 export TARGET_ARCH=$arch
 export TARGET_OS=linux
 export FIPS=true
-# For BoringCrypto to link, we need CGO enabled. Otherwise compilation fails.
-export CGO_ENABLED=1
+# Go's native FIPS 140 module does not require CGO.
+export CGO_ENABLED=0
 
 make cloudflared-deb
 mv cloudflared-fips\_$VERSION\_$arch.deb $ARTIFACT_DIR/cloudflared-fips-linux-$arch.deb

@@ -44,7 +44,7 @@ formatters:
 
 run:
   timeout: 5m
-  modules-download-mode: vendor
+  modules-download-mode: readonly
 
 # output configuration options
 output:
@@ -77,15 +77,6 @@ issues:
   # Show issues in any part of update files (requires new-from-rev or new-from-patch).
   # Default: false
   whole-files: true
-  # Which dirs to exclude: issues from them won't be reported.
-  # Can use regexp here: `generated.*`, regexp is applied on full path,
-  # including the path prefix if one is set.
-  # Default dirs are skipped independently of this option's value (see exclude-dirs-use-default).
-  # "/" will be replaced by current OS file path separator to properly work on Windows.
-  # Default: []
-  exclude-dirs:
-    - vendor
-
 linters-settings:
   # Check exhaustiveness of enum switch statements.
   exhaustive:

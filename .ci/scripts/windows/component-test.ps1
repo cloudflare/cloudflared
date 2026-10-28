@@ -13,6 +13,11 @@ python -m pip --version
 
 
 Write-Host "Building cloudflared"
+go mod download
+if ($LASTEXITCODE -ne 0) { throw "Failed to download Go modules" }
+# Module downloads must not change the committed dependency lockfiles.
+git diff --exit-code -- go.mod go.sum
+if ($LASTEXITCODE -ne 0) { throw "Go module download changed module metadata" }
 & make cloudflared
 if ($LASTEXITCODE -ne 0) { throw "Failed to build cloudflared" }
 
@@ -20,7 +25,7 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to build cloudflared" }
 Write-Host "Running unit tests"
 # Not testing with race detector because of https://github.com/golang/go/issues/61058
 # We already test it on other platforms
-go test -failfast -v -mod=vendor ./...
+go test -failfast -v -mod=readonly ./...
 if ($LASTEXITCODE -ne 0) { throw "Failed unit tests" }
 
 
