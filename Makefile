@@ -222,6 +222,7 @@ install: cloudflared cloudflared.1
 
 # When we build packages, the package name will be FIPS-aware.
 # But we keep the binary installed by it to be named "cloudflared" regardless.
+# The optional second argument passes extra fpm flags for that package type.
 define build_package
 	mkdir -p $(PACKAGE_DIR)
 	cp cloudflared $(PACKAGE_DIR)/cloudflared
@@ -232,7 +233,7 @@ define build_package
 		--license 'Apache License Version 2.0' \
 		--url 'https://github.com/cloudflare/cloudflared' \
 		-m 'Cloudflare <support@cloudflare.com>' \
-	    -a $(PACKAGE_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(RPM_DIGEST) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh \
+	    -a $(PACKAGE_ARCH) -v $(VERSION) -n $(DEB_PACKAGE_NAME) $(RPM_DIGEST) $(NIGHTLY_FLAGS) --after-install postinst.sh --after-remove postrm.sh $(2) \
 		cloudflared=$(INSTALL_BINDIR) cloudflared.1=$(INSTALL_MANDIR)
 endef
 
@@ -240,9 +241,13 @@ endef
 cloudflared-deb: cloudflared cloudflared.1
 	$(call build_package,deb)
 
+# On upgrade, rpm runs the old package's %postun after the new package's %post,
+# and packages released before TUN-11048 delete the symlink and the
+# .installedFromPackageManager file there. Run postinst.sh again in %posttrans,
+# which comes last, to restore them.
 .PHONY: cloudflared-rpm
 cloudflared-rpm: cloudflared cloudflared.1
-	$(call build_package,rpm)
+	$(call build_package,rpm,--rpm-posttrans postinst.sh)
 
 .PHONY: cloudflared-msi
 cloudflared-msi:
