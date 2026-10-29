@@ -131,8 +131,12 @@ func (fs *featureSelector) prechecksSkip() bool {
 
 // clientFeatures will return the list of currently available features that cloudflared should provide to the edge.
 func (fs *featureSelector) clientFeatures() []string {
-	// Evaluate any remote features along with static feature list to construct the list of features
-	return dedupAndRemoveFeatures(slices.Concat(defaultFeatures, fs.cliFeatures, []string{string(fs.datagramVersion())}))
+	var features []string
+	if fs.datagramVersion() == DatagramV3 {
+		features = append(features, FeatureDatagramV3_2)
+	}
+	// Evaluate any user provided features to construct the list of features
+	return dedupAndRemoveFeatures(slices.Concat(features, fs.cliFeatures))
 }
 
 func (fs *featureSelector) refresh(ctx context.Context) error {

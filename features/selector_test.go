@@ -63,13 +63,13 @@ func TestFeaturePrecedenceEvaluationPostQuantum(t *testing.T) {
 		{
 			name:             "default",
 			cli:              false,
-			expectedFeatures: defaultFeatures,
+			expectedFeatures: []string{},
 			expectedVersion:  PostQuantumPrefer,
 		},
 		{
 			name:             "user_specified",
 			cli:              true,
-			expectedFeatures: dedupAndRemoveFeatures(append(defaultFeatures, FeaturePostQuantum)),
+			expectedFeatures: []string{FeaturePostQuantum},
 			expectedVersion:  PostQuantumStrict,
 		},
 	}
@@ -99,21 +99,21 @@ func TestFeaturePrecedenceEvaluationDatagramVersion(t *testing.T) {
 			name:             "default",
 			cli:              []string{},
 			remote:           featuresRecord{},
-			expectedFeatures: defaultFeatures,
+			expectedFeatures: []string{},
 			expectedVersion:  DatagramV2,
 		},
 		{
 			name:             "user_specified_v2",
 			cli:              []string{FeatureDatagramV2},
 			remote:           featuresRecord{},
-			expectedFeatures: defaultFeatures,
+			expectedFeatures: []string{FeatureDatagramV2},
 			expectedVersion:  DatagramV2,
 		},
 		{
 			name:             "user_specified_v3",
 			cli:              []string{FeatureDatagramV3_2},
 			remote:           featuresRecord{},
-			expectedFeatures: dedupAndRemoveFeatures(append(defaultFeatures, FeatureDatagramV3_2)),
+			expectedFeatures: []string{FeatureDatagramV3_2},
 			expectedVersion:  FeatureDatagramV3_2,
 		},
 	}
@@ -132,41 +132,11 @@ func TestFeaturePrecedenceEvaluationDatagramVersion(t *testing.T) {
 
 func TestDeprecatedFeaturesRemoved(t *testing.T) {
 	logger := zerolog.Nop()
-	tests := []struct {
-		name             string
-		cli              []string
-		remote           featuresRecord
-		expectedFeatures []string
-	}{
-		{
-			name:             "no_removals",
-			cli:              []string{},
-			remote:           featuresRecord{},
-			expectedFeatures: defaultFeatures,
-		},
-		{
-			name:             "support_datagram_v3",
-			cli:              []string{DeprecatedFeatureDatagramV3},
-			remote:           featuresRecord{},
-			expectedFeatures: defaultFeatures,
-		},
-		{
-			name:             "support_datagram_v3_1",
-			cli:              []string{DeprecatedFeatureDatagramV3_1},
-			remote:           featuresRecord{},
-			expectedFeatures: defaultFeatures,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			resolver := &staticResolver{record: test.remote}
-			selector, err := newFeatureSelector(t.Context(), test.name, &logger, resolver, test.cli, false, time.Second)
-			require.NoError(t, err)
-			snapshot := selector.Snapshot()
-			require.ElementsMatch(t, test.expectedFeatures, snapshot.FeaturesList)
-		})
-	}
+	resolver := &staticResolver{record: featuresRecord{}}
+	selector, err := newFeatureSelector(t.Context(), t.Name(), &logger, resolver, deprecatedFeatures, false, time.Second)
+	require.NoError(t, err)
+	snapshot := selector.Snapshot()
+	require.Empty(t, snapshot.FeaturesList)
 }
 
 func TestRefreshFeaturesRecord(t *testing.T) {
