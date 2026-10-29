@@ -33,6 +33,10 @@ COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cl
 # The `nonroot` user maps to `65532`, from: https://github.com/GoogleContainerTools/distroless/blob/main/common/variables.bzl#L18
 USER 65532:65532
 
+# disable autoupdate: images are updated by pulling a new tag, not by replacing the binary in place.
+# set as an env var rather than an entrypoint flag, so it still applies when the entrypoint is overridden.
+ENV NO_AUTOUPDATE=true
+
 # command / entrypoint of container
-ENTRYPOINT ["cloudflared", "--no-autoupdate"]
+ENTRYPOINT ["cloudflared"]
 CMD ["version"]
