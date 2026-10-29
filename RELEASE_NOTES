@@ -1,3 +1,14 @@
+2026.10.6
+- 2026-10-29 TUN-11048: Randomize and enable the cloudflared update timer
+- 2026-10-29 TUN-11051: Disable autoupdate in container images via NO_AUTOUPDATE
+- 2026-10-28 TUN-11048: Keep package-manager marker across RPM upgrades
+- 2026-10-28 VULN-184686: Bump github.com/go-jose/go-jose/v4 to v4.1.6
+- 2026-10-27 Update gcr.io/distroless/base-debian13:nonroot-amd64 Docker digest to 91475ae
+- 2026-10-27 Update gcr.io/distroless/base-debian13:nonroot Docker digest to f9518b7
+- 2026-10-27 TUN-11018: Align prechecks with regular cloudflare connection
+- 2026-10-27 Remove unnecessary comment
+- 2026-10-21 ci: enable in-build container scanning
+
 2026.10.5
 - 2026-10-27 TUN-11015: Ignore unchanged fields in QUIC MetricsUpdated events
 - 2026-10-27 TUN-10996: Allow for validating config from stdin
