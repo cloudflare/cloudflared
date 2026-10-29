@@ -100,6 +100,11 @@ Wants=network-online.target
 ExecStart=/bin/bash -c '{{ .Path }} update; code=$?; if [ $code -eq 11 ]; then systemctl restart cloudflared; exit 0; fi; exit $code'
 `,
 	},
+	// The update service restarts cloudflared when it updates. The random delay
+	// keeps the replicas of a tunnel from all restarting at the same moment.
+	// RandomizedDelaySec needs systemd 229 or later. Older versions, such as
+	// systemd 219 on EL7, ignore it, so there the timer still fires at midnight
+	// on every host.
 	cloudflaredUpdateTimer: {
 		Path: fmt.Sprintf("/etc/systemd/system/%s", cloudflaredUpdateTimer),
 		Content: `[Unit]
@@ -107,6 +112,7 @@ Description=Update cloudflared
 
 [Timer]
 OnCalendar=daily
+RandomizedDelaySec=6h
 
 [Install]
 WantedBy=timers.target
@@ -367,23 +373,35 @@ func installSystemd(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zer
 			return err
 		}
 	}
-	if err := runCommand("systemctl", "enable", cloudflaredService); err != nil {
+	return enableSystemdUnits(runCommand, autoUpdate, log)
+}
+
+// commandRunner runs an external command. It has the signature of runCommand,
+// so tests can record the commands instead of running them.
+type commandRunner func(command string, args ...string) error
+
+// enableSystemdUnits enables and starts the units that installSystemd wrote.
+func enableSystemdUnits(run commandRunner, autoUpdate bool, log *zerolog.Logger) error {
+	if err := run("systemctl", "enable", cloudflaredService); err != nil {
 		log.Err(err).Msgf("systemctl enable %s error", cloudflaredService)
 		return err
 	}
 
 	if autoUpdate {
-		if err := runCommand("systemctl", "start", cloudflaredUpdateTimer); err != nil {
-			log.Err(err).Msgf("systemctl start %s error", cloudflaredUpdateTimer)
-			return err
+		// Enable the timer as well as starting it, so it still runs after a reboot.
+		for _, action := range []string{"enable", "start"} {
+			if err := run("systemctl", action, cloudflaredUpdateTimer); err != nil {
+				log.Err(err).Msgf("systemctl %s %s error", action, cloudflaredUpdateTimer)
+				return err
+			}
 		}
 	}
 
-	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+	if err := run("systemctl", "daemon-reload"); err != nil {
 		log.Err(err).Msg("systemctl daemon-reload error")
 		return err
 	}
-	return runCommand("systemctl", "start", cloudflaredService)
+	return run("systemctl", "start", cloudflaredService)
 }
 
 func installSysv(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolog.Logger) error {
@@ -479,22 +497,8 @@ func uninstallSystemd(log *zerolog.Logger) error {
 		}
 	}
 
-	if _, exists := installedServices[cloudflaredService]; exists {
-		if err := runCommand("systemctl", "disable", cloudflaredService); err != nil {
-			log.Err(err).Msgf("systemctl disable %s error", cloudflaredService)
-			return err
-		}
-		if err := runCommand("systemctl", "stop", cloudflaredService); err != nil {
-			log.Err(err).Msgf("systemctl stop %s error", cloudflaredService)
-			return err
-		}
-	}
-
-	if _, exists := installedServices[cloudflaredUpdateTimer]; exists {
-		if err := runCommand("systemctl", "stop", cloudflaredUpdateTimer); err != nil {
-			log.Err(err).Msgf("systemctl stop %s error", cloudflaredUpdateTimer)
-			return err
-		}
+	if err := disableSystemdUnits(runCommand, installedServices, log); err != nil {
+		return err
 	}
 
 	for _, serviceTemplate := range installedServices {
@@ -506,6 +510,24 @@ func uninstallSystemd(log *zerolog.Logger) error {
 	if err := runCommand("systemctl", "daemon-reload"); err != nil {
 		log.Err(err).Msg("systemctl daemon-reload error")
 		return err
+	}
+	return nil
+}
+
+// disableSystemdUnits disables and stops the installed units before their
+// files are removed. Disabling a timer that was only started, as older
+// versions did, does nothing and succeeds.
+func disableSystemdUnits(run commandRunner, installedServices map[string]ServiceTemplate, log *zerolog.Logger) error {
+	for _, unit := range []string{cloudflaredService, cloudflaredUpdateTimer} {
+		if _, exists := installedServices[unit]; !exists {
+			continue
+		}
+		for _, action := range []string{"disable", "stop"} {
+			if err := run("systemctl", action, unit); err != nil {
+				log.Err(err).Msgf("systemctl %s %s error", action, unit)
+				return err
+			}
+		}
 	}
 	return nil
 }
