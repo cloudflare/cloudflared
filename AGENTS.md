@@ -155,7 +155,7 @@ func TestMetricsListenerCreation(t *testing.T) {
 ```go
 const (
     MaxGracePeriod       = time.Minute * 3
-    MaxConcurrentStreams = math.MaxUint32
+    MaxConcurrentStreams = math.MaxInt32
     LogFieldConnIndex    = "connIndex"
 )
 

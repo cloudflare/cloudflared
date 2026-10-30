@@ -37,7 +37,7 @@ var errEdgeConnectionClosed = fmt.Errorf("connection with edge closed")
 // origin.
 type HTTP2Connection struct {
 	conn         net.Conn
-	server       *http2.Server
+	server       *http2.Server //nolint:staticcheck
 	orchestrator Orchestrator
 	connOptions  *client.ConnectionOptionsSnapshot
 	observer     *Observer
@@ -62,8 +62,11 @@ func NewHTTP2Connection(
 ) *HTTP2Connection {
 	return &HTTP2Connection{
 		conn: conn,
-		server: &http2.Server{
-			MaxConcurrentStreams: MaxConcurrentStreams,
+		server: &http2.Server{ //nolint:staticcheck
+			// In case more values are set it is imperative to update
+			// the test TestHTTP2MaxConcurrentStreams expecting the
+			// new values
+			MaxConcurrentStreams: MaxConcurrentStreams, //nolint:staticcheck
 		},
 		orchestrator:         orchestrator,
 		connOptions:          connOptions,
@@ -80,7 +83,7 @@ func (c *HTTP2Connection) Serve(ctx context.Context) error {
 		<-ctx.Done()
 		c.close()
 	}()
-	c.server.ServeConn(c.conn, &http2.ServeConnOpts{
+	c.server.ServeConn(c.conn, &http2.ServeConnOpts{ //nolint: staticcheck
 		Context: ctx,
 		Handler: c,
 	})
@@ -131,7 +134,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Check for tracing on request
 		tr := tracing.NewTracedHTTPRequest(r, c.connIndex, c.log)
 		if err := originProxy.ProxyHTTP(respWriter, tr, connType == TypeWebsocket); err != nil {
-			requestErr = fmt.Errorf("Failed to proxy HTTP: %w", err)
+			requestErr = fmt.Errorf("failed to proxy HTTP: %w", err)
 		}
 
 	case TypeTCP:
@@ -151,7 +154,7 @@ func (c *HTTP2Connection) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 
 	default:
-		requestErr = fmt.Errorf("Received unknown connection type: %s", connType)
+		requestErr = fmt.Errorf("received unknown connection type: %s", connType)
 	}
 
 	if requestErr != nil {
@@ -188,7 +191,7 @@ func (c *HTTP2Connection) handleConfigurationUpdate(respWriter *http2RespWriter,
 func (c *HTTP2Connection) close() {
 	// Wait for all serve HTTP handlers to return
 	c.activeRequestsWG.Wait()
-	c.conn.Close()
+	_ = c.conn.Close()
 }
 
 type http2RespWriter struct {
@@ -232,7 +235,7 @@ func (rp *http2RespWriter) AddTrailer(trailerName, trailerValue string) {
 		return
 	}
 
-	rp.w.Header().Add(http2.TrailerPrefix+trailerName, trailerValue)
+	rp.w.Header().Add(http.TrailerPrefix+trailerName, trailerValue)
 }
 
 func (rp *http2RespWriter) WriteRespHeaders(status int, header http.Header) error {
