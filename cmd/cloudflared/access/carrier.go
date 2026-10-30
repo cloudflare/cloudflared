@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -125,6 +128,9 @@ func ssh(c *cli.Context) error {
 			return errors.Wrap(err, "error validating origin URL")
 		}
 		log.Info().Str(LogFieldHost, forwarder.Host).Msg("Start Websocket listener")
+		if path := c.String(sshPidfileFlag); path != "" {
+			writePidFile(path, log)
+		}
 		err = carrier.StartForwarder(wsConn, forwarder.Host, shutdownC, options)
 		if err != nil {
 			log.Err(err).Msg("Error on Websocket listener")
@@ -144,4 +150,22 @@ func ssh(c *cli.Context) error {
 		s = stream.NewDebugStream(s, &logger, maxMessages)
 	}
 	return carrier.StartClient(wsConn, s, options)
+}
+
+// writePidFile writes the current PID to pidPathname so a supervising script can
+// stop this forwarder with something like `pkill -F`. Failures are logged rather
+// than returned: the forwarder itself is still usable without the file.
+func writePidFile(pidPathname string, log *zerolog.Logger) {
+	expandedPath, err := homedir.Expand(pidPathname)
+	if err != nil {
+		log.Err(err).Str("pidPathname", pidPathname).Msg("Unable to expand the path, try to use absolute path in --pidfile")
+		return
+	}
+	file, err := os.Create(filepath.Clean(expandedPath))
+	if err != nil {
+		log.Err(err).Str("expandedPath", expandedPath).Msg("Unable to write pid")
+		return
+	}
+	defer func() { _ = file.Close() }()
+	_, _ = fmt.Fprintf(file, "%d", os.Getpid())
 }
