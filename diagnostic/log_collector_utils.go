@@ -9,48 +9,14 @@ import (
 )
 
 func PipeCommandOutputToFile(command *exec.Cmd, outputHandle *os.File) (*LogInformation, error) {
-	stdoutReader, err := command.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf(
-			"error retrieving stdout from command '%s': %w",
-			command.String(),
-			err,
-		)
-	}
-
-	stderrReader, err := command.StderrPipe()
-	if err != nil {
-		return nil, fmt.Errorf(
-			"error retrieving stderr from command '%s': %w",
-			command.String(),
-			err,
-		)
-	}
+	// Share the output file so neither stream can block on an unread pipe.
+	command.Stdout = outputHandle
+	command.Stderr = outputHandle
 
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf(
 			"error running command '%s': %w",
 			command.String(),
-			err,
-		)
-	}
-
-	_, err = io.Copy(outputHandle, stdoutReader)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"error copying stdout from %s to file %s: %w",
-			command.String(),
-			outputHandle.Name(),
-			err,
-		)
-	}
-
-	_, err = io.Copy(outputHandle, stderrReader)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"error copying stderr from %s to file %s: %w",
-			command.String(),
-			outputHandle.Name(),
 			err,
 		)
 	}
