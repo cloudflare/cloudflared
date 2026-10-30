@@ -1,3 +1,7 @@
+2026.10.7
+- 2026-10-30 TUN-11058: Fix regression on max concurrent streams over http2 introduced by go1.27
+- 2026-10-29 TUN-10904: Stop advertising legacy default features to the edge
+
 2026.10.6
 - 2026-10-29 TUN-11048: Randomize and enable the cloudflared update timer
 - 2026-10-29 TUN-11051: Disable autoupdate in container images via NO_AUTOUPDATE
