@@ -24,7 +24,11 @@ const (
 	lbProbeUserAgentPrefix = "Mozilla/5.0 (compatible; Cloudflare-Traffic-Manager/1.0; +https://www.cloudflare.com/traffic-manager/;"
 	LogFieldConnIndex      = "connIndex"
 	MaxGracePeriod         = time.Minute * 3
-	MaxConcurrentStreams   = math.MaxUint32
+	// MaxConcurrentStreams is the HTTP/2 stream limit advertised to the edge.
+	// It must fit in an int32: http2.Server implementations backed by
+	// net/http (Go 1.27+) silently replace larger values with their default
+	// of 250 streams.
+	MaxConcurrentStreams = math.MaxInt32
 
 	contentTypeHeader      = "content-type"
 	contentLengthHeader    = "content-length"

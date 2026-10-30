@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 
 	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -99,6 +100,42 @@ func TestHTTP2ConfigurationSet(t *testing.T) {
 	assert.Equal(t, `{"lastAppliedVersion":2,"err":null}`, string(bdy))
 	cancel()
 	wg.Wait()
+}
+
+// TestHTTP2AdvertisedMaxConcurrentStreams checks the SETTINGS frame the
+// HTTP/2 server actually sends to the edge, not just the configured value.
+// Some http2.Server implementations silently replace limits they cannot
+// represent with their default of 250 streams.
+func TestHTTP2AdvertisedMaxConcurrentStreams(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = http2Conn.Serve(ctx)
+	}()
+	defer func() {
+		cancel()
+		wg.Wait()
+	}()
+
+	go func() {
+		_, _ = edgeConn.Write([]byte(http2.ClientPreface))
+	}()
+
+	require.NoError(t, edgeConn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	framer := http2.NewFramer(nil, edgeConn)
+	frame, err := framer.ReadFrame()
+	require.NoError(t, err)
+	settings, ok := frame.(*http2.SettingsFrame)
+	require.True(t, ok, "expected the server to send SETTINGS first, got %T", frame)
+	require.False(t, settings.IsAck())
+
+	maxStreams, ok := settings.Value(http2.SettingMaxConcurrentStreams)
+	require.True(t, ok, "SETTINGS_MAX_CONCURRENT_STREAMS was not advertised")
+	assert.Equal(t, uint32(MaxConcurrentStreams), maxStreams)
 }
 
 func TestServeHTTP(t *testing.T) {
