@@ -832,6 +832,103 @@ func TestParseAccessConfig(t *testing.T) {
 	}
 }
 
+func TestParseIngressAccessConfig(t *testing.T) {
+	t.Parallel()
+
+	globalAccess := config.AccessConfig{
+		Required:    true,
+		TeamName:    "global-team",
+		AudTag:      []string{"global-aud"},
+		Environment: "global-environment",
+	}
+	ruleAccess := config.AccessConfig{
+		Required:    true,
+		TeamName:    "rule-team",
+		AudTag:      []string{"rule-aud"},
+		Environment: "rule-environment",
+	}
+
+	tests := []struct {
+		name             string
+		globalAccess     *config.AccessConfig
+		ruleAccess       *config.AccessConfig
+		expectedHandlers []int
+		expectedAccess   []config.AccessConfig
+		expectedError    string
+	}{
+		{
+			name:             "global access applies to every rule",
+			globalAccess:     &globalAccess,
+			expectedHandlers: []int{1, 1},
+			expectedAccess:   []config.AccessConfig{globalAccess, globalAccess},
+		},
+		{
+			name:             "rule access overrides global access",
+			globalAccess:     &globalAccess,
+			ruleAccess:       &ruleAccess,
+			expectedHandlers: []int{1, 1},
+			expectedAccess:   []config.AccessConfig{ruleAccess, globalAccess},
+		},
+		{
+			name:             "rule access applies only to its rule",
+			ruleAccess:       &ruleAccess,
+			expectedHandlers: []int{1, 0},
+			expectedAccess:   []config.AccessConfig{ruleAccess, {}},
+		},
+		{
+			name:             "no access adds no handlers",
+			expectedHandlers: []int{0, 0},
+			expectedAccess:   []config.AccessConfig{{}, {}},
+		},
+		{
+			name: "invalid global access returns an error",
+			globalAccess: &config.AccessConfig{
+				Required: true,
+				AudTag:   []string{"global-aud"},
+			},
+			expectedError: "access.TeamName cannot be blank",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			conf := &config.Configuration{
+				OriginRequest: config.OriginRequestConfig{Access: test.globalAccess},
+				Ingress: []config.UnvalidatedIngressRule{
+					{
+						Hostname: "example.com",
+						Service:  "https://localhost:8000",
+						OriginRequest: config.OriginRequestConfig{
+							Access: test.ruleAccess,
+						},
+					},
+					{
+						Service: "http_status:404",
+					},
+				},
+			}
+
+			ing, err := ParseIngress(conf)
+			if test.expectedError != "" {
+				require.ErrorContains(t, err, test.expectedError)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, ing.Rules, len(test.expectedHandlers))
+
+			for i, expectedHandlerCount := range test.expectedHandlers {
+				require.Len(t, ing.Rules[i].Handlers, expectedHandlerCount)
+				assert.Equal(t, test.expectedAccess[i], ing.Rules[i].Config.Access)
+				for _, handler := range ing.Rules[i].Handlers {
+					assert.Equal(t, "AccessJWTValidator", handler.Name())
+				}
+			}
+		})
+	}
+}
+
 func MustReadIngress(s string) *config.Configuration {
 	var conf config.Configuration
 	err := yaml.Unmarshal([]byte(s), &conf)
