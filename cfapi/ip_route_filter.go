@@ -70,7 +70,7 @@ func NewIpRouteFilterFromCLI(c *cli.Context) (*IpRouteFilter, error) {
 	if subset, err := cidrFromFlag(c, filterSubsetIpRoute); err != nil {
 		return nil, err
 	} else if subset != nil {
-		f.NetworkIsSupersetOf(*subset)
+		f.NetworkIsSubsetOf(*subset)
 	}
 
 	if superset, err := cidrFromFlag(c, filterSupersetIpRoute); err != nil {
