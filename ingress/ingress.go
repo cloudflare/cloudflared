@@ -35,21 +35,52 @@ const (
 )
 
 // FindMatchingRule returns the index of the Ingress Rule which matches the given
-// hostname and path. This function assumes the last rule matches everything,
+// hostname and request URL's path. This function assumes the last rule matches everything,
 // which is the case if the rules were instantiated via the ingress#Validate method.
 //
 // Negative index rule signifies local cloudflared rules (not-user defined).
-func (ing Ingress) FindMatchingRule(hostname, path string) (*Rule, int) {
+func (ing Ingress) FindMatchingRule(hostname string, requestURL *url.URL) (*Rule, int) {
 	// The hostname might contain port. We only want to compare the host part with the rule
 	host, _, err := net.SplitHostPort(hostname)
 	if err == nil {
 		hostname = host
 	}
+	if !ing.DisablePathNormalization && (rulesRequireAccess(ing.InternalRules) || rulesRequireAccess(ing.Rules)) {
+		return ing.findMatchingRuleWithPathNormalization(hostname, requestURL)
+	}
+	return ing.findMatchingRule(hostname, requestURL.Path)
+}
+
+func (ing Ingress) findMatchingRuleWithPathNormalization(hostname string, requestURL *url.URL) (*Rule, int) {
 	// Canonicalize before first-match evaluation so an earlier non-Access rule
 	// cannot capture a traversal targeting a protected rule.
-	if !ing.DisablePathNormalization && (rulesRequireAccess(ing.InternalRules) || rulesRequireAccess(ing.Rules)) {
-		path = canonicalPathForMatching(path)
+	path := canonicalPathForMatching(requestURL.EscapedPath())
+	rule, ruleIndex := ing.findMatchingRule(hostname, path)
+	if rule.Config.Access.Required {
+		return rule, ruleIndex
 	}
+	// The shared steps intentionally run in a different order here: some origins
+	// decode and normalize separators before stripping matrix parameters. For
+	// example, /public%5C..;x%5Cadmin becomes /admin under this interpretation,
+	// but / under the strip-first interpretation in canonicalPathForMatching.
+	// An unprotected primary match must not bypass Access on the first matching
+	// rule under either interpretation. URL.Path is already decoded, so it must
+	// not be percent-decoded again.
+	alternatePath := normalizePath(requestURL.Path,
+		normalizeSeparators,
+		stripPathParameters,
+		resolveDotSegments,
+	)
+	if alternatePath != path {
+		alternateRule, alternateRuleIndex := ing.findMatchingRule(hostname, alternatePath)
+		if alternateRule.Config.Access.Required {
+			return alternateRule, alternateRuleIndex
+		}
+	}
+	return rule, ruleIndex
+}
+
+func (ing Ingress) findMatchingRule(hostname, path string) (*Rule, int) {
 	for i, rule := range ing.InternalRules {
 		if rule.Matches(hostname, path) {
 			// Local rule matches return a negative rule index to distinguish local rules from user-defined rules in logs
@@ -76,18 +107,48 @@ func rulesRequireAccess(rules []Rule) bool {
 	return false
 }
 
-// canonicalPathForMatching resolves dot-segments in URL.Path for ingress rule
-// matching only; the request forwarded to the origin is never modified.
-// net/url decodes percent-encoded separators and dot-segments into URL.Path
-// before this is called. Backslashes are then converted to forward slashes to
-// match edge normalization before path.Clean resolves repeated separators and
-// dot-segments. Trailing slashes are preserved, including the RFC 3986 implied
-// slash after a trailing "." or ".." segment.
-func canonicalPathForMatching(p string) string {
+// canonicalPathForMatching normalizes an escaped path for ingress rule matching
+// only; the request forwarded to the origin is never modified. Matrix parameters
+// are stripped before decoding so encoded separators in parameter values cannot
+// introduce traversal segments. Trailing slashes are preserved, including the
+// RFC 3986 implied slash after a trailing "." or ".." segment.
+func canonicalPathForMatching(escapedPath string) string {
+	return normalizePath(escapedPath,
+		stripPathParameters,
+		decodePathForMatching,
+		normalizeSeparators,
+		resolveDotSegments,
+	)
+}
+
+type pathNormalizer func(string) string
+
+// normalizePath applies transformations in order, each to the previous result.
+func normalizePath(p string, steps ...pathNormalizer) string {
+	for _, step := range steps {
+		p = step(p)
+	}
+	return p
+}
+
+func decodePathForMatching(p string) string {
+	decoded, err := url.PathUnescape(p)
+	if err != nil {
+		// EscapedPath produces valid escapes. Preserve malformed input from
+		// direct callers rather than partially decoding it.
+		return p
+	}
+	return decoded
+}
+
+func normalizeSeparators(p string) string {
+	return strings.ReplaceAll(p, `\`, "/")
+}
+
+func resolveDotSegments(p string) string {
 	if p == "" {
 		return "/"
 	}
-	p = strings.ReplaceAll(p, `\`, "/")
 	// In RFC 3986, a trailing "." or ".." segment implies a directory, so the
 	// cleaned result should end with "/". path.Clean removes the dot-segment
 	// but also strips the slash, so we detect it up front.
@@ -99,6 +160,17 @@ func canonicalPathForMatching(p string) string {
 		cleaned += "/"
 	}
 	return cleaned
+}
+
+// stripPathParameters removes Servlet-style matrix parameters from each literal
+// slash-delimited segment. Callers control whether decoding and separator
+// normalization happen before or after stripping to cover both interpretations.
+func stripPathParameters(p string) string {
+	segments := strings.Split(p, "/")
+	for i, segment := range segments {
+		segments[i], _, _ = strings.Cut(segment, ";")
+	}
+	return strings.Join(segments, "/")
 }
 
 func matchHost(ruleHost, reqHost string) bool {
