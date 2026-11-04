@@ -124,11 +124,17 @@ func (s *Supervisor) Run(
 		s.log.Logger().Error().Err(err).Msg("initial tunnel connection failed")
 		return err
 	}
+
+	return s.runLoop(ctx)
+}
+
+func (s *Supervisor) runLoop(ctx context.Context) error {
 	var tunnelsWaiting []int
 	tunnelsActive := s.config.HAConnections
 
 	backoff := retry.NewBackoff(s.config.Retries, tunnelRetryDuration, true)
 	var backoffTimer <-chan time.Time
+	gracefulShutdownC := s.gracefulShutdownC
 
 	shuttingDown := false
 	for {
@@ -175,8 +181,9 @@ func (s *Supervisor) Run(
 				// No more tunnels outstanding, clear backoff timer
 				backoff.SetGracePeriod()
 			}
-		case <-s.gracefulShutdownC:
+		case <-gracefulShutdownC:
 			shuttingDown = true
+			gracefulShutdownC = nil
 		}
 	}
 }
