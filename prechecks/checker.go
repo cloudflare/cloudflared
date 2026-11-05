@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/cloudflare/backoff"
@@ -182,9 +183,11 @@ func tlsConfigErrResults(probeType ProbeType, component string, targets []string
 	return results
 }
 
-// probeAllTargets probes each target group sequentially and returns one
-// CheckResult per group. Within each group, all available addresses (V4 and/or
-// V6) are tried and the best result is kept.
+// probeAllTargets probes each target group concurrently and returns one
+// CheckResult per group. Groups run in parallel so that a blocked address in
+// one group (e.g. an unreachable IPv6 path) cannot consume the shared suite
+// deadline and starve the probes for the other groups. Within each group, all
+// available addresses (V4 and/or V6) are tried and the best result is kept.
 func probeAllTargets(
 	ctx context.Context,
 	probeType ProbeType,
@@ -194,9 +197,15 @@ func probeAllTargets(
 	probeFn func(*allregions.EdgeAddr) CheckResult,
 ) []CheckResult {
 	results := make([]CheckResult, len(perGroupAddrs))
+	var wg sync.WaitGroup
 	for i, addrs := range perGroupAddrs {
-		results[i] = probeTarget(ctx, probeType, component, targets[i], addrs, probeFn)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = probeTarget(ctx, probeType, component, targets[i], addrs, probeFn)
+		}()
 	}
+	wg.Wait()
 	return results
 }
 
@@ -221,9 +230,22 @@ func probeTarget(
 		}
 	}
 
-	best := probeWithRetry(ctx, addrs[0], probeFn)
-	for _, addr := range addrs[1:] {
-		if r := probeWithRetry(ctx, addr, probeFn); r.ProbeStatus == Pass {
+	// Addresses run concurrently so that a blackholed address listed first
+	// cannot consume the deadline before the remaining addresses are tried.
+	results := make([]CheckResult, len(addrs))
+	var wg sync.WaitGroup
+	for i, addr := range addrs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = probeWithRetry(ctx, addr, probeFn)
+		}()
+	}
+	wg.Wait()
+
+	best := results[0]
+	for _, r := range results[1:] {
+		if r.ProbeStatus == Pass {
 			best = r
 		}
 	}
