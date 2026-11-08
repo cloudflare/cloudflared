@@ -88,7 +88,7 @@ func (v *WorkersVersion) Apply() error {
 	os.Remove(newFilePath) //remove any failed updates before download
 
 	// download the file
-	if err := download(v.downloadURL, newFilePath, v.isCompressed); err != nil {
+	if err := download(v.downloadURL, newFilePath, v.isCompressed, clientTimeout); err != nil {
 		return err
 	}
 
@@ -156,12 +156,13 @@ func (v *WorkersVersion) UserMessage() string {
 	return v.userMessage
 }
 
-// download the file from the link in the json
-func download(url, filepath string, isCompressed bool) error {
+// download the file from the link in the json. timeout is how long the download may go without receiving
+// any data before it is aborted.
+func download(url, filepath string, isCompressed bool, timeout time.Duration) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// the stall timer covers the request as well as the body, and is re-armed on every read
-	stall := time.AfterFunc(clientTimeout, cancel)
+	stall := time.AfterFunc(timeout, cancel)
 	defer stall.Stop()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -172,14 +173,14 @@ func download(url, filepath string, isCompressed bool) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return stalledError(err)
+			return stalledError(err, timeout)
 		}
 		return err
 	}
 	defer resp.Body.Close()
 
 	var r io.Reader
-	r = &stallReader{r: resp.Body, timer: stall, timeout: clientTimeout}
+	r = &stallReader{r: resp.Body, timer: stall, timeout: timeout}
 
 	// compressed macos binary, need to decompress
 	if isCompressed || isCompressedFile(url) {
@@ -207,14 +208,14 @@ func download(url, filepath string, isCompressed bool) error {
 
 	_, err = io.Copy(out, r)
 	if err != nil && ctx.Err() != nil {
-		return stalledError(err)
+		return stalledError(err, timeout)
 	}
 	return err
 }
 
-// stalledError reports a download that the stall timer aborted because no data arrived for clientTimeout.
-func stalledError(err error) error {
-	return fmt.Errorf("download stalled for %s without data: %w", clientTimeout, err)
+// stalledError reports a download that the stall timer aborted because no data arrived for timeout.
+func stalledError(err error, timeout time.Duration) error {
+	return fmt.Errorf("download stalled for %s without data: %w", timeout, err)
 }
 
 // stallReader re-arms the stall timer after every read, so a download is only cancelled when the
