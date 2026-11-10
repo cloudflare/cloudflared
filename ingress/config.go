@@ -328,7 +328,9 @@ type OriginRequestConfig struct {
 	ProxyType string `yaml:"proxyType" json:"proxyType"`
 	// IP rules for the proxy service
 	IPRules []ipaccess.Rule `yaml:"ipRules" json:"ipRules"`
-	// Attempt to connect to origin with HTTP/2
+	// Use HTTP/2 to connect to the origin. TLS origins negotiate HTTP/2.
+	// Cleartext HTTP and Unix origins use prior-knowledge h2c, which requires
+	// HTTP/2 support with no HTTP/1.1 fallback.
 	Http2Origin bool `yaml:"http2Origin" json:"http2Origin"`
 
 	// Access holds all access related configs
@@ -544,7 +546,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 }
 
 func convertToRawIPRules(ipRules []ipaccess.Rule) []config.IngressIPRule {
-	result := make([]config.IngressIPRule, 0)
+	result := make([]config.IngressIPRule, 0, len(ipRules))
 	for _, r := range ipRules {
 		cidr := r.StringCIDR()
 
