@@ -2,7 +2,9 @@ package connection
 
 import (
 	"net"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -22,7 +24,9 @@ type Observer struct {
 	log             *zerolog.Logger
 	metrics         *tunnelMetrics
 	tunnelEventChan chan Event
-	addSinkChan     chan EventSink
+
+	sinksMu sync.RWMutex
+	sinks   []EventSink
 }
 
 type EventSink interface {
@@ -34,14 +38,17 @@ func NewObserver(log *zerolog.Logger) *Observer {
 		log:             log,
 		metrics:         newTunnelMetrics(),
 		tunnelEventChan: make(chan Event, observerChannelBufferSize),
-		addSinkChan:     make(chan EventSink, observerChannelBufferSize),
 	}
 	go o.dispatchEvents()
 	return o
 }
 
+// RegisterSink registers sink and returns only once the sink is visible to
+// event dispatching, so it cannot miss events sent after RegisterSink returns.
 func (o *Observer) RegisterSink(sink EventSink) {
-	o.addSinkChan <- sink
+	o.sinksMu.Lock()
+	defer o.sinksMu.Unlock()
+	o.sinks = append(o.sinks, sink)
 }
 
 func (o *Observer) logConnecting(connIndex uint8, address net.IP, protocol Protocol) {
@@ -106,16 +113,19 @@ func (o *Observer) sendEvent(e Event) {
 }
 
 func (o *Observer) dispatchEvents() {
-	var sinks []EventSink
-	for {
-		select {
-		case sink := <-o.addSinkChan:
-			sinks = append(sinks, sink)
-		case evt := <-o.tunnelEventChan:
-			for _, sink := range sinks {
-				sink.OnTunnelEvent(evt)
-			}
-		}
+	for evt := range o.tunnelEventChan {
+		o.notifySinks(evt)
+	}
+}
+
+// notifySinks delivers evt to a snapshot of the registered sinks, so a slow or
+// re-entrant sink callback cannot block sink registration.
+func (o *Observer) notifySinks(evt Event) {
+	o.sinksMu.RLock()
+	sinks := slices.Clone(o.sinks)
+	o.sinksMu.RUnlock()
+	for _, sink := range sinks {
+		sink.OnTunnelEvent(evt)
 	}
 }
 
