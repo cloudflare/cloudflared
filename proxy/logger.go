@@ -33,10 +33,10 @@ func newHTTPLogger(logger *zerolog.Logger, connIndex uint8, req *http.Request, r
 	cfRay := connection.FindCfRayHeader(req)
 	lbProbe := connection.IsLBProbeRequest(req)
 	if cfRay != "" {
-		ctx.Str(logFieldCFRay, cfRay)
+		ctx = ctx.Str(logFieldCFRay, cfRay)
 	}
 	if lbProbe {
-		ctx.Bool(logFieldLBProbe, lbProbe)
+		ctx = ctx.Bool(logFieldLBProbe, lbProbe)
 	}
 	return ctx.
 		Str(logFieldOriginService, serviceName).
