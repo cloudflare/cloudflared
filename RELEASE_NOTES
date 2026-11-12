@@ -1,3 +1,9 @@
+2026.11.0
+- 2026-11-12 TUN-11065: Run Windows CI on production runners
+- 2026-11-12 chore: Bump golang to 1.27.4
+- 2026-11-09 chore: Use correct logger
+- 2026-11-04 VULN-170057: Don't bypass access with matrix parameters
+
 2026.10.7
 - 2026-10-30 TUN-11058: Fix regression on max concurrent streams over http2 introduced by go1.27
 - 2026-10-29 TUN-10904: Stop advertising legacy default features to the edge
