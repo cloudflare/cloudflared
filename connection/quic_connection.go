@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -244,7 +245,7 @@ func (q *quicConnection) dispatchRequest(ctx context.Context, stream *rpcquic.Re
 			return err, false
 		}
 		w := newHTTPResponseAdapter(stream)
-		return originProxy.ProxyHTTP(&w, tracedReq, request.Type == pogs.ConnectionTypeWebsocket), w.connectResponseSent
+		return originProxy.ProxyHTTP(w, tracedReq, request.Type == pogs.ConnectionTypeWebsocket), w.connectResponseSent
 
 	case pogs.ConnectionTypeTCP:
 		rwa := &streamReadWriteAcker{RequestServerStream: stream}
@@ -291,10 +292,12 @@ type httpResponseAdapter struct {
 	*rpcquic.RequestServerStream
 	headers             http.Header
 	connectResponseSent bool
+	hijacked            bool
+	hijackedMutex       sync.Mutex
 }
 
-func newHTTPResponseAdapter(s *rpcquic.RequestServerStream) httpResponseAdapter {
-	return httpResponseAdapter{RequestServerStream: s, headers: make(http.Header)}
+func newHTTPResponseAdapter(s *rpcquic.RequestServerStream) *httpResponseAdapter {
+	return &httpResponseAdapter{RequestServerStream: s, headers: make(http.Header)}
 }
 
 func (hrw *httpResponseAdapter) AddTrailer(trailerName, trailerValue string) {
@@ -314,7 +317,16 @@ func (hrw *httpResponseAdapter) WriteRespHeaders(status int, header http.Header)
 	return hrw.WriteConnectResponseData(nil, metadata...)
 }
 
+func (hrw *httpResponseAdapter) isHijacked() bool {
+	hrw.hijackedMutex.Lock()
+	defer hrw.hijackedMutex.Unlock()
+	return hrw.hijacked
+}
+
 func (hrw *httpResponseAdapter) Write(p []byte) (int, error) {
+	if hrw.isHijacked() {
+		return 0, http.ErrHijacked
+	}
 	// Make sure to send WriteHeader response if not called yet
 	if !hrw.connectResponseSent {
 		_ = hrw.WriteRespHeaders(http.StatusOK, hrw.headers)
@@ -330,10 +342,23 @@ func (hrw *httpResponseAdapter) Header() http.Header {
 func (hrw *httpResponseAdapter) Flush() {}
 
 func (hrw *httpResponseAdapter) WriteHeader(status int) {
+	if hrw.isHijacked() {
+		return
+	}
 	_ = hrw.WriteRespHeaders(status, hrw.headers)
 }
 
 func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if !hrw.connectResponseSent {
+		return nil, nil, fmt.Errorf("status not yet written before attempting to hijack connection")
+	}
+	hrw.hijackedMutex.Lock()
+	defer hrw.hijackedMutex.Unlock()
+	if hrw.hijacked {
+		return nil, nil, http.ErrHijacked
+	}
+	hrw.hijacked = true
+
 	conn := &localProxyConnection{hrw.ReadWriteCloser}
 	readWriter := bufio.NewReadWriter(
 		bufio.NewReader(hrw.ReadWriteCloser),
