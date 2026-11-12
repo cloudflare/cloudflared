@@ -3,6 +3,7 @@ package updater
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,8 @@ import (
 )
 
 const (
+	// clientTimeout is how long a download may go without receiving any data, from the request until the
+	// last body byte, before it is aborted. A slow but progressing link is not cut off.
 	clientTimeout = time.Second * 60
 	// stop the service
 	// rename cloudflared.exe to cloudflared.exe.old
@@ -85,7 +88,7 @@ func (v *WorkersVersion) Apply() error {
 	os.Remove(newFilePath) //remove any failed updates before download
 
 	// download the file
-	if err := download(v.downloadURL, newFilePath, v.isCompressed); err != nil {
+	if err := download(v.downloadURL, newFilePath, v.isCompressed, clientTimeout); err != nil {
 		return err
 	}
 
@@ -153,25 +156,36 @@ func (v *WorkersVersion) UserMessage() string {
 	return v.userMessage
 }
 
-// download the file from the link in the json
-func download(url, filepath string, isCompressed bool) error {
-	client := &http.Client{
-		Timeout: clientTimeout,
-	}
-	resp, err := client.Get(url)
+// download the file from the link in the json. timeout is how long the download may go without receiving
+// any data before it is aborted.
+func download(url, filepath string, isCompressed bool, timeout time.Duration) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// the stall timer covers the request as well as the body, and is re-armed on every read
+	stall := time.AfterFunc(timeout, cancel)
+	defer stall.Stop()
 
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		return err
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return stalledError(err, timeout)
+		}
 		return err
 	}
 	defer resp.Body.Close()
 
 	var r io.Reader
-	r = resp.Body
+	r = &stallReader{r: resp.Body, timer: stall, timeout: timeout}
 
 	// compressed macos binary, need to decompress
 	if isCompressed || isCompressedFile(url) {
 		// first the gzip reader
-		gr, err := gzip.NewReader(resp.Body)
+		gr, err := gzip.NewReader(r)
 		if err != nil {
 			return err
 		}
@@ -193,7 +207,29 @@ func download(url, filepath string, isCompressed bool) error {
 	defer out.Close()
 
 	_, err = io.Copy(out, r)
+	if err != nil && ctx.Err() != nil {
+		return stalledError(err, timeout)
+	}
 	return err
+}
+
+// stalledError reports a download that the stall timer aborted because no data arrived for timeout.
+func stalledError(err error, timeout time.Duration) error {
+	return fmt.Errorf("download stalled for %s without data: %w", timeout, err)
+}
+
+// stallReader re-arms the stall timer after every read, so a download is only cancelled when the
+// connection stays quiet for the full timeout.
+type stallReader struct {
+	r       io.Reader
+	timer   *time.Timer
+	timeout time.Duration
+}
+
+func (s *stallReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	s.timer.Reset(s.timeout)
+	return n, err
 }
 
 // isCompressedFile is a really simple file extension check to see if this is a macos tar and gzipped
