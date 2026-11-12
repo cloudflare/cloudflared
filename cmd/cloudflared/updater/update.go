@@ -173,7 +173,7 @@ func Update(c *cli.Context) error {
 	}
 
 	if updateOutcome.noUpdate() {
-		log.Info().Str(LogFieldVersion, updateOutcome.Version).Msg("cloudflared is up to date")
+		log.Info().Str(LogFieldVersion, buildInfo.CloudflaredVersion).Msg("cloudflared is up to date")
 		return nil
 	}
 
