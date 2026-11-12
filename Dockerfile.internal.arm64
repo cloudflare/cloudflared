@@ -1,6 +1,6 @@
 # use the internal builder image for building cloudflared
 ARG CLOUDFLARE_DOCKER_REGISTRY_HOST
-FROM ${CLOUDFLARE_DOCKER_REGISTRY_HOST:-registry.cfdata.org}/stash/plat/dockerfiles/debian-trixie-golang/master:1.27.3-1@sha256:521137a205e8e2efcbbc933d2f28d9ef05e14be4a75d16e34dbb73939f0f653f AS builder
+FROM ${CLOUDFLARE_DOCKER_REGISTRY_HOST:-registry.cfdata.org}/stash/plat/dockerfiles/debian-trixie-golang/master:1.27.4-2@sha256:03669d17e2de0b1f77c69ffe50c3ba6105e2ef0416b7792f24368ca85cf9a1fa AS builder
 ARG GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
