@@ -1,13 +1,17 @@
 package prechecks
 
 import (
+	"context"
+	"crypto/tls"
 	"errors"
 	"math"
 	"net"
+	"net/netip"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +22,7 @@ import (
 	"github.com/cloudflare/cloudflared/edgediscovery/allregions"
 	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/mocks"
+	cfdquic "github.com/cloudflare/cloudflared/quic"
 )
 
 const (
@@ -521,6 +526,92 @@ func TestRun_IPVersionRestriction(t *testing.T) {
 			requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
 		})
 	}
+}
+
+// TestRun_BlackholedIPv6DoesNotStarveOtherRegions verifies that an IPv6 address
+// that never answers in one region does not consume the shared suite deadline
+// and fail the other region's probes. Each case blackholes IPv6 on one
+// transport only: IPv4 dials succeed immediately, and blackholed IPv6 dials
+// block until the context is done.
+func TestRun_BlackholedIPv6DoesNotStarveOtherRegions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		blackholeQUIC bool
+		blackholeTCP  bool
+	}{
+		{name: "QUIC", blackholeQUIC: true},
+		{name: "TCP", blackholeTCP: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+
+			dns := mocks.NewMockDNSResolver(ctrl)
+			tcp := mocks.NewMockTCPDialer(ctrl)
+			quicD := mocks.NewMockQUICDialer(ctrl)
+			mgmt := mocks.NewMockManagementDialer(ctrl)
+
+			dns.EXPECT().Resolve(gomock.Any()).Return(twoRegionAddrsBothFamilies(), nil)
+			quicD.EXPECT().DialQuic(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(ctx context.Context, _ *quic.Config, _ *tls.Config, addr netip.AddrPort, _ net.IP, _ uint8, _ *zerolog.Logger, _ dialopts.DialOpts) (cfdquic.QUICConnection, error) {
+					if tc.blackholeQUIC && !addr.Addr().Unmap().Is4() {
+						<-ctx.Done()
+						return nil, ctx.Err()
+					}
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					return newFakeQUICConn(ctrl), nil
+				}).AnyTimes()
+			tcp.EXPECT().DialEdge(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(ctx context.Context, _ time.Duration, _ *tls.Config, addr *net.TCPAddr, _ net.IP) (net.Conn, error) {
+					if tc.blackholeTCP && addr.IP.To4() == nil {
+						<-ctx.Done()
+						return nil, ctx.Err()
+					}
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					return nopConn{}, nil
+				}).AnyTimes()
+			mgmt.EXPECT().DialContext(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(nopConn{}, nil).AnyTimes()
+
+			report := Run(t.Context(), emptyCert, Config{Timeout: 300 * time.Millisecond, IPVersion: allregions.Auto},
+				features.PostQuantumPrefer, nopLogger(), RunDialers{DNSResolver: dns, TCPDialer: tcp, QUICDialer: quicD, ManagementDialer: mgmt})
+
+			requireStatuses(t, report, Pass, Pass, Pass, Pass, Pass, Pass, Pass)
+		})
+	}
+}
+
+// TestRun_BlackholedFirstAddrDoesNotStarveGroup verifies that an address that
+// blocks until the deadline and is listed first in a target group does not
+// stop a later address in the same group from passing.
+func TestRun_BlackholedFirstAddrDoesNotStarveGroup(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+
+	v6 := &allregions.EdgeAddr{TCP: &net.TCPAddr{IP: net.ParseIP("2001:db8::1"), Port: 7844}, IPVersion: allregions.V6}
+	v4 := &allregions.EdgeAddr{TCP: &net.TCPAddr{IP: net.ParseIP("1.2.3.4"), Port: 7844}, IPVersion: allregions.V4}
+	probeFn := func(addr *allregions.EdgeAddr) CheckResult {
+		if addr.IPVersion == allregions.V6 {
+			<-ctx.Done()
+			return CheckResult{ProbeStatus: Fail}
+		}
+		if err := ctx.Err(); err != nil {
+			return CheckResult{ProbeStatus: Fail}
+		}
+		return CheckResult{ProbeStatus: Pass}
+	}
+
+	r := probeTarget(ctx, ProbeTypeQUIC, componentUDPConnectivity, "region", []*allregions.EdgeAddr{v6, v4}, probeFn)
+	assert.Equalf(t, Pass, r.ProbeStatus, "got %s, want %s", r.ProbeStatus, Pass)
 }
 
 // TestRun_EdgeAddrs_SingleAddr verifies that a single --edge addr bypasses DNS
