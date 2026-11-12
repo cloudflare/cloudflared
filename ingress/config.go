@@ -26,6 +26,7 @@ const (
 	SSHServerFlag                 = "ssh-server"
 	Socks5Flag                    = "socks5"
 	ProxyConnectTimeoutFlag       = "proxy-connect-timeout"
+	ProxyConnectRetryTimeoutFlag  = "proxy-connect-retry-timeout"
 	ProxyTLSTimeoutFlag           = "proxy-tls-timeout"
 	ProxyTCPKeepAliveFlag         = "proxy-tcp-keepalive"
 	ProxyNoHappyEyeballsFlag      = "proxy-no-happy-eyeballs"
@@ -121,6 +122,7 @@ func (rc *RemoteConfig) UnmarshalJSON(b []byte) error {
 
 func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 	var connectTimeout = defaultHTTPConnectTimeout
+	var connectRetryTimeout config.CustomDuration
 	var tlsTimeout = defaultTLSTimeout
 	var tcpKeepAlive = defaultTCPKeepAlive
 	var noHappyEyeballs bool
@@ -139,6 +141,9 @@ func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 	var http2Origin bool
 	if flag := ProxyConnectTimeoutFlag; c.IsSet(flag) {
 		connectTimeout = config.CustomDuration{Duration: c.Duration(flag)}
+	}
+	if flag := ProxyConnectRetryTimeoutFlag; c.IsSet(flag) {
+		connectRetryTimeout = config.CustomDuration{Duration: c.Duration(flag)}
 	}
 	if flag := ProxyTLSTimeoutFlag; c.IsSet(flag) {
 		tlsTimeout = config.CustomDuration{Duration: c.Duration(flag)}
@@ -193,6 +198,7 @@ func originRequestFromSingleRule(c *cli.Context) OriginRequestConfig {
 
 	return OriginRequestConfig{
 		ConnectTimeout:         connectTimeout,
+		ConnectRetryTimeout:    connectRetryTimeout,
 		TLSTimeout:             tlsTimeout,
 		TCPKeepAlive:           tcpKeepAlive,
 		NoHappyEyeballs:        noHappyEyeballs,
@@ -223,6 +229,9 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 	}
 	if c.ConnectTimeout != nil {
 		out.ConnectTimeout = *c.ConnectTimeout
+	}
+	if c.ConnectRetryTimeout != nil {
+		out.ConnectRetryTimeout = *c.ConnectRetryTimeout
 	}
 	if c.TLSTimeout != nil {
 		out.TLSTimeout = *c.TLSTimeout
@@ -292,6 +301,8 @@ func originRequestFromConfig(c config.OriginRequestConfig) OriginRequestConfig {
 type OriginRequestConfig struct {
 	// HTTP proxy timeout for establishing a new connection
 	ConnectTimeout config.CustomDuration `yaml:"connectTimeout" json:"connectTimeout"`
+	// Total time to retry refused HTTP origin connections or missing Unix sockets. Zero disables retries.
+	ConnectRetryTimeout config.CustomDuration `yaml:"connectRetryTimeout" json:"connectRetryTimeout,omitzero"`
 	// HTTP proxy timeout for completing a TLS handshake
 	TLSTimeout config.CustomDuration `yaml:"tlsTimeout" json:"tlsTimeout"`
 	// HTTP proxy TCP keepalive duration
@@ -338,6 +349,12 @@ type OriginRequestConfig struct {
 func (defaults *OriginRequestConfig) setConnectTimeout(overrides config.OriginRequestConfig) {
 	if val := overrides.ConnectTimeout; val != nil {
 		defaults.ConnectTimeout = *val
+	}
+}
+
+func (defaults *OriginRequestConfig) setConnectRetryTimeout(overrides config.OriginRequestConfig) {
+	if val := overrides.ConnectRetryTimeout; val != nil {
+		defaults.ConnectRetryTimeout = *val
 	}
 }
 
@@ -467,6 +484,7 @@ func (defaults *OriginRequestConfig) setAccess(overrides config.OriginRequestCon
 func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfig) OriginRequestConfig {
 	cfg := defaults
 	cfg.setConnectTimeout(overrides)
+	cfg.setConnectRetryTimeout(overrides)
 	cfg.setTLSTimeout(overrides)
 	cfg.setNoHappyEyeballs(overrides)
 	cfg.setKeepAliveConnections(overrides)
@@ -491,6 +509,7 @@ func setConfig(defaults OriginRequestConfig, overrides config.OriginRequestConfi
 
 func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig {
 	var connectTimeout *config.CustomDuration
+	var connectRetryTimeout *config.CustomDuration
 	var tlsTimeout *config.CustomDuration
 	var tcpKeepAlive *config.CustomDuration
 	var keepAliveConnections *int
@@ -500,6 +519,9 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 
 	if c.ConnectTimeout != defaultHTTPConnectTimeout {
 		connectTimeout = &c.ConnectTimeout
+	}
+	if c.ConnectRetryTimeout.Duration != 0 {
+		connectRetryTimeout = &c.ConnectRetryTimeout
 	}
 	if c.TLSTimeout != defaultTLSTimeout {
 		tlsTimeout = &c.TLSTimeout
@@ -522,6 +544,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 
 	return config.OriginRequestConfig{
 		ConnectTimeout:         connectTimeout,
+		ConnectRetryTimeout:    connectRetryTimeout,
 		TLSTimeout:             tlsTimeout,
 		TCPKeepAlive:           tcpKeepAlive,
 		NoHappyEyeballs:        defaultBoolToNil(c.NoHappyEyeballs),
@@ -544,7 +567,7 @@ func ConvertToRawOriginConfig(c OriginRequestConfig) config.OriginRequestConfig 
 }
 
 func convertToRawIPRules(ipRules []ipaccess.Rule) []config.IngressIPRule {
-	result := make([]config.IngressIPRule, 0)
+	result := make([]config.IngressIPRule, 0, len(ipRules))
 	for _, r := range ipRules {
 		cidr := r.StringCIDR()
 
