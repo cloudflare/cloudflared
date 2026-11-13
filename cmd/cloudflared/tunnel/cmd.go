@@ -252,7 +252,7 @@ func TunnelCommand(c *cli.Context) error {
 
 	// Run a quick tunnel
 	// A unauthenticated named tunnel hosted on <random>.<quick-tunnels-service>.com
-	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag)
+	shouldRunQuickTunnel := c.IsSet("url") || c.IsSet(ingress.HelloWorldFlag) || c.IsSet(ingress.FileFlag)
 	if c.String("quick-service") != "" && shouldRunQuickTunnel {
 		return RunQuickTunnel(sc)
 	}
@@ -965,6 +965,12 @@ func configureProxyFlags(shouldHide bool) []cli.Flag {
 			Value:   "http://localhost:8080",
 			Usage:   "Connect to the local webserver at `URL`.",
 			EnvVars: []string{"TUNNEL_URL"},
+			Hidden:  shouldHide,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    ingress.FileFlag,
+			Usage:   "Serve the local directory at PATH read-only instead of connecting to --url.",
+			EnvVars: []string{"TUNNEL_FILE"},
 			Hidden:  shouldHide,
 		}),
 		altsrc.NewBoolFlag(&cli.BoolFlag{

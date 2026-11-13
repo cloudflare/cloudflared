@@ -50,6 +50,9 @@ func describeQuickTunnelLocalOrigin(c *cli.Context, hasConfiguredIngress bool) (
 	if c.IsSet(ingress.HelloWorldFlag) {
 		return quickTunnelHelloWorldOrigin, nil
 	}
+	if c.IsSet(ingress.FileFlag) {
+		return "file:" + c.String(ingress.FileFlag), nil
+	}
 
 	originURL, err := config.ValidateUrl(c, false)
 	if err != nil {
