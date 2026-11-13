@@ -277,8 +277,8 @@ func newDefaultOrigin(c *cli.Context, log *zerolog.Logger) Ingress {
 // Get a single origin service from the CLI/config.
 func parseSingleOriginService(c *cli.Context, allowURLFromArgs bool) (OriginService, error) {
 	if c.IsSet(FileFlag) {
-		if c.IsSet("url") || c.IsSet("unix-socket") {
-			return nil, errors.New("--file must be used exclusively: it conflicts with --url and --unix-socket")
+		if c.IsSet("url") || c.IsSet("unix-socket") || c.IsSet(HelloWorldFlag) || c.IsSet(config.BastionFlag) {
+			return nil, errors.New("--file must be used exclusively: it conflicts with --url, --unix-socket, --hello-world and --bastion")
 		}
 		return newFileServer(c.String(FileFlag))
 	}

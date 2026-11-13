@@ -19,6 +19,8 @@ func newFileFlagContext(t *testing.T, args ...string) *cli.Context {
 		&cli.StringFlag{Name: "url"},
 		&cli.StringFlag{Name: "unix-socket"},
 		&cli.StringFlag{Name: "hostname"},
+		&cli.BoolFlag{Name: HelloWorldFlag},
+		&cli.BoolFlag{Name: config.BastionFlag},
 	} {
 		require.NoError(t, cliFlag.Apply(flagSet))
 	}
@@ -47,6 +49,8 @@ func TestFileFlagIsExclusive(t *testing.T) {
 	cases := map[string][]string{
 		"with --url":         {"--" + FileFlag, dir, "--url", "http://localhost:8080"},
 		"with --unix-socket": {"--" + FileFlag, dir, "--unix-socket", "/tmp/sock"},
+		"with --hello-world": {"--" + FileFlag, dir, "--" + HelloWorldFlag},
+		"with --bastion":     {"--" + FileFlag, dir, "--" + config.BastionFlag},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {

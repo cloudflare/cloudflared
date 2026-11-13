@@ -33,9 +33,8 @@ const localFileAuthHeader = "X-Cloudflared-File-Server"
 // httpService at it, in the same way helloWorld does. Nothing is ever written.
 type fileServer struct {
 	httpService
-	root   string
-	token  string
-	server net.Listener
+	root  string
+	token string
 }
 
 // newFileServer records the directory to serve.
@@ -106,7 +105,6 @@ func (o *fileServer) start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg O
 	if err != nil {
 		return errors.Wrap(err, "cannot start local file server")
 	}
-	o.server = listener
 	server := &http.Server{
 		Handler:           o,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -115,7 +113,9 @@ func (o *fileServer) start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg O
 	go func() { _ = server.Serve(listener) }()
 	go func() {
 		<-shutdownC
-		_ = listener.Close()
+		// Close also tears down keep-alive connections the shared transport
+		// may still be holding open.
+		_ = server.Close()
 	}()
 	o.httpService.url = &url.URL{Scheme: "http", Host: listener.Addr().String()}
 	log.Info().
@@ -128,6 +128,10 @@ func (o *fileServer) start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg O
 // ServeHTTP serves files under root. It is deliberately stricter than
 // http.FileServer: no directory listings, no dotfiles, no symlink escapes and
 // only GET/HEAD.
+//
+// Only the root path maps to index.html. Requests for a directory such as
+// "/sub/" are 404 by design, so a site whose links end in a slash needs the
+// page to be requested explicitly ("/sub/index.html").
 func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
@@ -198,6 +202,11 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // willing to serve. It is applied both to the request path and to the resolved
 // filesystem path.
 func safeRelativePath(rel string) bool {
+	// A backslash is a separator on Windows but not on Unix. Reject it
+	// everywhere so the policy does not depend on the platform.
+	if strings.ContainsRune(rel, 0x5C) {
+		return false
+	}
 	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
 		if segment == "" || segment == "." || segment == ".." {
 			return false
