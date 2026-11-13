@@ -7,17 +7,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// safeRelativePath is the single place that decides what may be served. It is
+// The path policy is the single place that decides what may be served. It is
 // tested directly, because going through ServeHTTP cannot distinguish "the rule
 // rejected this" from "the file simply does not exist on this platform".
 func TestSafeRelativePath(t *testing.T) {
-	always := []struct {
+	cases := []struct {
 		rel  string
 		want bool
 	}{
 		{"index.html", true},
 		{"sub/ok.txt", true},
 		{"a.txt", true},
+		{"sub/deeper/x.css", true},
 		{"", false},
 		{".", false},
 		{"..", false},
@@ -28,12 +29,35 @@ func TestSafeRelativePath(t *testing.T) {
 		{"a.txt.", false},
 		{"a.txt ", false},
 		{"sub/a.txt. ", false},
+	}
+	for _, c := range cases {
+		require.Equalf(t, c.want, safeRelativePath(c.rel), "safeRelativePath(%q)", c.rel)
+	}
+
+	// Windows hands back OS-separated paths from filepath.Rel; they must be
+	// accepted after normalisation rather than rejected as unsafe.
+	if runtime.GOOS == "windows" {
+		require.True(t, safeRelativePath("sub\\ok.txt"))
+		require.False(t, safeRelativePath("sub\\.hidden"))
+	}
+}
+
+func TestSafeRequestPath(t *testing.T) {
+	cases := []struct {
+		rel  string
+		want bool
+	}{
+		{"index.html", true},
+		{"sub/ok.txt", true},
 		{"a\\b", false},
 		{"\\.env", false},
 		{"sub\\ok.txt", false},
+		{"sub\\..\\.env", false},
+		{".env", false},
+		{"a.txt.", false},
 	}
-	for _, c := range always {
-		require.Equalf(t, c.want, safeRelativePath(c.rel), "safeRelativePath(%q)", c.rel)
+	for _, c := range cases {
+		require.Equalf(t, c.want, safeRequestPath(c.rel), "safeRequestPath(%q)", c.rel)
 	}
 }
 

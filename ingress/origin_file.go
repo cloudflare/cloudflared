@@ -157,7 +157,7 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if rel == "" {
 		rel = "index.html"
 	}
-	if !safeRelativePath(rel) {
+	if !safeRequestPath(rel) {
 		http.NotFound(w, r)
 		return
 	}
@@ -201,12 +201,18 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // safeRelativePath reports whether every component of rel is something we are
 // willing to serve. It is applied both to the request path and to the resolved
 // filesystem path.
-func safeRelativePath(rel string) bool {
-	// A backslash is a separator on Windows but not on Unix. Reject it
-	// everywhere so the policy does not depend on the platform.
+// safeRequestPath applies the policy to a path that came straight from the
+// request. A backslash is a separator on Windows but opaque to path.Clean,
+// so it must never appear here; on Unix it is rejected as well so the rule
+// does not depend on the platform.
+func safeRequestPath(rel string) bool {
 	if strings.ContainsRune(rel, 0x5C) {
 		return false
 	}
+	return safeRelativePath(rel)
+}
+
+func safeRelativePath(rel string) bool {
 	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
 		if segment == "" || segment == "." || segment == ".." {
 			return false
