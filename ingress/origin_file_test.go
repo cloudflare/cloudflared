@@ -10,16 +10,19 @@ import (
 
 func TestFileServerServesFiles(t *testing.T) {
 	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, "index.html"), "INDEX")
-	mustWrite(t, filepath.Join(root, "a.txt"), "AAA")
+	mustWriteFile(t, filepath.Join(root, "index.html"), "INDEX")
+	mustWriteFile(t, filepath.Join(root, "a.txt"), "AAA")
 	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	mustWrite(t, filepath.Join(root, "sub", "b.txt"), "BBB")
+	mustWriteFile(t, filepath.Join(root, "sub", "b.txt"), "BBB")
 
 	svc, err := newFileServer(root)
 	if err != nil {
 		t.Fatalf("newFileServer: %v", err)
+	}
+	if err := svc.resolveRoot(); err != nil {
+		t.Fatalf("resolveRoot: %v", err)
 	}
 	if !strings.HasPrefix(svc.String(), "file:") {
 		t.Fatalf("unexpected String(): %s", svc.String())
@@ -50,18 +53,21 @@ func TestFileServerServesFiles(t *testing.T) {
 
 func TestFileServerRejectsUnsafePaths(t *testing.T) {
 	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, "a.txt"), "AAA")
-	mustWrite(t, filepath.Join(root, ".env"), "SECRET=1")
+	mustWriteFile(t, filepath.Join(root, "a.txt"), "AAA")
+	mustWriteFile(t, filepath.Join(root, ".env"), "SECRET=1")
 	if err := os.MkdirAll(filepath.Join(root, "sub"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	outside := t.TempDir()
-	mustWrite(t, filepath.Join(outside, "secret.txt"), "OUTSIDE")
+	mustWriteFile(t, filepath.Join(outside, "secret.txt"), "OUTSIDE")
 	linkErr := os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(root, "evil.txt"))
 
 	svc, err := newFileServer(root)
 	if err != nil {
 		t.Fatalf("newFileServer: %v", err)
+	}
+	if err := svc.resolveRoot(); err != nil {
+		t.Fatalf("resolveRoot: %v", err)
 	}
 
 	paths := []struct {
@@ -75,6 +81,8 @@ func TestFileServerRejectsUnsafePaths(t *testing.T) {
 		{"dotfile", "GET", "/.env", 404},
 		{"dot directory", "GET", "/.git/config", 404},
 		{"directory listing", "GET", "/sub/", 404},
+		{"trailing dot", "GET", "/a.txt.", 404},
+		{"trailing dot on dotfile", "GET", "/.env.", 404},
 		{"post not allowed", "POST", "/a.txt", 405},
 		{"put not allowed", "PUT", "/a.txt", 405},
 	}
@@ -96,23 +104,38 @@ func TestFileServerRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
-func TestNewFileServerRejectsInvalidRoot(t *testing.T) {
-	root := t.TempDir()
-	file := filepath.Join(root, "f.txt")
-	mustWrite(t, file, "x")
-
-	if _, err := newFileServer(file); err == nil {
-		t.Error("expected error for a file, got nil")
-	}
-	if _, err := newFileServer(filepath.Join(root, "missing")); err == nil {
-		t.Error("expected error for a missing path, got nil")
-	}
+func TestNewFileServerOnlyChecksSyntax(t *testing.T) {
+	// Configuration parsing must not touch the filesystem: a config file may be
+	// validated on a machine where the directory does not exist.
 	if _, err := newFileServer(""); err == nil {
 		t.Error("expected error for an empty path, got nil")
 	}
+
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	svc, err := newFileServer(missing)
+	if err != nil {
+		t.Fatalf("newFileServer must not stat the directory, got: %v", err)
+	}
+	if err := svc.resolveRoot(); err == nil {
+		t.Error("resolveRoot must fail for a missing directory")
+	}
 }
 
-func mustWrite(t *testing.T, path, content string) {
+func TestResolveRootRejectsNonDirectory(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "f.txt")
+	mustWriteFile(t, file, "x")
+
+	svc, err := newFileServer(file)
+	if err != nil {
+		t.Fatalf("newFileServer: %v", err)
+	}
+	if err := svc.resolveRoot(); err == nil {
+		t.Error("resolveRoot must reject a regular file")
+	}
+}
+
+func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)

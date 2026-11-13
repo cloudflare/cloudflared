@@ -29,26 +29,37 @@ type fileServer struct {
 	server net.Listener
 }
 
+// newFileServer records the directory to serve.
+//
+// The path is only made absolute here. Resolving and validating it happens in
+// start(), so that validating a configuration file does not require the
+// directory to exist on the machine doing the validation.
 func newFileServer(dir string) (*fileServer, error) {
-	if dir == "" {
+	if strings.TrimSpace(dir) == "" {
 		return nil, errors.New("file service requires a directory")
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid directory")
 	}
-	root, err := filepath.EvalSymlinks(abs)
+	return &fileServer{root: abs}, nil
+}
+
+// resolveRoot resolves symlinks and checks that root is an existing directory.
+func (o *fileServer) resolveRoot() error {
+	resolved, err := filepath.EvalSymlinks(o.root)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot resolve directory")
+		return errors.Wrapf(err, "cannot resolve directory %s", o.root)
 	}
-	info, err := os.Stat(root)
+	info, err := os.Stat(resolved)
 	if err != nil {
-		return nil, errors.Wrap(err, "cannot stat directory")
+		return errors.Wrapf(err, "cannot stat directory %s", resolved)
 	}
 	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", root)
+		return fmt.Errorf("%s is not a directory", resolved)
 	}
-	return &fileServer{root: root}, nil
+	o.root = resolved
+	return nil
 }
 
 func (o *fileServer) String() string { return "file:" + o.root }
@@ -56,6 +67,9 @@ func (o *fileServer) String() string { return "file:" + o.root }
 func (o fileServer) MarshalJSON() ([]byte, error) { return json.Marshal(o.String()) }
 
 func (o *fileServer) start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg OriginRequestConfig) error {
+	if err := o.resolveRoot(); err != nil {
+		return err
+	}
 	if err := o.httpService.start(log, shutdownC, cfg); err != nil {
 		return err
 	}
@@ -67,6 +81,7 @@ func (o *fileServer) start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg O
 	server := &http.Server{
 		Handler:           o,
 		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 	go func() { _ = server.Serve(listener) }()
 	go func() {
@@ -97,6 +112,12 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, segment := range strings.Split(rel, "/") {
 		if segment == "" || segment == "." || segment == ".." || strings.HasPrefix(segment, ".") {
+			http.NotFound(w, r)
+			return
+		}
+		// Windows silently strips trailing dots and spaces from path
+		// components, so "/a.txt." would alias "a.txt". Reject instead.
+		if strings.TrimRight(segment, ". ") != segment {
 			http.NotFound(w, r)
 			return
 		}
