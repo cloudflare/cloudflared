@@ -1,6 +1,9 @@
 package ingress
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -9,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -19,6 +23,10 @@ import (
 // FileFlag is the CLI flag used to serve a local directory through the tunnel.
 const FileFlag = "file"
 
+// localFileAuthHeader marks requests that came through the tunnel proxy rather
+// than from another process on the machine listening on the loopback port.
+const localFileAuthHeader = "X-Cloudflared-File-Server"
+
 // fileServer is an OriginService that serves a local directory read-only.
 //
 // It starts an in-process HTTP server bound to loopback and points the embedded
@@ -26,6 +34,7 @@ const FileFlag = "file"
 type fileServer struct {
 	httpService
 	root   string
+	token  string
 	server net.Listener
 }
 
@@ -42,7 +51,19 @@ func newFileServer(dir string) (*fileServer, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid directory")
 	}
-	return &fileServer{root: abs}, nil
+	token, err := newLocalToken()
+	if err != nil {
+		return nil, err
+	}
+	return &fileServer{root: abs, token: token}, nil
+}
+
+func newLocalToken() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", errors.Wrap(err, "cannot generate loopback token")
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // resolveRoot resolves symlinks and checks that root is an existing directory.
@@ -65,6 +86,14 @@ func (o *fileServer) resolveRoot() error {
 func (o *fileServer) String() string { return "file:" + o.root }
 
 func (o fileServer) MarshalJSON() ([]byte, error) { return json.Marshal(o.String()) }
+
+// RoundTrip marks requests that come from the tunnel so the loopback listener
+// can tell them apart from other local processes.
+func (o *fileServer) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header.Set(localFileAuthHeader, o.token)
+	return o.httpService.RoundTrip(clone)
+}
 
 func (o *fileServer) start(log *zerolog.Logger, shutdownC <-chan struct{}, cfg OriginRequestConfig) error {
 	if err := o.resolveRoot(); err != nil {
@@ -106,21 +135,27 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only the tunnel may talk to this listener.
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get(localFileAuthHeader)), []byte(o.token)) != 1 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	// A backslash is never valid in a URL path. On Windows it is a separator
+	// for the filesystem but not for path.Clean, so allowing it would let
+	// "/%5c.env" slip past the segment checks below and resolve to ".env".
+	if strings.ContainsRune(r.URL.Path, '\\') {
+		http.NotFound(w, r)
+		return
+	}
+
 	rel := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 	if rel == "" {
 		rel = "index.html"
 	}
-	for _, segment := range strings.Split(rel, "/") {
-		if segment == "" || segment == "." || segment == ".." || strings.HasPrefix(segment, ".") {
-			http.NotFound(w, r)
-			return
-		}
-		// Windows silently strips trailing dots and spaces from path
-		// components, so "/a.txt." would alias "a.txt". Reject instead.
-		if strings.TrimRight(segment, ". ") != segment {
-			http.NotFound(w, r)
-			return
-		}
+	if !safeRelativePath(rel) {
+		http.NotFound(w, r)
+		return
 	}
 
 	target := filepath.Join(o.root, filepath.FromSlash(rel))
@@ -134,6 +169,14 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Re-check the resolved path: the filesystem may have expanded the request
+	// into something the checks above never saw, for example a Windows 8.3
+	// short name such as "GIT~1" that aliases ".git".
+	if resolvedRel, err := filepath.Rel(o.root, resolved); err != nil || !safeRelativePath(resolvedRel) {
+		http.NotFound(w, r)
+		return
+	}
+
 	file, err := os.Open(resolved)
 	if err != nil {
 		http.NotFound(w, r)
@@ -142,13 +185,61 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	info, err := file.Stat()
-	if err != nil || info.IsDir() {
+	if err != nil || !info.Mode().IsRegular() {
 		http.NotFound(w, r)
 		return
 	}
 
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+}
+
+// safeRelativePath reports whether every component of rel is something we are
+// willing to serve. It is applied both to the request path and to the resolved
+// filesystem path.
+func safeRelativePath(rel string) bool {
+	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+		// No hidden files or directories.
+		if strings.HasPrefix(segment, ".") {
+			return false
+		}
+		// Windows silently strips trailing dots and spaces, so "a.txt." would
+		// alias "a.txt". Rejecting everywhere keeps behaviour identical across
+		// platforms rather than aliasing on one of them.
+		if strings.TrimRight(segment, ". ") != segment {
+			return false
+		}
+		if isReservedName(segment) {
+			return false
+		}
+	}
+	return true
+}
+
+// isReservedName reports Windows device names, which are not regular files and
+// can block on open.
+func isReservedName(segment string) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	name := strings.ToUpper(segment)
+	if idx := strings.IndexByte(name, '.'); idx >= 0 {
+		name = name[:idx]
+	}
+	switch name {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	if len(name) == 4 {
+		prefix, digit := name[:3], name[3]
+		if digit >= '1' && digit <= '9' && (prefix == "COM" || prefix == "LPT") {
+			return true
+		}
+	}
+	return false
 }
 
 func isWithin(root, target string) bool {
