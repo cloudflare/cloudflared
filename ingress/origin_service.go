@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -9,11 +10,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	"golang.org/x/net/proxy"
 
 	"github.com/cloudflare/cloudflared/hello"
 	"github.com/cloudflare/cloudflared/ipaccess"
@@ -97,7 +100,7 @@ func (o httpService) MarshalJSON() ([]byte, error) {
 // It's used by warp routing
 type rawTCPService struct {
 	name         string
-	dialer       net.Dialer
+	dialer       proxy.Dialer
 	writeTimeout time.Duration
 	logger       *zerolog.Logger
 }
@@ -114,14 +117,145 @@ func (o rawTCPService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(o.String())
 }
 
+// proxyAwareDialer wraps net.Dialer with proxy support for both HTTP CONNECT and SOCKS
+type proxyAwareDialer struct {
+	baseDialer *net.Dialer
+	logger     *zerolog.Logger
+}
+
+// newProxyAwareDialer creates a dialer that supports proxy settings from environment
+func newProxyAwareDialer(timeout, keepAlive time.Duration, logger *zerolog.Logger) proxy.Dialer {
+	baseDialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: keepAlive,
+	}
+
+	// Check for SOCKS proxy first using standard proxy package
+	if socksDialer := proxy.FromEnvironmentUsing(baseDialer); socksDialer != baseDialer {
+		if logger != nil {
+			logger.Debug().Msg("proxy: using SOCKS proxy from environment")
+		}
+		return socksDialer
+	}
+
+	// Check for HTTP proxy environment variables
+	httpProxy := getEnvProxy("HTTP_PROXY", "http_proxy")
+	httpsProxy := getEnvProxy("HTTPS_PROXY", "https_proxy")
+
+	if httpProxy == "" && httpsProxy == "" {
+		if logger != nil {
+			logger.Debug().Msg("proxy: no proxy configured, using direct connection")
+		}
+		return baseDialer
+	}
+
+	if logger != nil {
+		logger.Debug().Str("HTTP_PROXY", httpProxy).Str("HTTPS_PROXY", httpsProxy).Msg("proxy: using HTTP proxy from environment")
+	}
+	return &proxyAwareDialer{
+		baseDialer: baseDialer,
+		logger:     logger,
+	}
+}
+
+func getEnvProxy(upper, lower string) string {
+	if v := os.Getenv(upper); v != "" {
+		return v
+	}
+	return os.Getenv(lower)
+}
+
+func (p *proxyAwareDialer) Dial(network, addr string) (net.Conn, error) {
+	return p.DialContext(context.Background(), network, addr)
+}
+
+func (p *proxyAwareDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	if network != "tcp" {
+		return p.baseDialer.DialContext(ctx, network, addr)
+	}
+
+	req := &http.Request{URL: &url.URL{Scheme: "http", Host: addr}}
+	proxyURL, err := http.ProxyFromEnvironment(req)
+	if err != nil || proxyURL == nil {
+		if p.logger != nil {
+			p.logger.Debug().Str("addr", addr).Msg("proxy: direct connection to")
+		}
+		return p.baseDialer.DialContext(ctx, network, addr)
+	}
+
+	if p.logger != nil {
+		p.logger.Debug().Str("proxy_url", proxyURL.String()).Str("addr", addr).Msg("proxy: using proxy")
+	}
+
+	switch proxyURL.Scheme {
+	case "socks4", "socks5":
+		return p.dialSOCKS(ctx, proxyURL, network, addr)
+	case "http", "https":
+		return p.dialHTTPConnect(ctx, proxyURL, addr)
+	default:
+		return nil, fmt.Errorf("unsupported proxy scheme: %s", proxyURL.Scheme)
+	}
+}
+
+func (p *proxyAwareDialer) dialSOCKS(ctx context.Context, proxyURL *url.URL, network, addr string) (net.Conn, error) {
+	socksDialer, err := proxy.FromURL(proxyURL, p.baseDialer)
+	if err != nil {
+		return nil, fmt.Errorf("SOCKS proxy error: %w", err)
+	}
+
+	if contextDialer, ok := socksDialer.(proxy.ContextDialer); ok {
+		return contextDialer.DialContext(ctx, network, addr)
+	}
+	return socksDialer.Dial(network, addr)
+}
+
+func (p *proxyAwareDialer) dialHTTPConnect(ctx context.Context, proxyURL *url.URL, addr string) (net.Conn, error) {
+	proxyAddr := proxyURL.Host
+	if proxyURL.Port() == "" {
+		if proxyURL.Scheme == "https" {
+			proxyAddr = net.JoinHostPort(proxyURL.Hostname(), "443")
+		} else {
+			proxyAddr = net.JoinHostPort(proxyURL.Hostname(), "80")
+		}
+	}
+
+	conn, err := p.baseDialer.DialContext(ctx, "tcp", proxyAddr)
+	if err != nil {
+		return nil, fmt.Errorf("proxy connection failed: %w", err)
+	}
+
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", addr, addr)
+	if _, err := conn.Write([]byte(connectReq)); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("CONNECT request failed: %w", err)
+	}
+
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, &http.Request{Method: "CONNECT"})
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("CONNECT response failed: %w", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		conn.Close()
+		return nil, fmt.Errorf("proxy CONNECT failed: %s", resp.Status)
+	}
+
+	if p.logger != nil {
+		p.logger.Debug().Str("addr", addr).Msg("proxy: HTTP CONNECT successful")
+	}
+	return conn, nil
+}
+
 // tcpOverWSService models TCP origins serving eyeballs connecting over websocket, such as
-// cloudflared access commands.
 type tcpOverWSService struct {
 	scheme        string
 	dest          string
 	isBastion     bool
 	streamHandler streamHandlerFunc
-	dialer        net.Dialer
+	dialer        proxy.Dialer
 }
 
 type socksProxyOverWSService struct {
@@ -142,12 +276,14 @@ func newTCPOverWSService(url *url.URL) *tcpOverWSService {
 	return &tcpOverWSService{
 		scheme: url.Scheme,
 		dest:   url.Host,
+		dialer: newProxyAwareDialer(30*time.Second, 30*time.Second, nil),
 	}
 }
 
 func newBastionService() *tcpOverWSService {
 	return &tcpOverWSService{
 		isBastion: true,
+		dialer:    newProxyAwareDialer(30*time.Second, 30*time.Second, nil),
 	}
 }
 
@@ -187,8 +323,8 @@ func (o *tcpOverWSService) start(log *zerolog.Logger, _ <-chan struct{}, cfg Ori
 	} else {
 		o.streamHandler = DefaultStreamHandler
 	}
-	o.dialer.Timeout = cfg.ConnectTimeout.Duration
-	o.dialer.KeepAlive = cfg.TCPKeepAlive.Duration
+	// Recreate dialer with new timeout and keepalive settings
+	o.dialer = newProxyAwareDialer(cfg.ConnectTimeout.Duration, cfg.TCPKeepAlive.Duration, log)
 	return nil
 }
 
@@ -291,11 +427,8 @@ type WarpRoutingService struct {
 
 func NewWarpRoutingService(config WarpRoutingConfig, writeTimeout time.Duration) *WarpRoutingService {
 	svc := &rawTCPService{
-		name: ServiceWarpRouting,
-		dialer: net.Dialer{
-			Timeout:   config.ConnectTimeout.Duration,
-			KeepAlive: config.TCPKeepAlive.Duration,
-		},
+		name:         ServiceWarpRouting,
+		dialer:       newProxyAwareDialer(config.ConnectTimeout.Duration, config.TCPKeepAlive.Duration, nil),
 		writeTimeout: writeTimeout,
 	}
 
