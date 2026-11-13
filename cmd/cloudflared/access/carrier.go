@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/urfave/cli/v2"
@@ -68,6 +72,26 @@ func ssh(c *cli.Context) error {
 		outputTerminal = logger.EnableTerminalLog
 	}
 	log := logger.CreateSSHLoggerFromContext(c, outputTerminal)
+
+	if c.IsSet(sshPidFileFlag) {
+		pidFile := c.String(sshPidFileFlag)
+		writePidFile(pidFile, log)
+		defer removePidFile(pidFile, log)
+
+		// Trap SIGTERM/SIGINT to clean up the PID file before exiting.
+		// Without this, signals kill the process before defers can run.
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+		go func() {
+			<-sigCh
+			removePidFile(pidFile, log)
+			signal.Reset(syscall.SIGTERM, syscall.SIGINT)
+			// Re-raise so the process exits with the default signal behavior
+			if p, err := os.FindProcess(os.Getpid()); err == nil {
+				_ = p.Signal(syscall.SIGTERM)
+			}
+		}()
+	}
 
 	// get the hostname from the cmdline and error out if its not provided
 	rawHostName := c.String(sshHostnameFlag)
@@ -144,4 +168,33 @@ func ssh(c *cli.Context) error {
 		s = stream.NewDebugStream(s, &logger, maxMessages)
 	}
 	return carrier.StartClient(wsConn, s, options)
+}
+
+// writePidFile writes the current process ID to a given file path.
+// It expands ~ in paths using go-homedir.
+func writePidFile(pidPathname string, log *zerolog.Logger) {
+	expandedPath, err := homedir.Expand(pidPathname)
+	if err != nil {
+		log.Err(err).Str("pidPath", pidPathname).Msg("Unable to expand the path, try to use absolute path in --pidfile")
+		return
+	}
+	file, err := os.Create(expandedPath)
+	if err != nil {
+		log.Err(err).Str("pidPath", expandedPath).Msg("Unable to write pid")
+		return
+	}
+	defer file.Close()
+	fmt.Fprintf(file, "%d", os.Getpid())
+}
+
+// removePidFile removes the PID file at the given path.
+// Errors are logged but do not cause a failure.
+func removePidFile(pidPathname string, log *zerolog.Logger) {
+	expandedPath, err := homedir.Expand(pidPathname)
+	if err != nil {
+		return
+	}
+	if err := os.Remove(expandedPath); err != nil && !os.IsNotExist(err) {
+		log.Err(err).Str("pidPath", expandedPath).Msg("Unable to remove pid file")
+	}
 }
