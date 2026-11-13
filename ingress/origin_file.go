@@ -86,8 +86,8 @@ func (o *fileServer) String() string { return "file:" + o.root }
 
 func (o fileServer) MarshalJSON() ([]byte, error) { return json.Marshal(o.String()) }
 
-// RoundTrip marks requests that come from the tunnel so the loopback listener
-// can tell them apart from other local processes.
+// RoundTrip marks requests that come through the tunnel so that the loopback
+// listener can tell them apart from other local processes.
 func (o *fileServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	clone := req.Clone(req.Context())
 	clone.Header.Set(localFileAuthHeader, o.token)
@@ -145,14 +145,6 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A backslash is never valid in a URL path. On Windows it is a separator
-	// for the filesystem but not for path.Clean, so allowing it would let
-	// "/%5c.env" slip past the segment checks below and resolve to ".env".
-	if strings.ContainsRune(r.URL.Path, '\\') {
-		http.NotFound(w, r)
-		return
-	}
-
 	rel := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 	if rel == "" {
 		rel = "index.html"
@@ -168,15 +160,14 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !isWithin(o.root, resolved) {
-		http.NotFound(w, r)
-		return
-	}
 
-	// Re-check the resolved path: the filesystem may have expanded the request
-	// into something the checks above never saw, for example a Windows 8.3
-	// short name such as "GIT~1" that aliases ".git".
-	if resolvedRel, err := filepath.Rel(o.root, resolved); err != nil || !safeRelativePath(resolvedRel) {
+	// This is the check that actually contains the request. The filesystem may
+	// have expanded it into something the policy above never saw: a Windows 8.3
+	// short name such as "GIT~1" that aliases ".git", or a symlink inside the
+	// root pointing at a dotfile. Applying the same policy to the resolved path
+	// rejects both, and an escape from the root surfaces here as a leading "..".
+	resolvedRel, err := filepath.Rel(o.root, resolved)
+	if err != nil || !safeRelativePath(resolvedRel) {
 		http.NotFound(w, r)
 		return
 	}
@@ -198,20 +189,24 @@ func (o *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
 
-// safeRelativePath reports whether every component of rel is something we are
-// willing to serve. It is applied both to the request path and to the resolved
-// filesystem path.
 // safeRequestPath applies the policy to a path that came straight from the
-// request. A backslash is a separator on Windows but opaque to path.Clean,
-// so it must never appear here; on Unix it is rejected as well so the rule
-// does not depend on the platform.
+// request. It additionally rejects backslashes: on Windows they separate path
+// components for the filesystem but are opaque to path.Clean, which would give
+// one file two URLs ("/sub%5ca.txt" and "/sub/a.txt").
+//
+// That is a normalisation rule rather than the safety boundary: what stops a
+// backslash from reaching a dotfile is safeRelativePath mapping it through
+// filepath.ToSlash, and ultimately the resolved-path check in ServeHTTP.
 func safeRequestPath(rel string) bool {
-	if strings.ContainsRune(rel, 0x5C) {
+	if strings.ContainsRune(rel, '\\') {
 		return false
 	}
 	return safeRelativePath(rel)
 }
 
+// safeRelativePath reports whether every component of rel is something we are
+// willing to serve. It is applied both to the request path and to the path the
+// filesystem resolved to.
 func safeRelativePath(rel string) bool {
 	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
 		if segment == "" || segment == "." || segment == ".." {
@@ -222,8 +217,8 @@ func safeRelativePath(rel string) bool {
 			return false
 		}
 		// Windows silently strips trailing dots and spaces, so "a.txt." would
-		// alias "a.txt". Rejecting everywhere keeps behaviour identical across
-		// platforms rather than aliasing on one of them.
+		// alias "a.txt". Rejecting on every platform keeps behaviour identical
+		// rather than aliasing on one of them.
 		if strings.TrimRight(segment, ". ") != segment {
 			return false
 		}
@@ -255,12 +250,4 @@ func isReservedName(segment string) bool {
 		}
 	}
 	return false
-}
-
-func isWithin(root, target string) bool {
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
