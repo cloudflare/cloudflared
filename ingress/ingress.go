@@ -479,9 +479,10 @@ func validateHostname(r config.UnvalidatedIngressRule, ruleIndex, totalRules int
 	if err == nil {
 		return errHostnameContainsPort
 	}
-	// Ensure that there are no wildcards anywhere except the first character
-	// of the hostname.
-	if strings.LastIndex(r.Hostname, "*") > 0 {
+	// A wildcard must be the entire hostname or the entire first label.
+	wildcardIndex := strings.LastIndex(r.Hostname, "*")
+	if wildcardIndex > 0 || (wildcardIndex == 0 && r.Hostname != "*" &&
+		(!strings.HasPrefix(r.Hostname, "*.") || len(r.Hostname) == len("*."))) {
 		return errBadWildcard
 	}
 
