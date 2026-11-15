@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -296,6 +297,68 @@ func newTestSupervisor(t *testing.T, server TunnelServer) *Supervisor {
 		},
 		log: connAwareLogger,
 	}
+}
+
+type countingDoneContext struct {
+	context.Context
+	doneCalls atomic.Int32
+	doneCallC chan struct{}
+}
+
+func (c *countingDoneContext) Done() <-chan struct{} {
+	c.doneCalls.Add(1)
+	select {
+	case c.doneCallC <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func TestRunLoopHandlesGracefulShutdownOnce(t *testing.T) {
+	gracefulShutdownC := make(chan struct{})
+	s := newTestSupervisor(t, nil)
+	s.config.HAConnections = 1
+	s.gracefulShutdownC = gracefulShutdownC
+
+	ctx := &countingDoneContext{
+		Context:   context.Background(),
+		doneCallC: make(chan struct{}, 3),
+	}
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- s.runLoop(ctx)
+	}()
+
+	select {
+	case <-ctx.doneCallC:
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not start")
+	}
+
+	close(gracefulShutdownC)
+	select {
+	case <-ctx.doneCallC:
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not handle graceful shutdown")
+	}
+
+	busyLoop := false
+	select {
+	case <-ctx.doneCallC:
+		busyLoop = true
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	s.tunnelErrors <- tunnelError{index: 0}
+	select {
+	case err := <-runDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("run loop did not exit after the active tunnel stopped")
+	}
+
+	assert.False(t, busyLoop, "run loop repeatedly selected the closed graceful shutdown channel")
+	assert.Equal(t, int32(2), ctx.doneCalls.Load())
 }
 
 func TestStartFirstTunnelRetryLoop(t *testing.T) {
