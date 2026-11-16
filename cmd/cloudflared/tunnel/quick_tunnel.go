@@ -214,10 +214,6 @@ func RunQuickTunnel(sc *subcommandContext) error {
 	quickTunnelURL := normalizeQuickTunnelURL(data.Result.Hostname)
 	cliutil.LogTable(sc.log, quickTunnelStartupLines(isProtected, quickTunnelURL, localOrigin, recipientPolicy))
 
-	if !sc.c.IsSet(flags.Protocol) {
-		_ = sc.c.Set(flags.Protocol, "quic")
-	}
-
 	// Override the number of connections used. Quick tunnels shouldn't be used for production usage,
 	// so, use a single connection instead.
 	_ = sc.c.Set(flags.HaConnections, "1")
