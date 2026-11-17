@@ -912,6 +912,7 @@ func (*testOverrideOriginProxy) ProxyTCP(context.Context, connection.ReadWriteAc
 // TestOverrideProxy tests that a custom OriginProxy takes precedence over the
 // ingress-based proxy, and that the ingress-based proxy is used again once it is cleared.
 func TestOverrideProxy(t *testing.T) {
+	t.Parallel()
 	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
 		DefaultDialer:   testDefaultDialer,
 		TCPWriteTimeout: 1 * time.Second,
