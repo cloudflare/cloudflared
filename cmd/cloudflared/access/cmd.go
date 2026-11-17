@@ -38,6 +38,7 @@ const (
 	sshGenCertFlag     = "short-lived-cert"
 	sshConnectTo       = "connect-to"
 	sshDebugStream     = "debug-stream"
+	sshPidfileFlag     = "pidfile"
 	sshConfigTemplate  = `
 Add to your {{.Home}}/.ssh/config:
 
@@ -180,6 +181,11 @@ func Commands() []*cli.Command {
 							Aliases: []string{"secret"},
 							Usage:   "specify an Access service token secret you wish to use.",
 							EnvVars: []string{"TUNNEL_SERVICE_TOKEN_SECRET"},
+						},
+						&cli.StringFlag{
+							Name:    sshPidfileFlag,
+							Usage:   "Write the application's PID to this file once the listener is ready.",
+							EnvVars: []string{"TUNNEL_PIDFILE"},
 						},
 						&cli.StringFlag{
 							Name:  cfdflags.LogFile,
