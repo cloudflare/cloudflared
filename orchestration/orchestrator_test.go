@@ -898,3 +898,44 @@ func (rrw *respReadWriteFlusher) WriteHeader(statusCode int) {
 		close(rrw.hasStatus)
 	})
 }
+
+type testOverrideOriginProxy struct{}
+
+func (*testOverrideOriginProxy) ProxyHTTP(connection.ResponseWriter, *tracing.TracedHTTPRequest, bool) error {
+	return nil
+}
+
+func (*testOverrideOriginProxy) ProxyTCP(context.Context, connection.ReadWriteAcker, *connection.TCPRequest) error {
+	return nil
+}
+
+// TestOverrideProxy tests that a custom OriginProxy takes precedence over the
+// ingress-based proxy, and that the ingress-based proxy is used again once it is cleared.
+func TestOverrideProxy(t *testing.T) {
+	t.Parallel()
+	originDialer := ingress.NewOriginDialer(ingress.OriginConfig{
+		DefaultDialer:   testDefaultDialer,
+		TCPWriteTimeout: 1 * time.Second,
+	}, &testLogger)
+	initConfig := &Config{
+		Ingress:                  &ingress.Ingress{},
+		OriginDialerService:      originDialer,
+		DisablePathNormalization: true,
+	}
+	orchestrator, err := NewOrchestrator(t.Context(), initConfig, testTags, []ingress.Rule{ingress.NewManagementRule(management.New("management.argotunnel.com", false, "1.1.1.1:80", uuid.Nil, "", &testLogger, nil))}, &testLogger)
+	require.NoError(t, err)
+
+	ingressProxy, err := orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+
+	override := &testOverrideOriginProxy{}
+	orchestrator.OverrideProxy = override
+	got, err := orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+	require.Same(t, override, got)
+
+	orchestrator.OverrideProxy = nil
+	got, err = orchestrator.GetOriginProxy()
+	require.NoError(t, err)
+	require.Equal(t, ingressProxy, got)
+}
