@@ -4,14 +4,21 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/quic-go/quic-go"
+
 	tunnelpogs "github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 )
 
 const (
 	DuplicateConnectionError = "EDUPCONN"
+	// RegionChangeQUICCode tells the connector that the account region changed.
+	RegionChangeQUICCode quic.ApplicationErrorCode = 10002
 )
 
 var ErrDuplicateConnection = errors.New("already connected to this server, trying another address")
+
+// ErrRegionChanged requests a restart of the entire HA connection group.
+var ErrRegionChanged = errors.New("account region changed")
 
 // Dial to edge server with quic failed
 type EdgeQuicDialError struct {

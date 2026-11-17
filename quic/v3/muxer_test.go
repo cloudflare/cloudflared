@@ -15,6 +15,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/google/gopacket/layers"
+	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,6 +188,51 @@ func TestDatagramConnServe_ConnectionClosed(t *testing.T) {
 	}
 }
 
+func TestDatagramConnServe_ConnectionCloseCause(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		cause error
+	}{
+		{"application error", &quic.ApplicationError{Remote: true, ErrorCode: 42}},
+		{"idle timeout", &quic.IdleTimeoutError{}},
+		{"cancellation", context.Canceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			log := zerolog.Nop()
+			connCtx, closeConn := context.WithCancelCause(t.Context())
+			closeConn(test.cause)
+			peer := newMockQuicConn(connCtx)
+			conn := v3.NewDatagramConn(peer, &mockSessionManager{}, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+
+			// Both the connection context and the datagram reader can report the
+			// closure. Serve must preserve the close reason whichever wins.
+			require.ErrorIs(t, conn.Serve(ctx), test.cause)
+		})
+	}
+}
+
+func TestDatagramConnServe_CallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	connCtx, closeConn := context.WithCancel(t.Context())
+	defer closeConn()
+	peer := newMockQuicConn(connCtx)
+	conn := v3.NewDatagramConn(peer, &mockSessionManager{}, &noopICMPRouter{}, 0, &noopMetrics{}, &log)
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cancel(errors.New("caller stopped serving"))
+
+	// Caller cancellation remains cancellation, not a transport close error.
+	require.ErrorIs(t, conn.Serve(ctx), context.Canceled)
+}
+
 func TestDatagramConnServe_ReceiveDatagramError(t *testing.T) {
 	log := zerolog.Nop()
 	originDialerService := ingress.NewOriginDialer(ingress.OriginConfig{
@@ -232,8 +278,8 @@ func TestDatagramConnServe_SessionRegistrationRateLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	require.EqualValues(t, testRequestID, resp.RequestID)
-	require.EqualValues(t, v3.ResponseTooManyActiveFlows, resp.ResponseType)
+	require.Equal(t, testRequestID, resp.RequestID)
+	require.Equal(t, v3.ResponseTooManyActiveFlows, resp.ResponseType)
 
 	assertContextClosed(t, ctx, done, cancel)
 }
@@ -465,7 +511,7 @@ func TestDatagramConnServeDecodeMultipleICMPInParallel(t *testing.T) {
 	for _, p := range receivedPackets {
 		packetSet[p.Dst] = p
 	}
-	assert.Equal(t, len(packetSet), len(packets))
+	assert.Len(t, packets, len(packetSet))
 
 	// Sort the slice by last byte of IP address (the one we increment for each destination)
 	// and then check that we have one match for each packet sent
@@ -816,7 +862,7 @@ func TestDatagramConnServe_ICMPDatagram_TTLExceeded(t *testing.T) {
 	}
 
 	// Packet should be a TTL Exceeded ICMP
-	if ttlExpiredICMP.TTL != packet.DefaultTTL || ttlExpiredICMP.Message.Type != ipv4.ICMPTypeTimeExceeded {
+	if ttlExpiredICMP.TTL != packet.DefaultTTL || ttlExpiredICMP.Type != ipv4.ICMPTypeTimeExceeded {
 		t.Fatalf("ICMP packet should be a ICMP Exceeded: %+v", ttlExpiredICMP)
 	}
 

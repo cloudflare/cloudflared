@@ -259,6 +259,10 @@ func (e *EdgeTunnelServer) Serve(ctx context.Context, connIndex uint8, protocolF
 		// retry policy once it has canceled this connection attempt.
 		return err
 	}
+	if errors.Is(err, connection.ErrRegionChanged) {
+		// The supervisor owns restarting all HA connections.
+		return connection.ErrRegionChanged
+	}
 	if err == nil {
 		// The connection completed gracefully, so there is nothing to retry.
 		return err
@@ -431,6 +435,11 @@ func (e *EdgeTunnelServer) serveTunnel(
 			// Preserve the typed connection error for the caller, but do not log or
 			// classify an expected shutdown as a connection failure.
 			return err, false
+		}
+		if errors.Is(err, connection.ErrRegionChanged) {
+			// This is a requested restart, not a connection failure. The QUIC
+			// adapter translates the edge's application-close code to the sentinel.
+			return connection.ErrRegionChanged, false
 		}
 		if errors.Is(err, connection.ErrDuplicateConnection) {
 			connLog.ConnAwareLogger().Err(err).Msg("Unable to establish connection.")
@@ -653,7 +662,26 @@ func (e *EdgeTunnelServer) serveQUIC(
 	)
 
 	// Serve the TunnelConnection
-	return tunnelConn.Serve(ctx), false
+	err = tunnelConn.Serve(ctx)
+	return mapQUICCloseError(err), false
+}
+
+// mapQUICCloseError translates recognized edge-initiated QUIC close codes
+// into transport-independent errors. Other errors are returned unchanged.
+// Preserve unrecognized errors, including wrappers, so existing retry and
+// address-selection policies can still classify them.
+func mapQUICCloseError(err error) error {
+	quicErr, ok := errors.AsType[*quic.ApplicationError](err)
+	if !ok || !quicErr.Remote {
+		return err
+	}
+
+	switch quicErr.ErrorCode {
+	case connection.RegionChangeQUICCode:
+		return connection.ErrRegionChanged
+	default:
+		return err
+	}
 }
 
 // The reportErrorToSentry is an helper function that handles

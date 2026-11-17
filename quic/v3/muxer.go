@@ -185,9 +185,14 @@ func (c *datagramConn) Serve(ctx context.Context) error {
 			return ctx.Err()
 		// Monitor the context of the underlying quic connection
 		case <-connCtx.Done():
-			return connCtx.Err()
+			return context.Cause(connCtx)
 		// Monitor for any hard errors from reading the connection
 		case err := <-c.readErrors:
+			// The reader uses the connection context and may report cancellation
+			// instead of the QUIC error that closed the connection.
+			if errors.Is(err, context.Canceled) && connCtx.Err() != nil {
+				return context.Cause(connCtx)
+			}
 			return err
 		// Wait and dequeue datagrams as they come in
 		case d := <-c.datagrams:

@@ -2,21 +2,241 @@ package supervisor
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/connection"
+	"github.com/cloudflare/cloudflared/edgediscovery"
+	"github.com/cloudflare/cloudflared/features"
 	"github.com/cloudflare/cloudflared/retry"
 	"github.com/cloudflare/cloudflared/signal"
+	"github.com/cloudflare/cloudflared/tunnelrpc"
+	"github.com/cloudflare/cloudflared/tunnelrpc/pogs"
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
+
+type tunnelTestFeatures struct{}
+
+func (tunnelTestFeatures) Snapshot() features.FeatureSnapshot {
+	return features.FeatureSnapshot{DatagramVersion: features.DatagramV3}
+}
+
+type tunnelTestRegistrationServer struct{}
+
+func (tunnelTestRegistrationServer) RegisterConnection(context.Context, pogs.TunnelAuth, uuid.UUID, byte, *pogs.ConnectionOptions) (*pogs.ConnectionDetails, error) {
+	return &pogs.ConnectionDetails{UUID: uuid.New(), Location: "test", TunnelIsRemotelyManaged: true}, nil
+}
+
+func (tunnelTestRegistrationServer) UnregisterConnection(context.Context) {}
+
+func (tunnelTestRegistrationServer) UpdateLocalConfiguration(context.Context, []byte) error {
+	return nil
+}
+
+func TestMapQUICCloseError(t *testing.T) {
+	t.Parallel()
+
+	remoteRegionChange := &quic.ApplicationError{Remote: true, ErrorCode: connection.RegionChangeQUICCode}
+	localRegionChange := &quic.ApplicationError{ErrorCode: connection.RegionChangeQUICCode}
+	unknownClose := &quic.ApplicationError{Remote: true, ErrorCode: connection.RegionChangeQUICCode + 1}
+	wrappedUnknownClose := fmt.Errorf("connection closed: %w", unknownClose)
+	otherError := errors.New("unexpected failure")
+	wrappedOtherError := fmt.Errorf("connection failed: %w", otherError)
+
+	for _, tc := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"remote region change", remoteRegionChange, connection.ErrRegionChanged},
+		{"wrapped remote region change", fmt.Errorf("connection closed: %w", remoteRegionChange), connection.ErrRegionChanged},
+		{"local region change", localRegionChange, localRegionChange},
+		{"unknown remote close", unknownClose, unknownClose},
+		{"wrapped unknown remote close", wrappedUnknownClose, wrappedUnknownClose},
+		{"other error", otherError, otherError},
+		{"wrapped other error", wrappedOtherError, wrappedOtherError},
+		{"cancellation", context.Canceled, context.Canceled},
+		{"nil", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := mapQUICCloseError(tc.err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestQUICCloseErrorPreservesUnknownCodes(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []quic.ApplicationErrorCode{0, 1, connection.RegionChangeQUICCode + 1, 1<<62 - 1} {
+		for _, remote := range []bool{false, true} {
+			t.Run(fmt.Sprintf("code=%d/remote=%t", code, remote), func(t *testing.T) {
+				t.Parallel()
+
+				err := &quic.ApplicationError{Remote: remote, ErrorCode: code}
+				require.Same(t, err, mapQUICCloseError(err), "unrecognized codes must preserve the original error")
+
+				wrapped := fmt.Errorf("connection closed: %w", err)
+				require.Same(t, wrapped, mapQUICCloseError(wrapped), "unrecognized codes must preserve the original wrappers")
+			})
+		}
+	}
+}
+
+func TestServeQUICRegionChange(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []quic.ApplicationErrorCode{connection.RegionChangeQUICCode, connection.RegionChangeQUICCode + 1} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+
+			// Use a local QUIC peer that completes registration, then closes with
+			// either the region-change code or an unrelated application error.
+			listener, tlsConfig := newTestQUICRegionChangePeer(t)
+			connected := signal.New(make(chan struct{}))
+			edgeDone := make(chan error, 1)
+			go func() {
+				edgeDone <- serveTestQUICRegionChangePeer(ctx, listener, code, connected)
+			}()
+			defer func() {
+				cancel()
+				require.NoError(t, <-edgeDone)
+			}()
+
+			// Disable retries so the result reflects this connection's close code.
+			server := newTestQUICEdgeTunnelServer(t, listener.Addr().String(), tlsConfig)
+
+			// Expected restarts should not produce the failure logs used for other close codes.
+			var failureLogs atomic.Int32
+			log := zerolog.New(io.Discard).Hook(zerolog.HookFunc(func(_ *zerolog.Event, level zerolog.Level, _ string) {
+				if level == zerolog.WarnLevel || level == zerolog.ErrorLevel {
+					failureLogs.Add(1)
+				}
+			}))
+			server.config.Log = &log
+			server.connAwareLogger = server.connAwareLogger.ReplaceLogger(&log)
+
+			fallback := &protocolFallback{retry.NewBackoff(0, time.Millisecond, false), connection.QUIC, false}
+			err := server.Serve(ctx, 0, fallback, connected)
+
+			// Only the designated code should trigger a group restart. Preserve
+			// unrelated peer errors so ordinary retry and fallback still apply.
+			if code == connection.RegionChangeQUICCode {
+				require.ErrorIs(t, err, connection.ErrRegionChanged)
+				require.Zero(t, failureLogs.Load(), "a requested region change must not be logged as a connection failure")
+			} else {
+				require.NotErrorIs(t, err, connection.ErrRegionChanged)
+				appErr, ok := errors.AsType[*quic.ApplicationError](err)
+				require.True(t, ok, "expected wrapped application error, got %v", err)
+				require.True(t, appErr.Remote)
+				require.Equal(t, code, appErr.ErrorCode)
+				require.Positive(t, failureLogs.Load(), "unrelated connection failures must still be logged")
+			}
+		})
+	}
+}
+
+func newTestQUICRegionChangePeer(t *testing.T) (*quic.Listener, *tls.Config) {
+	t.Helper()
+
+	certServer := httptest.NewTLSServer(nil)
+	t.Cleanup(certServer.Close)
+
+	listener, err := quic.ListenAddr("127.0.0.1:0", &tls.Config{
+		Certificates: certServer.TLS.Certificates,
+		NextProtos:   []string{"argotunnel"},
+	}, &quic.Config{EnableDatagrams: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+
+	// Trust only the local peer's certificate, without disabling TLS verification.
+	roots := x509.NewCertPool()
+	roots.AddCert(certServer.Certificate())
+	return listener, &tls.Config{RootCAs: roots, ServerName: "example.com", NextProtos: []string{"argotunnel"}}
+}
+
+func serveTestQUICRegionChangePeer(ctx context.Context, listener *quic.Listener, code quic.ApplicationErrorCode, connected *signal.Signal) error {
+	conn, err := listener.Accept(ctx)
+	if err != nil {
+		return err
+	}
+	stream, err := conn.AcceptStream(ctx)
+	if err != nil {
+		return err
+	}
+
+	rpcDone := make(chan error, 1)
+	go func() {
+		rpcDone <- tunnelrpc.NewRegistrationServer(tunnelTestRegistrationServer{}).Serve(ctx, stream)
+	}()
+
+	// Wait until cloudflared has received the registration response. Closing
+	// earlier tests an interrupted registration rather than a region change.
+	select {
+	case <-connected.Wait():
+		err = conn.CloseWithError(code, "test close")
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+
+	// Closing the connection also ends the registration RPC server. Ignore its
+	// expected shutdown error, but propagate errors while the connection is live.
+	if rpcErr := <-rpcDone; rpcErr != nil && conn.Context().Err() == nil && err == nil {
+		err = rpcErr
+	}
+	return err
+}
+
+func newTestQUICEdgeTunnelServer(t *testing.T, address string, tlsConfig *tls.Config) *EdgeTunnelServer {
+	t.Helper()
+
+	log := zerolog.Nop()
+	observer := connection.NewObserver(&log)
+	tracker := tunnelstate.NewConnTracker(&log)
+	addrs, err := edgediscovery.StaticEdge(&log, []string{address})
+	require.NoError(t, err)
+
+	// Keep the loopback address in IPv4 form so Darwin selects a UDPv4 socket.
+	addr, err := addrs.GetAddr(0)
+	require.NoError(t, err)
+	addr.UDP.IP = addr.UDP.IP.To4()
+
+	clientConfig, err := client.NewConfig("test", "test", tunnelTestFeatures{})
+	require.NoError(t, err)
+
+	return &EdgeTunnelServer{
+		config: &TunnelConfig{
+			Log: &log, Observer: observer, ClientConfig: clientConfig,
+			NamedTunnel: &connection.TunnelProperties{},
+			RPCTimeout:  3 * time.Second,
+			EdgeTLSConfigs: map[connection.Protocol]*tls.Config{
+				connection.QUIC: tlsConfig,
+			},
+		},
+		edgeAddrs:       addrs,
+		edgeAddrHandler: NewIPAddrFallback(1),
+		connAwareLogger: NewConnAwareLogger(&log, tracker, observer),
+	}
+}
 
 func immediateTimeAfter(time.Duration) <-chan time.Time {
 	c := make(chan time.Time, 1)

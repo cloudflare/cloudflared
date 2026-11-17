@@ -65,6 +65,13 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 	if err != nil {
 		return nil, err
 	}
+	// Cap the group size only once. Edge addresses remain assigned across
+	// restarts, so AvailableAddrs excludes addresses used by the previous group.
+	availableAddrs := edgeIPs.AvailableAddrs()
+	if config.HAConnections > availableAddrs {
+		config.Log.Info().Msgf("%d HA connections were requested but the maximum available is %d.", config.HAConnections, availableAddrs)
+		config.HAConnections = availableAddrs
+	}
 
 	tracker := tunnelstate.NewConnTracker(config.Log)
 	log := NewConnAwareLogger(config.Log, tracker, config.Observer)
@@ -117,7 +124,56 @@ func (s *Supervisor) Run(
 	// Setup DNS Resolver refresh
 	go s.config.OriginDNSService.StartRefreshLoop(ctx)
 
-	if err := s.initialize(ctx, connectedSignal); err != nil {
+	return s.runWithRegionChanges(ctx, connectedSignal)
+}
+
+// runWithRegionChanges runs the tunnel connections until shutdown. On an account
+// region change, it waits for all connections to stop before reconnecting.
+func (s *Supervisor) runWithRegionChanges(ctx context.Context, connectedSignal *signal.Signal) error {
+	var nextRegionChange time.Time
+	for {
+		err := s.runConnections(ctx, connectedSignal)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if !errors.Is(err, connection.ErrRegionChanged) {
+			return err
+		}
+		// Handle the first change immediately, but rate-limit repeated changes.
+		// The old HA group is already drained while we wait.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-s.gracefulShutdownC:
+			return nil
+		case <-time.After(time.Until(nextRegionChange)):
+		}
+		nextRegionChange = time.Now().Add(tunnelRetryDuration)
+		s.log.Logger().Info().Msg("Account region changed; restarting tunnel connections")
+
+		// runConnections has drained the old group, so no connection goroutine
+		// can still use this map or notify the previous group's signal.
+		s.tunnelsConnecting = make(map[int]chan struct{})
+		s.nextConnectedSignal = nil
+	}
+}
+
+// runConnections owns one HA connection group. Every exit cancels and drains
+// that group before the supervisor can start another.
+func (s *Supervisor) runConnections(ctx context.Context, connectedSignal *signal.Signal) error {
+	ctx, cancel := context.WithCancel(ctx)
+	tunnelsActive := 0
+	defer func() {
+		cancel()
+		// Each started tunnel sends one result before exiting. Wait for all
+		// outstanding results before reusing connection state in the next group.
+		for ; tunnelsActive > 0; tunnelsActive-- {
+			<-s.tunnelErrors
+		}
+	}()
+	var err error
+	tunnelsActive, err = s.initialize(ctx, connectedSignal)
+	if err != nil {
 		if err == errEarlyShutdown {
 			return nil
 		}
@@ -125,7 +181,6 @@ func (s *Supervisor) Run(
 		return err
 	}
 	var tunnelsWaiting []int
-	tunnelsActive := s.config.HAConnections
 
 	backoff := retry.NewBackoff(s.config.Retries, tunnelRetryDuration, true)
 	var backoffTimer <-chan time.Time
@@ -135,15 +190,16 @@ func (s *Supervisor) Run(
 		select {
 		// Context cancelled
 		case <-ctx.Done():
-			for tunnelsActive > 0 {
-				<-s.tunnelErrors
-				tunnelsActive--
-			}
 			return nil
 		// startTunnel completed with a response
 		// (note that this may also be caused by context cancellation)
 		case tunnelError := <-s.tunnelErrors:
 			tunnelsActive--
+			if !shuttingDown && errors.Is(tunnelError.err, connection.ErrRegionChanged) {
+				// The deferred cleanup drains the entire group. The outer loop
+				// handles the restart instead of retrying this connection alone.
+				return connection.ErrRegionChanged
+			}
 			s.log.ConnAwareLogger().Err(tunnelError.err).Int(connection.LogFieldConnIndex, tunnelError.index).Msg("Connection terminated")
 			if tunnelError.err != nil && !shuttingDown {
 				// Make sure we don't continue if there is no more fallback allowed
@@ -181,39 +237,45 @@ func (s *Supervisor) Run(
 	}
 }
 
-// Returns nil if initialization succeeded, else the initialization error.
-// Attempts here will be made to connect one tunnel, if successful, it will
-// connect the available tunnels up to config.HAConnections.
+// initialize connects the first tunnel, then starts the remaining HA connections.
+// It returns the number of active tunnels still to be drained and any initialization error.
+//
+// Graceful shutdown leaves ctx active, so both the first-connection wait and HA
+// registration delays must also watch gracefulShutdownC. This matters on initial
+// startup and when a region change sends us through initialization again: the
+// runConnections shutdown loop is not running yet. Returning errEarlyShutdown
+// lets runConnections cancel and drain the started tunnels without waiting for
+// initialization to finish or starting the remaining HA connections.
 func (s *Supervisor) initialize(
 	ctx context.Context,
 	connectedSignal *signal.Signal,
-) error {
-	availableAddrs := s.edgeIPs.AvailableAddrs()
-	if s.config.HAConnections > availableAddrs {
-		s.log.Logger().Info().Msgf("You requested %d HA connections but I can give you at most %d.", s.config.HAConnections, availableAddrs)
-		s.config.HAConnections = availableAddrs
-	}
+) (int, error) {
 	s.tunnelsProtocolFallback[0] = &protocolFallback{
 		retry.NewBackoff(s.config.Retries, retry.DefaultBaseTime, true),
 		s.config.ProtocolSelector.Current(),
 		false,
 	}
 
-	go s.startFirstTunnel(ctx, connectedSignal)
+	// Each group must await its own first connection, even if the daemon's
+	// one-time connected signal was already notified by an earlier group.
+	firstConnected := signal.New(make(chan struct{}))
+	go s.startFirstTunnel(ctx, firstConnected)
 
 	// Wait for response from first tunnel before proceeding to attempt other HA edge tunnels
 	select {
 	case <-ctx.Done():
-		<-s.tunnelErrors
-		return ctx.Err()
+		return 1, ctx.Err()
 	case tunnelError := <-s.tunnelErrors:
-		return tunnelError.err
+		// The first tunnel's result was already consumed, so nothing remains to drain.
+		return 0, tunnelError.err
 	case <-s.gracefulShutdownC:
-		return errEarlyShutdown
-	case <-connectedSignal.Wait():
+		return 1, errEarlyShutdown
+	case <-firstConnected.Wait():
+		connectedSignal.Notify()
 	}
 
 	// At least one successful connection, so start the rest
+	active := 1
 	for i := 1; i < s.config.HAConnections; i++ {
 		s.tunnelsProtocolFallback[i] = &protocolFallback{
 			retry.NewBackoff(s.config.Retries, retry.DefaultBaseTime, true),
@@ -222,9 +284,16 @@ func (s *Supervisor) initialize(
 			false,
 		}
 		go s.startTunnel(ctx, i, s.newConnectedTunnelSignal(i))
-		time.Sleep(registrationInterval)
+		active++
+		select {
+		case <-ctx.Done():
+			return active, ctx.Err()
+		case <-s.gracefulShutdownC:
+			return active, errEarlyShutdown
+		case <-time.After(registrationInterval):
+		}
 	}
-	return nil
+	return active, nil
 }
 
 // startTunnel starts the first tunnel connection. The resulting error will be sent on
@@ -247,6 +316,11 @@ func (s *Supervisor) startFirstTunnel(
 			return
 		}
 		if err == nil {
+			return
+		}
+		if errors.Is(err, connection.ErrRegionChanged) {
+			// Restarting only the first connection would leave the rest of the
+			// HA group using the old region. Let the supervisor restart them all.
 			return
 		}
 		// Make sure we don't continue if there is no more fallback allowed

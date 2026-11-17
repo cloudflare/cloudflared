@@ -111,7 +111,8 @@ type ClassicTunnelProperties struct {
 	UseReconnectToken bool
 }
 
-// Type indicates the connection type of the  connection.
+// Type identifies the traffic or control operation carried by an
+// edge-to-cloudflared request.
 type Type int
 
 const (
