@@ -104,3 +104,63 @@ func (s *eventCollectorSink) assertSawEvent(t *testing.T, event Event) {
 	defer s.mu.Unlock()
 	assert.Contains(t, s.observedEvents, event)
 }
+
+type countingSink struct {
+	mu     sync.Mutex
+	events []Event
+}
+
+func (s *countingSink) OnTunnelEvent(e Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, e)
+}
+
+func (s *countingSink) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.events)
+}
+
+func TestObserverClose(t *testing.T) {
+	t.Run("stops dispatching events", func(t *testing.T) {
+		observer := NewObserver(&log)
+		sink := &countingSink{}
+		observer.RegisterSink(sink)
+		observer.SendDisconnect(0)
+		require.Eventually(t, func() bool { return sink.count() == 1 }, time.Second, time.Millisecond)
+
+		observer.Close()
+		// Allow the dispatch goroutine to observe the close.
+		time.Sleep(50 * time.Millisecond)
+		observer.SendDisconnect(0)
+		time.Sleep(50 * time.Millisecond)
+		assert.Equal(t, 1, sink.count())
+	})
+
+	t.Run("RegisterSink does not block after close", func(t *testing.T) {
+		observer := NewObserver(&log)
+		observer.Close()
+		time.Sleep(50 * time.Millisecond)
+
+		done := make(chan struct{})
+		go func() {
+			// More than the channel buffer, so a blocked send would hang.
+			for i := 0; i < observerChannelBufferSize*2; i++ {
+				observer.RegisterSink(&countingSink{})
+			}
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("RegisterSink blocked after Close")
+		}
+	})
+
+	t.Run("Close is idempotent", func(t *testing.T) {
+		observer := NewObserver(&log)
+		observer.Close()
+		assert.NotPanics(t, observer.Close)
+	})
+}
