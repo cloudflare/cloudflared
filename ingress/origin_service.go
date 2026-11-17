@@ -43,7 +43,7 @@ type OriginService interface {
 type unixSocketPath struct {
 	path      string
 	scheme    string
-	transport *http.Transport
+	transport *originHTTPTransport
 }
 
 func (o *unixSocketPath) String() string {
@@ -70,7 +70,7 @@ func (o unixSocketPath) MarshalJSON() ([]byte, error) {
 type httpService struct {
 	url            *url.URL
 	hostHeader     string
-	transport      *http.Transport
+	transport      *originHTTPTransport
 	matchSNIToHost bool
 }
 
@@ -99,7 +99,6 @@ type rawTCPService struct {
 	name         string
 	dialer       net.Dialer
 	writeTimeout time.Duration
-	logger       *zerolog.Logger
 }
 
 func (o *rawTCPService) String() string {
@@ -233,10 +232,10 @@ func (o *helloWorld) start(
 	if err != nil {
 		return errors.Wrap(err, "Cannot start Hello World Server")
 	}
-	go hello.StartHelloWorldServer(log, helloListener, shutdownC)
+	go hello.StartHelloWorldServer(log, helloListener, shutdownC) //nolint:errcheck // The managed server exits asynchronously when shutdownC closes.
 	o.server = helloListener
 
-	o.httpService.url = &url.URL{
+	o.url = &url.URL{
 		Scheme: "https",
 		Host:   o.server.Addr().String(),
 	}
@@ -343,21 +342,24 @@ func (nrc *NopReadCloser) Close() error {
 	return nil
 }
 
-func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerolog.Logger) (*http.Transport, error) {
+func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerolog.Logger) (*originHTTPTransport, error) {
 	originCertPool, err := tlsconfig.LoadOriginCA(cfg.CAPool, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error loading cert pool")
 	}
 
-	httpTransport := http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		MaxIdleConns:          cfg.KeepAliveConnections,
-		MaxIdleConnsPerHost:   cfg.KeepAliveConnections,
-		IdleConnTimeout:       cfg.KeepAliveTimeout.Duration,
-		TLSHandshakeTimeout:   cfg.TLSTimeout.Duration,
-		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: cfg.NoTLSVerify},
-		ForceAttemptHTTP2:     cfg.Http2Origin,
+	httpTransport := originHTTPTransport{
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConns:          cfg.KeepAliveConnections,
+			MaxIdleConnsPerHost:   cfg.KeepAliveConnections,
+			IdleConnTimeout:       cfg.KeepAliveTimeout.Duration,
+			TLSHandshakeTimeout:   cfg.TLSTimeout.Duration,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig:       &tls.Config{RootCAs: originCertPool, InsecureSkipVerify: cfg.NoTLSVerify}, //nolint:gosec // Explicit origin noTLSVerify configuration.
+			ForceAttemptHTTP2:     cfg.Http2Origin,
+		},
+		connectRetryTimeout: cfg.ConnectRetryTimeout.Duration,
 	}
 	if _, isHelloWorld := service.(*helloWorld); !isHelloWorld && cfg.OriginServerName != "" {
 		httpTransport.TLSClientConfig.ServerName = cfg.OriginServerName
@@ -372,9 +374,10 @@ func newHTTPTransport(service OriginService, cfg OriginRequestConfig, log *zerol
 	}
 
 	// DialContext depends on which kind of origin is being used.
-	dialContext := dialer.DialContext
+	dialContext := func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialOriginWithRetry(ctx, network, address, httpTransport.connectRetryTimeout, dialer.DialContext)
+	}
 	switch service := service.(type) {
-
 	// If this origin is a unix socket, enforce network type "unix".
 	case *unixSocketPath:
 		httpTransport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
