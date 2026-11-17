@@ -9,7 +9,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // The error that is throw by the writer when there is `no network activity`.
@@ -41,7 +40,7 @@ func (s *SafeStreamCloser) Write(p []byte) (n int, err error) {
 	if s.writeTimeout > 0 {
 		err = s.stream.SetWriteDeadline(time.Now().Add(s.writeTimeout))
 		if err != nil {
-			log.Err(err).Msg("Error setting write deadline for QUIC stream")
+			s.log.Err(err).Msg("Error setting write deadline for QUIC stream")
 		}
 	}
 	nBytes, err := s.stream.Write(p)

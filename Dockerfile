@@ -1,7 +1,7 @@
 # use a builder image for building cloudflare
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
-FROM golang:1.27.3 AS builder
+FROM golang:1.27.4 AS builder
 ARG TARGET_GOOS
 ARG TARGET_GOARCH
 ARG GOPROXY=https://athens.cfdata.org|https://proxy.golang.org|direct

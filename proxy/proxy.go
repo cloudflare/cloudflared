@@ -132,7 +132,7 @@ func (p *Proxy) ProxyHTTP(
 	p.appendTagHeaders(req)
 	_, ruleSpan := tr.Tracer().Start(req.Context(), "ingress_match",
 		trace.WithAttributes(attribute.String("req-host", req.Host)))
-	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL.Path)
+	rule, ruleNum := p.ingressRules.FindMatchingRule(req.Host, req.URL)
 	ruleSpan.SetAttributes(attribute.Int("rule-num", ruleNum))
 	ruleSpan.End()
 	logger := newHTTPLogger(p.log, tr.ConnIndex, req, ruleNum, rule.Service.String())
