@@ -1,3 +1,9 @@
+2026.11.1
+- 2026-11-17 TUN-11062: Reconnect on account region changes
+- 2026-11-17 chore: Update base images to latest versions
+- 2026-11-16 VULN-187395: Bump OpenTelemetry to 1.47.0
+- 2026-11-16 fix: Allow quick tunnels to fall back to HTTP/2
+
 2026.11.0
 - 2026-11-12 TUN-11065: Run Windows CI on production runners
 - 2026-11-12 chore: Bump golang to 1.27.4
