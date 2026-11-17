@@ -127,15 +127,21 @@ func TestObserverClose(t *testing.T) {
 		observer := NewObserver(&log)
 		sink := &countingSink{}
 		observer.RegisterSink(sink)
-		observer.SendDisconnect(0)
-		require.Eventually(t, func() bool { return sink.count() == 1 }, time.Second, time.Millisecond)
+		// Registration and events travel on separate channels, so resend until
+		// the dispatcher has installed the sink and delivers an event to it.
+		require.Eventually(t, func() bool {
+			observer.SendDisconnect(0)
+			return sink.count() > 0
+		}, time.Second, time.Millisecond)
 
 		observer.Close()
-		// Allow the dispatch goroutine to observe the close.
+		// Let any delivery already in flight when Close was called finish. After
+		// that, Close has priority in the dispatcher and nothing more is delivered.
 		time.Sleep(50 * time.Millisecond)
+		before := sink.count()
 		observer.SendDisconnect(0)
 		time.Sleep(50 * time.Millisecond)
-		assert.Equal(t, 1, sink.count())
+		assert.Equal(t, before, sink.count())
 	})
 
 	t.Run("RegisterSink does not block after close", func(t *testing.T) {

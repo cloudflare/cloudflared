@@ -133,6 +133,13 @@ func (o *Observer) dispatchEvents() {
 		case sink := <-o.addSinkChan:
 			sinks = append(sinks, sink)
 		case evt := <-o.tunnelEventChan:
+			// select picks randomly among ready cases, so give Close priority
+			// here: no event is delivered once Close has returned.
+			select {
+			case <-o.closeChan:
+				return
+			default:
+			}
 			for _, sink := range sinks {
 				sink.OnTunnelEvent(evt)
 			}
