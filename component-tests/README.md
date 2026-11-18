@@ -42,7 +42,8 @@ Run `pytest` inside this(component-tests) folder
 Run `pytest <file 1 name>.py <file 2 name>.py`
 
 ## Specific tests
-Run `pytest file.py -k <test 1 name> -k <test 2 name>`
+To select multiple tests by name, combine them in one `-k` expression, for example:
+`pytest test_logging.py -k "logging_to_terminal or logging_to_file"`
 
 ## Live Logging
 Running with `-o log_cli=true` outputs logging to CLI as the tests are. By default the log level is WARN.
