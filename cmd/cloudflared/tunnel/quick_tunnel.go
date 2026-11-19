@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,6 +50,13 @@ func describeQuickTunnelLocalOrigin(c *cli.Context, hasConfiguredIngress bool) (
 	}
 	if c.IsSet(ingress.HelloWorldFlag) {
 		return quickTunnelHelloWorldOrigin, nil
+	}
+	if c.IsSet(ingress.FileFlag) {
+		dir, err := filepath.Abs(c.String(ingress.FileFlag))
+		if err != nil {
+			return "", fmt.Errorf("resolve --file directory: %w", err)
+		}
+		return "file:" + dir, nil
 	}
 
 	originURL, err := config.ValidateUrl(c, false)
