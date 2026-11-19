@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/rs/zerolog"
+	"golang.org/x/net/proxy"
 )
 
 // HTTPOriginProxy can be implemented by origin services that want to proxy http requests.
@@ -86,7 +87,15 @@ func (o *statusCode) RoundTrip(_ *http.Request) (*http.Response, error) {
 }
 
 func (o *rawTCPService) EstablishConnection(ctx context.Context, dest string, logger *zerolog.Logger) (OriginConnection, error) {
-	conn, err := o.dialer.DialContext(ctx, "tcp", dest)
+	var conn net.Conn
+	var err error
+
+	if contextDialer, ok := o.dialer.(proxy.ContextDialer); ok {
+		conn, err = contextDialer.DialContext(ctx, "tcp", dest)
+	} else {
+		conn, err = o.dialer.Dial("tcp", dest)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +114,13 @@ func (o *tcpOverWSService) EstablishConnection(ctx context.Context, dest string,
 		dest = o.dest
 	}
 
-	conn, err := o.dialer.DialContext(ctx, "tcp", dest)
+	var conn net.Conn
+	if contextDialer, ok := o.dialer.(proxy.ContextDialer); ok {
+		conn, err = contextDialer.DialContext(ctx, "tcp", dest)
+	} else {
+		conn, err = o.dialer.Dial("tcp", dest)
+	}
+
 	if err != nil {
 		return nil, err
 	}
