@@ -27,6 +27,7 @@ func ensureConfigDirExists(configDir string) error {
 	return nil
 }
 
+//nolint:unused // Used by the macOS service installer, but not the Linux installer.
 func createTokenFileUnix(path string) error {
 	const tokenPerms os.FileMode = 0o600
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, tokenPerms) //nolint:gosec // All callers of this function construct path from constant strings or well-known env vars (e.g., $HOME)
@@ -48,6 +49,8 @@ func createTokenFileUnix(path string) error {
 // permissions. Since the method used to restrict the permissions is platform
 // dependent, make the function used to restrict the permissions an injectable
 // dependency
+//
+//nolint:unused // Used by the macOS and Windows service installers.
 func writeTokenToFile(path string, token string) error {
 	if _, err := tunnel.ParseToken(token); err != nil {
 		return cliutil.UsageError("Provided tunnel token is not valid (%s).", err)
@@ -84,6 +87,7 @@ func tokenPath(configDir string) string {
 	return filepath.Join(configDir, defaultTokenFile)
 }
 
+//nolint:unused // Used by the macOS and Windows service installers.
 func writeTokenToConfigDir(c *cli.Context, configDir string) error {
 	if err := ensureConfigDirExists(configDir); err != nil {
 		return err

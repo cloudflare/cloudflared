@@ -67,7 +67,9 @@ const (
 	cloudflaredOpenRCService = "cloudflared"
 )
 
-// OS-specific function for token file creation
+// OS-specific function required by the shared non-exclusive token writer.
+//
+//nolint:unused // The macOS and Windows installers use that writer; Linux creates tokens exclusively.
 var createTokenFile = createTokenFileUnix
 
 var systemdAllTemplates = map[string]ServiceTemplate{
@@ -281,18 +283,6 @@ func installLinuxService(c *cli.Context) error {
 		// write the token to the config directory and install the service
 		// using --token-file pointing to that file. This is the quick setup
 		// the tunnel UI suggests.
-
-		// Ensure token file is removed if install fails
-		defer func() {
-			if err != nil {
-				removeTokenFile(serviceConfigDir, log)
-			}
-		}()
-
-		if err = writeTokenToConfigDir(c, serviceConfigDir); err != nil {
-			return fmt.Errorf("could not write token to configuration directory: %w", err)
-		}
-
 		extraArgs = buildArgsForTokenFile(serviceConfigDir)
 	}
 
@@ -301,22 +291,88 @@ func installLinuxService(c *cli.Context) error {
 	// Check if the "no update flag" is set
 	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
 
+	var serviceTemplate ServiceTemplate
+	var install func() error
 	switch {
 	case inits.IsSystemd():
 		log.Info().Msgf("Using Systemd")
-		err = installSystemd(&templateArgs, autoUpdate, log)
+		serviceTemplate = systemdAllTemplates[cloudflaredService]
+		install = func() error { return installSystemd(&templateArgs, autoUpdate, log) }
 	case inits.IsOpenRC():
 		log.Info().Msgf("Using OpenRC")
-		err = installOpenRC(&templateArgs, autoUpdate)
+		serviceTemplate = openrcTemplate
+		install = func() error { return installOpenRC(&templateArgs, autoUpdate) }
 	default:
 		log.Info().Msgf("Using SysV")
-		err = installSysv(&templateArgs, autoUpdate, log)
+		serviceTemplate = sysvTemplate
+		install = func() error { return installSysv(&templateArgs, autoUpdate, log) }
 	}
 
+	err = installLinuxServiceWithCredentials(c, serviceConfigDir, serviceTemplate, install, log)
 	if err == nil {
 		log.Info().Msg("Linux service for cloudflared installed successfully")
 	}
 	return err
+}
+
+func installLinuxServiceWithCredentials(c *cli.Context, configDir string, serviceTemplate ServiceTemplate, install func() error, log *zerolog.Logger) (err error) {
+	if c.NArg() == 0 {
+		return install()
+	}
+
+	servicePath, err := serviceTemplate.ResolvePath()
+	if err != nil {
+		return err
+	}
+	// Reject a repeat install before it can overwrite the existing service's
+	// credentials. Lstat also catches a dangling service symlink.
+	if _, err := os.Lstat(servicePath); err == nil {
+		return errors.New(serviceAlreadyExistsWarn(servicePath))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check existing service at %s: %w", servicePath, err)
+	}
+
+	token := c.Args().First()
+	if _, err := tunnel.ParseToken(token); err != nil {
+		return cliutil.UsageError("Provided tunnel token is not valid (%s).", err)
+	}
+	if err := ensureConfigDirExists(configDir); err != nil {
+		return err
+	}
+
+	// Create exclusively so an existing file or symlink, including one created
+	// concurrently, cannot be followed or overwritten.
+	path := tokenPath(configDir)
+	tokenFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // configDir is the fixed service directory or a test directory.
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("refusing to overwrite existing token file at %s; inspect it and move it aside before retrying installation: %w", path, err)
+		}
+		return fmt.Errorf("create service token file: %w", err)
+	}
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		// Installers leave service definitions in place on failure, including
+		// failures while writing a template or enabling/starting the service.
+		// Only remove a newly created token if no service definition remains.
+		// If the path cannot be checked, retain the token conservatively.
+		if _, statErr := os.Lstat(servicePath); errors.Is(statErr, os.ErrNotExist) {
+			removeTokenFile(configDir, log)
+		} else if statErr != nil {
+			err = errors.Join(err, fmt.Errorf("check service at %s before token cleanup: %w", servicePath, statErr))
+		}
+	}()
+	defer func() { _ = tokenFile.Close() }()
+	if _, err = tokenFile.WriteString(token); err != nil {
+		return fmt.Errorf("write service token file: %w", err)
+	}
+	if err = tokenFile.Close(); err != nil {
+		return fmt.Errorf("close service token file: %w", err)
+	}
+	return install()
 }
 
 func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
@@ -353,16 +409,20 @@ func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
 }
 
 func installSystemd(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolog.Logger) error {
+	return installSystemdWithTemplates(templateArgs, autoUpdate, systemdAllTemplates, runCommand, log)
+}
+
+func installSystemdWithTemplates(templateArgs *ServiceTemplateArgs, autoUpdate bool, templates map[string]ServiceTemplate, run commandRunner, log *zerolog.Logger) error {
 	var systemdTemplates []ServiceTemplate
 	if autoUpdate {
 		systemdTemplates = []ServiceTemplate{
-			systemdAllTemplates[cloudflaredService],
-			systemdAllTemplates[cloudflaredUpdateService],
-			systemdAllTemplates[cloudflaredUpdateTimer],
+			templates[cloudflaredService],
+			templates[cloudflaredUpdateService],
+			templates[cloudflaredUpdateTimer],
 		}
 	} else {
 		systemdTemplates = []ServiceTemplate{
-			systemdAllTemplates[cloudflaredService],
+			templates[cloudflaredService],
 		}
 	}
 
@@ -373,7 +433,7 @@ func installSystemd(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zer
 			return err
 		}
 	}
-	return enableSystemdUnits(runCommand, autoUpdate, log)
+	return enableSystemdUnits(run, autoUpdate, log)
 }
 
 // commandRunner runs an external command. It has the signature of runCommand,
