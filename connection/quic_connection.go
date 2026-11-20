@@ -207,7 +207,11 @@ func (q *quicConnection) handleDataStream(ctx context.Context, stream *rpcquic.R
 	}
 
 	if err, connectResponseSent := q.dispatchRequest(ctx, stream, request); err != nil {
-		q.logger.Err(err).Str("type", request.Type.String()).Str("dest", request.Dest).Msg("Request failed")
+		if IsBenignRemoteStreamCancel(err) {
+			q.logger.Debug().Err(err).Str("type", request.Type.String()).Str("dest", request.Dest).Msg("Request canceled")
+		} else {
+			q.logger.Err(err).Str("type", request.Type.String()).Str("dest", request.Dest).Msg("Request failed")
+		}
 
 		// if the connectResponse was already sent and we had an error, we need to propagate it up, so that the stream is
 		// closed with an RST_STREAM frame
