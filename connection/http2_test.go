@@ -534,10 +534,15 @@ func TestGracefulShutdownHTTP2(t *testing.T) {
 	cancel()
 	wg.Wait()
 
-	events.assertSawEvent(t, Event{
+	// The observer delivers events asynchronously; wait for the sink to
+	// observe the Unregistering event instead of asserting immediately.
+	unregistering := Event{
 		Index:     http2Conn.connIndex,
 		EventType: Unregistering,
-	})
+	}
+	assert.Eventually(t, func() bool {
+		return events.hasEvent(unregistering)
+	}, 5*time.Second, 10*time.Millisecond, "sink did not observe event %v", unregistering)
 }
 
 func TestServeTCP_RateLimited(t *testing.T) {
