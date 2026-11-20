@@ -2,6 +2,7 @@ package updater
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"text/template"
 	"time"
 
@@ -23,18 +25,37 @@ import (
 
 const (
 	clientTimeout = time.Second * 60
-	// stop the service
-	// rename cloudflared.exe to cloudflared.exe.old
-	// rename cloudflared.exe.new to cloudflared.exe
-	// delete cloudflared.exe.old
-	// start the service
-	// exit with code 0 if we've reached this point indicating success.
-	windowsUpdateCommandTemplate = `sc stop cloudflared >nul 2>&1
-del "{{.OldPath}}"
+	// "net stop", unlike "sc stop", blocks until the service has actually
+	// stopped, so cloudflared.exe is guaranteed to be free of the service's
+	// file handle before the renames below run. This process (cloudflared.exe
+	// update) is itself an instance of the binary being replaced, so it must
+	// launch this script and exit almost immediately afterwards (see
+	// runWindowsBatch): Windows can rename a running executable, but only
+	// once nothing is left waiting on this process to finish, which is why
+	// the short sleep below exists as a safety margin. If a rename fails
+	// partway through, the script restores the original binary rather than
+	// leaving the install without an executable.
+	windowsUpdateCommandTemplate = `net stop cloudflared >nul 2>&1
+ping -n 2 127.0.0.1 >nul
+if exist "{{.OldPath}}" del /f /q "{{.OldPath}}"
 rename "{{.TargetPath}}" {{.OldName}}
+if errorlevel 1 goto fail
 rename "{{.NewPath}}" {{.BinaryName}}
+if errorlevel 1 goto restore
+del /f /q "{{.OldPath}}" >nul 2>&1
 sc start cloudflared >nul 2>&1
-exit /b 0`
+del "%~f0"
+exit /b 0
+:restore
+rename "{{.OldPath}}" {{.BinaryName}}
+sc start cloudflared >nul 2>&1
+del "%~f0"
+exit /b 1
+:fail
+sc start cloudflared >nul 2>&1
+del "%~f0"
+exit /b 1
+`
 	batchFileName = "cfd_update.bat"
 )
 
@@ -124,6 +145,12 @@ func (v *WorkersVersion) Apply() error {
 		}
 		rootDir := filepath.Dir(v.targetPath)
 		batchPath := filepath.Join(rootDir, batchFileName)
+		// runWindowsBatch starts the script and returns without waiting for
+		// it, so Apply() (and everything above it, up through the update
+		// command's Action) must return promptly: this process is running
+		// the very binary the script is about to rename, and Windows won't
+		// let that rename go through while something is still waiting on
+		// this process.
 		return runWindowsBatch(batchPath)
 	}
 
@@ -209,8 +236,12 @@ func isCompressedFile(urlstring string) bool {
 	return path.Ext(u.Path) == ".tgz"
 }
 
-// writeBatchFile writes a batch file out to disk
-// see the dicussion on why it has to be done this way
+// writeBatchFile writes a batch file out to disk.
+// See the discussion on why it has to be done this way in runWindowsBatch.
+//
+// The rendered script is normalized to CRLF line endings: cmd.exe's parser
+// has known issues with GOTOs/labels in a script that has Unix line endings,
+// and this template relies on both.
 func writeBatchFile(targetPath string, newPath string, oldPath string) error {
 	batchFilePath := filepath.Join(filepath.Dir(targetPath), batchFileName)
 	os.Remove(batchFilePath) //remove any failed updates before download
@@ -235,20 +266,33 @@ func writeBatchFile(targetPath string, newPath string, oldPath string) error {
 	if err != nil {
 		return err
 	}
-	return t.Execute(f, data)
+	var rendered bytes.Buffer
+	if err := t.Execute(&rendered, data); err != nil {
+		return err
+	}
+	normalized := strings.ReplaceAll(rendered.String(), "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\n", "\r\n")
+	_, err = f.WriteString(normalized)
+	return err
 }
 
-// run each OS command for windows
+// runWindowsBatch starts (but does not wait for) the update batch script.
+//
+// This process is cloudflared.exe update, an instance of the very binary the
+// script needs to rename away. Renaming a running executable only works once
+// nothing is left waiting on that process to exit, so this function must not
+// block on the script the way an ordinary shell-out would: if it did (as it
+// used to, via cmd.Output()), this process would sit here holding the update
+// open until the script's "net stop"/rename/"sc start" sequence finished, and
+// the rename of cloudflared.exe would fail because this very process was
+// still running from it. Starting the script and returning immediately lets
+// the caller (Apply, then the update command's Action) return right away, so
+// the process exits and releases the binary before the script needs it gone.
+//
+// Because of that, this function can only report whether the script was
+// launched, not whether the update it performs ultimately succeeds. The
+// script cleans up after itself (including deleting itself) once it is done.
 func runWindowsBatch(batchFile string) error {
-	defer os.Remove(batchFile)
 	cmd := exec.Command("cmd", "/C", batchFile)
-	_, err := cmd.Output()
-	// Remove the batch file we created. Don't let this interfere with the error
-	// we report.
-	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("Error during update : %s;", string(exitError.Stderr))
-		}
-	}
-	return err
+	return cmd.Start()
 }
