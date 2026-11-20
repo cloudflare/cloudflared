@@ -396,7 +396,7 @@ func buildHTTPRequest(
 	// Close the original body before replacing it so a QUIC peer cannot remain
 	// blocked sending data that this request will never consume. The QUIC body
 	// implementation closes only the read side, leaving the response writable.
-	if !isWebsocket && !isTransferEncodingChunked(req) && req.ContentLength == 0 {
+	if !isWebsocket && !isEncodingChunked(req) && req.ContentLength == 0 {
 		if req.Body != nil {
 			if err := req.Body.Close(); err != nil {
 				return nil, fmt.Errorf("failed to close bodyless request stream: %w", err)
@@ -419,11 +419,12 @@ func setContentLength(req *http.Request) error {
 	return err
 }
 
-func isTransferEncodingChunked(req *http.Request) bool {
+func isEncodingChunked(req *http.Request) bool {
+	contentEncodingVal := req.Header.Get("Content-Encoding") // AWS S3 uses Content-Encoding: aws-chunked
 	transferEncodingVal := req.Header.Get("Transfer-Encoding")
 	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding suggests that this can be a comma
 	// separated value as well.
-	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked")
+	return strings.Contains(strings.ToLower(transferEncodingVal), "chunked") || strings.Contains(strings.ToLower(contentEncodingVal), "chunked")
 }
 
 // readWriteCloser is a bidirectional stream whose receive side can be closed
