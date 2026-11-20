@@ -334,6 +334,9 @@ func (hrw *httpResponseAdapter) WriteHeader(status int) {
 }
 
 func (hrw *httpResponseAdapter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if !hrw.connectResponseSent {
+		return nil, nil, fmt.Errorf("status not yet written before attempting to hijack connection")
+	}
 	conn := &localProxyConnection{hrw.ReadWriteCloser}
 	readWriter := bufio.NewReadWriter(
 		bufio.NewReader(hrw.ReadWriteCloser),
