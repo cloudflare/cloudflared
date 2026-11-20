@@ -12,8 +12,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/google/gopacket/layers"
 	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
 
+	"github.com/cloudflare/cloudflared/packet"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,6 +126,51 @@ func TestParseEchoV6Reply(t *testing.T) {
 			require.True(t, bytes.Equal(resp.data, test.expectedData))
 		}
 	}
+}
+
+func TestHandleEchoReplyUsesIPv4TTL(t *testing.T) {
+	t.Parallel()
+
+	echo := &icmp.Echo{
+		ID:   6193,
+		Seq:  25712,
+		Data: []byte(t.Name()),
+	}
+	request := &packet.ICMP{
+		IP: &packet.IP{
+			Src:      localhostIP,
+			Dst:      netip.MustParseAddr("192.0.2.200"),
+			Protocol: layers.IPProtocolICMPv4,
+		},
+		Message: &icmp.Message{
+			Type: ipv4.ICMPTypeEcho,
+			Code: 0,
+			Body: echo,
+		},
+	}
+	resp := &echoV4Resp{
+		reply: &echoReply{
+			Status: success,
+			Options: ipOption{
+				TTL: 59,
+			},
+		},
+		data: []byte(t.Name()),
+	}
+	muxer := newMockMuxer(1)
+	responder := newPacketResponder(muxer, 0, packet.NewEncoder())
+
+	sent, err := (&icmpProxy{}).handleEchoReply(request, echo, resp, responder)
+	require.NoError(t, err)
+	require.True(t, sent)
+
+	pk := <-muxer.cfdToEdge
+	decoded, err := packet.NewICMPDecoder().Decode(packet.RawPacket{Data: pk.Payload()})
+	require.NoError(t, err)
+	require.Equal(t, uint8(58), decoded.TTL)
+	require.Equal(t, request.Dst, decoded.Src)
+	require.Equal(t, request.Src, decoded.Dst)
+	require.Equal(t, ipv4.ICMPTypeEchoReply, decoded.Type)
 }
 
 // TestSendEchoErrors makes sure icmpSendEcho handles error cases

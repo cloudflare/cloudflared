@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/netip"
 	"time"
 
@@ -26,6 +27,38 @@ const (
 var (
 	errPacketNil = fmt.Errorf("packet is nil")
 )
+
+type receivedTTL struct {
+	value uint8
+	ok    bool
+}
+
+func receivedTTLFromControlMessage(value int) receivedTTL {
+	if value <= 0 || value > math.MaxUint8 {
+		return receivedTTL{}
+	}
+	return receivedTTL{
+		value: uint8(value),
+		ok:    true,
+	}
+}
+
+func receivedTTLFromIPHeader(value uint8) receivedTTL {
+	return receivedTTL{
+		value: value,
+		ok:    true,
+	}
+}
+
+func (ttl receivedTTL) forwardedTTL() (uint8, bool) {
+	if !ttl.ok {
+		return packet.DefaultTTL, true
+	}
+	if ttl.value <= 1 {
+		return 0, false
+	}
+	return ttl.value - 1, true
+}
 
 // ICMPRouterServer is a parent interface over-top of ICMPRouter that allows for the operation of the proxy origin listeners.
 type ICMPRouterServer interface {

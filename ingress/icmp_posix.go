@@ -19,10 +19,27 @@ import (
 
 // Opens a non-privileged ICMP socket on Linux and Darwin
 func newICMPConn(listenIP netip.Addr) (*icmp.PacketConn, error) {
+	var (
+		network string
+		err     error
+	)
 	if listenIP.Is4() {
-		return icmp.ListenPacket("udp4", listenIP.String())
+		network = "udp4"
+	} else {
+		network = "udp6"
 	}
-	return icmp.ListenPacket("udp6", listenIP.String())
+
+	conn, err := icmp.ListenPacket(network, listenIP.String())
+	if err != nil {
+		return nil, err
+	}
+	if err := enableReceiveTTL(conn, listenIP); err != nil {
+		if closeErr := conn.Close(); closeErr != nil {
+			return nil, fmt.Errorf("%w; failed to close ICMP socket after error: %v", err, closeErr)
+		}
+		return nil, err
+	}
+	return conn, nil
 }
 
 func netipAddr(addr net.Addr) (netip.Addr, bool) {
@@ -120,8 +137,12 @@ func (ief *icmpEchoFlow) sendToDst(dst netip.Addr, msg *icmp.Message) error {
 }
 
 // returnToSrc rewrites the echo ID to the original echo ID from the eyeball
-func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) error {
+func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) (bool, error) {
 	ief.UpdateLastActive()
+	ttl, shouldForward := reply.ttl.forwardedTTL()
+	if !shouldForward {
+		return false, nil
+	}
 	reply.echo.ID = ief.originalEchoID
 	reply.msg.Body = reply.echo
 	pk := packet.ICMP{
@@ -129,20 +150,21 @@ func (ief *icmpEchoFlow) returnToSrc(reply *echoReply) error {
 			Src:      reply.from,
 			Dst:      ief.src,
 			Protocol: layers.IPProtocol(reply.msg.Type.Protocol()),
-			TTL:      packet.DefaultTTL,
+			TTL:      ttl,
 		},
 		Message: reply.msg,
 	}
-	return ief.responder.ReturnPacket(&pk)
+	return true, ief.responder.ReturnPacket(&pk)
 }
 
 type echoReply struct {
 	from netip.Addr
 	msg  *icmp.Message
 	echo *icmp.Echo
+	ttl  receivedTTL
 }
 
-func parseReply(from net.Addr, rawMsg []byte) (*echoReply, error) {
+func parseReply(from net.Addr, rawMsg []byte, ttl receivedTTL) (*echoReply, error) {
 	fromAddr, ok := netipAddr(from)
 	if !ok {
 		return nil, fmt.Errorf("cannot convert %s to netip.Addr", from)
@@ -163,6 +185,7 @@ func parseReply(from net.Addr, rawMsg []byte) (*echoReply, error) {
 		from: fromAddr,
 		msg:  msg,
 		echo: echo,
+		ttl:  ttl,
 	}, nil
 }
 
