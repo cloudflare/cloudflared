@@ -22,7 +22,9 @@ RUN GOOS=linux GOARCH=amd64 make cloudflared
 # use a distroless base image with glibc
 FROM gcr.io/distroless/base-debian13:nonroot-amd64@sha256:c8998bf90d7742145d45be51b2f673cbb899ef0dc52e48bd0211e650a8a2c58c
 
+ARG VERSION=dev
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
+LABEL org.opencontainers.image.version="${VERSION}"
 
 # copy our compiled binary
 COPY --from=builder --chown=nonroot /go/src/github.com/cloudflare/cloudflared/cloudflared /usr/local/bin/
