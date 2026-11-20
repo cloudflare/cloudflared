@@ -17,6 +17,7 @@ type TunnelClient interface {
 
 type HostnameClient interface {
 	RouteTunnel(tunnelID uuid.UUID, route HostnameRoute) (HostnameRouteResult, error)
+	ListZones() ([]*Zone, error)
 }
 
 type IPRouteClient interface {
@@ -38,4 +39,9 @@ type Client interface {
 	HostnameClient
 	IPRouteClient
 	VnetClient
+}
+
+type Zone struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }

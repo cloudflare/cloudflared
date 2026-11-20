@@ -1,9 +1,14 @@
 package cfapi
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -96,4 +101,74 @@ func TestLBRouteResultSuccessSummary(t *testing.T) {
 		actual := res.SuccessSummary()
 		assert.Equal(t, tt.expected, actual, "case %d", i+1)
 	}
+}
+
+func TestRouteTunnel_ZoneResolution(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/zones" {
+			// A sample JSON response matching the Cloudflare api format, ensuring we mimic what the real API sends.
+			io.WriteString(w, `{
+				"success": true,
+				"errors": [],
+				"messages": [],
+				"result": [
+					{
+						"id": "zone-1",
+						"name": "example.com",
+						"status": "active",
+						"paused": false
+					},
+					{
+						"id": "zone-2",
+						"name": "example.co.uk",
+						"status": "active",
+						"paused": false
+					}
+				],
+				"result_info": {
+					"page": 1,
+					"per_page": 50,
+					"total_pages": 1,
+					"count": 2,
+					"total_count": 2
+				}
+			}`)
+			return
+		}
+		if r.URL.Path == "/zones/zone-1/tunnels/11111111-2222-3333-4444-555555555555/routes" {
+			io.WriteString(w, `{"success":true,"result":{"cname":"new","name":"app.example.com"}}`)
+			return
+		}
+		
+		// Fallback path when zone does NOT match. It uses "default-zone-from-login" as specified in NewRESTClient arguments.
+		if r.URL.Path == "/zones/default-zone-from-login/tunnels/11111111-2222-3333-4444-555555555555/routes" {
+			io.WriteString(w, `{"success":true,"result":{"cname":"new","name":"fallback.otherdomain.com"}}`)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	logger := zerolog.Nop()
+	client, err := NewRESTClient(ts.URL, "account", "default-zone-from-login", "token", "agent", &logger)
+	assert.NoError(t, err)
+
+	tunnelID, _ := uuid.Parse("11111111-2222-3333-4444-555555555555")
+
+	t.Run("Success match", func(t *testing.T) {
+		route := NewDNSRoute("app.example.com", false)
+		res, err := client.RouteTunnel(tunnelID, route)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, "Added CNAME app.example.com which will route to this tunnel", res.SuccessSummary())
+	})
+
+	t.Run("Fallback to default zone when no match", func(t *testing.T) {
+		route := NewDNSRoute("fallback.otherdomain.com", false)
+		res, err := client.RouteTunnel(tunnelID, route)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+		assert.Equal(t, "Added CNAME fallback.otherdomain.com which will route to this tunnel", res.SuccessSummary())
+	})
 }
