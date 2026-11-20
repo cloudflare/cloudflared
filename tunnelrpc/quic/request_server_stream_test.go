@@ -103,6 +103,64 @@ func TestConnectResponseMeta(t *testing.T) {
 	}
 }
 
+// A stream may deliver the preamble in pieces: a QUIC peer is free to send the first bytes of
+// a stream in a frame of their own, and a Read returns what has arrived. The two bytes of the
+// version must be read in full, or the decoder that follows starts in the middle of them.
+func TestConnectDataIsReadFromAStreamThatDeliversFewBytesAtATime(t *testing.T) {
+	metadata := []pogs.Metadata{{Key: "key", Val: "1234"}}
+	// The preamble is six bytes of signature and two of version.
+	for _, firstRead := range []int{1, 5, 6, 7, 8} {
+		t.Run(fmt.Sprintf("response whose first %d bytes arrive alone", firstRead), func(t *testing.T) {
+			b := &bytes.Buffer{}
+			reqServerStream := RequestServerStream{noopCloser{b}}
+			require.NoError(t, reqServerStream.WriteConnectResponseData(nil, metadata...))
+
+			reqClientStream := RequestClientStream{noopCloser{&shortFirstRead{r: b, first: firstRead}}}
+			respMeta, err := reqClientStream.ReadConnectResponseData()
+			require.NoError(t, err)
+			require.Equal(t, metadata, respMeta.Metadata)
+		})
+		t.Run(fmt.Sprintf("request whose first %d bytes arrive alone", firstRead), func(t *testing.T) {
+			b := &bytes.Buffer{}
+			reqClientStream := RequestClientStream{noopCloser{b}}
+			require.NoError(t, reqClientStream.WriteConnectRequestData("tunnel.com", pogs.ConnectionTypeHTTP, metadata...))
+
+			stream := &shortFirstRead{r: b, first: firstRead}
+			protocol, err := determineProtocol(stream)
+			require.NoError(t, err)
+			require.Equal(t, dataStreamProtocolSignature, protocol)
+			reqServerStream := RequestServerStream{noopCloser{stream}}
+			reqMeta, err := reqServerStream.ReadConnectRequestData()
+			require.NoError(t, err)
+			require.Equal(t, metadata, reqMeta.Metadata)
+			require.Equal(t, "tunnel.com", reqMeta.Dest)
+		})
+	}
+}
+
+// shortFirstRead delivers the first `first` bytes of a stream apart from the rest, as a stream
+// does whose first frame carried that many: no Read returns bytes from both sides of that
+// boundary.
+type shortFirstRead struct {
+	r     io.ReadWriter
+	first int
+}
+
+func (s *shortFirstRead) Read(p []byte) (int, error) {
+	if s.first > 0 && len(p) > s.first {
+		p = p[:s.first]
+	}
+	n, err := s.r.Read(p)
+	if s.first > 0 {
+		s.first -= n
+	}
+	return n, err
+}
+
+func (s *shortFirstRead) Write(p []byte) (int, error) {
+	return s.r.Write(p)
+}
+
 func TestRegisterUdpSession(t *testing.T) {
 	unregisterMessage := "closed by eyeball"
 
@@ -143,7 +201,7 @@ func TestRegisterUdpSession(t *testing.T) {
 				err := ss.Serve(t.Context(), serverStream)
 				assert.NoError(t, err)
 
-				serverStream.Close()
+				assert.NoError(t, serverStream.Close())
 				close(sessionRegisteredChan)
 			}()
 
@@ -188,7 +246,7 @@ func TestManageConfiguration(t *testing.T) {
 		err := server.Serve(t.Context(), serverStream)
 		assert.NoError(t, err)
 
-		serverStream.Close()
+		assert.NoError(t, serverStream.Close())
 		close(updatedChan)
 	}()
 

@@ -17,7 +17,6 @@ var (
 	rpcStreamProtocolSignature = protocolSignature{0x52, 0xBB, 0x82, 0x5C, 0xDB, 0x65}
 
 	errDataStreamNotSupported = fmt.Errorf("data protocol not supported")
-	errRPCStreamNotSupported  = fmt.Errorf("rpc protocol not supported")
 )
 
 type protocolVersion string
@@ -60,8 +59,10 @@ func writeVersion(stream io.Writer) error {
 
 func readVersion(stream io.Reader) (string, error) {
 	version := make([]byte, protocolVersionLength)
-	_, err := stream.Read(version)
-	return string(version), err
+	if _, err := io.ReadFull(stream, version); err != nil {
+		return "", err
+	}
+	return string(version), nil
 }
 
 func readSignature(stream io.Reader) (protocolSignature, error) {
