@@ -1,3 +1,8 @@
+2026.11.2
+- 2026-11-23 TUN-11396: Bump golang.org/x/net and golang.org/x/crypto
+- 2026-11-23 chore: Update Google Distroless image digests
+- 2026-11-20 TUN-11362: Read the whole protocol version of a tunnel stream
+
 2026.11.1
 - 2026-11-17 TUN-11062: Reconnect on account region changes
 - 2026-11-17 chore: Update base images to latest versions
