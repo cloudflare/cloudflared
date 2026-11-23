@@ -20,7 +20,7 @@ COPY . .
 RUN GOOS=linux GOARCH=arm64 make cloudflared
 
 # use a distroless base image with glibc
-FROM gcr.io/distroless/base-debian13:nonroot-arm64@sha256:e247f2ae3696d1754ef8533281a947cd0d613b145aa7ef7d6972a97233579fe0
+FROM gcr.io/distroless/base-debian13:nonroot-arm64@sha256:c9b89085acda7df58e353e215ae7db136878ddfd30c31d2641f57809a5402a8d
 
 LABEL org.opencontainers.image.source="https://github.com/cloudflare/cloudflared"
 
