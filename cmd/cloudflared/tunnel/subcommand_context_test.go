@@ -439,3 +439,139 @@ func Test_subcommandContext_ValidateIngressCommand(t *testing.T) {
 		})
 	}
 }
+
+type findIDMockTunnelStore struct {
+	cfapi.Client
+	listTunnelsFunc func(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error)
+}
+
+func (m *findIDMockTunnelStore) ListTunnels(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
+	if m.listTunnelsFunc != nil {
+		return m.listTunnelsFunc(filter)
+	}
+	return nil, nil
+}
+
+func Test_subcommandContext_findID(t *testing.T) {
+	tunnelIDA := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	tunnelIDB := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	credFileA := "tunnel_a_cred.json"
+	log := zerolog.Nop()
+
+	fsWithCredA := mockFileSystem{
+		rf: func(filePath string) ([]byte, error) {
+			if filePath == credFileA {
+				return []byte(fmt.Sprintf(`{"AccountTag":"tag","TunnelSecret":"c2VjcmV0","TunnelID":"%s"}`, tunnelIDA)), nil
+			}
+			return nil, errors.New("file not found")
+		},
+		vfp: func(string) bool { return true },
+	}
+
+	makeContextWithCred := func(credPath string) *cli.Context {
+		flagSet := flag.NewFlagSet("test", flag.PanicOnError)
+		flagSet.String(CredFileFlag, credPath, "")
+		c := cli.NewContext(cli.NewApp(), flagSet, nil)
+		_ = c.Set(CredFileFlag, credPath)
+		return c
+	}
+
+	tests := []struct {
+		name              string
+		input             string
+		c                 *cli.Context
+		fs                fileSystem
+		tunnelstoreClient cfapi.Client
+		want              uuid.UUID
+		wantErr           bool
+		wantErrMsg        string
+	}{
+		{
+			name:  "UUID input is parsed directly without querying Tunnelstore or credentials",
+			input: tunnelIDA.String(),
+			want:  tunnelIDA,
+		},
+		{
+			name:  "Tunnel name resolves via Tunnelstore even if a different credentials file is configured",
+			input: "tunnel-b",
+			c:     makeContextWithCred(credFileA),
+			fs:    fsWithCredA,
+			tunnelstoreClient: &findIDMockTunnelStore{
+				listTunnelsFunc: func(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
+					return []*cfapi.Tunnel{
+						{ID: tunnelIDB, Name: "tunnel-b"},
+					}, nil
+				},
+			},
+			want: tunnelIDB,
+		},
+		{
+			name:  "Tunnel name not found in Tunnelstore returns error and does not misroute to configured credentials file",
+			input: "non-existent-tunnel",
+			c:     makeContextWithCred(credFileA),
+			fs:    fsWithCredA,
+			tunnelstoreClient: &findIDMockTunnelStore{
+				listTunnelsFunc: func(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
+					return []*cfapi.Tunnel{}, nil
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "non-existent-tunnel is neither the ID nor the name of any of your tunnels",
+		},
+		{
+			name:  "When API credentials are available but Tunnelstore returns error, returns error without falling back to credentials file",
+			input: "tunnel-b",
+			c:     makeContextWithCred(credFileA),
+			fs:    fsWithCredA,
+			tunnelstoreClient: &findIDMockTunnelStore{
+				listTunnelsFunc: func(filter *cfapi.TunnelFilter) ([]*cfapi.Tunnel, error) {
+					return nil, errors.New("cannot reach tunnelstore")
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "cannot reach tunnelstore",
+		},
+		{
+			name:  "When API credentials are unavailable, falls back to reading configured credentials file",
+			input: "tunnel-a",
+			c:     makeContextWithCred(credFileA),
+			fs:    fsWithCredA,
+			want:  tunnelIDA,
+		},
+		{
+			name:  "When API credentials are unavailable and credentials file is missing, returns error",
+			input: "tunnel-a",
+			c:     makeContextWithCred("missing.json"),
+			fs: mockFileSystem{
+				rf:  func(string) ([]byte, error) { return nil, errors.New("file not found") },
+				vfp: func(string) bool { return false },
+			},
+			wantErr:    true,
+			wantErrMsg: "Error locating origin cert",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sc := &subcommandContext{
+				c:                 tt.c,
+				log:               &log,
+				fs:                tt.fs,
+				tunnelstoreClient: tt.tunnelstoreClient,
+			}
+			if sc.c == nil {
+				sc.c = makeContextWithCred("")
+			}
+			got, err := sc.findID(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
