@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -143,18 +144,28 @@ func TestRegionChangeDrainsHAAndRefreshesOnce(t *testing.T) {
 }
 
 func TestRegionChangeShutdownInterruptsBootstrap(t *testing.T) {
-	t.Parallel()
+	// The restart counter is shared, so check its delta serially.
 	for _, graceful := range []bool{false, true} {
 		t.Run(fmt.Sprint(graceful), func(t *testing.T) {
-			t.Parallel()
+			restartsBefore := regionChangeRestartCount(t)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			shutdown := make(chan struct{})
-			s := newTestSupervisor(t, nil)
+			var starts atomic.Int32
+			server := regionChangeTunnelServer(func(_ context.Context, _ uint8, connected *signal.Signal) error {
+				starts.Add(1)
+				connected.Notify()
+				return connection.ErrRegionChanged
+			})
+			s := newTestSupervisor(t, server)
+			s.config.HAConnections = 1
+			selector, err := connection.NewProtocolSelector("quic", s.log.Logger())
+			require.NoError(t, err)
+			s.config.ProtocolSelector = selector
 			s.gracefulShutdownC = shutdown
-			var requested atomic.Bool
+			var requested bool
 			setBootstrapFetcher(t, s, func(fetchCtx context.Context, _ connection.Credentials, _ *client.Config) (*bootstrap.Response, error) {
-				requested.Store(true)
+				requested = true
 				if graceful {
 					close(shutdown)
 				} else {
@@ -163,14 +174,17 @@ func TestRegionChangeShutdownInterruptsBootstrap(t *testing.T) {
 				<-fetchCtx.Done()
 				return nil, fetchCtx.Err()
 			})
-			require.ErrorIs(t, s.handleRegionChange(ctx), errEarlyShutdown)
-			require.True(t, requested.Load(), "shutdown must interrupt an active bootstrap request")
+			require.NoError(t, s.runWithRegionChanges(ctx, signal.New(make(chan struct{}))))
+			require.True(t, requested, "shutdown must interrupt an active bootstrap request")
+			require.Equal(t, int32(1), starts.Load(), "shutdown must prevent starting a replacement group")
+			require.InDelta(t, restartsBefore, regionChangeRestartCount(t), 0)
 		})
 	}
 }
 
 func TestRegionChangeRestartInterval(t *testing.T) {
-	t.Parallel()
+	// The restart counter is shared, so check its delta serially.
+	restartsBefore := regionChangeRestartCount(t)
 
 	s := newTestSupervisor(t, nil)
 	synctest.Test(t, func(t *testing.T) {
@@ -200,6 +214,14 @@ func TestRegionChangeRestartInterval(t *testing.T) {
 		require.Equal(t, starts[0], starts[1], "the first region change must restart without a backoff delay")
 		require.Equal(t, tunnelRetryDuration, starts[2].Sub(starts[1]))
 	})
+	require.InDelta(t, restartsBefore+2, regionChangeRestartCount(t), 0)
+}
+
+func regionChangeRestartCount(t *testing.T) float64 {
+	t.Helper()
+	var metric dto.Metric
+	require.NoError(t, regionChangeRestarts.Write(&metric))
+	return metric.GetCounter().GetValue()
 }
 
 func TestRegionChangeCancellationInterruptsRestartDelay(t *testing.T) {

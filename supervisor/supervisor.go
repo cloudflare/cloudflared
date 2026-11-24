@@ -172,7 +172,7 @@ func (s *Supervisor) runWithRegionChanges(ctx context.Context, connectedSignal *
 		s.log.Logger().Info().Msg("Account region changed; restarting tunnel connections")
 
 		if err := s.handleRegionChange(ctx); err != nil {
-			if err == errEarlyShutdown || ctx.Err() != nil {
+			if errors.Is(err, errEarlyShutdown) || ctx.Err() != nil {
 				return nil
 			}
 			return err
@@ -182,6 +182,15 @@ func (s *Supervisor) runWithRegionChanges(ctx context.Context, connectedSignal *
 		// can still use this map or notify the previous group's signal.
 		s.tunnelsConnecting = make(map[int]chan struct{})
 		s.nextConnectedSignal = nil
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-s.gracefulShutdownC:
+			return nil
+		default:
+		}
+		regionChangeRestarts.Inc()
 	}
 }
 

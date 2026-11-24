@@ -92,11 +92,12 @@ func (c *Client) FetchMetadata(ctx context.Context, creds connection.Credentials
 	backoff := retry.NewBackoff(c.maxBackoffRetries, retry.DefaultBaseTime, true)
 	for ctx.Err() == nil {
 		result, err := c.fetchMetadata(ctx, creds, config)
-		if ctx.Err() != nil {
-			break
-		}
 		if err == nil {
 			err = result.Validate(creds)
+		}
+		recordAttempt(ctx, err)
+		if ctx.Err() != nil {
+			break
 		}
 		if err == nil {
 			return result, nil
@@ -113,7 +114,7 @@ func (c *Client) FetchMetadata(ctx context.Context, creds connection.Credentials
 func (c *Client) fetchMetadata(ctx context.Context, creds connection.Credentials, config *client.Config) (*Response, error) {
 	token, err := connection.TunnelToken(creds).Encode()
 	if err != nil {
-		return nil, fmt.Errorf("encode bootstrap tunnel token: %w", err)
+		return nil, bootstrapErrorf(outcomeTokenEncodeError, "encode bootstrap tunnel token: %w", err)
 	}
 	body, err := json.Marshal(bootstrapRequest{
 		Client: bootstrapClient{
@@ -124,37 +125,37 @@ func (c *Client) fetchMetadata(ctx context.Context, creds connection.Credentials
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("encode bootstrap request: %w", err)
+		return nil, bootstrapErrorf(outcomeRequestSetupError, "encode bootstrap request: %w", err)
 	}
 	requestURL, err := url.JoinPath(c.baseURL, bootstrapPath)
 	if err != nil {
-		return nil, fmt.Errorf("join bootstrap URL: %w", err)
+		return nil, bootstrapErrorf(outcomeRequestSetupError, "join bootstrap URL: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create bootstrap request: %w", err)
+		return nil, bootstrapErrorf(outcomeRequestSetupError, "create bootstrap request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", fmt.Sprintf("cloudflared/%s", config.Version))
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch bootstrap: %w", err)
+		return nil, bootstrapErrorf(outcomeTransportError, "fetch bootstrap: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("bootstrap returned HTTP %d", resp.StatusCode)
+		return nil, bootstrapErrorf(httpOutcome(resp.StatusCode), "bootstrap returned HTTP %d", resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, responseLimit+1))
 	if err != nil {
-		return nil, fmt.Errorf("read bootstrap: %w", err)
+		return nil, bootstrapErrorf(outcomeTransportError, "read bootstrap: %w", err)
 	}
 	if len(data) > responseLimit {
-		return nil, errors.New("bootstrap response exceeds size limit")
+		return nil, &attemptError{outcome: outcomeInvalidResponse, err: errors.New("bootstrap response exceeds size limit")}
 	}
 	var result Response
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("decode bootstrap: %w", err)
+		return nil, bootstrapErrorf(outcomeInvalidResponse, "decode bootstrap: %w", err)
 	}
 	return &result, nil
 }
@@ -162,13 +163,13 @@ func (c *Client) fetchMetadata(ctx context.Context, creds connection.Credentials
 // Validate checks that the response is usable for reconnecting the given tunnel over QUIC.
 func (r *Response) Validate(creds connection.Credentials) error {
 	if r == nil {
-		return errors.New("bootstrap response is missing")
+		return &attemptError{outcome: outcomeValidationError, err: errors.New("bootstrap response is missing")}
 	}
 	if r.AccountTag != creds.AccountTag || r.TunnelID != creds.TunnelID {
-		return errors.New("bootstrap identity does not match tunnel")
+		return &attemptError{outcome: outcomeValidationError, err: errors.New("bootstrap identity does not match tunnel")}
 	}
 	if r.SNI[connection.QUIC.String()] == "" {
-		return errors.New("bootstrap response is missing QUIC SNI")
+		return &attemptError{outcome: outcomeValidationError, err: errors.New("bootstrap response is missing QUIC SNI")}
 	}
 	return nil
 }

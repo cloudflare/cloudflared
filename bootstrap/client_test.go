@@ -171,7 +171,12 @@ func TestFetchUsesDeploymentFromCredentialEndpoint(t *testing.T) {
 }
 
 func TestFetchMetadataWaitsForValidMetadata(t *testing.T) {
-	t.Parallel()
+	// This test measures deltas on process-wide counters.
+	before := map[string]float64{
+		outcomeHTTP5xx:         attemptCount(t, outcomeHTTP5xx),
+		outcomeValidationError: attemptCount(t, outcomeValidationError),
+		outcomeSuccess:         attemptCount(t, outcomeSuccess),
+	}
 	synctest.Test(t, func(t *testing.T) {
 		bootstrapClient := newTestClient()
 		creds := connection.Credentials{AccountTag: "account", TunnelID: uuid.New()}
@@ -194,6 +199,26 @@ func TestFetchMetadataWaitsForValidMetadata(t *testing.T) {
 		require.Equal(t, 3, attempts, "the backoff cap must not limit the number of attempts")
 		require.Equal(t, "ch.example", result.SNI["quic"])
 	})
+	for outcome, count := range before {
+		require.InDelta(t, count+1, attemptCount(t, outcome), 0, outcome)
+	}
+}
+
+func TestFetchMetadataRecordsCanceledAttempt(t *testing.T) {
+	// This test measures deltas on process-wide counters.
+	before := attemptCount(t, outcomeCanceled)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	c := newTestClient()
+	c.httpClient.Transport = bootstrapRoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		defer func() { require.NoError(t, req.Body.Close()) }()
+		cancel()
+		return nil, req.Context().Err()
+	})
+
+	_, err := c.FetchMetadata(ctx, connection.Credentials{}, &client.Config{})
+	require.ErrorIs(t, err, context.Canceled)
+	require.InDelta(t, before+1, attemptCount(t, outcomeCanceled), 0)
 }
 
 func TestFetchMetadataCancellationInterruptsBackoff(t *testing.T) {

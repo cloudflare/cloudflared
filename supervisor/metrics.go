@@ -18,10 +18,17 @@ var (
 			Help:      "Number of active ha connections",
 		},
 	)
+	regionChangeRestarts = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: connection.MetricsNamespace,
+		Subsystem: connection.TunnelSubsystem,
+		Name:      "region_change_restarts_total",
+		Help:      "Number of replacement HA connection groups started after a successful account region refresh.",
+	})
 )
 
 func init() {
 	prometheus.MustRegister(
 		haConnections,
+		regionChangeRestarts,
 	)
 }
