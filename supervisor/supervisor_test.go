@@ -2,18 +2,28 @@ package supervisor
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudflare/cloudflared/bootstrap"
+	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/signal"
 )
+
+type bootstrapFetcherFunc func(context.Context, connection.Credentials, *client.Config) (*bootstrap.Response, error)
+
+func (f bootstrapFetcherFunc) FetchMetadata(ctx context.Context, creds connection.Credentials, config *client.Config) (*bootstrap.Response, error) {
+	return f(ctx, creds, config)
+}
 
 type regionChangeTunnelServer func(context.Context, uint8, *signal.Signal) error
 
@@ -67,7 +77,16 @@ func newRegionChangeTunnelServer(t *testing.T, ctx context.Context, cancel conte
 	return server, &calls, &oldActive
 }
 
-func TestRegionChangeDrainsHABeforeReconnecting(t *testing.T) {
+func setBootstrapFetcher(t *testing.T, s *Supervisor, fetch bootstrapFetcherFunc) {
+	t.Helper()
+	s.config.NamedTunnel = &connection.TunnelProperties{Credentials: connection.Credentials{
+		AccountTag: "account", TunnelID: uuid.New(), TunnelSecret: []byte("secret"),
+	}}
+	s.config.ClientConfig = &client.Config{Version: "test", Arch: "darwin_arm64", ConnectorID: uuid.New()}
+	s.bootstrapClient = fetch
+}
+
+func TestRegionChangeDrainsHAAndRefreshesOnce(t *testing.T) {
 	t.Parallel()
 
 	const haConnections = 2
@@ -85,18 +104,67 @@ func TestRegionChangeDrainsHABeforeReconnecting(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 
-			server, calls, _ := newRegionChangeTunnelServer(t, ctx, cancel, haConnections, notification.err)
+			base := &tls.Config{ServerName: "old.example"}
+			server, calls, oldActive := newRegionChangeTunnelServer(t, ctx, cancel, haConnections, notification.err)
 
 			s := newTestSupervisor(t, server)
 			s.tunnelsConnecting = make(map[int]chan struct{})
 			s.config.HAConnections = haConnections
+			s.config.EdgeTLSConfigs = map[connection.Protocol]*tls.Config{connection.QUIC: base, connection.HTTP2: base}
 
 			selector, err := connection.NewProtocolSelector("quic", s.log.Logger())
 			require.NoError(t, err)
 			s.config.ProtocolSelector = selector
 
+			// Bootstrap must run once, after the original group has drained and
+			// before either replacement connection starts.
+			var refreshes atomic.Int32
+			setBootstrapFetcher(t, s, func(_ context.Context, creds connection.Credentials, _ *client.Config) (*bootstrap.Response, error) {
+				assert.Zero(t, oldActive.Load(), "bootstrap must follow complete old-group teardown")
+				assert.Equal(t, int32(haConnections), calls.Load(), "no new connection may start before bootstrap")
+				refreshes.Add(1)
+				return &bootstrap.Response{
+					AccountTag: creds.AccountTag,
+					TunnelID:   creds.TunnelID,
+					SNI:        map[string]string{"quic": "ch.example", "http2": "ch.example"},
+				}, nil
+			})
+
 			require.NoError(t, s.runWithRegionChanges(ctx, signal.New(make(chan struct{}))))
+			require.Equal(t, int32(1), refreshes.Load())
 			require.Equal(t, int32(2*haConnections), calls.Load(), "expected the original and replacement HA groups")
+			require.Equal(t, "ch.example", s.config.EdgeTLSConfigs[connection.QUIC].ServerName)
+			require.Equal(t, "old.example", s.config.EdgeTLSConfigs[connection.HTTP2].ServerName)
+			require.NotSame(t, base, s.config.EdgeTLSConfigs[connection.QUIC])
+			require.Same(t, base, s.config.EdgeTLSConfigs[connection.HTTP2])
+			require.Equal(t, "old.example", base.ServerName)
+		})
+	}
+}
+
+func TestRegionChangeShutdownInterruptsBootstrap(t *testing.T) {
+	t.Parallel()
+	for _, graceful := range []bool{false, true} {
+		t.Run(fmt.Sprint(graceful), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			shutdown := make(chan struct{})
+			s := newTestSupervisor(t, nil)
+			s.gracefulShutdownC = shutdown
+			var requested atomic.Bool
+			setBootstrapFetcher(t, s, func(fetchCtx context.Context, _ connection.Credentials, _ *client.Config) (*bootstrap.Response, error) {
+				requested.Store(true)
+				if graceful {
+					close(shutdown)
+				} else {
+					cancel()
+				}
+				<-fetchCtx.Done()
+				return nil, fetchCtx.Err()
+			})
+			require.ErrorIs(t, s.handleRegionChange(ctx), errEarlyShutdown)
+			require.True(t, requested.Load(), "shutdown must interrupt an active bootstrap request")
 		})
 	}
 }
@@ -104,52 +172,110 @@ func TestRegionChangeDrainsHABeforeReconnecting(t *testing.T) {
 func TestRegionChangeRestartInterval(t *testing.T) {
 	t.Parallel()
 
-	for _, mode := range []string{"repeated changes", "cancellation", "graceful shutdown"} {
-		t.Run(mode, func(t *testing.T) {
-			t.Parallel()
-			s := newTestSupervisor(t, nil)
-			synctest.Test(t, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 2*tunnelRetryDuration)
-				defer cancel()
-				shutdown := make(chan struct{})
-				var starts []time.Time
-				server := regionChangeTunnelServer(func(_ context.Context, _ uint8, connected *signal.Signal) error {
-					starts = append(starts, time.Now())
-					connected.Notify()
-					if len(starts) == 3 {
-						cancel()
-					} else if len(starts) == 2 && mode != "repeated changes" {
-						time.AfterFunc(time.Second, func() {
-							if mode == "graceful shutdown" {
-								close(shutdown)
-							} else {
-								cancel()
-							}
-						})
-					}
-					return connection.ErrRegionChanged
-				})
-				s.edgeTunnelServer = server
-				s.config.HAConnections = 1
-				s.gracefulShutdownC = shutdown
-				selector, err := connection.NewProtocolSelector("quic", s.log.Logger())
-				require.NoError(t, err)
-				s.config.ProtocolSelector = selector
-
-				require.NoError(t, s.runWithRegionChanges(ctx, signal.New(make(chan struct{}))))
-				if mode == "repeated changes" {
-					require.Len(t, starts, 3)
-					require.GreaterOrEqual(t, starts[2].Sub(starts[1]), tunnelRetryDuration)
-				} else {
-					require.Len(t, starts, 2, "shutdown must interrupt the restart delay")
-					if mode == "graceful shutdown" {
-						require.NoError(t, ctx.Err())
-					} else {
-						require.ErrorIs(t, ctx.Err(), context.Canceled)
-					}
-				}
-				require.Equal(t, starts[0], starts[1], "the first region change must restart immediately")
-			})
+	s := newTestSupervisor(t, nil)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 2*tunnelRetryDuration)
+		defer cancel()
+		s.config.NamedTunnel = &connection.TunnelProperties{}
+		s.config.HAConnections = 1
+		s.bootstrapClient = bootstrapFetcherFunc(func(context.Context, connection.Credentials, *client.Config) (*bootstrap.Response, error) {
+			return &bootstrap.Response{SNI: map[string]string{"quic": "edge.example"}}, nil
 		})
-	}
+		selector, err := connection.NewProtocolSelector("quic", s.log.Logger())
+		require.NoError(t, err)
+		s.config.ProtocolSelector = selector
+
+		var starts []time.Time
+		s.edgeTunnelServer = regionChangeTunnelServer(func(_ context.Context, _ uint8, connected *signal.Signal) error {
+			starts = append(starts, time.Now())
+			connected.Notify()
+			if len(starts) == 3 {
+				cancel()
+			}
+			return connection.ErrRegionChanged
+		})
+
+		require.NoError(t, s.runWithRegionChanges(ctx, signal.New(make(chan struct{}))))
+		require.Len(t, starts, 3)
+		require.Equal(t, starts[0], starts[1], "the first region change must restart without a backoff delay")
+		require.Equal(t, tunnelRetryDuration, starts[2].Sub(starts[1]))
+	})
+}
+
+func TestRegionChangeCancellationInterruptsRestartDelay(t *testing.T) {
+	t.Parallel()
+
+	s := newTestSupervisor(t, nil)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 2*tunnelRetryDuration)
+		defer cancel()
+		s.config.NamedTunnel = &connection.TunnelProperties{}
+		s.config.HAConnections = 1
+		s.bootstrapClient = bootstrapFetcherFunc(func(context.Context, connection.Credentials, *client.Config) (*bootstrap.Response, error) {
+			return &bootstrap.Response{SNI: map[string]string{"quic": "edge.example"}}, nil
+		})
+		selector, err := connection.NewProtocolSelector("quic", s.log.Logger())
+		require.NoError(t, err)
+		s.config.ProtocolSelector = selector
+
+		var starts int
+		s.edgeTunnelServer = regionChangeTunnelServer(func(_ context.Context, _ uint8, connected *signal.Signal) error {
+			starts++
+			connected.Notify()
+			return connection.ErrRegionChanged
+		})
+		done := make(chan error, 1)
+		go func() { done <- s.runWithRegionChanges(ctx, signal.New(make(chan struct{}))) }()
+
+		// Let the immediate restart complete and wait for the next restart delay.
+		synctest.Wait()
+		require.Equal(t, 2, starts)
+		stoppedAt := time.Now()
+		cancel()
+
+		require.NoError(t, <-done)
+		require.ErrorIs(t, ctx.Err(), context.Canceled)
+		require.Equal(t, stoppedAt, time.Now(), "cancellation must interrupt the restart delay")
+		require.Equal(t, 2, starts, "cancellation must prevent another connection")
+	})
+}
+
+func TestRegionChangeGracefulShutdownInterruptsRestartDelay(t *testing.T) {
+	t.Parallel()
+
+	s := newTestSupervisor(t, nil)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 2*tunnelRetryDuration)
+		defer cancel()
+		shutdown := make(chan struct{})
+		s.gracefulShutdownC = shutdown
+		s.config.NamedTunnel = &connection.TunnelProperties{}
+		s.config.HAConnections = 1
+		s.bootstrapClient = bootstrapFetcherFunc(func(context.Context, connection.Credentials, *client.Config) (*bootstrap.Response, error) {
+			return &bootstrap.Response{SNI: map[string]string{"quic": "edge.example"}}, nil
+		})
+		selector, err := connection.NewProtocolSelector("quic", s.log.Logger())
+		require.NoError(t, err)
+		s.config.ProtocolSelector = selector
+
+		var starts int
+		s.edgeTunnelServer = regionChangeTunnelServer(func(_ context.Context, _ uint8, connected *signal.Signal) error {
+			starts++
+			connected.Notify()
+			return connection.ErrRegionChanged
+		})
+		done := make(chan error, 1)
+		go func() { done <- s.runWithRegionChanges(ctx, signal.New(make(chan struct{}))) }()
+
+		// Let the immediate restart complete and wait for the next restart delay.
+		synctest.Wait()
+		require.Equal(t, 2, starts)
+		stoppedAt := time.Now()
+		close(shutdown)
+
+		require.NoError(t, <-done)
+		require.NoError(t, ctx.Err(), "graceful shutdown must leave the parent context active")
+		require.Equal(t, stoppedAt, time.Now(), "graceful shutdown must interrupt the restart delay")
+		require.Equal(t, 2, starts, "graceful shutdown must prevent another connection")
+	})
 }

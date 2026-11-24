@@ -663,7 +663,10 @@ func (e *EdgeTunnelServer) serveQUIC(
 
 	// Serve the TunnelConnection
 	err = tunnelConn.Serve(ctx)
-	return mapQUICCloseError(err), false
+	if connOptions.FeatureSnapshot.SupportsRegionalization() {
+		err = mapQUICCloseError(err)
+	}
+	return err, false
 }
 
 // mapQUICCloseError translates recognized edge-initiated QUIC close codes

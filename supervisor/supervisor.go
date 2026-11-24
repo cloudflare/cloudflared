@@ -9,6 +9,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/quic-go/quic-go"
 
+	"github.com/cloudflare/cloudflared/bootstrap"
+	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/connection"
 	"github.com/cloudflare/cloudflared/edgediscovery"
 	"github.com/cloudflare/cloudflared/orchestration"
@@ -25,6 +27,12 @@ const (
 	registrationInterval = time.Second
 )
 
+// regionalizedProtocols lists protocols whose TLS server names are refreshed
+// from bootstrap metadata after an account region change.
+var regionalizedProtocols = []connection.Protocol{
+	connection.QUIC,
+}
+
 // Supervisor manages non-declarative tunnels. Establishes TCP connections with the edge, and
 // reconnects them if they disconnect.
 type Supervisor struct {
@@ -32,6 +40,7 @@ type Supervisor struct {
 	orchestrator            *orchestration.Orchestrator
 	edgeIPs                 *edgediscovery.Edge
 	edgeTunnelServer        TunnelServer
+	bootstrapClient         bootstrapFetcher
 	tunnelErrors            chan tunnelError
 	tunnelsConnecting       map[int]chan struct{}
 	tunnelsProtocolFallback map[int]*protocolFallback
@@ -43,6 +52,10 @@ type Supervisor struct {
 	log *ConnAwareLogger
 
 	gracefulShutdownC <-chan struct{}
+}
+
+type bootstrapFetcher interface {
+	FetchMetadata(context.Context, connection.Credentials, *client.Config) (*bootstrap.Response, error)
 }
 
 var errEarlyShutdown = errors.New("shutdown started")
@@ -96,11 +109,17 @@ func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrato
 		connAwareLogger:   log,
 	}
 
+	var credentialEndpoint string
+	if config.NamedTunnel != nil {
+		credentialEndpoint = config.NamedTunnel.Credentials.Endpoint
+	}
+
 	return &Supervisor{
 		config:                  config,
 		orchestrator:            orchestrator,
 		edgeIPs:                 edgeIPs,
 		edgeTunnelServer:        &edgeTunnelServer,
+		bootstrapClient:         bootstrap.NewClient(credentialEndpoint, config.Retries, log.Logger()),
 		tunnelErrors:            make(chan tunnelError),
 		tunnelsConnecting:       map[int]chan struct{}{},
 		tunnelsProtocolFallback: map[int]*protocolFallback{},
@@ -128,7 +147,8 @@ func (s *Supervisor) Run(
 }
 
 // runWithRegionChanges runs the tunnel connections until shutdown. On an account
-// region change, it waits for all connections to stop before reconnecting.
+// region change, it waits for all connections to stop and refreshes bootstrap
+// metadata before reconnecting.
 func (s *Supervisor) runWithRegionChanges(ctx context.Context, connectedSignal *signal.Signal) error {
 	var nextRegionChange time.Time
 	for {
@@ -151,6 +171,13 @@ func (s *Supervisor) runWithRegionChanges(ctx context.Context, connectedSignal *
 		nextRegionChange = time.Now().Add(tunnelRetryDuration)
 		s.log.Logger().Info().Msg("Account region changed; restarting tunnel connections")
 
+		if err := s.handleRegionChange(ctx); err != nil {
+			if err == errEarlyShutdown || ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+
 		// runConnections has drained the old group, so no connection goroutine
 		// can still use this map or notify the previous group's signal.
 		s.tunnelsConnecting = make(map[int]chan struct{})
@@ -158,8 +185,50 @@ func (s *Supervisor) runWithRegionChanges(ctx context.Context, connectedSignal *
 	}
 }
 
+// handleRegionChange runs only after runConnections has drained every old
+// connection. It waits for usable bootstrap metadata before replacing the
+// TLS configs for the next connection group.
+func (s *Supervisor) handleRegionChange(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	shutdownDone := make(chan struct{})
+	defer func() {
+		cancel()
+		<-shutdownDone
+	}()
+	go func() {
+		defer close(shutdownDone)
+		select {
+		case <-s.gracefulShutdownC:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	result, err := s.bootstrapClient.FetchMetadata(ctx, s.config.NamedTunnel.Credentials, s.config.ClientConfig)
+	if ctx.Err() != nil {
+		return errEarlyShutdown
+	}
+	if err != nil {
+		return err
+	}
+	// Regionalization currently applies only to QUIC. Preserve the HTTP/2
+	// fallback configuration and the --region edge discovery setting.
+	for _, protocol := range regionalizedProtocols {
+		config, ok := s.config.EdgeTLSConfigs[protocol]
+		serverName := result.SNI[protocol.String()]
+		if !ok || serverName == "" {
+			continue
+		}
+
+		clone := config.Clone()
+		clone.ServerName = serverName
+		s.config.EdgeTLSConfigs[protocol] = clone
+	}
+	return nil
+}
+
 // runConnections owns one HA connection group. Every exit cancels and drains
-// that group before the supervisor can start another.
+// that group before the supervisor can refresh configuration or start another.
 func (s *Supervisor) runConnections(ctx context.Context, connectedSignal *signal.Signal) error {
 	ctx, cancel := context.WithCancel(ctx)
 	tunnelsActive := 0

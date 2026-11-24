@@ -61,10 +61,9 @@ func TestFeaturePrecedenceEvaluationPostQuantum(t *testing.T) {
 		expectedVersion  PostQuantumMode
 	}{
 		{
-			name:             "default",
-			cli:              false,
-			expectedFeatures: []string{},
-			expectedVersion:  PostQuantumPrefer,
+			name:            "default",
+			cli:             false,
+			expectedVersion: PostQuantumPrefer,
 		},
 		{
 			name:             "user_specified",
@@ -96,11 +95,10 @@ func TestFeaturePrecedenceEvaluationDatagramVersion(t *testing.T) {
 		expectedVersion  DatagramVersion
 	}{
 		{
-			name:             "default",
-			cli:              []string{},
-			remote:           featuresRecord{},
-			expectedFeatures: []string{},
-			expectedVersion:  DatagramV2,
+			name:            "default",
+			cli:             []string{},
+			remote:          featuresRecord{},
+			expectedVersion: DatagramV2,
 		},
 		{
 			name:             "user_specified_v2",
@@ -137,6 +135,18 @@ func TestDeprecatedFeaturesRemoved(t *testing.T) {
 	require.NoError(t, err)
 	snapshot := selector.Snapshot()
 	require.Empty(t, snapshot.FeaturesList)
+}
+
+func TestRegionalizationOptIn(t *testing.T) {
+	t.Parallel()
+
+	logger := zerolog.Nop()
+	resolver := &staticResolver{record: featuresRecord{}}
+	selector, err := newFeatureSelector(t.Context(), t.Name(), &logger, resolver, []string{"support_regionalization"}, false, time.Hour)
+	require.NoError(t, err)
+	snapshot := selector.Snapshot()
+	require.Equal(t, []string{"support_regionalization"}, snapshot.FeaturesList)
+	require.True(t, snapshot.SupportsRegionalization())
 }
 
 func TestRefreshFeaturesRecord(t *testing.T) {

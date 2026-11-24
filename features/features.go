@@ -3,9 +3,10 @@ package features
 import "slices"
 
 const (
-	FeatureDatagramV2   = "support_datagram_v2"
-	FeaturePostQuantum  = "postquantum"
-	FeatureDatagramV3_2 = "support_datagram_v3_2"
+	FeatureDatagramV2      = "support_datagram_v2"
+	FeaturePostQuantum     = "postquantum"
+	FeatureDatagramV3_2    = "support_datagram_v3_2"
+	FeatureRegionalization = "support_regionalization"
 
 	// Legacy features that the edge universally supports and no longer requires to be advertised (TUN-10904).
 	DeprecatedFeatureSerializedHeaders = "serialized_headers"  // Deprecated: TUN-10904
@@ -45,6 +46,11 @@ type FeatureSnapshot struct {
 	// SkipPrechecks indicates when to skip connectivity pre-checks at startup.
 	// Controlled via DNS TXT record to allow remote kill-switch in case of issues.
 	SkipPrechecks bool
+}
+
+// SupportsRegionalization reports whether the connection advertises regionalization support.
+func (s FeatureSnapshot) SupportsRegionalization() bool {
+	return slices.Contains(s.FeaturesList, FeatureRegionalization)
 }
 
 type PostQuantumMode uint8

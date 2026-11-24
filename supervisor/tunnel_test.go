@@ -29,10 +29,12 @@ import (
 	"github.com/cloudflare/cloudflared/tunnelstate"
 )
 
-type tunnelTestFeatures struct{}
+type tunnelTestFeatures struct {
+	featuresList []string
+}
 
-func (tunnelTestFeatures) Snapshot() features.FeatureSnapshot {
-	return features.FeatureSnapshot{DatagramVersion: features.DatagramV3}
+func (f tunnelTestFeatures) Snapshot() features.FeatureSnapshot {
+	return features.FeatureSnapshot{DatagramVersion: features.DatagramV3, FeaturesList: f.featuresList}
 }
 
 type tunnelTestRegistrationServer struct{}
@@ -102,8 +104,17 @@ func TestQUICCloseErrorPreservesUnknownCodes(t *testing.T) {
 func TestServeQUICRegionChange(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range []quic.ApplicationErrorCode{connection.RegionChangeQUICCode, connection.RegionChangeQUICCode + 1} {
-		t.Run(fmt.Sprint(code), func(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		code        quic.ApplicationErrorCode
+		features    []string
+		wantRestart bool
+	}{
+		{"opted in", connection.RegionChangeQUICCode, []string{features.FeatureRegionalization}, true},
+		{"disabled by default", connection.RegionChangeQUICCode, nil, false},
+		{"unrelated close", connection.RegionChangeQUICCode + 1, []string{features.FeatureRegionalization}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -115,7 +126,7 @@ func TestServeQUICRegionChange(t *testing.T) {
 			connected := signal.New(make(chan struct{}))
 			edgeDone := make(chan error, 1)
 			go func() {
-				edgeDone <- serveTestQUICRegionChangePeer(ctx, listener, code, connected)
+				edgeDone <- serveTestQUICRegionChangePeer(ctx, listener, tc.code, connected)
 			}()
 			defer func() {
 				cancel()
@@ -123,7 +134,7 @@ func TestServeQUICRegionChange(t *testing.T) {
 			}()
 
 			// Disable retries so the result reflects this connection's close code.
-			server := newTestQUICEdgeTunnelServer(t, listener.Addr().String(), tlsConfig)
+			server := newTestQUICEdgeTunnelServer(t, listener.Addr().String(), tlsConfig, tc.features)
 
 			// Expected restarts should not produce the failure logs used for other close codes.
 			var failureLogs atomic.Int32
@@ -140,7 +151,7 @@ func TestServeQUICRegionChange(t *testing.T) {
 
 			// Only the designated code should trigger a group restart. Preserve
 			// unrelated peer errors so ordinary retry and fallback still apply.
-			if code == connection.RegionChangeQUICCode {
+			if tc.wantRestart {
 				require.ErrorIs(t, err, connection.ErrRegionChanged)
 				require.Zero(t, failureLogs.Load(), "a requested region change must not be logged as a connection failure")
 			} else {
@@ -148,8 +159,8 @@ func TestServeQUICRegionChange(t *testing.T) {
 				appErr, ok := errors.AsType[*quic.ApplicationError](err)
 				require.True(t, ok, "expected wrapped application error, got %v", err)
 				require.True(t, appErr.Remote)
-				require.Equal(t, code, appErr.ErrorCode)
-				require.Positive(t, failureLogs.Load(), "unrelated connection failures must still be logged")
+				require.Equal(t, tc.code, appErr.ErrorCode)
+				require.Positive(t, failureLogs.Load(), "ordinary connection failures must still be logged")
 			}
 		})
 	}
@@ -206,7 +217,7 @@ func serveTestQUICRegionChangePeer(ctx context.Context, listener *quic.Listener,
 	return err
 }
 
-func newTestQUICEdgeTunnelServer(t *testing.T, address string, tlsConfig *tls.Config) *EdgeTunnelServer {
+func newTestQUICEdgeTunnelServer(t *testing.T, address string, tlsConfig *tls.Config, featureList []string) *EdgeTunnelServer {
 	t.Helper()
 
 	log := zerolog.Nop()
@@ -220,7 +231,7 @@ func newTestQUICEdgeTunnelServer(t *testing.T, address string, tlsConfig *tls.Co
 	require.NoError(t, err)
 	addr.UDP.IP = addr.UDP.IP.To4()
 
-	clientConfig, err := client.NewConfig("test", "test", tunnelTestFeatures{})
+	clientConfig, err := client.NewConfig("test", "test", tunnelTestFeatures{featuresList: featureList})
 	require.NoError(t, err)
 
 	return &EdgeTunnelServer{

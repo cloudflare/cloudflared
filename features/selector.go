@@ -130,6 +130,7 @@ func (fs *featureSelector) prechecksSkip() bool {
 }
 
 // clientFeatures will return the list of currently available features that cloudflared should provide to the edge.
+// Features added unconditionally here are advertised by default; opt-in features come from fs.cliFeatures.
 func (fs *featureSelector) clientFeatures() []string {
 	var features []string
 	if fs.datagramVersion() == DatagramV3 {
