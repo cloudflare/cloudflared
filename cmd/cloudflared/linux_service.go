@@ -259,7 +259,13 @@ var noUpdateServiceFlag = &cli.BoolFlag{
 
 func installLinuxService(c *cli.Context) error {
 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
+	return installLinuxServiceWith(c, log, serviceConfigDir, installLinuxServiceForInit)
+}
 
+// installLinuxServiceWith is installLinuxService with the service config
+// directory and the init-specific install step as parameters, so tests can
+// run an install against a temporary directory and a failing install step.
+func installLinuxServiceWith(c *cli.Context, log *zerolog.Logger, configDir string, install func(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolog.Logger) error) error {
 	etPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("error determining executable path: %v", err)
@@ -281,19 +287,19 @@ func installLinuxService(c *cli.Context) error {
 		// write the token to the config directory and install the service
 		// using --token-file pointing to that file. This is the quick setup
 		// the tunnel UI suggests.
-
-		// Ensure token file is removed if install fails
-		defer func() {
-			if err != nil {
-				removeTokenFile(serviceConfigDir, log)
-			}
-		}()
-
-		if err = writeTokenToConfigDir(c, serviceConfigDir); err != nil {
+		//
+		// The token file is left in place if the install then fails. The
+		// install may already have written and enabled the service
+		// definition, which points at the token file; deleting the token
+		// leaves that service restarting against a missing file, and a
+		// repeated install fails again at generating the definition, so
+		// the state cannot be recovered by re-running the install.
+		// `service uninstall` removes the token file.
+		if err = writeTokenToConfigDir(c, configDir); err != nil {
 			return fmt.Errorf("could not write token to configuration directory: %w", err)
 		}
 
-		extraArgs = buildArgsForTokenFile(serviceConfigDir)
+		extraArgs = buildArgsForTokenFile(configDir)
 	}
 
 	templateArgs.ExtraArgs = extraArgs
@@ -301,22 +307,28 @@ func installLinuxService(c *cli.Context) error {
 	// Check if the "no update flag" is set
 	autoUpdate := !c.IsSet(noUpdateServiceFlag.Name)
 
+	if err = install(&templateArgs, autoUpdate, log); err != nil {
+		return err
+	}
+
+	log.Info().Msg("Linux service for cloudflared installed successfully")
+	return nil
+}
+
+// installLinuxServiceForInit installs the service using the init system
+// detected on this machine.
+func installLinuxServiceForInit(templateArgs *ServiceTemplateArgs, autoUpdate bool, log *zerolog.Logger) error {
 	switch {
 	case inits.IsSystemd():
 		log.Info().Msgf("Using Systemd")
-		err = installSystemd(&templateArgs, autoUpdate, log)
+		return installSystemd(templateArgs, autoUpdate, log)
 	case inits.IsOpenRC():
 		log.Info().Msgf("Using OpenRC")
-		err = installOpenRC(&templateArgs, autoUpdate)
+		return installOpenRC(templateArgs, autoUpdate)
 	default:
 		log.Info().Msgf("Using SysV")
-		err = installSysv(&templateArgs, autoUpdate, log)
+		return installSysv(templateArgs, autoUpdate, log)
 	}
-
-	if err == nil {
-		log.Info().Msg("Linux service for cloudflared installed successfully")
-	}
-	return err
 }
 
 func buildArgsForConfig(c *cli.Context, log *zerolog.Logger) ([]string, error) {
