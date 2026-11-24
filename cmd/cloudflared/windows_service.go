@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/eventlog"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -355,7 +356,7 @@ func installWindowsService(c *cli.Context) error {
 	}
 	defer s.Close()
 	log.Info().Msg("cloudflared agent service is installed")
-	err = eventlog.InstallAsEventCreate(windowsServiceName, eventlog.Error|eventlog.Warning|eventlog.Info)
+	err = installEventLogSource(windowsServiceName)
 	if err != nil {
 		s.Delete()
 		return errors.Wrap(err, "Cannot install event logger")
@@ -375,6 +376,24 @@ func installWindowsService(c *cli.Context) error {
 
 	log.Info().Msg("Agent service for cloudflared installed successfully")
 	return nil
+}
+
+// Seams over the eventlog calls so tests can run without touching the registry.
+var (
+	installEventSource = eventlog.InstallAsEventCreate
+	removeEventSource  = eventlog.Remove
+)
+
+// installEventLogSource registers the event source for the service. A source left behind by an
+// earlier install, such as one whose uninstall did not finish, makes InstallAsEventCreate fail with
+// "registry key already exists", so it is removed first. The service was just created, so any source with
+// this name is left over from an earlier install. A source that does not exist is not an error: Remove
+// returns registry.ErrNotExist (ERROR_FILE_NOT_FOUND) in that case.
+func installEventLogSource(name string) error {
+	if err := removeEventSource(name); err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return errors.Wrap(err, "Cannot remove stale event logger")
+	}
+	return installEventSource(name, eventlog.Error|eventlog.Warning|eventlog.Info)
 }
 
 func uninstallWindowsService(c *cli.Context) error {
