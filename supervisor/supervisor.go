@@ -255,6 +255,7 @@ func (s *Supervisor) runConnections(ctx context.Context, connectedSignal *signal
 	var backoffTimer <-chan time.Time
 
 	shuttingDown := false
+	gracefulShutdownC := s.gracefulShutdownC
 	for {
 		select {
 		// Context cancelled
@@ -300,8 +301,10 @@ func (s *Supervisor) runConnections(ctx context.Context, connectedSignal *signal
 				// No more tunnels outstanding, clear backoff timer
 				backoff.SetGracePeriod()
 			}
-		case <-s.gracefulShutdownC:
+		case <-gracefulShutdownC:
 			shuttingDown = true
+			// Avoid making the loop spin while the tunnels drain.
+			gracefulShutdownC = nil
 		}
 	}
 }
