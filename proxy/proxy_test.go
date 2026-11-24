@@ -871,8 +871,10 @@ func TestConnections(t *testing.T) {
 		{
 			name: "ws-ws proxy",
 			args: args{
-				ingressServiceScheme:  "ws://",
-				originService:         runEchoWSService,
+				ingressServiceScheme: "ws://",
+				originService: func(t *testing.T, ln net.Listener) {
+					runEchoWSService(t, ln, true)
+				},
 				eyeballResponseWriter: newWSRespWriter(replayer),
 				eyeballRequestBody:    newWSRequestBody([]byte("test1")),
 				connectionType:        connection.TypeWebsocket,
@@ -913,7 +915,9 @@ func TestConnections(t *testing.T) {
 			name: "tcp-ws proxy",
 			args: args{
 				ingressServiceScheme: "ws://",
-				originService:        runEchoWSService,
+				originService: func(t *testing.T, ln net.Listener) {
+					runEchoWSService(t, ln, false)
+				},
 				// eyeballResponseWriter gets set after roundtrip dial.
 				eyeballRequestBody: newPipedWSRequestBody([]byte("test3")),
 				requestHeaders: map[string][]string{
@@ -971,8 +975,10 @@ func TestConnections(t *testing.T) {
 		{
 			name: "ws-ws proxy when origin is different",
 			args: args{
-				ingressServiceScheme:  "ws://",
-				originService:         runEchoWSService,
+				ingressServiceScheme: "ws://",
+				originService: func(t *testing.T, ln net.Listener) {
+					runEchoWSService(t, ln, false)
+				},
 				eyeballResponseWriter: newWSRespWriter(replayer),
 				eyeballRequestBody:    newWSRequestBody([]byte("test1")),
 				connectionType:        connection.TypeWebsocket,
@@ -1081,7 +1087,12 @@ func TestConnections(t *testing.T) {
 
 			cancel()
 			require.Equal(t, test.want.err, err != nil)
-			require.Equal(t, test.want.message, replayer.Bytes())
+			message := replayer.Bytes()
+			if wsWriter, ok := respWriter.(*wsRespWriter); ok && wsWriter.code == http.StatusSwitchingProtocols {
+				message, err = wsutil.ReadServerBinary(bytes.NewBuffer(message))
+				require.NoError(t, err)
+			}
+			require.Equal(t, test.want.message, message)
 			require.Equal(t, test.want.headers, respWriter.Header())
 			replayer.rw.Reset()
 		})
@@ -1187,9 +1198,7 @@ type wsRespWriter struct {
 	code            int
 }
 
-// newWSRespWriter uses wsutil.WriteClientText to generate websocket frames.
-// and wsutil.ReadClientText to translate frames from server to byte data.
-// In essence, this acts as a wsClient.
+// newWSRespWriter records the response stream for decoding after the proxy returns.
 func newWSRespWriter(w io.Writer) *wsRespWriter {
 	return &wsRespWriter{
 		w: w,
@@ -1198,14 +1207,7 @@ func newWSRespWriter(w io.Writer) *wsRespWriter {
 
 // Write is written to by ingress.Stream and serves as the output to the client.
 func (w *wsRespWriter) Write(p []byte) (int, error) {
-	returnedMsg, err := wsutil.ReadServerBinary(bytes.NewBuffer(p))
-	if err != nil {
-		// The data was not returned by a websocket connection.
-		if err != io.ErrUnexpectedEOF {
-			return w.w.Write(p)
-		}
-	}
-	return w.w.Write(returnedMsg)
+	return w.w.Write(p)
 }
 
 func (w *wsRespWriter) WriteRespHeaders(status int, header http.Header) error {
@@ -1321,7 +1323,7 @@ func runEchoTCPService(t *testing.T, l net.Listener) {
 	}()
 }
 
-func runEchoWSService(t *testing.T, l net.Listener) {
+func runEchoWSService(t *testing.T, l net.Listener, closeAfterEcho bool) {
 	upgrader := gorillaWS.Upgrader{
 		ReadBufferSize:  10,
 		WriteBufferSize: 10,
@@ -1349,6 +1351,10 @@ func runEchoWSService(t *testing.T, l net.Listener) {
 			data := []byte("echo-")
 			data = append(data, p...)
 			if err := conn.WriteMessage(messageType, data); err != nil {
+				return
+			}
+			// End the WS-to-WS stream explicitly after delivering the response.
+			if closeAfterEcho {
 				return
 			}
 		}
