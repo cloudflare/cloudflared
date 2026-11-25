@@ -71,17 +71,17 @@ func TestParseIngress(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Multiple rules",
+			name: "Subdomain wildcard and catch-all",
 			args: args{rawYAML: `
 ingress:
- - hostname: tunnel1.example.com
+ - hostname: "*.example.com"
    service: https://localhost:8000
  - hostname: "*"
    service: https://localhost:8001
 `},
 			want: []Rule{
 				{
-					Hostname: "tunnel1.example.com",
+					Hostname: "*.example.com",
 					Service:  &httpService{url: localhost8000},
 					Config:   defaultConfig,
 				},
@@ -228,6 +228,27 @@ ingress:
 ingress:
  - hostname: "test.*.example.com"
    service: https://localhost:8000
+ - service: http_status:404
+`},
+			wantErr: true,
+		},
+		{
+			name: "Wildcard attached to a partial label",
+			args: args{rawYAML: `
+ingress:
+ - hostname: "*app.example.com"
+   service: https://localhost:8000
+ - service: http_status:404
+`},
+			wantErr: true,
+		},
+		{
+			name: "Wildcard without a domain suffix",
+			args: args{rawYAML: `
+ingress:
+ - hostname: "*."
+   service: https://localhost:8000
+ - service: http_status:404
 `},
 			wantErr: true,
 		},
