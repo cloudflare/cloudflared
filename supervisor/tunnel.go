@@ -190,6 +190,18 @@ func (f *IpAddrFallback) ShouldGetNewAddress(connIndex uint8, err error) (needsN
 		return true, nil
 	}
 
+	if _, ok := errors.AsType[*connection.ControlStreamError](err); ok {
+		// Retrying a failed control stream on the same edge can leave a connector
+		// stuck indefinitely, even when the transport connects successfully. Try
+		// another address without counting this as a protocol connectivity failure.
+		// Permanent registration failures, such as invalid credentials, are not
+		// specific to an edge address and should retain their existing behavior.
+		if registrationErr, ok := errors.AsType[connection.ServerRegisterTunnelError](err); ok && registrationErr.Permanent {
+			return false, nil
+		}
+		return true, nil
+	}
+
 	return false, nil
 }
 
