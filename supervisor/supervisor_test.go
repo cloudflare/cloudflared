@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -300,4 +301,69 @@ func TestRegionChangeGracefulShutdownInterruptsRestartDelay(t *testing.T) {
 		require.Equal(t, stoppedAt, time.Now(), "graceful shutdown must interrupt the restart delay")
 		require.Equal(t, 2, starts, "graceful shutdown must prevent another connection")
 	})
+}
+
+func TestReconnectAfterServedConnectionCloses(t *testing.T) {
+	t.Parallel()
+
+	errEdgeClosed := errors.New("connection with edge closed")
+	for _, test := range []struct {
+		name          string
+		index         uint8
+		registers     bool
+		servesFor     time.Duration
+		wantImmediate bool
+	}{
+		{"served connection reconnects at once", 1, true, time.Hour, true},
+		{"served first connection reconnects at once", 0, true, time.Hour, true},
+		{"short-lived connection waits for the backoff", 1, true, time.Second, false},
+		{"unregistered connection waits for the backoff", 1, false, time.Hour, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			s := newTestSupervisor(t, nil)
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				var closed, restarted time.Time
+				var calls atomic.Int32
+				s.edgeTunnelServer = regionChangeTunnelServer(func(ctx context.Context, index uint8, connected *signal.Signal) error {
+					if index != test.index {
+						connected.Notify()
+						<-ctx.Done()
+						return ctx.Err()
+					}
+					switch calls.Add(1) {
+					case 1:
+						if test.registers {
+							connected.Notify()
+						}
+						time.Sleep(test.servesFor)
+						closed = time.Now()
+						return errEdgeClosed
+					default:
+						restarted = time.Now()
+						cancel()
+						return ctx.Err()
+					}
+				})
+				// Channels the supervisor selects on must belong to the bubble, or
+				// the fake clock never advances past a connection's lifetime.
+				s.tunnelErrors = make(chan tunnelError)
+				s.tunnelsConnecting = make(map[int]chan struct{})
+				s.config.HAConnections = 2
+				selector, err := connection.NewProtocolSelector("http2", s.log.Logger())
+				require.NoError(t, err)
+				s.config.ProtocolSelector = selector
+
+				require.NoError(t, s.runConnections(ctx, signal.New(make(chan struct{}))))
+				require.Equal(t, int32(2), calls.Load(), "the closed connection must be started again")
+				if test.wantImmediate {
+					require.Equal(t, closed, restarted, "a connection that was serving must reconnect without the shared backoff")
+				} else {
+					require.Greater(t, restarted.Sub(closed), time.Duration(0), "the reconnect must wait for the shared backoff")
+				}
+			})
+		})
+	}
 }
