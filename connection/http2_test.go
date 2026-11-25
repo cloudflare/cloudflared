@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
 
 	"github.com/cloudflare/cloudflared/client"
 	"github.com/cloudflare/cloudflared/tracing"
@@ -627,4 +628,83 @@ func BenchmarkServeHTTPLargeFile(b *testing.B) {
 	}
 
 	benchmarkServeHTTP(b, test)
+}
+
+// startFakeEdge completes the HTTP/2 handshake on edgeConn and then sends nothing unprompted. It reports each PING it
+// receives and acknowledges them only when ackPings is set.
+func startFakeEdge(t *testing.T, edgeConn net.Conn, ackPings bool) <-chan struct{} {
+	t.Helper()
+	framer := http2.NewFramer(edgeConn, edgeConn)
+	var writeMu sync.Mutex
+	pings := make(chan struct{}, 100)
+	go func() {
+		for {
+			frame, err := framer.ReadFrame()
+			if err != nil {
+				return
+			}
+			ping, ok := frame.(*http2.PingFrame)
+			if !ok || ping.IsAck() {
+				continue
+			}
+			pings <- struct{}{}
+			if ackPings {
+				writeMu.Lock()
+				_ = framer.WritePing(true, ping.Data)
+				writeMu.Unlock()
+			}
+		}
+	}()
+
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	_, err := edgeConn.Write([]byte(http2.ClientPreface))
+	require.NoError(t, err)
+	require.NoError(t, framer.WriteSettings())
+	return pings
+}
+
+func TestHTTP2ClosesUnresponsiveEdgeConnection(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+	http2Conn.sendPingTimeout = 50 * time.Millisecond
+	http2Conn.pingTimeout = 100 * time.Millisecond
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- http2Conn.Serve(t.Context()) }()
+	pings := startFakeEdge(t, edgeConn, false)
+
+	select {
+	case err := <-serveErr:
+		require.ErrorIs(t, err, errEdgeConnectionClosed)
+	case <-time.After(5 * time.Second):
+		t.Fatal("unresponsive edge connection was not closed")
+	}
+	require.NotEmpty(t, pings, "expected a health check PING before closing")
+}
+
+func TestHTTP2KeepsResponsiveEdgeConnection(t *testing.T) {
+	http2Conn, edgeConn := newTestHTTP2Connection()
+	http2Conn.sendPingTimeout = 50 * time.Millisecond
+	http2Conn.pingTimeout = time.Second
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- http2Conn.Serve(ctx) }()
+	pings := startFakeEdge(t, edgeConn, true)
+
+	for range 3 {
+		select {
+		case <-pings:
+		case err := <-serveErr:
+			t.Fatalf("responsive edge connection was closed: %v", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("no health check PING was sent")
+		}
+	}
+	select {
+	case err := <-serveErr:
+		t.Fatalf("responsive edge connection was closed: %v", err)
+	default:
+	}
 }
