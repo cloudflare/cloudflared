@@ -58,12 +58,33 @@ func newTCPLogger(logger *zerolog.Logger, req *connection.TCPRequest) zerolog.Lo
 
 // logHTTPRequest logs a Debug message with the corresponding HTTP request details from the eyeball.
 func logHTTPRequest(logger *zerolog.Logger, r *http.Request) {
-	logger.Debug().
+	event := logger.Debug()
+	if !event.Enabled() {
+		return
+	}
+	event.
 		Str("host", r.Host).
 		Str("path", r.URL.Path).
-		Interface("headers", r.Header).
+		Interface("headers", redactedRequestHeaders(r.Header)).
 		Int64("content-length", r.ContentLength).
 		Msgf("%s %s %s", r.Method, r.URL, r.Proto)
+}
+
+// redactedRequestHeaders keeps header names and value counts useful for debugging
+// without recording values that may contain credentials or other private data.
+func redactedRequestHeaders(headers http.Header) http.Header {
+	if headers == nil {
+		return nil
+	}
+	redacted := make(http.Header, len(headers))
+	for name, values := range headers {
+		redactedValues := make([]string, len(values))
+		for i := range redactedValues {
+			redactedValues[i] = "[redacted]"
+		}
+		redacted[name] = redactedValues
+	}
+	return redacted
 }
 
 // logOriginHTTPResponse logs a Debug message of the origin response.
