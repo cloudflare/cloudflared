@@ -1645,3 +1645,48 @@ func GenerateTLSConfig() *tls.Config {
 		NextProtos:   []string{"argotunnel"},
 	}
 }
+
+type mockStreamRWC struct {
+	bytes.Buffer
+}
+
+func (m *mockStreamRWC) Close() error {
+	return nil
+}
+
+func TestHTTPResponseAdapter_Hijack(t *testing.T) {
+	stream := &rpcquic.RequestServerStream{
+		ReadWriteCloser: &mockStreamRWC{},
+	}
+	adapter := newHTTPResponseAdapter(stream)
+
+	// Precondition: Hijack before status written should return an error
+	conn, rw, err := adapter.Hijack()
+	require.Error(t, err)
+	assert.EqualError(t, err, "status not yet written before attempting to hijack connection")
+	assert.Nil(t, conn)
+	assert.Nil(t, rw)
+
+	// Writing headers should satisfy the precondition
+	adapter.connectResponseSent = true
+
+	// Hijack after status written should succeed
+	conn, rw, err = adapter.Hijack()
+	require.NoError(t, err)
+	assert.NotNil(t, conn)
+	assert.NotNil(t, rw)
+
+	// Second Hijack call should return http.ErrHijacked
+	conn2, rw2, err := adapter.Hijack()
+	assert.ErrorIs(t, err, http.ErrHijacked)
+	assert.Nil(t, conn2)
+	assert.Nil(t, rw2)
+
+	// Write after hijack should return http.ErrHijacked
+	n, err := adapter.Write([]byte("data"))
+	assert.Equal(t, 0, n)
+	assert.ErrorIs(t, err, http.ErrHijacked)
+
+	// WriteHeader after hijack should be a no-op
+	adapter.WriteHeader(http.StatusOK)
+}
