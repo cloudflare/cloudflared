@@ -63,6 +63,9 @@ var errEarlyShutdown = errors.New("shutdown started")
 type tunnelError struct {
 	index int
 	err   error
+	// served reports whether the connection registered and stayed up for at
+	// least tunnelRetryDuration before it ended.
+	served bool
 }
 
 func NewSupervisor(config *TunnelConfig, orchestrator *orchestration.Orchestrator, gracefulShutdownC <-chan struct{}) (*Supervisor, error) {
@@ -284,6 +287,15 @@ func (s *Supervisor) runConnections(ctx context.Context, connectedSignal *signal
 				if _, retry := s.tunnelsProtocolFallback[tunnelError.index].GetMaxBackoffDuration(ctx); !retry {
 					continue
 				}
+				if tunnelError.served {
+					// The edge keeps routing requests to this connection until it registers
+					// again, so reconnect a connection that was serving right away. Serve has
+					// already waited its per-connection backoff, and a reconnect that fails
+					// before registering goes through the shared backoff below.
+					go s.startTunnel(ctx, tunnelError.index, s.newConnectedTunnelSignal(tunnelError.index))
+					tunnelsActive++
+					continue
+				}
 				tunnelsWaiting = append(tunnelsWaiting, tunnelError.index)
 				s.waitForNextTunnel(tunnelError.index)
 
@@ -381,15 +393,21 @@ func (s *Supervisor) startFirstTunnel(
 	connectedSignal *signal.Signal,
 ) {
 	var err error
+	var started time.Time
 	const firstConnIndex = 0
 	isStaticEdge := len(s.config.EdgeAddrs) > 0
 	defer func() {
-		s.tunnelErrors <- tunnelError{index: firstConnIndex, err: err}
+		s.tunnelErrors <- tunnelError{index: firstConnIndex, err: err, served: served(connectedSignal, started)}
 	}()
+
+	// Read the fallback before the first connection can register: initialize
+	// adds the other connections' entries to the map once it has.
+	protocolFallback := s.tunnelsProtocolFallback[firstConnIndex]
 
 	// If the first tunnel disconnects, keep restarting it.
 	for {
-		err = s.edgeTunnelServer.Serve(ctx, firstConnIndex, s.tunnelsProtocolFallback[firstConnIndex], connectedSignal)
+		started = time.Now()
+		err = s.edgeTunnelServer.Serve(ctx, firstConnIndex, protocolFallback, connectedSignal)
 		if ctx.Err() != nil {
 			return
 		}
@@ -402,7 +420,7 @@ func (s *Supervisor) startFirstTunnel(
 			return
 		}
 		// Make sure we don't continue if there is no more fallback allowed
-		if _, retry := s.tunnelsProtocolFallback[firstConnIndex].GetMaxBackoffDuration(ctx); !retry {
+		if _, retry := protocolFallback.GetMaxBackoffDuration(ctx); !retry {
 			return
 		}
 		// Try again for Unauthorized errors because we hope them to be
@@ -467,9 +485,22 @@ func (s *Supervisor) startTunnel(
 	index int,
 	connectedSignal *signal.Signal,
 ) {
+	started := time.Now()
 	// nolint: gosec
 	err := s.edgeTunnelServer.Serve(ctx, uint8(index), s.tunnelsProtocolFallback[index], connectedSignal)
-	s.tunnelErrors <- tunnelError{index: index, err: err}
+	s.tunnelErrors <- tunnelError{index: index, err: err, served: served(connectedSignal, started)}
+}
+
+// served reports whether a connection started at started registered and lasted
+// at least tunnelRetryDuration. This limits immediate reconnects of a connection
+// to one per tunnelRetryDuration, as with region changes.
+func served(connectedSignal *signal.Signal, started time.Time) bool {
+	select {
+	case <-connectedSignal.Wait():
+		return time.Since(started) >= tunnelRetryDuration
+	default:
+		return false
+	}
 }
 
 func (s *Supervisor) newConnectedTunnelSignal(index int) *signal.Signal {
