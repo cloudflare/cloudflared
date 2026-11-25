@@ -99,8 +99,45 @@ func (s *eventCollectorSink) OnTunnelEvent(event Event) {
 	s.observedEvents = append(s.observedEvents, event)
 }
 
-func (s *eventCollectorSink) assertSawEvent(t *testing.T, event Event) {
+func (s *eventCollectorSink) observedEventCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	assert.Contains(t, s.observedEvents, event)
+	return len(s.observedEvents)
+}
+
+func (s *eventCollectorSink) hasEvent(event Event) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, observed := range s.observedEvents {
+		if assert.ObjectsAreEqual(event, observed) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *eventCollectorSink) assertSawEvent(t *testing.T, event Event) {
+	assert.True(t, s.hasEvent(event), "sink did not observe event %v", event)
+}
+
+// A sink registered right after NewObserver must not miss events sent
+// immediately after RegisterSink returns.
+func TestObserverRegisterSinkThenImmediatelySendEvents(t *testing.T) {
+	t.Parallel()
+
+	observer := NewObserver(&log)
+	events := &eventCollectorSink{}
+	observer.RegisterSink(events)
+
+	for i := 0; i < observerChannelBufferSize; i++ {
+		observer.sendRegisteringEvent(uint8(i))
+	}
+
+	assert.Eventually(t, func() bool {
+		return events.observedEventCount() == observerChannelBufferSize
+	}, 5*time.Second, 10*time.Millisecond)
+
+	for i := 0; i < observerChannelBufferSize; i++ {
+		events.assertSawEvent(t, Event{Index: uint8(i), EventType: RegisteringTunnel})
+	}
 }
