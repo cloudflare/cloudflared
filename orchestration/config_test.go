@@ -14,10 +14,12 @@ import (
 // TestNewLocalConfig_MarshalJSON tests that we are able to converte a compiled and validated config back
 // into an "unvalidated" format which is compatible with Remote Managed configurations.
 func TestNewLocalConfig_MarshalJSON(t *testing.T) {
+	t.Parallel()
 	rawConfig := []byte(`
 	{
 		"originRequest": {
 					"connectTimeout": 160,
+					"connectRetryTimeout": 2,
 					"httpHostHeader": "default"
 		},
 		"ingress": [
@@ -26,10 +28,11 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 				"service": "https://localhost:8000"
 			},
 			{
-				"hostname": "*",
+				"hostname": "overridden.example.com",
 				"service": "https://localhost:8001",
 				"originRequest": {
 					"connectTimeout": 121,
+					"connectRetryTimeout": 0.5,
 					"tlsTimeout": 2,
 					"noHappyEyeballs": false,
 					"tcpKeepAlive": 2,
@@ -57,6 +60,13 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 						}
 					]
 				}
+			},
+			{
+				"hostname": "*",
+				"service": "unix:/tmp/app.sock",
+				"originRequest": {
+					"connectRetryTimeout": 0
+				}
 			}
 		],
         "warp-routing": {
@@ -68,6 +78,10 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 	var expectedConfig ingress.RemoteConfig
 	err := json.Unmarshal(rawConfig, &expectedConfig)
 	require.NoError(t, err)
+	require.Len(t, expectedConfig.Ingress.Rules, 3)
+	for i, timeout := range []time.Duration{2 * time.Second, 500 * time.Millisecond, 0} {
+		require.Equal(t, timeout, expectedConfig.Ingress.Rules[i].Config.ConnectRetryTimeout.Duration)
+	}
 
 	c := &newLocalConfig{
 		RemoteConfig:       expectedConfig,
@@ -81,13 +95,13 @@ func TestNewLocalConfig_MarshalJSON(t *testing.T) {
 	err = json.Unmarshal(jsonSerde, &remoteConfig)
 	require.NoError(t, err)
 
-	require.Equal(t, remoteConfig.WarpRouting, ingress.WarpRoutingConfig{
+	require.Equal(t, ingress.WarpRoutingConfig{
 		ConnectTimeout: config.CustomDuration{
 			Duration: time.Second,
 		},
 		TCPKeepAlive: config.CustomDuration{
 			Duration: 30 * time.Second, // default value is 30 seconds
 		},
-	})
-	require.Equal(t, remoteConfig.Ingress.Rules, expectedConfig.Ingress.Rules)
+	}, remoteConfig.WarpRouting)
+	require.Equal(t, expectedConfig.Ingress.Rules, remoteConfig.Ingress.Rules)
 }
